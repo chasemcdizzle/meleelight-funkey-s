@@ -1625,3 +1625,128 @@ MILESTONE PASS: M2-CAL
 - next: task 7 (characters/shared moves — the move-object template
   {name,init,main,interrupt}; the physics AND hitdet dispatch seams both
   become live cross-checks for its boundary captures).
+
+## iter 26 — 2026-07-14 — M2 task 7: characters/shared moves — MOVES SHARED MATCH
+
+- phase M2, task 7 (the shared move set: 79 move objects
+  {name,init,main,interrupt(,land)} driven by player[p].timer — the
+  MlMoveDef table's first real bodies; task 5's physics dispatch seams
+  and task 6's hitdet dispatch seams are this cluster's live
+  cross-checks by construction: the same trace's dispatches now execute
+  as real C bodies under this spec's own boundary).
+- done-check: `bash port/sim/calib/check-moves-shared-replay.sh` →
+  exit 0, `MOVES SHARED MATCH` (.loop/task7-donecheck.log). Per golden
+  (g01/g04/g06): 2 fresh captures byte-identical (cmp), both runs
+  STREAM MATCH vs the frozen streams (3600/3600 exact; finalCheck
+  mvData re-dump drift-guarded), pins OK
+  (expected-capture-moves-shared.json), strict replay 0 divergences —
+  4,985 + 5,351 + 5,061 = 15,397 records: 14,943 mutation-captured
+  top-level shared-move phase calls (args [phase,name,[slot,...extras],
+  inputs(8-deep x4),pre]; post {alias4,hq,players,rng,snd,vfx}; 44
+  frame-0 rule-11/12 sweep records per golden on a separate sweep
+  mulberry32), 210 mdispatch seams (per-char inits from shared
+  interrupt chains — JAB1/FORWARDTILT/GRAB/NEUTRALSPECIAL*/ATTACKAIR*/
+  DOWNATTACK/CATCHATTACK), 238 standalone seeded draws, 3 mvData +
+  3 rngBoot records. The seeded chain replays ONE C mulberry32
+  draw-for-draw (owner draws: CAPTUREWAIT mash wiggle — live on
+  g01+g04's grab phases — LANDING-family circleDust 4-draw sites,
+  DEAD* screenShake; window draws via seam rng lists — measured ZERO).
+- conformance guard + regressions ALL GREEN (.loop/task7-reg-*.log):
+  ENVCOLL MATCH · UTIL MATCH · PLAYER MODEL MATCH · INPUT MATCH ·
+  ASSHORT MATCH · PHYSICS MATCH · HITDET MATCH (ml_events.{c,h} gained
+  the vfx queue and physics.h's MlStageX gained respawnPoints/
+  respawnFace this iteration — every prior spec re-verified against the
+  rebuilt TUs).
+- design: boundary = every SHARED-ORIGIN actionStates entry's phase fns
+  (1212 wrapped; origin MEASURED by fn identity vs the shared index
+  module — deepCopyObject(true,·) deep-copies data, copies FUNCTIONS by
+  reference; puff overrides FURAFURA/JUMPAERIALB/JUMPAERIALF → her
+  entries are per-char seams, task 12). Records fire outside any move
+  record's scope (inScope==0): under TOP-LEVEL per-char windows
+  recording is chain-safe (window draws are standalone records pushed
+  at draw time), under an attributing record's seam window it is NOT
+  (would misorder the chain) — nested shared→shared calls stay
+  transparent (the C tree calls its own bodies). hq is carried OPAQUE
+  (reserialized canon string): no shared move imports hitDetection's
+  queues — seam resyncs swap the string whole. C: port/sim/characters/
+  shared/moves/*.c (79 files, structure-parallel, 5,548 lines) +
+  moves_index.c/moves.h (mv_dispatch via the task-4 as_lookup registry;
+  MvX extras pack; AsTri phase returns — upstream interrupt arms that
+  FALL THROUGH without a return (SMASHTURN/TILTTURN tilt arms,
+  OTTOTTO/OTTOTTOWAIT's 2nd GUARDON arm, RUN's chain end, SQUATWAIT's
+  restart, ENTRANCE, STOPCEIL's FALL arm, CAPTURE* grabbedBy===-1
+  guards) return undefined, carried verbatim). Data planes: framesData/
+  charAttributes/charHitboxes("thrown") from CTAB1 ml_tables (3rd/4th
+  consumers of the M1 generated path — DAMAGEFLYN's thrown.id0 write is
+  live on g06, cross-checking the hitbox table emission); index.js
+  setVelocities/posOffset patches + CAPTUREDAMAGE.setPositions +
+  actionSounds rows + palettes[pPal] from the frame-0 mvData dump (NEW
+  RULE 15). Sweep (44 calls): a REAL upstream playerObject(0,[10,20],1)
+  in net-restored slot 3 covers rolls/techs/walls/shieldbreak-chain/
+  FURASLEEP (live-executes blendColours + rgb() string formatting)/
+  DOWNSTAND*/DEADUP/DEADRIGHT/SLEEP/PASS/MISSFOOT/THROWNFALCONDIVE/
+  grabbedBy-guards + the extra-arg init variants, with Math.random
+  swapped for the sweep generator (rule 12).
+- DIVERGENCE LEDGER (fn · root-cause class · fix · min):
+  1. sweep synthetic player (capture bring-up) · playerObject's pos
+     parameter is an ARRAY (physicsObject reads pos[0]/pos[1]) — the
+     {x,y} object gave undefined components and the strict marshaller
+     hard-failed exactly as designed (rule 7) · pass [10,20] · 3m.
+  Replay divergences after the first successful build: ZERO on all
+  three goldens (rules 1-14 held; no expression-shape, desugaring,
+  alias, or chain-order misses across 15,397 records).
+- comparator negative tests (all restored, tree re-verified 0 div):
+  (a) corrupted POST players nibble → exactly 1; (b) WAIT self-restart
+  frames−1 → 1; (c) circleDust 4→3 draws → 96 (chain cascade);
+  (d) footstep sound typo → 22; (e) double-jump direction −0.3→0.3 →
+  0/1/1 on g01/g04/g06 — a CLASSIFICATION flip (JUMPAERIALB vs F) that
+  bites only where neutral double-jumps occur (rule-12 corollary, 3rd
+  measured instance); (f) GUARD GRAB→APPEAL → 8 seam-args divergences.
+- honest coverage (documented, not silent): FURAFURA unswept (init
+  stores the Howl play id into furaLoopID — an emulator-environment
+  value outside the sim domain; the C body traps at that exact site);
+  finishGame (isFinalDeath true) trapped as task 17's lifecycle
+  surface; CLIFFJUMP*/CLIFFGETUP*/CLIFFESCAPE*/CLIFFATTACK* and
+  THROW*/CATCHATTACK per-char seam arms plus every dispatch arm the
+  traces never fire are translated verbatim and verified must-not-fire
+  on every live record; the shared JUMPAERIALB/F MODULE objects
+  (checkForIASA's import path) are wrapped but zero-live — a live puff
+  record through them would fail the seam-name verification loudly.
+  Live coverage DID include: 40+ distinct top-level (name,phase) pairs
+  incl. REBIRTH (respawn data), CLIFFCATCH/CLIFFWAIT mains (ledge
+  deref), DEADDOWN/DEADLEFT inits (screenShake draws), DAMAGEFLYN init
+  ×3 (thrown.id0), CAPTUREWAIT/CAPTUREDAMAGE/CATCHWAIT/CAPTURECUT/
+  CATCHCUT grab chains, GUARD/GUARDON shield stack, and 101-126
+  sound-playing records per golden.
+- artifacts (sha256/12): moves.h f4ebac8d3ee1 · moves_index.c
+  45c6e2c5b863 · moves/*.c (79 files) 0b05efc96185 ·
+  spec-moves-shared.js 581cb1a091a3 · replay_moves_shared.c
+  9bdb9597b6db · expected-capture-moves-shared.json 79ff94357c91 ·
+  check-moves-shared-replay.sh 7546ddb80765 · ml_events.c 21aacfb127f2
+  · ml_events.h 05a23a11d3d9 · physics.h b50c8f08cdaa · FORMAT.md
+  3a7e79be60d3. Logs: .loop/task7-donecheck.log, .loop/task7-reg-*.log.
+- zoom-out: (1) NEW RULE 15 (fix_plan §M2): per-char table COMPOSITION
+  is executed data — measure shared-vs-override by fn identity, dump
+  the registry + the post-setup data patches in the frame-0 mvData
+  record, and build the C registry FROM the dump; tasks 8-12 inherit
+  the instrument (their specs extend the same dump instead of assuming
+  file layout). (2) Rule 14 got STRONGER, not just re-pinned: seam
+  posts carry the window's rng list and the replay advances the chain
+  at the seam's exact structural point — chain-order recoverability is
+  a property of resync-seam architecture, not an assumption; the
+  measured value stayed zero, but tasks 8-12 get a mechanism instead of
+  a pin. (3) Rule 13's family gained a member: control-flow FALLTHROUGH
+  is part of the expression shape — seven upstream interrupt arms
+  return undefined by falling off the chain, and truthiness-checking
+  callers (`if (!interrupt(...))`) keep executing their else-body after
+  a dispatch fired; modeling interrupts as bool instead of the
+  tri-state would have been a silent class error across every move.
+  (4) The scope-condition distinction (inScope vs stack-empty) is the
+  chain-order lesson generalized: what makes a nested boundary
+  recordable is not stack depth but whether an ATTRIBUTING record's
+  draws could interleave — the same criterion will govern tasks 8-12's
+  wrappers when per-char moves become the attributing boundary and
+  shared moves become their nested C tree.
+- next: task 8 (characters/fox moves, 4,450 ln — extend the mvData/
+  registry instrument to fox's per-char table; the 210 mdispatch seams
+  recorded here become live cross-checks for the per-char clusters).

@@ -437,11 +437,52 @@ live records — translated verbatim, teeth proven by 8 negative tests
 (POST nibble → exactly 1; hurtWidth 8→12 → 2; kb formula → 8; dispatch
 threshold 80→30 → 36; RNG drop → 50; sound typo → 9; alias-mirror skip
 → 16; phantom classification inverted → 14).)
-7. characters/shared moves (5,088 ln, 80 files) — move-object template
-   {name,init,main,interrupt}; boundary = every move's init/main/
-   interrupt with player pre/post-state.
-   done-check: `bash port/sim/calib/check-moves-shared-replay.sh` →
-   prints `MOVES shared MATCH`, exit 0.
+- **RULE 15 — per-char table COMPOSITION is executed data (adopted task
+  7)**: upstream builds actionStates[c] as `{...baseActionStates,
+  ...charMoves}` plus post-setup data patches (index.js setVelocities/
+  posOffset assignments). Which states are shared-origin vs per-char
+  OVERRIDES (puff overrides FURAFURA/JUMPAERIALB/JUMPAERIALF), the
+  state→name map, and the patched data arrays are all MEASURED from the
+  live tables — fn identity against the shared index module works because
+  `deepCopyObject(true, ·)` deep-copies data but copies FUNCTIONS by
+  reference — and dumped in the capture's frame-0 `mvData` record
+  (finalCheck drift-guarded); the C registry is built FROM the dump,
+  never from assumed file layout. Tasks 8-12 inherit the instrument
+  (their specs extend the same dump/registry).
+
+(task 7 — characters/shared moves — DONE iter 26:
+`bash port/sim/calib/check-moves-shared-replay.sh` → MOVES SHARED MATCH,
+exit 0. 4,985 + 5,351 + 5,061 = 15,397 records over g01/g04/g06
+(14,943 mutation-captured top-level shared-move phase calls with
+[phase,name,[slot,...extras],inputs,pre] args and {alias,hq,players,rng,
+snd,vfx} post envelopes — 44 frame-0 rule-11/12 sweep records per golden
+on a separate sweep RNG chain — plus 210 mdispatch seams, 238 standalone
+draws, 3 mvData dumps), byte-stable ×2, 6× STREAM MATCH, 0 replay
+divergences on the first successful build (rules 1-14 held; one rule-7
+marshal catch during bring-up: playerObject's pos parameter is an ARRAY
+[x,y], not {x,y} — the sweep's synthetic player). C: the MlMoveDef table
+gets its first real bodies — `port/sim/characters/shared/moves/*.c` (79
+files, structure-parallel), `moves_index.c` + `moves.h` (mv_dispatch
+through the task-4 as_lookup registry; unregistered states cross the
+driver's mv_seam), ml_events gained the vfx queue seam (M3/M4 renderer;
+circleDust = 4 seeded draws), MlStageX gained respawnPoints/respawnFace
+(REBIRTH's read set). framesData/attributes/charHitboxes("thrown") come
+from CTAB1 ml_tables (3rd/4th consumers); index.js data patches +
+actionSounds + palettes come from the measured mvData dump (rule 15).
+Interrupt fallthrough arms return undefined upstream (SMASHTURN/TILTTURN
+tilt arms, OTTOTTO/OTTOTTOWAIT's 2nd GUARDON arm, RUN's chain end,
+SQUATWAIT's restart, ENTRANCE, STOPCEIL's FALL arm) — AsTri, carried
+verbatim. Teeth: POST nibble → exactly 1; WAIT restart −1 → 1; circleDust
+4→3 draws → 96 cascade; footstep typo → 22; GRAB→APPEAL → 8 seam-args;
+double-jump direction flip → 0/1/1 (bites only where neutral DJs occur —
+rule-12 corollary, 3rd measured instance). Honest coverage: FURAFURA
+unswept (init stores the Howl play id into furaLoopID — outside the sim
+value domain, C traps), finishGame (isFinalDeath true) trapped as task
+17's lifecycle surface, live-stage CLIFF*/REBIRTH init arms beyond live
+coverage and all per-char seam arms not fired by the traces are
+translated verbatim and seam/trap-guarded. Rule-14 measurement: seam
+window draws ZERO over all three goldens (mechanism supports nonzero via
+seam rng lists).)
 8. characters/fox moves (4,450 ln).
    done-check: `bash port/sim/calib/check-moves-fox-replay.sh` →
    `MOVES fox MATCH`, exit 0.

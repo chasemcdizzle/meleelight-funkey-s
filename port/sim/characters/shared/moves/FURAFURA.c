@@ -1,0 +1,79 @@
+// FURAFURA.c <- src/characters/shared/moves/FURAFURA.js (M2 task 7)
+// (Puff OVERRIDES this state with her own module — task 12; this shared
+// body is registered for the other four characters.)
+#include "../moves.h"
+
+#include <math.h>
+
+static AsTri mv_init(MlSim *S, double p, const MlInputBuffer in[4],
+                     const MvX *ex) {
+  (void)ex;
+  MlPlayer *pl = mv_player(S, p);
+  strcpy(pl->actionState, "FURAFURA");
+  pl->timer = 0;
+  pl->phys.stuckTimer = 490;
+  // furaFura vfx position jitter: 2 seeded draws (values render-only)
+  (void)ml_random();
+  (void)ml_random();
+  mv_drawVfx("furaFura");
+  // player[p].furaLoopID = sounds.furaloop.play() — the Howl play id is an
+  // emulator-environment value outside the sim domain (rule 7; zero-live:
+  // no shieldbreak reaches FURAFURA over the goldens).
+  ml_sound_play("furaloop");
+  mv_out_of_domain("FURAFURA: furaLoopID = Howl play id");
+  mv_dispatch(S, MV_CS(S, p), "FURAFURA", "main", p, in, 0);
+  return AS_UNDEF;
+}
+
+static AsTri mv_main(MlSim *S, double p, const MlInputBuffer in[4],
+                     const MvX *ex) {
+  (void)ex;
+  MlPlayer *pl = mv_player(S, p);
+  pl->timer += 1;
+  if (mv_dispatch(S, MV_CS(S, p), "FURAFURA", "interrupt", p, in, 0) !=
+      AS_TRUE) {
+    if (fmod(pl->timer, 100) == 65) {
+      const AsSoundRow *rows = 0;
+      const int n = mv_actionSounds(MV_CS(S, p), "FURAFURA", &rows);
+      if (n < 1) mv_out_of_domain("FURAFURA: actionSounds[..][0][1]");
+      ml_sound_play(rows[0].name);
+    }
+    as_reduceByTraction(true, (int)MV_CS(S, p), &pl->phys.cVel.x);
+    if (fmod(pl->timer, 49) == 0) {
+      (void)ml_random();
+      (void)ml_random();
+      mv_drawVfx("furaFura");
+    }
+    if (fmod(pl->timer, 49) == 20) {
+      (void)ml_random();
+      (void)ml_random();
+      mv_drawVfx("furaFura");
+    }
+    if (pl->phys.shieldHP > 30) {
+      pl->phys.shieldHP = 30;
+    }
+    pl->phys.stuckTimer -= 1;
+    if (as_mashOut(MV_IN(in, p))) {
+      pl->phys.stuckTimer -= 3;
+    }
+  }
+  return AS_UNDEF;
+}
+
+static AsTri mv_interrupt(MlSim *S, double p, const MlInputBuffer in[4],
+                          const MvX *ex) {
+  (void)ex;
+  MlPlayer *pl = mv_player(S, p);
+  if (pl->phys.stuckTimer <= 0) {
+    ml_sound_stop("furaloop.stop"); // sounds.furaloop.stop(furaLoopID)
+    mv_dispatch(S, MV_CS(S, p), "WAIT", "init", p, in, 0);
+    return AS_TRUE;
+  } else if (pl->timer > mv_frames(MV_CS(S, p), "FURAFURA")) {
+    pl->timer = 1;
+    return AS_FALSE;
+  } else {
+    return AS_FALSE;
+  }
+}
+
+const MlMoveDef mv_FURAFURA = {"FURAFURA", mv_init, mv_main, mv_interrupt, 0};

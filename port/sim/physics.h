@@ -78,6 +78,11 @@ typedef struct {
   MlLedge ledge[ML_MAX_LEDGES];
   int ledgeCount;
   Box2D blastzone;
+  // REBIRTH's read set (M2 task 7; STAB1 carries the same data — the
+  // capture projects it per record like the rest of the stage argument):
+  Vec2D respawnPoints[4];
+  double respawnFace[4];
+  int respawnCount; // 0 in captures that don't project it (physics spec)
 } MlStageX;
 
 // --- actionStates flag table (per char x state; capture-dumped) ------------

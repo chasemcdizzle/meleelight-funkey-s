@@ -11,6 +11,12 @@ void ml_ev_reset(void) {
   ml_events.snd_count = 0;
   ml_events.dsp_count = 0;
   ml_events.rng_count = 0;
+  ml_events.vfx_count = 0;
+}
+
+void ml_vfx(const char *name) {
+  if (ml_events.vfx_count >= ML_EV_CAP) ml_events_fail("vfx queue overflow");
+  ml_events.vfx[ml_events.vfx_count++] = name;
 }
 
 void ml_sound_play(const char *name) {

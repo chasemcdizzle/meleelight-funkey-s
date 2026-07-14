@@ -369,6 +369,41 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   razor-thin threshold nudges (hurtWidth +0.5, the 0.01 phantom band)
   are no-op teeth on occurring hit margins (rule-12 corollary, 2nd
   measured instance).
+- **characters/shared moves (M2 task 7 committed form):** `node
+  port/sim/calib/run-capture.js --spec moves-shared --golden <id>` —
+  wraps every SHARED-ORIGIN actionStates entry's phase fns (1212 incl.
+  the shared JUMPAERIALB/F modules; origin MEASURED by fn identity —
+  deepCopyObject deep-copies data but copies functions by reference, and
+  puff overrides FURAFURA/JUMPAERIALB/JUMPAERIALF) as mutation-captured
+  "move" records ([phase,name,[slot,...extras],inputs(8-deep ×4),pre]
+  args; {alias4,hq,players,rng,snd,vfx} post; hq carried OPAQUE — no
+  shared move imports the hitQueue), non-shared entries as "mdispatch"
+  seams (post {alias,hq,players,rng} — seam rng lists strengthen rule 14:
+  window draws replay chain-exact at the seam point; measured 0), and a
+  frame-0 mvData dump of the EXECUTED move-data plane (state→name,
+  sharedOrigin registry, index.js setVelocities/posOffset patches,
+  CAPTUREDAMAGE setPositions, actionSounds rows, palettes — fix_plan §M2
+  rule 15). C: `port/sim/characters/shared/moves/*.c` (79 files) +
+  `moves_index.c`/`moves.h` — MlMoveDef completed with real phase fn
+  pointers (AsTri returns: several upstream interrupt arms FALL THROUGH
+  and return undefined — control-flow fallthrough is part of the
+  expression shape, rule 13 family); mv_dispatch resolves via the task-4
+  as_lookup registry, unregistered states cross mv_seam; ml_events
+  gained the vfx queue (drawVfx names; "circleDust" = 4 seeded draws —
+  drawVfx.js:15); MlStageX gained respawnPoints/respawnFace. Sweep
+  (rules 11/12, 44 calls): a REAL `new playerObject(0, [10,20], 1)` in
+  restored slot 3 — NOTE pos is an ARRAY [x,y] (physicsObject reads
+  pos[0]/pos[1]); Math.random swapped for a sweep mulberry32
+  (0x0badf00d) that the replay mirrors for ALL frame-0 move records.
+  Task check: `bash port/sim/calib/check-moves-shared-replay.sh` →
+  `MOVES SHARED MATCH`. Gotcha classes: recording shared moves under
+  TOP-LEVEL per-char windows is chain-safe (window draws are standalone
+  records pushed at draw time) but recording them under an attributing
+  record's seam window is NOT (would misorder the chain) — the wrapper's
+  scope condition is inScope==0, not stack-empty; razor-thin threshold
+  teeth again no-op on keyboard-quantized axes (DJ direction flip bit
+  only where neutral double-jumps occur — rule-12 corollary, 3rd
+  instance).
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;

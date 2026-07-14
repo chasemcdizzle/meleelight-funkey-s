@@ -66,6 +66,13 @@ Specs (`node run-capture.js --spec <name>`):
   `port/sim/hit_detection.{c,h}`). See "The hitdet spec" below. Pins:
   `expected-capture-hitdet.json`.
 
+- `moves-shared` (M2 task 7, `spec-moves-shared.js`): the shared move set
+  (src/characters/shared/moves/, 79 move objects) →
+  `replay_moves_shared.c` (translations
+  `port/sim/characters/shared/moves/*.c` + `moves_index.c` + `moves.h`).
+  See "The moves-shared spec" below. Pins:
+  `expected-capture-moves-shared.json`.
+
 Method records use `Mod#method` names (args prepended with the canon of
 `this`); constructor records use `Mod.new` (ret = canon of the built
 instance, per-instance closures serializing as `fn`). Argument canon is
@@ -396,6 +403,93 @@ type x tier x char lattice via a rule-12 characterSelections[3] injection
 threshold nudges are no-op teeth — hurtWidth 8->8.5 and the 0.01
 phantomThreshold band bite NOTHING on occurring hit margins; geometry
 teeth need 8->12, phantom teeth need the classification inverted.
+
+## The moves-shared spec (M2 task 7)
+
+Wrapped boundary (1212 fns): every function property of every
+SHARED-ORIGIN actionStates entry — sharedOrigin is MEASURED by function
+identity against the shared moves-index module (`setupActionStates` runs
+`deepCopyObject(true, val)`, which deep-copies data but copies FUNCTIONS
+by reference), asserted per char: 243 fns (79 moves × 3 phases + `land`
+on DAMAGEN2/ESCAPEAIR/FALLSPECIAL/SHIELDBREAKFALL/STOPCEIL/DOWNDAMAGE)
+for chars 0/2/3/4, 234 for puff (char 1 OVERRIDES
+FURAFURA/JUMPAERIALB/JUMPAERIALF — tasks 12's surface), plus the shared
+JUMPAERIALB/F module objects (checkForIASA's direct import path;
+zero-live, and a live puff record through them would fail the seam name
+verification loudly — documented caveat). Non-shared actionStates entries
+get the SEAM logger below.
+
+- `move` (5-field, mutation-captured): a shared-move phase entered
+  OUTSIDE any move record's scope (`inScope == 0`) — callers are physics'
+  per-frame state drive, hitdet's inits, and per-char move windows at top
+  level (recording under a silent per-char window is chain-safe: the
+  window's own draws are standalone records pushed at draw time, so file
+  order equals chain order). Nested shared→shared calls are TRANSPARENT
+  (the C body calls its own translations). args = `[phase, name,
+  [slot, ...extras], inputs, pre]`:
+  * extras: the args around `(p, input)` — input sits at index 2 for
+    JUMPF/JUMPB/KNEEBEND/WALK `.init` and SHIELDBREAKFALL `.land` (their
+    extra precedes it), index 1 otherwise (extras follow). Domain:
+    number | boolean | Vec2D (STOPCEIL/WALLDAMAGE normals).
+  * inputs: per-slot `input[k].slice(0,8)` (moves read history depth ≤ 6
+    — GUARD/GUARDON read `input[p][4]`/`[6]` — and CAPTURE moves read
+    `input[grabbedBy]`), null for absent slots.
+  * pre: {alias (probe4), characterSelections, gameMode, gameSettings
+    {tapJumpOffp1..4}, hq (the FULL exported hitQueue — carried OPAQUE:
+    no shared move imports hitDetection's queues), playerType, players,
+    stage {ground, ledge, platform, respawnFace, respawnPoints} (null on
+    pre-match sweep records), versusMode}.
+  post = {alias(4 — pos-ECB1 is C-TRACKED here, moves own the
+  reassignment/component-write sites), hq, players, rng (owner draws:
+  CAPTUREWAIT's mash wiggle, FURAFURA's vfx jitter, screenShake's 4 per
+  DEAD call, drawVfx("circleDust")'s 4), snd (incl. "furaloop.stop"),
+  vfx (drawVfx name queue — the ml_vfx seam's oracle)}. ret is
+  T | F | undef (several upstream interrupt arms fall through without a
+  return — carried verbatim as AS_UNDEF).
+- `mdispatch` (5-field seam): a NON-shared move fn entered while the TOP
+  frame is the attributing move frame (per-char inits from shared
+  interrupt chains; asserted 2-arg `(p, input)`). args =
+  `[phase, name, [slot]]`, post = {alias(4), hq, players, rng} — the rng
+  list is the rule-14 instrument STRENGTHENED: window draws are carried
+  in the seam post and advanced/verified on the chain at the seam point
+  (interleaving is recoverable because the seam sits at an exact
+  structural point of the C body). Measured ZERO window draws over
+  g01/g04/g06. Deeper windows push silent frames (subsumed).
+- `mvData` (frame-0 record, finalCheck drift-guarded): the EXECUTED
+  move-data plane — per char {state→name} (seam name verification),
+  {state→sharedOrigin} (the C registry is built from this measured map),
+  the per-char index.js data patches (ESCAPEB/ESCAPEF/DOWNSTANDB/
+  DOWNSTANDF/TECHB/TECHF setVelocities, CLIFFCATCH/CLIFFWAIT posOffset),
+  CAPTUREDAMAGE.setPositions, actionSounds rows for the shared-move
+  sound keys, and palettes[pPal[k]][0] (the FURASLEEP colour-blend
+  bases). framesData/charAttributes/charHitboxes("thrown") are NOT
+  dumped — the C side reads the M1 CTAB1 tables (3rd/4th consumers of
+  the generated data path).
+- RNG: rngBoot + the asshort discipline. Frame-0 `move` records are the
+  rule-12 sweep and replay on a SEPARATE sweep mulberry32 (seed
+  0x0badf00d) chained across all of them; the spec swaps Math.random for
+  that generator during the sweep so ESCAPEN's circleDust and DEAD*'s
+  screenShake draws never touch the seeded match stream.
+
+moves-shared sweep (rules 11/12, 44 calls): a REAL upstream
+`playerObject(0, [10,20], 1)` injected into inactive slot 3
+(playerType[3] set and restored — net-restore purity under the ×2
+byte-stability + STREAM MATCH guards), neutral 8-deep inputs; covers the
+zero-live shared moves with a reachable future domain: rolls/spotdodge/
+airdodge (ESCAPE*), techs (TECH*/WALLTECH*/WALLJUMP), WALLDAMAGE +
+STOPCEIL both reflect arms (kVel preset) and all three STOPCEIL land
+arms, the shieldbreak chain (minus FURAFURA: its init stores the Howl
+play id into furaLoopID — outside the sim value domain, the C body traps
+there), FURASLEEP* (live-executes blendColours + the rgb() string
+formatting against the dumped palette strings), DOWNSTAND*/DOWNDAMAGE,
+DEADUP/DEADRIGHT (screenShake on the sweep chain), SLEEP/PASS/MISSFOOT/
+THROWNFALCONDIVE, the CAPTUREWAIT/CAPTUREDAMAGE grabbedBy===-1 guards,
+and the JUMPF/JUMPB/KNEEBEND/WALK/FALL extra-arg variants. Zero-live
+surfaces WITHOUT a sweep (documented): FURAFURA (furaLoopID), CLIFFCATCH/
+CLIFFWAIT/REBIRTH init paths beyond their live coverage (need a live
+stage), throws/CATCHATTACK/CLIFF* per-char seam arms, and every per-char
+dispatch arm not fired by the traces (seams verify must-not-fire on
+every live record).
 
 ## The undef-ret allowlist (rule 8)
 

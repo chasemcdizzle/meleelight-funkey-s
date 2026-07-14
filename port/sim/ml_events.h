@@ -33,6 +33,15 @@ typedef struct {
   char dsp[ML_EV_CAP][ML_EV_DSP_LEN];
   int rng_count;
   double rng[ML_EV_CAP];
+  // VFX-EVENT QUEUE (M2 task 7): upstream spawns render vfx inline
+  // (drawVfx(vfxConfig), src/main/vfx/drawVfx.js). The C sim enqueues the
+  // vfx NAME here (render plane; the M3/M4 renderer consumes it). Part of
+  // the verified boundary from the moves clusters on: the capture records
+  // every owner-attributed drawVfx name and the replay compares this queue
+  // bit-exactly. NOTE "circleDust" also consumes 4 seeded draws upstream
+  // (drawVfx.js:15-18) — that lives in mv_drawVfx, not here.
+  int vfx_count;
+  const char *vfx[ML_EV_CAP];
 } MlEvents;
 
 extern MlEvents ml_events;
@@ -51,6 +60,7 @@ void ml_sound_play(const char *name);
 // token, so the queues compare bit-exactly.
 void ml_sound_stop(const char *nameDotStop);
 void ml_dispatch_note(const char *phase, const char *move);
+void ml_vfx(const char *name);
 double ml_random(void);
 
 // Provided by the host (replay driver / future sim harness): fatal report.
