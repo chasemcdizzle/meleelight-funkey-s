@@ -164,6 +164,24 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   (spec §8). Envelope keys are fixed-literal order (NOT sorted — only
   nested objects sort); the seeded stream burns exactly one off-step draw
   at `startGame` (`rngCallsOutsideStep == 1` is the expected value).
+- **Golden record + freeze / stream verify (M0 task 5):**
+  `bash oracle/record.sh <golden-id> [--refreeze]` — params come ONLY from
+  `oracle/goldens/manifest.json` (single param source; g01 seeded, task 7
+  extends it): two fresh browser runs (fdlibm shim on by default) →
+  `compare.js` identity → `oracle/harness/freeze-stream.js` writes
+  `oracle/goldens/<name>.sha256.json` (deterministic — NO timestamps or
+  environment data; re-recording an already-frozen golden must print
+  `unchanged (byte-identical re-freeze)`, any diff = drift; a DIFFERING
+  overwrite needs `--refreeze` and is only legit with a spec version bump,
+  CHECKSUM.md §8) → `verify-stream.js` self-check. Verify any run:
+  `cd oracle/harness && node verify-stream.js <run.json> ../goldens/<name>.sha256.json`
+  → `STREAM MATCH …`, exit 0 — exact string equality per frame, FULL
+  length, plus rngCalls + rngCallsOutsideStep equality, specVersion pin
+  (parsed live from oracle/CHECKSUM.md — a spec bump without re-freeze
+  fails mechanically), trace-sha256/param pins, and the frozen file's
+  `streamSha256` integrity seal. g01 frozen: spec v1, 3600 frames,
+  rngCalls=134, rngCallsOutsideStep=1, frame-1 hash = the CHECKSUM.md §5
+  anchor (9f4c6df7…).
 - **QuickJS oracle-runtime build:** `spikes/device-feasibility/README.md`
   step 2 (bellard/quickjs @2026-06-04, single gcc invocation via `qjsmin.c`,
   static, 890 KB). M0 repoints its Math table at the vendored fdlibm.

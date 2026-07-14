@@ -24,12 +24,6 @@ covering the remaining char pairs and the other 5 VS stages; g07–g08 =
 human-vs-CPU traces (difficulty 5) on two distinct stages; together every
 one of the 5 characters and 6 stages appears ≥1×.)
 
-5. Record + freeze golden #1's checksum stream with the fdlibm JS shim
-   active: `oracle/record.sh g01` (two fresh browser runs must agree
-   before writing `oracle/goldens/g01-fox-marth-battlefield.sha256.json`)
-   plus `oracle/harness/verify-stream.js <run.json> <frozen.sha256.json>`
-   (exact equality, full length) — done-check:
-   `cd oracle/harness && node run.js --dist "${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}" --trace ../goldens/g01-fox-marth-battlefield.trace.json --frames 3600 --seed 1337 --out out/g01-fresh.json && node verify-stream.js out/g01-fresh.json ../goldens/g01-fox-marth-battlefield.sha256.json` → prints `STREAM MATCH`, exit 0.
 6. Build the fdlibm-patched QuickJS oracle runtime + replay rig:
    `oracle/qjs/build.sh` (bellard/quickjs pinned at the exact commit the
    feasibility spike used — record the sha in the script; host `cc` build

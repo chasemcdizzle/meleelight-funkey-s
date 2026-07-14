@@ -214,3 +214,60 @@ iter 4 · 2026-07-14 · phase M0 · task 3: vendored fdlibm BOTH sides + crossch
   hole iter 4's crosscheck lesson warned about for the M2 port.
 - next: M0 task 5 — record + freeze golden #1's checksum stream
   (oracle/record.sh g01 + verify-stream.js) → STREAM MATCH.
+
+## iter 6 — 2026-07-14 — M0 task 5: record + freeze golden #1's checksum stream
+- phase: M0. task: fix_plan §M0 item 5 — oracle/record.sh + verify-stream.js;
+  freeze oracle/goldens/g01-fox-marth-battlefield.sha256.json (fdlibm shim
+  active, spec v1).
+- done-check: `cd oracle/harness && node run.js --dist "$MELEELIGHT_CLONE…"
+  --trace ../goldens/g01-fox-marth-battlefield.trace.json --frames 3600
+  --seed 1337 --out out/g01-fresh.json && node verify-stream.js
+  out/g01-fresh.json ../goldens/g01-fox-marth-battlefield.sha256.json` →
+  `STREAM MATCH g01-fox-marth-battlefield: 3600/3600 frames exact,
+  rngCalls=134, rngCallsOutsideStep=1, specVersion=1`, exit 0
+  (.loop/iter6-m0t5-donecheck.log; CHECKER re-run .loop/checker/m0t5.log).
+- artifacts: oracle/goldens/g01-fox-marth-battlefield.sha256.json (FROZEN,
+  sha256 6426169198c7cf27…, 3600 frames, spec v1, rngCalls=134,
+  rngCallsOutsideStep=1, frame-1 hash = CHECKSUM.md §5 anchor 9f4c6df7…);
+  oracle/goldens/manifest.json (golden registry, seeded with g01 — the
+  SINGLE param source for record/freeze/verify; task 7 extends it + adds
+  coverage assertions); oracle/record.sh (2 fresh runs → compare →
+  freeze → self-verify); oracle/harness/{streamlib,freeze-stream,
+  verify-stream}.js.
+- evidence beyond the done-check (.loop/iter6-m0t5-record.log,
+  -rerecord.log, -negative.log): (1) two fresh runs bit-identical before
+  freezing (compare.js IDENTICAL, rngCalls 134==134); (2) re-running
+  record.sh reproduces the frozen file BYTE-IDENTICALLY ("unchanged
+  (byte-identical re-freeze)"; sha256 equal before/after) — the file is
+  timestamp/environment-free by design, so `git diff` after any re-record
+  is itself a drift detector; (3) negative tests — verifier rejects a
+  pre-shim run (meta.fdlibm undefined), a tampered frozen file (streamSha256
+  seal), a tampered run hash (divergence at frame 3000, exit 2), and
+  freeze-stream refuses a differing overwrite without --refreeze.
+- PROVISIONAL (auto-adopted): manifest.json created now (task 7's text
+  says it writes the manifest — it will extend this one; record.sh being
+  manifest-driven is the class-level design over per-golden hardcoding);
+  frozen-file format {golden, specVersion, params(+traceSha256), rngCalls,
+  rngCallsOutsideStep, streamSha256, frames[{f,h}]}, one frame per line;
+  frames=3600 per the done-check (the 3800-frame trace's tail 200 frames
+  stay unconsumed — held-last semantics make the stream well-defined).
+- CHECKER (mode=task, sub-agent): verified=true, tamper=false, gaps=[];
+  evidence: done-check exit 0 with STREAM MATCH; verify-stream.js read —
+  exact equality, full length, no epsilon/tolerance/prefix; frozen file
+  has no timestamps/env data; git diff HEAD empty, only 6 new files all
+  under oracle/ (M0-allowed); branch agent/auto.
+- zoom-out: the CLASS is "contract artifacts that drift silently or pass
+  vacuously". Instruments over process-trust: (a) determinism by
+  construction — the frozen file contains nothing environmental, so
+  re-freeze byte-identity (proved this iter) turns git diff into the drift
+  alarm; (b) the §8 versioning rule got a mechanical enforcer —
+  verify-stream parses the live spec version out of CHECKSUM.md and fails
+  any stream frozen under a different version, so spec-bump-without-
+  refreeze cannot pass a gate; (c) freeze-stream refuses differing
+  overwrites (--refreeze is a deliberate, visible act); (d) a verifier
+  that has never failed is unproven — four negative tests exercised every
+  rejection path before the gate was trusted. Manifest-as-single-source
+  kills the params-copied-in-N-places class before task 7 multiplies the
+  goldens.
+- next: M0 task 6 — fdlibm-patched QuickJS oracle runtime + replay rig
+  (oracle/qjs/build.sh + replay.sh g01) → QJS MATCH g01.

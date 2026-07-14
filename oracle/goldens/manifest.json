@@ -1,0 +1,17 @@
+{
+  "comment": "Golden registry: the single param source for oracle/record.sh, oracle/harness/freeze-stream.js and (M0 task 7) oracle/verify_goldens.sh. Char indices: 0 marth 1 puff 2 fox 3 falco 4 falcon. Stage indices: 0 battlefield 1 ystory 2 pstadium 3 dreamland 4 fdest 5 fountain. Seeded with g01 in M0 task 5; g02-g08 land in task 7.",
+  "goldens": [
+    {
+      "id": "g01",
+      "name": "g01-fox-marth-battlefield",
+      "trace": "g01-fox-marth-battlefield.trace.json",
+      "frames": 3600,
+      "seed": 1337,
+      "p1": 2,
+      "p2": 0,
+      "stage": 0,
+      "cpu": false,
+      "difficulty": null
+    }
+  ]
+}
