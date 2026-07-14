@@ -24,16 +24,6 @@ covering the remaining char pairs and the other 5 VS stages; g07–g08 =
 human-vs-CPU traces (difficulty 5) on two distinct stages; together every
 one of the 5 characters and 6 stages appears ≥1×.)
 
-3. Land vendored fdlibm BOTH sides: `port/fdlibm/` C sources (surface:
-   sin, cos, tan, atan, atan2, pow — V8's fdlibm-derived ieee754;
-   `NOTICES` entry lands FIRST; vendored sources don't count against the
-   diff budget), JS ports of the same functions shimming `Math.*` inside
-   `oracle/harness/init.js` (pins the oracle against browser libm drift),
-   and `oracle/fdlibm-crosscheck/` — C harness + JS harness emitting
-   IEEE-754 bit patterns over (a) a deterministic edge-case + seeded sweep
-   per function and (b) golden #1's recorded per-call argument stream;
-   byte-compare — done-check:
-   `bash oracle/fdlibm-crosscheck/run.sh` → prints `CROSSCHECK OK`, exit 0.
 4. Freeze the checksum spec as `oracle/CHECKSUM.md`: the spike-proven
    field list (per active player: actionState, timer, percent, stocks,
    hit, hitboxes, phys; plus the aArticles queue), serialization rules

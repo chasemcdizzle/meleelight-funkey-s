@@ -101,3 +101,69 @@ iter 3 · 2026-07-14 · phase M0 · task 2: productionize spike harness → orac
 - next: M0 task 3 — vendored fdlibm both sides (port/fdlibm/ C sources +
   NOTICES entry first, JS Math shim in oracle/harness/init.js,
   oracle/fdlibm-crosscheck/ → CROSSCHECK OK).
+
+iter 4 · 2026-07-14 · phase M0 · task 3: vendored fdlibm BOTH sides + crosscheck
+- done-check (verbatim fix_plan): `bash oracle/fdlibm-crosscheck/run.sh`
+  → printed `CROSSCHECK OK`, DONE-CHECK EXIT: 0.
+- logs: .loop/iter4-m0t3-donecheck.log (writer run, exit 0),
+  .loop/iter4-m0t3-harness-rerun.log (two fresh shim-active harness runs
+  → IDENTICAL checksum streams, 3600/3600 frames, rngCalls 134=134,
+  exit 0), .loop/checker/m0t3.log (CHECKER re-run, exit 0).
+- artifacts: port/fdlibm/{fdlibm.h, fdlibm.c (sha256 46e7eb3ccb114887…),
+  fdlibm.js (sha256 da767867ccdc9f9d…)} — sin/cos/tan/atan/atan2/pow,
+  NOTICES entry landed first, Sun+V8 notices carried verbatim in headers;
+  oracle/fdlibm-crosscheck/{run.sh, gen-inputs.js, csweep.c, jssweep.js,
+  check-constants.js, sanity-ulp.js, extract-args.js, .gitignore};
+  oracle/harness/init.js (Math shim installed from window.__fdlibm,
+  hard-fails if fdlibm.js not injected; --capture-math logging),
+  oracle/harness/run.js (injects port/fdlibm/fdlibm.js before init.js by
+  default, --native-libm / --capture-math flags, meta.fdlibm recorded).
+- evidence: (1) CONSTANTS OK — 176 decimal-literal/bit-pattern pairs
+  verified across BOTH files; (2) sweep — 257,287 deterministic inputs
+  (every fdlibm branch threshold ±ulps, denormals, ±0, ±Inf, NaN incl.
+  payload, k·π/2 cancellation to k=400, Payne-Hanek exponent spread, pow
+  overflow/underflow z-boundaries, yisint parity boundaries, sim ranges)
+  → C and JS BYTE-IDENTICAL on first run; (3) SANITY OK — all 257,287
+  within 16 ulp of node native Math, worst = 1 ulp; (4) golden #1 stream
+  — 11,488 captured calls (sin 2027 · cos 2018 · atan 656 · atan2 6499 ·
+  pow 288; tan 0 until the M4 AI port) replayed browser/C/JS three-way
+  BYTE-IDENTICAL (inputs sha256 b164802a…, args sha256 c6a6337a…).
+- behavioral proof the shim matters: shimmed g01 checksum stream first
+  diverges from the pre-shim iter-3 stream at frame 1671 (browser native
+  libm ≠ fdlibm in live sim inputs) while remaining run-to-run identical
+  — exactly the drift the shim pins away. atan/atan2 match node's native
+  Math bit-exactly over 100k random inputs (V8 ships this same fdlibm
+  atan), independently validating those ports; sin/cos/tan differ from
+  native ~0.5% of args (platform libm trig), pow rarely (≤1 ulp).
+- PROVISIONAL (auto-adopted): (a) fdlibm source lineage fixed = V8
+  12.4.254 src/base/ieee754.cc (sha256 recorded in fdlibm.c header),
+  using the pure-fdlibm fdlibm_sin/fdlibm_cos bodies — settles PLAN §2's
+  "exact source file set fixed at M0"; scalbn from classic Sun s_scalbn.
+  (b) V8's signaling_NaN() returns → canonical quiet NaN
+  0x7FF8000000000000 on BOTH sides (JS cannot reliably produce sNaN;
+  identical bit pattern preserved crosscheck-exactly).
+- CHECKER (mode=task, sub-agent): verified=true, tamper=false, gaps=[];
+  evidence: done-check re-run exit 0, gates are plain `cmp` on full
+  64-bit patterns (no epsilon anywhere in the binding path; 16-ulp bound
+  is a supplementary guard), license notices present, shim injected by
+  default and hard-fails when missing, tree touches only NOTICES +
+  oracle/harness + new port/ + new crosscheck (M0-allowed), branch
+  agent/auto, remotes = origin only.
+- zoom-out: the crosscheck proves C≡JS IDENTITY, not CORRECTNESS — a
+  transcription typo copied into both sides sails through bit-exact
+  comparison. That is a CLASS (shared-source-error blindness), and it got
+  two instruments, not a one-off eyeball: check-constants.js re-derives
+  every constant from its commented bit pattern in BOTH files (kills the
+  dominant typo vector mechanically), and sanity-ulp.js bounds every
+  sweep result against an INDEPENDENT implementation (node native Math)
+  at 16 ulp — gross algorithm errors show up as thousands of ulps.
+  Neither weakens the bit-exact gates; both run inside the done-check.
+  Same class-thinking applied downstream: when M2's C sim diverges from
+  the oracle, "identical-but-wrong shared assumptions" should be the
+  first suspect list, and independent-reference bounds the standard
+  instrument. Also reused iter-3's lesson (new flags need behavioral
+  proof beyond the default path): --capture-math and --native-libm are
+  exercised by the done-check itself (capture feeds gate 4) and by the
+  divergence-at-frame-1671 observation respectively.
+- next: M0 task 4 — freeze the checksum spec as oracle/CHECKSUM.md
+  (field list, serialization rules, percentShake exclusion) → SPEC OK.

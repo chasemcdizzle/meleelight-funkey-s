@@ -13,7 +13,7 @@
 //     [--p1 <char 0-4>] [--p2 <char 0-4>] [--stage <0-5>] \
 //     [--cpu [--difficulty N]] \
 //     [--native-rng] [--real-clock] [--capture-frames 512,513] \
-//     [--capture-all] [--render]
+//     [--capture-all] [--render] [--native-libm] [--capture-math]
 //
 // Character indices (upstream characterSelections):
 //   0 marth · 1 puff · 2 fox · 3 falco · 4 falcon
@@ -26,6 +26,11 @@
 //                trace-driven; the trace's P2 column is ignored (the patch
 //                lets AI slots keep reading aiInputBank).
 // --native-rng : leave Math.random unseeded (determinism experiments only).
+// --native-libm: do NOT shim Math.* with the vendored fdlibm (drift
+//                experiments only; golden recording always uses the shim).
+// --capture-math: record every shimmed Math call (args + result, IEEE-754
+//                bit-pattern hex) into the output JSON's mathCapture — the
+//                oracle/fdlibm-crosscheck/ golden-stream replay input.
 "use strict";
 
 const fs = require("fs");
@@ -121,8 +126,14 @@ async function main() {
   await page.addInitScript({
     content: "window.__harnessConfig = " +
       JSON.stringify({ seedRandom: !has("native-rng"), seed: SEED,
-        virtualClock: !has("real-clock") }) + ";",
+        virtualClock: !has("real-clock"), fdlibm: !has("native-libm"),
+        captureMath: has("capture-math") }) + ";",
   });
+  if (!has("native-libm")) {
+    await page.addInitScript({
+      path: path.join(__dirname, "..", "..", "port", "fdlibm", "fdlibm.js"),
+    });
+  }
   await page.addInitScript({ path: path.join(__dirname, "init.js") });
   await page.addInitScript({ path: path.join(__dirname, "pagelib.js") });
   if (has("render")) {
@@ -168,18 +179,21 @@ async function main() {
 
   const coverage = await page.evaluate(() => window.__coverage());
   const captured = await page.evaluate(() => window.__captured);
+  const mathCapture = has("capture-math")
+    ? await page.evaluate(() => window.__mathCapture) : undefined;
 
   fs.mkdirSync(path.dirname(path.resolve(OUT)), { recursive: true });
   fs.writeFileSync(OUT, JSON.stringify({
     meta: {
       dist: DIST_ROOT, trace: TRACE, frames: FRAMES, seed: SEED,
       p1: P1, p2: P2, stage: STAGE,
-      seedRandom: !has("native-rng"), cpu: CPU,
+      seedRandom: !has("native-rng"), fdlibm: !has("native-libm"), cpu: CPU,
       difficulty: CPU ? DIFFICULTY : null, wallMs: wall,
       browser: browser.browserType().name(), version: browser.version(),
     },
     coverage,
     captured,
+    mathCapture,
     frames,
   }));
   console.log(`${OUT}: ${FRAMES} frames in ${wall}ms ` +

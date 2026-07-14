@@ -45,15 +45,27 @@ Nintendo / HAL Laboratory — no license, no claim, never distributed
   shapes and stays in-repo under the same no-distribution rule.
 
 --------------------------------------------------------------------------------
-fdlibm — Copyright (C) Sun Microsystems (freely-distributable notice)
+fdlibm — Copyright (C) 1993 Sun Microsystems (freely-distributable notice)
+        + Copyright 2016 the V8 project authors (BSD-3-Clause)
 --------------------------------------------------------------------------------
-  The port vendors fdlibm-derived implementations of atan2/sin/cos/atan/pow
-  (+tan for the AI) on BOTH sides of the oracle (C sim, browser Math shim,
-  QuickJS Math patch), per the locked strategy (issue #10). Source: V8's
-  fdlibm port (v8/src/base/ieee754.cc, BSD-licensed, which retains Sun's
-  "Developed at SunSoft ... freely granted" notice). Retain both notices on
-  the vendored files when M0 lands them (planned location: port/fdlibm/ —
-  NOT vendor/, which is gitignored for scratch clones).
+  VENDORED (M0 task 3, 2026-07-14) at port/fdlibm/:
+    - port/fdlibm/fdlibm.c, port/fdlibm/fdlibm.h — C implementations of
+      sin, cos, tan, atan, atan2, pow (the locked transcendental surface,
+      issue #10) plus their internal kernels (__kernel_sin/cos/tan,
+      __ieee754_rem_pio2, __kernel_rem_pio2, scalbn).
+    - port/fdlibm/fdlibm.js — line-for-line JavaScript port of fdlibm.c
+      (IEEE-754 bit manipulation via typed arrays), used by the oracle
+      browser harness to shim Math.* and by oracle/fdlibm-crosscheck/.
+  Source lineage: V8's fdlibm port, v8/src/base/ieee754.cc at tag 12.4.254
+  (https://raw.githubusercontent.com/v8/v8/12.4.254/src/base/ieee754.cc,
+  sha256 recorded in port/fdlibm/fdlibm.c header), itself derived from
+  Sun's fdlibm (http://www.netlib.org/fdlibm). sin/cos are V8's
+  fdlibm_sin/fdlibm_cos bodies (the pure-fdlibm variants). Both upstream
+  notices (Sun's "Developed at SunSoft ... freely granted" and V8's
+  copyright line) are carried verbatim in each vendored file's header,
+  with a list of the mechanical transformations applied (C++ → C99 /
+  → JS). scalbn is from classic Sun fdlibm s_scalbn.c (same Sun notice).
+  Location note: port/fdlibm/, NOT vendor/ (gitignored scratch).
 
 --------------------------------------------------------------------------------
 QuickJS — MIT, Copyright (c) 2017-2025 Fabrice Bellard and Charlie Gordon

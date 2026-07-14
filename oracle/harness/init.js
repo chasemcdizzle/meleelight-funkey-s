@@ -2,14 +2,31 @@
 // spikes/determinism/harness/init.js).
 // Injected into the page BEFORE any page script runs (Playwright addInitScript).
 // Reads window.__harnessConfig (set by an earlier init script from run.js):
-//   { seedRandom: bool, seed: uint32, virtualClock: bool }
+//   { seedRandom: bool, seed: uint32, virtualClock: bool, fdlibm: bool,
+//     captureMath: bool }
 //
 // Provides:
 //   - deterministic Math.random (mulberry32) when seedRandom, counting calls either way
 //   - virtual clock: performance.now / Date.now advance only via __vAdvance
-//   - transcendental call counters on Math.*
+//   - vendored-fdlibm Math shim (sin/cos/tan/atan/atan2/pow) unless
+//     fdlibm === false — pins the oracle against browser libm drift
+//   - transcendental call counters on Math.*; with captureMath, a
+//     bit-pattern log of every shimmed call (oracle/fdlibm-crosscheck/)
 (() => {
   const cfg = window.__harnessConfig || { seedRandom: true, seed: 42 };
+
+  // --- vendored fdlibm Math shim (PLAN §2, M0 task 3) --------------------
+  // port/fdlibm/fdlibm.js is injected by run.js BEFORE this script and
+  // exposes window.__fdlibm. Fail hard if it is missing: a run silently
+  // using native browser libm would record the wrong stream.
+  const FD_SURFACE = ["sin", "cos", "tan", "atan", "atan2", "pow"];
+  if (cfg.fdlibm !== false) {
+    if (!window.__fdlibm) {
+      throw new Error("harness: fdlibm shim required but fdlibm.js was not injected");
+    }
+    for (const name of FD_SURFACE) Math[name] = window.__fdlibm[name];
+    window.__fdlibmActive = true;
+  }
 
   // --- seeded PRNG -----------------------------------------------------
   function mulberry32(a) {
@@ -48,7 +65,24 @@
     Date.now = () => epoch + vnow;
   }
 
-  // --- transcendental / libm exposure counters --------------------------
+  // --- transcendental / libm exposure counters + capture ----------------
+  // With cfg.captureMath, every call to a shimmed surface function is
+  // logged in the crosscheck line format "<fn> <hex16> [<hex16>] -> <hex16>"
+  // (IEEE-754 bit patterns) for oracle/fdlibm-crosscheck/ replay.
+  const capBuf = new ArrayBuffer(8);
+  const capF64 = new Float64Array(capBuf);
+  const capU32 = new Uint32Array(capBuf);
+  capF64[0] = 1.0;
+  const capHI = capU32[1] === 0x3ff00000 ? 1 : 0;
+  const capLO = 1 - capHI;
+  const hexBits = (x) => {
+    capF64[0] = x;
+    return ((capU32[capHI] >>> 0).toString(16).padStart(8, "0") +
+            (capU32[capLO] >>> 0).toString(16).padStart(8, "0"));
+  };
+  window.__mathCapture = [];
+  const captureMath = cfg.captureMath === true;
+
   const tracked = ["sin", "cos", "tan", "asin", "acos", "atan", "atan2",
     "pow", "exp", "log", "sqrt", "cbrt", "hypot", "sinh", "cosh", "tanh"];
   window.__mathCalls = {};
@@ -56,13 +90,22 @@
     window.__mathCalls[name] = 0;
     const orig = Math[name];
     if (typeof orig !== "function") continue;
+    const isSurface = FD_SURFACE.indexOf(name) !== -1;
     Math[name] = function (a, b) {
       window.__mathCalls[name]++;
-      return arguments.length === 1 ? orig(a) : orig(a, b);
+      const r = arguments.length === 1 ? orig(a) : orig(a, b);
+      if (captureMath && isSurface) {
+        window.__mathCapture.push(
+          arguments.length === 1
+            ? name + " " + hexBits(a) + " -> " + hexBits(r)
+            : name + " " + hexBits(a) + " " + hexBits(b) + " -> " + hexBits(r));
+      }
+      return r;
     };
   }
   window.__resetMathCalls = () => {
     for (const k of Object.keys(window.__mathCalls)) window.__mathCalls[k] = 0;
+    window.__mathCapture = [];
     window.__rngCalls = 0;
     window.__rngCallsOutsideStep = 0;
     window.__rngOutsideStacks = [];

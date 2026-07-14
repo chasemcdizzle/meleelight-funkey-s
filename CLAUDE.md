@@ -143,6 +143,20 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   is NOT on PATH (full path above). Run docker builds SERIALLY. Image is
   amd64 — fine under emulation. `-ffp-contract=off` on every sim TU is a
   hard rule; `-O3` only on the hot raster TU.
+- **fdlibm crosscheck (M0 task 3):** `bash oracle/fdlibm-crosscheck/run.sh`
+  → `CROSSCHECK OK`, exit 0 — (1) every constant in
+  `port/fdlibm/{fdlibm.c,fdlibm.js}` matches its commented bit pattern,
+  (2) ~257k-input deterministic sweep C↔JS bit-exact (`cmp`), (3) ≤16-ulp
+  sanity vs native Math (guard only, never the gate), (4) golden #1's
+  full Math call stream three-way byte-identical (browser/C/JS). Vendored
+  surface sin/cos/tan/atan/atan2/pow at `port/fdlibm/` (V8 12.4.254
+  `src/base/ieee754.cc` lineage; fdlibm_sin/fdlibm_cos bodies; NOTICES
+  entry + Sun/V8 headers carried). The harness shims `Math.*` with fdlibm
+  BY DEFAULT (`--native-libm` disables, drift experiments only;
+  `--capture-math` records the call stream into output JSON's
+  `mathCapture`). Shimmed g01 stream first diverges from the pre-shim
+  stream at frame 1671 — browser-libm drift is real; run-to-run identity
+  holds (streams freeze in task 5).
 - **QuickJS oracle-runtime build:** `spikes/device-feasibility/README.md`
   step 2 (bellard/quickjs @2026-06-04, single gcc invocation via `qjsmin.c`,
   static, 890 KB). M0 repoints its Math table at the vendored fdlibm.
