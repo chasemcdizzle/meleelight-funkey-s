@@ -90,6 +90,21 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
 
 ## §Commands (verified; the loop appends as each phase defines them)
 
+- **M0 EXIT GATE (concretized by REPLAN, iter 1):**
+  `bash oracle/verify_goldens.sh` — for EVERY golden in
+  `oracle/goldens/manifest.json`: two fresh browser runs
+  (`oracle/harness/run.js`, fdlibm JS shim active) produce checksum
+  streams bit-identical to each other AND to the committed
+  `oracle/goldens/*.sha256.json`; the fdlibm-patched QuickJS runtime
+  (`oracle/qjs/replay.sh`) reproduces the same stream; manifest coverage
+  asserts all 5 characters, all 6 VS stages, and ≥1 CPU trace.
+  Exact-equality per frame hash, full trace length; any mismatch,
+  missing artifact, or coverage shortfall → nonzero exit.
+- **Upstream clone + build (M0 committed form):**
+  `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
+  `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
+  docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;
+  idempotent, `--force` rebuilds from the pristine pin.
 - **Upstream clone + build (proven twice — determinism spike + prototype):**
   ```
   git clone https://github.com/schmooblidon/meleelight "$MELEELIGHT_CLONE"
