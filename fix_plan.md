@@ -67,16 +67,13 @@ same bundle for stage geometry + sounds.)
 FORMATS.md §4; the extractor bundle now also exposes window.__stages —
 ystory/fountain's god-module imports externals-stubbed, see §4.2.)
 
-4. Audio conversion + sound map: extractor additionally exports the
-   `sounds` table (180 Howl names → wav path + volume + sprite windows)
-   and the MusicManager track list; ffmpeg (version + exact flags pinned
-   in the manifest) converts all 204 `dist/sfx/*.wav` → 22050 Hz mono
-   S16LE raw PCM blobs and all 8 `dist/music/*.ogg` → 22050 Hz stereo
-   S16LE raw PCM — done-check: `bash pipeline/check-audio.sh` → prints
-   `AUDIO OK`, exit 0 (two fresh runs byte-identical; 204 sfx blobs /
-   180 mapped sounds / 8 tracks == expected.json; every blob's byte
-   length ≡ 0 mod frame size and sample count recorded in the manifest;
-   provenance marks Nintendo-derived PRIVATE).
+(task 4 — audio conversion + executed-JS sound map — DONE iter 12:
+`bash pipeline/check-audio.sh` → AUDIO OK, exit 0. SND1 spec:
+FORMATS.md §5; ffmpeg 8.1.1 + exact argv + aggregate output sha256
+frozen in expected.json audio — a different ffmpeg fails loudly, never
+drifts; blobs are Nintendo-derived PRIVATE USE ONLY and live only in
+gitignored build output.)
+
 5. Full-pipeline runner + M1 exit gate: `pipeline/verify_pipeline.sh`
    runs the ENTIRE pipeline twice fresh (all registered stages) into
    `pipeline/build/gate-{a,b}`, asserts manifest byte-identity,

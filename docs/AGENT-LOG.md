@@ -714,3 +714,98 @@ MILESTONE PASS: M0
   saw fire is an untested guard.
 - next: M1 task 4 — audio conversion + sound map
   (`bash pipeline/check-audio.sh`).
+
+## iter 12 — 2026-07-14 — M1 task 4: audio conversion + executed-JS sound map (SND1)
+
+- phase M1, task: fix_plan §M1 task 4 (all 204 dist/sfx wavs → 22050 Hz
+  mono S16LE raw PCM, all 8 dist/music oggs → 22050 Hz stereo S16LE raw
+  PCM, + the sound map executed out of upstream's own main/sfx +
+  main/music via the extractor bundle).
+- done-check: `bash pipeline/check-audio.sh` → AUDIO OK, exit 0
+  (.loop/iter12-check-audio.log; CHECKER re-run
+  .loop/checker/check-audio.log). Regressions: ANIMATIONS OK / TABLES OK
+  / STAGES OK (.loop/iter12-check-{animations,tables,stages}.log; also
+  re-run by CHECKER — the extractor bundle changed, both table stages
+  re-verified against it).
+- CHECKER (separate sub-agent, mode=task): verified=true, tamper=false —
+  evidence: AUDIO OK exit 0 (byte-stability cmp ×2, 214 artifacts
+  re-hashed ×2, expected.json audio pins, no-commit guard, zero
+  epsilon/tolerance anywhere in the verification path); all three
+  regression checks green; diff surface exactly as declared (CLAUDE.md
+  §Commands additive-only, expected.json audio section additive with
+  animations/tables/stages pins byte-untouched); nothing under
+  pipeline/build tracked by git.
+- what landed: extractor entry imports upstream's own main/sfx (the 180
+  named Howls INCLUDING its module-scope changeVolume pass) + main/music
+  (8 MusicManager track Howls) → window.__sounds; loadExtractor gained a
+  browser-parity shim (window === global, adds swept afterwards) + a
+  Howl capture shim (records constructor cfg verbatim, loads no audio;
+  upstream's own _volume writes land on the instances). New: stage
+  pipeline/stages/audio.js (ffmpeg conversion + SND1 sounds.json +
+  audio/README.md provenance notice) · lib/sounds-schema.js (pinned
+  schema + hard-throw walk: cfg key sets, volume [0,1] as f64 bits,
+  sprite windows int32, actionSounds referential integrity into the sfx
+  map) · check-audio.sh · FORMATS.md §5 (SND1 spec incl. §5.3 volume
+  semantics + §5.4 C-emission judgment) · expected.json audio section +
+  check-expected.js audio block (incl. blob-shape and aggregate-hash
+  recompute) · run.js registration · build-extractor.sh __sounds guard.
+- measured (executed data, now frozen in expected.json): 204 sfx blobs
+  (5,458,598 bytes / 2,729,299 samples) · 180 mapped sounds over 179
+  distinct wavs (electricfizz.wav shared by electricfizz +
+  loudelectricfizz) · 25 unmapped wavs (converted anyway; upstream
+  content) · 1 looping sound (furaloop) · 8 music tracks (181,407,012
+  bytes / 45,351,753 sample frames ≈ 34 min; SD-streaming budget fine
+  per audio-spike) · actionSounds 5 chars / 65 states / 36 events, all
+  referentially intact. KEY SEMANTIC FIND: every Howl's authored cfg
+  volume is DEAD at runtime — sfx.js's own load-time
+  changeVolume(sounds, 0.5) / changeVolume(MusicManager, 0.3) overwrites
+  _volume with masterDefault × (volumeOverwrites[name] || 1); the map
+  records the post-load effective volume (what Howler actually plays)
+  AND the authored cfgVolume as provenance. Babel 6 drops the valueless
+  `static whatisPlaying;` class property — Object.keys(MusicManager)
+  yields exactly the 8 track Howls, which is the only reason upstream's
+  own changeVolume doesn't crash at load; schema asserts the track set.
+- verification beyond the done-check (negative tests, all restored):
+  ffmpeg pin perturbed to 7.0.0 → stage hard-fails BEFORE converting
+  ("would DRIFT frozen artifact bytes") · blob tampered (2 bytes
+  appended) → verify-artifacts SIZE mismatch exit 1 · aggregate
+  artifactsSha256 pin perturbed → check-expected exit 1. Faithfulness
+  spot-checks: dash.pcm 6,773 samples = 0.3072 s vs source wav 0.307125 s
+  (16000→22050 resample) ✓ · menu.pcm 4,417,729 frames = 200.351 s vs
+  ogg 200.350521 s ✓ · volume 0.15 bits 3fc3333333333333 == python
+  struct pack of 0.5×0.3 ✓ · marth JUMP → [[1,"jump"]] matches source ✓.
+- artifact hashes (sha256 first 16): check-audio.sh 4db800301f56b655 ·
+  stages/audio.js 160d1b216bfae26f · lib/sounds-schema.js
+  2bf032fa7e674ed6 · lib/tables-schema.js d98d72d8ab9e2b65 ·
+  lib/check-expected.js b40ffde29d689e98 · extractor.entry.js
+  ee80674e83b1b741 · build-extractor.sh f7ee63cd0d878d46 · expected.json
+  98a7d974c22ed088 · run.js 52cd133bcfe022c6 · FORMATS.md
+  26078b9e4708630c. Frozen output aggregate (expected.json
+  audio.artifactsSha256): e776a885df21edd4… over 214 artifacts,
+  ffmpeg 8.1.1.
+- PROVISIONAL (auto-adopted): SND1 as JSON-canonical with C emission
+  deferred to the M4 mixer task (FORMATS.md §5.4 — the sound map's only
+  consumer is the M4 mixer; emitting a C surface now would freeze a
+  mixer-facing API before the mixer design exists; the M4 task generates
+  its C table FROM sounds.json with the CTAB1 dual-dump discipline).
+  Also: recording post-load effective volume as the primary `volume`
+  (with authored cfgVolume kept) — executed-state-over-authored-text is
+  the same principle as every other stage. Also: unmapped wavs converted
+  anyway (upstream content; map records reachability).
+- zoom-out: two prior classes held with zero adaptation (hard-throw
+  schema walk = the silent-drift instrument; measured-then-frozen
+  expected.json pins). NEW class surfaced and instrumented:
+  TOOLCHAIN-VERSION-DEPENDENT OUTPUT BYTES — byte-stability ×2 runs the
+  SAME binary twice and is structurally blind to version drift, so any
+  stage whose bytes depend on an external tool build (ffmpeg resampler
+  here; docker node:8 webpack already pinned by image tag for the same
+  reason) needs an explicit version+argv pin that fails BEFORE
+  generating, plus a frozen output aggregate that fails after. Same
+  family as the browser-libm drift M0 solved with fdlibm — the fix is
+  always: pin the transform, freeze the bytes. 2nd instance of the
+  browser-global-identity gotcha (qjs getCookie class): sfx.js reads
+  back window-assigned names as bare globals; shim window = global for
+  parity of paths, not just survival — a detached window object
+  "survives" every module except the one that matters.
+- next: M1 task 5 — full-pipeline runner + M1 exit gate
+  (`bash pipeline/verify_pipeline.sh`), then the phase-advance iteration.

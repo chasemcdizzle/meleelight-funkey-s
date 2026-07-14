@@ -1,6 +1,7 @@
 # pipeline/FORMATS.md — generated-data formats the C side implements against
 
-Status: **PROVISIONAL** (auto-adopted, M1 REPLAN iter 9; §4 added iter 11).
+Status: **PROVISIONAL** (auto-adopted, M1 REPLAN iter 9; §4 added iter 11;
+§5 added iter 12).
 Format changes after C consumers exist require a version bump in the magic
 and a regeneration of every artifact + expected.json re-freeze in the same
 change (same discipline as oracle/CHECKSUM.md §8).
@@ -373,3 +374,127 @@ COMPILED tables; actual store/load round trip through a C double) and
 execution of the real upstream stage modules (412 leaf lines at the pin).
 The C reader/consumer implements THIS document; on disagreement between
 code and spec, the spec + a regenerated artifact set win.
+
+## 5. SND1 — converted PCM audio + the sound map
+
+Artifacts per pipeline run: `audio/sfx/<name>.pcm` (one per
+`dist/sfx/*.wav`), `audio/music/<name>.pcm` (one per `dist/music/*.ogg`),
+`sounds.json` (the canonical executed-JS sound map) and `audio/README.md`
+(provenance notice). Generator: `pipeline/stages/audio.js`; schema/walk:
+`pipeline/lib/sounds-schema.js`. Source: the SAME extractor bundle as
+CTAB1/STAB1 — task 4 extends the entry with upstream's own `main/sfx`
+(the 180 named Howls plus its load-time `changeVolume` pass) and
+`main/music` (the 8 `MusicManager` track Howls) → `window.__sounds`,
+executed under the shared loader's browser-parity shim (`window ===
+global` — sfx.js reads back names it assigned to `window` as bare
+globals; a detached window object breaks that path) with a `Howl`
+capture shim (records each constructor cfg verbatim; loads no audio;
+upstream's own post-construction `_volume` writes land on the captured
+instances exactly as on real Howler objects).
+
+**PROVENANCE / DISTRIBUTION:** all §5 audio content is Nintendo-derived
+(ripped Melee SFX/music). PRIVATE USE ONLY, never distributed; blobs
+exist only in gitignored build output (`build*/`) — the repo commits
+hashes, never bytes. The manifest stage entry carries an explicit
+`provenance` field and `check-audio.sh` enforces the no-commit guard.
+
+### 5.1 PCM blobs (the device runtime format)
+
+Headerless raw PCM, S16LE (little-endian per §0), per the measured
+device verdict (PLAN §7, docs/research/audio-spike.md):
+
+| dir | source | rate | channels | frame size | runtime use |
+|---|---|---|---|---|---|
+| `audio/sfx/` | `dist/sfx/*.wav` | 22050 Hz | 1 (mono) | 2 bytes | pre-decoded into RAM, 8-voice mixer |
+| `audio/music/` | `dist/music/*.ogg` | 22050 Hz | 2 (stereo, interleaved L R) | 4 bytes | streamed from SD, 2×64 KB double-buffer |
+
+Every blob's byte length is asserted ≡ 0 mod frame size (generator
+hard-throw + check-expected re-check); the manifest artifact entry
+records `samples` (sample FRAMES, i.e. bytes / frame size), `channels`
+and `rate` alongside the standard `sha256`/`bytes`. wav/ogg never ship
+to the device (ogg is the offline source format only).
+
+### 5.2 Determinism / the ffmpeg pin
+
+Raw s16le output has no container metadata or timestamps, but the
+resampler (16000→22050 etc.) and the vorbis decoder are properties of
+the ffmpeg BUILD. Byte-stability ×2 within a run pair cannot see a
+version change, so the pin is explicit and three-layered, frozen in
+`pipeline/expected.json` `audio`:
+
+- `tool.ffmpeg` — exact version string; `stages/audio.js` HARD-FAILS
+  before converting anything when the installed ffmpeg differs
+  (fail loudly, never drift).
+- `tool.sfxArgs` / `tool.musicArgs` — the exact conversion argv
+  (incl. `-fflags +bitexact`, `-map_metadata -1`); recorded verbatim in
+  the manifest and compared by check-expected, so a loosened flag is a
+  failure, not a silent re-measure.
+- `artifactsSha256` — aggregate sha256 over `"<path> <sha256>\n"` of
+  every audio artifact (sorted by path): the frozen output bytes.
+
+Upgrading ffmpeg is a DELIBERATE re-freeze: update `tool.ffmpeg`,
+`artifactsSha256` and the byte/sample counts in expected.json in the
+same change, with the diff recorded in docs/AGENT-LOG.md (same
+discipline as oracle/CHECKSUM.md §8).
+
+### 5.3 `sounds.json` — the sound map (canonical model)
+
+Deterministic JSON (§0 rules; sorted keys, no provenance inside the
+artifact — provenance lives in the manifest so unrelated pipeline edits
+don't churn the frozen aggregate). Doubles are `{bits, dec}` pairs
+(16 lowercase hex digits of the IEEE-754 pattern + shortest round-trip
+decimal; bits authoritative, CTAB1 §3.1 discipline). Shape:
+
+```
+formatVersion: 1
+sfx.<name>:   file (sfx/<x>.wav) · blob (audio/sfx/<x>.pcm) ·
+              volume {bits,dec} · cfgVolume {bits,dec} · loop 0|1
+music.<name>: file (music/<x>.ogg) · blob (audio/music/<x>.pcm) ·
+              volume · cfgVolume · sprite { start: [offMs, durMs],
+              loop: [offMs, durMs] }
+actionSounds.<char>.<STATE>: [ [frame, sfxName], ... ]
+```
+
+Pinned semantics (measured iter 12; hard-throws on drift):
+
+- **`volume` is the post-load effective value** — sfx.js's own
+  module-scope `changeVolume(sounds, 0.5, 0)` /
+  `changeVolume(MusicManager, 0.3, 1)` overwrites every Howl's
+  `_volume` with `masterDefault × (volumeOverwrites[name] || 1)`,
+  making the authored constructor volume dead at runtime. `volume` is
+  what Howler actually plays at default settings and is the C mixer's
+  per-sound gain source; `cfgVolume` preserves the authored
+  constructor value (provenance). Runtime master-volume changes
+  (audiomenu, main.js pause ducking) are M4 logic, not data.
+- sfx cfg keys ⊆ {src, volume, loop}; exactly one looping sound at the
+  pin (`furaloop`). src is a single-element array. 180 Howl names over
+  179 distinct wavs (`electricfizz.wav` is shared by `electricfizz` +
+  `loudelectricfizz`); 25 of the 204 wavs are unreferenced by any Howl
+  (converted anyway — upstream content, and the map records
+  reachability).
+- music: exactly 8 tracks (TRACK_NAMES pinned); cfg keys ⊆ {src,
+  volume, html5, sprite, onend}; `html5: true` asserted (upstream's
+  own streaming hint — matches the SD-streaming design); sprite keys
+  exactly `<name>Start`/`<name>Loop`, each `[offsetMs, durationMs]`
+  int32 (the Start→Loop chaining `onend` handlers are M4 logic; the
+  windows are the data). Sprite windows may end before the decoded
+  track does (e.g. menu loop ends at 180.9 s of a 200.4 s ogg) —
+  carried verbatim, Howler sprite semantics.
+- `actionSounds` (per-char `STATE → [[frame, sfxName], …]`, registered
+  by the attributes modules, parked here from CTAB1 §3.4): frames
+  int32 ≥ 0, every sfxName must resolve in the sfx map (referential
+  integrity hard-throw), event order verbatim. The
+  `player.timer == frame → play` caller (actionStateShortcuts.js) is
+  M2/M4 sim logic.
+
+### 5.4 C emission judgment (why no ml_sounds.c yet)
+
+CTAB1/STAB1 got generated C tables because the M2 sim links them.
+The sound map's only consumer is the M4 audio mixer (PLAN §7), which
+doesn't exist yet — emitting a C surface now would freeze a
+mixer-facing API before the mixer design does, so `sounds.json` is the
+canonical artifact and the M4 mixer task generates its C table FROM
+this model, implementing against THIS section with the same round-trip
+discipline (dual dump, hard-throw typing). PROVISIONAL (auto-adopted,
+iter 12). On disagreement between code and spec, the spec + a
+regenerated artifact set win.

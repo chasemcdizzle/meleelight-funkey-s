@@ -22,7 +22,7 @@ const STAGES = [
   require("./stages/animations"),
   require("./stages/tables"),
   require("./stages/stages"),
-  // fix_plan §M1 task 4 registers here: audio
+  require("./stages/audio"),
 ];
 
 function arg(name, dflt) {

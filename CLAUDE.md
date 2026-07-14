@@ -173,6 +173,33 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   pinned empty/absent, schema hard-throws on drift. fdest `ledgePos`
   x=±68.4 while its ground runs ±85.6 — authored upstream quirk
   (battlefield copy-paste), carried verbatim: faithfulness > plausibility.
+- **Audio conversion + sound map (M1 task 4 committed form):** the
+  extractor bundle additionally executes upstream's own `main/sfx` +
+  `main/music` (Howl capture shim + browser-parity `window === global`
+  shim in `tables-schema.js loadExtractor` — sfx.js reads back its own
+  `window.changeVolume` as a bare global, a detached window object breaks
+  it) → `window.__sounds`. Stage `audio` (in `node pipeline/run.js`)
+  ffmpeg-converts all 204 `dist/sfx/*.wav` → `audio/sfx/*.pcm` (22050 Hz
+  MONO S16LE raw) and all 8 `dist/music/*.ogg` → `audio/music/*.pcm`
+  (22050 Hz STEREO S16LE raw; device streams from SD per PLAN §7) and
+  emits `sounds.json` (format SND1, FORMATS.md §5): 180 Howl names →
+  blob + effective volume (post-load `changeVolume` value; authored
+  cfgVolume kept as provenance) + loop, 8 music tracks with sprite
+  Start/Loop windows, per-char `actionSounds` state→[[frame,sound]]
+  schedules (referential integrity hard-throw). ffmpeg pinned three ways
+  in expected.json audio (version — stage hard-fails on mismatch BEFORE
+  converting; exact argv; aggregate artifact sha256): a different ffmpeg
+  build fails loudly, never drifts. C emission deferred to the M4 mixer
+  task BY JUDGMENT (FORMATS.md §5.4 — no C consumer until then). Task
+  check: `bash pipeline/check-audio.sh` → `AUDIO OK` (byte-stability ×2,
+  artifact hashes, expected.json pins incl. blob shape bytes ≡ 0 mod
+  frame size, no-commit guard). PROVENANCE: blobs are Nintendo-derived,
+  PRIVATE USE ONLY, gitignored build output only — never distributed,
+  never committed. Gotcha class (browser-global identity, 3rd god-module
+  cousin): upstream modules assign `window.X` then read bare `X` —
+  works in browsers where window IS the global; any node-side shim must
+  be `global.window = global`, not a plain object (qjs shim class:
+  parity of paths, not just survival).
 - **Upstream clone + build (M0 committed form):**
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via

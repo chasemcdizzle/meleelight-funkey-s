@@ -1,6 +1,34 @@
 {
-  "_comment": "Pinned coverage contract for the M1 data pipeline (fix_plan §M1 conventions). Values are MEASURED-THEN-FROZEN from executed-JS runs against the upstream pin — never hand-invented (AGENT-LOG iters 9-11 record the measurements). check-expected.js asserts a run manifest against this file and re-derives the 754-file reconciliation live from the src tree. Task 4 appends its section (audio) when it lands. tables.animXref pins the measured framesData/ECB vs ANIM1 reconciliation (lists are exact and sorted; tables-anim-xref.js re-derives them live from the run artifacts).",
+  "_comment": "Pinned coverage contract for the M1 data pipeline (fix_plan §M1 conventions). Values are MEASURED-THEN-FROZEN from executed-JS runs against the upstream pin — never hand-invented (AGENT-LOG iters 9-12 record the measurements). check-expected.js asserts a run manifest against this file and re-derives the 754-file reconciliation live from the src tree. tables.animXref pins the measured framesData/ECB vs ANIM1 reconciliation (lists are exact and sorted; tables-anim-xref.js re-derives them live from the run artifacts). audio pins the ffmpeg version + exact conversion argv + an aggregate sha256 over path+sha256 of every audio artifact: a different ffmpeg build may resample differently, so it must FAIL here loudly, never drift — re-freeze deliberately per FORMATS.md §5.",
   "upstreamPinPrefix": "27af171",
+  "audio": {
+    "artifactsSha256": "e776a885df21edd45b32964bd99c9a33548e3cfddda55ee8999dd8367733810d",
+    "artifactsTotal": 214,
+    "coverage": {
+      "actionSoundChars": 5,
+      "actionSoundEvents": 36,
+      "actionSoundStates": 65,
+      "loopingSounds": 1,
+      "mappedSounds": 180,
+      "mappedWavs": 179,
+      "musicBytes": 181407012,
+      "musicSamples": 45351753,
+      "musicTracks": 8,
+      "sfxBlobs": 204,
+      "sfxBytes": 5458598,
+      "sfxSamples": 2729299,
+      "unmappedWavs": 25
+    },
+    "provenance": {
+      "contentOrigin": "Nintendo-derived (Super Smash Bros. Melee SFX/music, ripped upstream)",
+      "use": "PRIVATE USE ONLY - never distributed"
+    },
+    "tool": {
+      "ffmpeg": "8.1.1",
+      "musicArgs": ["-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-fflags", "+bitexact", "-i", "<in.ogg>", "-map_metadata", "-1", "-f", "s16le", "-acodec", "pcm_s16le", "-ar", "22050", "-ac", "2", "<out.pcm>"],
+      "sfxArgs": ["-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-fflags", "+bitexact", "-i", "<in.wav>", "-map_metadata", "-1", "-f", "s16le", "-acodec", "pcm_s16le", "-ar", "22050", "-ac", "1", "<out.pcm>"]
+    }
+  },
   "animations": {
     "coverage": {
       "absentFrames": 0,

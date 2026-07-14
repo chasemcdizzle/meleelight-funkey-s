@@ -12,6 +12,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { sha256 } = require("./manifest");
 
 const runDir = path.resolve(process.argv[2] || "");
 const distRoot = path.resolve(process.argv[3] || "");
@@ -148,6 +149,59 @@ if (wantStages.includes("stages")) {
         fail(`stages artifact ${name} missing from manifest`);
       }
     }
+  }
+}
+
+// ---- audio (converted PCM blobs + sound map, SND1) ----
+if (wantStages.includes("audio")) {
+  const exp = expected.audio;
+  const st = manifest.stages.audio;
+  if (!st) {
+    fail("manifest has no audio stage");
+  } else {
+    eq("audio.format", st.format, "SND1");
+    // ffmpeg pin: version AND exact argv — a loosened flag or different
+    // build must fail here, never drift frozen bytes silently.
+    eq("audio.tool.ffmpeg", st.tool && st.tool.ffmpeg, exp.tool.ffmpeg);
+    for (const args of ["sfxArgs", "musicArgs"]) {
+      eq(`audio.tool.${args}`, JSON.stringify(st.tool && st.tool[args]),
+        JSON.stringify(exp.tool[args]));
+    }
+    for (const k of Object.keys(exp.coverage)) {
+      eq(`audio.coverage.${k}`, st.coverage[k], exp.coverage[k]);
+    }
+    for (const k of Object.keys(exp.provenance)) {
+      eq(`audio.provenance.${k}`, st.provenance && st.provenance[k],
+        exp.provenance[k]);
+    }
+    eq("audio.artifacts.length", st.artifacts.length, exp.artifactsTotal);
+    for (const name of ["sounds.json", "audio/README.md"]) {
+      if (!st.artifacts.some((a) => a.path === name)) {
+        fail(`audio artifact ${name} missing from manifest`);
+      }
+    }
+    // Blob shape: raw S16LE — bytes divisible by the frame size and equal
+    // to samples * frame size, at the pinned rate (fix_plan task 4
+    // done-check: "byte length ≡ 0 mod frame size and sample count
+    // recorded in the manifest").
+    for (const a of st.artifacts) {
+      if (a.channels === undefined) continue; // sounds.json / README
+      const frameSize = 2 * a.channels;
+      if (a.bytes % frameSize !== 0) {
+        fail(`audio blob ${a.path}: ${a.bytes} bytes not 0 mod frame size ${frameSize}`);
+      }
+      if (a.samples * frameSize !== a.bytes || !(a.samples > 0)) {
+        fail(`audio blob ${a.path}: samples ${a.samples} * ${frameSize} != bytes ${a.bytes}`);
+      }
+      if (a.rate !== 22050) fail(`audio blob ${a.path}: rate ${a.rate} != 22050`);
+    }
+    // Frozen output bytes: aggregate over path+sha256 of every artifact,
+    // recomputed here from the manifest (which verify-artifacts.js has
+    // re-hashed against the files) and compared to BOTH the stage's own
+    // aggregate and the expected.json pin.
+    const agg = sha256(st.artifacts.map((a) => `${a.path} ${a.sha256}\n`).join(""));
+    eq("audio.artifactsSha256 (manifest-internal)", st.artifactsSha256, agg);
+    eq("audio.artifactsSha256 (frozen pin)", agg, exp.artifactsSha256);
   }
 }
 

@@ -78,28 +78,52 @@ function asI16(where, v) {
   return n;
 }
 
-// Execute the built extractor bundle under a window shim (same pattern as
-// stages/animations.js: the bundle is pure data construction — Vec2D /
-// createHitbox object literals and constant arithmetic, no executed
-// Math.*, no DOM — so plain node execution of the SAME built artifact is
-// engine-neutral). Returns the whole shim window so every extractor
-// global (__tables task 2, __stages task 3) shares ONE loader — shim
-// duplication is a drift class.
+// Execute the built extractor bundle under a browser-parity shim (same
+// executed-JS basis as stages/animations.js: the bundle is pure data
+// construction — no executed Math.*, no DOM — so plain node execution of
+// the SAME built artifact is engine-neutral). Returns a snapshot of the
+// extractor globals (__tables task 2, __stages task 3, __sounds task 4)
+// so every stage shares ONE loader — shim duplication is a drift class.
+//
+// window === global (not a plain object): in a browser `window` IS the
+// global object, and upstream modules rely on that identity — sfx.js does
+// `window.changeVolume = function ...` then CALLS bare `changeVolume(...)`
+// at module scope. A detached window object makes that read a
+// ReferenceError (the qjs-shim gotcha class: shim for parity of paths,
+// not just survival). Every global the load adds is swept afterwards.
+//
+// Howl capture shim: sfx.js/music.js construct Howler `Howl`s (a browser
+// global there) at import time; the cfg object IS the data plane. The
+// shim records it (instance.__howlCfg) and loads no audio; post-load
+// mutations by upstream's own changeVolume land on the instances
+// (._volume) exactly as they would on real Howls.
+const EXTRACTOR_GLOBALS = ["__tables", "__stages", "__sounds"];
+
 function loadExtractor(distRoot) {
   const srcPath = path.join(distRoot, "dist", "js", "extractor.js");
   if (!fs.existsSync(srcPath)) {
     throw new Error(`missing ${srcPath} — run pipeline/extractor/build-extractor.sh first`);
   }
+  const before = new Set(Object.getOwnPropertyNames(global));
   const hadWindow = "window" in global;
-  const saved = global.window;
-  const win = {};
-  global.window = win;
+  const savedWindow = global.window;
+  const hadHowl = "Howl" in global;
+  const savedHowl = global.Howl;
+  function Howl(cfg) { this.__howlCfg = cfg; }
+  global.window = global;
+  global.Howl = Howl;
   try {
     delete require.cache[require.resolve(srcPath)];
     require(srcPath);
+    const win = {};
+    for (const k of EXTRACTOR_GLOBALS) win[k] = global[k];
     return { win, srcSha256: sha256(fs.readFileSync(srcPath)) };
   } finally {
-    if (hadWindow) global.window = saved; else delete global.window;
+    for (const k of Object.getOwnPropertyNames(global)) {
+      if (!before.has(k)) delete global[k];
+    }
+    if (hadWindow) global.window = savedWindow;
+    if (hadHowl) global.Howl = savedHowl;
   }
 }
 
