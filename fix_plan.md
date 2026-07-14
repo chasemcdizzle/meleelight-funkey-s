@@ -54,18 +54,9 @@ wavs of which exactly 180 are referenced as Howls in src/main/sfx.js;
 8 music oggs. Audio artifacts are Nintendo-derived: PRIVATE use only,
 never distributed — provenance field marks them.)
 
-1. Pipeline skeleton + animations serializer: runner `pipeline/run.js`
-   (stage registry, `--only`, `--dist`, `--out`, deterministic manifest
-   writer) + executed-JS serialization of `window.animations` into
-   per-character packed int16 bezier-path binaries (`ANIM1` in
-   `pipeline/FORMATS.md`) with an independent-decoder round-trip check
-   inside the stage — done-check: `bash pipeline/check-animations.sh` →
-   prints `ANIMATIONS OK`, exit 0 (two fresh runs → byte-identical
-   manifests, every artifact re-hashed against its manifest entry,
-   coverage == expected.json: 5 chars / 744 states / 27,820 frames /
-   27,808 paths / 7,747,148 coords, plus the 754-file reconciliation
-   re-derived live against the upstream src tree, decoder round-trip
-   exact on every coord).
+(task 1 — pipeline skeleton + animations serializer — DONE iter 9:
+`bash pipeline/check-animations.sh` → ANIMATIONS OK, exit 0.)
+
 2. Extractor bundle + engine tables → generated C: build a
    `pipeline/extractor/` webpack entry with upstream's docker node:8
    toolchain (modeled on `bin/webpack/animations.config.js`; entry

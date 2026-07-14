@@ -1,0 +1,33 @@
+{
+  "_comment": "Pinned coverage contract for the M1 data pipeline (fix_plan §M1 conventions). Values are MEASURED-THEN-FROZEN from executed-JS runs against the upstream pin — never hand-invented (AGENT-LOG iter 9 records the measurement). check-expected.js asserts a run manifest against this file and re-derives the 754-file reconciliation live from the src tree. Tasks 2-4 append their sections (tables/stages/audio) when they land.",
+  "upstreamPinPrefix": "27af171",
+  "animations": {
+    "coverage": {
+      "absentFrames": 0,
+      "bytes": 15734864,
+      "chars": 5,
+      "coords": 7747148,
+      "frames": 27820,
+      "irregularPaths": 0,
+      "maxCoordCount": 650,
+      "nonInt16Paths": 0,
+      "paths": 27808,
+      "states": 744
+    },
+    "perChar": {
+      "falco": { "states": 148 },
+      "falcon": { "states": 145 },
+      "fox": { "states": 142 },
+      "marth": { "states": 155 },
+      "puff": { "states": 154 }
+    },
+    "sourceFilesTotal": 754,
+    "deadFiles": [
+      "falco/ILLUSIONFX",
+      "falco/THROWNDOCBACK",
+      "falco/THROWNDOCDOWN",
+      "falco/THROWNDOCFORWARD",
+      "falco/THROWNDOCUP"
+    ]
+  }
+}

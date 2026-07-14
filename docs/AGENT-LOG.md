@@ -484,3 +484,63 @@ MILESTONE PASS: M0
   expected.json pins EXACT counts (stronger than PLAN's "~27.9k";
   measured-then-frozen like goldens, never hand-invented).
 - next: execute M1 task 1 (pipeline skeleton + animations serializer).
+
+## iter 9 (cont.) — 2026-07-14 — M1 task 1: pipeline skeleton + animations serializer
+
+- done-check: `bash pipeline/check-animations.sh` → exit 0, ends
+  `ANIMATIONS OK` (.loop/iter9-m1t1-donecheck.log; first measurement run
+  .loop/iter9-m1t1-firstrun.log). Two FRESH runs → byte-identical
+  manifest.json (sha256 d001897c48b2aea6…, stable across three runs
+  total incl. the dev run); verify-artifacts re-hashed all 5 binaries
+  both runs; check-expected asserted the full pinned contract INCLUDING
+  the live 754-file reconciliation against the upstream src tree.
+- shipped: pipeline/run.js (stage-registry runner, deterministic
+  manifest: sorted keys, no timestamps/abs paths, upstream HEAD +
+  source sha256 provenance) · pipeline/stages/animations.js (executed-JS:
+  window-shimmed node require of the BUILT dist/js/animations.js, walks
+  the live objects, hard in-run decoder round-trip on every coord) ·
+  pipeline/lib/animbin.js (ANIM1 encoder + validating decoder — the C
+  reference) · pipeline/lib/{manifest,verify-artifacts,check-expected}.js
+  · pipeline/expected.json (pinned contract) · pipeline/FORMATS.md
+  (ANIM1 spec v1, PROVISIONAL, little-endian pinned: host arm64 LE /
+  device ARMv7 LE; absolute-offset header/state-directory/string-table/
+  frame-offset-tables/frame-records; absent-frame sentinel 0; u16
+  pathCount/coordCount with hard throws on overflow, max measured 650).
+- measured (executed data, now frozen in expected.json): 5 chars ·
+  744 states · 27,820 frames · 27,808 paths · 7,747,148 int16 coords ·
+  0 absent frames · 0 irregular paths · 0 non-Int16Array paths · total
+  15,734,864 artifact bytes (~15.0 MiB, matches anatomy §2's ≈15 MB;
+  4 empty frames exist: marth 4, fox 4, falco 4 have frames<->paths
+  deltas — frames with pathCount 0, kept verbatim). expected.json bytes
+  value was pinned FROM the measured run (placeholder corrected before
+  commit — values are executed, never invented).
+- verification beyond the done-check (negative tests, not committed as
+  artifacts): 1-byte artifact tamper → verify-artifacts HASH mismatch
+  exit 1; stray file in run dir → exit 1; corrupted version field →
+  decoder throws; end-to-end spot-check: fox APPEAL frame-1 path-0
+  coords decoded from the binary == the raw upstream source literal
+  (-13,-148,-17,-154,…) — source text → built bundle → executed →
+  ANIM1 → decode, bit-faithful the whole chain.
+- artifact hashes (sha256 first 16): check-animations.sh
+  677aaa578f418491 · run.js 07da5b35b32f5137 · lib/animbin.js
+  63107cb140f2f639 · stages/animations.js 5dfb7dd31e5e3ff7 ·
+  expected.json 7027d3871544ba05.
+- PROVISIONAL (auto-adopted): ANIM1 layout as specced (FORMATS.md §2);
+  plain-node execution of the animations bundle (pure Int16Array data
+  construction, engine-neutral — cross-checked against raw source
+  literals; the browser path stays available via the oracle harness if
+  a future stage ever needs engine-specific evaluation); empty frames
+  serialized as pathCount 0 records (distinct from ABSENT frames,
+  offset 0 — both cases in the spec).
+- zoom-out: the serializer validates EVERYTHING it copies (int16 range,
+  u16 widths, ASCII names, shape contract counts) and hard-throws
+  rather than clamping — the CLASS to prevent is silent data coercion
+  in a pipeline whose whole point is bit-faithfulness; the instrument
+  is the in-run decoder round-trip + measured-then-frozen expected.json
+  (any upstream or generator drift becomes a loud diff, exactly like
+  the golden streams). Also registered: the dead-file reconciliation is
+  an INSTRUMENT (re-derived live every check) rather than a comment, so
+  the "754 files" claim can never silently rot.
+- next: M1 task 2 — extractor bundle (docker node:8 webpack) +
+  framedata/attributes/ECB/hitbox → generated C tables
+  (`bash pipeline/check-tables.sh`).
