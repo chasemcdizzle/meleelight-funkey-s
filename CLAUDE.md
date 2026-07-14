@@ -288,6 +288,28 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   `js_round` (ECMAScript Math.round: ties toward +Inf, -0 preserved —
   V8's Float64Round algorithm; naive floor(x+0.5) is WRONG at
   0.49999999999999994 and at every negative tie).
+- **actionStateShortcuts + scaffolding + mulberry32 + sound-event seam
+  (M2 task 4 committed form):** `node port/sim/calib/run-capture.js
+  --spec asshort --golden <id>` — wraps all 29 exports of
+  src/physics/actionStateShortcuts.js with per-function READ-SET arg
+  projections + a {dsp,mut,rng,snd} post-state envelope (owner-stack
+  event attribution; FORMAT.md "asshort"), records the seeded-RNG stream
+  (frame-0 `rngBoot` [seed, 465 boot draws — browser == qjs boot pin] +
+  every draw as a standalone `Math.random` record or a post `rng` entry).
+  C: `port/sim/action_state_shortcuts.{c,h}` (attributes/intangibility
+  from generated CTAB1 ml_tables — first M1-data consumer; actionStates
+  registry scaffolding with opaque MlMoveDef until tasks 7-12),
+  `port/sim/ml_rng.h` (mulberry32), `port/sim/ml_events.{c,h}`
+  (sound-event queue seam the M4 mixer consumes + dispatch notes +
+  logged ml_random). Replay chains ONE C mulberry32 draw-for-draw
+  across the whole file (off-step startGame draw asserted == 1).
+  Task check: `bash port/sim/calib/check-asshort-replay.sh` →
+  `ASSHORT MATCH` (regenerates ml_tables via `node pipeline/run.js
+  --only animations,tables --out pipeline/build/asshort-tables`).
+  Gotcha classes: sweep purity is NET (rule 12 — swapped-RNG KO-shout
+  sweep + restored player[3] injection, guarded by ×2 byte-stability +
+  STREAM MATCH); threshold-nudge negative tests can be no-ops on
+  keyboard-quantized traces — perturb constants/events/RNG instead.
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;

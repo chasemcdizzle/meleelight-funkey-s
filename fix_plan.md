@@ -251,6 +251,20 @@ the phase to M2.)
   produces 73 sweep divergences and ZERO live ones. Dead-upstream
   surfaces stay documented skips; sweeps never substitute for live
   chain verification.
+- **RULE 12 — sweep purity is about NET effect; and negative tests must
+  bite occurring values (adopted task 4)**: a sweep MAY touch sim-global
+  state when (a) it restores it exactly (the executeIntangibility sweep
+  injects a synthetic player into an inactive slot and restores the
+  original value) and (b) it never draws the SEEDED stream — swap
+  Math.random for a local same-algorithm generator for the duration (the
+  KO-shout sweep; the replay mirrors with a sweep RNG for frame-0
+  records). The existing ×2 byte-stability + STREAM MATCH guards remain
+  the proof of non-perturbation — an unrestored write or a stolen seeded
+  draw fails them mechanically. Corollary for comparator teeth: verify a
+  negative test actually flips an outcome in the captured domain — trace
+  inputs are keyboard-quantized (axes hit no values in (0.78, 0.79]), so
+  threshold nudges can be no-op "teeth"; formula-constant/event-name/RNG
+  perturbations bite reliably.
 - **Skipped-by-judgment util files** (documented, not silent):
   `firstNonNull.js` (zero importers upstream — dead code),
   `deepValue.js` (target-builder encode only — M4), `randomAnnulusPoint`
@@ -324,12 +338,32 @@ the pause/frameAdvance edge branches, the AI/gamepad arms and the
 startGame/endGame combos have zero live cases — translated verbatim,
 guarded by ml_input_out_of_domain traps where behavior would need
 another cluster's surface (AI bank = task 16, lifecycle = task 17).)
-4. actionStateShortcuts + state-machine scaffolding — actionStates
-   dispatch table, turnOffHitboxes/checkFor* family, C mulberry32 (seeded
-   PRNG, draw-count parity incl. KO-shout sites), sound-event queue seam;
-   mutation-capture (player post-state + rng draws + sound events).
-   done-check: `bash port/sim/calib/check-asshort-replay.sh` → prints
-   `ASSHORT MATCH`, exit 0.
+(task 4 — actionStateShortcuts + state-machine scaffolding + C mulberry32
++ sound-event queue seam — DONE iter 23:
+`bash port/sim/calib/check-asshort-replay.sh` → ASSHORT MATCH, exit 0.
+97,516 boundary records over g01/g04/g06 (29 wrapped exports + the
+Math.random/rngBoot stream records), byte-stable ×2, 6× STREAM MATCH,
+0 divergences on the first successful build (rules 1-11 held). C:
+`port/sim/action_state_shortcuts.{c,h}` (verbatim translations; read-set
+projected args; charAttributes/intangibility via M1 CTAB1 ml_tables —
+FIRST consumer of the generated-table data path, live-cross-checked),
+`port/sim/ml_rng.h` (mulberry32, chained draw-for-draw over every
+recorded seeded draw incl. the off-step pre-frame-1 startGame draw and
+the 465-draw boot fast-forward — browser boot count == the qjs boot pin),
+`port/sim/ml_events.{c,h}` (sound-event queue seam for the M4 mixer +
+dispatch-note seam + logged ml_random), actionStates registry scaffolding
+(as_setupActionStates/as_lookup/as_dispatch, driver-self-checked; move
+defs stay opaque until tasks 7-12). Post-state envelope
+{dsp,mut,rng,snd}; event teeth proven (sound-name typo → 11 sweep
+divergences; spurious dispatch → 3 live divergences on g06; RNG
+off-by-one → 135; mut constant tweak → 307; corrupted nibble → exactly
+1). Honest coverage: turbo interrupts, shieldDepletion break branch,
+isFinalDeath true-arms and ALL positive dispatch paths have zero live
+records (dispatch verified must-not-fire on every live record + by sweep
+events); KO-shout sites + executeIntangibility covered by the rule-12
+guarded impure sweep. Gotcha: a 0.79→0.78 threshold negative test bit
+NOTHING — trace inputs are keyboard-quantized; negative tests must
+perturb across values that OCCUR (see rule 12).)
 5. physics.js core + interpolatedCollision — the per-player update
    pipeline (mutation-heavy; pre/post player + stage).
    done-check: `bash port/sim/calib/check-physics-replay.sh` → prints

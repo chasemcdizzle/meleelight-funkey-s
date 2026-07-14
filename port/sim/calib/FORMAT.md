@@ -48,6 +48,13 @@ Specs (`node run-capture.js --spec <name>`):
   Value bridge: `input_canon.{h,c}` (strict 22-key MlInput marshal +
   serializer, reusable by tasks 5/16).
 
+- `asshort` (M2 task 4, `spec-asshort.js`): all 29 exported functions of
+  `src/physics/actionStateShortcuts.js` + the seeded-PRNG draw stream +
+  the sound-event/dispatch-event queues → `replay_asshort.c` (translations
+  `port/sim/action_state_shortcuts.{c,h}`, seams `port/sim/ml_events.{c,h}`
+  + `port/sim/ml_rng.h`). See "The asshort spec" below. Pins:
+  `expected-capture-asshort.json`.
+
 Method records use `Mod#method` names (args prepended with the canon of
 `this`); constructor records use `Mod.new` (ret = canon of the built
 instance, per-instance closures serializing as `fn`). Argument canon is
@@ -172,6 +179,75 @@ stage argument above):
 The `physics` args are projected to `[i]` (slot index only): the
 inputBuffers argument is the input cluster's surface (fix_plan §M2 tasks
 3/5 capture it at their own boundaries).
+
+## The asshort spec (M2 task 4)
+
+Args are per-function READ-SET projections (the stage-argument discipline
+below): the exact player/global fields the function dereferences, verified
+against the module source and frozen in `spec-asshort.js`'s BOUNDARY
+table. Common projections: `input` → `input[p].slice(0,4)` (the module
+reads history depth ≤ 3; entries reuse the input spec's 22-key Input
+canon/marshal); `characterSelections[p]` → a `char` id arg (the C side
+reads charAttributes/intangibility from the M1 CTAB1 tables `ml_tables`,
+never from snapshots — this cluster is the first consumer of the generated
+data path); `gameSettings["tapJumpOffp"+(p+1)]` → the read VALUE (the
+god-module settings slice is task 17's; the captured domain is the number
+0 and the upstream `== false` loose-eq is therefore `v == 0`);
+`actionSounds[char][state]` → the schedule rows as an arg (SND1 data
+plane; C table emission is the M4 mixer task, FORMATS.md §5.4 — this task
+verifies the LOGIC). `isFinalDeath`'s args are a projected globals slice
+{gameMode, playerType, stocks (null for inactive slots), versusMode} —
+measured: versusMode is 0 in harness matches, so the stocks loop IS the
+live path.
+
+EVENT ATTRIBUTION (owner stack): entering a wrapped boundary fn pushes an
+attributing frame; entering any dispatched move fn (`actionStates` deep
+copies, the 5 per-char moves-index tables, the shared JUMPAERIALB/F module
+objects — all their function properties get non-recording loggers) pushes
+a non-attributing frame. A sound play / seeded-RNG draw / dispatch is
+credited to the innermost frame if attributing; otherwise sounds and
+dispatches are ignored (they belong to the moves clusters) and RNG draws
+are emitted as standalone `Math.random` records. Mutation-captured
+boundaries carry the 5th post field as the envelope
+`{"dsp":[...],"mut":{...},"rng":[...],"snd":[...]}` (sorted keys): direct
+dispatch notes as `"<phase>:<MOVENAME>"` strings, the fn's mutated
+write-set, seeded draws consumed, sound names played.
+
+RNG channel records (oracle/CHECKSUM.md §6): a frame-0 `rngBoot` record
+(`args [seed, bootDraws]`, ret = the fast-forwarded mulberry32 state;
+bootDraws pinned 465 — the same count the qjs oracle boot pin froze)
+opens the file; every seeded draw thereafter appears exactly once (as a
+standalone record or inside a post `rng` list), so the replay chains ONE
+C mulberry32 (`port/sim/ml_rng.h`) through the whole file draw-for-draw —
+including the single off-step pre-frame-1 `startGame` draw, asserted as
+exactly one standalone frame-0 draw. percentShake uses the stashed native
+RNG upstream and never appears.
+
+asshort sweep (rule 11, measured zero-live surfaces): getAngle, mashOut
+(the `!input < 0.7` bool<num coercion arms), checkForSquat, the
+checkForJump/DoubleJump/MultiJump tap-jump arms (synthetic 22-key Input
+literals) — plus two guarded impure extensions, both restore-proven by
+the ×2 byte-stability and STREAM MATCH guards: (a) the KO-shout sites
+(`randomShout` ×48 per char, covering every shout outcome of both switch
+shapes): Math.random is SWAPPED for a local mulberry32 seeded 0x0badf00d
+for the duration (drawing the seeded match stream pre-match would shift
+every subsequent draw and fail the stream guard); the replay driver
+mirrors with a sweep generator for frame-0 randomShout records. (b)
+executeIntangibility: a synthetic player is injected into INACTIVE slot 3
+(playerType −1; pre-match value restored) so the C `ml_intang` CTAB1
+lookup gets live-executed cross-checks (marth ESCAPEF/TECHN/DOWNSTANDF,
+trigger and no-trigger frames).
+
+Zero-live surfaces WITHOUT a sweep (documented honest coverage, all
+translated verbatim): the turbo interrupts (turbo mode off in all
+goldens; they read live player state and dispatch real moves — unsweepable
+without perturbation), shieldDepletion's break branch, isFinalDeath's
+true outcomes (match-end path, task 17's lifecycle surface), and every
+POSITIVE dispatch path (checkForIASA never fires an aerial/jump cancel in
+these traces) — the dispatch seam is verified negatively on every live
+record (a C translation that spuriously dispatches diverges: proven, 3
+divergences on g06 in the negative test) and positively by the sweep's
+sound/rng events only.
 
 ## The undef-ret allowlist (rule 8)
 

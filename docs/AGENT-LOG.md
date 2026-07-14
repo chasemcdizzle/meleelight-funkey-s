@@ -1300,3 +1300,96 @@ MILESTONE PASS: M2-CAL
   bridge records aiInputBank Inputs).
 - next: task 4 (actionStateShortcuts + state-machine scaffolding,
   C mulberry32 + sound-event queue seam).
+
+## iter 23 — 2026-07-14 — M2 task 4: actionStateShortcuts + state-machine scaffolding + C mulberry32 + sound-event queue seam
+
+- phase M2, task 4 (fix_plan §M2 item 4).
+- done-check: `bash port/sim/calib/check-asshort-replay.sh` → ASSHORT
+  MATCH, exit 0 (.loop/iter23-asshort-check.log): per golden g01/g04/g06
+  — 2 fresh asshort captures byte-identical, 2× STREAM MATCH
+  (non-perturbation incl. the rule-12 impure-but-restored sweep), pins OK
+  (32,201 / 35,076 / 30,239 records), rngBoot pin OK (per-golden seed +
+  465 boot draws — the BROWSER boot-draw count equals the qjs oracle boot
+  pin, cross-confirming the boot-stream class), strict replay 0
+  divergences across all 97,516 records (ret AND {dsp,mut,rng,snd}
+  post-state). Conformance guards all green: check-envcoll.sh → ENVCOLL
+  MATCH (.loop/iter23-envcoll-regression.log), check-util-replay.sh →
+  UTIL MATCH (.loop/iter23-util-regression.log), check-player-model.sh →
+  PLAYER MODEL MATCH (.loop/iter23-player-regression.log),
+  check-input-replay.sh → INPUT MATCH (.loop/iter23-input-regression.log).
+- what landed: capture spec-asshort.js (29 wrapped exports with READ-SET
+  arg projections; owner-stack event attribution: sounds via 180 wrapped
+  Howl.play, dispatches via non-recording loggers on every actionStates
+  deep-copy entry + the 5 moves-index tables + JUMPAERIALB/F module
+  objects, seeded draws as standalone Math.random records or post rng
+  lists; frame-0 rngBoot record [seed, bootDraws] -> fast-forwarded
+  state). C: port/sim/ml_rng.h (mulberry32 == init.js:32-40 bit-exact),
+  port/sim/ml_events.{h,c} (sound-event queue seam for the M4 mixer +
+  dispatch-note seam + logged ml_random), port/sim/
+  action_state_shortcuts.{h,c} (verbatim translations of all 29 exports;
+  charAttributes/intangibility through generated CTAB1 ml_tables — FIRST
+  consumer of the M1 data path, live-cross-checked by the
+  executeIntangibility sweep against the real marth table rows;
+  actionStates registry as_setupActionStates/as_lookup/as_dispatch with
+  opaque MlMoveDef until tasks 7-12, mechanics driver-self-checked),
+  replay_asshort.c (chained mulberry32 draw-for-draw over every recorded
+  seeded draw incl. the off-step pre-frame-1 startGame draw, asserted
+  exactly 1 standalone frame-0 draw; strict marshals; post envelope
+  compare), expected-capture-asshort.json (counts + undefRetAllowed +
+  postStateFns + rngBootDraws=465), check-asshort-replay.sh (regenerates
+  ml_tables via the pipeline, builds with -ffp-contract=off, 2×capture +
+  verify-stream + pins + rngBoot pin + strict replay + no-commit guard);
+  FORMAT.md "asshort" section; fix_plan §M2 rule 12. Artifact hashes
+  (sha256/12): action_state_shortcuts.c 64144ffc64b2 ·
+  action_state_shortcuts.h 68cafbb70644 · ml_rng.h 046bdcb7ac7c ·
+  ml_events.c f2c715066772 · ml_events.h c8e8b4e614a9 · spec-asshort.js
+  38608c3f05ff · replay_asshort.c 8a70f272897a ·
+  expected-capture-asshort.json f9855295d1f0 · check-asshort-replay.sh
+  57161996c716.
+- burn-down: 0 divergences on the first successful build across all three
+  goldens (rules 1-11 held; capture-FIRST survey preceded the value
+  modeling — measured versusMode=0 in harness matches, IASATimer always
+  present in live IASA records, shieldstun/applyDouble/lock truthiness
+  domains, keyboard-quantized axes).
+- comparator negative tests (all restored, tree re-verified 0 div):
+  (a) shieldTilt formula constant 0.01→0.011 → 307 mut divergences;
+  (b) rngBoot fast-forward off-by-one → 135 divergences (state pin at
+  line 1 + every subsequent draw — chain teeth); (c) foxshout3→foxshout9
+  → 11 divergences, ALL in frame-0 sweep records (sound-event stream
+  teeth; zero live randomShout traffic exists to catch it); (d) spurious
+  dispatch on checkForIASA's false arm → 3 divergences on g06's live
+  records (the must-not-dispatch teeth); (e) single corrupted capture
+  nibble → exactly 1 divergence; (f) appended bogus record → CAPTURE PIN
+  FAIL exit 1. LESSON: a 0.79→0.78 checkForDash threshold nudge produced
+  ZERO divergences — trace inputs are keyboard-quantized and no live axis
+  value falls in (0.78, 0.79]; negative tests must perturb across values
+  that OCCUR (recorded in rule 12).
+- honest coverage: randomShout and executeIntangibility had ZERO live
+  records over all three goldens (traces never land smash/throw shouts,
+  never roll/tech) — covered by the rule-12 sweep (swapped-RNG KO-shout
+  calls covering every shout outcome ×5 chars; restored player[3]
+  injection exercising real intangibility rows trigger/no-trigger). Turbo
+  interrupts (turbo off in goldens), shieldDepletion's break branch,
+  isFinalDeath's true arms, and ALL positive dispatch paths (checkForIASA
+  never fires an aerial/jump cancel live) remain zero-live: translated
+  verbatim, dispatch verified must-not-fire on every live record + event
+  teeth via sweep; first positive live coverage arrives with the moves
+  clusters' traces or task 17.
+- zoom-out: (1) rule 11's "sweeps must be pure" was too coarse — the real
+  invariant is NET purity (restore exactly + never draw the seeded
+  stream), and the rig's existing guards (×2 byte-stability, STREAM
+  MATCH) mechanically PROVE net purity, so the class fix is rule 12
+  rather than new machinery. This unlocks sweep coverage for a whole
+  class of read-player/impure-effect boundaries that rule 11 wrote off.
+  (2) The RNG channel is now an instrument, not just a spec paragraph:
+  boot draws measured in-browser (465) match the qjs boot pin — two
+  independent runtimes agreeing on the boot stream — and every future
+  cluster that draws (hitDetection task 6 has no draws; moves/articles
+  do) inherits the chained draw-for-draw verification for free via
+  standalone Math.random records. (3) The sound-event queue seam
+  established here is the M4 mixer's contract: events are now part of
+  the verified boundary surface, so growing the checksum surface with
+  sound events (CHECKSUM.md §7 note) has a C-side consumer design
+  already validated.
+- next: task 5 (physics.js core + interpolatedCollision — the
+  mutation-heavy per-player update pipeline; pre/post player + stage).
