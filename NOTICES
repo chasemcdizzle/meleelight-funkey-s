@@ -1,0 +1,86 @@
+NOTICES — provenance and third-party attributions
+=================================================
+
+What in this repo derives from what. This project is PRIVATE and
+NON-DISTRIBUTED (locked goal #4); the notices below are kept as hygiene so
+the provenance is never in doubt. See docs/LICENSING.md for the reuse map
+and docs/research/meleelight-license.md for the full upstream analysis.
+
+--------------------------------------------------------------------------------
+meleelight — MIT, Copyright (c) 2016 Will Blackett (schmooblidon)
+--------------------------------------------------------------------------------
+  https://github.com/schmooblidon/meleelight
+  Upstream LICENSE carried VERBATIM in this repo as LICENSE-meleelight,
+  including its appended Nintendo-IP rider ("Characters (c) Nintendo / HAL
+  Laboratory"). The rider is why GitHub reports NOASSERTION; the code grant
+  is standard MIT.
+
+  Everything derived from it here:
+    - The port itself (the M0–M4 build products): a structure-parallel C
+      rewrite of meleelight's sim + a data pipeline executing meleelight's
+      own JS to serialize its animation/frame data. All of it is a
+      derivative work of meleelight and carries the MIT notice above.
+    - spikes/determinism/meleelight-harness.patch — patch against upstream
+      @ 27af171 (harness hooks + percentShake RNG isolation).
+    - prototypes/control-mapping/funkey-mapping.patch — patch against
+      upstream @ 27af171 (input-mapping seam + build fixes).
+      funkeyMapping.js / funkeyOverlay.js are our original modules but are
+      written to be installed into the meleelight tree.
+    - spikes/device-feasibility/simbench.js — copies meleelight leaf
+      functions (Vec2D, linAlg, solveQuadraticEquation) verbatim.
+    - spikes/device-feasibility/data/anim.bin — packed from meleelight's
+      src/animations/ data (fox + marth subsets).
+  Upstream itself is NOT vendored in this repo; working clones live outside
+  the tree (see the repro sections of the spike READMEs).
+
+--------------------------------------------------------------------------------
+Nintendo / HAL Laboratory — no license, no claim, never distributed
+--------------------------------------------------------------------------------
+  meleelight's bundled audio (dist/sfx, dist/music), character-select art,
+  and the character designs its vector animations recreate are Nintendo/HAL
+  IP, expressly carved out of the MIT grant by the upstream rider. This
+  project uses them privately on one personal device and distributes
+  nothing. No Nintendo-derived asset may ever be published from this repo
+  (hard rule in CLAUDE.md). anim.bin above recreates character silhouette
+  shapes and stays in-repo under the same no-distribution rule.
+
+--------------------------------------------------------------------------------
+fdlibm — Copyright (C) Sun Microsystems (freely-distributable notice)
+--------------------------------------------------------------------------------
+  The port vendors fdlibm-derived implementations of atan2/sin/cos/atan/pow
+  (+tan for the AI) on BOTH sides of the oracle (C sim, browser Math shim,
+  QuickJS Math patch), per the locked strategy (issue #10). Source: V8's
+  fdlibm port (v8/src/base/ieee754.cc, BSD-licensed, which retains Sun's
+  "Developed at SunSoft ... freely granted" notice). Retain both notices on
+  the vendored files when M0 lands them (planned location: port/fdlibm/ —
+  NOT vendor/, which is gitignored for scratch clones).
+
+--------------------------------------------------------------------------------
+QuickJS — MIT, Copyright (c) 2017-2025 Fabrice Bellard and Charlie Gordon
+--------------------------------------------------------------------------------
+  https://bellard.org/quickjs/ — used as TOOLING only (the fdlibm-patched
+  on-device oracle runtime; never shipped as the game). Our 40-line embedder:
+  spikes/device-feasibility/qjsmin.c. QuickJS sources are fetched at build
+  time, not vendored.
+
+--------------------------------------------------------------------------------
+SDL — Simple DirectMedia Layer
+--------------------------------------------------------------------------------
+  SDL 1.2 (LGPL-2.1) — dynamically linked on the device from the FunKey OS /
+  SDK sysroot (never statically linked, never vendored).
+  SDL2 (zlib) — dev/CI backend on the host.
+
+--------------------------------------------------------------------------------
+mulberry32 PRNG — public domain (Tommy Ettinger)
+--------------------------------------------------------------------------------
+  The tick-owned seeded gameplay PRNG on both sides of the oracle
+  (spikes/determinism/harness/init.js today; the C sim's PRNG at M2).
+
+--------------------------------------------------------------------------------
+ssb64-funkey-s (sibling project, same owner) — process prior art
+--------------------------------------------------------------------------------
+  CLAUDE.md hard rules, docs/LOOP.md, docs/loop/*, scripts/loop.sh, the SDL
+  platform-seam policy, and the OPK/ADB recipes are adapted from
+  ~/code_projects/ssb64-funkey-s (private). Discipline adapted, no code
+  copied yet; anything lifted later (e.g. port/gfx backends, fk_input.c)
+  gets its own entry here when it lands.
