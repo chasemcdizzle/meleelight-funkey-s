@@ -1,0 +1,4 @@
+DRIVER=alsa
+OBTAINED freq=44100 format=0x8010 channels=2 samples=1024 size=4096 silence=0
+LOAD pct=80
+RESULT cbs=2582 expected=2584 nominal_us=23219 avg_interval_us=23239.9 max_interval_us=30364 late125=1 late150=0 late200=0 cb_cpu_avg_us=180.4 cb_cpu_max_us=852.2 cpu_ms_per_frame=0.1295 frame_budget_pct=0.78

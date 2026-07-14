@@ -2,3 +2,4 @@ vendor/
 .loop/
 build*/
 .DS_Store
+spikes/device-audio/audiotest

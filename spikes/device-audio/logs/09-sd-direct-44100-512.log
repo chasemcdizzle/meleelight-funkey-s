@@ -1,0 +1,5 @@
+DRIVER=alsa
+OBTAINED freq=44100 format=0x8010 channels=2 samples=512 size=2048 silence=0
+SDREAD path=/mnt/Applications/ssb64.opk load=0%
+RESULT cbs=2583 expected=2584 nominal_us=11609 avg_interval_us=11619.5 max_interval_us=13734 late125=0 late150=0 late200=0 cb_cpu_avg_us=99.1 cb_cpu_max_us=877.0 cpu_ms_per_frame=0.1423 frame_budget_pct=0.85
+SD_BYTES=669888512 direct=1 (21.3 MB/s)
