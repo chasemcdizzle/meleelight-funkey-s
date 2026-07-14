@@ -890,3 +890,17 @@ MILESTONE PASS: M0
 - next: M1 PHASE-ADVANCE iteration (LOOP F-advance: CHECKER
   mode=phase-advance re-runs `bash pipeline/verify_pipeline.sh`,
   flips Current phase → M2-CAL, logs MILESTONE PASS: M1).
+
+## iter 14 — 2026-07-14 — M1 PHASE-ADVANCE
+
+- phase M1 → M2-CAL (LOOP F-advance). CHECKER mode=phase-advance: re-ran
+  the M1 EXIT GATE `bash pipeline/verify_pipeline.sh` fresh → PIPELINE OK,
+  exit 0, 64s wall (.loop/iter14-m1-gate.log). All sub-gates green:
+  ANIMATIONS OK · TABLES OK (38832 leaves) · STAGES OK (412 leaves) ·
+  AUDIO OK · full-run byte-stability + 225-artifact re-hash ×2 ·
+  expected.json contract incl. live 754-file reconciliation ·
+  integrated compiled round-trips bit-exact · no-commit guard.
+- fix_plan.md `Current phase:` flipped to M2-CAL; M1 section closed.
+- next: REPLAN M2-CAL (concretize the 3 seed items + exit gate).
+
+MILESTONE PASS: M1

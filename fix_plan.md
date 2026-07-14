@@ -1,6 +1,6 @@
 # fix_plan — the loop's priority queue
 
-Current phase: M1
+Current phase: M2-CAL
 
 Rules: items live under their phase heading; an actionable item needs an
 exact runnable `done-check:` (see `docs/LOOP.md` §C). Items below are
@@ -73,6 +73,10 @@ FORMATS.md §5; ffmpeg 8.1.1 + exact argv + aggregate output sha256
 frozen in expected.json audio — a different ffmpeg fails loudly, never
 drifts; blobs are Nintendo-derived PRIVATE USE ONLY and live only in
 gitignored build output.)
+
+(M1 PASSED its exit gate `bash pipeline/verify_pipeline.sh` on the
+phase-advance iteration 14, driver-verified — PIPELINE OK, exit 0,
+64s wall; MILESTONE PASS: M1 logged in docs/AGENT-LOG.md iter 14.)
 
 (task 5 — full-pipeline runner + M1 exit gate — DONE iter 13:
 `bash pipeline/verify_pipeline.sh` → PIPELINE OK, exit 0. The gate
