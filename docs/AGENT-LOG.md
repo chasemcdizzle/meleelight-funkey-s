@@ -346,3 +346,85 @@ iter 4 · 2026-07-14 · phase M0 · task 3: vendored fdlibm BOTH sides + crossch
 - next: M0 task 7 — record the full golden set g02–g08 (traces via
   gen-trace.js variants, record.sh freeze, manifest coverage) + commit
   oracle/verify_goldens.sh → ALL GOLDENS OK (then M0 phase-advance).
+
+## iter 8 — 2026-07-14 — M0 task 7: golden set g02–g08 + oracle/verify_goldens.sh (FINAL M0 task)
+- phase: M0. task: fix_plan §M0 item 7 — record the full golden set per
+  the REPLAN composition contract and commit the M0 exit gate script.
+- roster (manifest.json is the single param source; manifest seed = run
+  seed = gen-trace.js seed, trace 3800 frames, 3600 verified):
+  g01 fox/marth/battlefield 1337 (untouched) · g02 falco/puff/ystory 7302
+  · g03 falcon/fox/pstadium 7303 · g04 puff/falcon/dreamland 7344 ·
+  g05 marth/falco/fdest 7305 · g06 falcon/marth/fountain 7306 ·
+  g07 falco vs CPU-falcon d5/battlefield 7307 · g08 fox vs CPU-puff
+  d5/fdest 7308. Coverage: all 5 chars (each ≥2×), all 6 stages, 2 CPU.
+- done-check: `bash oracle/verify_goldens.sh` → `ALL GOLDENS OK`, exit 0
+  (.loop/iter8-m0t7-donecheck.log: 8× GOLDEN OK, 8× QJS MATCH, coverage
+  assertion "8 goldens, chars {0,1,2,3,4}, stages {0,1,2,3,4,5}, cpu
+  goldens: 2"). Per golden: 2 fresh browser runs → compare.js
+  bit-identity → verify-stream.js BOTH runs vs frozen (exact equality,
+  full 3600, RNG channels, spec/trace/param pins) → qjs replay judged by
+  the same unchanged verifier.
+- recording evidence: every record.sh double-run was IDENTICAL on the
+  first attempt for all 7 new goldens (.loop/iter8-m0t7-record-{1,2}.log)
+  — NO new nondeterminism from puff/falco/falcon movesets, the 5 new
+  stages (incl. fountain platforms), or d5 AI; the spike-era seeding
+  holds. QJS reproduced all 7 with zero shim changes
+  (.loop/iter8-m0t7-qjs-g0{2..8}.log) — no new Storage-class gotcha.
+  rngCalls: g02 125 · g03 119 · g04 115 · g05 185 · g06 160 · g07 81 ·
+  g08 1496 (AI RNG usage is matchup-dependent; g08 pounds the stream —
+  strong RNG-channel coverage). rngCallsOutsideStep == 1 everywhere.
+- trace sanity (gameplay quality contract, applied uniformly before
+  freezing — .loop/iter8-m0t7-sanity-{1,2}.log): ≥1 KO (DEAD*), ≥1
+  DAMAGE*/CAPTUREDAMAGE (real hits), both players ≥1 stock at frame 3600.
+  All 8 pass; endpoints (stocks/percents): g01 [4,2]/[43,0] ·
+  g02 [4,1]/[0,0] · g03 [4,2]/[19,0] · g04 [4,3]/[8,7] · g05 [3,3]/[13,13]
+  · g06 [2,3]/[13,10] · g07 [3,4]/[0,16] · g08 [1,4]/[15,94]. New states
+  vs g01: CLIFF*, DOWNBOUND/DOWNWAIT/DOWNATTACK, THROWBACK/THROWNPUFFBACK,
+  DAMAGEFLYN/DAMAGEFALL, SMASHTURN, JAB3, NEUTRALSPECIALAIR.
+- found-and-rejected degenerates (g04, puff-P1/falcon-P2/dreamland): seed
+  7304 hits-but-no-KO (puff P1's rollout — a MOVEMENT neutral-B, unlike
+  fox/falco lasers — intercepts P2's scripted walk-off); 7314 P2 hit 0
+  stocks → match ENDED before 3600 (post-match frames = weak trailing
+  coverage); 7324/7354/7374 KOs but ZERO hit states (pure SDs);
+  7334 nothing. 7344 passes all three criteria and is the frozen g04.
+- artifacts (sha256 first 16): verify_goldens.sh 6a01ed5e35737584;
+  frozen streams g02 1c8432eb9b635b0b · g03 760c99dfdceb6fa3 ·
+  g04 1d7eeb6807524a86 · g05 6b32b5c5ecba698b · g06 16c0017bf75ad264 ·
+  g07 9580e25b5e52b835 · g08 a49e8913315354d0; manifest.json +85 lines.
+  g01 trace/stream byte-untouched (git status clean on them; its frozen
+  rng behavior unaffected — no harness/shim/spec change this iteration).
+- CHECKER (mode=task, sub-agent): verified=true, tamper=false, gaps=[];
+  evidence: independent full gate re-run exit 0 ending "ALL GOLDENS OK"
+  (.loop/checker/iter8-donecheck.log) with 8× GOLDEN OK + 8× QJS MATCH;
+  no tolerance logic anywhere in the verification path (grep); all 16
+  golden artifacts + manifest coverage confirmed; every frozen file
+  specVersion=1 with params matching its manifest entry; diff touches
+  only oracle/goldens/manifest.json + new files under oracle/ (M0's
+  contract); branch agent/auto.
+- PROVISIONAL (auto-adopted): roster matchups/stages/seeds (fix_plan
+  composition honored: g02–g06 human-vs-human over the 5 remaining
+  stages, g07–g08 CPU d5 on two distinct stages, every char ≥1×); the
+  gameplay quality contract as the recording bar (documented in the
+  manifest comment so re-recorders apply it); verify_goldens.sh checks
+  BOTH fresh runs against the frozen stream (cheap belt-and-braces);
+  CPU-golden filenames keep the plain gNN-<p1>-<p2>-<stage> convention
+  (cpu flag lives in the manifest, the single param source).
+- zoom-out: the g04 failures are a CLASS — open-loop scripted traces
+  encode geometry/moveset assumptions (projectile neutral-B, stationary
+  interception, walk-off reachability) that new char/stage combos break
+  SILENTLY: the run still completes, the stream still freezes, coverage
+  is just quietly weak. Per the hierarchy (instrument > class fix >
+  registered one-off), the fix shipped is an INSTRUMENT — the measurable
+  per-trace gameplay quality contract (KO + real hits + match-live
+  endpoint) applied to every golden before freezing and recorded in the
+  manifest — plus the gate's manifest-computed coverage assertion so the
+  8-golden set can never silently regress below 5 chars/6 stages/1 CPU.
+  The seed choice 7344 itself is the registered one-off riding on that
+  instrument. Also NULL-result worth logging: the feared "new gameplay
+  RNG site" class (spec §8 territory) did NOT materialize — seeding is
+  global-Math.random-wide, so char-specific moves can't reach an unseeded
+  site; first-attempt identity on all 14 recording runs is the evidence.
+- next: M0 phase-advance iteration (type C-c): CHECKER mode=phase-advance
+  re-runs `bash oracle/verify_goldens.sh` as the exit gate, then fix_plan
+  Current phase → M1 and `MILESTONE PASS: M0` — driver-owned per the loop
+  protocol.

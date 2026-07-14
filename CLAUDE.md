@@ -204,6 +204,22 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   crashes — absent `Storage`, getCookie returns `""` (not null) and
   getGameplayCookies Number("")-zeroes every gameSettings entry
   (phantomThreshold 0.01→0). Shim for parity of paths, not just survival.
+- **Golden set (M0 task 7, committed form):** 8 goldens in
+  `oracle/goldens/manifest.json` — g01 fox/marth/battlefield seed 1337 ·
+  g02 falco/puff/ystory 7302 · g03 falcon/fox/pstadium 7303 ·
+  g04 puff/falcon/dreamland 7344 · g05 marth/falco/fdest 7305 ·
+  g06 falcon/marth/fountain 7306 · g07 falco/CPU-falcon(d5)/battlefield
+  7307 · g08 fox/CPU-puff(d5)/fdest 7308. All 3600 verified frames;
+  manifest `seed` doubles as the gen-trace.js seed
+  (`node oracle/harness/gen-trace.js <trace> 3800 <seed>` reproduces every
+  trace byte-identically). Trace GAMEPLAY QUALITY CONTRACT (checked at
+  record time; documented in the manifest comment): ≥1 KO (DEAD* state),
+  ≥1 DAMAGE*/CAPTUREDAMAGE state (real hits, not just SDs), both players
+  ≥1 stock at the final frame (match still live — a 0-stock endpoint means
+  post-match frames polluted the stream; seed 7314 rejected for exactly
+  that). Full gate `bash oracle/verify_goldens.sh` (16 browser runs + 8
+  qjs replays) ≈ 4 min. CPU rngCalls vary wildly by matchup (81 g07 vs
+  1496 g08) — both deterministic.
 - **QuickJS oracle-runtime build (spike-era original, frozen):**
   `spikes/device-feasibility/README.md` step 2 (bellard/quickjs
   @2026-06-04, single gcc invocation via `qjsmin.c`, static, 890 KB).

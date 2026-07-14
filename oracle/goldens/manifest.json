@@ -1,5 +1,5 @@
 {
-  "comment": "Golden registry: the single param source for oracle/record.sh, oracle/harness/freeze-stream.js and (M0 task 7) oracle/verify_goldens.sh. Char indices: 0 marth 1 puff 2 fox 3 falco 4 falcon. Stage indices: 0 battlefield 1 ystory 2 pstadium 3 dreamland 4 fdest 5 fountain. Seeded with g01 in M0 task 5; g02-g08 land in task 7.",
+  "comment": "Golden registry: the single param source for oracle/record.sh, oracle/harness/freeze-stream.js, oracle/qjs/replay.sh and oracle/verify_goldens.sh. Char indices: 0 marth 1 puff 2 fox 3 falco 4 falcon. Stage indices: 0 battlefield 1 ystory 2 pstadium 3 dreamland 4 fdest 5 fountain. seed = the run's Math.random seed AND the gen-trace.js seed that reproduces the trace (node oracle/harness/gen-trace.js <trace> 3800 <seed>). Coverage contract (asserted by verify_goldens.sh): all 5 characters, all 6 stages, >=1 cpu golden. Every trace sanity-checked at record time: >=1 KO, >=1 DAMAGE* action state (real hits), both players >=1 stock at the final frame (match still live).",
   "goldens": [
     {
       "id": "g01",
@@ -12,6 +12,90 @@
       "stage": 0,
       "cpu": false,
       "difficulty": null
+    },
+    {
+      "id": "g02",
+      "name": "g02-falco-puff-ystory",
+      "trace": "g02-falco-puff-ystory.trace.json",
+      "frames": 3600,
+      "seed": 7302,
+      "p1": 3,
+      "p2": 1,
+      "stage": 1,
+      "cpu": false,
+      "difficulty": null
+    },
+    {
+      "id": "g03",
+      "name": "g03-falcon-fox-pstadium",
+      "trace": "g03-falcon-fox-pstadium.trace.json",
+      "frames": 3600,
+      "seed": 7303,
+      "p1": 4,
+      "p2": 2,
+      "stage": 2,
+      "cpu": false,
+      "difficulty": null
+    },
+    {
+      "id": "g04",
+      "name": "g04-puff-falcon-dreamland",
+      "trace": "g04-puff-falcon-dreamland.trace.json",
+      "frames": 3600,
+      "seed": 7344,
+      "p1": 1,
+      "p2": 4,
+      "stage": 3,
+      "cpu": false,
+      "difficulty": null
+    },
+    {
+      "id": "g05",
+      "name": "g05-marth-falco-fdest",
+      "trace": "g05-marth-falco-fdest.trace.json",
+      "frames": 3600,
+      "seed": 7305,
+      "p1": 0,
+      "p2": 3,
+      "stage": 4,
+      "cpu": false,
+      "difficulty": null
+    },
+    {
+      "id": "g06",
+      "name": "g06-falcon-marth-fountain",
+      "trace": "g06-falcon-marth-fountain.trace.json",
+      "frames": 3600,
+      "seed": 7306,
+      "p1": 4,
+      "p2": 0,
+      "stage": 5,
+      "cpu": false,
+      "difficulty": null
+    },
+    {
+      "id": "g07",
+      "name": "g07-falco-falcon-battlefield",
+      "trace": "g07-falco-falcon-battlefield.trace.json",
+      "frames": 3600,
+      "seed": 7307,
+      "p1": 3,
+      "p2": 4,
+      "stage": 0,
+      "cpu": true,
+      "difficulty": 5
+    },
+    {
+      "id": "g08",
+      "name": "g08-fox-puff-fdest",
+      "trace": "g08-fox-puff-fdest.trace.json",
+      "frames": 3600,
+      "seed": 7308,
+      "p1": 2,
+      "p2": 1,
+      "stage": 4,
+      "cpu": true,
+      "difficulty": 5
     }
   ]
 }

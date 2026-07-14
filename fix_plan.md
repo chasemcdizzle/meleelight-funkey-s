@@ -24,15 +24,9 @@ covering the remaining char pairs and the other 5 VS stages; g07–g08 =
 human-vs-CPU traces (difficulty 5) on two distinct stages; together every
 one of the 5 characters and 6 stages appears ≥1×.)
 
-7. Record the full golden set per the composition above (g02–g08:
-   generate traces with `oracle/harness/gen-trace.js` variants/seeds,
-   record + freeze streams via `oracle/record.sh`, write
-   `oracle/goldens/manifest.json`) and commit `oracle/verify_goldens.sh`
-   (final form = the M0 exit gate; see CLAUDE.md §Commands: per golden
-   two fresh browser runs bit-identical to each other AND the frozen
-   stream, QuickJS replay reproduces it, manifest coverage = all 5 chars
-   + all 6 stages + ≥1 CPU trace) — done-check:
-   `bash oracle/verify_goldens.sh` → prints `ALL GOLDENS OK`, exit 0.
+(no items remain — iter 8 completed task 7, the last M0 item; next
+iteration is the M0 phase-advance: CHECKER mode=phase-advance runs the
+exit gate `bash oracle/verify_goldens.sh` from CLAUDE.md §Gates.)
 
 ## M1 — Data pipeline
 
