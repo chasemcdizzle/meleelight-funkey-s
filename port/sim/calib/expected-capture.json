@@ -1,0 +1,39 @@
+{
+  "comment": "Measured-then-frozen capture pins (M2-CAL task 1, iter 16, 2026-07-14). Counts are per-function boundary-call totals over the full 3600-frame manifest replay of each captured golden; records = total JSONL lines. Any drift (harness change, dist rebuild, upstream pin move) must fail loudly here, never silently re-baseline. invariants.retsWithUndef: the C replay parser maps arg-position `undef` to canonical NaN (0x7ff8000000000000) — sound ONLY while no return value ever carries `undef`; measured 0 across all three captures (arg-position undef appears exactly twice, both frame-1 runCollisionRoutine calls whose ECB1 is upstream-uninitialized).",
+  "goldens": {
+    "g01": {
+      "records": 119619,
+      "counts": {
+        "hLineThrough": 0, "hLineAt": 0, "vLineThrough": 0, "vLineAt": 0,
+        "lineThrough": 0, "outwardsWallNormal": 6262,
+        "coordinateInterceptParameter": 21912, "coordinateIntercept": 6229,
+        "findCollision": 65751, "getSameAndOther": 0,
+        "moveAlongGround": 6240, "groundedECBSquashFactor": 6262,
+        "runCollisionRoutine": 6963
+      }
+    },
+    "g04": {
+      "records": 34052,
+      "counts": {
+        "hLineThrough": 0, "hLineAt": 0, "vLineThrough": 0, "vLineAt": 0,
+        "lineThrough": 0, "outwardsWallNormal": 6043,
+        "coordinateInterceptParameter": 2880, "coordinateIntercept": 6015,
+        "findCollision": 0, "getSameAndOther": 0,
+        "moveAlongGround": 6020, "groundedECBSquashFactor": 6043,
+        "runCollisionRoutine": 7051
+      }
+    },
+    "g06": {
+      "records": 33004,
+      "counts": {
+        "hLineThrough": 0, "hLineAt": 0, "vLineThrough": 0, "vLineAt": 0,
+        "lineThrough": 0, "outwardsWallNormal": 5496,
+        "coordinateInterceptParameter": 4408, "coordinateIntercept": 5436,
+        "findCollision": 0, "getSameAndOther": 4,
+        "moveAlongGround": 5443, "groundedECBSquashFactor": 5464,
+        "runCollisionRoutine": 6753
+      }
+    }
+  },
+  "invariants": { "retsWithUndef": 0 }
+}

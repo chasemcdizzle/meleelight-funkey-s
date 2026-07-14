@@ -922,3 +922,39 @@ MILESTONE PASS: M1
   (anchor + puff collision stress + fountain moving platforms making the
   stage arg vary per call).
 - next: task 1 (capture rig).
+
+## iter 16 — 2026-07-14 — M2-CAL task 1: module-boundary capture rig
+
+- phase M2-CAL, task 1 (fix_plan §M2-CAL item 1).
+- done-check: `bash port/sim/calib/check-capture.sh` → CAPTURE OK, exit 0
+  (.loop/iter16-check-capture.log): per golden (g01/g04/g06) two fresh
+  capture runs byte-identical JSONL, 6× STREAM MATCH against frozen
+  goldens (unchanged verify-stream.js — instrumentation non-perturbation
+  PROVEN, not assumed), pins OK.
+- what landed: port/sim/calib/{FORMAT.md, capturelib.js, run-capture.js,
+  check-capture-pins.js, check-capture.sh, expected-capture.json}.
+  oracle/ untouched (HARD RULE 3) — the runner reuses
+  oracle/harness/{init,pagelib}.js + port/fdlibm/fdlibm.js verbatim by
+  path; the ONLY intervention is a served-bytes-only injection exposing
+  the webpack module cache, then wrapping the 13 exported functions of
+  the environmentalCollision module object post-load.
+- measured (now frozen in expected-capture.json): g01 119,619 records ·
+  g04 34,052 · g06 33,004 (186,675 total). Notables: findCollision fires
+  65,751× in g01 only (fox/falco laser articles); getSameAndOther 4× in
+  g06 only (real corner collisions — angular rets present); five exports
+  (hLine*/vLine*/lineThrough) have ZERO live call sites in these traces;
+  frame-0 (setup-time) boundary calls: none.
+- gotcha class logged (JS-semantics, for the M2 brief): upstream leaves
+  player ECB1 UNINITIALIZED on frame 1 — Vec2D{x:undef,y:undef} flows
+  into runCollisionRoutine (2 records, both frame 1). undef behaves as
+  NaN under every arithmetic/comparison path in the module (ToNumber),
+  and NO return value ever carries undef (pinned invariant) — so the C
+  replay parser maps arg-undef -> canonical NaN 0x7ff8000000000000. If a
+  ret ever carried undef the pin fails loudly instead of silently
+  mismatching.
+- negative test: perturbed run-meta count -> CAPTURE PIN FAIL, exit 1.
+- zoom-out: the capture rig is an INSTRUMENT (hierarchy top): the same
+  served-bytes webpack-cache wrap generalizes to ANY module boundary for
+  M2's module-by-module slices — nothing module-specific except the
+  export list + the stage projection rule.
+- next: task 2 (structure-parallel C translation + replay driver).
