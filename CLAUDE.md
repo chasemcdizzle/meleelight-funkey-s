@@ -157,6 +157,13 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   `mathCapture`). Shimmed g01 stream first diverges from the pre-shim
   stream at frame 1671 — browser-libm drift is real; run-to-run identity
   holds (streams freeze in task 5).
+- **Checksum spec (M0 task 4, FROZEN):** `oracle/CHECKSUM.md` spec v1 —
+  the normative field-list/serialization/SHA-256/frame-boundary/RNG
+  contract the C port implements in M2. Any normative change = version
+  bump + re-freeze ALL `oracle/goldens/*.sha256.json` in the same change
+  (spec §8). Envelope keys are fixed-literal order (NOT sorted — only
+  nested objects sort); the seeded stream burns exactly one off-step draw
+  at `startGame` (`rngCallsOutsideStep == 1` is the expected value).
 - **QuickJS oracle-runtime build:** `spikes/device-feasibility/README.md`
   step 2 (bellard/quickjs @2026-06-04, single gcc invocation via `qjsmin.c`,
   static, 890 KB). M0 repoints its Math table at the vendored fdlibm.

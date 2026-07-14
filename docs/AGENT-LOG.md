@@ -167,3 +167,50 @@ iter 4 · 2026-07-14 · phase M0 · task 3: vendored fdlibm BOTH sides + crossch
   divergence-at-frame-1671 observation respectively.
 - next: M0 task 4 — freeze the checksum spec as oracle/CHECKSUM.md
   (field list, serialization rules, percentShake exclusion) → SPEC OK.
+
+## iter 5 — 2026-07-14 — M0 task 4: freeze the checksum spec (oracle/CHECKSUM.md)
+- phase: M0. task: fix_plan §M0 item 4 — write oracle/CHECKSUM.md as the
+  frozen, normative checksum spec (field list, serialization, SHA-256,
+  frame boundary, RNG channel, percentShake exclusion, versioning rule).
+- done-check: `bash -c 'for t in actionState timer percent stocks hitboxes
+  phys articles percentShake SHA-256 mulberry32 "\-0"; do grep -q -- "$t"
+  oracle/CHECKSUM.md || { echo "missing: $t"; exit 1; }; done; echo SPEC
+  OK'` → `SPEC OK`, exit 0 (.loop/iter5-m0t4-donecheck.log; CHECKER re-run
+  .loop/checker/m0t4.log).
+- artifacts: oracle/CHECKSUM.md (spec v1, 271 lines, sha256
+  cdc48d11014a41ae…). Every normative rule cites file:line in
+  oracle/harness/{pagelib,init,run,compare}.js,
+  oracle/meleelight-harness.patch, and the patched upstream
+  (src/main/player.js, src/main/main.js, src/physics/article.js) — all
+  read end-to-end this iteration; no code changes were needed.
+- precision findings pinned in spec §9 (doc-vs-shorthand, not code bugs):
+  (1) the envelope key order is FIXED-LITERAL (p0..p3 then articles;
+  per-player actionState,timer,percent,stocks,hit,hitboxes,phys), NOT
+  sorted — PLAN §3's "sorted keys" is only true of nested objects
+  (pagelib.js:30 vs 50-62); (2) cycle detection is path-based (seen-set
+  add/delete), so shared DAG references serialize in full at each
+  occurrence; (3) the seeded RNG stream includes exactly ONE off-step draw
+  before frame 1 (startGame → setBackgroundType, patched upstream
+  main.js:1322) — confirmed rngCallsOutsideStep==1 in every recorded run
+  output (oracle/harness/out/*.json); the C port must burn one draw at
+  match start. Conformance channels fixed: per-frame hash stream (binding)
+  + end-of-run draw count (binding) + rngCallsOutsideStep==1 (diagnostic).
+- CHECKER (mode=task, sub-agent): verified=true, tamper=false, gaps=[];
+  evidence: done-check exit 0 (all 11 tokens), spec-vs-code spot-check
+  passed on every cited rule at the exact cited lines (serialization,
+  hash, frame boundary, mulberry32 verbatim, percentShake patch hunk,
+  __harness hooks, compare.js/run.js secondary cites), all required topics
+  present, diff touches only M0-allowed paths, branch agent/auto.
+- zoom-out: a frozen spec that merely paraphrases code rots into a second
+  source of truth — the CLASS is doc/code drift. Instruments applied
+  instead of trusting prose: (a) every normative rule carries a file:line
+  citation so drift is mechanically auditable; (b) §8 makes the spec
+  self-invalidating — any normative edit forces a version bump + re-freeze
+  of every golden stream in the same change, so a drifted spec cannot
+  coexist with valid streams; (c) the under-specified spots found while
+  transcribing (envelope order, path-based cycles, the startGame draw)
+  were pinned as numbered findings rather than silently papered over —
+  each was exactly the kind of "both sides copy the same wrong assumption"
+  hole iter 4's crosscheck lesson warned about for the M2 port.
+- next: M0 task 5 — record + freeze golden #1's checksum stream
+  (oracle/record.sh g01 + verify-stream.js) → STREAM MATCH.

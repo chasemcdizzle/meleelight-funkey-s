@@ -24,14 +24,6 @@ covering the remaining char pairs and the other 5 VS stages; g07–g08 =
 human-vs-CPU traces (difficulty 5) on two distinct stages; together every
 one of the 5 characters and 6 stages appears ≥1×.)
 
-4. Freeze the checksum spec as `oracle/CHECKSUM.md`: the spike-proven
-   field list (per active player: actionState, timer, percent, stocks,
-   hit, hitboxes, phys; plus the aArticles queue), serialization rules
-   (sorted keys, `String(x)` shortest-round-trip floats, explicit `-0`,
-   `NaN`/`Infinity` literal, booleans `T`/`F`, typed arrays as arrays,
-   cycle-safe `cyc`, functions `fn`), SHA-256 per frame, and the explicit
-   percentShake exclusion + rationale — done-check:
-   `bash -c 'for t in actionState timer percent stocks hitboxes phys articles percentShake SHA-256 mulberry32 "\-0"; do grep -q -- "$t" oracle/CHECKSUM.md || { echo "missing: $t"; exit 1; }; done; echo SPEC OK'` → prints `SPEC OK`, exit 0.
 5. Record + freeze golden #1's checksum stream with the fdlibm JS shim
    active: `oracle/record.sh g01` (two fresh browser runs must agree
    before writing `oracle/goldens/g01-fox-marth-battlefield.sha256.json`)
