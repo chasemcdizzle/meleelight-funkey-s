@@ -1129,3 +1129,82 @@ MILESTONE PASS: M2-CAL
   not a new instrument.
 - next: task 2 (player/game-state value model + mutation-capture rig
   upgrade).
+
+## iter 21 — 2026-07-14 — M2 task 2: player value model + mutation-capture rig upgrade
+
+- phase M2, task 2 (fix_plan §M2 item 2).
+- done-check: `bash port/sim/calib/check-player-model.sh` → PLAYER MODEL
+  MATCH, exit 0 (.loop/iter21-check-player-model.log): per golden
+  g01/g04/g06 — 2 fresh player-spec captures byte-identical, 2× STREAM
+  MATCH (non-perturbation), pins OK (7,200 records each, 5-field
+  post-state form), strict replay 0 divergences across all 21,600
+  snapshots (round-trip + deep-copy independence + merge property per
+  record). Conformance guards: `bash port/sim/check-envcoll.sh` →
+  ENVCOLL MATCH, exit 0 (.loop/iter21-envcoll-regression.log);
+  `bash port/sim/calib/check-util-replay.sh` → UTIL MATCH, exit 0
+  (.loop/iter21-util-regression.log) — both stay green after the rig's
+  post-state upgrade (4-field records byte-identical to before).
+- what landed: value model `port/sim/ml_player.h` (MlPlayer/MlPhysics/
+  MlHitboxes/MlHitboxSpec + JsBool undef-at-rest + ml_player_copy/
+  ml_hitboxes_copy/ml_hitboxes_merge_from — the type-specialized
+  deepCopy/deepObjectMerge); canon bridge port/sim/calib/
+  player_canon.{h,c} (strict marshaller, rule 7 + sorted-key serializer;
+  reusable for later clusters' pre/post player states); driver
+  replay_player.c; spec-player.js (wraps physics.js's exported
+  physics(i,·) — update(i) itself is main.js-internal to gameTick, NOT
+  namespace-wrappable; physics is update's tail so post-physics ==
+  post-update); rig upgrade capturelib.js (optional post callback →
+  5th tab field) + check-spec-pins.js (postStateFns: 5-field records
+  enforced for mutation-captured fns, 4 for all others);
+  expected-capture-player.json; check-player-model.sh; NEW capture-FIRST
+  instrument survey-shapes.js (per-path type/key-set/length report);
+  FORMAT.md (post-state field, player spec + projections). Artifact
+  hashes (sha256/12): ml_player.h fe294870902f · player_canon.c
+  572dac69abca · player_canon.h 00412d85664a · replay_player.c
+  7205b03dc4ec · spec-player.js d533376fdfd6 · survey-shapes.js
+  1ee5717c428a · check-player-model.sh f469d51f4e3b ·
+  expected-capture-player.json 59c24278876b.
+- capture-FIRST payoff (survey over 21,600 snapshots BEFORE writing the
+  struct): hitboxes.id[j] takes exactly TWO shapes — constructor
+  ActiveHitbox {offset: Vec2D} vs chars-data {offset: Vec2D[1..24],
+  +clank/hitAirborne/hitGrounded/throwextra} (move code aliases id[j] to
+  chars[c].hitboxes entries); 13 runtime-added presence-modeled fields
+  (IASATimer, inAerial, hit.reverse, hitboxes.frames, phys.grabTech/
+  laserCombo/ledgeHangTimer/autocancel — lowercase, coexists with
+  constructor autoCancel — /rollOut×7); phys.canWallJump undef-at-rest
+  in 87% of snapshots (rule 8 extended to bools, JsBool); phys.passing
+  runtime-added but always present post-update (physics.js:1067 is the
+  1st statement). Zero cyc/fn tokens in the domain.
+- burn-down: 0 divergences on the first successful build (one required-
+  key count fixed pre-replay: 75 phys keys, not 74). The prevention rules
+  held; no new record-level fixes.
+- comparator negative tests (all restored, tree verified): out-of-domain
+  key injected into one record → MARSHAL FAIL, exit 3
+  (.loop/iter21-negA.log); single serializer byte perturbed ("frame"→
+  "framf") → 7200/7200 divergences (.loop/iter21-negB.log); merge typo
+  (target active[0] surviving) → 163 divergences (.loop/iter21-negC.log);
+  4-field physics record → CAPTURE PIN FAIL, exit 1
+  (.loop/iter21-pins-neg.log). NOTE (gotcha class, now in CLAUDE.md
+  §Commands): a corrupted capture NIBBLE round-trips cleanly (exit 0) —
+  round-trip model checks are self-referential for value edits, so model
+  tasks' teeth come from model/serializer perturbations, not data
+  corruption (unlike computational replay tasks).
+- discoveries → rules: RULE 10 (fix_plan §M2) — upstream deepObjectMerge's
+  3-arg sim call sites leave exclusionList undefined, falsifying the
+  recursion guard: the "deep merge" is a SHALLOW per-key REFERENCE
+  assignment (prevFrameHitboxes arrays become ALIASES of hitboxes').
+  RULE 8 extended (undef-at-rest bools; void-mutator undef returns).
+- honest coverage: merge frames-retention branch (target keeps its own
+  `frames` when source lacks it) has ZERO live cases in these captures —
+  property-tested in replay_player.c, first live coverage from task 5's
+  physics capture, which also owns the live in-frame aliasing (rule 10)
+  and the g07/g08 CPU-trace shapes (task 16).
+- zoom-out: the two instruments built here are class-level controls, not
+  one-offs — survey-shapes.js turns "guess the value model" into a
+  measured enumeration for EVERY remaining cluster (rule 7 now has a
+  runnable tool), and the 5th-field post-state form is the single
+  mutation-capture mechanism tasks 3-14 inherit (no per-cluster capture
+  formats). The negative-test lesson (round-trip ≠ compute-replay teeth)
+  generalizes to task 15's formatter check design: differential vs JS
+  String(x), never self-referential.
+- next: task 3 (interpretInputs + input buffer + meleeInputs).

@@ -1,0 +1,10 @@
+{
+  "comment": "Measured-then-frozen player-spec capture pins (M2 task 2, 2026-07-14). Boundary: physics.js's exported physics(i, inputBuffers) — the tail statement of main.js update(i), namespace-dereferenced at every gameTick call, so post-physics == post-update(i). 2 active players x 3600 frames = 7200 records per golden (gameTick calls update for every active slot every tick, including the ~91-frame 'starting' window). undefRetAllowed: physics is a void MUTATOR — its value is the 5th-field post-state (postStateFns), not the return. Post-state snapshots are the projected player[i] (charAttributes/charHitboxes/percentShake excluded — FORMAT.md 'player spec projections'). Frames-retention merge cases (prevFrameHitboxes.frames present while hitboxes.frames absent): ZERO in this captured domain — the ml_hitboxes_merge_from retention branch is property-tested in replay_player.c but has no live instance until a later cluster's capture provides one.",
+  "undefRetAllowed": ["physics"],
+  "postStateFns": ["physics"],
+  "goldens": {
+    "g01": { "records": 7200, "counts": { "physics": 7200 } },
+    "g04": { "records": 7200, "counts": { "physics": 7200 } },
+    "g06": { "records": 7200, "counts": { "physics": 7200 } }
+  }
+}

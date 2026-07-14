@@ -72,9 +72,15 @@
   window.__envcollCounts = window.__capCounts;
 
   // push one record: <frame> TAB <name> TAB <argsCanon> TAB <retCanon>
-  function pushRecord(name, argsCanon, retCanon) {
+  // Mutation-capture (M2 task 2): a 5th tab field carries the POST-STATE
+  // canon for boundaries that mutate arguments/globals (FORMAT.md
+  // "post-state field"). Pure boundaries omit it — 4-field records are
+  // byte-identical to the M2-CAL format.
+  function pushRecord(name, argsCanon, retCanon, postCanon) {
     const f = window.__inStep ? window.__frameCount + 1 : 0;
-    window.__capBuffer.push(f + "\t" + name + "\t" + argsCanon + "\t" + retCanon);
+    let rec = f + "\t" + name + "\t" + argsCanon + "\t" + retCanon;
+    if (postCanon !== undefined) rec += "\t" + postCanon;
+    window.__capBuffer.push(rec);
     window.__capCounts[name]++;
   }
   window.__capPush = pushRecord;
@@ -98,7 +104,9 @@
 
   // Wrap one exported function (Babel-CJS exports are plain writable
   // properties; external call sites dereference at call time).
-  function wrapExport(target, name, recName, proj) {
+  // `post` (optional, mutation-capture): post(args, ret) -> canon string,
+  // computed AFTER the call returns; recorded as the 5th tab field.
+  function wrapExport(target, name, recName, proj, post) {
     if (typeof target[name] !== "function") {
       throw new Error("capture: expected export missing/not a function: " + name);
     }
@@ -107,7 +115,8 @@
       const args = Array.prototype.slice.call(arguments);
       const argsCanon = canon1(proj ? proj(args) : args); // PRE-call state
       const ret = orig.apply(this, arguments);
-      pushRecord(recName, argsCanon, canon1(ret));
+      pushRecord(recName, argsCanon, canon1(ret),
+                 post ? post(args, ret) : undefined);
       return ret;
     };
     window.__capCounts[recName] = window.__capCounts[recName] || 0;
@@ -136,8 +145,8 @@
       declare: function (name) {
         window.__capCounts[name] = window.__capCounts[name] || 0;
       },
-      wrapExport: function (target, name, recName, proj) {
-        this.wrapped += wrapExport(target, name, recName || name, proj);
+      wrapExport: function (target, name, recName, proj, post) {
+        this.wrapped += wrapExport(target, name, recName || name, proj, post);
       },
     };
     const res = spec.install(ctx);

@@ -20,6 +20,17 @@ Specs (`node run-capture.js --spec <name>`):
   recorded with [thisState, ...args]) — 34 wrapped functions →
   `replay_util.c`. Pins: `expected-capture-util.json` via
   `check-spec-pins.js`.
+- `player` (M2 task 2, `spec-player.js`): per-frame post-`update(i)`
+  player snapshots for the player VALUE MODEL (`port/sim/ml_player.h`) —
+  wraps physics.js's exported `physics(i, inputBuffers)`, the tail
+  statement of main.js `update(i)` (update itself is called through the
+  local module binding inside gameTick and is NOT namespace-wrappable;
+  post-physics state == post-update state). MUTATION-CAPTURED: the
+  return is void, the value is the post-state field (below) = canon of
+  the projected `player[i]` after the call. Replay:
+  `replay_player.c` (canon→struct→canon round-trip + deep-copy
+  independence probe + deepObjectMerge property check). Pins:
+  `expected-capture-player.json`.
 
 Method records use `Mod#method` names (args prepended with the canon of
 `this`); constructor records use `Mod.new` (ret = canon of the built
@@ -51,7 +62,7 @@ whose checksum stream MUST pass the unchanged
 One line per boundary call, tab-separated, in call order:
 
 ```
-<frame> TAB <fn> TAB <args-canon> TAB <ret-canon> LF
+<frame> TAB <fn> TAB <args-canon> TAB <ret-canon> [TAB <post-canon>] LF
 ```
 
 - `frame`: 1-based sim frame being ticked (`__frameCount + 1` while
@@ -59,6 +70,16 @@ One line per boundary call, tab-separated, in call order:
 - `fn`: the exported function name.
 - `args-canon`: canon-v1 serialization of the argument list (as an array).
 - `ret-canon`: canon-v1 serialization of the return value.
+- `post-canon` (mutation-capture, M2 task 2): present for exactly the
+  functions frozen in the spec's expectations `postStateFns` — boundaries
+  that mutate arguments/globals record the canon of the (projected)
+  mutated state AFTER the call returns; the replay driver marshals
+  pre-state, calls C, and compares ret AND post-state bit-exactly.
+  Void mutators additionally appear in `undefRetAllowed` (their ret is
+  the literal `undef` by construction — the value is the post-state).
+  Post-state canon MAY contain `undef` (undef-at-rest fields are modeled,
+  rule 8); the no-undef pin applies to the ret field only. 4-field
+  records are byte-identical to the M2-CAL format.
 
 ## canon v1.1 — value serialization
 
@@ -102,6 +123,25 @@ render/blastzone/moving-platform machinery the module never reads).
 Captured at call time, so per-frame moving-platform mutations (fountain)
 are recorded faithfully.
 
+## Player spec projections (M2 task 2)
+
+The `player` post-state snapshot is `player[i]` with exactly three keys
+projected out (spec-player.js; the same projection discipline as the
+stage argument above):
+
+- `charAttributes` / `charHitboxes` — immutable per-character table data;
+  the C sim consumes the M1-generated tables (ml_tables, CTAB1), never a
+  snapshot copy. Zero in-match writes upstream (the only assignments are
+  menu-time css.js:150/171).
+- `percentShake` — written OFF-TICK by wall-clock setTimeout callbacks
+  from the stashed NATIVE RNG (oracle/CHECKSUM.md §7: the one player
+  field excluded from the checksum surface). Including it would make
+  capture byte-stability timing-dependent by construction.
+
+The `physics` args are projected to `[i]` (slot index only): the
+inputBuffers argument is the input cluster's surface (fix_plan §M2 tasks
+3/5 capture it at their own boundaries).
+
 ## The undef-ret allowlist (rule 8)
 
 The no-undef-in-returns pin (soundness of the marshaller's
@@ -124,4 +164,8 @@ invariant.
 - `expected-capture.json` — measured-then-frozen per-function call-count
   pins per golden for envcoll (drift alarm, M1 instrument class)
 - `expected-capture-<spec>.json` — the same for later specs
-  (checked by `check-spec-pins.js`)
+  (checked by `check-spec-pins.js`; may add `postStateFns` — functions
+  whose records carry the 5th post-state field)
+- `survey-shapes.js` — capture-FIRST instrument (rule 7): per-path
+  type/key-set/length report over a capture's canon fields; run it on a
+  fresh capture BEFORE finalizing any C value model

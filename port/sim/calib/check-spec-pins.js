@@ -21,10 +21,17 @@ if (!pins) { console.error(`no pins for golden ${id}`); process.exit(1); }
 const run = JSON.parse(fs.readFileSync(runPath, "utf8"));
 const lines = fs.readFileSync(jsonlPath, "utf8").split("\n").filter((l) => l.length > 0);
 
-// Accessor-class functions (M2 rule 8) echo undefined VERBATIM — the
-// no-undef-ret invariant applies to every OTHER function. The allowlist
-// is part of the frozen expectations, never inferred.
+// Accessor-class functions (M2 rule 8) echo undefined VERBATIM, and
+// void MUTATORS (mutation-capture class, M2 task 2: the value is in the
+// post-state field) return undefined by construction — the no-undef-ret
+// invariant applies to every OTHER function. The allowlist is part of the
+// frozen expectations, never inferred.
 const undefRetAllowed = new Set(expected.undefRetAllowed || []);
+// Mutation-captured functions (M2 task 2, FORMAT.md "post-state field"):
+// their records carry exactly 5 tab fields (the 5th = post-state canon,
+// which MAY contain undef — undef-at-rest values are modeled, rule 8);
+// every other function's records carry exactly 4. Frozen per spec.
+const postStateFns = new Set(expected.postStateFns || []);
 
 let fail = false;
 const die = (m) => { console.error("CAPTURE PIN FAIL: " + m); fail = true; };
@@ -40,7 +47,9 @@ const counts = {};
 let prevF = 0;
 for (let i = 0; i < lines.length; i++) {
   const parts = lines[i].split("\t");
-  if (parts.length !== 4) { die(`line ${i + 1}: ${parts.length} fields`); break; }
+  const want = postStateFns.has(parts[1]) ? 5 : 4;
+  if (parts.length !== want) { die(`line ${i + 1}: ${parts.length} fields (want ${want} for ${parts[1]})`); break; }
+  if (want === 5 && parts[4].length === 0) { die(`line ${i + 1}: empty post-state field`); break; }
   const f = Number(parts[0]);
   if (!Number.isInteger(f) || f < 0) { die(`line ${i + 1}: bad frame ${parts[0]}`); break; }
   if (f < prevF) { die(`line ${i + 1}: frame ${f} after ${prevF} (order broken)`); break; }

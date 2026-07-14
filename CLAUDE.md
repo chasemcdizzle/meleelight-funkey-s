@@ -245,6 +245,27 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   undef-at-rest; per-function no-undef-ret pins); NaN PAYLOADS are
   unreproducible V8/C artifacts — canon collapses them, never chase
   payloads by reordering C arithmetic.
+- **Player value model + mutation-capture rig upgrade (M2 task 2
+  committed form):** `node port/sim/calib/run-capture.js --spec player
+  --golden <id>` records per-frame post-update(i) player snapshots as
+  5-field records (5th = POST-STATE canon of the projected player[i];
+  FORMAT.md — projections: charAttributes/charHitboxes are M1-table
+  data, percentShake is CHECKSUM.md §7's timing-dependent exclusion).
+  Value model `port/sim/ml_player.h` (MlPlayer/MlPhysics/MlHitboxes/
+  MlHitboxSpec; JsBool undef-at-rest; presence flags for 13
+  runtime-added fields; type-specialized ml_player_copy +
+  ml_hitboxes_merge_from — the sim's 3-arg deepObjectMerge ALIASES, see
+  fix_plan §M2 rule 10); canon bridge `port/sim/calib/player_canon.{h,c}`
+  is reusable by later clusters' pre/post player states. Task check:
+  `bash port/sim/calib/check-player-model.sh` → `PLAYER MODEL MATCH`.
+  Capture-FIRST instrument: `node port/sim/calib/survey-shapes.js
+  <capture.jsonl>` — per-path type/key-set/length survey; run it on a
+  fresh capture BEFORE finalizing any C value model. Gotcha class:
+  round-trip model checks are SELF-REFERENTIAL for value edits (a
+  corrupted capture nibble round-trips cleanly) — negative tests must
+  perturb the C model/serializer (key order, presence flag, merge rule)
+  or inject out-of-domain shapes (marshal hard-fail), never the data
+  bytes.
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;

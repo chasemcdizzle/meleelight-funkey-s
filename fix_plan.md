@@ -187,6 +187,22 @@ the phase to M2.)
   mapping is valid ONLY for arithmetic-context args, and the
   no-undef-ret pin is per-function with a frozen accessor allowlist
   (expected-capture-<spec>.json `undefRetAllowed`, FORMAT.md).
+  EXTENDED task 2: undef-at-rest is not number-only — phys.canWallJump
+  holds undefined in 87% of captured snapshots (JsBool, ml_player.h);
+  and void MUTATORS legitimately return undef (their value is the
+  post-state field) — same frozen-allowlist mechanism, distinct class.
+- **RULE 10 — upstream "copy" helpers may ALIAS (discovered task 2)**:
+  the sim's deepObjectMerge call sites are 3-arg (physics.js:1070,
+  main.js:824), leaving `exclusionList` undefined — which FALSIFIES the
+  recursion guard (`typeof obj[key]==='object' && exclusionList && …`,
+  deepCopyObject.js:23) so the "deep merge" executes as a SHALLOW per-key
+  REFERENCE assignment: prevFrameHitboxes.{active,hitList,id} become
+  aliases of hitboxes' arrays, and later writes through one path are
+  visible through the other. Never assume an upstream copy helper copies:
+  read the EXECUTED, argument-dependent semantics, and model the aliasing
+  explicitly when translating mutation clusters (task 5 owns the live
+  prevFrameHitboxes aliasing; ml_player.h documents the value-level
+  merge semantics ml_hitboxes_merge_from implements).
 - **RULE 9 — NaN payloads are not values (discovered task 1, 24
   divergences fixed at class level)**: V8 emits payload NaNs
   (0xfffefffffff6ffff from undefined-arithmetic) and propagates them by
@@ -244,16 +260,27 @@ fns have zero live records over these traces — translated anyway,
 report-§6 precedent; Segment2D/Vec2D#dot/detectIntersections' other
 exports get their first live records from later clusters' captures.)
 
-2. player/game-state value model + mutation-capture rig upgrade —
-   capture per-frame post-`update(i)` `player[i]` snapshots (canon v1)
-   over g01/g04/g06; finalize `ml_player.h` (playerObject: the 7
-   checksummed fields incl. the ENTIRE phys object, CHECKSUM.md §2, plus
-   every field sim code reads/writes); C strict marshaller + serializer
-   with canon→struct→canon byte-identity over EVERY captured snapshot;
-   type-specialized deepCopy/deepCopyObject; add post-state capture
-   support to the rig.
-   done-check: `bash port/sim/calib/check-player-model.sh` → prints
-   `PLAYER MODEL MATCH`, exit 0.
+(task 2 — player/game-state value model + mutation-capture rig upgrade —
+DONE iter 21: `bash port/sim/calib/check-player-model.sh` → PLAYER MODEL
+MATCH, exit 0. 21,600 post-update(i) player snapshots over g01/g04/g06
+(7,200 each), byte-stable ×2, 6× STREAM MATCH, 0 divergences: per record
+canon→MlPlayer→canon round-trip + deep-copy independence probe +
+deepObjectMerge property check. Boundary = physics.js's exported
+`physics(i,·)` — update(i)'s tail statement (update itself is
+main.js-internal to gameTick, not namespace-wrappable). `ml_player.h`
+finalized capture-FIRST via the new `survey-shapes.js` instrument: two
+hitbox-entry shapes (constructor ActiveHitbox vs aliased chars-data with
+per-frame offset arrays), 13 runtime-added presence-modeled fields
+(IASATimer, inAerial, hit.reverse, hitboxes.frames, phys.grabTech/
+laserCombo/ledgeHangTimer/autocancel/rollOut×7), canWallJump
+undef-at-rest (JsBool). Rig upgrade: optional 5th-field POST-STATE canon
+(capturelib `post` callback; `postStateFns` pins in check-spec-pins.js).
+Projections documented in FORMAT.md: charAttributes/charHitboxes (M1
+tables own them), percentShake (CHECKSUM.md §7). Honest coverage: the
+merge frames-retention branch has ZERO live cases in these captures
+(property-tested only; first live coverage arrives with task 5's physics
+capture), and live in-frame prevFrameHitboxes ALIASING — rule 10 — is
+task 5's surface.)
 3. interpretInputs + input buffer + meleeInputs — C Input record,
    8-deep buffer semantics (main.js:662 pause-aware offsets), meleeInputs
    scaling/deadzone; capture interpretInputs boundary + replay.
