@@ -1,0 +1,25 @@
+DRIVER=alsa
+PROBE req_freq=44100 req_samples=256
+  OBTAINED freq=44100 format=0x8010 channels=2 samples=256 size=1024 silence=0
+  RAN cbs=54 (300ms, nominal_us=5804)
+PROBE req_freq=44100 req_samples=512
+  OBTAINED freq=44100 format=0x8010 channels=2 samples=512 size=2048 silence=0
+  RAN cbs=28 (300ms, nominal_us=11609)
+PROBE req_freq=44100 req_samples=1024
+  OBTAINED freq=44100 format=0x8010 channels=2 samples=1024 size=4096 silence=0
+  RAN cbs=15 (300ms, nominal_us=23219)
+PROBE req_freq=44100 req_samples=2048
+  OBTAINED freq=44100 format=0x8010 channels=2 samples=2048 size=8192 silence=0
+  RAN cbs=9 (300ms, nominal_us=46439)
+PROBE req_freq=22050 req_samples=256
+  OBTAINED freq=22050 format=0x8010 channels=2 samples=256 size=1024 silence=0
+  RAN cbs=28 (300ms, nominal_us=11609)
+PROBE req_freq=22050 req_samples=512
+  OBTAINED freq=22050 format=0x8010 channels=2 samples=512 size=2048 silence=0
+  RAN cbs=15 (300ms, nominal_us=23219)
+PROBE req_freq=22050 req_samples=1024
+  OBTAINED freq=22050 format=0x8010 channels=2 samples=1024 size=4096 silence=0
+  RAN cbs=9 (300ms, nominal_us=46439)
+PROBE req_freq=22050 req_samples=2048
+  OBTAINED freq=22050 format=0x8010 channels=2 samples=2048 size=8192 silence=0
+  RAN cbs=6 (300ms, nominal_us=92879)
