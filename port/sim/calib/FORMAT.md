@@ -55,6 +55,11 @@ Specs (`node run-capture.js --spec <name>`):
   + `port/sim/ml_rng.h`). See "The asshort spec" below. Pins:
   `expected-capture-asshort.json`.
 
+- `physics` (M2 task 5, `spec-physics.js`): physics.js core +
+  interpolatedCollision → `replay_physics.c` (translations
+  `port/sim/physics.{c,h}` + `port/sim/interpolated_collision.{c,h}`).
+  See "The physics spec" below. Pins: `expected-capture-physics.json`.
+
 Method records use `Mod#method` names (args prepended with the canon of
 `this`); constructor records use `Mod.new` (ret = canon of the built
 instance, per-instance closures serializing as `fn`). Argument canon is
@@ -248,6 +253,81 @@ these traces) — the dispatch seam is verified negatively on every live
 record (a C translation that spuriously dispatches diverges: proven, 3
 divergences on g06 in the negative test) and positively by the sweep's
 sound/rng events only.
+
+## The physics spec (M2 task 5)
+
+Wrapped boundary (8): `physics(i, inputBuffers)` (mutation-captured),
+interpolatedCollision's `sweepCircleVsSweepCircle`/`sweepCircleVsAABB`
+(pure; live callers hitDetection + article), and the 5 hitDetection launch
+getters (`getLaunchAngle`, `getHorizontal/VerticalVelocity`,
+`getHorizontal/VerticalDecay`) recorded ONLY while inside a physics call.
+
+The physics record:
+
+- args = `[i, inputBuffers[i].slice(0,4), pre]` — physics reads input
+  history depth ≤ 3 (22-key Input canon, input_canon bridge). `pre` is the
+  full PRE-call state envelope (sorted keys): `alias` (probe, below),
+  `characterSelections`, `gameMode`, `gameSettings`
+  {lCancelType, phantomThreshold, turbo}, `playerType`, `players` (the
+  projected player canon per active slot, null for inactive — same
+  projection as the player spec; frame-1 pre-states legitimately lack
+  `phys.passing` and carry `undef` ECB1/ECBp components, both
+  presence-modeled in ml_player.h per rule 8), `stage` (module-read
+  projection of activeStage: the five surface lists + `connected`
+  (normalized: absent key → null) + `ledge` + `blastzone` — captured per
+  record, so fountain's per-frame moving-platform mutations are recorded
+  faithfully), `versusMode`.
+- post = `{"alias":…,"hq":[…],"players":…,"snd":[…]}` — post-call alias
+  probe (3 hitbox flags, compared against the C tracking), physics' OWN
+  hitQueue rows (mark/collect attribution: hitQueue is reassigned by
+  resetHitQueue each tick so its `push` cannot be wrapped once; rows
+  appended during dispatch windows belong to the moves), post players,
+  physics' own direct sound plays.
+
+ORACLE-FED SEAMS (moves are tasks 7-12, the getters task 6): every
+top-level move dispatch from inside physics produces a `dispatch` record —
+args `[phase, moveObject.name, [slot, ...extraArgs]]` (the input array arg
+is dropped by projection), post `{alias, players}`. The replay VERIFIES
+the site (phase + expected name via the asFlags table + slot/extras
+bit-exactly, in call order — FIFO) and RESYNCS the C sim from the recorded
+post-dispatch state. Getter records: args verified bit-exactly, the
+recorded return injected. A C translation that reaches a seam out of
+order, with different arguments, or not at all, diverges. (Corollary
+measured in the negative tests: a corrupted PRE field that is overwritten
+by the next dispatch resync before any observable read is MASKED — the
+oracle-fed seam bounds each record's sensitivity to the state the C code
+actually consumes.)
+
+ALIAS PROBES (rule 10): per active player
+`[pos===ECB1[0], active, hitList, id aliased]` in pre-args and dispatch
+posts (restored into the C flags — a move init inside land() may reassign
+pos invisibly, so pos-ECB1 is capture-restored, never C-predicted); the
+physics post carries the 3 HITBOX flags only, which the C side tracks
+through merge/land/turnOffHitboxes and must match (teeth: untracked merge
+flags → 26 divergences on g01). The pos→ECB1[0] component WRITE-THROUGH
+is modeled in C (physics.c pos_set_*) but has zero OBSERVABLE live
+coverage on g01/g04/g06 (its visible window is grounded movement under a
+low ceiling — moveAlongGround; no VS-stage golden reaches one): documented
+honest coverage, first observable domain = target-stage/pstadium work.
+
+`asFlags` (frame-0 record): the actionStates per-(char,state) flag DATA
+physics branches on (canEdgeCancel, disableTeeter, inGrab, headBonk,
+specialWallCollide, canPassThrough, dead, missfoot, ignoreCollision,
+wallJumpAble (assigned verbatim to canWallJump — JsBool undef-at-rest),
+landType, airborneState, canGrabLedge, name), dumped for all 5 chars.
+run-capture.js's post-run `finalCheck()` hook re-dumps and hard-fails on
+ANY drift — the mechanical soundness proof for the C side's static table.
+Measured domain note: `canGrabLedge` is undef | false | [bool,bool] —
+`false[k]` is undefined in JS (falsy element reads), `undefined[k]` throws
+(the C read traps, placed at the EXACT lazy read point upstream reaches).
+
+physics sweep (rule 11): 35 fixed pure calls through the wrapped
+interpolatedCollision exports covering sweepCircleVsAABB's 8 region cases
+(corner/line/null/overlap/separated arms) and sweepCircleVsSweepCircle's
+overlap + t1/t2 selection lattice. ecbSquashData is physics.js
+module-PRIVATE state (unreadable from outside): the replay CHAINS it in C
+across the whole file from the nullSquashDatum initial value — the shared
+JS object is provably never mutated (physics.h note 3).
 
 ## The undef-ret allowlist (rule 8)
 

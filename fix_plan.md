@@ -265,7 +265,17 @@ the phase to M2.)
   inputs are keyboard-quantized (axes hit no values in (0.78, 0.79]), so
   threshold nudges can be no-op "teeth"; formula-constant/event-name/RNG
   perturbations bite reliably.
-- **Skipped-by-judgment util files** (documented, not silent):
+- **RULE 13 — JS DESUGARINGS are part of the expression shape (adopted
+  task 5)**: (a) compound assignment groups its ENTIRE right-hand side:
+  `a += b + c` is `a = a + (b + c)` — left-flattening it in C is a 1-ulp
+  FP divergence class (measured: 22 live divergences from
+  `pos.x += cVel.x + kVel.x`, the ONLY divergence class in the whole
+  physics translation); (b) domain traps stand in for upstream THROW
+  sites and must sit at the exact lazy dereference point — hoisting a
+  trap above the guard that upstream short-circuits on (canGrabLedge[0]
+  inside a snap-box test) turns unreached-undefined into a false abort.
+  Rule 6's "expression shapes verbatim" includes the operator DESUGARING
+  and the evaluation ORDER, not just the arithmetic.
   `firstNonNull.js` (zero importers upstream — dead code),
   `deepValue.js` (target-builder encode only — M4), `randomAnnulusPoint`
   (vfx render-only), `deepCopy/deepCopyObject` (type-specialized in task
@@ -364,10 +374,28 @@ events); KO-shout sites + executeIntangibility covered by the rule-12
 guarded impure sweep. Gotcha: a 0.79→0.78 threshold negative test bit
 NOTHING — trace inputs are keyboard-quantized; negative tests must
 perturb across values that OCCUR (see rule 12).)
-5. physics.js core + interpolatedCollision — the per-player update
-   pipeline (mutation-heavy; pre/post player + stage).
-   done-check: `bash port/sim/calib/check-physics-replay.sh` → prints
-   `PHYSICS MATCH`, exit 0.
+(task 5 — physics.js core + interpolatedCollision — DONE iter 24:
+`bash port/sim/calib/check-physics-replay.sh` → PHYSICS MATCH, exit 0.
+47,060 records over g01/g04/g06 (21,600 mutation-captured physics(i,·)
+calls with full pre/post envelopes, 21,441 oracle-fed move-dispatch
+seams, 120 hitDetection-getter seams, 3,791 live + 105 sweep
+interpolatedCollision records, 3 asFlags dumps), byte-stable ×2, 6×
+STREAM MATCH, 0 divergences after FOUR class-level fixes (ledger in
+docs/AGENT-LOG.md iter 24; the only live-divergence class — compound
+assignment grouping — became rule 13). C: `port/sim/physics.{c,h}`
+(structure-parallel; MlSim god-module slice; rule-10 alias sites modeled:
+prevFrameHitboxes merge aliases + the land() pos-ECB1[0] alias with
+capture-probe restoration; ecbSquashData chained module state; edgeOffset
+code literal), `port/sim/interpolated_collision.{c,h}`; ml_player.h
+gained rule-8 ECB1/ECBp component undef masks + presence-modeled
+phys.passing (frame-1 pre-states). Moves stay tasks 7-12 (dispatch
+resync seams verify site+args and restore post-state), launch getters
+stay task 6 (args verified, rets injected). Honest coverage: the
+damaging-stage hq path (no VS-stage damageType — M4 target stages) and
+the pos→ECB1 write-through's OBSERVABLE window (grounded movement under
+low ceilings) have zero live cases — translated verbatim, hq/probe teeth
+proven by negative tests; turbo interrupts remain zero-live
+(self-flagging via the seam FIFO if ever reached).)
 6. hitDetection + hitQueue + hitbox value model (createHitBox/
    createHitboxObject) — queue-ordered resolution, checkPhantoms,
    executeHits; launch-angle transcendentals via fdlibm.

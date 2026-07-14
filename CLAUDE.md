@@ -310,6 +310,35 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   sweep + restored player[3] injection, guarded by ×2 byte-stability +
   STREAM MATCH); threshold-nudge negative tests can be no-ops on
   keyboard-quantized traces — perturb constants/events/RNG instead.
+- **physics.js core + interpolatedCollision (M2 task 5 committed form):**
+  `node port/sim/calib/run-capture.js --spec physics --golden <id>` —
+  mutation-captures `physics(i, inputBuffers)` with a full PRE-state args
+  envelope (players/stage/globals/alias probes; stage captured per record
+  so fountain's moving platforms are faithful) and a
+  {alias,hq,players,snd} POST envelope; ORACLE-FED SEAMS for the
+  not-yet-translated surfaces: every top-level move dispatch (tasks 7-12)
+  records site+args+post-state and the replay verifies-then-RESYNCS; the
+  5 hitDetection launch getters (task 6) record args+ret and the replay
+  verifies args bit-exactly and injects the ret. interpolatedCollision's
+  2 exports replay pure (live + a 35-call rule-11 sweep). C:
+  `port/sim/physics.{c,h}` (MlSim god-module slice; rule-10 alias sites:
+  prevFrameHitboxes merge + the land() pos===ECB1[0] alias, probe-driven;
+  ecbSquashData chained as module state — the shared nullSquashDatum is
+  provably never written) + `port/sim/interpolated_collision.{c,h}`.
+  Task check: `bash port/sim/calib/check-physics-replay.sh` →
+  `PHYSICS MATCH`. run-capture.js gained an optional spec `finalCheck()`
+  post-run hook (the physics spec re-dumps the frame-0 asFlags
+  actionStates flag table and hard-fails on in-match drift). Gotcha
+  classes (now fix_plan §M2 rule 13): JS COMPOUND ASSIGNMENT groups its
+  whole RHS (`a += b + c` is `a = a + (b + c)`) — left-flattening cost 22
+  one-ulp live divergences; domain traps must sit at upstream's exact
+  lazy dereference (hoisting a canGrabLedge[0] trap above its snap-box
+  guard falsely aborts). Rule-8 extension: ECB1/ECBp COMPONENTS hold
+  undefined at rest in frame-1 pre-states (undef masks in ml_player.h;
+  `phys.passing` became presence-modeled for the same reason). Oracle-fed
+  seams BOUND sensitivity: a corrupted pre field that a dispatch resync
+  overwrites before any read is mechanically masked (measured) — corrupt
+  POST fields for nibble teeth.
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;

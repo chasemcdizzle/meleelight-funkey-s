@@ -1393,3 +1393,116 @@ MILESTONE PASS: M2-CAL
   already validated.
 - next: task 5 (physics.js core + interpolatedCollision — the
   mutation-heavy per-player update pipeline; pre/post player + stage).
+
+## iter 24 — 2026-07-14 — M2 task 5: physics.js core + interpolatedCollision — PHYSICS MATCH
+
+- phase M2, task 5 (the mutation-heavy per-player update pipeline — the
+  cluster M2CAL-REPORT §6 flagged as the unpriced mutation class).
+- done-check: `bash port/sim/calib/check-physics-replay.sh` → exit 0,
+  `PHYSICS MATCH` (.loop/task5-donecheck.log). Per golden (g01/g04/g06):
+  2 fresh captures byte-identical (cmp), both runs STREAM MATCH vs the
+  frozen streams (3600/3600 exact; instrumentation non-perturbing incl.
+  the finalCheck asFlags re-dump), pins OK
+  (expected-capture-physics.json), strict replay 0 divergences —
+  17,188 + 14,805 + 15,067 = 47,060 records: 21,600 physics(i,·)
+  mutation captures (full pre/post envelopes), 21,441 dispatch seams,
+  120 getter seams, 3,896 interpolatedCollision (3,791 live + 105
+  rule-11 sweep), 3 asFlags dumps.
+- conformance guard + regressions all green (.loop/task5-reg-*.log):
+  ENVCOLL MATCH · UTIL MATCH · PLAYER MODEL MATCH · INPUT MATCH ·
+  ASSHORT MATCH (player_canon.c changed this iteration — the task-2
+  round-trip stays byte-exact with the rule-8 extensions).
+- design: physics(i, inputBuffers) wrapped with a PRE-state args envelope
+  (players/stage/globals + rule-10 alias probes; stage projected per
+  record → fountain moving platforms faithful) and a POST envelope
+  {alias, hq, players, snd}. NOT-YET-TRANSLATED surfaces are ORACLE-FED
+  SEAMS consumed by the C replay in strict call order (FIFO): move
+  dispatches (tasks 7-12) verify phase+moveName (via the asFlags
+  table)+slot+extra-args bit-exactly then RESYNC the sim from the
+  recorded post-dispatch state; hitDetection launch getters (task 6)
+  verify args bit-exactly and inject the recorded return. hitQueue rows
+  attributed by mark/collect (resetHitQueue reassigns the array each
+  tick — push is unwrappable); physics' 4 direct sound sites on the
+  ml_events seam. ecbSquashData (module-private, unreadable) chained in
+  C across the file; the shared nullSquashDatum is provably never
+  written (physics.h note 3). asFlags: frame-0 dump of the 14
+  per-(char,state) flags physics branches on, drift-checked post-run by
+  the new run-capture.js finalCheck() hook.
+- DIVERGENCE LEDGER (frame · function · root-cause class · fix · min):
+  1. frame 0 · load_flags(canGrabLedge) · captured domain wider than
+     modeled (plain `false`; false[k] is undefined in JS, no throw) ·
+     bool arm → [falsy,falsy] semantics (rule-7 marshal catch working
+     as designed) · 5m.
+  2. frame 1 · cv_player(phys.ECB1/ECBp) · rule-8 undef-at-rest is not
+     field-level only — Vec2D COMPONENTS hold undefined in frame-1
+     pre-physics states (and mid-frame dispatch posts) · class fix:
+     ecb1Undef/ecbpUndef component masks in ml_player.h (values carry
+     canonical NaN — every consumer is arithmetic/comparison) +
+     phys.passing became presence-modeled (absent pre-first-call) · 25m.
+  3. frame 1 · dealWithLedges(canGrabLedge trap) · trap hoisted above
+     the snap-box guard upstream short-circuits on — false abort where
+     JS never reads the flag · moved traps to the exact lazy dereference
+     sites (rule 13b) · 10m.
+  4. frame 2856+ (22 live records) · hitlagSwitchUpdate velocity
+     integration · JS COMPOUND ASSIGNMENT groups its whole RHS:
+     `pos.x += cVel.x + kVel.x` is pos.x + (cVel.x + kVel.x); the C
+     translation left-flattened it — 1-ulp FP divergence class ·
+     class fix + NEW RULE 13a · 15m.
+  Zero divergences after the four class fixes; no one-offs.
+- comparator negative tests (all restored, tree re-verified 0 div):
+  (a) shieldHP regen 0.07→0.071 → 971 divergences; (b) land
+  WAIT/LANDING cVel.y threshold −1→−3 → 8 (dispatch-name seam teeth);
+  (c) spurious hq push at the hitlag-exit site → 30 (hq envelope teeth);
+  (d) getLaunchAngle lsX/lsY swap → 12 = every getter record (seam args
+  teeth); (e) merge alias flags untracked → 26 (post alias-probe
+  teeth); (f) sweepCC overlap midpoint (q1 coeff) → 2, sweepCC
+  quadratic a1 → 1, sweepAABB line-case pt → 1 (sweep+live
+  interpolatedCollision teeth); (g) corrupted POST nibble → exactly 1.
+  MEASURED SEAM PROPERTY: a corrupted PRE nibble that the next dispatch
+  resync overwrites before any observable read is MASKED (0 div) —
+  oracle-fed seams bound each record's sensitivity to state the C code
+  actually consumes; nibble teeth must target POST fields.
+- honest coverage (documented, not silent): damaging-stage collisions
+  (hq rows) have zero live cases — no VS-stage surface carries
+  damageType (grep-verified); reachable future domain = M4 target
+  stages; hq teeth proven by (c). The pos→ECB1[0] alias WRITE-THROUGH is
+  modeled but zero-live-OBSERVABLE (visible only via grounded movement
+  under a low ceiling — moveAlongGround; no golden reaches one); the
+  alias STATE itself is probe-verified every record. Turbo interrupts
+  remain zero-live (off in all goldens) — wired to the as_turbo* C
+  translations, self-flagging through the seam FIFO if ever reached.
+  aabbChecker's corner-case sweep parameter is ordering-observable only
+  (the returned point is the corner regardless of t) — translated
+  verbatim; its selection lattice is teeth-covered via sweepCC (same
+  code shape).
+- artifacts (sha256/12): physics.c 78c2dd5a48d8 · physics.h 57f6a30fdc0c
+  · interpolated_collision.c e341e64c6206 · interpolated_collision.h
+  1301d273809d · spec-physics.js a5757dcb1e91 · replay_physics.c
+  11fac3027df1 · expected-capture-physics.json dd7f60a08435 ·
+  check-physics-replay.sh 7c94e5580bcd · ml_player.h 4e5e577fa99a ·
+  player_canon.c f5e27b486bbe · run-capture.js 7e0cf1406ed5. Logs:
+  .loop/task5-donecheck.log, .loop/task5-reg-*.log,
+  .loop/task5-capture*.log.
+- zoom-out: (1) the ONLY live-divergence class in a 1,233-line
+  mutation-heavy translation was an operator DESUGARING (compound
+  assignment grouping) — rules 1-12 pre-empted everything else; rule 13
+  now pins desugarings + trap placement as part of "expression shape",
+  which every remaining cluster (moves, hitDetection — both full of
+  `+=`) inherits. (2) The oracle-fed dispatch seam is the class-level
+  instrument for translating AROUND untranslated mutation surfaces: it
+  verifies the caller's control flow (site order + names + args) while
+  the recording supplies the callee's effects — tasks 6-12 can now be
+  built in ANY order against the same physics capture, and each task
+  that lands replaces a seam with real C, with the seam FIFO as the
+  drift alarm. (3) Discovered for task 17: outOfCameraTimer is
+  incremented by the RENDER/camera plane but consumed by sim logic
+  (percent++ — checksummed); the full C gameTick needs that camera
+  slice ported or the field's writer identified and translated —
+  registered here so integration doesn't chase it as a mystery
+  divergence. (4) The rule-8 arc completed: undef-at-rest now spans
+  numbers (task 1), bools (task 2), and COMPONENTS of nested value
+  objects (this task) — the class instrument (survey-shapes before
+  finalizing any model) caught each extension before it cost a
+  wrong-model rewrite.
+- next: task 6 (hitDetection + hitQueue + hitbox value model — the
+  getter seams recorded here become its first live cross-checks).

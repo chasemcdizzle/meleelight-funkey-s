@@ -80,6 +80,41 @@ static void pc_vec4(const CanonVal *v, Vec2D out[4], const char *what) {
   for (int i = 0; i < 4; i++) out[i] = pc_vec2d(v->items[i], what);
 }
 
+// ECBp/ECB1: components may hold undefined AT REST (rule 8; measured:
+// frame-1 pre-physics states, M2 task 5). Value slot = canonical NaN
+// (ToNumber(undefined) — all in-sim consumers are arithmetic/comparison);
+// the mask (bit 2i = x of point i, bit 2i+1 = y) round-trips `undef`.
+static void pc_vec4_undef(const CanonVal *v, Vec2D out[4], uint8_t *mask,
+                          const char *what) {
+  if (v->type != CV_ARR || v->count != 4) {
+    char msg[128];
+    snprintf(msg, sizeof msg, "%s: expected [Vec2D x4]", what);
+    pc_fail(msg);
+  }
+  *mask = 0;
+  for (int i = 0; i < 4; i++) {
+    const CanonVal *pt = v->items[i];
+    if (pt->type != CV_OBJ || pt->nkeys != 2 ||
+        strcmp(pt->keys[0], "x") != 0 || strcmp(pt->keys[1], "y") != 0) {
+      char msg[128];
+      snprintf(msg, sizeof msg, "%s: expected Vec2D {x,y}", what);
+      pc_fail(msg);
+    }
+    if (pt->vals[0]->type == CV_UNDEF) {
+      out[i].x = js_nan();
+      *mask |= (uint8_t)(1u << (2 * i));
+    } else {
+      out[i].x = pc_num(pt->vals[0], what);
+    }
+    if (pt->vals[1]->type == CV_UNDEF) {
+      out[i].y = js_nan();
+      *mask |= (uint8_t)(1u << (2 * i + 1));
+    } else {
+      out[i].y = pc_num(pt->vals[1], what);
+    }
+  }
+}
+
 // --- hitbox spec (hitboxes.id[j]) --------------------------------------------
 
 static MlHitboxSpec pc_hitbox_spec(const CanonVal *v) {
@@ -158,6 +193,21 @@ static void ser_vec4(CanonBuf *b, const Vec2D v[4]) {
   for (int i = 0; i < 4; i++) {
     if (i) cb_putc(b, ',');
     ser_vec2d_pc(b, v[i]);
+  }
+  cb_putc(b, ']');
+}
+
+static void ser_vec4_undef(CanonBuf *b, const Vec2D v[4], uint8_t mask) {
+  cb_putc(b, '[');
+  for (int i = 0; i < 4; i++) {
+    if (i) cb_putc(b, ',');
+    cb_puts(b, "{\"x\":");
+    if (mask & (1u << (2 * i))) cb_puts(b, "undef");
+    else cb_num(b, v[i].x);
+    cb_puts(b, ",\"y\":");
+    if (mask & (1u << (2 * i + 1))) cb_puts(b, "undef");
+    else cb_num(b, v[i].y);
+    cb_putc(b, '}');
   }
   cb_putc(b, ']');
 }
@@ -341,9 +391,13 @@ static void ser_interp(CanonBuf *b, const Vec2D v[ML_INTERP_CAP][4], int n) {
 
 // --- physicsObject ----------------------------------------------------------------
 
-// 75 always-present phys keys post-update (74 distinct constructor fields
-// + runtime-added passing).
-#define PHYS_REQUIRED 75
+// 74 always-present constructor phys keys. `passing` is runtime-added by
+// physics.js:1067 (the first statement of every physics() call): always
+// present in POST-update snapshots, legitimately ABSENT in a frame-1
+// PRE-physics state (M2 task 5 marshals pre-states too) — presence
+// modeled (hasPassing), serialized only when present, so the task-2
+// post-state round-trip is unchanged byte-for-byte.
+#define PHYS_REQUIRED 74
 
 static void cv_phys(const CanonVal *v, MlPhysics *out) {
   memset(out, 0, sizeof *out);
@@ -368,9 +422,9 @@ static void cv_phys(const CanonVal *v, MlPhysics *out) {
       else if (strcmp(key, name) == 0) { out->flag = true; out->field = pc_bool(val, "phys." name); }
 
     if (false) {}
-    REQ_VEC4("ECB1", ECB1)
+    else if (strcmp(key, "ECB1") == 0) { pc_vec4_undef(val, out->ECB1, &out->ecb1Undef, "phys.ECB1"); required++; }
     REQ_VEC4("ECB2", ECB2)
-    REQ_VEC4("ECBp", ECBp)
+    else if (strcmp(key, "ECBp") == 0) { pc_vec4_undef(val, out->ECBp, &out->ecbpUndef, "phys.ECBp"); required++; }
     REQ_NUM("airborneTimer", airborneTimer)
     REQ_BOOL("autoCancel", autoCancel)
     OPT_BOOL("autocancel", hasAutocancelLower, autocancelLower)
@@ -434,7 +488,7 @@ static void cv_phys(const CanonVal *v, MlPhysics *out) {
     }
     REQ_NUM("outOfCameraTimer", outOfCameraTimer)
     REQ_BOOL("passFastfall", passFastfall)
-    REQ_BOOL("passing", passing)
+    OPT_BOOL("passing", hasPassing, passing)
     REQ_VEC("pos", pos)
     REQ_VEC("posDelta", posDelta)
     REQ_VEC("posPrev", posPrev)
@@ -487,11 +541,11 @@ static void cv_phys(const CanonVal *v, MlPhysics *out) {
 
 static void ser_phys(CanonBuf *b, const MlPhysics *p) {
   cb_puts(b, "{\"ECB1\":");
-  ser_vec4(b, p->ECB1);
+  ser_vec4_undef(b, p->ECB1, p->ecb1Undef);
   cb_puts(b, ",\"ECB2\":");
   ser_vec4(b, p->ECB2);
   cb_puts(b, ",\"ECBp\":");
-  ser_vec4(b, p->ECBp);
+  ser_vec4_undef(b, p->ECBp, p->ecbpUndef);
   cb_puts(b, ",\"airborneTimer\":");
   cb_num(b, p->airborneTimer);
   cb_puts(b, ",\"autoCancel\":");
@@ -598,8 +652,10 @@ static void ser_phys(CanonBuf *b, const MlPhysics *p) {
   cb_num(b, p->outOfCameraTimer);
   cb_puts(b, ",\"passFastfall\":");
   ser_bool(b, p->passFastfall);
-  cb_puts(b, ",\"passing\":");
-  ser_bool(b, p->passing);
+  if (p->hasPassing) {
+    cb_puts(b, ",\"passing\":");
+    ser_bool(b, p->passing);
+  }
   cb_puts(b, ",\"pos\":");
   ser_vec2d_pc(b, p->pos);
   cb_puts(b, ",\"posDelta\":");

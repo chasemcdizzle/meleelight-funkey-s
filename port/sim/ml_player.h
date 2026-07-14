@@ -129,6 +129,15 @@ typedef struct {
   Vec2D ECBp[4];
   Vec2D ECB1[4];
   Vec2D ECB2[4];
+  // Rule-8 undef-at-rest masks for ECBp/ECB1 COMPONENTS (bit 2k = point
+  // k's x, bit 2k+1 = its y). Measured domain (M2 task 5 physics capture,
+  // survey-shapes): frame-1 pre-physics states carry Vec2D(undefined,
+  // undefined) in exactly these two arrays. The VALUE slots hold the
+  // canonical NaN (ToNumber(undefined) — every in-sim consumer is
+  // arithmetic/comparison), the masks exist so serialization echoes
+  // `undef` verbatim. Every whole-array assignment clears the mask.
+  uint8_t ecbpUndef;
+  uint8_t ecb1Undef;
   double onSurface[2];
   bool doubleJumped;
   double shieldHP;
@@ -192,7 +201,10 @@ typedef struct {
   double bTurnaroundDirection;
   double groundAngle;
   bool raptorBoost;
-  // runtime-added, always present post-update (physics.js:1067, 1st stmt):
+  // runtime-added by physics.js:1067 (1st stmt of every physics() call):
+  // always present POST-update; a frame-1 PRE-physics state (M2 task 5's
+  // capture marshals those too) legitimately lacks it — presence modeled.
+  bool hasPassing;
   bool passing;
   // runtime-added, presence modeled (rule 3):
   bool hasGrabTech;             bool grabTech;

@@ -194,6 +194,14 @@ async function main() {
   }
   const wall = Date.now() - t0;
 
+  // Optional spec-defined post-run assertion (M2 task 5): e.g. the physics
+  // spec re-dumps the actionStates flag table and hard-fails on drift
+  // (soundness of its frame-0 asFlags record). Throws = capture fails.
+  await page.evaluate((s) => {
+    const spec = window.__capSpecs[s];
+    return spec.finalCheck ? spec.finalCheck() : 0;
+  }, SPEC);
+
   const coverage = await page.evaluate(() => window.__coverage());
   const counts = await page.evaluate(() => window.__capCounts);
 
