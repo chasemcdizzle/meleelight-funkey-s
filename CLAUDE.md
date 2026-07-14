@@ -339,6 +339,36 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   seams BOUND sensitivity: a corrupted pre field that a dispatch resync
   overwrites before any read is mechanically masked (measured) — corrupt
   POST fields for nibble teeth.
+- **hitDetection + hitQueue + hitbox value model (M2 task 6 committed
+  form):** `node port/sim/calib/run-capture.js --spec hitdet --golden
+  <id>` — wraps all 29 hitDetection exports: hitDetect/executeHits/
+  checkPhantoms mutation-captured with the uniform pre {alias,
+  characterSelections, gameMode, gameSettings, hq, phq, playerType,
+  players} / post {alias,hq,phq,players,rng,snd} envelopes (hq/phq = the
+  FULL exported queues, marshalled per record — rows enter from THROW
+  moves/physics windows, never chained); resetHitQueue/setPhantonQueue
+  lean; launch getters + getKnockback/getHitstun/segmentSegmentCollision
+  pure (getLaunchAngle's args projected with the LAZILY-read
+  player[v].phys.grounded — null iff knockback >= 80); knockbackSounds
+  {rng,snd}; 15 internal-only exports pinned ZERO records; move
+  dispatches = oracle-fed seams (post {alias,hq,players}); frame-0
+  hdFlags dump (canBeGrabbed/crouch/downed/specialClank/specialOnHit/
+  vCancel, finalCheck drift-guarded). C: `port/sim/hit_detection.{c,h}`
+  (task 5's 5 launch-getter seams are REAL bodies here; screenShake = 4
+  logged ml_random draws per regular hit; ml_sound_stop "furaloop.stop";
+  hitList push/splice write through the rule-10 alias; both
+  MlHitboxSpec shapes' undefined-key reads via hb_* helpers). Task
+  check: `bash port/sim/calib/check-hitdet-replay.sh` → `HITDET MATCH`.
+  Gotcha classes: (rule 14) owner-draw vs dispatch-window-draw chain
+  order is unrecoverable — record window draws as `Math.randomW`, pin
+  the measured 0, replay hard-fails; node's ~512 MB readFileSync string
+  cap (ERR_STRING_TOO_LONG — g06 hitdet capture is 542 MB):
+  check-spec-pins.js STREAMS the JSONL; held object references across
+  seam resyncs (executeHits' `hitbox = player[a].hitboxes.id[h]`) read
+  the ORIGINAL object under reassignment — model with a by-value copy;
+  razor-thin threshold nudges (hurtWidth +0.5, the 0.01 phantom band)
+  are no-op teeth on occurring hit margins (rule-12 corollary, 2nd
+  measured instance).
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;

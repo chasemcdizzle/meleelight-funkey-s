@@ -45,6 +45,11 @@ extern MlRng *ml_active_rng;
 
 void ml_ev_reset(void);
 void ml_sound_play(const char *name);
+// Howl .stop sites (hitDetection's FURAFURA arm, M2 task 6): enqueued on
+// the same queue with a ".stop"-suffixed token (e.g. "furaloop.stop") so
+// the M4 mixer can distinguish stop events; the capture records the same
+// token, so the queues compare bit-exactly.
+void ml_sound_stop(const char *nameDotStop);
 void ml_dispatch_note(const char *phase, const char *move);
 double ml_random(void);
 

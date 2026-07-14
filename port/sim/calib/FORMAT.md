@@ -60,6 +60,12 @@ Specs (`node run-capture.js --spec <name>`):
   `port/sim/physics.{c,h}` + `port/sim/interpolated_collision.{c,h}`).
   See "The physics spec" below. Pins: `expected-capture-physics.json`.
 
+- `hitdet` (M2 task 6, `spec-hitdet.js`): all 29 exported functions of
+  `src/physics/hitDetection.js` + the hitQueue/phantomQueue value model +
+  the seeded-RNG chain → `replay_hitdet.c` (translations
+  `port/sim/hit_detection.{c,h}`). See "The hitdet spec" below. Pins:
+  `expected-capture-hitdet.json`.
+
 Method records use `Mod#method` names (args prepended with the canon of
 `this`); constructor records use `Mod.new` (ret = canon of the built
 instance, per-instance closures serializing as `fn`). Argument canon is
@@ -328,6 +334,68 @@ overlap + t1/t2 selection lattice. ecbSquashData is physics.js
 module-PRIVATE state (unreadable from outside): the replay CHAINS it in C
 across the whole file from the nullSquashDatum initial value — the shared
 JS object is provably never mutated (physics.h note 3).
+
+## The hitdet spec (M2 task 6)
+
+Wrapped boundary (29 = every exported function; hitQueue/phantomQueue are
+exported ARRAYS, asserted present). Live external callers: main.js's
+gameTick pipeline (resetHitQueue / checkPhantoms / hitDetect / executeHits),
+physics.js's hitlag exit (the 5 launch getters — task 5's oracle-fed getter
+seams are these functions' REAL C translations now), article.js
+(getKnockback / getHitstun / knockbackSounds / segmentSegmentCollision).
+The other 15 exports have only module-internal callers (babel local
+bindings): identity-wrapped, PINNED AT ZERO records — a record appearing
+means a new external caller and fails the pins.
+
+- `hitDetect` (args `[p, pre]`), `executeHits` / `checkPhantoms`
+  (args `[pre]`): mutation-captured with ONE uniform envelope — pre
+  `{alias, characterSelections, gameMode, gameSettings {phantomThreshold},
+  hq, phq, playerType, players}`, post `{alias(3-flag), hq, phq, players,
+  rng, snd}`. `hq`/`phq` are the FULL exported queues (rows enter from
+  other clusters' windows — THROW moves during update, physics'
+  damaging-stage rows — so the replay marshals them per record, never
+  chains). hq rows: 6/7-element arrays `[v, a, h, shieldHit, isThrow,
+  drawBounce(, phantom)]`; `a` is a slot number or physics' collisionData
+  object (stage damage). `resetHitQueue`/`setPhantonQueue` are lean
+  (queue-only read/write set — they run pre-update when frame-1 players
+  still lack prevFrameHitboxes, so no alias probe).
+- DISPATCH seams (tasks 7-12): args `[phase, moveName, [slot, ...extras]]`
+  (`init`/`onClank`/`onPlayerHit`), post `{alias(4), hq, players}` —
+  verified in call order, resynced. phantomQueue is NOT in dispatch posts
+  (no move module imports it; a move write would diverge the outer post).
+- RNG channel: rngBoot + owner-attributed draws (the asshort discipline).
+  hitdet's own draws = screenShake's 4 per regular hit (render shake; the
+  DRAWS are stream state) → the post `rng` list. Draws inside a dispatch
+  window BELOW a hitdet boundary would be chain-order-ambiguous vs the
+  boundary's own draws: recorded as `Math.randomW`, PINNED ZERO (measured),
+  replay hard-fails on one. All other draws are standalone `Math.random`
+  records burned eagerly in file order (sound because of the W pin).
+- `getLaunchAngle` args are projected `[trajectory, knockback, reverse,
+  x, y, v, groundedOrNull]` — the 7th mirrors upstream's exact laziness
+  (player[v].phys.grounded is read ONLY under knockback < 80; null
+  otherwise). `getKnockback`'s hb arg → its `{bk,kg,sk}` read set;
+  `crouching`/`vCancel` are bool|undefined truthiness (article passes raw
+  actionStates flag reads). `knockbackSounds` args `[type, knockback,
+  characterSelections[v]]` with post `{rng, snd}`.
+- `hdFlags` (frame-0 record): the per-(char,state) flags hitDetection
+  branches on — `{canBeGrabbed, crouch, downed, name, specialClank,
+  specialOnHit, vCancel}` — dumped for all 5 chars; finalCheck() re-dumps
+  post-run and hard-fails on drift (the C table's soundness proof).
+- Sound stops: `sounds.furaloop.stop` (the FURAFURA arm) records the token
+  `"furaloop.stop"` in the owner's snd list; C mirrors via
+  `ml_sound_stop` on the same queue.
+
+hitdet sweep (rule 11, 164 calls): getKnockback both formula arms/caps/
+modifiers, getHitstun, the velocity/decay getters (incl. the kb-0 `-0`
+product and getVerticalVelocity's zeroing arms), getLaunchAngle's kb>=80
+arms (player[v] never dereferenced — upstream short-circuits) plus kb<80
+grounded/deadzone arms via a rule-12 slot-3 player injection (restored),
+segmentSegmentCollision's parallel/t/u/hit arms, and the knockbackSounds
+type x tier x char lattice via a rule-12 characterSelections[3] injection
+(restored). Measured rule-12 corollary (2nd instance): razor-thin
+threshold nudges are no-op teeth — hurtWidth 8->8.5 and the 0.01
+phantomThreshold band bite NOTHING on occurring hit margins; geometry
+teeth need 8->12, phantom teeth need the classification inverted.
 
 ## The undef-ret allowlist (rule 8)
 

@@ -489,6 +489,7 @@ static void cv_phys(const CanonVal *v, MlPhysics *out) {
     REQ_NUM("outOfCameraTimer", outOfCameraTimer)
     REQ_BOOL("passFastfall", passFastfall)
     OPT_BOOL("passing", hasPassing, passing)
+    OPT_NUM("phantomDamage", hasPhantomDamage, phantomDamage)
     REQ_VEC("pos", pos)
     REQ_VEC("posDelta", posDelta)
     REQ_VEC("posPrev", posPrev)
@@ -518,6 +519,7 @@ static void cv_phys(const CanonVal *v, MlPhysics *out) {
     REQ_BOOL("shielding", shielding)
     REQ_NUM("shoulderLockout", shoulderLockout)
     REQ_BOOL("sideBJumpFlag", sideBJumpFlag)
+    OPT_NUM("stageDamageImmunity", hasStageDamageImmunity, stageDamageImmunity)
     REQ_NUM("stuckTimer", stuckTimer)
     REQ_NUM("techTimer", techTimer)
     REQ_BOOL("thrownHitbox", thrownHitbox)
@@ -656,6 +658,10 @@ static void ser_phys(CanonBuf *b, const MlPhysics *p) {
     cb_puts(b, ",\"passing\":");
     ser_bool(b, p->passing);
   }
+  if (p->hasPhantomDamage) {
+    cb_puts(b, ",\"phantomDamage\":");
+    cb_num(b, p->phantomDamage);
+  }
   cb_puts(b, ",\"pos\":");
   ser_vec2d_pc(b, p->pos);
   cb_puts(b, ",\"posDelta\":");
@@ -722,6 +728,10 @@ static void ser_phys(CanonBuf *b, const MlPhysics *p) {
   cb_num(b, p->shoulderLockout);
   cb_puts(b, ",\"sideBJumpFlag\":");
   ser_bool(b, p->sideBJumpFlag);
+  if (p->hasStageDamageImmunity) {
+    cb_puts(b, ",\"stageDamageImmunity\":");
+    cb_num(b, p->stageDamageImmunity);
+  }
   cb_puts(b, ",\"stuckTimer\":");
   cb_num(b, p->stuckTimer);
   cb_puts(b, ",\"techTimer\":");

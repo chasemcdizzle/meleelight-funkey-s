@@ -208,6 +208,8 @@ typedef struct {
   bool passing;
   // runtime-added, presence modeled (rule 3):
   bool hasGrabTech;             bool grabTech;
+  bool hasPhantomDamage;        double phantomDamage;       // hitDetection phantom arm (M2 task 6; zero-live over the goldens)
+  bool hasStageDamageImmunity;  double stageDamageImmunity; // hitDetection stage-damage arm (M4 target stages)
   bool hasLaserCombo;           bool laserCombo;            // phys-level (falco laser code); distinct from player.laserCombo
   bool hasLedgeHangTimer;       double ledgeHangTimer;
   bool hasAutocancelLower;      bool autocancelLower;       // upstream key "autocancel" (≠ constructor autoCancel)

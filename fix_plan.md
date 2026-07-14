@@ -265,6 +265,16 @@ the phase to M2.)
   inputs are keyboard-quantized (axes hit no values in (0.78, 0.79]), so
   threshold nudges can be no-op "teeth"; formula-constant/event-name/RNG
   perturbations bite reliably.
+- **RULE 14 — RNG chain-order ambiguity is MEASURED-then-pinned, never
+  assumed (adopted task 6)**: when a mutation boundary both draws the
+  seeded stream ITSELF and contains dispatch windows whose moves may
+  draw, the relative order of owner draws vs window draws is not
+  recoverable from the record stream. The capture records window draws
+  under a DISTINCT name (`Math.randomW`), the pins freeze the measured
+  count (zero over g01/g04/g06 for hitdet), and the replay hard-fails on
+  one — eager standalone-draw processing stays sound by construction.
+  The moves clusters (tasks 7-12: move boundaries draw shouts AND call
+  other moves) inherit this instrument.
 - **RULE 13 — JS DESUGARINGS are part of the expression shape (adopted
   task 5)**: (a) compound assignment groups its ENTIRE right-hand side:
   `a += b + c` is `a = a + (b + c)` — left-flattening it in C is a 1-ulp
@@ -396,11 +406,37 @@ the pos→ECB1 write-through's OBSERVABLE window (grounded movement under
 low ceilings) have zero live cases — translated verbatim, hq/probe teeth
 proven by negative tests; turbo interrupts remain zero-live
 (self-flagging via the seam FIFO if ever reached).)
-6. hitDetection + hitQueue + hitbox value model (createHitBox/
-   createHitboxObject) — queue-ordered resolution, checkPhantoms,
-   executeHits; launch-angle transcendentals via fdlibm.
-   done-check: `bash port/sim/calib/check-hitdet-replay.sh` → prints
-   `HITDET MATCH`, exit 0.
+(task 6 — hitDetection + hitQueue + hitbox value model — DONE iter 25:
+`bash port/sim/calib/check-hitdet-replay.sh` → HITDET MATCH, exit 0.
+54,977 records over g01/g04/g06 (18,000 mutation-captured pipeline calls
+per golden — hitDetect×2/executeHits/checkPhantoms/resetHitQueue per
+frame with full pre/post envelopes incl. the hq/phq queue value model —
+plus 34 live dispatch seams, 636 pure getter/knockback/collision records
+(live + the 164-call rule-11 sweep), the full seeded-RNG chain
+draw-for-draw incl. screenShake's 4-draws-per-hit and 301 standalone
+draws), byte-stable ×2, 6× STREAM MATCH, 0 replay divergences on the
+first successful build (rules 1-13 held; one rule-7 marshal catch:
+article passes RAW actionStates crouch/vCancel reads to getKnockback —
+bool|undefined truthiness domain). C: `port/sim/hit_detection.{c,h}`
+(structure-parallel; both MlHitboxSpec shapes' undefined-key semantics
+via hb_* helpers; hitList push/splice write THROUGH the rule-10
+prevFrameHitboxes alias; the throw arm's pos reassignment breaks
+pos-ECB1; the launch getters are REAL bodies now — task 5's getter seams
+stay in ITS replay only), ml_player.h gained presence-modeled
+phys.phantomDamage/stageDamageImmunity, ml_events gained ml_sound_stop
+("furaloop.stop" token). RNG-order instrument: draws inside a dispatch
+window BELOW a hitdet boundary are chain-order-ambiguous → recorded as
+`Math.randomW`, measured ZERO, pinned (rule 14). check-spec-pins.js now
+STREAMS the JSONL (g06 capture 542 MB > node's 512 MB string cap — all
+prior checks re-verified green). Honest coverage: clanks/CATCHCUT/
+onClank, phantoms (storedPhantom/checkPhantoms' settle arm), throws
+(isThrow rows, THROWNFALCONDIVE), executeGrabTech, shieldbreak,
+powershield, jabReset/DOWNDAMAGE, FURASLEEPSTART/furaloop.stop,
+ground-bounce, electric hits, cssHits and the stage-damage arm have zero
+live records — translated verbatim, teeth proven by 8 negative tests
+(POST nibble → exactly 1; hurtWidth 8→12 → 2; kb formula → 8; dispatch
+threshold 80→30 → 36; RNG drop → 50; sound typo → 9; alias-mirror skip
+→ 16; phantom classification inverted → 14).)
 7. characters/shared moves (5,088 ln, 80 files) — move-object template
    {name,init,main,interrupt}; boundary = every move's init/main/
    interrupt with player pre/post-state.

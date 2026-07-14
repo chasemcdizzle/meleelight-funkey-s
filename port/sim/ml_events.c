@@ -18,6 +18,11 @@ void ml_sound_play(const char *name) {
   ml_events.snd[ml_events.snd_count++] = name;
 }
 
+void ml_sound_stop(const char *nameDotStop) {
+  if (ml_events.snd_count >= ML_EV_CAP) ml_events_fail("sound queue overflow");
+  ml_events.snd[ml_events.snd_count++] = nameDotStop;
+}
+
 void ml_dispatch_note(const char *phase, const char *move) {
   if (ml_events.dsp_count >= ML_EV_CAP) ml_events_fail("dispatch queue overflow");
   int n = snprintf(ml_events.dsp[ml_events.dsp_count], ML_EV_DSP_LEN, "%s:%s",

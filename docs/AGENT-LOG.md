@@ -1506,3 +1506,122 @@ MILESTONE PASS: M2-CAL
   wrong-model rewrite.
 - next: task 6 (hitDetection + hitQueue + hitbox value model — the
   getter seams recorded here become its first live cross-checks).
+
+## iter 25 — 2026-07-14 — M2 task 6: hitDetection + hitQueue + hitbox value model — HITDET MATCH
+
+- phase M2, task 6 (queue-ordered hit resolution: hitDetect fills the
+  hitQueue, executeHits resolves rows, checkPhantoms settles deferred
+  phantom damage; plus the launch getters task 5 left as oracle-fed
+  seams — their REAL C bodies land here).
+- done-check: `bash port/sim/calib/check-hitdet-replay.sh` → exit 0,
+  `HITDET MATCH` (.loop/task6-donecheck.log). Per golden (g01/g04/g06):
+  2 fresh captures byte-identical (cmp), both runs STREAM MATCH vs the
+  frozen streams (3600/3600 exact; instrumentation non-perturbing incl.
+  the finalCheck hdFlags re-dump), pins OK (expected-capture-hitdet.json
+  incl. ZERO pins for the 15 internal-only exports and Math.randomW),
+  strict replay 0 divergences — 18,348 + 18,285 + 18,344 = 54,977
+  records: 54,000 mutation-captured pipeline calls (hitDetect×2 +
+  executeHits + checkPhantoms + resetHitQueue per frame, full pre/post
+  envelopes with the hq/phq queue value model), 34 dispatch seams, 636
+  pure records (live physics/article callers + the 164-call rule-11
+  sweep), 903 RNG-chain records (3 rngBoot + 301 standalone draws +
+  screenShake's owner draws in post rng lists) — the chain replays ONE C
+  mulberry32 draw-for-draw across each file.
+- conformance guard + regressions all green (.loop/task6-reg-*.log):
+  ENVCOLL MATCH · UTIL MATCH · PLAYER MODEL MATCH · INPUT MATCH ·
+  ASSHORT MATCH · PHYSICS MATCH (player_canon.c + check-spec-pins.js
+  changed this iteration — every prior spec's check re-verified).
+- design: uniform mutation envelopes (pre {alias, characterSelections,
+  gameMode, gameSettings{phantomThreshold}, hq, phq, playerType,
+  players}; post {alias(3), hq, phq, players, rng, snd}); the queues are
+  marshalled from each record's pre-state (rows enter from OTHER
+  clusters' windows — THROW moves during update, physics' damaging-stage
+  rows — so chaining is impossible by construction). Dispatches from
+  inside hitdet boundaries (CATCHCUT/DAMAGEN2/DAMAGEFLYN(+!isThrow bool)/
+  GUARD/SHIELDBREAKFALL/FURASLEEPSTART/CAPTUREPULLED/THROWNFALCONDIVE/
+  WAIT/DOWNDAMAGE/CAPTUREDAMAGE/CAPTURECUT .init + .onClank/.onPlayerHit)
+  are oracle-fed seams verified in call order and resynced from post
+  {alias, hq, players}. RNG: the asshort rngBoot/standalone-draw
+  discipline + a NEW instrument for the owner-draw vs dispatch-window-
+  draw order ambiguity (below). hit_detection.c models both measured
+  MlHitboxSpec shapes' undefined-key reads (CONSTRUCTOR entries lack
+  clank/hitGrounded/hitAirborne/throwextra: falsy/never-loose-equal,
+  undefined != 6 TRUE), the hitList push/splice write-through of the
+  rule-10 prevFrameHitboxes alias, the throw arm's pos-reassignment
+  alias break, executeHits' HELD hitbox reference as a by-value copy
+  (reassignment-safe), upstream's dead hurtboxState-typo arm
+  (documented constant-false), and traps at every JS-throw site
+  (bluntHit's string-arg drawVfx, cssHits' rpsPoints, the
+  getLaunchAngle prompt arm). charAttributes.weight reads via M1 CTAB1
+  ml_tables (2nd consumer of the generated data path).
+- DIVERGENCE LEDGER (fn · root-cause class · fix · min):
+  1. getKnockback (live article records) · captured arg domain wider
+     than modeled — article passes RAW actionStates crouch/vCancel
+     flag reads (undefined for most states); the strict marshaller
+     hard-failed exactly as designed (rule 7) · truthiness domain
+     bool|undefined (cv_truthy_bu) · 5m.
+  Replay divergences after first successful build: ZERO on all three
+  goldens (rules 1-13 held; no expression-shape or desugaring misses).
+  Rig-scale class fix: check-spec-pins.js read the whole JSONL via
+  readFileSync — node's ~512 MB string cap (ERR_STRING_TOO_LONG) at
+  g06's 542 MB capture; rewritten as a line STREAM with byte-identical
+  checks (class fix — any future spec's capture can exceed the cap).
+- comparator negative tests (all restored, tree re-verified 0 div):
+  (a) corrupted POST players nibble → exactly 1; (b) hurtWidth 8→12 →
+  2 (8→8.5 bit NOTHING — occurring hit margins exceed 0.25; rule-12
+  corollary, 2nd measured instance); (c) getKnockback +18→+18.01 → 8
+  (sweep + live); (d) DAMAGEFLYN threshold 80→30 → 36 dispatch-seam
+  divergences (80→79 bit nothing — no occurring kb in [79,80));
+  (e) screenShake 4→3 draws → 50 (chain misalignment cascade);
+  (f) swordweakhit typo → 9 (snd teeth); (g) hitList alias mirror
+  skipped → 16 (rule-10 teeth); (h) phantom classification inverted →
+  14 = every direct hit (storedPhantom-arm teeth; the 0.01
+  phantomThreshold band itself is unbitable on these traces).
+- honest coverage (documented, not silent): zero live records for
+  clanks (hitHitCollision/interpolatedHitHitCollision/CATCHCUT/onClank),
+  phantoms (storedPhantom rows, checkPhantoms' settle arm — phq empty
+  all 10,800 live calls), throws (isThrow rows/THROWNFALCONDIVE — no
+  golden lands a grab-throw), executeGrabTech, shieldbreak, powershield,
+  jabReset/DOWNDAMAGE, FURASLEEPSTART + furaloop.stop, ground-bounce,
+  electric hits (shocked), interpolated shield/hurt variants, cssHits
+  (gameMode 2) and the stage-damage arm (M4 target stages) — translated
+  verbatim, guarded by ml_hd_out_of_domain traps at upstream throw
+  sites, teeth proven by (a)-(h). Live coverage DID include: regular
+  hits with launch (DAMAGEN2 ×27, DAMAGEFLYN ×3 on g06 incl. the
+  fire-type kb>=140 sound tier), shield hits (GUARD ×3), grabs
+  (CAPTUREPULLED ×3, CAPTUREDAMAGE ×3), fox-laser article calls
+  (getKnockback/knockbackSounds ×12 live on g01), and both hq row
+  shapes (6-elem shield + 7-elem regular).
+- artifacts (sha256/12): hit_detection.c 4fbe26a47c03 · hit_detection.h
+  857a646228b7 · spec-hitdet.js 03eb6489a80a · replay_hitdet.c
+  597cf8cc78f7 · expected-capture-hitdet.json 9343c2f48f2c ·
+  check-hitdet-replay.sh a8c517ac0275 · check-spec-pins.js cfe33cf8415e
+  · player_canon.c 244402c08c37 · ml_player.h 9690e25aab1b · ml_events.c
+  a449043b39fb · ml_events.h f2edc682e136 · FORMAT.md dff57baa0cc8.
+  Logs: .loop/task6-donecheck.log, .loop/task6-reg-*.log,
+  .loop/task6-capture-*.log.
+- zoom-out: (1) NEW RULE 14 (fix_plan §M2): when a boundary both draws
+  the seeded stream itself AND contains dispatch windows whose moves may
+  draw, the owner-draw/window-draw order is unrecoverable from the
+  record stream — measure it, record window draws under a distinct name
+  (Math.randomW), pin the count, hard-fail on one. The moves clusters
+  (tasks 7-12; move code draws shouts AND calls other moves) inherit
+  this instrument — without it their replays would silently assume an
+  order. (2) The rule-12 corollary is now a measured CLASS (2nd
+  instance): threshold nudges smaller than the data's occurring margins
+  are no-op teeth (task 4: keyboard-quantized axes; here: hit-geometry
+  margins > 0.25 and the 0.01 phantom band) — negative tests must FLIP
+  a classification, not graze a boundary. (3) Held-object-reference
+  semantics extend rule 10's lesson from "copy helpers may alias" to
+  "seam resyncs must not rebind upstream's held references": executeHits
+  holds `hitbox` across dispatches — the C by-value copy is the
+  translation of object identity, and the same pattern will recur in
+  every move that caches a player field object across an init call.
+  (4) The rig scaled past a platform limit (node string cap) rather
+  than a design limit — the streaming pins checker is the class fix and
+  the capture format needed no change; envelope size is dominated by
+  players canon ×6 records/frame, which task 17's integration will NOT
+  pay (it replays traces, not captures).
+- next: task 7 (characters/shared moves — the move-object template
+  {name,init,main,interrupt}; the physics AND hitdet dispatch seams both
+  become live cross-checks for its boundary captures).
