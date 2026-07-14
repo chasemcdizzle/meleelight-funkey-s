@@ -214,6 +214,22 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   (div/KLOC, fix-rate, projection, go/no-go). Prints `ENVCOLL MATCH`,
   exit 0; any divergence, stream mismatch, or missing metric → nonzero.
   NO-GO handling per LOOP §H: sentinel `LOOP STOP: m2-entry-no-go`.
+- **M2 EXIT GATE (concretized by REPLAN, iter 19):**
+  `bash port/sim/check-sim.sh` — implements PLAN §4/M2's EXIT verbatim:
+  builds the headless C sim (every TU `cc -O2 -ffp-contract=off -Wall
+  -Wextra -Werror`; vendored fdlibm; doubles only), loads the M1 pipeline
+  data it consumes (generated `ml_tables.c`/`ml_stages.c` + ANIM1 frame
+  counts), then for EVERY golden in `oracle/goldens/manifest.json` (all
+  8: g01–g06 human traces, g07–g08 CPU via the recorded AI-input bridge,
+  fix_plan §M2 task 16) replays the trace end-to-end and emits a
+  verify-stream-compatible run JSON, judged by the UNCHANGED
+  `oracle/harness/verify-stream.js` against the frozen
+  `oracle/goldens/*.sha256.json` — exact per-frame hash equality over the
+  FULL 3600-frame length, plus rngCalls + rngCallsOutsideStep equality
+  and the specVersion/trace pins. Prints `SIM CONFORMS`, exit 0; any
+  mismatch, length shortfall, or missing golden → nonzero. (Script is
+  built by fix_plan §M2 task 17; per-cluster `done-check:`s replay module
+  captures and never substitute for this gate.)
 - **Upstream clone + build (M0 committed form):**
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via

@@ -1031,3 +1031,42 @@ MILESTONE PASS: M1
   iteration order, the Ryu-class formatter).
 - next: M2-CAL PHASE-ADVANCE (driver re-runs the gate, flips Current
   phase → M2, logs MILESTONE PASS: M2-CAL; GO path — no human gate).
+
+## iter 19 — 2026-07-14 — M2-CAL PHASE-ADVANCE + M2 REPLAN
+
+- phase-advance (LOOP §F-advance): re-ran the M2-CAL exit gate
+  `bash port/sim/check-envcoll.sh` → ENVCOLL MATCH, exit 0
+  (.loop/iter19-envcoll-gate.log — 3× STREAM MATCH, 3× pins OK,
+  186,675/186,675 records 0 divergences, report needles present).
+  Verdict in docs/M2CAL-REPORT.md §7: GO — no human gate on this path.
+  Current phase flipped M2-CAL → M2 in fix_plan.md.
+
+MILESTONE PASS: M2-CAL
+
+- REPLAN (same driver-directed iteration, docs/loop/REPLAN.md): fix_plan
+  §M2 concretized into 17 dependency-ordered cluster tasks, each with an
+  exact runnable done-check on the M2-CAL pattern (capture cluster
+  boundary over goldens → structure-parallel C → strict replay to
+  bit-identical → CLUSTER MATCH). Measured the true remaining surface
+  during recon (physics 3,841 + moves 28,716 + main-slice + input +
+  util; attributes/ECB/stage data are M1 tables, not code). Conventions
+  fixed: generalized spec-driven capture rig; mutation-capture (post-state
+  field) for mutating clusters; the 7 M2CAL-REPORT §3 prevention rules
+  binding on every task; check-envcoll.sh as the per-iteration regression
+  guard. M2 EXIT GATE concretized into CLAUDE.md §Commands as
+  `bash port/sim/check-sim.sh` (all 8 goldens, unchanged verify-stream.js,
+  full length, rngCalls pins — built by task 17).
+- judgment calls (PROVISIONAL, auto-adopted, documented in fix_plan §M2
+  conventions): (a) AI-as-recorded-input bridge for g07/g08 — PLAN keeps
+  ai.js JS-side until M4 yet the gate covers CPU goldens; upstream already
+  consumes AI as an input bank identical to human input, so the bridge
+  records aiInputBank + RNG-draw counts non-perturbingly (write-set recon
+  hard-checked in task 16) and M4's port replaces it live; (b) documented
+  util skips (firstNonNull dead upstream, deepValue target-only,
+  randomAnnulusPoint vfx-only, deepCopy family + createHitBox family
+  deferred to their value-model tasks).
+- zoom-out: the REPLAN's structure IS the class-level control for the
+  grind: one reusable instrument (spec-driven capture/replay rig) +
+  inherited prevention-rule list (extensible at rule 8+) instead of 17
+  ad-hoc verification schemes.
+- next: task 1 (util/math substrate).

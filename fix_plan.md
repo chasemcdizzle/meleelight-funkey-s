@@ -1,6 +1,6 @@
 # fix_plan — the loop's priority queue
 
-Current phase: M2-CAL
+Current phase: M2
 
 Rules: items live under their phase heading; an actionable item needs an
 exact runnable `done-check:` (see `docs/LOOP.md` §C). Items below are
@@ -146,9 +146,171 @@ the phase to M2.)
 
 ## M2 — Sim core checksum-locked, headless
 
-(seed items — REPLAN decomposes the ~15–20k LOC grind on phase entry,
-module-by-module in dependency order, each module slice-verified like
-M2-CAL before integration)
+(concretized by REPLAN, iter 19, 2026-07-14. CONVENTIONS fixed here:
+
+- **Layout**: C sim stays at `port/sim/`, structure-parallel to upstream
+  paths — `physics.c`, `hit_detection.c`, `action_state_shortcuts.c`,
+  `article.c`, `interpolated_collision.c`, `characters/{shared,fox,falco,
+  falcon,marth,puff}/moves/*.c`, `input/`, value models `ml_player.h` /
+  `ml_input.h`, flattened game-state struct (the god-module's mutable
+  globals become ONE struct; port the logic, never the module graph).
+- **MEASURED remaining surface** (upstream lines, executed-recon this
+  REPLAN; honest vs the anatomy's ~14–19k shorthand): physics/ 3,841
+  (envcoll's 1,343 done) + characters moves 28,716 (5 chars + shared,
+  heavily boilerplate-repetitive interrupt chains — the effective unique
+  surface is far smaller) + main sim slice (~600 of main.js:
+  gameTick mode-3 body, update, matchTimerTick + player.js 167) + input
+  (meleeInputs 219 + Input record/buffer slice of input.js) + util
+  substrate ~700 + movingPlatforms stage logic. Attributes/ECB/hitbox/
+  stage data are M1 CTAB1/STAB1/ANIM1 tables, NOT retranslated.
+- **Per-cluster verification (the M2-CAL pattern, PLAN §4 M2)**: every
+  cluster gets (a) a module-boundary capture over goldens g01/g04/g06
+  via the GENERALIZED rig (`port/sim/calib/`, spec-driven; every capture
+  run non-perturbation-guarded by the unchanged verify-stream.js against
+  the frozen stream), (b) a structure-parallel C translation, (c) a
+  strict replay driver comparing canon-v1 serializations bit-exactly
+  (FORMAT.md), counts pinned in `expected-capture-<spec>.json`. Replay of
+  every captured record must show 0 divergences (CLUSTER MATCH).
+- **Mutation-capture (rig upgrade, task 2)**: boundary functions that
+  mutate arguments/globals (physics.js onward: player[p], hitQueue,
+  stage, RNG draws, sound events) capture a POST-STATE canon field after
+  the return-value field; replay marshals pre-state, calls C, compares
+  ret AND post-state bit-exactly. New capture classes discovered become
+  rules here (rule 8+).
+- **THE 7 MANDATORY PREVENTION RULES** (docs/M2CAL-REPORT.md §3 — binding
+  for EVERY module translation, every task brief): (1) js_max/js_min/
+  js_sign (ml_js.h), never libm fmax/fmin; (2) ToNumber(undefined) →
+  canonical NaN 0x7ff8…, soundness pinned by capture invariants; (3)
+  object KEY PRESENCE modeled explicitly (DT_ABSENT pattern), serialize
+  per construction site; (4) fdlibm on both sides for transcendentals;
+  (5) `-ffp-contract=off` on every TU; (6) expression SHAPES copied
+  verbatim, no algebraic cleanup; (7) capture-FIRST — read real record
+  shapes before finalizing C value models, strict marshallers hard-fail
+  outside the captured domain.
+- **AI policy (PROVISIONAL, auto-adopted)**: PLAN §4 keeps ai.js JS-side
+  until M4, but the M2 exit gate covers CPU goldens g07/g08. Resolution:
+  AI-as-recorded-input — upstream consumes AI through aiInputBank
+  "identically to human input" (anatomy §7), so a non-perturbing capture
+  records per-frame aiInputBank state + the AI's seeded-PRNG draw count
+  (+ any other verified write-set), and the C sim replays CPU players
+  from that recording, advancing its mulberry32 by the recorded draw
+  count at the runAI call site. Task 16 hard-verifies the write-set
+  recon (aiInputBank + non-checksummed bookkeeping like currentAction/
+  currentSubaction only — anything else fails the task). M4's ai.js port
+  replaces the bridge and must reproduce the same streams live.
+- **Regression every iteration**: `bash port/sim/check-envcoll.sh` stays
+  green (the M2 conformance guard per LOOP §E.2 until check-sim.sh
+  exists, then both). Never weaken any check; exact equality only.
+- **Skipped-by-judgment util files** (documented, not silent):
+  `firstNonNull.js` (zero importers upstream — dead code),
+  `deepValue.js` (target-builder encode only — M4), `randomAnnulusPoint`
+  (vfx render-only), `deepCopy/deepCopyObject` (type-specialized in task
+  2 where the C value model lives), `createHitBox/createHitboxObject`
+  (hitbox value model, task 6), `Segment2D` included in task 1.)
+
+Tasks (dependency order; each < ~400-line diff where possible, per-char
+move tasks are data-shaped repetition):
+
+1. util/math substrate — complete structure-parallel C for EVERY
+   sim-imported util module (full `linAlg` 11 exports incl.
+   inverseMatrix/multMatVect/reflect/orthogonalProjection; full `Vec2D`
+   module incl. the `.dot` method + getXOrYCoord/putXOrYCoord/flipXOrY;
+   `Box2D`; `Segment2D` + methods; `toList`; full `findSmallestWithin`
+   (both exports, 4-arg seed form); `solveQuadraticEquation`;
+   `lineAngle`; `extremePoint`; `ecbTransform` (all 5 exports);
+   `zipLabels`; `detectIntersections` (all 4 exports + private helpers));
+   generalize the capture rig to module-spec-driven (`--spec util`, the
+   envcoll spec + CLI unchanged); capture util boundaries over
+   g01/g04/g06 ×2 byte-stable + STREAM MATCH guards + pins; strict
+   replay of every record 0-divergence.
+   done-check: `bash port/sim/calib/check-util-replay.sh` → prints
+   `UTIL MATCH`, exit 0 (and `bash port/sim/check-envcoll.sh` stays
+   green → `ENVCOLL MATCH`, exit 0).
+2. player/game-state value model + mutation-capture rig upgrade —
+   capture per-frame post-`update(i)` `player[i]` snapshots (canon v1)
+   over g01/g04/g06; finalize `ml_player.h` (playerObject: the 7
+   checksummed fields incl. the ENTIRE phys object, CHECKSUM.md §2, plus
+   every field sim code reads/writes); C strict marshaller + serializer
+   with canon→struct→canon byte-identity over EVERY captured snapshot;
+   type-specialized deepCopy/deepCopyObject; add post-state capture
+   support to the rig.
+   done-check: `bash port/sim/calib/check-player-model.sh` → prints
+   `PLAYER MODEL MATCH`, exit 0.
+3. interpretInputs + input buffer + meleeInputs — C Input record,
+   8-deep buffer semantics (main.js:662 pause-aware offsets), meleeInputs
+   scaling/deadzone; capture interpretInputs boundary + replay.
+   done-check: `bash port/sim/calib/check-input-replay.sh` → prints
+   `INPUT MATCH`, exit 0.
+4. actionStateShortcuts + state-machine scaffolding — actionStates
+   dispatch table, turnOffHitboxes/checkFor* family, C mulberry32 (seeded
+   PRNG, draw-count parity incl. KO-shout sites), sound-event queue seam;
+   mutation-capture (player post-state + rng draws + sound events).
+   done-check: `bash port/sim/calib/check-asshort-replay.sh` → prints
+   `ASSHORT MATCH`, exit 0.
+5. physics.js core + interpolatedCollision — the per-player update
+   pipeline (mutation-heavy; pre/post player + stage).
+   done-check: `bash port/sim/calib/check-physics-replay.sh` → prints
+   `PHYSICS MATCH`, exit 0.
+6. hitDetection + hitQueue + hitbox value model (createHitBox/
+   createHitboxObject) — queue-ordered resolution, checkPhantoms,
+   executeHits; launch-angle transcendentals via fdlibm.
+   done-check: `bash port/sim/calib/check-hitdet-replay.sh` → prints
+   `HITDET MATCH`, exit 0.
+7. characters/shared moves (5,088 ln, 80 files) — move-object template
+   {name,init,main,interrupt}; boundary = every move's init/main/
+   interrupt with player pre/post-state.
+   done-check: `bash port/sim/calib/check-moves-shared-replay.sh` →
+   prints `MOVES shared MATCH`, exit 0.
+8. characters/fox moves (4,450 ln).
+   done-check: `bash port/sim/calib/check-moves-fox-replay.sh` →
+   `MOVES fox MATCH`, exit 0.
+9. characters/falco moves (4,488 ln).
+   done-check: `bash port/sim/calib/check-moves-falco-replay.sh` →
+   `MOVES falco MATCH`, exit 0.
+10. characters/falcon moves (4,432 ln).
+    done-check: `bash port/sim/calib/check-moves-falcon-replay.sh` →
+    `MOVES falcon MATCH`, exit 0.
+11. characters/marth moves (5,659 ln).
+    done-check: `bash port/sim/calib/check-moves-marth-replay.sh` →
+    `MOVES marth MATCH`, exit 0.
+12. characters/puff moves (4,599 ln).
+    done-check: `bash port/sim/calib/check-moves-puff-replay.sh` →
+    `MOVES puff MATCH`, exit 0.
+13. articles (article.js 639 — fox/falco lasers, ILLUSION etc.) — article
+    queues + article hit detection; articles are checksummed
+    (CHECKSUM.md §2 `articles` key).
+    done-check: `bash port/sim/calib/check-article-replay.sh` → prints
+    `ARTICLE MATCH`, exit 0.
+14. movingPlatforms stage-tick logic (ystory/fountain updatePlatform +
+    pstadium if live) — the M1-externals-stubbed god-module bodies;
+    stage pre/post-state capture.
+    done-check: `bash port/sim/calib/check-platforms-replay.sh` →
+    prints `PLATFORMS MATCH`, exit 0.
+15. ECMAScript shortest-float formatter + CHECKSUM.md `ser` in C —
+    Ryu/Grisu-class `String(x)` (incl. `-0` token + exponent-form rules)
+    + the §3 envelope serializer + SHA-256 per frame; differential
+    done-check vs JS `String(x)` over every double in the captured
+    player/article snapshots PLUS an adversarial generated sweep
+    (subnormals, exponent boundaries, shortest-repr torture cases).
+    done-check: `bash port/sim/calib/check-format.sh` → prints
+    `FORMAT MATCH`, exit 0.
+16. AI-input bridge for CPU goldens — write-set recon hard-check, then
+    capture per-frame aiInputBank + RNG-draw counts over g07/g08
+    (STREAM MATCH guarded); emit replayable bridge artifacts + pins.
+    done-check: `bash port/sim/calib/check-ai-bridge.sh` → prints
+    `AI BRIDGE OK`, exit 0.
+17. integration: the full C gameTick — flattened game-state struct,
+    trace loader (oracle trace JSON), M1 data consumption (CTAB1 tables,
+    STAB1 stages, ANIM1 frame counts for timer clamps), mode-3 tick
+    order (main.js:1039-1080: resetHitQueue → movingPlatforms →
+    destroy/executeArticles → [interpretInputs+update]×4 →
+    checkPhantoms → hitDetect×4 → executeHits → article hits →
+    matchTimerTick), boot-RNG draw parity (rngCallsOutsideStep == 1),
+    checksum-stream emission via task 15's serializer, headless platform
+    TU (+ SDL2 dev TU per CLAUDE.md seam policy); replay ALL 8 goldens
+    end-to-end vs the ORACLE STREAMS.
+    done-check: `bash port/sim/check-sim.sh` → prints `SIM CONFORMS`,
+    exit 0 — this is the M2 exit gate command (§Commands).)
 
 ## M3 — On-device at 60 fps
 
