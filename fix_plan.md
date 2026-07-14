@@ -24,17 +24,6 @@ covering the remaining char pairs and the other 5 VS stages; g07–g08 =
 human-vs-CPU traces (difficulty 5) on two distinct stages; together every
 one of the 5 characters and 6 stages appears ≥1×.)
 
-6. Build the fdlibm-patched QuickJS oracle runtime + replay rig:
-   `oracle/qjs/build.sh` (bellard/quickjs pinned at the exact commit the
-   feasibility spike used — record the sha in the script; host `cc` build
-   of a qjsmin-style embedder linking `port/fdlibm/` and repointing the
-   `Math` table at it at startup; arm cross-build compile-only, no device)
-   and `oracle/qjs/replay.sh <golden-id>` (minimal DOM/browser shim
-   sufficient to boot the built bundle headless under qjs, feed the trace
-   through the same `__harness` seam, emit the per-frame SHA-256 stream,
-   compare vs the frozen stream) — done-check:
-   `bash oracle/qjs/build.sh && bash oracle/qjs/replay.sh g01` → prints
-   `QJS MATCH g01`, exit 0.
 7. Record the full golden set per the composition above (g02–g08:
    generate traces with `oracle/harness/gen-trace.js` variants/seeds,
    record + freeze streams via `oracle/record.sh`, write

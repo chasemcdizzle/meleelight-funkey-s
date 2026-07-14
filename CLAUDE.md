@@ -182,9 +182,31 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   `streamSha256` integrity seal. g01 frozen: spec v1, 3600 frames,
   rngCalls=134, rngCallsOutsideStep=1, frame-1 hash = the CHECKSUM.md §5
   anchor (9f4c6df7…).
-- **QuickJS oracle-runtime build:** `spikes/device-feasibility/README.md`
-  step 2 (bellard/quickjs @2026-06-04, single gcc invocation via `qjsmin.c`,
-  static, 890 KB). M0 repoints its Math table at the vendored fdlibm.
+- **QuickJS oracle runtime + golden replay (M0 task 6, committed form):**
+  `bash oracle/qjs/build.sh && bash oracle/qjs/replay.sh <golden-id>` →
+  `QJS MATCH <id>`, exit 0. build.sh pins bellard/quickjs @
+  `42d08be5f28abfdf881110bba3713f6a256d8d97` (VERSION 2026-06-04 —
+  byte-matches the feasibility-spike tree; all 18 consumed sources
+  sha256-verified), builds `build-host/qjs-oracle` (embedder repoints the
+  Math table at `port/fdlibm/` C at startup; C SHA-256, NIST-self-tested;
+  `-ffp-contract=off` on every TU) + a static armv7 cross-build
+  COMPILE-ONLY (`QJS_SKIP_ARM=1` skips it for fast host iteration; device
+  rung is M3). replay.sh boots the built bundle under qjs via
+  `oracle/qjs/shim.js` (host-object shims only, each documented) with the
+  browser harness's `init.js`/`pagelib.js` VERBATIM, feeds the golden's
+  manifest params/trace through `__harness`, and judges with the
+  unchanged `verify-stream.js`. Boot guards fail hard: bitwise
+  fdlibm-repoint assertion (negative-testable: `QJS_ORACLE_NO_REPOINT=1`)
+  and a boot-RNG draw pin (== 465; mulberry32 state is never re-seeded at
+  setupMatch, so boot draw count misalignment silently shifts the
+  in-match stream). Gotcha class (cost a divergence at frame 403):
+  browser FEATURE DETECTION makes missing globals silent path-flips, not
+  crashes — absent `Storage`, getCookie returns `""` (not null) and
+  getGameplayCookies Number("")-zeroes every gameSettings entry
+  (phantomThreshold 0.01→0). Shim for parity of paths, not just survival.
+- **QuickJS oracle-runtime build (spike-era original, frozen):**
+  `spikes/device-feasibility/README.md` step 2 (bellard/quickjs
+  @2026-06-04, single gcc invocation via `qjsmin.c`, static, 890 KB).
 - **Device access (ADB):** marker file `adb` at SD root → adbd on boot,
   root shell. Park frontend: `touch /mnt/disable_frontend; pkill gmenu2x`
   (restore: `rm /mnt/disable_frontend`). Launch via login shell **`sh -lc`**

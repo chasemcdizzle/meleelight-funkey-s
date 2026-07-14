@@ -271,3 +271,78 @@ iter 4 · 2026-07-14 · phase M0 · task 3: vendored fdlibm BOTH sides + crossch
   goldens.
 - next: M0 task 6 — fdlibm-patched QuickJS oracle runtime + replay rig
   (oracle/qjs/build.sh + replay.sh g01) → QJS MATCH g01.
+
+## iter 7 — 2026-07-14 — M0 task 6: fdlibm-patched QuickJS oracle runtime + replay rig
+- phase: M0. task: fix_plan §M0 item 6 — oracle/qjs/{build.sh,qjs_oracle.c,
+  sha256.c/h,shim.js,replay-main.js,replay.sh}: prove the meleelight sim
+  replays bit-identically OUTSIDE a browser, on a runtime we control, with
+  our fdlibm as the only Math (porting-strategies.md role).
+- done-check: `bash oracle/qjs/build.sh && bash oracle/qjs/replay.sh g01`
+  → `QJS MATCH g01`, exit 0 (.loop/iter7-m0t6-donecheck.log; CHECKER
+  independent re-run .loop/checker/m0t6.log). Replay: 3600/3600 frames
+  exact vs the frozen g01 stream via the UNCHANGED verify-stream.js,
+  rngCalls=134, rngCallsOutsideStep=1, specVersion=1; ~9.3 s (~385 fps).
+- artifacts: oracle/qjs/build.sh (bellard/quickjs pinned @
+  42d08be5f28abfdf881110bba3713f6a256d8d97, VERSION 2026-06-04 — commit
+  recovered by byte-matching the spike's surviving /tmp/qjs-src tree,
+  .git was gone; all 18 consumed sources sha256-pinned in-script; host
+  build + armv7 static cross-build COMPILE-ONLY per fix_plan, 906 KB,
+  sha256 c96291775b082fd5…); qjs_oracle.c (embedder: Math table repointed
+  at port/fdlibm C pre-JS; __qjs_sha256/__evalFile/__readFile/__writeFile;
+  unhandled-rejection = fatal; __replayExit completion proof); sha256.c
+  (FIPS 180-4, written from spec, NIST self-test at startup); shim.js
+  (host-object shims, each with a documented why); replay-main.js (driver:
+  VERBATIM oracle/harness/init.js+pagelib.js, so the serialization
+  contract has ONE implementation per side); replay.sh (manifest-driven
+  params, verdict by unchanged verify-stream.js). Run output
+  oracle/qjs/out/qjs-g01.json (untracked, sha256 df6f633874a1649a…).
+- evidence beyond the done-check: (1) negative test — QJS_ORACLE_NO_REPOINT=1
+  dies at boot: "fdlibm repoint NOT active: Math.sin(-502630247.09…)"
+  1-ulp host-libm mismatch caught by the 4110-input bitwise assertion
+  (.loop/iter7-m0t6-neg-norepoint.log); (2) negative test — seed 1338 run
+  rejected by verify-stream param pin; (3) negative test — wrong stage
+  (--stage 1) diverges at frame 75: the stream is a live detector, not
+  vacuous; (4) rerun determinism — two full replays both QJS MATCH
+  (.loop/iter7-m0t6-rerun{1,2}.log); (5) boot RNG pin — browser boot
+  consumes exactly 465 seeded draws (measured: 1 jQuery expando + 464
+  stagerender bgStar, all module-eval, stable at +3 s), asserted == in
+  the qjs driver since mulberry32 state is never re-seeded at setupMatch.
+- found-and-fixed divergence (frame 403, interPolatedHitboxPhantom ±0.01):
+  main.js feature-detects Web Storage via `typeof(Storage)`; without the
+  Storage INTERFACE global, getCookie returns "" instead of localStorage's
+  null, and getGameplayCookies treats "" as stored → Number("") = 0 for
+  EVERY gameSettings entry (phantomThreshold 0.01→0). Fix: expose Storage
+  in shim.js — path parity with the browser, not a value tweak.
+- PROVISIONAL (auto-adopted): QuickJS pin = master-at-spike-date commit
+  42d08be5 (not the 3d5e064e release commit — the spike's tree
+  byte-matches only the former); timers/rAF registered-but-never-run under
+  qjs (browser-parity argument documented in shim.js; every timer consumer
+  is sim-irrelevant by harness construction); qjs run meta.fdlibm=true
+  (fdlibm active in its strongest form — the Math table IS the C fdlibm,
+  asserted bitwise at boot); QJS_ORACLE_NO_REPOINT env hook exists solely
+  so the negative test can prove the assertion bites; arm cross-build kept
+  inside build.sh (so the done-check exercises it) with QJS_SKIP_ARM=1
+  iteration escape.
+- CHECKER (mode=task, sub-agent): verified=true, tamper=false, gaps=[];
+  evidence: independent full re-run exit 0 "QJS MATCH g01"; verify path
+  confirmed exact-equality full-length via unchanged committed verifier;
+  no hardcoded frame hashes in oracle/qjs (only the QuickJS source pins +
+  NIST vectors); git diff --stat HEAD empty, only new files under
+  oracle/qjs/ (M0-allowed); branch agent/auto.
+- zoom-out: two CLASSES surfaced. (a) "missing browser global ≠ crash":
+  feature detection converts absence into a SILENT path flip (Storage →
+  "" → Number("")=0 across all gameSettings). One-off would be "set
+  phantomThreshold"; the class fix shipped is path-parity shimming plus
+  loud boot instruments (bitwise fdlibm assertion, RNG-draw pin 465) so
+  environment drift dies at boot instead of surfacing as a latent
+  mid-stream divergence — and the exact-equality stream remains the
+  backstop that caught it (instrument > class fix > one-off held). (b)
+  "two implementations of one contract drift": avoided twice by reuse —
+  init.js/pagelib.js run VERBATIM under qjs, and the verdict comes from
+  the same verify-stream.js the browser gate uses; the one collision this
+  caused (pagelib's window.__sha256 clobbering the embedder's global —
+  mutual recursion until "string too long") was fixed class-level by
+  namespacing ALL embedder globals __qjs_*.
+- next: M0 task 7 — record the full golden set g02–g08 (traces via
+  gen-trace.js variants, record.sh freeze, manifest coverage) + commit
+  oracle/verify_goldens.sh → ALL GOLDENS OK (then M0 phase-advance).
