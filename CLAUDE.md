@@ -100,6 +100,29 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   asserts all 5 characters, all 6 VS stages, and ≥1 CPU trace.
   Exact-equality per frame hash, full trace length; any mismatch,
   missing artifact, or coverage shortfall → nonzero exit.
+- **M1 EXIT GATE (concretized by REPLAN, iter 9):**
+  `bash pipeline/verify_pipeline.sh` — runs the FULL executed-JS data
+  pipeline (`pipeline/run.js`, every registered stage) twice fresh into
+  `pipeline/build/gate-{a,b}`, asserts the two `manifest.json` are
+  byte-identical, re-hashes every artifact against its manifest entry,
+  and asserts the pinned coverage contract `pipeline/expected.json`
+  (PLAN §4 M1's counts in exact measured-then-frozen form: 754 animation
+  files reconciled = 744 executed states + 5 index.js + 5 dead falco
+  files; 27,808 paths; 5 chars; 6 stages; 204 SFX wavs with 180 mapped
+  sounds; 8 music tracks). Prints `PIPELINE OK`, exit 0; any byte diff,
+  hash mismatch, or coverage shortfall → nonzero.
+- **Pipeline run (M1 task 1 committed form):**
+  `node pipeline/run.js --out pipeline/build/dev [--only animations]
+  [--dist "$MELEELIGHT_CLONE"]` — executed-JS serialization of the data
+  plane. The animations stage `require`s the BUILT
+  `dist/js/animations.js` under a `window` shim in plain node (the
+  bundle is pure data construction — Int16Array literals, no DOM, no
+  Math — so node vs browser is engine-neutral; verified identical
+  counts), emits per-char `ANIM1` binaries (spec `pipeline/FORMATS.md`,
+  little-endian pinned, decoder `pipeline/lib/animbin.js` round-trips
+  every coord in-run) + one deterministic manifest (sorted keys, no
+  timestamps/abs paths). Task-level check:
+  `bash pipeline/check-animations.sh` → `ANIMATIONS OK`, exit 0.
 - **Upstream clone + build (M0 committed form):**
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via

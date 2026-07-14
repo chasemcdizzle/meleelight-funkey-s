@@ -1,6 +1,6 @@
 # fix_plan — the loop's priority queue
 
-Current phase: M0
+Current phase: M1
 
 Rules: items live under their phase heading; an actionable item needs an
 exact runnable `done-check:` (see `docs/LOOP.md` §C). Items below are
@@ -24,21 +24,88 @@ covering the remaining char pairs and the other 5 VS stages; g07–g08 =
 human-vs-CPU traces (difficulty 5) on two distinct stages; together every
 one of the 5 characters and 6 stages appears ≥1×.)
 
-(no items remain — iter 8 completed task 7, the last M0 item; next
-iteration is the M0 phase-advance: CHECKER mode=phase-advance runs the
-exit gate `bash oracle/verify_goldens.sh` from CLAUDE.md §Gates.)
+(no items remain — M0 PASSED its exit gate `bash oracle/verify_goldens.sh`
+on the phase-advance iteration, driver-verified; MILESTONE PASS: M0 logged
+in docs/AGENT-LOG.md iter 9; issue #14 closed.)
 
 ## M1 — Data pipeline
 
-(seed items — REPLAN concretizes on phase entry)
-1. Animation serializer: executed-JS → packed int16 bezier-path binaries +
-   manifest — done-check: …
-2. Framedata/attributes/ECB/hitbox/stage-geometry → generated C tables —
-   done-check: …
-3. Audio conversion: SFX → 22050 mono S16 blobs; music → 22050 stereo S16
-   raw PCM — done-check: …
-4. Byte-stability + coverage verification (754 files / ~27.9k paths / 5
-   chars / 6 stages / ~180 SFX + 8 tracks) — done-check: …
+(concretized by REPLAN, iter 9, 2026-07-14. Conventions fixed here: the
+pipeline lives at `pipeline/` (host node; it never writes `oracle/`).
+Every stage is EXECUTED-JS — data is executed out of the original built
+artifacts (the animations bundle via a `window`-shimmed node `require` of
+`dist/js/animations.js`; engine tables via an extractor bundle built with
+upstream's own docker node:8 webpack toolchain), NEVER hand-transcribed.
+Outputs land in `pipeline/build/<label>/` (gitignored by the existing
+`build*/` pattern) with ONE deterministic `manifest.json` per run (sorted
+keys, stable artifact order, sha256 + byte length per artifact, upstream
+git HEAD + per-source-file hashes as provenance, NO timestamps and NO
+absolute paths). Pinned coverage lives in `pipeline/expected.json`
+(measured-then-frozen from executed runs, like goldens). Binary/table
+layouts are specified in `pipeline/FORMATS.md` — PROVISIONAL formats,
+little-endian pinned explicitly (host arm64 LE, device ARMv7 LE); the C
+side implements against that spec, never against the JS. Executed-coverage
+reconciliation (measured this REPLAN): anatomy's "754 animation files" =
+744 exported action states + 5 index.js + 5 dead falco files never
+required by falco/index.js nor referenced anywhere
+(ILLUSIONFX, THROWNDOC{BACK,DOWN,FORWARD,UP}); paths = 27,808 exact;
+frames = 27,820; int16 coords = 7,747,148 (~15.5 MB); dist has 204 sfx
+wavs of which exactly 180 are referenced as Howls in src/main/sfx.js;
+8 music oggs. Audio artifacts are Nintendo-derived: PRIVATE use only,
+never distributed — provenance field marks them.)
+
+1. Pipeline skeleton + animations serializer: runner `pipeline/run.js`
+   (stage registry, `--only`, `--dist`, `--out`, deterministic manifest
+   writer) + executed-JS serialization of `window.animations` into
+   per-character packed int16 bezier-path binaries (`ANIM1` in
+   `pipeline/FORMATS.md`) with an independent-decoder round-trip check
+   inside the stage — done-check: `bash pipeline/check-animations.sh` →
+   prints `ANIMATIONS OK`, exit 0 (two fresh runs → byte-identical
+   manifests, every artifact re-hashed against its manifest entry,
+   coverage == expected.json: 5 chars / 744 states / 27,820 frames /
+   27,808 paths / 7,747,148 coords, plus the 754-file reconciliation
+   re-derived live against the upstream src tree, decoder round-trip
+   exact on every coord).
+2. Extractor bundle + engine tables → generated C: build a
+   `pipeline/extractor/` webpack entry with upstream's docker node:8
+   toolchain (modeled on `bin/webpack/animations.config.js`; entry
+   assigns `window.__tables` from the real modules), execute it, and emit
+   character attributes / framesData / intangibility / ECB / hitbox
+   constants as generated C tables — doubles serialized as IEEE-754
+   uint64 bit patterns with a human-readable comment (port/fdlibm
+   constant convention), ints as ints — done-check:
+   `bash pipeline/check-tables.sh` → prints `TABLES OK`, exit 0 (two
+   fresh runs byte-identical; every emitted value bit-equal to a fresh
+   executed-JS walk of the extractor output; counts vs expected.json:
+   all 5 chars have attributes + framesData + ECB tables and framesData
+   totals cross-check against the ANIM1 per-state frame counts).
+3. Stage geometry → generated C tables from the same extractor (6 VS
+   stages: polygon/platform/ground/ceiling/wallL/wallR/ledge/ledgePos/
+   blastzone/startingPoint/startingFace/respawnPoints/respawnFace/scale/
+   offset/movingPlats; geometry doubles as collision — ONE source of
+   truth; doubles bit-exact as in task 2) — done-check:
+   `bash pipeline/check-stages.sh` → prints `STAGES OK`, exit 0 (two
+   fresh runs byte-identical; 6 stages; per-stage element counts ==
+   expected.json pins measured from executed data).
+4. Audio conversion + sound map: extractor additionally exports the
+   `sounds` table (180 Howl names → wav path + volume + sprite windows)
+   and the MusicManager track list; ffmpeg (version + exact flags pinned
+   in the manifest) converts all 204 `dist/sfx/*.wav` → 22050 Hz mono
+   S16LE raw PCM blobs and all 8 `dist/music/*.ogg` → 22050 Hz stereo
+   S16LE raw PCM — done-check: `bash pipeline/check-audio.sh` → prints
+   `AUDIO OK`, exit 0 (two fresh runs byte-identical; 204 sfx blobs /
+   180 mapped sounds / 8 tracks == expected.json; every blob's byte
+   length ≡ 0 mod frame size and sample count recorded in the manifest;
+   provenance marks Nintendo-derived PRIVATE).
+5. Full-pipeline runner + M1 exit gate: `pipeline/verify_pipeline.sh`
+   runs the ENTIRE pipeline twice fresh (all registered stages) into
+   `pipeline/build/gate-{a,b}`, asserts manifest byte-identity,
+   re-verifies every artifact hash, and asserts the FULL expected.json
+   coverage contract (754-file animation reconciliation / 27,808 paths /
+   5 chars / 6 stages / 204 SFX blobs with 180 mapped sounds / 8 tracks)
+   — done-check: `bash pipeline/verify_pipeline.sh` → prints
+   `PIPELINE OK`, exit 0 (this IS the M1 exit gate recorded in
+   CLAUDE.md §Commands; the phase-advance CHECKER re-runs it).
 
 ## M2-CAL — Calibration slice
 

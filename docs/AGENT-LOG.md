@@ -428,3 +428,59 @@ iter 4 · 2026-07-14 · phase M0 · task 3: vendored fdlibm BOTH sides + crossch
   re-runs `bash oracle/verify_goldens.sh` as the exit gate, then fix_plan
   Current phase → M1 and `MILESTONE PASS: M0` — driver-owned per the loop
   protocol.
+
+## iter 9 — 2026-07-14 — MILESTONE PASS: M0 → phase-advance to M1 + REPLAN
+
+MILESTONE PASS: M0
+
+- Phase-advance (LOOP.md F-advance): M0's exit gate
+  `bash oracle/verify_goldens.sh` was run and verified by the DRIVER
+  (writer ≠ checker; 8× GOLDEN OK + 8× QJS MATCH, "ALL GOLDENS OK",
+  exit 0); issue #14 closed by the driver. fix_plan.md
+  `Current phase:` flipped M0 → M1.
+- REPLAN (LOOP.md C-b; docs/loop/REPLAN.md): fix_plan.md §M1 rewritten
+  into 5 ordered tasks, each with an exact runnable done-check:
+  (1) pipeline skeleton + animations serializer
+  (`bash pipeline/check-animations.sh` → ANIMATIONS OK) ·
+  (2) extractor bundle + framedata/attributes/ECB/hitbox → generated C
+  tables (`check-tables.sh` → TABLES OK) · (3) stage geometry → C tables,
+  one source of truth with collision (`check-stages.sh` → STAGES OK) ·
+  (4) SFX → 22050 mono S16LE PCM + music → 22050 stereo S16LE raw PCM +
+  executed-JS sound map (`check-audio.sh` → AUDIO OK) · (5) full-run
+  byte-stability + coverage gate (`verify_pipeline.sh` → PIPELINE OK).
+  M1 EXIT GATE concretized into CLAUDE.md §Commands as
+  `bash pipeline/verify_pipeline.sh` (two fresh full runs byte-identical
+  + artifact re-hash + pinned expected.json coverage). §Gates table
+  untouched (its M1 cell stays the binding definition; the runnable
+  command lives in §Commands per the gate-concretization rule).
+- Conventions fixed (fix_plan §M1 header): pipeline/ is host-node,
+  executed-JS ONLY (built animations bundle via window-shimmed require;
+  engine/stage/sound tables via a webpack extractor built with
+  upstream's own docker node:8 toolchain — nothing hand-transcribed);
+  deterministic manifest (sorted keys, sha256+bytes per artifact,
+  upstream HEAD + source hashes, no timestamps, no absolute paths);
+  pinned coverage in pipeline/expected.json (measured-then-frozen);
+  formats specified in pipeline/FORMATS.md, little-endian pinned (host
+  arm64 LE / device ARMv7 LE); audio artifacts marked Nintendo-derived
+  PRIVATE, never distributed.
+- Measured reconciliation backing the coverage pins (executed the built
+  bundle in node, cross-checked against the src tree): anatomy's "754
+  animation files" = 744 exported action states + 5 index.js + 5 DEAD
+  falco files (ILLUSIONFX, THROWNDOC{BACK,DOWN,FORWARD,UP} — present on
+  disk, never required by falco/index.js, referenced nowhere in
+  src/main). Exact executed counts: 27,820 frames · 27,808 paths ·
+  7,747,148 int16 coords (~15.5 MB raw, matches anatomy §2's ≈15 MB) ·
+  max path length 650 coords (fits u16) · 0 null frames · 0 non-Int16Array
+  paths. Audio: dist/sfx has 204 wavs, exactly 180 `new Howl` sites in
+  src/main/sfx.js; 8 music oggs. Per-char states: marth 155 · puff 154 ·
+  fox 142 · falco 148 · falcon 145.
+- PROVISIONAL (auto-adopted): ANIM1 binary layout (per-char file: header
+  + sorted state directory + string table + u32 frame-offset tables +
+  frame records of u16 path counts / u16 coord counts / raw int16
+  coords; documented in pipeline/FORMATS.md for the C side); node (not
+  headless Chrome) as the animations-bundle executor — the bundle is
+  pure Int16Array data construction, engine-neutral, and node execution
+  of the SAME built artifact keeps the executed-JS principle intact;
+  expected.json pins EXACT counts (stronger than PLAN's "~27.9k";
+  measured-then-frozen like goldens, never hand-invented).
+- next: execute M1 task 1 (pipeline skeleton + animations serializer).
