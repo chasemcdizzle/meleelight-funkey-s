@@ -200,6 +200,20 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   works in browsers where window IS the global; any node-side shim must
   be `global.window = global`, not a plain object (qjs shim class:
   parity of paths, not just survival).
+- **M2-CAL EXIT GATE (concretized by REPLAN, iter 15):**
+  `bash port/sim/check-envcoll.sh` — implements PLAN §4/M2-CAL: builds the
+  structure-parallel C `port/sim/environmental_collision.c` (+ util slice)
+  with `cc -ffp-contract=off`, ensures module-boundary captures exist for
+  g01/g04/g06 (records them via `port/sim/calib/run-capture.js` when
+  absent — each capture run's checksum stream MUST verify against the
+  frozen golden via the unchanged `oracle/harness/verify-stream.js`, so
+  instrumentation cannot perturb the sim), then replays EVERY captured
+  call of ALL three captures through the C module comparing canon-v1
+  serializations (IEEE-754 bit-pattern hex — exact equality, a single ulp
+  fails) and asserts `docs/M2CAL-REPORT.md` carries the burn-down metrics
+  (div/KLOC, fix-rate, projection, go/no-go). Prints `ENVCOLL MATCH`,
+  exit 0; any divergence, stream mismatch, or missing metric → nonzero.
+  NO-GO handling per LOOP §H: sentinel `LOOP STOP: m2-entry-no-go`.
 - **Upstream clone + build (M0 committed form):**
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via

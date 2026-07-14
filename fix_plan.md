@@ -89,13 +89,62 @@ owns re-running the gate and advancing the phase.)
 
 ## M2-CAL — Calibration slice
 
-(seed items — REPLAN concretizes on phase entry)
-1. Slice harness: record environmentalCollision.js per-frame inputs/outputs
-   over golden trace #1 — done-check: …
-2. Translate environmentalCollision.js → C (structure-parallel) —
-   done-check: …
-3. Burn-down loop to bit-identical; record div/KLOC, fix-rate, projection;
-   go/no-go per PLAN §4 — done-check: …
+(concretized by REPLAN, iter 15, 2026-07-14. Conventions fixed here: the
+slice lives at `port/sim/` — `environmental_collision.{c,h}` +
+`util/{vec2d,lin_alg,find_smallest_within,solve_quadratic_equation,
+line_angle,extreme_point,ecb_transform,zip_labels}.{c,h}` structure-parallel
+to the JS module paths (drawECB = documented no-op, render-only). The
+capture/replay rig lives at `port/sim/calib/`; captures land in
+`port/sim/calib/build/` (gitignored `build*/`). CAPTURE APPROACH
+(PROVISIONAL, auto-adopted): the module boundary is wrapped AT RUNTIME —
+the capture runner serves the untouched built dist but textually exposes
+the webpack module cache (`var installedModules = {};` → `+
+window.__wpCache = installedModules;` in the served bytes only, disk
+untouched), then wraps every exported function of the
+environmentalCollision module object post-load (babel CJS exports are
+plain writable properties; all external call sites dereference the
+namespace object at call time — verified in dist/js/main.js; internal
+calls use local bindings and are correctly NOT captured). oracle/ is NOT
+modified (HARD RULE 3): the runner reuses oracle/harness/{init,pagelib}.js
++ port/fdlibm/fdlibm.js VERBATIM by path and judges every capture run with
+the unchanged verify-stream.js against the frozen golden stream —
+instrumentation that perturbs the sim cannot pass. Value serialization
+(canon v1, PROVISIONAL deviation from CHECKSUM.md conventions, documented
+in port/sim/calib/FORMAT.md): CHECKSUM.md structural rules (sorted nested
+keys, T/F/null/undef/fn tokens, arrays element-wise) but numbers as
+IEEE-754 bit-pattern hex `d:<16hex>` instead of shortest-round-trip
+decimal — injective on doubles both ways, strictly bit-exact (a single
+ulp diverges), and keeps the ECMAScript shortest-float formatter out of
+the calibration (it is a known one-time M2 component, not part of the
+per-KLOC translation rate being measured). Captured goldens: g01
+(fox/marth/battlefield — the PLAN §4 anchor trace), g04
+(puff/falcon/dreamland — puff movement stresses collision), g06
+(falcon/marth/fountain — moving platforms make the stage argument vary
+per frame). Full manifest frame counts (3600), manifest params only.)
+
+1. Capture rig: record environmentalCollision.js module-boundary calls
+   (args + return, canon v1) per frame over g01+g04+g06 — done-check:
+   `bash port/sim/calib/check-capture.sh` → prints `CAPTURE OK`, exit 0
+   (per golden: two fresh capture runs byte-identical JSONL, checksum
+   stream verifies against the frozen golden via unchanged
+   verify-stream.js, per-function call counts match measured-then-frozen
+   pins in port/sim/calib/expected-capture.json)
+2. Translate environmentalCollision.js + dependency slice → C
+   (structure-parallel, doubles, fd_atan2, -ffp-contract=off, no stubs) +
+   canon replay driver — done-check:
+   `bash port/sim/calib/check-replay-runs.sh` → builds
+   `port/sim/calib/build/envcoll_replay` with cc -ffp-contract=off and
+   replays the g01 capture END-TO-END (every record parsed + dispatched,
+   divergences COUNTED and reported, not fatal), prints
+   `REPLAY RAN <n> records`, exit 0
+3. Burn-down to bit-identical over ALL records of ALL 3 captures; keep
+   the divergence ledger (frame, function, root-cause class, fix,
+   minutes); write docs/M2CAL-REPORT.md (div/KLOC, fix-rate, class
+   breakdown, wall-clock, M2 projection, go/no-go per PLAN §4) —
+   done-check: `bash port/sim/check-envcoll.sh` → prints `ENVCOLL MATCH`,
+   exit 0 (rebuilds C, re-records captures fresh if absent, replays all
+   3 captures with ZERO divergences over full frame ranges, asserts
+   docs/M2CAL-REPORT.md carries the filled metrics table)
 
 ## M2 — Sim core checksum-locked, headless
 

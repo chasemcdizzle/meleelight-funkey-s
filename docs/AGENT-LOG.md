@@ -904,3 +904,21 @@ MILESTONE PASS: M0
 - next: REPLAN M2-CAL (concretize the 3 seed items + exit gate).
 
 MILESTONE PASS: M1
+
+## iter 15 — 2026-07-14 — REPLAN: M2-CAL concretized
+
+- phase M2-CAL, REPLAN iteration (LOOP C-b): the 3 seed items rewritten
+  with runnable done-checks; M2-CAL exit gate concretized into CLAUDE.md
+  §Commands as `bash port/sim/check-envcoll.sh` (ENVCOLL MATCH, exit 0).
+- key decisions (PROVISIONAL, auto-adopted; full rationale in fix_plan
+  §M2-CAL preamble): (1) runtime module-boundary wrap via
+  served-bytes-only webpack-cache exposure — oracle/ untouched (HARD RULE
+  3), every capture run judged by the unchanged verify-stream.js against
+  the frozen stream so instrumentation cannot silently perturb; (2) canon
+  v1 value serialization = CHECKSUM.md structure with bit-pattern-hex
+  numbers (injective, stricter-or-equal, keeps the Ryu-class shortest
+  float formatter out of the measured translation rate — it is a known
+  one-time M2 cost, priced separately); (3) capture set g01+g04+g06
+  (anchor + puff collision stress + fountain moving platforms making the
+  stage arg vary per call).
+- next: task 1 (capture rig).
