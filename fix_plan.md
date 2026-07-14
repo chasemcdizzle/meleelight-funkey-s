@@ -133,14 +133,16 @@ records, 0 divergences, exit 0. All three captures replay bit-identical
 on the first successful build — comparator teeth proven by negative
 tests: transcription-typo build → 11,883 divergences; single corrupted
 capture nibble → exactly 1.)
-3. Burn-down to bit-identical over ALL records of ALL 3 captures; keep
-   the divergence ledger (frame, function, root-cause class, fix,
-   minutes); write docs/M2CAL-REPORT.md (div/KLOC, fix-rate, class
-   breakdown, wall-clock, M2 projection, go/no-go per PLAN §4) —
-   done-check: `bash port/sim/check-envcoll.sh` → prints `ENVCOLL MATCH`,
-   exit 0 (rebuilds C, re-records captures fresh if absent, replays all
-   3 captures with ZERO divergences over full frame ranges, asserts
-   docs/M2CAL-REPORT.md carries the filled metrics table)
+(task 3 — burn-down + metrics + report — DONE iter 18:
+`bash port/sim/check-envcoll.sh` → ENVCOLL MATCH, exit 0. 186,675/186,675
+records bit-identical across g01/g04/g06; divergence ledger opened AND
+closed at zero (0 div/KLOC — root-cause classes were prevented at design
+time, see docs/M2CAL-REPORT.md §3); projection 15–30 agent-iterations for
+M2's ~14–19 KLOC; VERDICT: GO. Gate negative-tested: report-needle
+removal → exit 1; captures deleted → 3 fresh recordings + STREAM MATCH +
+ENVCOLL MATCH. §M2-CAL is empty — next iteration is the M2-CAL
+phase-advance; the driver/CHECKER owns re-running the gate and advancing
+the phase to M2.)
 
 ## M2 — Sim core checksum-locked, headless
 

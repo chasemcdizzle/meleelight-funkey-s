@@ -998,3 +998,36 @@ MILESTONE PASS: M1
   surface echoes) BEFORE finalizing the value model. These become
   mandatory rules in every M2 module brief.
 - next: task 3 (gate script + M2CAL-REPORT.md + metrics/projection).
+
+## iter 18 — 2026-07-14 — M2-CAL task 3: burn-down + metrics + GO recommendation
+
+- phase M2-CAL, task 3 (final task; §M2-CAL now empty — next iteration is
+  the phase-advance, driver/CHECKER-owned as with M1).
+- done-check: `bash port/sim/check-envcoll.sh` → ENVCOLL MATCH, exit 0
+  (.loop/iter18-check-envcoll.log; from-scratch run with captures deleted:
+  .loop/iter18-gate-fresh.log — 3 fresh recordings, 3× STREAM MATCH,
+  3× pins OK, 3× 0-divergence strict replay). Gate negative-tested:
+  VERDICT needle removed from the report → exit 1.
+- THE MEASUREMENT (full table + caveats: docs/M2CAL-REPORT.md):
+  1.69 KLOC JS slice → 186,675 boundary records over 3 goldens →
+  0 divergences (0 div/KLOC); burn-down opened and stayed at zero
+  (trivially converged, no oscillation); wall ~40 min M2-CAL total
+  (~25 min/KLOC translate+converge); comparator sensitivity proven
+  (typo → 11,883 divs; corrupt nibble → exactly 1). Projection:
+  ~14–19 KLOC remaining ⇒ 8–12 comparable slices ⇒ 15–30
+  agent-iterations for M2 at 2–3× pessimism for unpriced classes
+  (mutation-heavy modules, float formatter, integration). PLAN §4
+  NO-GO conditions (can't converge without epsilon-cheating; >10×
+  budget): neither is remotely near.
+- VERDICT: GO — recommend the loop proceeds to M2 on phase-advance.
+- zoom-out (M2-CAL milestone-level): the calibration's product is not
+  the zero — it is (a) the 7 mandatory design-stage prevention rules
+  (M2CAL-REPORT §3) that turned anticipated divergence classes into
+  non-events, now binding for every M2 module brief; (b) the reusable
+  module-boundary instrument (capture rig + canon replay), which makes
+  every M2 module slice-verifiable BEFORE integration exactly as PLAN §4
+  M2 requires; (c) the honest caveat register (§6) telling M2 where its
+  first real divergences will come from (in-place mutation, key
+  iteration order, the Ryu-class formatter).
+- next: M2-CAL PHASE-ADVANCE (driver re-runs the gate, flips Current
+  phase → M2, logs MILESTONE PASS: M2-CAL; GO path — no human gate).
