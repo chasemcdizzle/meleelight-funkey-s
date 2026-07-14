@@ -1,0 +1,49 @@
+# rastbench on-device results — FunKey-S (12c00003237f5528), 2026-07-13
+# ARMv7 Cortex-A7 rev5, VFPv4/NEON, no cpufreq scaling exposed (fixed clock)
+# Launched via: adb shell "sh -lc '/tmp/rastbench /tmp/anim.bin <args>'"
+# (frontend parked: touch /mnt/disable_frontend; pkill gmenu2x)
+# All runs: 1200 frames, first 30 skipped (warmup); times in ms.
+# SDL surface: 240x240 16bpp RGB565 (R=f800 G=07e0 B=001f) flags=40000121
+#   (HWSURFACE|DOUBLEBUF honored)
+
+=== -mode baseline (clear + SDL_Flip only — the floor) ===
+raster     n=1170 min=0.093 avg=0.111 p50=0.096 p90=0.108 p99=0.342 max=7.122 ms
+flip       n=1170 min=0.644 avg=0.762 p50=0.703 p90=0.929 p99=1.144 max=5.096 ms
+total      n=1170 min=0.746 avg=0.873 p50=0.799 p90=1.051 p99=1.261 max=9.368 ms
+
+=== -mode scene -aa 0 -tol 0.25 -zoom 1 ===
+raster     n=1170 min=0.433 avg=0.538 p50=0.504 p90=0.660 p99=0.843 max=2.354 ms
+flip       n=1170 min=0.661 avg=0.741 p50=0.696 p90=0.934 p99=1.051 max=3.411 ms
+total      n=1170 min=1.123 avg=1.279 p50=1.207 p90=1.489 p99=1.683 max=3.960 ms
+
+=== -mode scene -aa 0 -tol 1.0 -zoom 1 ===
+raster     n=1170 min=0.371 avg=0.447 p50=0.416 p90=0.540 p99=0.791 max=2.305 ms
+flip       n=1170 min=0.651 avg=0.757 p50=0.695 p90=0.945 p99=1.079 max=7.914 ms
+total      n=1170 min=1.062 avg=1.203 p50=1.115 p90=1.400 p99=1.710 max=8.324 ms
+
+=== -mode scene -aa 1 -tol 0.25 -zoom 1 ===
+raster     n=1170 min=1.244 avg=1.440 p50=1.347 p90=1.644 p99=2.002 max=10.031 ms
+flip       n=1170 min=0.661 avg=0.748 p50=0.697 p90=0.920 p99=1.069 max=4.874 ms
+total      n=1170 min=1.943 avg=2.188 p50=2.083 p90=2.393 p99=3.444 max=10.712 ms
+
+=== -mode scene -aa 1 -tol 1.0 -zoom 1 ===
+raster     n=1170 min=1.169 avg=1.340 p50=1.256 p90=1.543 p99=1.814 max=7.556 ms
+flip       n=1170 min=0.661 avg=0.745 p50=0.696 p90=0.867 p99=1.083 max=6.984 ms
+total      n=1170 min=1.865 avg=2.085 p50=1.969 p90=2.298 p99=2.688 max=8.235 ms
+
+=== -mode scene -aa 0 -tol 0.25 -zoom 2 ===
+raster     n=1170 min=0.540 avg=0.674 p50=0.625 p90=0.839 p99=1.031 max=4.266 ms
+flip       n=1170 min=0.664 avg=0.740 p50=0.698 p90=0.894 p99=1.071 max=1.207 ms
+total      n=1170 min=1.236 avg=1.414 p50=1.336 p90=1.634 p99=1.870 max=4.930 ms
+
+=== -mode scene -aa 1 -tol 0.25 -zoom 2 ===
+raster     n=1170 min=1.526 avg=1.802 p50=1.708 p90=2.018 p99=2.388 max=11.195 ms
+flip       n=1170 min=0.660 avg=0.737 p50=0.697 p90=0.881 p99=1.046 max=4.989 ms
+total      n=1170 min=2.227 avg=2.539 p50=2.452 p90=2.758 p99=3.212 max=11.884 ms
+
+# Note on max outliers (7-12ms, ~1 frame in 1000+): OS jitter on the single
+# core (adbd, kernel housekeeping) — p99 is the honest tail figure; even the
+# worst observed single frame stays near/below the half-budget line.
+# devframe.png = frame 30 (aa=1 tol=0.25 zoom=2) dumped BY THE DEVICE from
+# its own surface after flip, pulled over adb — pixel-identical to the host
+# headless render of the same frame.

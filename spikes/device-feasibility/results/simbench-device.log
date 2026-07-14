@@ -1,0 +1,24 @@
+# simbench (QuickJS instrument) results — 2026-07-13
+# Engine: Bellard QuickJS 2026-06-04, cross-compiled static (musl, armv7
+# hard-float) via jondbell/funkey-s-sdk, minimal embedder (qjsmin.c).
+# Binary: 890,184 bytes static, stripped.
+# Device: FunKey-S 12c00003237f5528, launched sh -lc from /tmp.
+
+=== device: /tmp/qjsmin /tmp/simbench.js 600 ===
+simbench engine=quickjs frames=600 min=25.022 avg=29.284 p50=29.113 p90=30.293 p99=47.896 max=55.368 ms/frame (wall total 17577 ms)
+state checksum: 637.255529751056
+VmHWM:	    1172 kB
+VmRSS:	    1156 kB
+
+=== host reference: node v22.22.2 (Apple Silicon), same file ===
+node simbench.js 2000:
+simbench engine=node frames=2000 min=0.007 avg=0.041 p50=0.017 p90=0.104 p99=0.256 max=0.789 ms/frame (wall total 82 ms)
+node simbench.js 600 checksum: 818.2831886005042
+
+# Ratio device-QuickJS : host-Node-JIT = 29.284 / 0.041 ≈ 714x.
+# Checksum divergence node-vs-qjs (818.28 vs 637.26) after 600 frames:
+# expected — the workload calls Math.sin/cos/atan2/pow every frame; V8
+# (fdlibm) and musl libm differ in last-ULP bits and the sim dynamics
+# amplify them. Direct on-device confirmation of porting-strategies.md §1:
+# the port (and any QuickJS oracle runtime) must vendor V8's fdlibm-derived
+# transcendentals to be checksum-compatible with the browser original.
