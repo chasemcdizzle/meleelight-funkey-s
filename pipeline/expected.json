@@ -1,5 +1,5 @@
 {
-  "_comment": "Pinned coverage contract for the M1 data pipeline (fix_plan §M1 conventions). Values are MEASURED-THEN-FROZEN from executed-JS runs against the upstream pin — never hand-invented (AGENT-LOG iter 9 records the measurement). check-expected.js asserts a run manifest against this file and re-derives the 754-file reconciliation live from the src tree. Tasks 2-4 append their sections (tables/stages/audio) when they land.",
+  "_comment": "Pinned coverage contract for the M1 data pipeline (fix_plan §M1 conventions). Values are MEASURED-THEN-FROZEN from executed-JS runs against the upstream pin — never hand-invented (AGENT-LOG iter 9 records the measurement). check-expected.js asserts a run manifest against this file and re-derives the 754-file reconciliation live from the src tree. Tasks 3-4 append their sections (stages/audio) when they land. tables.animXref pins the measured framesData/ECB vs ANIM1 reconciliation (lists are exact and sorted; tables-anim-xref.js re-derives them live from the run artifacts).",
   "upstreamPinPrefix": "27af171",
   "animations": {
     "coverage": {
@@ -15,11 +15,21 @@
       "states": 744
     },
     "perChar": {
-      "falco": { "states": 148 },
-      "falcon": { "states": 145 },
-      "fox": { "states": 142 },
-      "marth": { "states": 155 },
-      "puff": { "states": 154 }
+      "falco": {
+        "states": 148
+      },
+      "falcon": {
+        "states": 145
+      },
+      "fox": {
+        "states": 142
+      },
+      "marth": {
+        "states": 155
+      },
+      "puff": {
+        "states": 154
+      }
     },
     "sourceFilesTotal": 754,
     "deadFiles": [
@@ -29,5 +39,155 @@
       "falco/THROWNDOCFORWARD",
       "falco/THROWNDOCUP"
     ]
+  },
+  "tables": {
+    "coverage": {
+      "attrFields": 46,
+      "chars": 5,
+      "ecbEmptyStates": 4,
+      "ecbFrames": 27997,
+      "ecbStates": 755,
+      "f64Values": 6277,
+      "framesStates": 400,
+      "hitboxMoves": 243,
+      "hitboxOffsetVecs": 2743,
+      "hitboxes": 616,
+      "i32Values": 118097,
+      "intangStates": 50
+    },
+    "perChar": {
+      "falco": {
+        "ecbEmptyStates": 0,
+        "ecbFrames": 5450,
+        "ecbStates": 154,
+        "framesStates": 80,
+        "hitboxMoves": 45,
+        "hitboxOffsetVecs": 490,
+        "hitboxes": 99,
+        "intangStates": 10
+      },
+      "falcon": {
+        "ecbEmptyStates": 0,
+        "ecbFrames": 4913,
+        "ecbStates": 151,
+        "framesStates": 80,
+        "hitboxMoves": 54,
+        "hitboxOffsetVecs": 589,
+        "hitboxes": 123,
+        "intangStates": 10
+      },
+      "fox": {
+        "ecbEmptyStates": 0,
+        "ecbFrames": 4816,
+        "ecbStates": 141,
+        "framesStates": 80,
+        "hitboxMoves": 45,
+        "hitboxOffsetVecs": 495,
+        "hitboxes": 102,
+        "intangStates": 10
+      },
+      "marth": {
+        "ecbEmptyStates": 0,
+        "ecbFrames": 5516,
+        "ecbStates": 155,
+        "framesStates": 80,
+        "hitboxMoves": 62,
+        "hitboxOffsetVecs": 848,
+        "hitboxes": 219,
+        "intangStates": 10
+      },
+      "puff": {
+        "ecbEmptyStates": 4,
+        "ecbFrames": 7302,
+        "ecbStates": 154,
+        "framesStates": 80,
+        "hitboxMoves": 37,
+        "hitboxOffsetVecs": 321,
+        "hitboxes": 73,
+        "intangStates": 10
+      }
+    },
+    "animXref": {
+      "framesEqual": 370,
+      "framesDiffer": [
+        "fox/THROWNMARTHFORWARD:9:10",
+        "marth/CATCHCUT:29:30",
+        "marth/DOWNWAIT:60:70",
+        "marth/ESCAPEB:34:35",
+        "marth/ESCAPEF:34:35",
+        "marth/JUMPAERIALB:50:60",
+        "marth/RUNBRAKE:25:26",
+        "marth/THROWNFALCOBACK:7:8",
+        "marth/THROWNFALCODOWN:28:32",
+        "marth/THROWNFALCOFORWARD:9:10",
+        "marth/THROWNFOXBACK:7:8",
+        "marth/THROWNFOXUP:6:7",
+        "marth/THROWNMARTHDOWN:12:13",
+        "marth/THROWNMARTHFORWARD:12:13",
+        "marth/THROWNMARTHUP:10:11",
+        "marth/THROWNPUFFBACK:21:24",
+        "marth/THROWNPUFFDOWN:60:61",
+        "marth/THROWNPUFFUP:6:7",
+        "marth/WALLDAMAGE:50:51",
+        "puff/CATCHCUT:29:30",
+        "puff/DOWNWAIT:59:60",
+        "puff/GUARDON:8:9",
+        "puff/RUN:16:25",
+        "puff/RUNBRAKE:19:20",
+        "puff/RUNTURN:25:26",
+        "puff/THROWNPUFFDOWN:60:62"
+      ],
+      "framesNoAnim": [
+        "puff/FALLAERIAL:8",
+        "puff/JUMPAERIALB:50",
+        "puff/JUMPAERIALF:50",
+        "puff/WALLJUMP:40"
+      ],
+      "ecbFramesEqual": 715,
+      "ecbFramesDiffer": [
+        "fox/THROWFORWARD:34:33",
+        "fox/THROWNFOXBACK:7:6",
+        "fox/THROWNFOXDOWN:33:32",
+        "fox/THROWNFOXFORWARD:11:10",
+        "fox/THROWNFOXUP:6:5",
+        "fox/THROWNMARTHBACK:6:5",
+        "fox/THROWNMARTHDOWN:11:10",
+        "fox/THROWNMARTHFORWARD:11:10",
+        "fox/THROWNMARTHUP:10:9",
+        "fox/THROWNPUFFBACK:19:18",
+        "fox/THROWNPUFFDOWN:61:60",
+        "fox/THROWNPUFFFORWARD:10:9",
+        "fox/THROWNPUFFUP:6:5",
+        "fox/UPSPECIALCHARGE:43:42",
+        "marth/DEADDOWN:2:1",
+        "marth/DEADLEFT:2:1",
+        "marth/DEADRIGHT:2:1",
+        "marth/DEADUP:2:1",
+        "puff/RUNTURN:46:26",
+        "puff/THROWNMARTHBACK:5:4",
+        "puff/THROWNMARTHDOWN:9:8",
+        "puff/THROWNMARTHFORWARD:9:8",
+        "puff/THROWNMARTHUP:8:7",
+        "puff/THROWNPUFFBACK:15:14",
+        "puff/THROWNPUFFDOWN:63:62",
+        "puff/THROWNPUFFFORWARD:10:9",
+        "puff/THROWNPUFFUP:5:4"
+      ],
+      "ecbNoAnim": [
+        "falco/ILLUSIONFX",
+        "falco/TECHWALLJUMP",
+        "falco/THROWNDOCBACK",
+        "falco/THROWNDOCDOWN",
+        "falco/THROWNDOCFORWARD",
+        "falco/THROWNDOCUP",
+        "falcon/DEADDOWN",
+        "falcon/DEADLEFT",
+        "falcon/DEADRIGHT",
+        "falcon/DEADUP",
+        "falcon/SLEEP",
+        "falcon/TECHWALLJUMP",
+        "fox/TECHWALLJUMP"
+      ]
+    }
   }
 }

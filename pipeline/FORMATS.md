@@ -138,3 +138,120 @@ global therefore exposes exactly 744 states (marth 155 · puff 154 ·
 fox 142 · falco 148 · falcon 145), 27,820 frames, 27,808 paths,
 7,747,148 int16 coords. `check-expected.js` re-derives this
 reconciliation live against the upstream src tree on every check run.
+
+## 3. CTAB1 — generated C engine tables (attributes / framesData / intangibility / ECB / hitboxes)
+
+Artifacts per pipeline run: `ml_tables.h` + `ml_tables.c` (the C tables the
+sim links against) and `tables.json` (the canonical executed-JS model the
+tables were generated from; doubles carried as bit patterns). Generator:
+`pipeline/stages/tables.js`. Source: the extractor bundle
+`dist/js/extractor.js`, built from the REAL upstream data modules
+(per-character `attributes`/`ecb` files registering into
+`src/main/characters.js`) by `pipeline/extractor/build-extractor.sh` with
+upstream's own docker node:8 webpack toolchain, then executed under a
+`window` shim in node (pure data construction — Vec2D/createHitbox object
+literals and constant arithmetic; no `Math.*`, no DOM — engine-neutral,
+same PROVISIONAL basis as the animations stage).
+
+### 3.1 Value encoding (the whole point)
+
+- **Doubles are stored as IEEE-754 uint64 bit patterns**, emitted as
+  `UINT64_C(0x…)` with a human-readable shortest-round-trip decimal in an
+  adjacent comment (the port/fdlibm value↔bit-pattern pairing convention;
+  here the BITS are the authoritative value). C code reconstructs with
+  `ml_f64()` (memcpy; zero-cost). Values are therefore EXACT — never a
+  decimal-literal round-trip (PLAN §2).
+- **Ints as ints.** Fields whose executed values are mathematical integers
+  AND semantically integral (frame counts/indices, ECB quads, hitbox
+  damage/angle/knockback/type/flags) are typed `int32_t`/`int16_t`; the
+  generator HARD-THROWS if an executed value violates the pinned typing
+  (no silent coercion, ever). int→double conversion in C is exact for
+  these ranges.
+- Booleans are `uint8_t` 0/1. NaN/Inf/-0 are rejected by the generator
+  (none exist at the pin; a bit-pattern field would carry -0 faithfully if
+  upstream ever introduced one — the reject is for int-typed fields and
+  finiteness).
+
+### 3.2 Field typing (pinned; measured iter 10)
+
+Single source of truth: `pipeline/lib/tables-schema.js` (JS side) ==
+the `ML_*_FIELDS` X-macros generated into `ml_tables.h` (C side).
+
+- `ml_attributes_t` (exactly 46 fields per char, key set asserted):
+  35 double-bits (`aerialHmaxV` … `wallJumpVelY`, incl. `waitAnimSpeed`,
+  pinned f64 with its `run`/`walkAnimSpeed` siblings though integral at
+  the pin), 6 `int32_t` scalars (`airdodgeIntangible, dashFrameMax,
+  dashFrameMin, jumpSquat, runTurnBreakPoint, weight`), 3 `int32_t`
+  arrays (`hurtboxOffset[2], ledgeSnapBoxOffset[3], shieldOffset[2]`),
+  2 booleans (`multiJump, walljump`). Struct order = F64 sorted, I32
+  sorted, I32V sorted, BOOL sorted (bytewise).
+- `framesData` → `{name, int32 frames}`; `intangibility` →
+  `{name, int32 start, int32 length}` (upstream comment "start, length").
+- ECB → per state `int16_t v[4]` per frame, upstream order
+  `[bottomOffsetY, halfWidthX, midY, topY]` (consumed by
+  `src/physics/physics.js:1097-1102`). Empty state arrays exist upstream
+  (puff `DEAD*`, 4 of them) and are kept verbatim: `frameCount 0`,
+  `frames == NULL`.
+- Hitboxes → per move `id0..id3` pointers (NULL = absent upstream); each
+  hitbox: `offset` = array of double-bits Vec2D + `offsetCount` +
+  `offsetIsArray` (0 = single Vec2D upstream — the engine branches on
+  this; 21 exist, throws), `size` double-bits, 9 `int32_t` fields
+  (`dmg, angle, kg, bk, sk, type, clank, hitGrounded, hitAirborne`),
+  `throwextra` boolean. Aliased upstream offset arrays (e.g. fox nair
+  reusing id1's array) are serialized per-hitbox verbatim (copies).
+
+### 3.3 Ordering / determinism
+
+Characters in charId order (0 marth · 1 puff · 2 fox · 3 falco ·
+4 falcon == `CHARIDS`, asserted; same ids as ANIM1 and the oracle
+harness). All state/move name keys bytewise-sorted ASCII (`strcmp`
+order). Names asserted `[A-Za-z0-9_]+`. No timestamps, no absolute
+paths; provenance (upstream HEAD + extractor bundle sha256) embedded in
+the generated headers and recorded in the manifest sources together with
+`pipeline/extractor/extractor.{entry,config}.js` hashes.
+
+### 3.4 The registries NOT in CTAB1 (scope note)
+
+`actionSounds` (task 4 territory, audio map) and the raw `offsets`
+registry (consumed by the engine ONLY via the hitbox objects; embedded
+there) are exposed by the extractor bundle but not emitted as C tables.
+`setVelocities`/`posOffset` constants attached to actionState objects in
+`characters/<char>/index.js` are move-logic constants entangled with the
+actionState function table; they are ported with the sim code in M2 (the
+extractor deliberately does not import the index.js aggregators — that is
+the god-module boundary, anatomy §3).
+
+### 3.5 ANIM1 cross-check (measured-then-frozen reconciliation)
+
+`framesData`/ECB per-state frame counts vs the SAME run's decoded ANIM1
+binaries is NOT uniform equality upstream (26 framesData states differ,
+e.g. marth DOWNWAIT 60 vs 70 anim frames; 4 puff framesData states have
+no animation; 27 ECB states differ; 13 ECB states have no animation —
+incl. falco's 5 dead-file states and the TECHWALLJUMP class).
+`pipeline/lib/tables-anim-xref.js` re-derives the FULL reconciliation
+live from run artifacts and asserts the exact sorted lists pinned in
+`pipeline/expected.json` `tables.animXref`.
+
+### 3.6 Canonical leaf dump (round-trip contract)
+
+One line per leaf value, `path=value`, doubles as 16 lowercase hex digits
+of their bit pattern, ints as decimal; emission order == §3.2/§3.3 order:
+
+```
+attr/<char>/<field>[=|[i]=]…
+frames/<char>/<STATE>=<int>
+intang/<char>/<STATE>=<start>,<length>
+ecb/<char>/<STATE>/<frameIdx>=<a>,<b>,<c>,<d>
+hb/<char>/<move>/id<N>/offsetIsArray=<0|1>
+hb/<char>/<move>/id<N>/offset[<k>]=<xbits>,<ybits>
+hb/<char>/<move>/id<N>/<field>=<val>   (size bits, then i32 fields, then throwextra)
+```
+
+Reference implementations: `pipeline/lib/tables_check.c` (walks the
+COMPILED tables via the X-macros; an actual store/load round trip through
+a C double) and `pipeline/lib/tables-dump.js` (fresh executed-JS walk).
+`check-tables.sh` compiles the former with `-ffp-contract=off` and
+`cmp`(1)s the two dumps — every emitted value bit-equal to a fresh
+execution of the real upstream modules. The C reader/consumer implements
+THIS document; on disagreement between code and spec, the spec + a
+regenerated artifact set win.

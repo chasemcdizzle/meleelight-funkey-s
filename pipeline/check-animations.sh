@@ -25,6 +25,9 @@ echo "byte-stability: two fresh runs -> identical manifest.json"
 
 node lib/verify-artifacts.js build/check-a
 node lib/verify-artifacts.js build/check-b
-node lib/check-expected.js build/check-a "$DIST"
+# explicit stage scope: this --only run carries no tables/audio artifacts
+# (check-expected defaults to the FULL expected.json contract otherwise);
+# assertion strength for the animations stage is unchanged
+node lib/check-expected.js build/check-a "$DIST" animations
 
 echo "ANIMATIONS OK"

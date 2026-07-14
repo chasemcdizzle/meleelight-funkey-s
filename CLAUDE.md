@@ -123,6 +123,31 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   every coord in-run) + one deterministic manifest (sorted keys, no
   timestamps/abs paths). Task-level check:
   `bash pipeline/check-animations.sh` → `ANIMATIONS OK`, exit 0.
+- **Engine-table extractor + generated C tables (M1 task 2 committed
+  form):** `bash pipeline/extractor/build-extractor.sh` (idempotent,
+  stamp-cached; `--force` rebuilds) copies
+  `pipeline/extractor/extractor.{entry,config}.js` into the clone and
+  webpacks `dist/js/extractor.js` under docker node:8 with upstream's own
+  toolchain (babel query mirrors the game build's happypack loader); the
+  entry imports ONLY the per-char attributes/ecb data modules (no
+  characters/<char>/index.js — that's the god-module boundary) and assigns
+  the live `src/main/characters.js` registries to `window.__tables`.
+  Stage `tables` (in `node pipeline/run.js`) executes it under a window
+  shim and emits `ml_tables.{h,c}` + `tables.json` (format CTAB1,
+  FORMATS.md §3): doubles as `UINT64_C(0x…)` bit patterns + shortest
+  round-trip decimal comment, decoded via `ml_f64()` memcpy; ints as
+  int32/int16 with generator hard-throws on typing violations. Task
+  check: `bash pipeline/check-tables.sh` → `TABLES OK` (byte-stability ×2,
+  artifact hashes, expected.json coverage, framesData/ECB↔ANIM1 pinned
+  reconciliation via `lib/tables-anim-xref.js`, and the round-trip gate:
+  `cc -ffp-contract=off` compiles `lib/tables_check.c` + generated
+  `ml_tables.c`, its canonical leaf dump must be byte-identical to
+  `lib/tables-dump.js`'s fresh executed-JS walk — 38,832 leaf values).
+  Gotcha class: framesData/ECB vs animation frame counts is NOT uniform
+  equality upstream (26+27 differ, 4+13 no-anim states incl. puff DEAD*
+  empty ECBs kept verbatim as frameCount 0/NULL) — cross-checks against
+  executed data must be measured-then-frozen reconciliations, never
+  assumed identities.
 - **Upstream clone + build (M0 committed form):**
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via

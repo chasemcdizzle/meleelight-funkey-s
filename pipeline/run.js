@@ -20,7 +20,8 @@ const { stableStringify, sha256 } = require("./lib/manifest");
 
 const STAGES = [
   require("./stages/animations"),
-  // fix_plan §M1 tasks 2-4 register here: tables, stages, audio
+  require("./stages/tables"),
+  // fix_plan §M1 tasks 3-4 register here: stages, audio
 ];
 
 function arg(name, dflt) {

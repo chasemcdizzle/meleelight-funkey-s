@@ -544,3 +544,86 @@ MILESTONE PASS: M0
 - next: M1 task 2 — extractor bundle (docker node:8 webpack) +
   framedata/attributes/ECB/hitbox → generated C tables
   (`bash pipeline/check-tables.sh`).
+
+## iter 10 — 2026-07-14 — M1 task 2: extractor bundle + engine tables → generated C
+
+- done-check: `bash pipeline/check-tables.sh` → exit 0, ends `TABLES OK`
+  (.loop/iter10-m1t2-donecheck.log). Two FRESH runs (animations+tables)
+  → byte-identical manifest.json; verify-artifacts re-hashed all 8
+  artifacts both runs; check-expected asserted the pinned tables coverage
+  (+ animations, unchanged); tables-anim-xref matched the frozen
+  framesData/ECB↔ANIM1 reconciliation; round-trip gate: compiled C
+  tables (cc -std=c99 -O1 -ffp-contract=off -Wall -Wextra -Werror)
+  printed a canonical leaf dump byte-identical to a fresh executed-JS
+  walk — 38,832 leaf values, bit-exact.
+- shipped: pipeline/extractor/{extractor.entry.js, extractor.config.js,
+  build-extractor.sh} (webpack entry importing ONLY the per-char
+  attributes/ecb data modules + the main/characters registries — no
+  index.js aggregators, so no main.js god-module tentacles; built with
+  upstream's own docker node:8 webpack + babel query identical to the
+  game build's happypack loader; idempotent stamp cache) ·
+  pipeline/stages/tables.js (CTAB1 generator: ml_tables.h with X-macro
+  field lists + ml_f64() memcpy decoder, ml_tables.c data, tables.json
+  canonical model) · pipeline/lib/tables-schema.js (pinned typing/order;
+  validating executed-JS walk; hard-throws on typing violations) ·
+  pipeline/lib/tables_check.c (C round-trip dump walker, implements
+  FORMATS.md §3.6 via the generated X-macros) · pipeline/lib/tables-dump.js
+  (fresh JS walk dump) · pipeline/lib/tables-anim-xref.js (live
+  framesData/ECB vs decoded ANIM1 reconciliation vs frozen pins) ·
+  check-tables.sh · FORMATS.md §3 (CTAB1 spec) · expected.json tables
+  section (coverage + perChar + animXref lists) · check-expected.js
+  gained an explicit stage-scope arg (check-animations.sh now passes
+  "animations"; assertion strength for animations unchanged — verified,
+  ANIMATIONS OK regression run .loop/iter10-checkanim-regression.log).
+- measured (executed data, now frozen in expected.json): 5 chars ·
+  46 attribute fields/char (35 f64 + 6 i32 + 3 i32-arrays + 2 bool, key
+  set asserted exact) · framesData 80 states/char (400) · intangibility
+  10/char (50) · ECB 755 states / 27,997 frames / 4 empty states (puff
+  DEAD*, kept verbatim frameCount 0/NULL) · hitboxes 243 moves / 616
+  hitboxes / 2,743 offset vecs / 21 single-Vec2D offsets · 6,277 f64
+  values · 118,097 i32 values. ANIM1 xref (NOT uniform equality —
+  measured): framesData 370 equal / 26 differ / 4 puff no-anim; ECB 715
+  equal / 27 differ / 13 no-anim (falco dead-file states, TECHWALLJUMP
+  class, falcon DEAD*/SLEEP) — exact sorted lists pinned.
+- verification beyond the done-check (negative tests, not committed):
+  1-ulp bit-pattern tamper in ml_tables.c → round-trip cmp fails;
+  tampered artifact → verify-artifacts HASH mismatch exit 1; framesData
+  119.5 injected → generator throws "expected int32"; extra attribute
+  key injected → key-set drift throw; xref pin perturbed → xref exit 1
+  (pin restored, verified). End-to-end spot checks source-text →
+  bundle → executed → C → compiled dump: fox gravity 0.23 =
+  3fcd70a3d70a3d71 ✓, fox fair1 size 5.156 = 40149fbe76c8b439 / dmg 7 ✓,
+  fox ATTACKAIRB ecb[0] = 4,3,9,13 ✓, fox WAIT 120 / ESCAPEN 2,14 ✓.
+- artifact hashes (sha256 first 16): check-tables.sh b303eb5452508d22 ·
+  stages/tables.js 7da8aa726ef56a8f · lib/tables-schema.js
+  e75c7674055e45a8 · lib/tables_check.c 7122cc57c20d4c5f ·
+  lib/tables-dump.js 64dc8f16b5b70661 · lib/tables-anim-xref.js
+  a574fec40685b677 · extractor.entry.js b30628cb3d474516 ·
+  extractor.config.js de2b308c76c2f935 · build-extractor.sh
+  2f6e72fc6a540087 · expected.json 7d4f41397ff600b7.
+- PROVISIONAL (auto-adopted): CTAB1 layout + field typing (FORMATS.md §3;
+  bits-authoritative doubles with decimal comments — the inverse pairing
+  of classic fdlibm but the same value↔bits discipline; measured-integral
+  + semantically-integral fields as C ints, waitAnimSpeed pinned f64 with
+  its speed siblings); plain-node execution of the extractor bundle (pure
+  data construction, engine-neutral — same basis as the animations stage,
+  spot-checked against raw source literals); actionSounds + raw offsets
+  registry exposed by the bundle but not emitted (sounds are task 4;
+  offsets reach the engine only via hitbox objects); setVelocities/
+  posOffset stay with the M2 sim port (attached to actionState function
+  objects behind the god-module boundary).
+- zoom-out: the defect CLASS this task guards against is silent value
+  drift between executed JS and C — the instrument is the dual-dump
+  round trip (compiled C data vs fresh executed walk, byte-compared,
+  38.8k leaves) plus generator hard-throws on typing surprises, so a
+  classification error is a build failure, not a quiet coercion. Second
+  class surfaced: ASSUMED identities between related executed datasets
+  (framesData vs animation frames "should match") are false upstream —
+  registered the reconciliation-pin pattern (measure, freeze exact
+  lists, re-derive live every check) as the standard instrument for
+  every future cross-dataset check (stages/audio tasks 3-4). Also note
+  my initial survey scan MISSED the 4 empty puff ECB arrays that the
+  validating walk caught — surveys inform design, validators gate:
+  never promote a survey observation to a contract without a hard check.
+- next: M1 task 3 — stage geometry → generated C tables from the same
+  extractor (`bash pipeline/check-stages.sh`).

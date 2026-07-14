@@ -5,7 +5,10 @@
 // and re-derive the animation source-file reconciliation LIVE against the
 // upstream src tree (anatomy's "754 files" = exported states + index.js
 // files + dead files; see FORMATS.md §2.7).
-// Usage: node lib/check-expected.js <run-dir> <upstream-clone-root>
+// Usage: node lib/check-expected.js <run-dir> <upstream-clone-root> [stages]
+//   [stages] — comma-separated stage sections to assert (for --only runs,
+//   e.g. "animations"). Default: EVERY stage section pinned in
+//   expected.json (the full contract; the M1 exit gate uses the default).
 
 const fs = require("fs");
 const path = require("path");
@@ -16,6 +19,18 @@ const expected = JSON.parse(
   fs.readFileSync(path.join(__dirname, "..", "expected.json"), "utf8"));
 const manifest = JSON.parse(
   fs.readFileSync(path.join(runDir, "manifest.json"), "utf8"));
+
+const NON_STAGE_KEYS = new Set(["_comment", "upstreamPinPrefix"]);
+const allSections = Object.keys(expected).filter((k) => !NON_STAGE_KEYS.has(k));
+const wantStages = process.argv[4]
+  ? String(process.argv[4]).split(",")
+  : allSections;
+for (const s of wantStages) {
+  if (!allSections.includes(s)) {
+    console.error(`check-expected: no pinned section "${s}" in expected.json`);
+    process.exit(1);
+  }
+}
 
 let failures = 0;
 const fail = (msg) => { console.error("EXPECTED-FAIL: " + msg); failures++; };
@@ -29,6 +44,7 @@ if (!manifest.upstreamHead.startsWith(expected.upstreamPinPrefix)) {
 }
 
 // ---- animations ----
+if (wantStages.includes("animations")) {
 const exp = expected.animations;
 const st = manifest.stages.animations;
 if (!st) {
@@ -79,10 +95,39 @@ if (!st) {
   eq("reconciliation: states + index files + dead files",
     st.coverage.states + idx + deadFound.length, exp.sourceFilesTotal);
 }
+}
+
+// ---- tables ----
+if (wantStages.includes("tables")) {
+  const exp = expected.tables;
+  const st = manifest.stages.tables;
+  if (!st) {
+    fail("manifest has no tables stage");
+  } else {
+    eq("tables.format", st.format, "CTAB1");
+    for (const k of Object.keys(exp.coverage)) {
+      eq(`tables.coverage.${k}`, st.coverage[k], exp.coverage[k]);
+    }
+    for (const [charName, expChar] of Object.entries(exp.perChar)) {
+      const got = st.perChar && st.perChar[charName];
+      if (!got) { fail(`tables.perChar.${charName} missing`); continue; }
+      for (const k of Object.keys(expChar)) {
+        eq(`tables.perChar.${charName}.${k}`, got[k], expChar[k]);
+      }
+    }
+    eq("tables.artifacts.length", st.artifacts.length, 3);
+    for (const name of ["ml_tables.h", "ml_tables.c", "tables.json"]) {
+      if (!st.artifacts.some((a) => a.path === name)) {
+        fail(`tables artifact ${name} missing from manifest`);
+      }
+    }
+  }
+}
 
 if (failures > 0) {
   console.error(`check-expected: ${failures} failure(s)`);
   process.exit(1);
 }
-console.log("check-expected: coverage contract OK " +
-  "(incl. live 754-file reconciliation)");
+console.log(`check-expected: coverage contract OK for stage(s) ` +
+  `${wantStages.join(", ")}` +
+  (wantStages.includes("animations") ? " (incl. live 754-file reconciliation)" : ""));

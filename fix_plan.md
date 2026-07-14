@@ -57,19 +57,11 @@ never distributed — provenance field marks them.)
 (task 1 — pipeline skeleton + animations serializer — DONE iter 9:
 `bash pipeline/check-animations.sh` → ANIMATIONS OK, exit 0.)
 
-2. Extractor bundle + engine tables → generated C: build a
-   `pipeline/extractor/` webpack entry with upstream's docker node:8
-   toolchain (modeled on `bin/webpack/animations.config.js`; entry
-   assigns `window.__tables` from the real modules), execute it, and emit
-   character attributes / framesData / intangibility / ECB / hitbox
-   constants as generated C tables — doubles serialized as IEEE-754
-   uint64 bit patterns with a human-readable comment (port/fdlibm
-   constant convention), ints as ints — done-check:
-   `bash pipeline/check-tables.sh` → prints `TABLES OK`, exit 0 (two
-   fresh runs byte-identical; every emitted value bit-equal to a fresh
-   executed-JS walk of the extractor output; counts vs expected.json:
-   all 5 chars have attributes + framesData + ECB tables and framesData
-   totals cross-check against the ANIM1 per-state frame counts).
+(task 2 — extractor bundle + engine tables → generated C — DONE iter 10:
+`bash pipeline/check-tables.sh` → TABLES OK, exit 0. CTAB1 spec:
+FORMATS.md §3; extractor at `pipeline/extractor/`, tasks 3-4 extend the
+same bundle for stage geometry + sounds.)
+
 3. Stage geometry → generated C tables from the same extractor (6 VS
    stages: polygon/platform/ground/ceiling/wallL/wallR/ledge/ledgePos/
    blastzone/startingPoint/startingFace/respawnPoints/respawnFace/scale/
