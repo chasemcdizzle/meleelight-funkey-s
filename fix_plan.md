@@ -74,15 +74,14 @@ frozen in expected.json audio — a different ffmpeg fails loudly, never
 drifts; blobs are Nintendo-derived PRIVATE USE ONLY and live only in
 gitignored build output.)
 
-5. Full-pipeline runner + M1 exit gate: `pipeline/verify_pipeline.sh`
-   runs the ENTIRE pipeline twice fresh (all registered stages) into
-   `pipeline/build/gate-{a,b}`, asserts manifest byte-identity,
-   re-verifies every artifact hash, and asserts the FULL expected.json
-   coverage contract (754-file animation reconciliation / 27,808 paths /
-   5 chars / 6 stages / 204 SFX blobs with 180 mapped sounds / 8 tracks)
-   — done-check: `bash pipeline/verify_pipeline.sh` → prints
-   `PIPELINE OK`, exit 0 (this IS the M1 exit gate recorded in
-   CLAUDE.md §Commands; the phase-advance CHECKER re-runs it).
+(task 5 — full-pipeline runner + M1 exit gate — DONE iter 13:
+`bash pipeline/verify_pipeline.sh` → PIPELINE OK, exit 0. The gate
+composes the four unchanged task-level checks + one whole-pipeline
+double-run into `build/gate-{a,b}` with manifest byte-identity, full
+artifact re-hash, the FULL expected.json contract, gate-a compiled
+round-trips (38832 + 412 leaves pinned) and the no-commit guard. §M1 is
+empty — the next iteration is the M1 phase-advance; the driver/CHECKER
+owns re-running the gate and advancing the phase.)
 
 ## M2-CAL — Calibration slice
 

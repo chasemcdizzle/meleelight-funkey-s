@@ -809,3 +809,84 @@ MILESTONE PASS: M0
   "survives" every module except the one that matters.
 - next: M1 task 5 — full-pipeline runner + M1 exit gate
   (`bash pipeline/verify_pipeline.sh`), then the phase-advance iteration.
+
+## iter 13 — 2026-07-14 — M1 task 5: full-pipeline runner + M1 exit gate (FINAL M1 task)
+
+- phase M1, task: fix_plan §M1 task 5 — `pipeline/verify_pipeline.sh`,
+  the M1 EXIT GATE recorded in CLAUDE.md §Commands (REPLAN iter 9). §M1
+  is now EMPTY; the next iteration is the M1 phase-advance (driver/
+  CHECKER owns re-running the gate and advancing the phase — NOT done
+  here by design).
+- done-check: `bash pipeline/verify_pipeline.sh` → PIPELINE OK, exit 0
+  (.loop/iter13-verify-pipeline.log — first full run, 57s wall;
+  .loop/iter13-verify-pipeline-final.log — clean re-run of the exact
+  committed script after negative-testing).
+- what landed (ONE new file + bookkeeping; the task COMPOSES iters 9-12,
+  zero changes to any existing check): verify_pipeline.sh orchestrates
+  (b) all four task-level checks UNCHANGED (each keeps its own fresh
+  double-run + stage-specific gates: ANIMATIONS/TABLES/STAGES/AUDIO OK),
+  then (a) one whole-pipeline double-run from a clean slate into
+  build/gate-{a,b} — manifest.json byte-identical (cmp) + every artifact
+  re-hashed in BOTH dirs with stray rejection (identical manifests +
+  per-file hash verification in both => all 225 artifacts byte-identical
+  across runs), (c) the FULL expected.json contract on the integrated
+  run (check-expected.js DEFAULT scope = all four sections: 5 chars /
+  744 states / 27,808 paths / live 754-file reconciliation / 6 stages /
+  204 SFX blobs + 180 mapped sounds / 8 tracks / ffmpeg version+argv
+  pins + frozen audio aggregate e776a885…), (d) compiled round-trips
+  against gate-a's OWN artifacts — ml_tables.c and ml_stages.c compile
+  (cc -ffp-contract=off) and their canonical dumps match fresh
+  executed-JS walks with leaf counts PINNED in the gate (38832 + 412;
+  scratch in build/gate-rt, removed) plus tables-anim-xref on gate-a,
+  (e) no-commit guard over ALL of pipeline/build (gitignored `build*/`,
+  nothing tracked/staged).
+- evidence (from .loop/iter13-verify-pipeline.log): ANIMATIONS OK ·
+  TABLES OK (38832 leaves) · STAGES OK (412 leaves) · AUDIO OK (214
+  artifacts ×2) · full-run byte-stability cmp OK · verify-artifacts 225
+  OK ×2 · check-expected "audio, animations, tables, stages (incl. live
+  754-file reconciliation)" OK · integrated round-trip 38832+412
+  bit-exact · no-commit guard OK · gate wall-time 57s.
+- negative tests (all restored, restore proven byte-identical via cmp):
+  perturbed manifest copy → cmp exit 1 · set -euo pipefail propagation →
+  failing subcommand aborts · END-TO-END: leaf pin 412→413 sed'd into
+  the actual script → full gate run exits 1 at exactly that assert
+  (.loop/iter13-negtest-pin.log), script restored + final clean pass
+  re-run.
+- artifact hashes (sha256 first 16): pipeline/verify_pipeline.sh
+  4d79777b62e125e1 · fix_plan.md 3dce2fe4c41b90c4. No other file
+  touched; CLAUDE.md §Commands already carried the gate entry verbatim
+  (REPLAN iter 9) — nothing to append there.
+- PROVISIONAL (auto-adopted): gate composition = four unchanged
+  task-level checks + ONE whole-pipeline double-run + gate-a-local
+  round-trips/xref, accepting repeated work (~10 stage executions,
+  57s total) over refactoring the checks for reuse — wall-time is sane
+  and the assignment/LOOP forbid weakening any existing check; the
+  round-trips are re-run against the INTEGRATED run (not only the
+  --only runs the task checks use) so the gate stands alone even if a
+  task check's scope drifts. Leaf counts 38832/412 pinned INSIDE the
+  gate (measured-then-frozen; a silent shrink of either dump can no
+  longer pass on cmp-equality alone).
+- zoom-out (MILESTONE-LEVEL — what M1 produced as CLASSES, per CLAUDE.md
+  rule 8): M1's real yield beyond the artifacts is four reusable
+  instruments the M2+ grind inherits: (1) EXECUTED-OVER-AUTHORED as the
+  universal extraction stance — every stage executes upstream's own
+  built/bundled code and serializes live values (never transcribes
+  source text); its three god-module/browser-global gotcha instances
+  (index.js boundary, externals-stubbed sim imports, window===global)
+  are all the SAME lesson: reproduce the runtime's paths, not just its
+  survival. (2) MEASURED-THEN-FROZEN pins (expected.json, leaf counts,
+  dead-file lists, xref reconciliations) as the anti-assumption
+  instrument — every "obvious" identity we tested was FALSE somewhere
+  (754≠744, framesData≠anim frames, ECB≠anim, authored volume≠played
+  volume); never assert an identity you haven't measured, freeze what
+  you measured. (3) PIN-THE-TRANSFORM + FREEZE-THE-BYTES for any
+  toolchain-dependent output (ffmpeg version+argv+aggregate; docker
+  node:8 by image tag; fdlibm in M0) — byte-stability ×2 alone is
+  structurally blind to version drift. (4) DUAL-DUMP ROUND-TRIP
+  (compiled C ↔ fresh executed-JS, bit patterns not decimals) as the
+  generated-code gate — M2's translation grind should reuse exactly
+  this shape per module (slice-dump both sides, cmp). The gate itself
+  is the composition proof: one command, every instrument armed.
+- next: M1 PHASE-ADVANCE iteration (LOOP F-advance: CHECKER
+  mode=phase-advance re-runs `bash pipeline/verify_pipeline.sh`,
+  flips Current phase → M2-CAL, logs MILESTONE PASS: M1).
