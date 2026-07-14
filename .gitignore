@@ -1,0 +1,4 @@
+vendor/
+.loop/
+build*/
+.DS_Store
