@@ -122,21 +122,17 @@ per-KLOC translation rate being measured). Captured goldens: g01
 (falcon/marth/fountain — moving platforms make the stage argument vary
 per frame). Full manifest frame counts (3600), manifest params only.)
 
-1. Capture rig: record environmentalCollision.js module-boundary calls
-   (args + return, canon v1) per frame over g01+g04+g06 — done-check:
-   `bash port/sim/calib/check-capture.sh` → prints `CAPTURE OK`, exit 0
-   (per golden: two fresh capture runs byte-identical JSONL, checksum
-   stream verifies against the frozen golden via unchanged
-   verify-stream.js, per-function call counts match measured-then-frozen
-   pins in port/sim/calib/expected-capture.json)
-2. Translate environmentalCollision.js + dependency slice → C
-   (structure-parallel, doubles, fd_atan2, -ffp-contract=off, no stubs) +
-   canon replay driver — done-check:
-   `bash port/sim/calib/check-replay-runs.sh` → builds
-   `port/sim/calib/build/envcoll_replay` with cc -ffp-contract=off and
-   replays the g01 capture END-TO-END (every record parsed + dispatched,
-   divergences COUNTED and reported, not fatal), prints
-   `REPLAY RAN <n> records`, exit 0
+(task 1 — capture rig — DONE iter 16:
+`bash port/sim/calib/check-capture.sh` → CAPTURE OK, exit 0. 186,675
+boundary records over g01/g04/g06, byte-stable ×2, 6× STREAM MATCH,
+counts pinned in expected-capture.json.)
+
+(task 2 — structure-parallel C translation + replay driver — DONE iter
+17: `bash port/sim/calib/check-replay-runs.sh` → REPLAY RAN 119619
+records, 0 divergences, exit 0. All three captures replay bit-identical
+on the first successful build — comparator teeth proven by negative
+tests: transcription-typo build → 11,883 divergences; single corrupted
+capture nibble → exactly 1.)
 3. Burn-down to bit-identical over ALL records of ALL 3 captures; keep
    the divergence ledger (frame, function, root-cause class, fix,
    minutes); write docs/M2CAL-REPORT.md (div/KLOC, fix-rate, class

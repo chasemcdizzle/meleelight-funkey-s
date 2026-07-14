@@ -958,3 +958,43 @@ MILESTONE PASS: M1
   M2's module-by-module slices — nothing module-specific except the
   export list + the stage projection rule.
 - next: task 2 (structure-parallel C translation + replay driver).
+
+## iter 17 — 2026-07-14 — M2-CAL task 2: structure-parallel C translation + replay driver
+
+- phase M2-CAL, task 2 (fix_plan §M2-CAL item 2).
+- done-check: `bash port/sim/calib/check-replay-runs.sh` → build OK
+  (cc -O2 -ffp-contract=off -Wall -Wextra -Werror), REPLAY RAN 119619
+  records, 0 divergences, exit 0 (.loop/iter17-check-replay.log). Also
+  ran g04 + g06: 34,052 and 33,004 records, 0 divergences each
+  (.loop/iter17-replay-g0{4,6}.log). ALL 186,675 recorded boundary calls
+  replay BIT-IDENTICAL on the first successful build (one prior compile
+  fix: -Werror unused variable; zero behavioral fixes).
+- what landed: port/sim/{environmental_collision.{c,h}, ml_js.h,
+  stage_types.h, util/{vec2d,lin_alg,find_smallest_within,
+  solve_quadratic_equation,line_angle,extreme_point,ecb_transform,
+  zip_labels,draw_ecb}.h} — full module, no stubs (all 13 exports incl.
+  the five with zero live call sites); port/sim/calib/{canon.{c,h},
+  replay_envcoll.c, check-replay-runs.sh}. JS slice 1,689 lines →
+  2,209 lines C translation (+798 lines rig).
+- comparator negative tests (all restored, tree verified clean):
+  (a) transcription typo (line2.b.x for line2.a.x in ONE term of
+  coordinateInterceptParameter) → 11,883 divergences, first at line 155;
+  (b) single corrupted nibble in a capture copy → exactly 1 divergence
+  at exactly that line; (c) instructive NON-test: +1 ulp on
+  additionalOffset (1e-5) → 0 divergences — mathematically expected
+  (the 1.6e-21 absolute change vanishes below every consumer's result
+  ulp), a reminder that constant-level ulp probes are NOT valid
+  comparator tests here.
+- zoom-out (the calibration's real finding, for the M2 brief): the zero
+  divergence count is not luck — it is the yield of DESIGN-STAGE class
+  prevention: (1) js_max/js_min/js_sign helpers instead of fmax/fmin
+  (NaN + ±0 semantics differ); (2) canonical-NaN mapping for
+  ToNumber(undefined) args (pinned by the capture invariant); (3)
+  key-presence modeling (DT_ABSENT) so optional damageType keys
+  serialize exactly as JS construction sites create them; (4) fdlibm on
+  both sides; (5) -ffp-contract=off everywhere; (6) expression shapes
+  copied verbatim (no algebraic "cleanup"); (7) capture-first workflow —
+  reading real record shapes (undef ECB1s, damageType key patterns,
+  surface echoes) BEFORE finalizing the value model. These become
+  mandatory rules in every M2 module brief.
+- next: task 3 (gate script + M2CAL-REPORT.md + metrics/projection).
