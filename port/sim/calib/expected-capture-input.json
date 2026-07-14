@@ -1,0 +1,33 @@
+{
+  "comment": "Measured-then-frozen input-spec capture pins (M2 task 3, 2026-07-14). Boundaries: input module (pollInputs/inputData/nullInput/nullInputs), meleeInputs (all 6 exports), physics args-projected to [i, inputBuffers[i]] — interpretInputs' observable output (interpretInputs is main.js-internal to gameTick, not namespace-wrappable; the projection is its boundary, spec-input.js). Counts are identical across g01/g04/g06 BY STRUCTURE, not coincidence: 2 human slots x 3600 frames, a 90-frame 'starting' window (physics 7200 = 2x3600; pollInputs 7020 = 2x3510), nullInputs 21421 = 4x3600 gameTick + 2x3510 interpretInputs + 1 sweep, deaden 713638 = 32x21421 nullInputs-internal + 4x7020 pollInputs' internal nullInput + 66 sweep + 16 inputData sweep + 4 nullInput sweep, and the fixed 1780-call synthetic-domain sweep (meleeInputs' only records — the harness input path bypasses polling, so live traffic never reaches the GC scaling math). undefRetAllowed: physics is a void mutator (its input-cluster value is the args projection; the player post-state is task 2's spec).",
+  "undefRetAllowed": ["physics"],
+  "goldens": {
+    "g01": {
+      "records": 750992,
+      "counts": {
+        "deaden": 713638, "inputData": 4, "meleeRound": 46, "nullInput": 1,
+        "nullInputs": 21421, "physics": 7200, "pollInputs": 7020,
+        "scaleToGCTrigger": 72, "scaleToMeleeAxes": 700,
+        "scaleToUnitAxes": 500, "tasRescale": 390
+      }
+    },
+    "g04": {
+      "records": 750992,
+      "counts": {
+        "deaden": 713638, "inputData": 4, "meleeRound": 46, "nullInput": 1,
+        "nullInputs": 21421, "physics": 7200, "pollInputs": 7020,
+        "scaleToGCTrigger": 72, "scaleToMeleeAxes": 700,
+        "scaleToUnitAxes": 500, "tasRescale": 390
+      }
+    },
+    "g06": {
+      "records": 750992,
+      "counts": {
+        "deaden": 713638, "inputData": 4, "meleeRound": 46, "nullInput": 1,
+        "nullInputs": 21421, "physics": 7200, "pollInputs": 7020,
+        "scaleToGCTrigger": 72, "scaleToMeleeAxes": 700,
+        "scaleToUnitAxes": 500, "tasRescale": 390
+      }
+    }
+  }
+}

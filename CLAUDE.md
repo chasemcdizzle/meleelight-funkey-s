@@ -266,6 +266,28 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   perturb the C model/serializer (key order, presence flag, merge rule)
   or inject out-of-domain shapes (marshal hard-fail), never the data
   bytes.
+- **Input cluster: interpretInputs + 8-deep buffer + meleeInputs (M2
+  task 3 committed form):** `node port/sim/calib/run-capture.js --spec
+  input --golden <id>` — wraps the input module + all 6 meleeInputs
+  exports + physics args-projected to `[i, inputBuffers[i]]`
+  (interpretInputs is main.js-internal to gameTick, NOT
+  namespace-wrappable — the physics projection is its output boundary;
+  same trick as task 2's post-state). C: `port/sim/ml_input.h` (plain
+  bool/double — survey-measured, no undef-at-rest in this domain),
+  `port/sim/input/{melee_inputs,input}.h` +
+  `interpret_inputs.{c,h}` (MlInputSimState = the god-module's
+  input-globals slice; ml_input_out_of_domain traps for
+  lifecycle/AI/network arms), bridge `port/sim/calib/input_canon.{h,c}`.
+  Replay is a full-trace CHAIN (C output feeds next frame's input —
+  never the capture's bytes). Task check:
+  `bash port/sim/calib/check-input-replay.sh` → `INPUT MATCH`. NEW rig
+  facility: spec-defined deterministic `sweep()` (FORMAT.md; fix_plan
+  §M2 rule 11) records synthetic-domain calls at frame 0 for boundaries
+  with zero live records but a real future domain — sweep teeth proven
+  via js_round perturbation (73 sweep-only divergences). ml_js.h gained
+  `js_round` (ECMAScript Math.round: ties toward +Inf, -0 preserved —
+  V8's Float64Round algorithm; naive floor(x+0.5) is WRONG at
+  0.49999999999999994 and at every negative tie).
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;

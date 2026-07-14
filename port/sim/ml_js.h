@@ -58,4 +58,19 @@ static inline double js_sign(double x) {
 // Math.abs == fabs (clears the sign bit; NaN inputs here are canonical).
 static inline double js_abs(double x) { return fabs(x); }
 
+// ECMAScript Math.round (NOT C round()/rint()): ties round toward
+// +Infinity and the sign of zero is preserved — Math.round(-0.5) = -0,
+// Math.round(2.5) = 3, Math.round(0.49999999999999994) = 0 (naive
+// floor(x+0.5) gets that last one wrong: x+0.5 rounds up to 1.0).
+// Algorithm = V8's Float64Round: r = ceil(x); if (r - 0.5 > x) r -= 1.
+// `r - 0.5` is exact for every integer-valued double |r| <= 2^52; for
+// larger |x| ceil(x) == x and the guard stays false, so the identity is
+// returned. C ceil is exact and preserves -0 for inputs in (-1, -0].
+static inline double js_round(double x) {
+  if (isnan(x)) return js_nan();
+  double r = ceil(x);
+  if (r - 0.5 > x) r -= 1.0;
+  return r;
+}
+
 #endif // ML_JS_H

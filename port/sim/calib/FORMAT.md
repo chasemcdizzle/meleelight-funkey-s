@@ -31,6 +31,22 @@ Specs (`node run-capture.js --spec <name>`):
   `replay_player.c` (canon→struct→canon round-trip + deep-copy
   independence probe + deepObjectMerge property check). Pins:
   `expected-capture-player.json`.
+- `input` (M2 task 3, `spec-input.js`): the input cluster — input module
+  (pollInputs/inputData/nullInput/nullInputs), all 6 meleeInputs exports,
+  and `physics` args-projected to `[i, inputBuffers[i]]`: interpretInputs
+  (main.js:668) is main.js-internal to gameTick (direct calls in the
+  built bundle, not namespace-dereferenced) so its OUTPUT is captured at
+  the physics boundary — inputBuffers[i] is exactly the 8-deep buffer
+  interpretInputs returned for slot i this frame (or gameTick:919's fresh
+  nullInputs() during the ~90-frame 'starting' window; the same
+  wrappability trick as the player spec). Replay: `replay_input.c` —
+  pure records marshal→call→compare; the CHAIN records (a pollInputs
+  ret = the injected per-frame input, the following physics args = the
+  expected buffer) drive the C interpretInputs state machine
+  (`port/sim/input/`) over the full 3600-frame recurrence, chained from
+  the C values, never the capture's. Pins: `expected-capture-input.json`.
+  Value bridge: `input_canon.{h,c}` (strict 22-key MlInput marshal +
+  serializer, reusable by tasks 5/16).
 
 Method records use `Mod#method` names (args prepended with the canon of
 `this`); constructor records use `Mod.new` (ret = canon of the built
@@ -56,6 +72,21 @@ cross-module calls are captured; internal calls use local bindings and are
 Non-perturbation guard: each capture run emits a normal harness run JSON
 whose checksum stream MUST pass the unchanged
 `oracle/harness/verify-stream.js` against the frozen golden stream.
+
+## Synthetic-domain sweep (M2 task 3; fix_plan §M2 rule 11)
+
+A spec MAY define `sweep()`: a DETERMINISTIC (fixed literal values, no
+RNG) set of extra calls through the WRAPPED exports, which
+`run-capture.js` executes after install and BEFORE `setupMatch` — the
+records land at frame 0 ahead of every sim-step record and are real
+executed-upstream calls, replayed like live ones. Purpose: boundary
+functions with ZERO live records over the goldens but a reachable later
+domain (the input spec's meleeInputs surface — device sticks in M3 —
+gets 1,780 sweep records spanning every engine threshold in
+docs/research/b0xx-mapping.md §3.1, both zeros, quantization ties, and
+the degenerate-cardinals fallback) get bit-exact verification instead of
+translate-and-hope. Sweeps must be pure (no sim/RNG state): the
+verify-stream guard judges the whole run regardless.
 
 ## JSONL record format
 

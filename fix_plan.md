@@ -240,12 +240,32 @@ the phase to M2.)
 - **Regression every iteration**: `bash port/sim/check-envcoll.sh` stays
   green (the M2 conformance guard per LOOP §E.2 until check-sim.sh
   exists, then both). Never weaken any check; exact equality only.
+- **RULE 11 — zero-live-coverage boundaries with a reachable future
+  domain get a SYNTHETIC-DOMAIN SWEEP (adopted task 3)**: task 1
+  registered "translated anyway, zero live records" as honest-coverage
+  debt; where that surface WILL be exercised later (meleeInputs = the M3
+  device stick path), the spec defines a deterministic `sweep()` —
+  fixed-value calls through the wrapped exports, recorded at frame 0 and
+  replayed like live records (FORMAT.md "synthetic-domain sweep").
+  Teeth proven: a Math.round-semantics error (naive floor(x+0.5))
+  produces 73 sweep divergences and ZERO live ones. Dead-upstream
+  surfaces stay documented skips; sweeps never substitute for live
+  chain verification.
 - **Skipped-by-judgment util files** (documented, not silent):
   `firstNonNull.js` (zero importers upstream — dead code),
   `deepValue.js` (target-builder encode only — M4), `randomAnnulusPoint`
   (vfx render-only), `deepCopy/deepCopyObject` (type-specialized in task
   2 where the C value model lives), `createHitBox/createHitboxObject`
-  (hitbox value model, task 6), `Segment2D` included in task 1.)
+  (hitbox value model, task 6), `Segment2D` included in task 1. EXTENDED
+  task 3: `pollKeyboardInputs`/`pollGamepadInputs`/`setCustomCenters`/
+  `showButton`/`keyboardMap` are browser-I/O plane (DOM key events,
+  navigator.getGamepads, jQuery, settings keyMap) with zero live records
+  — pollInputs short-circuits to the harness-injected input for human
+  slots (the harness patch IS the recorded oracle behavior); their math
+  core (meleeInputs) is fully translated + sweep-verified, and the M3
+  device frontend synthesizes melee-unit coordinates directly
+  (docs/research/b0xx-mapping.md §3). `startScreenPrompt.js` is
+  render-only.)
 
 Tasks (dependency order; each < ~400-line diff where possible, per-char
 move tasks are data-shaped repetition):
@@ -281,11 +301,29 @@ merge frames-retention branch has ZERO live cases in these captures
 (property-tested only; first live coverage arrives with task 5's physics
 capture), and live in-frame prevFrameHitboxes ALIASING — rule 10 — is
 task 5's surface.)
-3. interpretInputs + input buffer + meleeInputs — C Input record,
-   8-deep buffer semantics (main.js:662 pause-aware offsets), meleeInputs
-   scaling/deadzone; capture interpretInputs boundary + replay.
-   done-check: `bash port/sim/calib/check-input-replay.sh` → prints
-   `INPUT MATCH`, exit 0.
+(task 3 — interpretInputs + input buffer + meleeInputs — DONE iter 22:
+`bash port/sim/calib/check-input-replay.sh` → INPUT MATCH, exit 0.
+750,992 boundary records per golden over g01/g04/g06, byte-stable ×2,
+6× STREAM MATCH, 0 divergences on the first successful build (rules 1-10
+held; js_round added to ml_js.h for JS Math.round semantics — V8's
+Float64Round algorithm, ties toward +Inf, -0 preserved).
+interpretInputs is main.js-internal to gameTick (not namespace-
+wrappable): its OUTPUT is captured as the physics args projection
+[i, inputBuffers[i]] and replayed as a full-trace CHAIN — the C state
+machine (port/sim/input/interpret_inputs.{c,h} + input.h +
+melee_inputs.h, value model ml_input.h, canon bridge
+calib/input_canon.{h,c}) rebuilds every frame's 8-deep buffer from ITS
+OWN previous output plus the recorded pollInputs injection; z/s
+always-shift, pause-aware pastOffset, pause/frameAdvance bookkeeping and
+end-of-tick frameByFrame handling verified bit-exactly over 3600 frames
+× 2 slots × 3 goldens. meleeInputs' GC scaling/deadzone/quantization has
+ZERO live records (the harness path bypasses polling) — covered by the
+new synthetic-domain sweep (rule 11): 1,780 fixed executed-upstream
+calls per capture. Honest coverage: pastOffset=0 (paused-history freeze),
+the pause/frameAdvance edge branches, the AI/gamepad arms and the
+startGame/endGame combos have zero live cases — translated verbatim,
+guarded by ml_input_out_of_domain traps where behavior would need
+another cluster's surface (AI bank = task 16, lifecycle = task 17).)
 4. actionStateShortcuts + state-machine scaffolding — actionStates
    dispatch table, turnOffHitboxes/checkFor* family, C mulberry32 (seeded
    PRNG, draw-count parity incl. KO-shout sites), sound-event queue seam;

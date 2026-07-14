@@ -1208,3 +1208,95 @@ MILESTONE PASS: M2-CAL
   generalizes to task 15's formatter check design: differential vs JS
   String(x), never self-referential.
 - next: task 3 (interpretInputs + input buffer + meleeInputs).
+
+## iter 22 — 2026-07-14 — M2 task 3: interpretInputs + input buffer + meleeInputs
+
+- phase M2, task 3 (fix_plan §M2 item 3).
+- done-check: `bash port/sim/calib/check-input-replay.sh` → INPUT MATCH,
+  exit 0 (.loop/iter22-check-input-replay.log): per golden g01/g04/g06 —
+  2 fresh input-spec captures byte-identical, 2× STREAM MATCH
+  (non-perturbation, sweep included), pins OK (750,992 records each,
+  counts identical across goldens BY STRUCTURE — see
+  expected-capture-input.json comment), strict replay 0 divergences
+  across all 2,252,976 records. Conformance guards all green:
+  `bash port/sim/check-envcoll.sh` → ENVCOLL MATCH
+  (.loop/iter22-envcoll-regression.log); `bash
+  port/sim/calib/check-util-replay.sh` → UTIL MATCH
+  (.loop/iter22-util-regression.log); `bash
+  port/sim/calib/check-player-model.sh` → PLAYER MODEL MATCH
+  (.loop/iter22-player-regression.log) — util/player re-captured through
+  the modified run-capture.js, proving the sweep hook is a no-op for
+  sweepless specs.
+- boundary problem + solution: interpretInputs (main.js:668) is
+  main.js-internal to gameTick (built bundle: direct `input[i] =
+  interpretInputs(` calls, verified — NOT namespace-dereferenced), so it
+  cannot be wrapped. Its OUTPUT is captured as a physics args projection
+  [i, inputBuffers[i]] (gameTick:1065-1067 makes inputBuffers[i] exactly
+  interpretInputs' return, or gameTick:919's fresh nullInputs() during
+  the 90-frame starting window — measured: pollInputs 7020 = 2×3510,
+  physics 7200 = 2×3600). The replay is a full-trace CHAIN: C rebuilds
+  every frame's 8-deep buffer from ITS OWN previous output + the recorded
+  pollInputs injection and must match the projection bit-exactly — z/s
+  always-shift (main.js:673), pause-aware pastOffset (:680), pause/
+  frameAdvance bookkeeping, end-of-tick frameByFrame handling, over
+  3600 frames × 2 slots × 3 goldens.
+- what landed: value model port/sim/ml_input.h (plain bool/double —
+  survey-shapes.js over the captures measured ZERO undef-at-rest in the
+  22-key Input domain, unlike the player model); translations
+  port/sim/input/{melee_inputs.h (full meleeInputs.js incl. quadrant
+  renormalization via lin_alg inverseMatrix/multMatVect, discretise/
+  unitRetract/meleeRound), input.h (inputData with the verbatim
+  r<-list[5]/l<-list[6] swap, nullInput(s), pollInputs seam),
+  interpret_inputs.{c,h} (MlInputSimState = the god-module's
+  input-globals slice: pause/frameAdvance [4][2] init true per
+  main.js:165-166, controllerResetCountdowns, giveInputs,
+  wasFrameByFrame; ml_input_out_of_domain traps on the
+  lifecycle/AI/network arms)}; ml_js.h += js_round (ECMAScript
+  Math.round = V8 Float64Round: r=ceil(x); if (r-0.5>x) r-=1 — ties
+  toward +Inf, -0 preserved, exact where floor(x+0.5) is wrong); rig:
+  spec-input.js (11 wrapped fns + deterministic 1,780-call sweep),
+  run-capture.js generic `spec.sweep()` hook (frame-0 records, before
+  setupMatch), replay_input.c (chain driver + strict marshal),
+  input_canon.{h,c} (reusable 22-key bridge for tasks 5/16),
+  expected-capture-input.json, check-input-replay.sh; FORMAT.md (input
+  spec + sweep section). Artifact hashes (sha256/12): ml_input.h
+  ddc44b194d74 · ml_js.h c4fbec42def1 · melee_inputs.h abd552f00261 ·
+  input.h 6edaf10c6dc5 · interpret_inputs.h d79b6c0e13a1 ·
+  interpret_inputs.c 76b191c3cb1f · input_canon.h 0f732a488565 ·
+  input_canon.c c9c2e29ae794 · replay_input.c 8d85095ace75 ·
+  spec-input.js 229a58277470 · expected-capture-input.json 21f36e293792
+  · check-input-replay.sh 25040ef523ce · run-capture.js 22c8570f319f.
+- burn-down: 0 divergences on the first successful build across all
+  three goldens — rules 1-10 held (js_round was written to spec BEFORE
+  first replay, capture-FIRST survey preceded the value model).
+- comparator negative tests (all restored, tree re-verified 0 div):
+  (a) z-history shift typo (slot[7-k] for slot[6-k]) → 280 divergences,
+  first diff exactly at a z byte (.loop/iter22-negA-detail.log);
+  (b) js_round → naive floor(x+0.5) → 73 divergences, ALL in frame-0
+  sweep records — proof the sweep catches what zero live records never
+  would; (c) single corrupted capture bool in one physics buffer →
+  exactly 1 divergence at exactly that line; (d) appended bogus record →
+  CAPTURE PIN FAIL, exit 1. NOTE: a corrupted nibble in a deaden ARG
+  replays clean (deadzone maps both values to 0) — args are inputs, not
+  assertions; teeth live in ret/projection fields.
+- honest coverage: pastOffset=0 (pause-frozen history), the pause/
+  frameAdvance edges, interpretPause's playing toggle, AI/gamepad arms,
+  and the startGame/endGame combos have ZERO live cases (goldens never
+  pause by quality contract — traces press z but playing=true keeps
+  frameByFrame false). Translated verbatim; behavior needing another
+  cluster's surface traps via ml_input_out_of_domain (AI bank = task 16,
+  lifecycle = task 17) rather than guessing. First live coverage of the
+  pause paths would need a pausing trace — noted for task 17's judgment.
+- zoom-out: task 1 registered "zero live records — translated anyway" as
+  accepted debt; this task turned that CLASS into an instrument — the
+  spec-level synthetic-domain sweep (rule 11, FORMAT.md), applied where
+  the dead-in-capture surface has a real future domain (meleeInputs IS
+  the M3 device stick path per b0xx-mapping §3). The negative test
+  quantified why: a genuine Math.round semantics bug is invisible to
+  100% of live traffic here (73/0 sweep/live divergences). Remaining
+  clusters with boilerplate-dead branches (moves' interrupt chains)
+  inherit the mechanism. Also reusable: input_canon marshals the Input
+  shape once for tasks 5 (physics consumes inputBuffers) and 16 (AI
+  bridge records aiInputBank Inputs).
+- next: task 4 (actionStateShortcuts + state-machine scaffolding,
+  C mulberry32 + sound-event queue seam).

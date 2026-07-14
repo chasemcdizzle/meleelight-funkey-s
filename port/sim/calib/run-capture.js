@@ -151,6 +151,17 @@ async function main() {
     throw new Error(`capture: expected ${expectWrapped} wrapped exports, got ${install.wrapped}`);
   }
 
+  // Optional spec-defined synthetic-domain sweep (M2 task 3, FORMAT.md
+  // "synthetic-domain sweep"): a DETERMINISTIC set of extra calls through
+  // the WRAPPED exports, executed before setupMatch so the records land at
+  // frame 0 ahead of every sim-step record. Pure functions only — the
+  // verify-stream non-perturbation guard still judges the whole run.
+  const swept = await page.evaluate((s) => {
+    const spec = window.__capSpecs[s];
+    return spec.sweep ? spec.sweep() : 0;
+  }, SPEC);
+  if (swept > 0) console.log(`sweep: ${swept} synthetic-domain calls recorded`);
+
   fs.mkdirSync(path.dirname(OUT_JSONL), { recursive: true });
   fs.writeFileSync(OUT_JSONL, "");
 
