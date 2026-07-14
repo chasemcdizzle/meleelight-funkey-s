@@ -24,16 +24,6 @@ covering the remaining char pairs and the other 5 VS stages; g07–g08 =
 human-vs-CPU traces (difficulty 5) on two distinct stages; together every
 one of the 5 characters and 6 stages appears ≥1×.)
 
-1. Commit the pinned upstream clone+patch+build recipe as
-   `oracle/build-upstream.sh`: clone schmooblidon/meleelight →
-   `git checkout 27af171` → `git apply oracle/meleelight-harness.patch`
-   (maintained copy of the spike patch) → prune dead 2018 devDeps
-   (`deepstream.io`, `electron*`) + the `postinstall` script from
-   package.json → docker `--platform linux/amd64 node:8`
-   `npm install --ignore-scripts && npm run animations && npm run build`.
-   Idempotent (verifies + skips when already built; `--force` rebuilds
-   from pristine pin) —
-   done-check: `bash oracle/build-upstream.sh && test -f "${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}/dist/meleelight.html" && grep -rq __harnessInputs "${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}/dist/js/"` → exit 0.
 2. Productionize the spike harness into `oracle/harness/` (adapt
    run.js/compare.js/init.js/pagelib.js/gen-trace.js from
    `spikes/determinism/harness/`; add a committed package.json pinning

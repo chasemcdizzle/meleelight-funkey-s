@@ -1,0 +1,108 @@
+diff --git a/src/input/input.js b/src/input/input.js
+index 3687363..d0779fc 100644
+--- a/src/input/input.js
++++ b/src/input/input.js
+@@ -123,6 +123,13 @@ export function pollInputs ( gameMode : number, frameByFrame : bool, controllerI
+                            , playerSlot : number, controllerIndex : number, keys : {[key: number] : bool}, playertype : number ) : Input {
+    // input is the input for player i in the current frame
+     let input = nullInput(); // initialise with default values
++    // Determinism-spike harness: synthetic per-frame inputs for human slots.
++    // AI slots (playertype 1 in versus) keep reading aiInputBank as usual.
++    if (typeof window !== "undefined" && window.__harnessInputs
++        && !(playertype === 1 && gameMode === 3)
++        && window.__harnessInputs[playerSlot]) {
++      return window.__harnessInputs[playerSlot];
++    }
+     if(replayActive){
+       input = pollReplayInputs(gameMode, controllerInfo, playerSlot, controllerIndex, frameByFrame);
+     }else if(playertype === 1 && gameMode === 3 ){
+diff --git a/src/main/main.js b/src/main/main.js
+index 7eb2153..5f62d74 100644
+--- a/src/main/main.js
++++ b/src/main/main.js
+@@ -359,10 +359,16 @@ export function screenShake (kb){
+ }
+ 
+ export function percentShake (kb,i){
+-  player[i].percentShake = new Vec2D(kb*0.1*Math.random(),kb*0.1*Math.random());
+-  setTimeout(function(){player[i].percentShake = new Vec2D(kb*0.05*Math.random(),kb*0.05*Math.random())},20);
+-  setTimeout(function(){player[i].percentShake = new Vec2D(-kb*0.1*Math.random(),-kb*0.1*Math.random())},40);
+-  setTimeout(function(){player[i].percentShake = new Vec2D(-kb*0.05*Math.random(),-kb*0.05*Math.random())},60);
++  // Determinism-spike harness: this HUD-only shake runs on wall-clock
++  // setTimeout and consumed Math.random OUTSIDE the sim step, stealing
++  // draws from the (harness-seeded) shared PRNG stream at nondeterministic
++  // times. Route it to the native RNG the harness stashes aside so the
++  // gameplay stream stays clean. Visual-only; no sim state reads this.
++  var rnd = (typeof window !== "undefined" && window.__nativeRandom) || Math.random;
++  player[i].percentShake = new Vec2D(kb*0.1*rnd(),kb*0.1*rnd());
++  setTimeout(function(){player[i].percentShake = new Vec2D(kb*0.05*rnd(),kb*0.05*rnd())},20);
++  setTimeout(function(){player[i].percentShake = new Vec2D(-kb*0.1*rnd(),-kb*0.1*rnd())},40);
++  setTimeout(function(){player[i].percentShake = new Vec2D(-kb*0.05*rnd(),-kb*0.05*rnd())},60);
+   setTimeout(function(){player[i].percentShake = new Vec2D(0,0)},80);
+ }
+ 
+@@ -1135,7 +1141,11 @@ export function gameTick (oldInputBuffers){
+ 
+     saveGameState(input,ports);
+ 
+-  setTimeout(gameTick, 16, input);
++  if (typeof window !== "undefined" && window.__harnessMode) {
++    window.__nextInputBuffers = input; // harness drives stepping explicitly
++  } else {
++    setTimeout(gameTick, 16, input);
++  }
+ 
+ }
+ 
+@@ -1152,6 +1162,9 @@ let otherFrame = true;
+ let fps30 = false;
+ export function renderTick (){
+   window.requestAnimationFrame(renderTick);
++  if (typeof window !== "undefined" && window.__harnessNoRender) {
++    return;
++  }
+   otherFrame ^= true;
+   if ((fps30 && otherFrame) || !fps30) {
+     //console.log("------");
+@@ -1786,3 +1799,41 @@ export function cacheDom() {
+ export function setCS(index,val){
+   characterSelections[index] = val;
+ }
++
++// ---------------------------------------------------------------------------
++// Determinism-spike harness hooks (spikes/determinism in meleelight-funkey-s).
++// Only active when the driving page sets window.__harnessMode before start().
++/* eslint-disable */
++export function harnessSetupMatch (cfg){
++  for (var i = 0; i < 4; i++) {
++    var pc = cfg.players[i];
++    if (pc) {
++      playerType[i] = pc.type;                 // 0 = human, 1 = cpu
++      mType[i] = "keyboard";
++      currentPlayers[i] = i;
++      characterSelections[i] = pc.character;   // 0 marth 1 puff 2 fox 3 falco 4 falcon
++      cpuDifficulty[i] = (pc.difficulty === undefined) ? 3 : pc.difficulty;
++    } else {
++      playerType[i] = -1;
++      currentPlayers[i] = -1;
++    }
++  }
++  setStageSelect(cfg.stage === undefined ? 0 : cfg.stage);
++  startGame();
++}
++
++if (typeof window !== "undefined") {
++  window.__harness = {
++    setupMatch: harnessSetupMatch,
++    gameTick: gameTick,
++    step: function (){ gameTick(window.__nextInputBuffers); },
++    getPlayers: function (){ return player; },
++    getPlayerType: function (){ return playerType; },
++    getArticles: function (){ return require("physics/article").aArticles; },
++    getGameMode: function (){ return gameMode; },
++    isStarting: function (){ return starting; },
++    isPlaying: function (){ return playing; },
++    getMatchTimer: function (){ return matchTimer; }
++  };
++}
++/* eslint-enable */
