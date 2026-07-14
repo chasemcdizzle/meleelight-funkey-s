@@ -24,14 +24,6 @@ covering the remaining char pairs and the other 5 VS stages; g07–g08 =
 human-vs-CPU traces (difficulty 5) on two distinct stages; together every
 one of the 5 characters and 6 stages appears ≥1×.)
 
-2. Productionize the spike harness into `oracle/harness/` (adapt
-   run.js/compare.js/init.js/pagelib.js/gen-trace.js from
-   `spikes/determinism/harness/`; add a committed package.json pinning
-   playwright; parameterize match setup — `--p1/--p2 <char 0-4>`,
-   `--stage <0-5>`, `--cpu [--difficulty N]`, `--trace <file>`) and copy
-   the 3800-frame spike trace to
-   `oracle/goldens/g01-fox-marth-battlefield.trace.json` —
-   done-check: `cd oracle/harness && npm install >/dev/null && node run.js --dist "${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}" --trace ../goldens/g01-fox-marth-battlefield.trace.json --frames 3600 --seed 1337 --out out/g01-a.json && node run.js --dist "${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}" --trace ../goldens/g01-fox-marth-battlefield.trace.json --frames 3600 --seed 1337 --out out/g01-b.json && node compare.js out/g01-a.json out/g01-b.json` → prints `IDENTICAL checksum streams`, exit 0.
 3. Land vendored fdlibm BOTH sides: `port/fdlibm/` C sources (surface:
    sin, cos, tan, atan, atan2, pow — V8's fdlibm-derived ieee754;
    `NOTICES` entry lands FIRST; vendored sources don't count against the

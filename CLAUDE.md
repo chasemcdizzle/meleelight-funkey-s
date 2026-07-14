@@ -116,7 +116,19 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   ```
   (Full recipe + patch: `spikes/determinism/README.md`,
   `prototypes/control-mapping/README.md`.)
-- **Oracle harness (runnable today):** `spikes/determinism/harness/` —
+- **Oracle harness (production, M0 task 2 — maintained copy; spike stays
+  frozen):** `cd oracle/harness && npm install` (committed package.json pins
+  playwright 1.61.1; launches installed Chrome via `channel:"chrome"`, no
+  browser download), then
+  `node run.js --dist "${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}" --trace ../goldens/g01-fox-marth-battlefield.trace.json --frames 3600 --seed 1337 --out out/a.json`
+  ×2 + `node compare.js out/a.json out/b.json` → `IDENTICAL checksum
+  streams`. Match params: `--p1/--p2` char (0 marth · 1 puff · 2 fox ·
+  3 falco · 4 falcon), `--stage` (0 battlefield · 1 ystory · 2 pstadium ·
+  3 dreamland · 4 fdest · 5 fountain), `--cpu [--difficulty 1-9]` (P2 AI;
+  trace P2 column ignored). Defaults p1=2 p2=0 stage=0 = golden #1.
+  `gen-trace.js /tmp/t.json 3800 1337` regenerates g01's trace
+  byte-identically (sha256 60c332c5…20b9).
+- **Oracle harness (spike-era original, frozen):** `spikes/determinism/harness/` —
   `node run.js --dist "$MELEELIGHT_CLONE" --frames 3600 --seed 1337 [--cpu] --out out/a.json`
   twice, then `node compare.js out/a.json out/b.json` → `IDENTICAL`.
   Needs `npm i playwright` next to the harness (uses installed Chrome).

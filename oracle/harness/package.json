@@ -1,0 +1,10 @@
+{
+  "name": "meleelight-oracle-harness",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser oracle harness: input-replay + per-frame SHA-256 checksum streams against the pinned meleelight build (oracle/build-upstream.sh).",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "playwright": "1.61.1"
+  }
+}
