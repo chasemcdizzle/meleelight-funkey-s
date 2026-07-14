@@ -1070,3 +1070,62 @@ MILESTONE PASS: M2-CAL
   inherited prevention-rule list (extensible at rule 8+) instead of 17
   ad-hoc verification schemes.
 - next: task 1 (util/math substrate).
+
+## iter 20 — 2026-07-14 — M2 task 1: util/math substrate
+
+- phase M2, task 1 (fix_plan §M2 item 1).
+- done-check: `bash port/sim/calib/check-util-replay.sh` → UTIL MATCH,
+  exit 0 (.loop/iter20-check-util-replay.log): per golden g01/g04/g06 —
+  2 fresh captures byte-identical, 2× STREAM MATCH (non-perturbation),
+  pins OK, strict replay 0 divergences. Totals: 1,970,207 boundary
+  records (g01 887,889 · g04 276,114 · g06 806,204) across 34 wrapped
+  functions in 11 util modules. Conformance guard:
+  `bash port/sim/check-envcoll.sh` → ENVCOLL MATCH, exit 0
+  (.loop/iter20-envcoll-regression.log) — the M2-CAL gate stays green
+  after the rig generalization AND the canon v1.1 change (measured
+  no-op: zero NaNs in the frozen envcoll captures).
+- what landed: FULL structure-parallel C for every sim-imported util
+  module — port/sim/util/{vec2d.h (+dot, +JsNum/JsVec2D undef-at-rest
+  accessor model), lin_alg.h (all 11 linAlg exports), box2d.h,
+  segment2d.h, to_list.h, find_smallest_within.h (+seed form),
+  detect_intersections.h (4 exports + private helpers)}; rig
+  generalization port/sim/calib/{capturelib.js (spec-driven engine,
+  envcoll spec built in — fresh envcoll capture proven BYTE-IDENTICAL to
+  the frozen M2-CAL one, .loop/iter20-envcoll-parity.log), spec-util.js,
+  run-capture.js --spec, replay_util.c, check-spec-pins.js,
+  expected-capture-util.json, check-util-replay.sh}; FORMAT.md → canon
+  v1.1 + spec/undef-allowlist docs. Documented skips (fix_plan §M2
+  conventions): firstNonNull (dead upstream), deepValue (target-only),
+  randomAnnulusPoint (vfx), deepCopy/createHitBox families (their
+  value-model tasks).
+- burn-down: first strict replay of g01 → 108 divergences in exactly TWO
+  classes, both fixed at CLASS level (zero record-level patching):
+  (1) 84× getXOrYCoord undefined-echo (accessor semantics) → rule 8;
+  (2) 24× solveQuadraticEquation NaN-payload mismatch (V8 payload
+  propagation vs clang FADD commutation; 130 dotProd records matched
+  only by hardware luck) → canon v1.1 + rule 9. Re-capture + replay:
+  0 divergences across all three goldens.
+- comparator negative tests (all restored, tree verified): transcription
+  typo (dotProd(lineVec,…) for dotProd(pointVec,…) in ONE term of
+  orthogonalProjection) → 11,544 divergences; single corrupted capture
+  nibble → exactly 1 divergence at exactly that line; pins tamper
+  (appended bogus record) → CAPTURE PIN FAIL, exit 1.
+- honest coverage note: 16/34 boundary fns have zero live records over
+  these traces (Segment2D trio, Vec2D#dot, distanceToLine/intersectsAny/
+  lineDistanceToLines, inverseMatrix/multMatVect/norm/scalarProd/reflect/
+  manhattanDist, flipXOrY, squashECBAt, ecbFocusFromAngularParameter) —
+  translated + compiled anyway (M2-CAL report §6 precedent);
+  squashECBAt/ecbFocus are exercised inside the C envcoll replay via
+  internal calls; the rest gain live records from later clusters
+  (hitDetection creates Segment2Ds) or stay dead upstream.
+- zoom-out: both divergence classes were INSTRUMENT-level fixes
+  (canon/value-model), not per-record patches, and are now inherited by
+  every remaining M2 task as mandatory rules 8/9 (fix_plan §M2). The
+  rule-9 lesson generalizes: exact-bit comparison must be exactly as
+  strict as JS VALUE semantics — stricter (raw NaN payloads) manufactures
+  unreproducible divergences, looser (epsilon) is forbidden; canon v1.1
+  is the fixed point. Also: the spec-driven rig means every remaining
+  cluster's capture is now a ~100-line spec file + a replay dispatch,
+  not a new instrument.
+- next: task 2 (player/game-state value model + mutation-capture rig
+  upgrade).

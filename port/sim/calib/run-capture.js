@@ -1,18 +1,24 @@
 #!/usr/bin/env node
-// M2-CAL capture runner: replays a golden through the browser oracle
-// harness (oracle/harness/{init,pagelib}.js VERBATIM — oracle/ is never
-// modified) while recording every call crossing the exported boundary of
-// src/physics/environmentalCollision.js. See port/sim/calib/FORMAT.md.
+// Module-boundary capture runner (M2-CAL rig, generalized for M2):
+// replays a golden through the browser oracle harness
+// (oracle/harness/{init,pagelib}.js VERBATIM — oracle/ is never modified)
+// while recording every call crossing the exported boundary of the chosen
+// capture SPEC's modules. See port/sim/calib/FORMAT.md.
 //
 // Usage:
-//   node run-capture.js --golden g01 [--dist <clone-root>] \
-//     [--out-jsonl build/g01.envcoll.jsonl] [--out-run build/g01.capture-run.json]
+//   node run-capture.js --golden g01 [--spec envcoll|util] [--dist <clone-root>] \
+//     [--out-jsonl build/g01.<spec>.jsonl] [--out-run <run.json>]
+//
+// --spec envcoll (default, M2-CAL boundary — CLI/output byte-compatible
+//   with the original runner; run JSON keeps meta.envcollCapture);
+// --spec <other> loads port/sim/calib/spec-<name>.js and writes
+//   meta.capture = {spec, moduleIds, counts}.
 //
 // Params (trace/frames/seed/chars/stage/cpu) come ONLY from
 // oracle/goldens/manifest.json (single param source, M0 convention).
 // The emitted run JSON is verify-stream.js-compatible; the capture is
 // only trustworthy if that run passes STREAM MATCH against the frozen
-// golden (non-perturbation guard) — check-capture.sh enforces it.
+// golden (non-perturbation guard) — the check scripts enforce it.
 "use strict";
 
 const fs = require("fs");
@@ -31,6 +37,7 @@ function arg(name, dflt) {
 }
 
 const GOLDEN_ID = arg("golden", "");
+const SPEC = arg("spec", "envcoll");
 const DIST_ROOT = path.resolve(arg("dist",
   process.env.MELEELIGHT_CLONE ||
   path.join(process.env.HOME, ".cache", "meleelight-funkey-s", "upstream")));
@@ -41,11 +48,17 @@ if (!g) {
   console.error(`--golden must be one of: ${manifest.goldens.map((x) => x.id).join(", ")}`);
   process.exit(1);
 }
+const SPEC_FILE = SPEC === "envcoll" ? null : path.join(__dirname, `spec-${SPEC}.js`);
+if (SPEC_FILE && !fs.existsSync(SPEC_FILE)) {
+  console.error(`--spec ${SPEC}: no such spec file ${SPEC_FILE}`);
+  process.exit(1);
+}
 const TRACE = path.join(REPO, "oracle", "goldens", g.trace);
 const OUT_JSONL = path.resolve(arg("out-jsonl",
-  path.join(__dirname, "build", `${g.id}.envcoll.jsonl`)));
+  path.join(__dirname, "build", `${g.id}.${SPEC}.jsonl`)));
 const OUT_RUN = path.resolve(arg("out-run",
-  path.join(__dirname, "build", `${g.id}.capture-run.json`)));
+  path.join(__dirname, "build",
+    SPEC === "envcoll" ? `${g.id}.capture-run.json` : `${g.id}.${SPEC}-run.json`)));
 const CHUNK = 120;
 
 const MIME = {
@@ -124,14 +137,18 @@ async function main() {
   await page.addInitScript({ path: path.join(HARNESS, "init.js") });
   await page.addInitScript({ path: path.join(HARNESS, "pagelib.js") });
   await page.addInitScript({ path: path.join(__dirname, "capturelib.js") });
+  if (SPEC_FILE) await page.addInitScript({ path: SPEC_FILE });
 
   await page.goto(`http://localhost:${port}/dist/meleelight.html`);
   await page.waitForFunction(
     "window.__harness && window.__nextInputBuffers", null, { timeout: 120000 });
 
-  const install = await page.evaluate(() => window.__envcollInstall());
-  if (install.wrapped !== 13) {
-    throw new Error("capture: expected 13 wrapped exports, got " + install.wrapped);
+  // Install the spec; the spec itself asserts its expected wrapped count
+  // (envcoll: 13 — the original M2-CAL assertion, now spec-declared).
+  const install = await page.evaluate((s) => window.__capInstallSpec(s), SPEC);
+  const expectWrapped = await page.evaluate((s) => window.__capSpecs[s].expectWrapped, SPEC);
+  if (install.wrapped !== expectWrapped) {
+    throw new Error(`capture: expected ${expectWrapped} wrapped exports, got ${install.wrapped}`);
   }
 
   fs.mkdirSync(path.dirname(OUT_JSONL), { recursive: true });
@@ -152,7 +169,7 @@ async function main() {
   }, { trace, p1: g.p1, p2: g.p2, stage: g.stage, cpu: g.cpu, difficulty: g.difficulty || 5 });
 
   // Drain the setup-time (frame 0) records before the first tick.
-  const setupRecords = await page.evaluate(() => window.__envcollDrain());
+  const setupRecords = await page.evaluate(() => window.__capDrain());
   if (setupRecords.length > 0) fs.appendFileSync(OUT_JSONL, setupRecords + "\n");
 
   const frames = [];
@@ -161,23 +178,28 @@ async function main() {
     const n = Math.min(CHUNK, g.frames - done);
     const chunk = await page.evaluate((nn) => window.__runFrames(nn, {}), n);
     frames.push(...chunk);
-    const records = await page.evaluate(() => window.__envcollDrain());
+    const records = await page.evaluate(() => window.__capDrain());
     if (records.length > 0) fs.appendFileSync(OUT_JSONL, records + "\n");
   }
   const wall = Date.now() - t0;
 
   const coverage = await page.evaluate(() => window.__coverage());
-  const counts = await page.evaluate(() => window.__envcollCounts);
+  const counts = await page.evaluate(() => window.__capCounts);
+
+  // meta: envcoll keeps the original M2-CAL shape (check-capture-pins.js
+  // reads meta.envcollCapture); other specs use the generic meta.capture.
+  const capMeta = SPEC === "envcoll"
+    ? { envcollCapture: { moduleId: install.moduleIds.environmentalCollision, counts: counts } }
+    : { capture: { spec: SPEC, moduleIds: install.moduleIds, counts: counts } };
 
   fs.writeFileSync(OUT_RUN, JSON.stringify({
-    meta: {
+    meta: Object.assign({
       dist: DIST_ROOT, trace: TRACE, frames: g.frames, seed: g.seed,
       p1: g.p1, p2: g.p2, stage: g.stage,
       seedRandom: true, fdlibm: true, cpu: g.cpu,
       difficulty: g.cpu ? g.difficulty : null, wallMs: wall,
       browser: browser.browserType().name(), version: browser.version(),
-      envcollCapture: { moduleId: install.moduleId, counts: counts },
-    },
+    }, capMeta),
     coverage,
     frames,
   }));

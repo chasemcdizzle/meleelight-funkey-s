@@ -177,6 +177,29 @@ the phase to M2.)
   the return-value field; replay marshals pre-state, calls C, compares
   ret AND post-state bit-exactly. New capture classes discovered become
   rules here (rule 8+).
+- **RULE 8 — undef-at-rest / accessor echo (discovered task 1, 84
+  divergences prevented-forward)**: ACCESSOR-class functions (raw
+  property reads like getXOrYCoord) echo `undefined` VERBATIM —
+  ToNumber(undefined)→NaN happens ONLY at the consumer's arithmetic.
+  Value models whose fields can hold undefined at rest (frame-1 ECB1;
+  the CHECKSUM stream itself serializes those as `undef`!) must model it
+  explicitly (JsNum/JsVec2D, vec2d.h); the marshaller's undef→NaN arg
+  mapping is valid ONLY for arithmetic-context args, and the
+  no-undef-ret pin is per-function with a frozen accessor allowlist
+  (expected-capture-<spec>.json `undefRetAllowed`, FORMAT.md).
+- **RULE 9 — NaN payloads are not values (discovered task 1, 24
+  divergences fixed at class level)**: V8 emits payload NaNs
+  (0xfffefffffff6ffff from undefined-arithmetic) and propagates them by
+  its own evaluation order; C compilers may legally commute FP adds
+  because payloads are unspecified — payload equality across the
+  boundary is UNREPRODUCIBLE and semantically meaningless
+  (String(NaN)=="NaN" in the real checksum stream, no typed-array
+  aliasing of sim values). canon v1.1 collapses ALL NaNs to
+  d:7ff8000000000000 on BOTH sides (capturelib dhex + canon.c cb_num);
+  measured no-op on the frozen envcoll captures (zero NaNs). Injectivity
+  on JS number VALUES (incl. -0) is preserved. NEVER "fix" a NaN-payload
+  divergence by reordering C arithmetic to chase V8 — that is
+  curve-fitting to unspecified behavior.
 - **THE 7 MANDATORY PREVENTION RULES** (docs/M2CAL-REPORT.md §3 — binding
   for EVERY module translation, every task brief): (1) js_max/js_min/
   js_sign (ml_js.h), never libm fmax/fmin; (2) ToNumber(undefined) →
@@ -211,21 +234,16 @@ the phase to M2.)
 Tasks (dependency order; each < ~400-line diff where possible, per-char
 move tasks are data-shaped repetition):
 
-1. util/math substrate — complete structure-parallel C for EVERY
-   sim-imported util module (full `linAlg` 11 exports incl.
-   inverseMatrix/multMatVect/reflect/orthogonalProjection; full `Vec2D`
-   module incl. the `.dot` method + getXOrYCoord/putXOrYCoord/flipXOrY;
-   `Box2D`; `Segment2D` + methods; `toList`; full `findSmallestWithin`
-   (both exports, 4-arg seed form); `solveQuadraticEquation`;
-   `lineAngle`; `extremePoint`; `ecbTransform` (all 5 exports);
-   `zipLabels`; `detectIntersections` (all 4 exports + private helpers));
-   generalize the capture rig to module-spec-driven (`--spec util`, the
-   envcoll spec + CLI unchanged); capture util boundaries over
-   g01/g04/g06 ×2 byte-stable + STREAM MATCH guards + pins; strict
-   replay of every record 0-divergence.
-   done-check: `bash port/sim/calib/check-util-replay.sh` → prints
-   `UTIL MATCH`, exit 0 (and `bash port/sim/check-envcoll.sh` stays
-   green → `ENVCOLL MATCH`, exit 0).
+(task 1 — util/math substrate — DONE iter 20:
+`bash port/sim/calib/check-util-replay.sh` → UTIL MATCH, exit 0.
+1,970,207 boundary records over g01/g04/g06 (34 wrapped functions, 11
+modules), byte-stable ×2, 6× STREAM MATCH, 0 divergences after two
+class-level fixes that became rules 8 and 9 above. Rig generalized to
+--spec (envcoll parity byte-identical, 119,619 records). 16/34 boundary
+fns have zero live records over these traces — translated anyway,
+report-§6 precedent; Segment2D/Vec2D#dot/detectIntersections' other
+exports get their first live records from later clusters' captures.)
+
 2. player/game-state value model + mutation-capture rig upgrade —
    capture per-frame post-`update(i)` `player[i]` snapshots (canon v1)
    over g01/g04/g06; finalize `ml_player.h` (playerObject: the 7

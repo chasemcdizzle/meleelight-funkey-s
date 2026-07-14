@@ -200,7 +200,14 @@ void cb_putc(CanonBuf *b, char c) {
 
 void cb_num(CanonBuf *b, double d) {
   uint64_t bits;
-  memcpy(&bits, &d, 8);
+  // canon v1.1: ALL NaNs collapse to the canonical quiet NaN (payloads
+  // are unobservable JS-side and non-reproducible C-side — see
+  // capturelib.js dhex + FORMAT.md). Everything else keeps exact bits.
+  if (d != d) {
+    bits = UINT64_C(0x7ff8000000000000);
+  } else {
+    memcpy(&bits, &d, 8);
+  }
   char tmp[24];
   snprintf(tmp, sizeof tmp, "d:%016llx", (unsigned long long)bits);
   cb_puts(b, tmp);

@@ -230,7 +230,21 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   mismatch, length shortfall, or missing golden → nonzero. (Script is
   built by fix_plan §M2 task 17; per-cluster `done-check:`s replay module
   captures and never substitute for this gate.)
-- **Upstream clone + build (M0 committed form):**
+- **Module-boundary capture + replay (M2 task 1 committed form; the
+  M2-CAL rig generalized):** `node port/sim/calib/run-capture.js
+  --spec <envcoll|util> --golden <id>` records a spec's module boundaries
+  over a golden (canon v1.1: CHECKSUM.md structure, bit-pattern numbers,
+  ALL NaNs collapsed to d:7ff8… — FORMAT.md; every run STREAM-MATCH
+  guarded). Task check: `bash port/sim/calib/check-util-replay.sh` →
+  `UTIL MATCH`, exit 0 (×2 byte-stable captures, pins via
+  check-spec-pins.js incl. the rule-8 undef-ret accessor allowlist,
+  strict 0-divergence C replay of every record). New cluster = new
+  `spec-<name>.js` + `replay_<name>.c` + `expected-capture-<name>.json` +
+  a `check-<name>-replay.sh` composed the same way. Gotcha classes (now
+  fix_plan §M2 rules 8/9): accessor fns echo undefined verbatim (model
+  undef-at-rest; per-function no-undef-ret pins); NaN PAYLOADS are
+  unreproducible V8/C artifacts — canon collapses them, never chase
+  payloads by reordering C arithmetic.
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;

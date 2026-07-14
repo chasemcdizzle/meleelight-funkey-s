@@ -1,0 +1,57 @@
+{
+  "comment": "Measured-then-frozen util-spec capture pins (M2 task 1, 2026-07-14). Counts from single-run captures of g01/g04/g06 (byte-stable x2 in check-util-replay.sh). undefRetAllowed: accessor-class functions that echo undefined VERBATIM (rule 8) — getXOrYCoord's 84 g01 records are all frame-1 uninitialized-ECB1 reads. 16 of 34 boundary functions have zero live records over these traces (translated and compiled anyway, M2-CAL report §6 precedent; squashECBAt/ecbFocusFromAngularParameter are additionally exercised inside the C envcoll replay via internal calls).",
+  "undefRetAllowed": ["getXOrYCoord"],
+  "goldens": {
+    "g01": {
+      "records": 887889,
+      "counts": {
+        "getXOrYCoord": 454, "putXOrYCoord": 0, "flipXOrY": 0, "Vec2D#dot": 0,
+        "dotProd": 428, "scalarProd": 0, "norm": 0, "add": 13845,
+        "subtract": 10067, "euclideanDist": 22446, "manhattanDist": 0,
+        "orthogonalProjection": 10956, "inverseMatrix": 0, "multMatVect": 0,
+        "reflect": 0, "solveQuadraticEquation": 46, "lineAngle": 86,
+        "findSmallestWithin": 6262, "pickSmallestSweep": 11371,
+        "extremePoint": 755316, "moveECB": 9333, "squashECBAt": 0,
+        "ecbFocusFromAngularParameter": 0, "interpolateECB": 22,
+        "makeECB": 2294, "zipLabels": 35962, "toList": 6262,
+        "intersectsAny": 0, "distanceToLine": 0, "distanceToPolygon": 2739,
+        "lineDistanceToLines": 0, "Segment2D.new": 0,
+        "Segment2D#segLength": 0, "Segment2D#project": 0
+      }
+    },
+    "g04": {
+      "records": 276114,
+      "counts": {
+        "getXOrYCoord": 414, "putXOrYCoord": 0, "flipXOrY": 0, "Vec2D#dot": 0,
+        "dotProd": 328, "scalarProd": 0, "norm": 0, "add": 19141,
+        "subtract": 7051, "euclideanDist": 3256, "manhattanDist": 0,
+        "orthogonalProjection": 1440, "inverseMatrix": 0, "multMatVect": 0,
+        "reflect": 0, "solveQuadraticEquation": 23, "lineAngle": 70,
+        "findSmallestWithin": 6043, "pickSmallestSweep": 9160,
+        "extremePoint": 175447, "moveECB": 6015, "squashECBAt": 0,
+        "ecbFocusFromAngularParameter": 0, "interpolateECB": 23,
+        "makeECB": 4030, "zipLabels": 37270, "toList": 6043,
+        "intersectsAny": 0, "distanceToLine": 0, "distanceToPolygon": 360,
+        "lineDistanceToLines": 0, "Segment2D.new": 0,
+        "Segment2D#segLength": 0, "Segment2D#project": 0
+      }
+    },
+    "g06": {
+      "records": 806204,
+      "counts": {
+        "getXOrYCoord": 1696, "putXOrYCoord": 31, "flipXOrY": 0, "Vec2D#dot": 0,
+        "dotProd": 1484, "scalarProd": 0, "norm": 0, "add": 17309,
+        "subtract": 6905, "euclideanDist": 5066, "manhattanDist": 0,
+        "orthogonalProjection": 2204, "inverseMatrix": 0, "multMatVect": 0,
+        "reflect": 0, "solveQuadraticEquation": 178, "lineAngle": 266,
+        "findSmallestWithin": 5464, "pickSmallestSweep": 8981,
+        "extremePoint": 706070, "moveECB": 5467, "squashECBAt": 0,
+        "ecbFocusFromAngularParameter": 0, "interpolateECB": 101,
+        "makeECB": 3468, "zipLabels": 35499, "toList": 5464,
+        "intersectsAny": 0, "distanceToLine": 0, "distanceToPolygon": 551,
+        "lineDistanceToLines": 0, "Segment2D.new": 0,
+        "Segment2D#segLength": 0, "Segment2D#project": 0
+      }
+    }
+  }
+}

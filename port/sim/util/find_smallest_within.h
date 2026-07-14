@@ -27,9 +27,12 @@ static inline MaybeNum maybe_null(void) {
 // finds the smallest value t of the list with t > min, t <= max
 // (JS doc comment; the CODE tests head >= min && head <= max — translated
 // from the code, as always)
-static inline MaybeNum findSmallestWithin(const MaybeNum *list, int n,
-                                          double min, double max) {
-  MaybeNum smallestSoFar = maybe_null();
+// The upstream 4th parameter `smallestSoFar` (default null) seeds the
+// recursion; findSmallestWithinFrom exposes it for callers passing it
+// explicitly, findSmallestWithin keeps the default-null form (M2 task 1).
+static inline MaybeNum findSmallestWithinFrom(const MaybeNum *list, int n,
+                                              double min, double max,
+                                              MaybeNum smallestSoFar) {
   for (int i = 0; i < n; i++) {
     if (!list[i].present) continue;               // head === null
     double head = list[i].v;
@@ -44,6 +47,11 @@ static inline MaybeNum findSmallestWithin(const MaybeNum *list, int n,
     }
   }
   return smallestSoFar;
+}
+
+static inline MaybeNum findSmallestWithin(const MaybeNum *list, int n,
+                                          double min, double max) {
+  return findSmallestWithinFrom(list, n, min, max, maybe_null());
 }
 
 // finds the object with smallest sweeping parameter; returns its index in

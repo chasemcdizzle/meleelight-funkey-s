@@ -1,10 +1,32 @@
-# port/sim/calib — module-boundary capture format (M2-CAL)
+# port/sim/calib — module-boundary capture format (M2-CAL, generalized for M2)
 
-Records every call crossing the exported boundary of
-`src/physics/environmentalCollision.js` during an oracle-harness replay of
-a golden trace: arguments + return value, per frame. The C translation
-(`port/sim/environmental_collision.c`) is replayed against these records
-bit-exactly by `port/sim/calib/replay_envcoll.c`.
+Records every call crossing the exported boundary of a capture SPEC's
+modules during an oracle-harness replay of a golden trace: arguments +
+return value, per frame. The C translations are replayed against these
+records bit-exactly by the spec's replay driver.
+
+Specs (`node run-capture.js --spec <name>`):
+- `envcoll` (default, M2-CAL): `src/physics/environmentalCollision.js`
+  (13 exports) → `replay_envcoll.c`. CLI/filenames/meta unchanged from
+  the M2-CAL rig (regression-proven: post-generalization fresh capture is
+  byte-identical to the frozen one).
+- `util` (M2 task 1, `spec-util.js`): the util/math substrate — Vec2D
+  module (getXOrYCoord/putXOrYCoord/flipXOrY + prototype method
+  `Vec2D#dot`; the trivial two-field constructor is deliberately not
+  wrapped), full linAlg (11), solveQuadraticEquation, lineAngle,
+  findSmallestWithin (2), extremePoint, ecbTransform (5), zipLabels,
+  toList, detectIntersections (4), Segment2D (constructor `Segment2D.new`
+  + per-instance closure methods `Segment2D#segLength`/`#project`,
+  recorded with [thisState, ...args]) — 34 wrapped functions →
+  `replay_util.c`. Pins: `expected-capture-util.json` via
+  `check-spec-pins.js`.
+
+Method records use `Mod#method` names (args prepended with the canon of
+`this`); constructor records use `Mod.new` (ret = canon of the built
+instance, per-instance closures serializing as `fn`). Argument canon is
+computed BEFORE the call (pre-call state — mutation-safe for later
+specs); records are pushed after return, so nested boundary calls appear
+before their caller's record.
 
 ## Capture mechanism (summary; rationale in fix_plan §M2-CAL)
 
@@ -38,14 +60,24 @@ One line per boundary call, tab-separated, in call order:
 - `args-canon`: canon-v1 serialization of the argument list (as an array).
 - `ret-canon`: canon-v1 serialization of the return value.
 
-## canon v1 — value serialization
+## canon v1.1 — value serialization
 
 CHECKSUM.md §3's structural rules with ONE deviation: numbers are IEEE-754
 bit patterns, not shortest-round-trip decimals.
 
 - number → `d:` + 16 lowercase hex digits (big-endian IEEE-754 double bit
-  pattern). Injective on doubles, distinguishes `0`/`-0` and every NaN
-  payload; strictly bit-exact — a single-ulp difference is a divergence.
+  pattern), with ALL NaNs collapsed to the canonical quiet NaN
+  `d:7ff8000000000000` (v1.1, M2 task 1). Injective on JS number VALUES:
+  distinguishes `0`/`-0` and every finite/infinite double bit-exactly — a
+  single-ulp difference is a divergence. NaN payloads are collapsed
+  because they are semantically unobservable in the sim domain
+  (`String(NaN) === "NaN"` in the real checksum stream; no typed-array
+  aliasing of sim values) and non-reproducible: V8 emits payload NaNs
+  from undefined-arithmetic (0xfffefffffff6ffff observed) and propagates
+  them by its own evaluation order, while C compilers may legally commute
+  FP adds since payloads are unspecified — measured: 24 solveQuadratic
+  divergences under v1 raw-bit NaNs, 0 under v1.1; and v1.1 is a measured
+  no-op on the frozen envcoll captures (zero NaNs in g01/g04/g06).
 - string → `JSON.stringify` (double-quoted, JSON escaping)
 - boolean → `T` / `F` · null → `null` · undefined → `undef` ·
   function → `fn`
@@ -70,11 +102,26 @@ render/blastzone/moving-platform machinery the module never reads).
 Captured at call time, so per-frame moving-platform mutations (fountain)
 are recorded faithfully.
 
+## The undef-ret allowlist (rule 8)
+
+The no-undef-in-returns pin (soundness of the marshaller's
+ToNumber(undefined)→NaN argument mapping) applies per function, not
+blanket: ACCESSOR-class functions (e.g. getXOrYCoord — a raw property
+read) echo undefined VERBATIM; JS converts only at the consumer's
+arithmetic. Such functions are frozen in the spec's expectations file
+(`undefRetAllowed`) and their C translations preserve undef-ness
+explicitly (JsNum/JsVec2D in vec2d.h). Everything else keeps the strict
+invariant.
+
 ## Files
 
-- `<golden-id>.envcoll.jsonl` — the boundary records (gitignored, in
-  `port/sim/calib/build/`)
-- `<golden-id>.capture-run.json` — the run JSON (meta/coverage/frames)
-  used for the verify-stream guard
+- `<golden-id>.envcoll.jsonl` — the M2-CAL boundary records (gitignored,
+  in `port/sim/calib/build/`)
+- `<golden-id>.capture-run.json` — the envcoll run JSON (meta/coverage/
+  frames) used for the verify-stream guard
+- `<golden-id>.<spec>.jsonl` / `<golden-id>.<spec>-run.json` — the same
+  pair for later specs (util, ...)
 - `expected-capture.json` — measured-then-frozen per-function call-count
-  pins per golden (drift alarm, M1 instrument class)
+  pins per golden for envcoll (drift alarm, M1 instrument class)
+- `expected-capture-<spec>.json` — the same for later specs
+  (checked by `check-spec-pins.js`)
