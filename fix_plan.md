@@ -62,14 +62,11 @@ never distributed — provenance field marks them.)
 FORMATS.md §3; extractor at `pipeline/extractor/`, tasks 3-4 extend the
 same bundle for stage geometry + sounds.)
 
-3. Stage geometry → generated C tables from the same extractor (6 VS
-   stages: polygon/platform/ground/ceiling/wallL/wallR/ledge/ledgePos/
-   blastzone/startingPoint/startingFace/respawnPoints/respawnFace/scale/
-   offset/movingPlats; geometry doubles as collision — ONE source of
-   truth; doubles bit-exact as in task 2) — done-check:
-   `bash pipeline/check-stages.sh` → prints `STAGES OK`, exit 0 (two
-   fresh runs byte-identical; 6 stages; per-stage element counts ==
-   expected.json pins measured from executed data).
+(task 3 — stage geometry → generated C tables — DONE iter 11:
+`bash pipeline/check-stages.sh` → STAGES OK, exit 0. STAB1 spec:
+FORMATS.md §4; the extractor bundle now also exposes window.__stages —
+ystory/fountain's god-module imports externals-stubbed, see §4.2.)
+
 4. Audio conversion + sound map: extractor additionally exports the
    `sounds` table (180 Howl names → wav path + volume + sprite windows)
    and the MusicManager track list; ffmpeg (version + exact flags pinned

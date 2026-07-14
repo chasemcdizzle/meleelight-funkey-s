@@ -148,6 +148,31 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   empty ECBs kept verbatim as frameCount 0/NULL) — cross-checks against
   executed data must be measured-then-frozen reconciliations, never
   assumed identities.
+- **Stage geometry → generated C tables (M1 task 3 committed form):** the
+  extractor bundle additionally exposes `window.__stages` (upstream's own
+  `src/stages/vs-stages/vs-stages.js` aggregator). Stage `stages` (in
+  `node pipeline/run.js`) emits `ml_stages.{h,c}` + `stages.json` (format
+  STAB1, FORMATS.md §4): 6 VS stages in oracle `--stage` id order, doubles
+  as `UINT64_C(0x…)` bit patterns (decode `ml_stage_f64()` — distinct name
+  so ml_tables.h can share a TU), ints int32 with hard-throws, empty
+  surface lists kept verbatim (fdest platforms, ystory ceilings: count
+  0/NULL). Task check: `bash pipeline/check-stages.sh` → `STAGES OK`
+  (byte-stability ×2, artifact hashes, expected.json per-stage pins, and
+  the compiled-C vs fresh executed-JS dual-dump round trip, 412 leaves).
+  Gotcha class (god-module boundary, 2nd instance): ystory/fountain
+  top-level-import `main/main`/`stages/activeStage`/
+  `physics/environmentalCollision` but only dereference them inside
+  their movingPlatforms/updatePlatform bodies (M2 sim logic) — webpack
+  `externals` stubs those EXACT request strings (`"var {}"`, incl. the
+  RELATIVE forms `../activeStage` etc., matched pre-resolve), and
+  build-extractor.sh hard-fails on any `document.` in the bundle (leak
+  guard; beware: a `document.` in an entry-file COMMENT trips it —
+  comments are bundled verbatim). Upstream renders VS stages from the
+  SAME structures physics collides against (one source of truth) —
+  `box`/`target`/`background`/`polygonMap` are target-stage machinery,
+  pinned empty/absent, schema hard-throws on drift. fdest `ledgePos`
+  x=±68.4 while its ground runs ±85.6 — authored upstream quirk
+  (battlefield copy-paste), carried verbatim: faithfulness > plausibility.
 - **Upstream clone + build (M0 committed form):**
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via

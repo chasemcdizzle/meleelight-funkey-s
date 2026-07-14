@@ -42,6 +42,19 @@ module.exports = {
       },
     ],
   },
+  // Stage modules (ystory/fountain) top-level-import engine modules but
+  // reference them ONLY inside movingPlatforms/updatePlatform function
+  // bodies, which extraction never calls (the data literals are verified
+  // self-contained). Stub the EXACT request strings so main.js (the
+  // god-module) and its DOM tentacles never enter the bundle;
+  // build-extractor.sh hard-fails the build if "document." leaks in.
+  externals: {
+    "main/main": "var {}",
+    "../../main/main": "var {}",
+    "stages/activeStage": "var {}",
+    "../activeStage": "var {}",
+    "../../physics/environmentalCollision": "var {}",
+  },
   plugins: [
     new webpack.DefinePlugin({
       "process.env": { NODE_ENV: '"dev"' },

@@ -50,5 +50,16 @@ if ! grep -q "__tables" "$BUNDLE"; then
   log "FAIL: built bundle lacks __tables assignment"
   exit 1
 fi
+if ! grep -q "__stages" "$BUNDLE"; then
+  log "FAIL: built bundle lacks __stages assignment"
+  exit 1
+fi
+# God-module leak guard: the extractor surface is pure data construction
+# (no DOM). Any "document." means an externals stub missed and main.js
+# (or another DOM-touching module) entered the bundle.
+if grep -q "document\." "$BUNDLE"; then
+  log "FAIL: bundle references document. — god-module leaked past the externals stubs"
+  exit 1
+fi
 echo "$STAMP_WANT" > "$STAMP_FILE"
 log "OK: $BUNDLE"

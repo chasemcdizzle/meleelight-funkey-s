@@ -1,5 +1,5 @@
 {
-  "_comment": "Pinned coverage contract for the M1 data pipeline (fix_plan §M1 conventions). Values are MEASURED-THEN-FROZEN from executed-JS runs against the upstream pin — never hand-invented (AGENT-LOG iter 9 records the measurement). check-expected.js asserts a run manifest against this file and re-derives the 754-file reconciliation live from the src tree. Tasks 3-4 append their sections (stages/audio) when they land. tables.animXref pins the measured framesData/ECB vs ANIM1 reconciliation (lists are exact and sorted; tables-anim-xref.js re-derives them live from the run artifacts).",
+  "_comment": "Pinned coverage contract for the M1 data pipeline (fix_plan §M1 conventions). Values are MEASURED-THEN-FROZEN from executed-JS runs against the upstream pin — never hand-invented (AGENT-LOG iters 9-11 record the measurements). check-expected.js asserts a run manifest against this file and re-derives the 754-file reconciliation live from the src tree. Task 4 appends its section (audio) when it lands. tables.animXref pins the measured framesData/ECB vs ANIM1 reconciliation (lists are exact and sorted; tables-anim-xref.js re-derives them live from the run artifacts).",
   "upstreamPinPrefix": "27af171",
   "animations": {
     "coverage": {
@@ -188,6 +188,97 @@
         "falcon/TECHWALLJUMP",
         "fox/TECHWALLJUMP"
       ]
+    }
+  },
+  "stages": {
+    "coverage": {
+      "ceilings": 16,
+      "connectedStages": 2,
+      "f64Values": 866,
+      "grounds": 12,
+      "i32Values": 177,
+      "ledges": 12,
+      "movingPlats": 3,
+      "platforms": 15,
+      "polygonRings": 6,
+      "polygonVerts": 112,
+      "stages": 6,
+      "wallLs": 40,
+      "wallRs": 40
+    },
+    "perStage": {
+      "battlefield": {
+        "ceilings": 5,
+        "connected": 0,
+        "grounds": 1,
+        "ledges": 2,
+        "movingPlats": 0,
+        "platforms": 3,
+        "polygonRings": 1,
+        "polygonVerts": 18,
+        "wallLs": 6,
+        "wallRs": 6
+      },
+      "dreamland": {
+        "ceilings": 1,
+        "connected": 0,
+        "grounds": 1,
+        "ledges": 2,
+        "movingPlats": 0,
+        "platforms": 3,
+        "polygonRings": 1,
+        "polygonVerts": 7,
+        "wallLs": 2,
+        "wallRs": 2
+      },
+      "fdest": {
+        "ceilings": 3,
+        "connected": 0,
+        "grounds": 1,
+        "ledges": 2,
+        "movingPlats": 0,
+        "platforms": 0,
+        "polygonRings": 1,
+        "polygonVerts": 14,
+        "wallLs": 5,
+        "wallRs": 5
+      },
+      "fountain": {
+        "ceilings": 2,
+        "connected": 1,
+        "grounds": 5,
+        "ledges": 2,
+        "movingPlats": 2,
+        "platforms": 3,
+        "polygonRings": 1,
+        "polygonVerts": 30,
+        "wallLs": 11,
+        "wallRs": 11
+      },
+      "pstadium": {
+        "ceilings": 5,
+        "connected": 0,
+        "grounds": 1,
+        "ledges": 2,
+        "movingPlats": 0,
+        "platforms": 2,
+        "polygonRings": 1,
+        "polygonVerts": 16,
+        "wallLs": 5,
+        "wallRs": 5
+      },
+      "ystory": {
+        "ceilings": 0,
+        "connected": 1,
+        "grounds": 3,
+        "ledges": 2,
+        "movingPlats": 1,
+        "platforms": 4,
+        "polygonRings": 1,
+        "polygonVerts": 27,
+        "wallLs": 11,
+        "wallRs": 11
+      }
     }
   }
 }

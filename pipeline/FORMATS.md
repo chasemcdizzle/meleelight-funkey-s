@@ -1,8 +1,8 @@
 # pipeline/FORMATS.md — generated-data formats the C side implements against
 
-Status: **PROVISIONAL** (auto-adopted, M1 REPLAN iter 9). Format changes
-after C consumers exist require a version bump in the magic and a
-regeneration of every artifact + expected.json re-freeze in the same
+Status: **PROVISIONAL** (auto-adopted, M1 REPLAN iter 9; §4 added iter 11).
+Format changes after C consumers exist require a version bump in the magic
+and a regeneration of every artifact + expected.json re-freeze in the same
 change (same discipline as oracle/CHECKSUM.md §8).
 
 ## 0. Global rules (all formats)
@@ -255,3 +255,121 @@ a C double) and `pipeline/lib/tables-dump.js` (fresh executed-JS walk).
 execution of the real upstream modules. The C reader/consumer implements
 THIS document; on disagreement between code and spec, the spec + a
 regenerated artifact set win.
+
+## 4. STAB1 — generated C VS-stage geometry tables
+
+Artifacts per pipeline run: `ml_stages.h` + `ml_stages.c` (the stage tables
+the sim and renderer link against) and `stages.json` (the canonical
+executed-JS model; doubles carried as bit patterns). Generator:
+`pipeline/stages/stages.js`. Source: the SAME extractor bundle as CTAB1
+(`dist/js/extractor.js`, task-3-extended entry imports upstream's own
+aggregator `src/stages/vs-stages/vs-stages.js` → `window.__stages`),
+executed under the shared `window` shim in node
+(`tables-schema.js loadExtractor` — one loader for all extractor globals).
+
+### 4.1 One source of truth (PLAN §4 M1)
+
+Upstream renders stages from the SAME structures the collision engine
+consumes: `stagerender.js` draws `polygon`/`ground`/`wallL`/`wallR`/
+`ceiling`/`platform`/`blastzone`/`ledge`; `physics.js` collides against
+`ground`/`platform`/`ceiling`/`wallL`/`wallR`/`connected`/`ledge`/`scale`/
+`offset`. There is NO separate draw-only stage vector data for VS stages
+(`background`/`box`/`target` are target-stage machinery — `box` is
+pinned-empty for all 6 VS stages, the others pinned-absent; the schema
+hard-throws on drift). These tables therefore serve both the M2 sim and
+the M3 renderer.
+
+### 4.2 God-module boundary (how ystory/fountain got in)
+
+`ystory.js`/`fountain.js` top-level-import `main/main`,
+`stages/activeStage` and `physics/environmentalCollision`, but reference
+them ONLY inside their `movingPlatforms`/`updatePlatform` function bodies
+— sim LOGIC ported with M2 (like `setVelocities`, §3.4), never called at
+extraction. `extractor.config.js` externals-stubs those EXACT request
+strings (`"var {}"`), so the god-module never enters the bundle;
+`build-extractor.sh` hard-fails on any `document.`-access leak. The stage
+DATA literals are self-contained (verified: only `Vec2D`/`Box2D` and
+local consts) — a stub can therefore never change an extracted value, and
+the exact-key-set assert catches wrong-module substitution.
+
+### 4.3 Value encoding + typing (pinned; measured iter 11)
+
+Same discipline as CTAB1 §3.1: geometry coordinates, `blastzone` and
+`scale` are IEEE-754 uint64 bit patterns (`UINT64_C(0x…)` + shortest
+round-trip decimal comment; decode `ml_stage_f64()` — named apart from
+`ml_tables.h`'s `ml_f64` so both generated headers can share a TU);
+integral-and-semantically-integral fields are `int32_t` with generator
+hard-throws: `offset[2]` (screen pixels), ledge/connected indices, faces
+(asserted `1|-1`), `movingPlats` entries (asserted `< platformCount`).
+Booleans are `uint8_t` 0/1.
+
+Single source of truth: `pipeline/lib/stages-schema.js`. Pinned there:
+
+- Stage order = oracle harness `--stage` ids == upstream
+  `activeStage.js stageMapping`: 0 battlefield · 1 ystory · 2 pstadium ·
+  3 dreamland · 4 fdest · 5 fountain (`STAGE_NAMES`).
+- Surface kind order (struct + dump + coverage): `ground, platform,
+  ceiling, wallL, wallR` (`SURF_KINDS`). A `Surface` is exactly
+  `[Vec2D, Vec2D]` at the pin; the type-level optional
+  `SurfaceProperties` third element exists on NO VS stage and its
+  appearance HARD-THROWS (never silently dropped — format bump).
+- Empty surface lists exist upstream and are kept verbatim (`fdest`
+  platforms, `ystory` ceilings): count 0 / `NULL` pointer.
+- `ledge` = `{type 0 ground | 1 platform, index, side 0 left | 1 right}`,
+  parallel to `ledgePos[i]` (lengths asserted equal); indices
+  bounds-checked against the typed surface list.
+- `startingPoint`/`startingFace`/`respawnPoints`/`respawnFace` are fixed
+  `[ML_STAGE_PLAYERS = 4]` arrays (engine player slots).
+- `blastzone` = Box2D → `{minX, minY, maxX, maxY}` bits.
+- `connected` (ystory + fountain only): `hasConnected` flag +
+  `connectedGround[groundCount]` / `connectedPlatform[platformCount]`
+  (lengths pinned to how `physics.js` indexes them); each entry is a
+  left/right pair of `{present, type, index}` labels with the
+  `getSurfaceFromStage` enum `0 g · 1 p · 2 c · 3 l(wallL) · 4 r(wallR)`
+  (only `g` occurs at the pin; membership asserted).
+- `movingPlats` carries the platform indices; the movement functions are
+  M2 sim code (§3.4 discipline). Fountain's platform rest heights are the
+  extracted `platform[1]/[2]` y values; ystory's mover extracted at its
+  authored start position.
+
+### 4.4 Ordering / determinism
+
+Stages in stageId order; within a stage: polygon rings (authored order —
+ring/vertex order is render/collision-meaningful, NEVER sorted), then
+surfaces in `SURF_KINDS` order (authored order within each list — physics
+indexes these lists positionally), ledges, ledgePos, spawn/respawn,
+blastzone, scale, offset, connected (grounds then platforms), movingPlats.
+No timestamps, no absolute paths; provenance (upstream HEAD + extractor
+bundle sha256 + extractor entry/config hashes) embedded in the generated
+headers and recorded in the manifest sources.
+
+### 4.5 Canonical leaf dump (round-trip contract)
+
+One line per leaf value, `path=value`, doubles as 16 lowercase hex digits
+of their bit pattern, ints as decimal; emission order == §4.4:
+
+```
+stage/<name>/polygon/<r>/<v>=<xbits>,<ybits>
+stage/<name>/<kind>[<i>]=<x1>,<y1>,<x2>,<y2>        (kind in SURF_KINDS order)
+stage/<name>/ledge[<i>]=<type>,<index>,<side>
+stage/<name>/ledgePos[<i>]=<xbits>,<ybits>
+stage/<name>/startingPoint[<i>]=<xbits>,<ybits>
+stage/<name>/startingFace[<i>]=<1|-1>
+stage/<name>/respawnPoints[<i>]=<xbits>,<ybits>
+stage/<name>/respawnFace[<i>]=<1|-1>
+stage/<name>/blastzone=<minx>,<miny>,<maxx>,<maxy>
+stage/<name>/scale=<bits>
+stage/<name>/offset=<x>,<y>
+stage/<name>/hasConnected=<0|1>
+stage/<name>/connected/<g|p>[<i>][<0|1>]=<-|type,index>   (when hasConnected)
+stage/<name>/movingPlats[<i>]=<platformIndex>
+```
+
+Reference implementations: `pipeline/lib/stages_check.c` (walks the
+COMPILED tables; actual store/load round trip through a C double) and
+`pipeline/lib/stages-dump.js` (fresh executed-JS walk).
+`check-stages.sh` compiles the former with `-ffp-contract=off` and
+`cmp`(1)s the two dumps — every emitted value bit-equal to a fresh
+execution of the real upstream stage modules (412 leaf lines at the pin).
+The C reader/consumer implements THIS document; on disagreement between
+code and spec, the spec + a regenerated artifact set win.

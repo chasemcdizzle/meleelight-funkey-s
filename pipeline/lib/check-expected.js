@@ -124,6 +124,33 @@ if (wantStages.includes("tables")) {
   }
 }
 
+// ---- stages (VS-stage geometry, STAB1) ----
+if (wantStages.includes("stages")) {
+  const exp = expected.stages;
+  const st = manifest.stages.stages;
+  if (!st) {
+    fail("manifest has no stages stage");
+  } else {
+    eq("stages.format", st.format, "STAB1");
+    for (const k of Object.keys(exp.coverage)) {
+      eq(`stages.coverage.${k}`, st.coverage[k], exp.coverage[k]);
+    }
+    for (const [stageName, expStage] of Object.entries(exp.perStage)) {
+      const got = st.perStage && st.perStage[stageName];
+      if (!got) { fail(`stages.perStage.${stageName} missing`); continue; }
+      for (const k of Object.keys(expStage)) {
+        eq(`stages.perStage.${stageName}.${k}`, got[k], expStage[k]);
+      }
+    }
+    eq("stages.artifacts.length", st.artifacts.length, 3);
+    for (const name of ["ml_stages.h", "ml_stages.c", "stages.json"]) {
+      if (!st.artifacts.some((a) => a.path === name)) {
+        fail(`stages artifact ${name} missing from manifest`);
+      }
+    }
+  }
+}
+
 if (failures > 0) {
   console.error(`check-expected: ${failures} failure(s)`);
   process.exit(1);

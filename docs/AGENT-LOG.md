@@ -627,3 +627,90 @@ MILESTONE PASS: M0
   never promote a survey observation to a contract without a hard check.
 - next: M1 task 3 — stage geometry → generated C tables from the same
   extractor (`bash pipeline/check-stages.sh`).
+
+## iter 11 — 2026-07-14 — M1 task 3: stage geometry → generated C tables (STAB1)
+
+- phase M1, task: fix_plan §M1 task 3 (stage geometry → generated C from
+  the same extractor bundle; 6 VS stages; ONE source of truth).
+- done-check: `bash pipeline/check-stages.sh` → STAGES OK, exit 0
+  (.loop/iter11-check-stages.log; CHECKER re-run .loop/checker/
+  check-stages.log). Regressions: check-animations.sh → ANIMATIONS OK
+  (.loop/iter11-checkanim-regression.log), check-tables.sh → TABLES OK
+  (.loop/iter11-checktables-regression.log; also re-run by CHECKER —
+  the extractor bundle changed, tables stage re-verified against it).
+- CHECKER (separate sub-agent, mode=task): verified=true, tamper=false —
+  evidence: STAGES OK exit 0 with 412-leaf bit-exact round trip; all cmp
+  (no epsilon anywhere); artifacts fresh; TABLES OK 38,832 leaves;
+  ANIMATIONS OK incl. live 754-file reconciliation; diff touches only
+  pipeline/* and expected.json is additive-only (animations/tables pins
+  byte-untouched); tables-schema.js refactor preserves all assertions.
+- what landed: extractor entry now also imports upstream's OWN vs-stages
+  aggregator → `window.__stages` (same bundle, task-2 infrastructure
+  extended as planned); webpack `externals` stubs the exact request
+  strings `main/main`, `../../main/main`, `stages/activeStage`,
+  `../activeStage`, `../../physics/environmentalCollision` ("var {}") —
+  ystory/fountain reference those ONLY inside movingPlatforms/
+  updatePlatform bodies (M2 sim logic, never called at extraction; data
+  literals verified self-contained). build-extractor.sh gained __stages +
+  document.-leak hard guards (guard proven live: it first tripped on the
+  word "document." inside my own entry-file comment — comments bundle
+  verbatim; reworded). New: pipeline/stages/stages.js (STAB1 generator:
+  ml_stages.{h,c} + stages.json) · lib/stages-schema.js (pinned schema +
+  hard-throw walk; loadExtractor SHARED with tables — loader refactored
+  into tables-schema.js so one window-shim serves every extractor
+  global) · lib/stages_check.c + lib/stages-dump.js (dual-dump round
+  trip) · check-stages.sh · FORMATS.md §4 (STAB1 spec) · expected.json
+  stages section + check-expected.js stages block · run.js registration.
+- measured (executed data, now frozen in expected.json): 6 stages ·
+  polygon 6 rings/112 verts · grounds 12 · platforms 15 · ceilings 16 ·
+  wallL 40 · wallR 40 · ledges 12 (all 2/stage, parallel ledgePos) ·
+  connected 2 stages (ystory, fountain; only "g" labels at the pin) ·
+  movingPlats 3 (ystory [0], fountain [1,2]) · 866 f64 · 177 i32 ·
+  empty-list faithfulness: fdest platforms 0, ystory ceilings 0 (count
+  0/NULL, kept verbatim). Round trip: 412 leaf values bit-exact
+  (compiled C vs fresh executed-JS walk).
+- verification beyond the done-check (negative tests, not committed):
+  1-ulp bit tamper in ml_stages.c → dump cmp fails; tampered artifact →
+  verify-artifacts exit 1; offset 600.5 injected → "expected int32"
+  throw; SurfaceProperties third element injected → hard-throw (never
+  silently dropped); extra stage key (background) → key-set throw;
+  expected.json pin perturbed → check-expected exit 1 (restored). Spot
+  checks source-text → executed → C: battlefield scale 4.5 =
+  4012000000000000 ✓, fountain platform[1] = (platL 21 → 4035000000000000,
+  22.125) with const substitution executed not transcribed ✓, ystory
+  blastzone minX -175.7 = c065f66666666666 ✓, fdest ledgePos ±68.4
+  (authored quirk vs its ±85.6 ground — battlefield copy-paste upstream)
+  carried verbatim ✓.
+- artifact hashes (sha256 first 16): check-stages.sh a3736e35894b1541 ·
+  stages/stages.js 0966e4acc48823f8 · lib/stages-schema.js
+  c3a2bfa3ca789c05 · lib/stages_check.c e40bbb2e98177ffa ·
+  lib/stages-dump.js 04f09ec864d18ca3 · extractor.entry.js
+  b45257f0574a2ff6 · extractor.config.js d3c0c3d5393c9280 ·
+  build-extractor.sh 01d09048837aea97 · expected.json 742ecffa05a11428 ·
+  lib/check-expected.js a6f4b62a92a49800 · lib/tables-schema.js
+  c7c84ad7c6f9557a · run.js cb51c5c75e7c3b27 · FORMATS.md
+  fb0bf286e93fc16b.
+- PROVISIONAL (auto-adopted): STAB1 layout (FORMATS.md §4) — stage order
+  = oracle --stage ids; authored (never sorted) geometry order because
+  physics/render index surface lists positionally; offset typed int32[2]
+  (screen pixels, integral + semantically integral); ml_stage_f64 named
+  apart from ml_f64 so both generated headers can share a TU; externals
+  stubbing as the god-module boundary mechanism for data modules whose
+  FUNCTION BODIES (not data) reference the engine — movingPlatforms
+  logic itself is M2 sim-port territory alongside setVelocities (§3.4).
+- zoom-out: same defect class as task 2 (silent executed-JS↔C drift),
+  same instrument (dual-dump round trip + hard-throw typing) — the
+  pattern held with zero adaptation, confirming it as the standard for
+  every generated-table stage. NEW class surfaced: BOUNDARY-CROSSING
+  IMPORTS in otherwise-pure data modules (2nd instance of the god-module
+  boundary; task 2 dodged it by not importing index.js, task 3 could
+  not dodge — stages ARE the module with the imports). Registered
+  instrument: externals-stub the exact request strings + a
+  bundle-content hard guard (document.-leak) + exact-key-set asserts on
+  every extracted object, so a stub that swallowed a REAL module fails
+  the build, not the data. Also: the leak guard tripping on its own
+  comment is a reminder that guards must be tested against the artifact
+  they actually scan (comments are bundle bytes too) — a guard you never
+  saw fire is an untested guard.
+- next: M1 task 4 — audio conversion + sound map
+  (`bash pipeline/check-audio.sh`).

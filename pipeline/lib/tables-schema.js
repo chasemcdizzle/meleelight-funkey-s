@@ -80,25 +80,34 @@ function asI16(where, v) {
 
 // Execute the built extractor bundle under a window shim (same pattern as
 // stages/animations.js: the bundle is pure data construction — Vec2D /
-// createHitbox object literals and constant arithmetic, no Math.*, no DOM
-// — so plain node execution of the SAME built artifact is engine-neutral).
-function loadTables(distRoot) {
+// createHitbox object literals and constant arithmetic, no executed
+// Math.*, no DOM — so plain node execution of the SAME built artifact is
+// engine-neutral). Returns the whole shim window so every extractor
+// global (__tables task 2, __stages task 3) shares ONE loader — shim
+// duplication is a drift class.
+function loadExtractor(distRoot) {
   const srcPath = path.join(distRoot, "dist", "js", "extractor.js");
   if (!fs.existsSync(srcPath)) {
     throw new Error(`missing ${srcPath} — run pipeline/extractor/build-extractor.sh first`);
   }
   const hadWindow = "window" in global;
   const saved = global.window;
-  global.window = {};
+  const win = {};
+  global.window = win;
   try {
     delete require.cache[require.resolve(srcPath)];
     require(srcPath);
-    const tables = global.window.__tables;
-    if (!tables) throw new Error("extractor bundle did not assign window.__tables");
-    return { tables, srcSha256: sha256(fs.readFileSync(srcPath)) };
+    return { win, srcSha256: sha256(fs.readFileSync(srcPath)) };
   } finally {
     if (hadWindow) global.window = saved; else delete global.window;
   }
+}
+
+function loadTables(distRoot) {
+  const { win, srcSha256 } = loadExtractor(distRoot);
+  const tables = win.__tables;
+  if (!tables) throw new Error("extractor bundle did not assign window.__tables");
+  return { tables, srcSha256 };
 }
 
 // Walk + validate the live registries into the canonical CTAB1 model.
@@ -261,5 +270,6 @@ function dumpModel(model, emit) {
 
 module.exports = {
   CHAR_NAMES, ATTR_F64, ATTR_I32, ATTR_I32V, ATTR_BOOL, HB_F64, HB_I32,
-  f64bits, loadTables, buildModel, dumpModel,
+  f64bits, asF64, asI32, asI16, loadExtractor, loadTables, buildModel,
+  dumpModel,
 };
