@@ -69,9 +69,14 @@ typedef enum {
 typedef struct {
   MlHitboxShape shape;
   double size;
-  Vec2D offset;                     // ML_HB_CONSTRUCTOR
-  Vec2D offsetArr[ML_HB_OFFSET_CAP]; // ML_HB_CHARDATA
-  int offsetLen;                     // ML_HB_CHARDATA
+  Vec2D offset;                     // ML_HB_CONSTRUCTOR / offsetSingle
+  Vec2D offsetArr[ML_HB_OFFSET_CAP]; // ML_HB_CHARDATA (per-frame array)
+  int offsetLen;                     // ML_HB_CHARDATA (per-frame array)
+  // ML_HB_CHARDATA with a SINGLE Vec2D offset: upstream createHitbox is
+  // called with a bare Vec2D for the throw hitboxes (e.g. fox
+  // attributes.js:749 throwup) — the 12-key chars-data key set with an
+  // OBJECT offset (M2 task 8; measured on the fox THROW* sweep records).
+  bool offsetSingle;
   double dmg;
   double angle;
   double kg;

@@ -73,6 +73,13 @@ Specs (`node run-capture.js --spec <name>`):
   See "The moves-shared spec" below. Pins:
   `expected-capture-moves-shared.json`.
 
+- `moves-fox` (M2 task 8, `spec-moves-fox.js`): the fox per-char move set
+  (src/characters/fox/moves/, 61 move objects) + the LASER/ILLUSION
+  article-init boundary → `replay_moves_fox.c` (translations
+  `port/sim/characters/fox/moves/*.c` + `moves_index.c` + `moves.h`;
+  goldens g01/g03/g08 — the fox carriers). See "The moves-fox spec"
+  below. Pins: `expected-capture-moves-fox.json`.
+
 Method records use `Mod#method` names (args prepended with the canon of
 `this`); constructor records use `Mod.new` (ret = canon of the built
 instance, per-instance closures serializing as `fn`). Argument canon is
@@ -490,6 +497,100 @@ CLIFFWAIT/REBIRTH init paths beyond their live coverage (need a live
 stage), throws/CATCHATTACK/CLIFF* per-char seam arms, and every per-char
 dispatch arm not fired by the traces (seams verify must-not-fire on
 every live record).
+
+## The moves-fox spec (M2 task 8)
+
+Wrapped boundary (194 fns): every function property of every FOX-ORIGIN
+actionStates entry — fox-origin is MEASURED by fn identity against the
+characters/fox/moves module index (rule 15's instrument extended per its
+recipe), found only on table 2: 61 module keys, 192 fns (49 moves ×
+init/main/interrupt + 11 × +land + UPSPECIAL's lone init) — plus the two
+article init boundaries (`articles.LASER.init` / `articles.ILLUSION.init`).
+Shared-origin entries stay UNWRAPPED (at top level they are chain-safe
+silent surface — their draws land as standalone records; inside a fox
+record they are the transparent nested C tree, task 7's bodies linked in);
+NON-fox per-char entries get the task-7 seam logger.
+
+GOLDENS (PROVISIONAL, auto-adopted): g01/g03/g08 — the fox carriers. The
+g01/g04/g06 convention's purpose is live coverage and g04/g06 field no fox
+slot. g08 is the first CPU-golden capture: the AI plane stays JS-side (M2
+AI policy) and its seeded draws land as standalone `Math.random` records
+(1488 on g08), chain-verified draw-for-draw like every other draw.
+
+- `move` (5-field, mutation-captured): a fox-origin phase entered OUTSIDE
+  any move record's scope. args = `[phase, name, [slot], inputs|null,
+  pre]` — fox phases carry NO extras; THROWN*{BACK,DOWN} inits arrive
+  1-arg upstream (throwers call `.init(grabbing)` without input — the
+  bodies never read it) and record inputs `null`. pre/post = the task-7
+  envelopes verbatim ({alias,hq,players,rng,snd,vfx} post).
+- `mdispatch` (5-field seam): a NON-fox, NON-shared move fn entered while
+  the top frame is the attributing fox frame — the victim's THROWNFOX*
+  per-char entries from fox THROW* chains. Task-7 form; 1-arg and 2-arg
+  dispatch sites both occur. Measured ZERO live over g01/g03/g08 (fox
+  never threw a non-fox live) — the FIFO's teeth are negative-test-proven
+  (a wrong-table dispatch in C → seam-underflow divergence).
+- `article` (4-field seam FIFO): `articles.{LASER,ILLUSION}.init(options)`
+  under the attributing fox frame — the task-13 oracle boundary. Article
+  inits only READ player state, mutate only the JS-side article queues,
+  and draw no RNG (LASER's nested main/wallDetection is pure stage reads),
+  so no post/resync: args = `[name, options]` verified bit-exactly in call
+  order, ret echoed (undefined). Outside fox scope (falco lasers,
+  executeArticles' per-frame mains) article calls are NOT this boundary —
+  the article sim stays oracle-side until task 13.
+- hq: carried OPAQUE as in task 7, EXTENDED with the push model — fox
+  THROW* does `hitQueue.push([grabbing, p, 0, false, true, isThrowDown])`;
+  the C crosses `mv_hq_push6`, which appends the row's canon to the opaque
+  carrier (teeth: flipping the THROWDOWN flag → exactly 1 divergence).
+- `mvData` (frame-0, finalCheck drift-guarded): the task-7 dump EXTENDED
+  with `fox: {origin: {state→bool}, data: {state → every own enumerable
+  ARRAY-valued non-function prop}}` — ATTACKDASH/APPEAL/FIREFOXBOUNCE/
+  THROWFORWARD setVelocities*, all 20 THROWN*.offset (incl. authored
+  EXPRESSIONS like `-7.74-0.08` — executed data, rule 15), CLIFF*
+  offset/setVelocities, canGrabLedge pairs (CLIFF*'s runtime
+  `this.canGrabLedge = false` write would drift the dump and hard-fail
+  finalCheck; the C traps at that site), THROWNPUFFBACK.offsetVel (dead
+  data). The C registry (shared for all chars + fox on table 2) and the
+  fox data plane (`mv_fox_arr`/`mv_fox_pair`/`mv_fox_arr_len`) are built
+  FROM the dump.
+
+Value-model extensions measured by this capture (rule 7's marshal caught
+both):
+- hitbox spec `offsetSingle`: the 12-key chars-data key set with a SINGLE
+  Vec2D offset — upstream `createHitbox` called with a bare Vec2D (fox
+  throw hitboxes, attributes.js:749). ml_player.h/player_canon.c; the old
+  CONSTRUCTOR fallback in the charHitboxes assign helper mis-shaped these
+  and was unreached by every prior capture (class-fixed in
+  `mv_assign_hitbox_id`).
+- AI number-valued input BUTTONS (g08): ai.js writes numbers into
+  aiInputBank button fields (`.l = 0` / `= 1.0`). Every sim consumer of
+  the button fields is truthiness-only (verified — no raw propagation into
+  player state), so `ml_input_from_canon` maps CV_NUM buttons by JS
+  truthiness. Human-golden captures are unaffected (all booleans).
+
+moves-fox sweep (rules 11/12, 168 calls): a REAL upstream
+`playerObject(2, [10,20], 1)` in net-restored slot 3 with
+`characterSelections[3] = 2` injected (hitdet-sweep precedent) + a second
+slot-2 player for the THROWN* grabbedBy<p (timer=-1) arm; covers jabs 2/3,
+tilts/smashes (charge/release/randomShout arms), ATTACKAIRU + land arms +
+the ATTACKAIRN `hitboxes.frames++` NaN quirk + the checkForIASA
+JUMPAERIALB/F + FOXMOVES-aerial dispatch arms, both lasers' article sites +
+laserCombo loops, illusion ground/air article sites + b-skip arms, the full
+firefox chain (atan2 angle + grounded clamp arms, launch face arms, bounce)
+, the shine family (reflector swap, shineLoop, face flip, release/b-held
+arms, platform drop, jump-cancel, double-jump-out), all four THROW* (guard
++ full arms via self-grab grabbing=grabbedBy=3, laser crossings, hq-push
+crossings incl. THROWDOWN's true flag, CATCHCUT + WAIT release arms), all
+20 THROWN* inits + clamp-quirk arms (THROWNFOXFORWARD's double clamp,
+THROWNPUFFUP's player-timer clamp), all 8 CLIFF* (init/offset/grounding/
+setVel/attack/interrupt-release arms against the default pre-match stage's
+real ledges), APPEAL. Sweep spawns are spliced back out of aArticles and
+hitQueue (net-restore purity). Zero-live surfaces WITHOUT a sweep
+(documented): SIDESPECIALAIR.init's grounded arm (upstream itself
+stack-overflows — main's grounded arm recurses with grounded still true),
+the CLIFF* onLedge===-1 canGrabLedge table-write arm (C traps; mvData
+drift-guarded), THROWNFALCO*/FALCON* offset overruns past the array end
+(upstream throws; C traps at mv_fox_pair), and interrupt-tail WALK arms
+shadowed by checkForTilts on the same axis domain.
 
 ## The undef-ret allowlist (rule 8)
 

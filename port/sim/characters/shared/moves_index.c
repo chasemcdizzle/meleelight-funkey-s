@@ -156,40 +156,49 @@ void mv_turnOffHitboxes(MlSim *S, double i) {
   S->aliasHbHitList[(int)i] = false;
 }
 
-void mv_assign_thrown_id0(MlSim *S, double p) {
+void mv_assign_hitbox_id(MlSim *S, double p, const char *moveKey, int srcIdx,
+                         int dstIdx) {
   MlPlayer *pl = mv_player(S, p);
   const int c = (int)S->characterSelections[(int)p];
   if (c < 0 || c >= ML_CHARS) mv_out_of_domain("charHitboxes char id");
+  if (srcIdx < 0 || srcIdx > 3 || dstIdx < 0 || dstIdx > 3) {
+    mv_out_of_domain("charHitboxes id index");
+  }
   const ml_hitbox_t *src = 0;
   for (int32_t k = 0; k < ml_hitbox_move_count[c]; k++) {
-    if (strcmp(ml_hitbox_moves[c][k].name, "thrown") == 0) {
-      src = ml_hitbox_moves[c][k].id[0];
+    if (strcmp(ml_hitbox_moves[c][k].name, moveKey) == 0) {
+      src = ml_hitbox_moves[c][k].id[srcIdx];
       break;
     }
   }
-  if (src == 0) mv_out_of_domain("charHitboxes.thrown.id0 missing");
+  if (src == 0) mv_out_of_domain("charHitboxes id entry missing");
+  // Every charHitboxes entry is a 12-key createHitbox object (chars-data
+  // shape); its offset is a per-frame Vec2D ARRAY or (throw hitboxes) a
+  // SINGLE Vec2D — ml_player.h offsetSingle (M2 task 8 class fix: the old
+  // CONSTRUCTOR fallback here mis-shaped single-offset chars data; it was
+  // unreached by every prior capture).
   MlHitboxSpec hb;
   memset(&hb, 0, sizeof hb);
+  hb.shape = ML_HB_CHARDATA;
   if (src->offsetIsArray) {
-    hb.shape = ML_HB_CHARDATA;
     if (src->offsetCount > ML_HB_OFFSET_CAP) {
-      mv_out_of_domain("thrown.id0 offset array over cap");
+      mv_out_of_domain("charHitboxes id offset array over cap");
     }
     hb.offsetLen = src->offsetCount;
     for (int32_t k = 0; k < src->offsetCount; k++) {
       hb.offsetArr[k].x = ml_f64(src->offset[k].x);
       hb.offsetArr[k].y = ml_f64(src->offset[k].y);
     }
-    hb.clank = (double)src->clank;
-    hb.hitAirborne = (double)src->hitAirborne;
-    hb.hitGrounded = (double)src->hitGrounded;
-    hb.throwextra = src->throwextra != 0;
   } else {
-    hb.shape = ML_HB_CONSTRUCTOR;
-    if (src->offsetCount != 1) mv_out_of_domain("thrown.id0 offset shape");
+    if (src->offsetCount != 1) mv_out_of_domain("charHitboxes id offset shape");
+    hb.offsetSingle = true;
     hb.offset.x = ml_f64(src->offset[0].x);
     hb.offset.y = ml_f64(src->offset[0].y);
   }
+  hb.clank = (double)src->clank;
+  hb.hitAirborne = (double)src->hitAirborne;
+  hb.hitGrounded = (double)src->hitGrounded;
+  hb.throwextra = src->throwextra != 0;
   hb.size = ml_f64(src->size);
   hb.dmg = (double)src->dmg;
   hb.angle = (double)src->angle;
@@ -197,7 +206,92 @@ void mv_assign_thrown_id0(MlSim *S, double p) {
   hb.bk = (double)src->bk;
   hb.sk = (double)src->sk;
   hb.type = (double)src->type;
-  pl->hitboxes.id[0] = hb;
+  pl->hitboxes.id[dstIdx] = hb;
   // element write THROUGH the id alias mirrors (rule 10):
-  if (S->aliasHbId[(int)p]) pl->phys.prevFrameHitboxes.id[0] = hb;
+  if (S->aliasHbId[(int)p]) pl->phys.prevFrameHitboxes.id[dstIdx] = hb;
+}
+
+void mv_assign_thrown_id0(MlSim *S, double p) {
+  mv_assign_hitbox_id(S, p, "thrown", 0, 0);
+}
+
+// activeStage[l[0]][l[1]][l[2]] for l = activeStage.ledge[onLedge] — the
+// generalized CLIFF* coordinate read (M2 task 8).
+Vec2D mv_ledge_point(MlSim *S, double onLedge, const char *what) {
+  const int idx = (int)onLedge;
+  if (onLedge != (double)idx || idx < 0 || idx >= S->stage.ledgeCount) {
+    // ledge[<bad>] is undefined; activeStage[l[0]] then THROWS upstream
+    mv_out_of_domain(what);
+  }
+  const MlLedge *l = &S->stage.ledge[idx];
+  const SurfaceList *list =
+      l->list == 'g' ? &S->stage.s.ground : &S->stage.s.platform;
+  const int si = (int)l->index;
+  if (si < 0 || si >= list->count) mv_out_of_domain(what);
+  const Surface *sf = &list->items[si];
+  return ((int)l->point == 0) ? sf->p0 : sf->p1;
+}
+
+// --- checkForIASA with real dispatch (actionStateShortcuts.js:388-416) ------
+static MvCharModuleLookup g_char_module[AS_CHARS];
+
+void mv_register_char_module(int charId, MvCharModuleLookup lookup) {
+  if (charId < 0 || charId >= AS_CHARS) {
+    mv_out_of_domain("mv_register_char_module: char id");
+  }
+  g_char_module[charId] = lookup;
+}
+
+static void mv_char_module_init(MlSim *S, int charId, const char *name,
+                                double p, const MlInputBuffer in[4]) {
+  // upstream: <CHAR>MOVES[a[1]].init(p, input) — the per-char module
+  // index, NOT the actionStates table (identical fns by reference, but
+  // the module path is the faithful one). Unregistered char = a cluster
+  // not yet translated: out of this replay's domain.
+  if (g_char_module[charId] == 0) {
+    mv_out_of_domain("checkForIASA: char module not registered");
+  }
+  const MlMoveDef *def = g_char_module[charId](name);
+  if (def == 0 || def->init == 0) {
+    mv_out_of_domain("checkForIASA: unknown aerial move name");
+  }
+  def->init(S, p, in, 0);
+}
+
+AsTri mv_checkForIASA(MlSim *S, double p, const MlInputBuffer in[4],
+                      bool isAerial) {
+  MlPlayer *pl = mv_player(S, p);
+  // absent IASATimer: `timer > undefined` is false (NaN comparison)
+  if (pl->hasIASATimer ? (pl->timer > pl->IASATimer) : false) {
+    if (isAerial) {
+      const AsPair a = as_checkForAerials(pl->phys.face, MV_IN(in, p));
+      if ((as_checkForDoubleJump(S->tapJumpOff[(int)p], MV_IN(in, p)) &&
+           (!pl->phys.doubleJumped)) ||
+          (as_checkForMultiJump(S->tapJumpOff[(int)p], MV_IN(in, p)) &&
+           pl->phys.jumpsUsed < 5 && mv_attr(MV_CS(S, p))->multiJump != 0)) {
+        if (MV_IN(in, p)[0].lsX * pl->phys.face < -0.3) {
+          mv_JUMPAERIALB.init(S, p, in, 0); // the shared MODULE object
+        } else {
+          mv_JUMPAERIALF.init(S, p, in, 0);
+        }
+        return AS_TRUE;
+      } else if (a.flag) {
+        const double c = MV_CS(S, p);
+        if (c == 0) {
+          mv_char_module_init(S, 0, mv_pair_str(&a), p, in); // MARTHMOVES
+        } else if (c == 1) {
+          mv_char_module_init(S, 1, mv_pair_str(&a), p, in); // PUFFMOVES
+        } else if (c == 2) {
+          mv_char_module_init(S, 2, mv_pair_str(&a), p, in); // FOXMOVES
+        }
+        // chars 3/4 dispatch nothing upstream (no branch) — verbatim
+        return AS_TRUE;
+      } else {
+        return AS_FALSE;
+      }
+    } else {
+      // upstream's non-aerial arm is empty
+    }
+  }
+  return AS_UNDEF; // falls off the end -> undefined
 }

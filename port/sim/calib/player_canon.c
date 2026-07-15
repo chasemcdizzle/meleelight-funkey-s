@@ -155,12 +155,19 @@ static MlHitboxSpec pc_hitbox_spec(const CanonVal *v) {
     s.hitGrounded = pc_num(v->vals[5], "hitbox.hitGrounded");
     s.kg = pc_num(v->vals[6], "hitbox.kg");
     const CanonVal *off = v->vals[7];
-    if (off->type != CV_ARR || off->count < 1 || off->count > ML_HB_OFFSET_CAP) {
-      pc_fail("hitbox.offset: expected Vec2D array within cap");
-    }
-    s.offsetLen = off->count;
-    for (int i = 0; i < off->count; i++) {
-      s.offsetArr[i] = pc_vec2d(off->items[i], "hitbox.offset[]");
+    if (off->type == CV_OBJ) {
+      // chars-data key set with a SINGLE Vec2D offset (fox throw
+      // hitboxes; ml_player.h offsetSingle note, M2 task 8)
+      s.offsetSingle = true;
+      s.offset = pc_vec2d(off, "hitbox.offset");
+    } else if (off->type == CV_ARR && off->count >= 1 &&
+               off->count <= ML_HB_OFFSET_CAP) {
+      s.offsetLen = off->count;
+      for (int i = 0; i < off->count; i++) {
+        s.offsetArr[i] = pc_vec2d(off->items[i], "hitbox.offset[]");
+      }
+    } else {
+      pc_fail("hitbox.offset: expected Vec2D array within cap or Vec2D");
     }
     s.size = pc_num(v->vals[8], "hitbox.size");
     s.sk = pc_num(v->vals[9], "hitbox.sk");
@@ -239,7 +246,7 @@ static void ser_hitbox_spec(CanonBuf *b, const MlHitboxSpec *s) {
   cb_puts(b, ",\"kg\":");
   cb_num(b, s->kg);
   cb_puts(b, ",\"offset\":");
-  if (s->shape == ML_HB_CONSTRUCTOR) {
+  if (s->shape == ML_HB_CONSTRUCTOR || s->offsetSingle) {
     ser_vec2d_pc(b, s->offset);
   } else {
     cb_putc(b, '[');

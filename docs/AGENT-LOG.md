@@ -1750,3 +1750,142 @@ MILESTONE PASS: M2-CAL
 - next: task 8 (characters/fox moves, 4,450 ln — extend the mvData/
   registry instrument to fox's per-char table; the 210 mdispatch seams
   recorded here become live cross-checks for the per-char clusters).
+
+## iter 27 — 2026-07-14 — M2 task 8: characters/fox moves — MOVES fox MATCH
+
+- phase M2, task 8 (the fox per-char move set: 61 move objects, 192 phase
+  fns — the first per-char cluster; the task-7 shared bodies are its
+  nested C tree, and the article boundary gets its first real seam).
+- done-check: `bash port/sim/calib/check-moves-fox-replay.sh` → exit 0,
+  `MOVES fox MATCH` (.loop/task8-donecheck.log). Per golden (g01/g03/
+  g08): 2 fresh captures byte-identical (cmp), both runs STREAM MATCH vs
+  the frozen streams (3600/3600 exact; finalCheck mvData re-dump
+  drift-guarded), pins OK (expected-capture-moves-fox.json), strict
+  replay 0 divergences — 1738 + 888 + 2934 = 5560 records: 3758
+  mutation-captured fox-origin phase calls (args [phase,name,[slot],
+  inputs|null,pre] — THROWN*{BACK,DOWN} inits arrive 1-arg upstream;
+  post {alias,hq,players,rng,snd,vfx}; 168 frame-0 rule-11/12 sweep
+  records per golden on a separate sweep mulberry32), 75 article seams
+  (LASER ×27 live on g01 AND g08 + 7 sweep spawns each; g03 sweep-only),
+  0 live mdispatch seams (measured: fox never threw a non-fox over these
+  traces), 1721 standalone seeded draws (1488 on g08 — the CPU golden's
+  AI plane, chain-verified draw-for-draw), 3 mvData + 3 rngBoot records.
+- GOLDENS (PROVISIONAL, auto-adopted): g01/g03/g08 — the fox carriers.
+  Deviation from the §M2 g01/g04/g06 convention documented: the
+  convention's PURPOSE is live coverage and g04/g06 field no fox slot.
+  g08 is the FIRST CPU-golden capture: run-capture.js takes the manifest
+  cpu params unchanged, AI stays JS-side per the M2 AI policy, and the
+  verify-stream guard + the standalone-draw chain hold exactly as on
+  human traces (rngCalls 1496 reproduced).
+- conformance guard + regressions ALL GREEN (.loop/task8-reg-*.log):
+  ENVCOLL MATCH · UTIL MATCH · PLAYER MODEL MATCH · INPUT MATCH ·
+  ASSHORT MATCH · PHYSICS MATCH · HITDET MATCH · MOVES SHARED MATCH —
+  every prior spec re-verified against the edited shared TUs
+  (ml_player.h/player_canon.c/input_canon.c/shared moves_index.c).
+- design: boundary = every FOX-ORIGIN actionStates entry fn (identity vs
+  the characters/fox/moves module index — rule 15's instrument extended
+  per its recipe; fox-origin measured ONLY on table 2: 61 states/192 fns)
+  + the 2 article inits (194 wrapped). SHARED entries stay UNWRAPPED —
+  the task-7 scope lesson applied in reverse: at top level they are
+  chain-safe silent surface (their draws are standalone records), inside
+  a fox record they are the TRANSPARENT nested C tree (shared bodies
+  linked in; fox JAB1.interrupt → WAIT.init is a direct MODULE import
+  upstream and a direct mv_WAIT.init call in C). Upstream's TWO dispatch
+  graphs are mirrored distinctly: direct module imports (fox→shared,
+  fox→fox, MOVES[checkFor-payload] via fox_move_def) vs actionStates
+  TABLE dispatch (only the THROW* victim arms — mv_dispatch: fox victim
+  = registered body, non-fox victim = mdispatch seam; THROWBACK/
+  THROWDOWN dispatch 1-arg). mv_checkForIASA (shared moves_index.c) is
+  checkForIASA with REAL dispatch — shared JUMPAERIALB/F MODULE objects
+  (puff's table overrides deliberately bypassed, the import-path
+  semantics) + a registered per-char module index (mv_register_char_
+  module; tasks 9-12 register theirs); the task-4 note-based
+  as_checkForIASA stays the asshort boundary unchanged. hitQueue.push
+  from fox THROW* = mv_hq_push6 appending the row's canon onto the
+  opaque hq carrier. Article seam: inits only READ player state, mutate
+  only JS-side article queues, draw no RNG → 4-field FIFO records, args
+  verified bit-exactly, no resync — the documented task-13 boundary.
+  Data planes: charHitboxes assigns via the GENERALIZED
+  mv_assign_hitbox_id (CTAB1, 5th consumer); fox move-object data arrays
+  (ATTACKDASH/APPEAL/FIREFOXBOUNCE/THROWFORWARD setVelocities*, 20
+  THROWN*.offset incl. authored expressions like -7.74-0.08, CLIFF*
+  offset/setVelocities) from the mvData fox dump (rule 15 — never
+  retyped), served by mv_fox_arr/mv_fox_pair/mv_fox_arr_len.
+- DIVERGENCE LEDGER (root-cause class · fix · min):
+  1. hitbox spec offsetSingle (5 sweep divergences, THROW* records) ·
+     charHitboxes entries are ALWAYS 12-key createHitbox objects but the
+     throw hitboxes pass a SINGLE Vec2D offset (attributes.js:749) — a
+     third sub-shape the task-2 survey never saw; the CONSTRUCTOR
+     fallback in the assign helper (inherited from task 7's
+     mv_assign_thrown_id0) mis-shaped them and was unreached-wrong for
+     every prior capture · ml_player.h offsetSingle + player_canon
+     marshal/ser + mv_assign_hitbox_id always-CHARDATA (class fix) · 25m.
+  2. AI number-valued input buttons (g08 marshal hard-fail, exactly as
+     rule 7 designs) · ai.js writes NUMBERS into aiInputBank button
+     fields (`.l = 0`/`= 1.0`) — the task-3 "buttons are real JS
+     booleans" pin was a HUMAN-golden fact · verified buttons are
+     truthiness-only upstream (no raw propagation into player state in
+     characters/ or actionStateShortcuts.js), then widened
+     ml_input_from_canon: CV_NUM buttons marshal by JS truthiness
+     (NEW RULE 16) · 20m.
+  Replay divergences after those two class fixes: ZERO on all three
+  goldens (rules 1-15 held; no expression-shape, desugaring, alias,
+  chain-order, or data-plane misses across 5560 records).
+- comparator negative tests (all restored, tree re-verified 0 div):
+  (a) corrupted POST players nibble → exactly 1; (b) JAB1 WAIT threshold
+  17→16 → 3/11/0 on g01/g03/g08 (bites where the value occurs — rule-12
+  corollary); (c) laser article y 7→8 → 27/27 on g01/g08 (article-args);
+  (d) THROWDOWN hq-push flag true→false → exactly 1 (the hq append
+  model's teeth); (e) THROWUP dispatched through marth's table →
+  seam-underflow divergence (mdispatch FIFO teeth despite zero live
+  seams); (f) circleDust 4→3 draws → 107/81 (sweep-chain cascade);
+  (g) ATTACKDASH setVelocities index off-by-one → 3 (rule-11 sweep teeth
+  on the rule-15 data plane).
+- honest coverage (documented, not silent): SIDESPECIALAIR.init's
+  grounded arm is UNSWEEPABLE — upstream itself stack-overflows (main's
+  grounded arm re-enters main with grounded still true; found when the
+  sweep crashed the page, removed with a spec comment); the CLIFF*
+  onLedge===-1 arm WRITES the move table (`this.canGrabLedge = false`) —
+  C traps at the exact site and the finalCheck-guarded mvData dump would
+  catch the drift if it ever fired live; THROWNFALCO*/FALCON* offset
+  overruns past the array end trap (upstream throws — no clamp in that
+  family); interrupt-tail WALK arms shadowed by checkForTilts stay
+  unswept; live mdispatch (non-fox THROW victims) zero — seam-guarded,
+  loud on first live record. Live coverage DID include: JAB1/FORWARDTILT/
+  DOWNTILT/GRAB/CATCHATTACK/DOWNATTACK chains, ATTACKAIRN/F/B/D incl.
+  land arms, NEUTRALSPECIALGROUND with 54 live LASER spawns, and fox as
+  THROWN victim (THROWNPUFFBACK live on g08).
+- artifacts (sha256/12): fox moves.h 58a122c4057c · fox moves_index.c
+  8c6c637a81aa · fox moves/*.c (61 files, 4983 lines) 19f5c8bc2f99 ·
+  spec-moves-fox.js fd0b7a961b1f · replay_moves_fox.c b1e2e122e3e3 ·
+  expected-capture-moves-fox.json 2e4b3e497e13 ·
+  check-moves-fox-replay.sh 04194bb92770 · ml_player.h b77e472f8539 ·
+  player_canon.c 37dba6a20e92 · input_canon.c 2b18537ca82c · shared
+  moves.h 11150dcc5871 · shared moves_index.c 5d7270a386d2 · FORMAT.md
+  c8f5dbd20967. Logs: .loop/task8-donecheck.log, .loop/task8-reg-*.log.
+- zoom-out: (1) NEW RULE 16 (fix_plan §M2): value models measured on
+  human goldens do NOT transfer to CPU goldens — the AI plane authors its
+  own value shapes (number buttons); re-survey before reuse, widen only
+  after verifying the consumption mode. Task 16's AI-input bridge
+  inherits this directly. (2) The offsetSingle find is rule 7 WORKING as
+  the instrument: both divergence classes this iteration were caught by
+  strict marshallers hard-failing outside the measured domain, not by
+  chasing wrong outputs — capture-FIRST plus hard-fail marshalling
+  remains the class-level defense; notably the wrong CONSTRUCTOR
+  fallback had sat unreached in verified code since task 7 — "verified"
+  means verified OVER THE CAPTURED DOMAIN, nothing more. (3) The
+  per-char cluster recipe is now mechanical for tasks 9-12: wrap
+  char-origin by module-index identity, leave shared unwrapped, seam the
+  other chars, extend the mvData dump with {origin, data:array-props},
+  register the module index for checkForIASA, reuse the sweep
+  scaffolding (slot-3 + cs[3] injection, self-grab throws, default-stage
+  cliffs, article/hq splice-restore). Falco (task 9) adds its laser/
+  DOWNSPECIAL articles to the same article-seam pattern. (4) Upstream's
+  import-graph vs table-dispatch distinction is now an explicit modeling
+  axis (module calls ≠ actionStates dispatch — puff's JUMPAERIALB/F
+  overrides make the difference observable); rule 15's "composition is
+  executed data" extends to the DISPATCH GRAPH, not just the data plane.
+- next: task 9 (characters/falco moves, 4,488 ln — extend the mvData/
+  registry instrument to falco; falco carries g02/g05/g07 (g07 = the
+  second CPU golden); falco's laser/THROWFORWARD article sites reuse the
+  article-seam pattern with isFox:false options).

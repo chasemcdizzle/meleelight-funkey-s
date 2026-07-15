@@ -404,6 +404,42 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   teeth again no-op on keyboard-quantized axes (DJ direction flip bit
   only where neutral double-jumps occur — rule-12 corollary, 3rd
   instance).
+- **characters/fox moves (M2 task 8 committed form):** `node
+  port/sim/calib/run-capture.js --spec moves-fox --golden <id>` — wraps
+  every FOX-ORIGIN actionStates entry's phase fns (192, all on table 2 —
+  fn identity vs the characters/fox/moves module index, rule 15's
+  instrument extended) + the LASER/ILLUSION article inits (194 wrapped)
+  over goldens **g01/g03/g08** (the fox carriers — PROVISIONAL deviation
+  from g01/g04/g06, which field no fox; g08 = FIRST CPU-golden capture,
+  AI JS-side, its seeded draws chain-verify as standalone records).
+  Shared entries stay UNWRAPPED (top level: chain-safe silent surface;
+  under a fox record: the transparent nested C tree — task 7's bodies
+  linked in); non-fox per-char entries are mdispatch seams (THROWNFOX* on
+  victims; zero live, teeth negative-test-proven); articles are 4-field
+  FIFO seams (task-13 boundary — inits only READ player state, no RNG:
+  args verified bit-exactly, no resync). C: `port/sim/characters/fox/
+  moves/*.c` (61 files) + fox moves_index/moves.h — direct MODULE calls
+  mirror upstream's import graph (fox→shared, fox→fox, MOVES[payload]);
+  TABLE dispatch (mv_dispatch) only at upstream actionStates sites
+  (THROW* victim arms; THROWBACK/THROWDOWN dispatch 1-arg, no input).
+  hitQueue.push modeled as canon-row append on the opaque hq
+  (mv_hq_push6); mv_checkForIASA = checkForIASA with REAL dispatch
+  (shared JUMPAERIALB/F MODULE objects — puff's table overrides do NOT
+  apply — plus a registered per-char module index); fox move-object data
+  arrays (setVelocities*/offsets incl. authored expressions) come from
+  the mvData fox dump (rule 15). Task check: `bash
+  port/sim/calib/check-moves-fox-replay.sh` → `MOVES fox MATCH`. Gotcha
+  classes: charHitboxes entries are ALWAYS 12-key createHitbox objects
+  but their offset may be a SINGLE Vec2D (fox throw hitboxes) — the
+  hitbox value model gained offsetSingle, and the old CONSTRUCTOR
+  fallback for chars data was unreached-wrong (class-fixed in
+  mv_assign_hitbox_id); CPU goldens widen VALUE domains (fix_plan §M2
+  rule 16: ai.js writes NUMBER buttons into aiInputBank — buttons are
+  truthiness-only upstream, marshal by JS truthiness); SIDESPECIALAIR.
+  init's grounded arm infinitely recurses UPSTREAM (unsweepable by
+  construction); CLIFF*'s onLedge===-1 arm WRITES the move table
+  (`this.canGrabLedge = false`) — C traps at the site and the mvData
+  finalCheck would catch the drift.
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;

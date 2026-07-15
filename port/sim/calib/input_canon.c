@@ -52,10 +52,21 @@ MlInput ml_input_from_canon(const CanonVal *v) {
     }
     char *base = (char *)&in;
     if (FIELDS[i].kind == FK_BOOL) {
-      if (v->vals[i]->type != CV_BOOL) {
-        ml_canon_fail("Input boolean field not T/F (undef out of domain)");
+      if (v->vals[i]->type == CV_BOOL) {
+        *(bool *)(base + FIELDS[i].off) = v->vals[i]->b;
+      } else if (v->vals[i]->type == CV_NUM) {
+        // Measured domain extension (M2 task 8, g08 CPU golden): ai.js
+        // writes NUMBERS into button fields of aiInputBank inputs
+        // (`aiInputBank[i][0].l = 0` / `= 1.0`, ai.js:37/170). Every sim
+        // consumer of the button fields is truthiness-only (verified: no
+        // raw `= input[p][k].<button>` propagation into player state in
+        // characters/ or actionStateShortcuts.js), so JS truthiness is
+        // the faithful bool mapping. -0/NaN are falsy.
+        const double d = v->vals[i]->num;
+        *(bool *)(base + FIELDS[i].off) = d == d && d != 0;
+      } else {
+        ml_canon_fail("Input boolean field not T/F/number (out of domain)");
       }
-      *(bool *)(base + FIELDS[i].off) = v->vals[i]->b;
     } else {
       if (v->vals[i]->type != CV_NUM) {
         ml_canon_fail("Input number field not a number (undef out of domain)");

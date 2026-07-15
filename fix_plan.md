@@ -483,9 +483,50 @@ coverage and all per-char seam arms not fired by the traces are
 translated verbatim and seam/trap-guarded. Rule-14 measurement: seam
 window draws ZERO over all three goldens (mechanism supports nonzero via
 seam rng lists).)
-8. characters/fox moves (4,450 ln).
-   done-check: `bash port/sim/calib/check-moves-fox-replay.sh` →
-   `MOVES fox MATCH`, exit 0.
+- **RULE 16 — value models measured on HUMAN goldens do not transfer to
+  CPU goldens (adopted task 8)**: the AI plane writes its own value
+  shapes — ai.js assigns NUMBERS into aiInputBank button fields
+  (`.l = 0` / `= 1.0`; the task-3 input model's "buttons are real JS
+  booleans" held only over g01/g04/g06). Before reusing a value model on
+  a CPU golden, RE-SURVEY the captured domain; widen only after verifying
+  the consumption mode (buttons are truthiness-only — measured: no raw
+  button propagation into player state anywhere in characters/ or
+  actionStateShortcuts.js — so CV_NUM buttons marshal by JS truthiness).
+  Task 16's AI-input bridge inherits this: aiInputBank rows are NOT
+  shape-identical to human Input objects.
+
+(task 8 — characters/fox moves — DONE iter 27:
+`bash port/sim/calib/check-moves-fox-replay.sh` → MOVES fox MATCH, exit 0.
+1738 + 888 + 2934 = 5560 records over g01/g03/g08 — the fox carriers
+(PROVISIONAL auto-adopted deviation from the g01/g04/g06 convention:
+g04/g06 field no fox slot; g08 is the FIRST CPU-golden capture — AI stays
+JS-side, its 1488 seeded draws chain-verify as standalone records), 3758
+mutation-captured fox-origin phase calls (168 frame-0 rule-11/12 sweep
+records per golden on the sweep RNG chain), 75 article seams (the task-13
+boundary: LASER/ILLUSION inits verified name+options bit-exactly in call
+order, no resync — inits only read player state), 0 live mdispatch seams
+(fox never threw a non-fox live; FIFO teeth negative-test-proven),
+byte-stable ×2, 6× STREAM MATCH, 0 replay divergences after two
+value-model class fixes (hitbox offsetSingle sub-shape; rule 16's AI
+number-buttons). C: `port/sim/characters/fox/moves/*.c` (61 files,
+structure-parallel) + fox `moves_index.c`/`moves.h` (module-index
+dispatch: direct shared/fox module calls mirror upstream's import graph;
+table dispatch only where upstream uses actionStates — THROW* victim
+arms); shared moves.h gained mv_assign_hitbox_id (generalized from
+thrown_id0), mv_ledge_point, mv_hq_push6 (hitQueue.push value model:
+canon-row append on the opaque hq carrier), mv_checkForIASA (REAL
+dispatch through shared JUMPAERIALB/F modules + the registered per-char
+module index — the task-4 note-based as_checkForIASA stays the asshort
+boundary). Fox move-object data arrays (setVelocities*/THROWN* offsets/
+CLIFF* offsets incl. authored expressions like -7.74-0.08) come from the
+mvData fox dump (rule 15 extended per its recipe). Honest coverage:
+SIDESPECIALAIR.init's grounded arm is unsweepable (upstream itself
+infinitely recurses), CLIFF*'s onLedge===-1 canGrabLedge TABLE WRITE arm
+traps in C (would also drift the finalCheck-guarded mvData dump),
+THROWNFALCO*/FALCON* offset overruns trap (upstream throws), THROW*
+against a live non-fox victim stays seam-guarded (loud on first live
+record).)
+
 9. characters/falco moves (4,488 ln).
    done-check: `bash port/sim/calib/check-moves-falco-replay.sh` →
    `MOVES falco MATCH`, exit 0.

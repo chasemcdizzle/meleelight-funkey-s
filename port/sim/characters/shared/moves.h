@@ -184,9 +184,35 @@ void mv_turnOffHitboxes(MlSim *S, double i);
 // player deref (absent slot = domain violation):
 MlPlayer *mv_player(MlSim *S, double i);
 
-// DAMAGEFLYN: player[p].hitboxes.id[0] = charHitboxes.thrown.id0 (CTAB1
+// player[p].hitboxes.id[dst] = charHitboxes[moveKey].id<src> (CTAB1
 // ml_hitbox_moves; element write mirrors through the id alias when live).
+// Generalized for the per-char clusters (M2 task 8); DAMAGEFLYN's
+// mv_assign_thrown_id0 is the thrown/id0 special case.
+void mv_assign_hitbox_id(MlSim *S, double p, const char *moveKey, int srcIdx,
+                         int dstIdx);
 void mv_assign_thrown_id0(MlSim *S, double p);
+
+// activeStage[l[0]][l[1]][l[2]] for l = activeStage.ledge[onLedge] — the
+// CLIFF* coordinate read (M2 task 8; CLIFFCATCH.c carries the original
+// static copy). Out-of-range mirrors upstream's throw via mv_out_of_domain.
+Vec2D mv_ledge_point(MlSim *S, double onLedge, const char *what);
+
+// hitQueue.push([a, b, c, d, e, f]) from move code (fox THROW*'s
+// [grabbing, p, 0, false, true, isThrowDown] rows) — driver-provided:
+// the replay appends the row's canon to its opaque hq carrier.
+extern void mv_hq_push6(MlSim *S, double a, double b, double c, bool d,
+                        bool e, bool f);
+
+// checkForIASA with REAL dispatch (actionStateShortcuts.js:388-416; the
+// note-based as_checkForIASA stays the task-4 asshort boundary): the
+// JUMPAERIALB/F arm dispatches the shared MODULE objects (checkForIASA's
+// import path — puff's table overrides do NOT apply here), the aerial-name
+// arm dispatches the per-char module index registered below. Called by the
+// per-char aerials' interrupts (tasks 8-12).
+typedef const MlMoveDef *(*MvCharModuleLookup)(const char *name);
+void mv_register_char_module(int charId, MvCharModuleLookup lookup);
+AsTri mv_checkForIASA(MlSim *S, double p, const MlInputBuffer in[4],
+                      bool isAerial);
 
 // --- the 79 shared move definitions (one per upstream file) -------------------
 extern const MlMoveDef mv_WAIT, mv_DASH, mv_RUN, mv_SMASHTURN, mv_TILTTURN,
