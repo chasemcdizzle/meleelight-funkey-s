@@ -2864,3 +2864,128 @@ MILESTONE PASS: M2-CAL
 - next: task 16 — AI-input bridge for CPU goldens (write-set recon
   hard-check, per-frame aiInputBank + RNG-draw counts over g07/g08,
   STREAM MATCH guarded; done-check check-ai-bridge.sh -> AI BRIDGE OK).
+
+## iter 35 — 2026-07-15 — M2 task 16: AI-input bridge for CPU goldens — AI BRIDGE OK
+
+- phase M2, task 16 (fix_plan §M2 "AI policy"): AI-as-recorded-input —
+  the M2 exit gate covers CPU goldens g07/g08 while ai.js stays JS-side
+  until M4; the bridge records the AI's verified write-set and the C sim
+  replays CPU slots from it without executing AI logic.
+- done-check: `bash port/sim/calib/check-ai-bridge.sh` -> AI BRIDGE OK,
+  exit 0 (.loop/task16-donecheck.log). Per golden (g07/g08): x2
+  byte-identical fresh captures, 2x STREAM MATCH (non-perturbation guard
+  over the recon instrumentation), pins OK, bridge artifact
+  deterministic (x2 + cmp), strict C replay 0 divergences (17812 +
+  17893 records) — FIRST successful build, ledger opened and closed at
+  zero.
+- WHAT (capture): spec-ai.js wraps runAI (mutation record, post
+  {bank: post-runAI aiInputBank[i][0], bk: {ca,cs,cta,lm} AI-private
+  player bookkeeping incl. the upstream `curentAction` typo (ai.js:
+  1254), rng: the in-window seeded draw list}) + the spec-input chain
+  pair (pollInputs, physics [i, inputBuffers[i]]) — also the FIRST
+  input-chain capture over CPU goldens. Draw accounting closes exactly:
+  g07 = 81 standalone + 0 attributed (its falcon AI hits ZERO RNG
+  arms); g08 = 162 standalone + 1334 attributed in 1081 runAI windows
+  == the frozen rngCalls 1496.
+- WRITE-SET RECONCILIATION (the task's hard-check, two instruments):
+  (1) grep-measured: every LIVE assignment target in upstream ai.js is
+  aiInputBank[i][0].{a,b,csX,csY,l,lA,lsX,lsY,x,y,z} or player[i]
+  bookkeeping {currentAction,currentSubaction,lastMash,curentAction} or
+  window.isOffstage (module-load fn def) — the player[i].inputs.* /
+  phys.* / cpu.timer / bank .r writes are ALL inside block comments.
+  (2) runtime, EVERY runAI call: in-page pre/post canon diff of all 4
+  players (minus the 4-key allowlist), all 32 bank rows, playerType,
+  characterSelections, gameSettings, activeStage -> wsViol records
+  pinned ZERO + spec finalCheck throw. Measured: wsViol == 0 on both
+  goldens across all runs. Cost: negligible (26s captures — full-player
+  canon x8 per call is fine; airtight > sampled).
+- WHAT (C): port/sim/input/ai_input.h — rule 16's CLASS FIX: the
+  tagged JS-typed input model (MlAiVal bool|number|undefined — the AI
+  writes NUMBER buttons, and helper-AI literals with missing keys
+  assign UNDEFINED through `inputs.<f>` reads, e.g. CPUTech's
+  {lsX,lsY,a} read as inputs.l) now carries THE single interpretInputs
+  implementation (ml_ai_interpret_inputs, truthiness/ToNumber at the
+  exact upstream coercion sites); interpret_inputs.c's
+  ml_interpret_inputs became a conversion wrapper around it (human
+  domain = all-bool buttons, asserted on exit; interpretPause exposed
+  as shared ml_interpret_pause). port/sim/ai_bridge.{h,c}: AIBRIDGE1
+  artifact loader + ml_ai_bridge_apply (burn recorded draws
+  bit-verified on the CHAINED mulberry32; verify the never-AI-written
+  fields dd,dl,dr,du,r,rA,raw*,s against the chain — the recording
+  cannot smuggle state through fields the AI provably does not write;
+  install the row). calib/build-ai-bridge.js distills the artifact
+  (pure deterministic stream transform); calib/replay_ai.c chains BOTH
+  slots through the shared MlInputSimState (human via
+  ml_interpret_inputs, CPU via the tagged core), drives the bank from
+  the ARTIFACT (task 17's consumption path) cross-checked against every
+  runAI record, models the pollInputs bank-row ALIAS (slot 0 re-copied
+  post-runAI — upstream runAI runs BETWEEN interpretInputs and physics
+  inside update(i)), rule-18 chain-verifies the bank at every poll.
+- upstream facts pinned during recon: harnessSetupMatch sets mType =
+  "keyboard" for CPU slots too -> interpretInputs takes the KEYBOARD
+  arm for them (the raw*/deaden AI arm at main.js:787-795 NEVER runs in
+  the captured domain; bank raw* fields stay 0 for the whole trace);
+  pollInputs returns the bank ROW ITSELF for playertype-1 slots
+  (input.js:135) — record ret = pre-runAI row, physics slot 0 =
+  post-runAI row (one object, two read points).
+- comparator negative tests (perturb -> count -> restore, all
+  re-verified clean after): capture nibble in a history-slot field ->
+  exactly 1; artifact DROPPED DRAW -> 1234 (the chain shift cascades
+  through every later draw — the brief's requirement bites); artifact
+  draw VALUE nibble -> exactly 2 (record-vs-artifact + apply
+  bit-verify), chain intact; artifact bank lsX nibble -> 10 (runAI
+  row compare + slot-0 physics input divergence + next-frame rule-18
+  poll + 8-deep history propagation); never-written field s=B1 ->
+  divergences then chain-state HARD ABORT (the injected s drives the C
+  keyboard-arm pause machine -> playing toggles -> poll grounding
+  marshal-fail: the pause logic is provably live on CPU slots);
+  in-page junk write (player[0].__wsTooth inside the runAI window) ->
+  3510 wsViol records + capture run exit 1 (finalCheck throw). Spec
+  restored byte-identical (diff-verified).
+- REGRESSIONS: interpret_inputs.{h,c} were rebased onto the tagged core
+  -> full `bash port/sim/calib/check-input-replay.sh` re-run -> INPUT
+  MATCH (.loop/task16-regress-input.log; also smoke-replayed the three
+  existing captures pre-rerun: 3x 750992 records, 0 divergences).
+  Conformance guard `bash port/sim/check-envcoll.sh` -> ENVCOLL MATCH
+  (.loop/task16-guard-envcoll.log). No other check links the touched
+  TUs (grep-verified; input_canon.{h,c} untouched).
+- artifacts (sha256/12): ai_input.h 83c93c386dfc · interpret_inputs.c
+  b0ec7b7446fe · interpret_inputs.h ce030d1b6ecd · ai_bridge.h
+  e718b152b433 · ai_bridge.c 96dd51b5c18d · spec-ai.js 27c4856c424c ·
+  build-ai-bridge.js 73985b74d4d1 · replay_ai.c 3aeff2b7e4ce ·
+  check-ai-bridge.sh 3f2193ad7794 · expected-capture-ai.json
+  9a2d016bb247. Logs: .loop/task16-donecheck.log,
+  .loop/task16-regress-input.log, .loop/task16-guard-envcoll.log,
+  .loop/task16-tooth-ws.log.
+- honest coverage: undefined bank values are ZERO-LIVE on g07/g08
+  (model + marshal + artifact token U support them; CPUTech's
+  missing-key path never fired); runAI-skipped SLEEP frames zero-live
+  (handled by construction — no record, chain carries); the tagged
+  core's gamepad/AI arms remain live-uncovered exactly as they were in
+  the plain core (task-3 honest-coverage note carries over; traps
+  unchanged); `bk` bookkeeping is recorded but consumed by nothing in
+  M2 (it is the M4 ai.js port's future differential surface).
+- zoom-out: (1) rule 16's "value models measured on human goldens do
+  not transfer" got its CLASS-LEVEL fix: the input plane is now modeled
+  as tagged JS values ONCE, with the human bool/double model as a
+  verified projection — no second interpretInputs twin to drift (the
+  alternative, a structure-parallel duplicate for the AI slot, was
+  rejected for exactly that drift class). (2) The write-set recon is an
+  INSTRUMENT, not a one-time audit: it runs inside every future
+  check-ai-bridge.sh capture, so an upstream-understanding error (or a
+  future golden re-record with different AI behavior) fails loudly at
+  the capture, not silently in task 17's integration. (3) The
+  never-written-field verification generalizes rule 18: when a
+  recording carries a plane the recorded actor only PARTIALLY writes,
+  pin the measured write set and chain-verify the complement — the
+  same discipline as the platforms spec's static-platform chain. (4)
+  ai.js's own quirks (curentAction typo, undefined-through-missing-key
+  literals) are carried as DATA here, deferring their verbatim-code
+  reckoning to the M4 port — the bk record gives that port a ready
+  differential.
+- next: task 17 — integration: the full C gameTick (flattened
+  game-state struct, trace loader, M1 data consumption, mode-3 tick
+  order, boot-RNG parity, checksum-stream emission via task 15's
+  ml_fmt/ml_ser, headless platform TU), replay ALL 8 goldens
+  end-to-end vs the oracle streams; done-check `bash
+  port/sim/check-sim.sh` -> SIM CONFORMS — the M2 exit gate.

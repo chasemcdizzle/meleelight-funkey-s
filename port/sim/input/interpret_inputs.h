@@ -69,6 +69,11 @@ void ml_interpret_inputs(MlInputSimState *st, int i, bool active,
 // boundary to keep the chained state faithful.
 void ml_input_end_of_tick(MlInputSimState *st);
 
+// main.js:847 interpretPause — shared by both interpretInputs value
+// domains (the MlInput wrapper below and ai_input.h's tagged core,
+// M2 task 16).
+void ml_interpret_pause(MlInputSimState *st, bool pause0, bool pause1);
+
 // Out-of-captured-domain trap (never a silent stub, HARD RULE 2): branches
 // whose upstream behavior is match-lifecycle or another cluster's surface
 // (startGame/endGame combo, AI aiInputBank poll) call this instead of

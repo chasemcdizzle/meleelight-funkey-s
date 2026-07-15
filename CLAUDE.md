@@ -644,6 +644,37 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;
   idempotent, `--force` rebuilds from the pristine pin.
+- **AI-input bridge for CPU goldens (M2 task 16 committed form):** `node
+  port/sim/calib/run-capture.js --spec ai --golden <g07|g08>` — wraps
+  runAI (mutation record: args [i], post {bank, bk, rng} — the post-runAI
+  aiInputBank[i][0] row, the AI-private player bookkeeping, the seeded
+  draws consumed in-window) + the spec-input chain pair (pollInputs,
+  physics args-projected [i, inputBuffers[i]]) over the CPU goldens, with
+  a per-call in-page WRITE-SET RECON (pre/post canon of 4 players minus
+  the {currentAction,currentSubaction,curentAction,lastMash} allowlist +
+  all 32 bank rows + playerType/cS/gameSettings/activeStage; any other AI
+  write → wsViol record, pinned ZERO + finalCheck throw).
+  `node port/sim/calib/build-ai-bridge.js <id> <capture> <out>` distills
+  the replayable AIBRIDGE1 artifact (format: port/sim/ai_bridge.h; one
+  line per runAI: frame, slot, draw bit-patterns, 22 B0/B1/U/N<hex16>
+  field tokens in canon key order). C bridge `port/sim/ai_bridge.{h,c}`:
+  ml_ai_bridge_apply burns the recorded draws bit-verified on the CHAINED
+  mulberry32, verifies the never-AI-written fields (dd,dl,dr,du,r,rA,
+  raw*,s) against the chain, installs the row; task 17 calls it at the
+  update(i) runAI site. Task check: `bash port/sim/calib/
+  check-ai-bridge.sh` → `AI BRIDGE OK`. Gotcha classes: (1) rule-16 CLASS
+  FIX — interpretInputs is now implemented ONCE over the tagged JS-value
+  input model (port/sim/input/ai_input.h, MlAiVal bool|number|undefined;
+  AI helper literals assign undefined via missing-key reads);
+  ml_interpret_inputs is a conversion wrapper (task-3 check re-verified).
+  (2) upstream pollInputs returns the bank ROW ALIAS for CPU slots and
+  runAI runs BETWEEN interpretInputs and physics — slot 0 must be
+  re-copied from the bank post-runAI (a skipped write-through = 8-frame
+  history-propagating divergences). (3) the harness pins CPU-slot mType
+  to "keyboard": the KEYBOARD arm (incl. the pause machine reading the
+  bank's s by truthiness) is live on CPU slots; the raw*/deaden AI arm
+  never runs in the captured domain. (4) recon canon of FULL players ×2
+  per call costs ~nothing (26s captures) — prefer airtight over sampled.
 - **Upstream clone + build (proven twice — determinism spike + prototype):**
   ```
   git clone https://github.com/schmooblidon/meleelight "$MELEELIGHT_CLONE"

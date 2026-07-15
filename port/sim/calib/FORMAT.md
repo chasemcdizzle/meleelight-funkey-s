@@ -1135,6 +1135,83 @@ transfer arms ([1,1]→ground, [1,2]→ground, ground→[1,1], ground→[1,2])
 and three transfer negatives (x outside the band, platform static, rider
 not grounded).
 
+## The ai spec (M2 task 16)
+
+The AI-input bridge boundary over the CPU goldens **g07/g08** (the only
+goldens with a playertype-1 slot; fix_plan §M2 "AI policy": ai.js stays
+JS-side until M4 — the C sim replays CPU slots from this recording).
+Wrapped boundary (3 fns): `runAI` (main/ai.js; called from update(i),
+main.js:902, when `!starting && actionState != "SLEEP"`), `pollInputs`,
+and `physics` args-projected to `[i, inputBuffers[i]]` (the spec-input
+chain pair — this spec is ALSO the first input-chain capture over the
+CPU goldens).
+
+- **runAI records** (mutation, 5-field): args `[i]`; post envelope
+  `{bank, bk, rng}` — `bank` = the post-runAI `aiInputBank[i][0]` row
+  (the value plane the C bridge installs; NUMBER/undefined button values
+  live here, rule 16 — helper-AI literals with missing keys assign
+  undefined through `inputs.<f>` reads), `bk` = the AI-private player
+  bookkeeping `{ca: currentAction, cs: currentSubaction, cta:
+  curentAction (upstream typo, ai.js:1254), lm: lastMash}` (recorded for
+  the M4 ai.js port's future differential; consumed by nothing in M2),
+  `rng` = the seeded draws consumed INSIDE the call, in order — the draw
+  schedule the C sim burns at the runAI call site (a dropped draw shifts
+  the whole chain).
+- **The pollInputs alias**: for the CPU slot, upstream pollInputs RETURNS
+  `aiInputBank[i][0]` itself (input.js:135) — the poll record's ret is
+  the row read at interpretInputs time (= the PREVIOUS runAI's output,
+  since runAI runs after interpretInputs inside update(i)), and the
+  physics projection's slot 0 is the row's POST-runAI state (the alias
+  write-through). The harness pins the CPU slot's mType to "keyboard"
+  (oracle/meleelight-harness.patch), so interpretInputs takes the
+  KEYBOARD arm for it — the raw*/deaden AI arm (main.js:787-795) never
+  runs in the captured domain (its rawX/rawY/rawcsX/rawcsY stay at the
+  inputData 0 defaults for the whole trace).
+- **WRITE-SET RECONCILIATION (the task's hard-check)**: ai.js's reachable
+  write surface is its import graph (player/cS/playerType from main,
+  aiInputBank from input, gameSettings, activeStage) + Math.random.
+  Grep-measured live assignment targets: `aiInputBank[i][0].{a,b,csX,
+  csY,l,lA,lsX,lsY,x,y,z}` (11 of 22 fields; `.r` only in a comment),
+  `player[i].{currentAction,currentSubaction,lastMash}` + `cpu.
+  curentAction`, `window.isOffstage` (module-load fn def); the
+  `player[i].inputs.*` / `phys.*` / `cpu.timer` writes are ALL inside
+  block comments. Enforced at runtime EVERY runAI call: canon snapshots
+  before/after of all four players (minus the four bookkeeping keys),
+  all 32 bank rows, playerType, characterSelections, gameSettings,
+  activeStage — any diff outside `aiInputBank[i][0]` pushes a `wsViol`
+  record (pinned ZERO) and fails the spec's finalCheck. Single-threaded
+  synchronous JS: between the snapshots only runAI runs.
+- **AIBRIDGE1 artifact** (`<id>.ai-bridge.txt`, built by
+  `build-ai-bridge.js`, format spec in `port/sim/ai_bridge.h`): the
+  distilled per-runAI schedule — frame, slot, draw values (bit
+  patterns), the 22-field row (B0/B1/U/N<hex16> tokens, canon key
+  order). Deterministic transform of the capture (built ×2 + cmp). The
+  C replay is DRIVEN by the artifact (task 17's consumption path) and
+  cross-checks it against every runAI record; `ml_ai_bridge_apply`
+  additionally verifies the artifact's never-AI-written fields
+  (dd,dl,dr,du,r,rA,raw*,s) against the C chain before installing —
+  the recording cannot smuggle state through fields the AI provably
+  does not write.
+- **RNG**: rngBoot + attributed runAI draw lists + everything else
+  standalone `Math.random` records pushed at draw time (chain-order
+  faithful). runAI never nests and dispatches nothing (rule 14 vacuous;
+  the wrapper asserts no nesting).
+- **No sweep** (rule 11 n/a): the boundary is data-driven — the
+  recording IS the behavior; there is no reachable-but-unexercised C
+  logic arm (the tagged interpretInputs core's non-keyboard arms are
+  the plain core's, already covered by task 3's captures + traps).
+- **Rule-18 chain**: the bank row is chained in C across the whole
+  trace; every CPU-slot poll ret is compared against the chained row —
+  an unrecorded upstream bank write (or a wrong C install) flags at the
+  very next record.
+
+Value-model note (rule 16 class fix): `port/sim/input/ai_input.h` now
+holds THE interpretInputs implementation, over tagged JS values
+(bool|number|undefined per field, `MlAiVal`); the plain-MlInput
+`ml_interpret_inputs` is a conversion wrapper around it (human slots'
+measured domain is all-bool buttons — asserted on exit). Task 3's
+check-input-replay.sh re-verified bit-exact after the rebase.
+
 ## The undef-ret allowlist (rule 8)
 
 

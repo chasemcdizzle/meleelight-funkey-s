@@ -1,0 +1,21 @@
+{
+  "comment": "Measured-then-frozen ai-spec capture pins (M2 task 16, 2026-07-15). Boundaries: runAI (mutation record with the {bank,bk,rng} post envelope — the AI-input bridge recording), pollInputs + physics args-projected to [i, inputBuffers[i]] (the input chain over the CPU goldens; spec-ai.js). Counts per golden: 2 active slots x 3600 frames with the 90-frame 'starting' window (physics 7200 = 2x3600; pollInputs 7020 = 2x3510); runAI 3510 = the CPU slot's !starting frames — its actionState never hits SLEEP on either golden (measured); Math.random = the STANDALONE seeded draws (outside runAI windows: KO shouts/screenShake/vfx planes) — 81 on g07 (its falcon AI hits ZERO RNG arms; total in-match rngCalls 81 == all standalone), 162 on g08 (the puff AI's 1334 attributed draws live in runAI post rng lists: 162 + 1334 = the frozen rngCalls 1496). wsViol = the WRITE-SET RECONCILIATION hard-check, pinned ZERO: any runAI write outside aiInputBank[i][0] + the player bookkeeping allowlist (currentAction/currentSubaction/curentAction/lastMash) pushes a record and fails the spec finalCheck. undefRetAllowed: runAI and physics are void mutators (their value is the post envelope / args projection).",
+  "undefRetAllowed": ["runAI", "physics"],
+  "postStateFns": ["runAI"],
+  "goldens": {
+    "g07": {
+      "records": 17812,
+      "counts": {
+        "Math.random": 81, "physics": 7200, "pollInputs": 7020,
+        "rngBoot": 1, "runAI": 3510, "wsViol": 0
+      }
+    },
+    "g08": {
+      "records": 17893,
+      "counts": {
+        "Math.random": 162, "physics": 7200, "pollInputs": 7020,
+        "rngBoot": 1, "runAI": 3510, "wsViol": 0
+      }
+    }
+  }
+}

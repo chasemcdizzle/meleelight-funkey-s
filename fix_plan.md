@@ -892,11 +892,48 @@ pipeline` pipestatus masks a mid-pipe failure — exit codes verified by
 direct invocation. Task 17 consumes ml_fmt/ml_ser for checksum-stream
 emission; ml_sb_num is the ONLY number emitter the sim serializer may
 use.)
-16. AI-input bridge for CPU goldens — write-set recon hard-check, then
-    capture per-frame aiInputBank + RNG-draw counts over g07/g08
-    (STREAM MATCH guarded); emit replayable bridge artifacts + pins.
-    done-check: `bash port/sim/calib/check-ai-bridge.sh` → prints
-    `AI BRIDGE OK`, exit 0.
+(task 16 — AI-input bridge for CPU goldens — DONE iter 35:
+`bash port/sim/calib/check-ai-bridge.sh` → AI BRIDGE OK, exit 0.
+17812 + 17893 records over g07/g08 (3510 runAI mutation records each —
+the CPU slot's !starting frames, args [i], post {bank, bk, rng}; 7020
+pollInputs + 7200 physics = the FIRST input-chain capture over the CPU
+goldens; 81/162 standalone draws; g08's 1334 attributed AI-window draws:
+162 + 1334 == the frozen rngCalls 1496), byte-stable ×2, 4× STREAM
+MATCH, 0 replay divergences on the FIRST successful build. WRITE-SET
+RECON hard-checked two ways: grep-measured (live ai.js writes =
+aiInputBank[i][0].{a,b,csX,csY,l,lA,lsX,lsY,x,y,z} + player[i]
+bookkeeping {currentAction,currentSubaction,lastMash,curentAction-typo}
+ONLY — player.inputs/phys/timer writes are all inside block comments)
+AND runtime-enforced per runAI call (in-page pre/post canon diff of all
+4 players minus the allowlist, all 32 bank rows, playerType/cS/
+gameSettings/activeStage; wsViol records pinned ZERO + finalCheck
+throw). C: `port/sim/ai_bridge.{h,c}` (AIBRIDGE1 artifact loader +
+ml_ai_bridge_apply: burn recorded draws bit-verified on the chained
+mulberry32, verify never-AI-written fields against the chain, install
+the row), `port/sim/input/ai_input.h` — rule 16's CLASS FIX: the
+tagged JS-value input model (MlAiVal bool|number|undefined; AI helper
+literals assign undefined through missing-key reads) now holds THE
+interpretInputs implementation; ml_interpret_inputs became a conversion
+wrapper (check-input-replay.sh re-verified bit-exact over g01/g04/g06).
+Artifact = build/<id>.ai-bridge.txt (deterministic distillation ×2 +
+cmp, build-ai-bridge.js); replay (replay_ai.c) chains BOTH slots
+through the shared MlInputSimState, models the pollInputs bank-row
+ALIAS (slot 0 re-copied post-runAI), rule-18 chain-verifies the bank at
+every poll. Upstream facts pinned: harness mType="keyboard" for CPU
+slots → the raw*/deaden AI arm never runs; pollInputs returns the bank
+ROW (alias); runAI runs between interpretInputs and physics inside
+update(i). Teeth: capture nibble → exactly 1; artifact dropped draw →
+1234 (chain-shift cascade); draw-value nibble → exactly 2, chain
+intact; bank lsX perturbation → 10 (runAI + slot-0 physics + rule-18
+poll + 8-deep history propagation); never-written field s=B1 →
+divergences then a chain-state HARD ABORT (the injected s drives the C
+pause machine — the keyboard arm is live on CPU slots); in-page junk
+write → 3510 wsViol + capture run fails. Honest coverage: undefined
+bank values are zero-live on g07/g08 (model + marshal support them —
+CPUTech's missing-l literal never fired); runAI-skipped SLEEP frames
+zero-live (chain handles them by construction); task 17 consumes the
+artifact at the real update(i) call site and replaces the physics-args
+projection with the live buffer plane.)
 17. integration: the full C gameTick — flattened game-state struct,
     trace loader (oracle trace JSON), M1 data consumption (CTAB1 tables,
     STAB1 stages, ANIM1 frame counts for timer clamps), mode-3 tick
