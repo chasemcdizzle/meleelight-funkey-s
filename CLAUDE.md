@@ -619,6 +619,27 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   the sweep restores fountain via the starting arm itself (the reset IS
   the restore — poke-free net restoration). Task check:
   `bash port/sim/calib/check-platforms-replay.sh` → `PLATFORMS MATCH`.
+- **ECMAScript float formatter + CHECKSUM.md ser (M2 task 15 committed
+  form):** `bash port/sim/calib/check-format.sh` → `FORMAT MATCH`, exit 0
+  — proves `port/sim/ml_fmt.c` (`String(x)`: vendored Ryu core at
+  port/ryu/, ulfjack/ryu @ 4c0618b0 byte-verbatim, provenance
+  sha256-pinned + NOTICES; our ECMA-262 §6.1.6.1.20 steps 6-10 layer on
+  Ryu's digits+exponent) and `port/sim/ml_ser.c` (§3 ser primitives:
+  explicit `-0` token, T/F, undef/null/fn/cyc, JSON.stringify escaping;
+  §4 SHA-256 lowercase hex via oracle/qjs/sha256.c) byte-identical to
+  the JS oracle DIFFERENTIALLY: 5.47M-pattern pinned adversarial corpus
+  + every unique double in ALL build/*.jsonl captures (~249k; records
+  g01 player+article if absent) through C vs V8-String(x)/oracle-numStr,
+  plus ~40k composite cases (every g01 player/article record tree + 3636
+  full §2/§3.1 fixed-literal-order frame envelopes) C parse→ser→hash vs
+  the oracle's OWN pagelib.js ser/__serializeState/__sha256 run under
+  `window === global` (references extracted from pagelib source bytes —
+  zero transcription). Pins: `expected-format.json`. Task 17 consumes
+  ml_fmt/ml_ser for stream emission — ml_sb_num is the only legal number
+  emitter. Gotcha classes: JS-reference extraction (eval the oracle's
+  own bytes, never transcribe it — transcription bugs mirror on both
+  sides of a differential); zsh `time cmd | tee` pipestatus lies about
+  mid-pipe failures — verify gate exit codes by direct invocation.
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;

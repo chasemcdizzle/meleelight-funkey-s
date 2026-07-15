@@ -2762,3 +2762,105 @@ MILESTONE PASS: M2-CAL
 - next: task 15 (ECMAScript shortest-float formatter + CHECKSUM.md ser
   in C — differential against JS String(x) over captured snapshots + an
   adversarial sweep; done-check check-format.sh -> FORMAT MATCH).
+
+## iter 34 — 2026-07-15 — M2 task 15: ECMAScript float formatter + CHECKSUM.md ser in C — FORMAT MATCH
+
+- phase M2, task 15 (fix_plan §M2): the Ryu-class risk flagged since
+  M2-CAL — the C `String(x)` + CHECKSUM.md §3/§4 serializer that task
+  17's checksum-stream emission byte-equality stands on.
+- done-check: `bash port/sim/calib/check-format.sh` -> FORMAT MATCH,
+  exit 0 (.loop/task15-donecheck.log; failure paths verified nonzero by
+  direct invocation — see gotcha below).
+- WHAT: (1) vendored the Ryu double->shortest-decimal core at port/ryu/
+  (ulfjack/ryu pinned @ commit 4c0618b0e44f7ef027ebae05d2cc7812048f7c8f,
+  7 files + both license texts byte-verbatim, per-file sha256 pins in
+  port/ryu/PROVENANCE.sha256 re-verified at the top of every check run;
+  NOTICES entry added BEFORE the code landed — Apache-2.0 OR BSL-1.0
+  dual, headers carried, ZERO local modifications). (2) port/sim/
+  ml_fmt.{h,c}: ml_fmt_dtoa = ECMA-262 §6.1.6.1.20 steps 6-10 applied
+  to Ryu's digits+exponent (#includes the verbatim ryu/d2s.c into its
+  own TU to reach the static d2d/d2d_small_int/decimalLength17;
+  small-int trailing-zero fold mirrors d2s_buffered_n, d2s.c:475-493);
+  specials NaN/±Infinity/0 (String(-0)==="0") handled bitwise — the TU
+  contains no FP arithmetic at all. (3) port/sim/ml_ser.{h,c}: the §3
+  ser primitives citing pagelib.js line-by-line (ml_sb_num = numStr with
+  the explicit -0 token, pagelib.js:10-13; JSON.stringify escaping;
+  T/F; undef/null/fn/cyc tokens; envelope contract documented =
+  pagelib.js:41-64 fixed-literal order) + ml_sha256_hex (§4, links
+  oracle/qjs/sha256.c — the NIST-self-tested TU the qjs oracle uses; no
+  copy, one implementation). (4) the differential rig: calib/fmt_diff.c
+  (--self-test 28 frozen anchors + escape/hash pins; --gen; --format;
+  --extract; --composite with §3.1 envelope builder), fmt-js-ref.js +
+  fmt-composite.js (JS reference side), check-format-pins.js +
+  expected-format.json, check-format.sh.
+- DIFFERENTIAL COVERAGE (all cmp-byte-exact, 0 divergences on the first
+  full run of each corpus — no burn-down was needed):
+  * adversarial: 5,469,538 deterministic patterns (corpus sha256 pinned
+    e3d542b79b19…): specials + payload NaNs, all 2047 exponents × 8
+    mantissa templates × both signs, subnormal bit ladders, powers of
+    2/5/10 ±3 ulp, ECMA 1e21/1e-7/1e-6/1e22 threshold straddles ±64 ulp,
+    67 known-hard shortest-repr/parse literals ±64 ulp, 4M seeded raw
+    u64 + 1M integer-path + 1M short-decimal + 400k subnormal/extreme-
+    exponent randoms. C String(x)+serNum vs V8 String(x)+oracle numStr.
+  * captured: 249,225 unique double bit patterns extracted from ALL 55
+    existing capture jsonl files (5.7 GB — every spec, every golden;
+    cold-run floor = 26,478 = g01 player+article baseline, pinned as
+    minimum). Same two-column differential.
+  * composite: 39,971 cases — every g01 player post snapshot (7,200) +
+    every article args/post envelope (29,135) as V record-tree cases +
+    3,600 per-frame CHECKSUM.md §2/§3.1 envelopes (captured slot
+    snapshots + that frame's post aArt queue; 760 with live articles;
+    -0 live in 3 cases) + 36 synthetic 4-slot envelopes (p2/p3 arm).
+    C canon-parse->ser->SHA-256 vs the oracle's OWN code: ser/numStr
+    extracted from pagelib.js source bytes (new Function over the
+    slice), envelopes through the actual window.__serializeState +
+    window.__sha256 under window===global. Zero transcription on the
+    reference side.
+  * byte-stability: C --format twice -> cmp identical; corpus generator
+    seeded (splitmix64), sha256-pinned.
+- comparator negative tests (perturb -> count -> restore -> re-verified
+  clean): (a) step-6/7 threshold n<=21 -> 22 -> 27,075 adv diffs; (b)
+  step-8 bound -6 -> -7 -> 16,229; (c) positive exponent '+' dropped ->
+  2,156,736; (d) -0 ser token dropped -> 3,294 adv + 3 LIVE composite
+  (g01 fields real -0); (e) T/F swapped -> 17,061 composite; (f)
+  envelope literal order (timer/percent swapped) -> 3,636 = every
+  envelope case; (g) sha256 hex nibble -> 39,971 = every case. Tooth (b'
+  — small-int trailing-zero fold) is OUTPUT-NEUTRAL by construction
+  (small ints < 2^53 < 1e16 never reach exponent form): documented, not
+  faked.
+- REGRESSIONS: none required — the diff adds new TUs/files only (canon.c
+  , run-capture.js, all replay drivers, all spec files untouched; the
+  teeth edits to ml_fmt.c/ml_ser.c/fmt_diff.c were restored and the
+  restored tree re-passed the full done-check).
+- artifacts (sha256/12): ml_fmt.h 4278f702aafa · ml_fmt.c 7ed7ac33b3d3 ·
+  ml_ser.h 376d363a768b · ml_ser.c d66dc5c33d1a · fmt_diff.c
+  2ffca40bc972 · fmt-js-ref.js ac721309cf49 · fmt-composite.js
+  68a1a4bdcd8c · check-format.sh d7151f6cf94b · check-format-pins.js
+  79983717678b · expected-format.json f3f221825b28 ·
+  port/ryu/PROVENANCE.sha256 47cfc5c220a6. Log:
+  .loop/task15-donecheck.log.
+- gotcha classes (new): (1) DIFFERENTIAL REFERENCES MUST NOT BE
+  TRANSCRIPTIONS — a transcribed JS ser would mirror its own bugs on
+  both sides; the rig evals the oracle's actual pagelib.js bytes
+  (numStr/ser via source slice, envelopes via the real
+  __serializeState/__sha256 under the window===global shim, the M1
+  task-4 browser-parity class). (2) zsh `time cmd | tee` pipestatus
+  reported 0 for a mid-pipe failure — gate exit codes are verified by
+  direct invocation, never through a pipe.
+- zoom-out: (1) This task is itself the class-level fix for the
+  "float-format drift" defect class: every future C serialization site
+  (task 17's stream emission, M3 device conformance, M4's grown
+  surface) consumes ml_sb_num/ml_fmt_dtoa — one implementation, one
+  differential harness, instead of per-site formatting decisions. The
+  instrument (the 5.47M-pattern corpus + capture extraction) outlives
+  the task: any future formatter touch re-proves against it for free.
+  (2) Vendoring discipline generalized: the fdlibm precedent (pin +
+  verbatim + NOTICES-first + mechanical provenance check IN the gate)
+  was reused unchanged for Ryu — provenance verification belongs in the
+  done-check, not in a one-time review. (3) The "-0 live in 3 composite
+  cases" measurement closes a coverage question the corpus alone could
+  not: the sim DOMAIN actually produces -0, so the ser token is
+  load-bearing, not defensive.
+- next: task 16 — AI-input bridge for CPU goldens (write-set recon
+  hard-check, per-frame aiInputBank + RNG-draw counts over g07/g08,
+  STREAM MATCH guarded; done-check check-ai-bridge.sh -> AI BRIDGE OK).

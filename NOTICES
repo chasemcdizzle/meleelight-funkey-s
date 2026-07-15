@@ -68,6 +68,28 @@ fdlibm — Copyright (C) 1993 Sun Microsystems (freely-distributable notice)
   Location note: port/fdlibm/, NOT vendor/ (gitignored scratch).
 
 --------------------------------------------------------------------------------
+Ryu — Copyright 2018 Ulf Adams (Apache-2.0 OR Boost Software License 1.0)
+--------------------------------------------------------------------------------
+  VENDORED (M2 task 15, 2026-07-15) at port/ryu/:
+    - port/ryu/ryu/{d2s.c, ryu.h, common.h, digit_table.h,
+      d2s_intrinsics.h, d2s_full_table.h, d2s_small_table.h} — the Ryu
+      double-to-shortest-decimal core (the exact shortest-round-trip
+      digits + decimal exponent the ECMAScript `String(x)` serializer
+      needs; adopted by Boost.Charconv and the MSVC STL).
+    - port/ryu/{LICENSE-Apache2, LICENSE-Boost} — both upstream license
+      texts carried VERBATIM (dual-licensed; we may use either — we
+      comply with both). Every vendored file carries its upstream
+      copyright header verbatim.
+  Source: https://github.com/ulfjack/ryu pinned at commit
+  4c0618b0e44f7ef027ebae05d2cc7812048f7c8f (fetched 2026-07-15); all
+  files byte-verbatim, ZERO local modifications — per-file sha256 pins
+  in port/ryu/PROVENANCE.sha256, mechanically re-verified by
+  port/sim/calib/check-format.sh on every run. Consumed by
+  port/sim/ml_fmt.c (which #includes ryu/d2s.c into its own TU and
+  applies ECMA-262 Number::toString formatting on top of Ryu's
+  digits+exponent).
+
+--------------------------------------------------------------------------------
 QuickJS — MIT, Copyright (c) 2017-2025 Fabrice Bellard and Charlie Gordon
 --------------------------------------------------------------------------------
   https://bellard.org/quickjs/ — used as TOOLING only (the fdlibm-patched

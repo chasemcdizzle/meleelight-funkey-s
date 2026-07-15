@@ -1147,6 +1147,41 @@ arithmetic. Such functions are frozen in the spec's expectations file
 explicitly (JsNum/JsVec2D in vec2d.h). Everything else keeps the strict
 invariant.
 
+## The format differential (M2 task 15)
+
+Not a capture spec: `check-format.sh` proves the C ECMAScript formatter
+(`port/sim/ml_fmt.c` — the vendored Ryu core under `port/ryu/`, byte-
+verbatim at a pinned commit, + the ECMA-262 §6.1.6.1.20 formatting
+layer) and the CHECKSUM.md §3 `ser` / §4 hash (`port/sim/ml_ser.c`,
+hashing via `oracle/qjs/sha256.c`) byte-identical to the JS oracle by
+differential testing:
+
+- **adversarial**: `fmt_diff --gen` emits a deterministic seeded corpus
+  (~5.47M bit patterns: specials incl. payload NaNs, every exponent ×
+  mantissa templates, subnormal ladders, powers of 2/5/10 ± ulp
+  spreads, the 1e21 / 1e-7 ECMA threshold straddles, known-hard
+  shortest-repr literals, millions of splitmix64 raw/structured
+  patterns; corpus sha256 pinned in `expected-format.json`);
+  `fmt_diff --format` (C: `String(x)` TAB ser-num with the `-0` token)
+  vs `fmt-js-ref.js` (V8 `String(x)` + numStr EXTRACTED from
+  pagelib.js's own source bytes) — `cmp`.
+- **captured**: `fmt_diff --extract` scans EVERY `build/*.jsonl` capture
+  for canon `d:<hex16>` tokens (all specs/goldens present; g01
+  player+article recorded first when absent) and runs the unique set
+  through the same differential.
+- **composite**: `fmt-composite.js gen` builds a shared case file from
+  the g01 player/article captures — every post snapshot and article
+  envelope as `V` cases, per-frame CHECKSUM.md §2/§3.1 envelopes
+  (fixed-literal key order, slot snapshots + that frame's post `aArt`
+  queue, plus synthetic 4-slot envelopes) as `E` cases; `fmt_diff
+  --composite` (C parse→ser→SHA-256) vs `fmt-composite.js ref` (the
+  ORACLE'S OWN `ser`/`__serializeState`/`__sha256` run under
+  `window === global`) — per-case hash + byte length, `cmp`.
+
+Number-domain note (measured): three g01 composite cases carry live
+`-0` — the `-0` ser token is live-covered, not just corpus-covered
+(dropping it diverges 3 composite cases + 3294 adversarial lines).
+
 ## Files
 
 - `<golden-id>.envcoll.jsonl` — the M2-CAL boundary records (gitignored,
@@ -1163,3 +1198,7 @@ invariant.
 - `survey-shapes.js` — capture-FIRST instrument (rule 7): per-path
   type/key-set/length report over a capture's canon fields; run it on a
   fresh capture BEFORE finalizing any C value model
+- `fmt_diff.c` / `fmt-js-ref.js` / `fmt-composite.js` /
+  `check-format-pins.js` / `expected-format.json` — the M2 task 15
+  format-differential rig (see "The format differential" above; driver
+  `check-format.sh`)

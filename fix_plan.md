@@ -858,14 +858,40 @@ g06; chain corruption after a clean record → 2/1 PURE chain divergences
 transfer arm dropped → 1 sweep-only (rule-12 corollary, 6th instance);
 rider arm dropped → 8 sweep-only. Task 17 wires mp_movingPlatforms into
 the gameTick order and replaces MpSim with the live sim slices.)
-15. ECMAScript shortest-float formatter + CHECKSUM.md `ser` in C —
-    Ryu/Grisu-class `String(x)` (incl. `-0` token + exponent-form rules)
-    + the §3 envelope serializer + SHA-256 per frame; differential
-    done-check vs JS `String(x)` over every double in the captured
-    player/article snapshots PLUS an adversarial generated sweep
-    (subnormals, exponent boundaries, shortest-repr torture cases).
-    done-check: `bash port/sim/calib/check-format.sh` → prints
-    `FORMAT MATCH`, exit 0.
+(task 15 — ECMAScript shortest-float formatter + CHECKSUM.md `ser` in C
+— DONE iter 34: `bash port/sim/calib/check-format.sh` → FORMAT MATCH,
+exit 0. C `String(x)` = vendored Ryu core (port/ryu/, ulfjack/ryu pinned
+@ 4c0618b0, byte-verbatim — Apache-2.0/BSL-1.0 dual, NOTICES entry +
+PROVENANCE.sha256 re-verified every check run) + our ECMA-262
+§6.1.6.1.20 steps 6-10 formatting layer (`port/sim/ml_fmt.c`; -0 → "0"
+at String level); CHECKSUM.md §3 ser + §4 hash primitives in
+`port/sim/ml_ser.c` (the explicit `-0` token per pagelib.js:10-13, T/F,
+undef/null/fn/cyc, full JSON.stringify escaping, SHA-256 lowercase hex
+via oracle/qjs/sha256.c). DIFFERENTIAL evidence (all `cmp`-byte-exact,
+zero divergences on the first full run): (a) adversarial — 5,469,538
+deterministic corpus patterns (sha256-pinned; specials/payload NaNs,
+every exponent × 8 mantissa templates, subnormal ladders, powers of
+2/5/10 ±ulp spreads, 1e21/1e-7 threshold straddles ±64 ulp, known-hard
+shortest-repr literals, 5.4M seeded random raw/int/short-decimal/
+subnormal patterns) C vs V8 String(x) + oracle numStr, both columns; (b)
+captured — 249,225 unique doubles extracted from ALL 55 existing capture
+files (every spec, every golden; cold-run floor pinned 26,478); (c)
+composite — 39,971 cases from the g01 captures: 36,335 record trees +
+3,600 per-frame §2/§3.1 envelopes (fixed-literal key order, 760 with
+live articles) + 36 synthetic 4-slot envelopes, C parse→ser→SHA-256 vs
+the ORACLE'S OWN ser/__serializeState/__sha256 (extracted from/run as
+pagelib.js's actual source — zero transcription on the reference side).
+Teeth (perturb→count→restore): n≤21→22 → 27,075; -6→-7 → 16,229; exp
+'+' dropped → 2,156,736; -0 dropped → 3,294 adv + 3 live composite; T/F
+swap → 17,061; envelope literal-order swap → 3,636 (every envelope);
+sha nibble → 39,971 (every case). Gotcha classes: the small-int
+trailing-zero fold (ryu d2s.c:475-493) is OUTPUT-neutral here by
+construction (small ints < 2^53 < 1e16 never reach exponent form — kept
+to mirror ryu's caller, unperturbable tooth documented); zsh `time
+pipeline` pipestatus masks a mid-pipe failure — exit codes verified by
+direct invocation. Task 17 consumes ml_fmt/ml_ser for checksum-stream
+emission; ml_sb_num is the ONLY number emitter the sim serializer may
+use.)
 16. AI-input bridge for CPU goldens — write-set recon hard-check, then
     capture per-frame aiInputBank + RNG-draw counts over g07/g08
     (STREAM MATCH guarded); emit replayable bridge artifacts + pins.

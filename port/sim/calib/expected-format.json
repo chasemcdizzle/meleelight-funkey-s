@@ -1,0 +1,14 @@
+{
+  "comment": "M2 task 15 measured-then-frozen pins (check-format.sh). adversarial: the deterministic seeded corpus fmt_diff --gen emits \u2014 exact line count + sha256 (splitmix64-seeded, byte-stable by construction; a drifting corpus means the generator changed and the pin must be consciously re-frozen). capturedUniqueMin: the unique-double floor for the capture extraction \u2014 26478 = the g01 player+article baseline (the cold-run minimum; a full build/ dir yields ~249k across all specs, and MORE capture files can only add). composite: exact case counts for the g01-derived composite file (captures are byte-stable across runs \u2014 check-player-model.sh/check-article-replay.sh \u2014 so these are exact, not minima): every player post snapshot (7200), every article args + post envelope (14636 + 14499), one full frame envelope per frame (3600), a synthetic 4-slot envelope every 100th frame (36), and 760 envelopes carrying a live non-empty articles queue (753 per-frame + 7 of the 4-slot ones; g01's 27 fox lasers over their lifetimes).",
+  "adversarial": {
+    "count": 5469538,
+    "sha256": "e3d542b79b191d1e5e37ec915af6ee1f9f638efde05deb5063abd0ec8d8f875a"
+  },
+  "capturedUniqueMin": 26478,
+  "composite": {
+    "vCases": 36335,
+    "eCases": 3636,
+    "e4Cases": 36,
+    "liveArticleEnvelopes": 760
+  }
+}
