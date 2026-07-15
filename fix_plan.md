@@ -566,9 +566,55 @@ threshold 3→4 → 2 each. Honest coverage: THROW*.init ungrabbed and
 snap-family THROWN*.init with grabbedBy=-1 unswept (upstream itself
 throws), THROWN* offset overruns trap, live mdispatch zero
 (seam-guarded, loud on first live record).)
-10. characters/falcon moves (4,432 ln).
-    done-check: `bash port/sim/calib/check-moves-falcon-replay.sh` →
-    `MOVES falcon MATCH`, exit 0.
+(task 10 — characters/falcon moves — DONE iter 29:
+`bash port/sim/calib/check-moves-falcon-replay.sh` → MOVES falcon MATCH,
+exit 0. 1847 + 1316 + 1810 = 4973 records over g03/g04/g06 — the falcon
+carriers, back on the g01/g04/g06-era convention with g03 replacing g01
+(g01 fields no falcon). CARRIER MEASUREMENT (task-8 convention made
+explicit): g07's CPU falcon fired ZERO live falcon-origin moves over its
+3600 frames — carrier membership is measured LIVE COVERAGE, never char
+presence; the loop's task brief had flagged g07 as a candidate, measured
+out. 4633 mutation-captured falcon-origin fn calls (294 frame-0
+rule-11/12 sweep records per golden on the sweep RNG chain), 0 live
+mdispatch seams, 0 article records — falcon has NO article call sites
+(6 dead `articles` imports, measured; pinned ZERO with the replay's
+unconsumed-FIFO tripwire), byte-stable ×2, 6× STREAM MATCH, 0 replay
+divergences on the FIRST successful build with ZERO value-model changes
+(rules 1-16 held; rule 16's re-survey budget was already paid — all
+three carriers were captured by prior specs). C:
+`port/sim/characters/falcon/moves/*.c` (67 files, structure-parallel;
+the 20 THROWN* + GRAB/CATCHATTACK are the task-8 fox translations with
+renames — falcon-vs-fox diffs are DATA-ONLY there, offsets served by the
+mvData falcon dump) + falcon `moves_index.c`/`moves.h`. NEW dispatch
+surface class: falcon's move objects carry NON-phase fns —
+onPlayerHit(p) (hitDetection.js:493 specialOnHit; SIDESPECIAL{GROUND,
+AIR}) and onWallCollide(p,input,wallFace,wallNum) (physics.js:122
+specialWallCollide; DOWNSPECIALGROUND — extras [wallFace(DX_STR),
+wallNum(DX_NUM)]) — modeled as `mv_register_special_phases` (shared
+moves.h: a driver-registered (state,phase)→MvFn lookup; MlMoveDef keeps
+its 5-field shape so 209 existing positional initializers stay
+untouched; tasks 11-12 reuse it for puff's NEUTRALSPECIAL* pair).
+Falcon structure deltas carried verbatim: THROWN* families are FOX's
+shapes (guarded PUFF/MARTH/FOX + unguarded FALCO/FALCON); THROW* keep
+fox's grabbing===-1 init guard but fire NO lasers; CLIFF* keep fox's
+canGrabLedge table-write trap arm; SIDESPECIALGROUND's runtime
+`this.canEdgeCancel` SCALAR table write is C module state
+(mv_falcon_ssg_set_canEdgeCancel — reader is physics' flag lookup, task
+17); UPSPECIALCATCH/UPSPECIALTHROW draw the seeded stream INLINE (2
+draws per firefoxtail ×3) and UPSPECIALCATCH's interrupt pushes a
+hitQueue row; dead-arm quirks (SIDESPECIALGROUNDHIT's phys.timer,
+DOWNSPECIALGROUNDENDAIR's player.timer — both undefined upstream)
+carried as commented dead arms. Teeth: POST nibble → exactly 1;
+FORWARDTILT active 9→8 → 9/17/9; THROWUP hq flag → exactly 1; THROWUP
+through marth's table → seam-underflow (mdispatch FIFO teeth despite
+zero live seams); circleDust 4→3 → 49/103/97; onWallCollide face flip →
+3 each; NSG setVelocities index → 324/2/324 (bites live falcon punches —
+rule 12); special-phase registration removed → OUT OF DOMAIN at the
+first onPlayerHit record; UPSPECIALCATCH inline draws 2→1 → 8 each.
+Honest coverage: live falcon throws/raptor-boost hits/wall collides are
+zero over g03/g04/g06 (sweep-covered; seams loud on first live record);
+THROWN{FALCO,FALCON}* guard arms unswept (upstream throws); the CLIFF*
+canGrabLedge arm traps.)
 11. characters/marth moves (5,659 ln).
     done-check: `bash port/sim/calib/check-moves-marth-replay.sh` →
     `MOVES marth MATCH`, exit 0.

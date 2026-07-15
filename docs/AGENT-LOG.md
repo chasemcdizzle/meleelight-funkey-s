@@ -2006,3 +2006,158 @@ MILESTONE PASS: M2-CAL
   pick per the live-coverage convention; extend the mvData/registry
   instrument to falcon; falcon has no articles, so the article seam
   list should pin to zero unless raptorBoost spawns one — measure).
+
+## iter 29 — 2026-07-14 — M2 task 10: characters/falcon moves — MOVES falcon MATCH
+
+- phase M2, task 10 (the falcon per-char move set: 67 move objects, 217
+  falcon-origin fns — the third per-char cluster, executed with the
+  task-8/9 mechanical recipe; first cluster with NON-phase move fns and
+  the first with a zero-article pin).
+- done-check: `bash port/sim/calib/check-moves-falcon-replay.sh` → exit
+  0, `MOVES falcon MATCH` (.loop/task10-donecheck.log). Per golden
+  (g03/g04/g06): two fresh captures byte-identical (cmp), STREAM MATCH
+  ×2 against the frozen streams (non-perturbation; finalCheck mvData
+  re-dump drift-guarded), pins green
+  (expected-capture-moves-falcon.json), strict C replay 0 divergences —
+  1847 + 1316 + 1810 = 4973 records: 4633 mutation-captured falcon-origin
+  fn calls (294 frame-0 rule-11/12 sweep records per golden on a separate
+  sweep mulberry32), 0 live mdispatch seams, 0 article records, 334
+  standalone seeded draws, 3 mvData + 3 rngBoot records.
+- GOLDENS: g03 falcon/fox/pstadium · g04 puff/falcon/dreamland · g06
+  falcon/marth/fountain — back on the g01/g04/g06-era convention with
+  g03 replacing g01 (g01 fields no falcon). CARRIER MEASUREMENT: the
+  task brief flagged g07's CPU falcon as a candidate — measured: it
+  fires ZERO live falcon-origin moves over its 3600 frames (the d5 AI
+  never attacked with a falcon-origin state; every falcon record a g07
+  capture would add is sweep-only). Carrier membership is measured LIVE
+  COVERAGE, never char presence. No new golden adopted → rule 16's
+  re-survey budget was already paid by tasks 2-9: ZERO value-model
+  changes this iteration (falcon's raptorBoost/landingMultiplier/
+  upbAngleMultiplier are constructor fields modeled since task 2).
+- conformance guard + regressions ALL GREEN (.loop/task10-reg-*.log):
+  ENVCOLL MATCH · UTIL MATCH · PLAYER MODEL MATCH · INPUT MATCH ·
+  ASSHORT MATCH · PHYSICS MATCH · HITDET MATCH · MOVES SHARED MATCH ·
+  MOVES fox MATCH · MOVES falco MATCH — every prior spec re-verified
+  against the edited shared TUs (shared moves.h/moves_index.c gained the
+  special-phase hook).
+- design: task 8's recipe followed (wrap falcon-origin by module-index
+  identity on table 4; shared entries unwrapped; non-falcon per-char
+  entries mdispatch seams; mvData extended with falcon {origin, data} —
+  85 arrays over 50 states incl. the UPSPECIAL/UPSPECIALTHROW/
+  DOWNSPECIALAIR PAIR setVelocities; data served by mv_falcon_arr/pair/
+  len, rule 15; sweep scaffolding reused with falcon-measured arms). NEW
+  DISPATCH SURFACE CLASS: falcon move objects carry NON-phase fns —
+  onPlayerHit(p) on SIDESPECIAL{GROUND,AIR} (hitDetection.js:493's
+  specialOnHit arm; 1-arg, inputs null) and onWallCollide(p,input,
+  wallFace,wallNum) on DOWNSPECIALGROUND (physics.js:122's
+  specialWallCollide arm; args canon [slot,wallFace,wallNum], extras
+  marshalled DX_STR+DX_NUM). Modeled WITHOUT touching MlMoveDef:
+  `mv_register_special_phases` (shared moves.h) is a driver-registered
+  (state,phase)→MvFn lookup mv_dispatch routes the two phase names
+  through — the alternative (two new MlMoveDef fields) tripped
+  -Wmissing-field-initializers across all 209 existing positional
+  initializers; the hook keeps every prior file byte-identical and
+  unregistered lookups reproduce the upstream missing-property
+  TypeError (trap). Tasks 11-12 reuse it (puff's NEUTRALSPECIAL* family
+  carries the same two fns). ARTICLES: falcon imports `articles` in 6
+  files and never dereferences it — dead imports, zero call sites,
+  measured; the spec still wraps LASER/ILLUSION as a measurement
+  instrument, the pins freeze article=0, and the replay FIFOs any
+  article record into an unconsumed-seam failure (tripwire for the
+  measured claim).
+- falcon STRUCTURE deltas (measured by per-file diff BEFORE translating;
+  all carried verbatim): THROWN* family is byte-identical to FOX's
+  shapes — guarded THROWN{PUFF,MARTH,FOX}* + unguarded
+  THROWN{FALCO,FALCON}* — so those 20 C files (+ byte-identical
+  GRAB/CATCHATTACK) are the task-8 fox translations with renames, diffs
+  data-only (offsets from the mvData dump); THROW* keep fox's
+  grabbing===-1 init guard but fire NO lasers (falcon throws are plain
+  hq-push crossings); CLIFF* keep fox's onLedge===-1 canGrabLedge
+  table-write arm (C traps; falcon CLIFF pos arms drop fox's inner
+  timer>=14 gate and CLIFFATTACK* play falcondoublejump in INIT);
+  SIDESPECIALGROUND writes `this.canEdgeCancel` at RUNTIME — a SCALAR
+  move-table write INVISIBLE to the array-only mvData dump (a new
+  sub-shape of the fox canGrabLedge class): modeled as C module state
+  (mv_falcon_ssg_set_canEdgeCancel; write-only in this cluster — its
+  only sim reader is physics' per-state flag lookup, wired in task 17;
+  the sweep restores the table value, rule 12); UPSPECIALCATCH/
+  UPSPECIALTHROW draw the seeded stream INLINE in move code (2 draws
+  per firefoxtail spawn ×3 — values render-only, DRAWS are chain
+  state) and UPSPECIALCATCH's interrupt pushes
+  [grabbing,p,0,false,true,false]; DEAD-ARM QUIRKS from upstream typos:
+  SIDESPECIALGROUNDHIT.main reads player[p].phys.timer (physicsObject
+  has no timer → undefined<18 false, the 0.30313 arm never fires) and
+  DOWNSPECIALGROUNDENDAIR.main reads player.timer (the ARRAY's —
+  undefined, both arms dead) — carried as commented dead arms (rule 13
+  family: the SHAPE includes the dead test), never "fixed"; the
+  firefoxtail vfx windows read id[0].offset[frame] for render-only
+  positions — mv_falcon_hb0_off performs the read for crash-fidelity
+  and discards the value.
+- DIVERGENCE LEDGER: EMPTY — 0 replay divergences on the first
+  successful build across all 4973 records, zero value-model changes,
+  zero class fixes (rules 1-16 held; the structure-delta diff pass +
+  capture-first measurement caught every quirk before a line of C).
+- comparator negative tests (all restored, tree re-verified 0 div):
+  (a) corrupted POST players nibble → exactly 1; (b) FORWARDTILT active
+  9→8 → 9/17/9 live divergences (bites occurring values — rule 12);
+  (c) THROWUP hq-push flag → exactly 1; (d) THROWUP dispatched through
+  marth's table → seam-underflow (mdispatch FIFO teeth despite zero
+  live seams); (e) circleDust 4→3 draws → 49/103/97 (sweep-chain
+  cascade); (f) onWallCollide wall-face condition flip → 3 each (all
+  three sweep arms bite); (g) NEUTRALSPECIALGROUND setVelocities index
+  off-by-one → 324/2/324 (rule-15 data plane; bites the LIVE falcon
+  punches on g03/g06); (h) special-phase registration removed → OUT OF
+  DOMAIN abort at the first onPlayerHit record (the upstream
+  missing-property TypeError); (i) UPSPECIALCATCH inline draws 2→1 →
+  8 each (inline-draw chain teeth).
+- honest coverage (documented, not silent): live falcon THROW*/THROWN*,
+  raptor-boost hits (onPlayerHit) and wall collides (onWallCollide) are
+  ZERO over g03/g04/g06 — sweep-covered (294 calls incl. both
+  onPlayerHit sites, all three onWallCollide arms, the full
+  FALCONDIVE catch/throw chains and all 20 THROWN* inits), seams loud
+  on first live record; THROWN{FALCO,FALCON}* grabbedBy=-1/overrun arms
+  unswept (upstream itself throws); the CLIFF* canGrabLedge write arm
+  traps (mvData drift-guarded). Live coverage DID include: 693-call
+  NEUTRALSPECIALGROUND falcon-punch arcs on g03 AND g06 (the rule-15
+  data plane live), JAB1/2/3 chains, FORWARDTILT/DOWNTILT, GRAB/
+  CATCHATTACK, ATTACKAIRN/F/B/D incl. land arms, and CLIFFATTACKQUICK
+  on g06.
+- artifacts (sha256/12): falcon moves.h 1de40720d279 · falcon
+  moves_index.c 6facb4fce9e6 · falcon moves/*.c (67 files, 5379 lines)
+  a9b9ccc4c55b · spec-moves-falcon.js 768ae707a7a4 ·
+  replay_moves_falcon.c 14f365307a28 ·
+  expected-capture-moves-falcon.json bc0289c91105 ·
+  check-moves-falcon-replay.sh 994f56ece4e7 · shared moves.h
+  8946cfa096a2 · shared moves_index.c fd7ad9801db2 · FORMAT.md
+  fa6eac43763f. Logs: .loop/task10-donecheck.log,
+  .loop/task10-probe-*.log, .loop/task10-reg-*.log.
+- zoom-out: (1) NO new rule minted and an EMPTY divergence ledger — the
+  first zero-fix cluster. The class-level machinery did the work up
+  front: the structure-delta diff pass surfaced every falcon quirk
+  (dead-arm typos, inline draws, the scalar table write, the THROWN
+  family split) before translation, and rule 15/16 instruments needed
+  no widening because the carriers were already-captured goldens. The
+  recipe's cost curve is bending: task 8 took two class fixes, task 9
+  two model widenings, task 10 zero. (2) The special-phase hook is a
+  CLASS decision, not a one-off: puff (task 12) carries the same
+  onPlayerHit/onWallCollide pair on its NEUTRALSPECIAL* family, so the
+  dispatch surface got a reusable registry rather than a falcon-shaped
+  patch; rejecting the MlMoveDef-field alternative also kept 209
+  translated files untouched (instrument > class fix > one-off,
+  applied to API shape). (3) Carrier selection is now explicitly a
+  MEASUREMENT, not a roster read: g07 carries a falcon but zero live
+  falcon moves — the convention's purpose (live coverage) survives only
+  if candidacy is checked against captures, one probe run per
+  candidate. (4) The article-zero pin generalizes the honest-coverage
+  discipline to ABSENCE claims: "falcon has no articles" is not a
+  comment but a wrapped boundary + a zero pin + an unconsumed-FIFO
+  tripwire — absence measured the same way presence is.
+- next: task 11 (characters/marth moves, 5,659 ln — marth carriers:
+  g01 fox/MARTH/battlefield, g05 MARTH/falco/fdest, g06
+  falcon/MARTH/fountain (g04 fields no marth; probe-measure per the
+  carrier convention); marth has no fox/falco sibling — diff against
+  the closest translated char and expect more fresh files; the
+  shieldBreaker fields are already presence-modeled from task 9;
+  extend the mvData/registry instrument to marth; marth reportedly has
+  a checkForIASA char-0 MODULE branch — register the marth module index
+  via mv_register_char_module).

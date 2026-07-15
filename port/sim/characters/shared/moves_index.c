@@ -40,6 +40,12 @@ const MlMoveDef *mv_shared_def(const char *name) {
 }
 
 // --- dispatch -----------------------------------------------------------------
+static MvSpecialPhaseLookup g_special_phases = 0;
+
+void mv_register_special_phases(MvSpecialPhaseLookup lookup) {
+  g_special_phases = lookup;
+}
+
 AsTri mv_dispatch(MlSim *S, double charId, const char *state,
                   const char *phase, double slot, const MlInputBuffer in[4],
                   const MvX *ex) {
@@ -50,6 +56,12 @@ AsTri mv_dispatch(MlSim *S, double charId, const char *state,
   else if (strcmp(phase, "main") == 0) fn = def->main_;
   else if (strcmp(phase, "interrupt") == 0) fn = def->interrupt;
   else if (strcmp(phase, "land") == 0) fn = def->land;
+  else if (strcmp(phase, "onPlayerHit") == 0 ||
+           strcmp(phase, "onWallCollide") == 0) {
+    // special phase surfaces (M2 task 10; see moves.h) — routed through
+    // the owning cluster's registered lookup
+    if (g_special_phases != 0) fn = g_special_phases(state, phase);
+  }
   else mv_out_of_domain("mv_dispatch: unknown phase");
   // upstream: calling a property the move object lacks is a TypeError
   if (fn == 0) mv_out_of_domain("mv_dispatch: phase missing on shared move");

@@ -87,6 +87,15 @@ Specs (`node run-capture.js --spec <name>`):
   + `moves.h`; goldens g02/g05/g07 — the falco carriers). See "The
   moves-falco spec" below. Pins: `expected-capture-moves-falco.json`.
 
+- `moves-falcon` (M2 task 10, `spec-moves-falcon.js`): the falcon
+  per-char move set (src/characters/falcon/moves/, 67 move objects) +
+  the LASER/ILLUSION article-init boundary as a MEASUREMENT instrument
+  (falcon has NO article call sites — pinned zero) →
+  `replay_moves_falcon.c` (translations
+  `port/sim/characters/falcon/moves/*.c` + `moves_index.c` + `moves.h`;
+  goldens g03/g04/g06 — the falcon carriers). See "The moves-falcon
+  spec" below. Pins: `expected-capture-moves-falcon.json`.
+
 Method records use `Mod#method` names (args prepended with the canon of
 `this`); constructor records use `Mod.new` (ret = canon of the built
 instance, per-instance closures serializing as `fn`). Argument canon is
@@ -662,6 +671,100 @@ Unswept (documented): THROW*.init without a grab and snap-family
 THROWN*.init with grabbedBy=-1 (upstream itself throws), THROWN* offset
 overruns (upstream throws), interrupt-tail WALK arms shadowed by
 checkForTilts.
+
+## The moves-falcon spec (M2 task 10)
+
+Task 8's fox spec followed per the per-char recipe (the "moves-fox"
+section above applies with fox→falcon) — deltas only:
+
+- Wrapped boundary (219 fns): falcon-origin lives ONLY on table 4 — 67
+  module keys, 214 phase fns (53 moves × init/main/interrupt + 13 ×
+  +land + SIDESPECIALGROUNDTOAIR's lone init/main pair) PLUS falcon's
+  three NON-phase move fns: `onPlayerHit(p)` on SIDESPECIAL{GROUND,AIR}
+  (hitDetection.js:493's specialOnHit arm — 1-arg, inputs `null`) and
+  `onWallCollide(p, input, wallFace, wallNum)` on DOWNSPECIALGROUND
+  (physics.js:122's specialWallCollide arm — the only >2-arg site in the
+  set; args canon `[phase, name, [slot, wallFace, wallNum], inputs,
+  pre]`) — plus the two article init boundaries as a MEASUREMENT
+  instrument.
+- ARTICLES: falcon has NONE — it imports `articles` in 6 files and never
+  dereferences it (dead imports, measured). The article count is pinned
+  ZERO per golden; the replay driver still FIFOs any article record and
+  fails it as unconsumed (the measured-claim tripwire).
+- GOLDENS: g03/g04/g06 — the falcon carriers, back on the g01/g04/g06-era
+  convention with g03 replacing g01 (g01 fields no falcon). g07's CPU
+  falcon was MEASURED before pinning: it fires ZERO live falcon-origin
+  moves over its 3600 frames (the falco capture's 81-rngCall AI plane
+  never attacks with falcon-origin states), so a g07 capture would add
+  sweep-only records — carrier membership is measured live coverage,
+  never char presence.
+- C dispatch: the special phases route through
+  `mv_register_special_phases` (shared moves.h — a driver-registered
+  (state, phase)→MvFn lookup; MlMoveDef keeps its 5-field shape so the
+  209 existing positional initializers stay untouched). Unregistered →
+  mv_out_of_domain, the upstream missing-property TypeError.
+- STRUCTURE deltas (measured per-file diffs; C carries each verbatim):
+  falcon's THROWN* family is byte-identical to FOX's shapes — the
+  guarded THROWN{PUFF,MARTH,FOX}* (init/main grabbedBy===-1 guards +
+  offset clamps) and the unguarded THROWN{FALCO,FALCON}* (player[-1]/
+  overrun throws upstream — traps); the 20 C files are the task-8 fox
+  translations with renames (data-only diffs, offsets served by the
+  mvData falcon dump); GRAB/CATCHATTACK are byte-identical to fox's
+  files. THROW* keep fox's grabbing===-1 init guard but fire NO lasers.
+  CLIFF* keep fox's onLedge===-1 canGrabLedge table-write arm (traps).
+  SIDESPECIALGROUND writes `this.canEdgeCancel` at runtime — a SCALAR
+  move-table write outside the array-only mvData dump, modeled as C
+  module state (`mv_falcon_ssg_set_canEdgeCancel`; its only sim reader
+  is physics' flag lookup, task 17). UPSPECIALCATCH/UPSPECIALTHROW draw
+  the seeded stream INLINE (2 draws per firefoxtail ×3) and
+  UPSPECIALCATCH's interrupt pushes `[grabbing,p,0,false,true,false]`
+  (mv_hq_push6). Dead-arm quirks carried verbatim:
+  SIDESPECIALGROUNDHIT.main reads `player[p].phys.timer` (undefined —
+  physicsObject has no timer) and DOWNSPECIALGROUNDENDAIR.main reads
+  `player.timer` (the ARRAY's — undefined): the `<`/`===` arms never
+  fire. The firefoxtail windows read `id[0].offset[frame]` for their
+  render-only positions — `mv_falcon_hb0_off` performs the read for
+  crash-fidelity (out-of-range/constructor-offset traps) and discards
+  the value.
+- checkForIASA: upstream has NO characterSelections==4 branch — a falcon
+  IASA aerial payload dispatches NOTHING (falco precedent); no char
+  module registration.
+- `mvData` carries `falcon: {origin, data}` (67-state origin map on
+  table 4 + 85 array-valued own props over 50 states: JAB3/FORWARDSMASH/
+  NEUTRALSPECIAL*/SIDESPECIAL*/DOWNSPECIALGROUNDENDAIR setVelocities,
+  the PAIR arrays of UPSPECIAL/UPSPECIALTHROW/DOWNSPECIALAIR, 20
+  THROWN*.offset (+offsetVel dead data), CLIFF* offset/setVelocities,
+  canGrabLedge pairs), served through `mv_falcon_arr`/`mv_falcon_pair`/
+  `mv_falcon_arr_len`.
+- Value model: NO widening needed — g03/g04/g06 were all captured by
+  prior specs (rule 16's budget was already paid by tasks 2-9; falcon's
+  raptorBoost/landingMultiplier/upbAngleMultiplier are constructor
+  fields modeled since task 2).
+
+moves-falcon sweep (rules 11/12, 294 calls): the task-8 scaffolding
+reused (slot-3 playerObject(4,·) + characterSelections[3]=4, slot-2
+injection for grabbedBy<p, sweep mulberry32, hq splice-restore, default
+pre-match stage cliffs) with falcon-measured timer arms; falcon-specific
+coverage: FALCONPUNCH both environments (charge-free 100-frame arc,
+setVel/vfx/sound arms, NSA's friction→setVel→fastfall phase arms + the
+actionState-write land), the FALCONKICK 6-state family (timer%2
+firefoxtail arms, Mid/Late swaps, END{AIR,GROUND} pairs incl. the dead
+player.timer arms and the DSGENDAIR land actionState write), the
+onWallCollide arms (both wall-face launch arms + the no-op arm; the
+UPSPECIALTHROW chain draws 6 sweep-RNG draws), FALCONDIVE (drift/clamp
+arms, face flip, the grab arm's pos component writes →
+UPSPECIALCATCH → hq push → UPSPECIALTHROW chains, both land-guard arms),
+raptor boost both environments + onPlayerHit + the HIT states, THROW*
+incl. the fox-style init guards + hq/swap crossings, all 20 THROWN*
+inits + guard/clamp arms (guarded family only — the THROWN{FALCO,
+FALCON}* family throws upstream on grabbedBy=-1/overrun, unswept), all
+8 CLIFF*, and the SIDESPECIALGROUND canEdgeCancel table-write arm
+(swept last among SSG calls, table value restored — rule 12
+net-restore). Unswept (documented): CLIFF* onLedge===-1 canGrabLedge
+table-write arm (C traps; mvData drift-guarded), THROWN* overruns
+(upstream throws), interrupt-tail WALK arms shadowed by checkForTilts,
+SIDESPECIALGROUNDHIT's phys.timer and DOWNSPECIALGROUNDENDAIR's
+player.timer dead arms (unreachable by construction upstream).
 
 ## The undef-ret allowlist (rule 8)
 

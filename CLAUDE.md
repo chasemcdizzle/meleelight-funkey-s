@@ -463,6 +463,37 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   trio + player.shieldBreakerID, presence-modeled in ml_player.h after a
   rule-7 marshal hard-fail); re-survey whenever a spec adopts a new
   golden.
+- **characters/falcon moves (M2 task 10 committed form):** `node
+  port/sim/calib/run-capture.js --spec moves-falcon --golden <id>` — the
+  task-8 recipe over goldens **g03/g04/g06** (the falcon carriers —
+  MEASURED: g07's CPU falcon fires ZERO live falcon-origin moves, so
+  carrier membership is measured live coverage, never char presence):
+  217 falcon-origin fns on table 4 (214 phase fns + falcon's NON-phase
+  dispatch surfaces onPlayerHit ×2 / onWallCollide ×1 — hitDetection.js:
+  493's specialOnHit and physics.js:122's specialWallCollide arms; the
+  onWallCollide args canon is `[slot, wallFace, wallNum]`) + the 2
+  article inits wrapped as a MEASUREMENT instrument only: falcon has NO
+  article call sites (6 dead `articles` imports) — pinned zero, replay
+  FIFOs any record as an unconsumed-seam tripwire. C:
+  `port/sim/characters/falcon/moves/*.c` (67 files) + falcon
+  moves_index/moves.h; special phases route through NEW
+  `mv_register_special_phases` (shared moves.h: driver-registered
+  (state,phase)→MvFn lookup — MlMoveDef keeps its 5-field shape, no
+  initializer churn; unregistered = the upstream missing-property
+  TypeError via mv_out_of_domain). The 20 THROWN* + GRAB/CATCHATTACK C
+  files are the fox translations renamed (falcon-vs-fox diffs data-only;
+  offsets from the mvData falcon dump, rule 15). Gotcha classes:
+  SIDESPECIALGROUND writes `this.canEdgeCancel` at RUNTIME — a scalar
+  move-table write invisible to the array-only mvData dump: modeled as C
+  module state (write-only until task 17 wires physics' flag read);
+  UPSPECIALCATCH/UPSPECIALTHROW draw the seeded stream INLINE in move
+  code (2 draws per firefoxtail ×3 — chain state even though the values
+  are render-only); dead-arm quirks from upstream typos
+  (SIDESPECIALGROUNDHIT reads phys.timer, DOWNSPECIALGROUNDENDAIR reads
+  player.timer — both undefined, comparisons always false) are carried
+  as commented dead arms, never "fixed". Task check:
+  `bash port/sim/calib/check-moves-falcon-replay.sh` →
+  `MOVES falcon MATCH`.
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;
