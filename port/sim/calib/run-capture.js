@@ -68,10 +68,22 @@ const MIME = {
 };
 
 // Serve the dist untouched EXCEPT dist/js/main.js, whose served bytes get
-// exactly one injection into the webpack bootstrap: expose the module
-// cache as window.__wpCache. Disk is never written; nothing else changes.
+// exactly two injections. Disk is never written; nothing else changes.
+// (1) the webpack bootstrap exposes the module cache as window.__wpCache;
+// (2) fountain's module-PRIVATE `platformStates` (a closure `let` no
+//     export reaches — src/stages/vs-stages/fountain.js:22) gains a
+//     read-only window getter right after its declaration (M2 task 14:
+//     the platforms spec records/chain-verifies it per rule 18). The
+//     injected statement carries no quotes or newlines, so it is safe
+//     inside the webpack eval-wrapped module string; behavior-neutral
+//     (pure exposure — only the capture spec ever CALLS the getter).
 const BOOT_LINE = "var installedModules = {};";
 const BOOT_HOOK = BOOT_LINE + " window.__wpCache = installedModules;";
+const PS_LINE =
+  "var platformStates = [{ state: \\\"moving\\\", timer: 0, destination: " +
+  "22.125 }, { state: \\\"moving\\\", timer: 0, destination: 16.125 }];";
+const PS_HOOK = PS_LINE +
+  " window.__mpFountainPS = function () { return platformStates; };";
 
 function serve(root) {
   return new Promise((resolve) => {
@@ -89,7 +101,14 @@ function serve(root) {
           res.end("capture: webpack bootstrap line not found exactly once in main.js");
           return;
         }
-        const hooked = src.slice(0, i) + BOOT_HOOK + src.slice(i + BOOT_LINE.length);
+        let hooked = src.slice(0, i) + BOOT_HOOK + src.slice(i + BOOT_LINE.length);
+        const j = hooked.indexOf(PS_LINE);
+        if (j === -1 || hooked.indexOf(PS_LINE, j + 1) !== -1) {
+          res.writeHead(500);
+          res.end("capture: fountain platformStates declaration not found exactly once in main.js");
+          return;
+        }
+        hooked = hooked.slice(0, j) + PS_HOOK + hooked.slice(j + PS_LINE.length);
         res.writeHead(200, { "Content-Type": "text/javascript" });
         res.end(hooked);
         return;

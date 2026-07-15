@@ -813,11 +813,51 @@ kg 40→41 → 1 each (sweep); chain corruption → 27/19/27 (rule 18's own
 teeth); corrupted POST nibble → exactly 1. Honest coverage: live
 reflects/shield-hits/illusions/multi-destroys are ZERO over the carriers
 — all sweep-covered (72 calls); no reachable arm is unswept.)
-14. movingPlatforms stage-tick logic (ystory/fountain updatePlatform +
-    pstadium if live) — the M1-externals-stubbed god-module bodies;
-    stage pre/post-state capture.
-    done-check: `bash port/sim/calib/check-platforms-replay.sh` →
-    prints `PLATFORMS MATCH`, exit 0.
+(task 14 — movingPlatforms stage-tick logic — DONE iter 33:
+`bash port/sim/calib/check-platforms-replay.sh` → PLATFORMS MATCH,
+exit 0. 3787 + 3778 + 3786 records over g01/g02/g06 — carrier membership
+by STAGE IDENTITY (only ystory/fountain have non-empty movingPlatforms
+bodies upstream — battlefield/dreamland/pstadium/fdest are EMPTY,
+measured; the brief's "pstadium if live" resolved: its body is empty,
+nothing to translate); g01 battlefield represents the static-stage class
+(3600 lean {plat} records pinning the one-call-per-tick contract +
+platform-plane non-drift). 3652 movingPlatforms records per golden (3600
+live + the 52-call rule-11/12 sweep on the sweep RNG chain), byte-stable
+×2, 6× STREAM MATCH, 0 replay divergences on the FIRST successful build
+(rules 1-18 held; ledger opened and closed at zero). C:
+`port/sim/stages/{moving_platforms.{h,c},ystory.c,fountain.c}` — MpSim
+value model (the god-module slice: full platform plane, platformStates,
+starting, 4× player {grounded,onSurface,pos} — the rider/transfer loops
+are UNGUARDED by playerType upstream; inactive slots hold page-start
+CSS-era playerObjects); no M1 tables consumed (the rail/platform
+constants are upstream CODE literals, not STAB1 data — the movingPlats
+STAB1 presence pins are asserted at install). NEW rig mechanism (the
+__wpCache class): run-capture.js's served bytes gain a SECOND injection
+— fountain's module-PRIVATE platformStates (a closure `let` no export
+reaches) gets a read-only window getter after its declaration
+(unique-match hard-fail; quote/newline-free so eval-string-safe; pure
+exposure) — making rule 18's chain-verify DIRECT instead of
+effects-only, and letting the sweep drive the private machine through
+its live entry objects. Rule-18 chain EXTENDED to the whole platform
+plane (statics included): "nothing else writes the plane" is now a
+per-record measurement, not an enclosure assumption. Live coverage:
+g06 fields the full fountain machine (90 starting-arm frames, 27 owner
+draws, sink/base-return/both-newTimer arms live); g02 fields Randall's
+full rail loop; the rider + all four transfer arms are ZERO live —
+sweep-covered. Upstream shapes carried verbatim: ystory's four
+sequential non-exclusive rail arms with `move` last-arm-wins
+(double-fire corners arm1→arm3 and arm2→arm4; a bottom-right double is
+impossible — arm 2 tests before arm 3), the commented-out
+`pos.y += move[1]` rider line, fountain's selection draw
+consumed-but-ignored on the base-return arm, `timer--` on fractional
+timers. Teeth: POST nibble → exactly 1; rail step 0.354845→0.354846 →
+7206 live on g02; arrival band 0.075→0.076 → 1927 live on g06; draw
+hoisted out of the base arm → 199 on g06; reset 22.125→22.126 → 272 on
+g06; chain corruption after a clean record → 2/1 PURE chain divergences
+(chain-plat + chain-ps, zero record divergences — rule 18's own teeth);
+transfer arm dropped → 1 sweep-only (rule-12 corollary, 6th instance);
+rider arm dropped → 8 sweep-only. Task 17 wires mp_movingPlatforms into
+the gameTick order and replaces MpSim with the live sim slices.)
 15. ECMAScript shortest-float formatter + CHECKSUM.md `ser` in C —
     Ryu/Grisu-class `String(x)` (incl. `-0` token + exponent-form rules)
     + the §3 envelope serializer + SHA-256 per frame; differential

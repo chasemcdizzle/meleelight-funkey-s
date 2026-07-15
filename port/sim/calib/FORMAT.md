@@ -106,10 +106,12 @@ before their caller's record.
 ## Capture mechanism (summary; rationale in fix_plan §M2-CAL)
 
 The runner (`run-capture.js`) serves the untouched built dist, but the
-served bytes of `dist/js/main.js` get ONE textual injection into the
-webpack bootstrap — `var installedModules = {};` gains
-`window.__wpCache = installedModules;` — nothing on disk changes and no
-sim code changes. After page load (before `setupMatch`), `capturelib.js`
+served bytes of `dist/js/main.js` get TWO textual injections — the
+webpack bootstrap's `var installedModules = {};` gains
+`window.__wpCache = installedModules;`, and fountain's module-private
+`platformStates` declaration gains a read-only window getter (M2 task
+14, "The platforms spec" below) — nothing on disk changes and no sim
+behavior changes (both injections are pure exposure). After page load (before `setupMatch`), `capturelib.js`
 locates the environmentalCollision module object in the cache by its
 export signature and replaces each exported function with a recording
 wrapper. Babel-CJS exports are plain writable properties and every
@@ -1055,6 +1057,83 @@ hurt/shield arms, and a clean miss. Zero-live surfaces without a sweep
 (documented): none — every reachable article arm is either live or
 swept; the dead `else` of ILLUSION's ground patch (isFox always true)
 is carried verbatim as an unreachable arm.
+
+## The platforms spec (M2 task 14)
+
+Wrapped boundary (6 fns): every VS stage object's `movingPlatforms` —
+main.js:1058 calls `getActiveStage().movingPlatforms()` FIRST thing in
+the mode-3 tick, so exactly one record fires per frame. Upstream bodies
+(measured): battlefield/dreamland/pstadium/fdest are EMPTY; ystory is
+Randall's rectangular rail machine (platform[0], no RNG, a rider arm over
+ALL FOUR player slots — the loop is unguarded by playerType; inactive
+slots hold page-start CSS-era playerObjects); fountain is the two side
+platforms' machine: module-PRIVATE `platformStates`, seeded Math.random
+draws, the `main.starting` reset arm, and player transfer arms. The
+wrapper asserts `getActiveStage() === ` the owning stage object per call
+(envelope coherence: the body mutates the activeStage import while the
+envelope reads the stage object).
+
+- **The platformStates getter (run-capture.js served-bytes injection #2)**:
+  fountain's `platformStates` is a closure `let` no export reaches — the
+  served `dist/js/main.js` gains
+  `window.__mpFountainPS = function () { return platformStates; };`
+  immediately after the declaration (unique-match hard-fail; the injected
+  statement carries no quotes/newlines so it is safe inside the webpack
+  eval-wrapped module string; behavior-neutral pure exposure — the
+  `__wpCache` mechanism class). Disk is never written.
+- **Envelopes** (per-stage measured read/write sets): `plat` = the FULL
+  `activeStage.platform` plane in EVERY record — the rule-18 chain
+  carrier (static platforms included: the chain turns the "nothing else
+  writes the platform plane" enclosure assumption into a per-record
+  measurement). Shapes:
+  * static stages: pre/post `{plat}` (lean — the body reads nothing).
+  * ystory: pre/post `{plat, players}`; players = 4×
+    `{grounded, onSurface, pos}` (the read/write slice); draws asserted
+    ZERO.
+  * fountain: pre `{plat, players, ps, starting}`, post
+    `{plat, players, ps, rng}` — ps = platformStates via the getter
+    (state string "moving"|"static" ↔ C isStatic), rng = owner draws.
+- **STAGE-PLANE CHAIN instrument (rule 18)**: the C replay chains the
+  platform plane (+ ps on fountain) across records and compares the
+  chained state against each in-match record's pre before re-marshaling
+  (authoritative); frame-0 sweep records poke state directly — the chain
+  arms from the first in-match record.
+- RNG: rngBoot + owner draws in fountain posts; everything else
+  standalone `Math.random`. No dispatch windows exist (rule 14 vacuous).
+  The base-return selection arm CONSUMES its draw and ignores it —
+  order verbatim (negative-test: hoisting the draw into the non-base
+  arms → 199 divergences on g06).
+
+GOLDENS g01/g02/g06: g02 (ystory) + g06 (fountain) are the only goldens
+whose stage has a non-empty body (carrier membership by stage identity —
+the movingPlats presence is STAB1-pinned and asserted at install); g01
+(battlefield) represents the static-stage class (3600 lean records
+pinning the call-per-tick contract + plane non-drift). Live coverage
+measured: g06 fields the FULL fountain machine (90 starting-arm frames;
+27 owner draws; sink −additionalOffset, base-return 19.875, and both
+newTimer formulas all live); g02 fields Randall's full rail loop (~3
+circuits, all four arms + both double-fire corners). Zero live anywhere:
+the ystory rider arm and all fountain transfer arms — sweep-covered.
+
+platforms sweep (rules 11/12, 52 calls): all four player slots as REAL
+`playerObject(2,·)` injections (restored); Math.random swapped for the
+sweep mulberry32 (0x0badf00d) that the replay mirrors on frame-0
+records; Randall poked per arm and restored to the authored STAB1
+coordinates; platformStates driven through the getter (its entry OBJECTS
+are live — pokes work) and net-restored by a final starting-arm call
+(the reset arm rewrites platformStates AND the platform ys to their
+authored values EXACTLY — the reset IS the restore; `starting` is true
+pre-setupMatch, asserted). Covers: Randall's four rail arms + the two
+real double-fire corners (arm1→arm3 bottom-left, arm2→arm4 top-right —
+arm order makes a bottom-right double-fire impossible: arm 2 is tested
+before arm 3) + the interior no-arm rider y-snap + rider negatives;
+fountain starting reset, arrival (all three newTimer arms incl.
+newTimer=0 base-arrival), static decrement, all three destination-
+selection arms (the t<0.3 / t>=0.3 split reached by a deterministic
+re-arm loop on the fixed sweep chain), both moving directions, all four
+transfer arms ([1,1]→ground, [1,2]→ground, ground→[1,1], ground→[1,2])
+and three transfer negatives (x outside the band, platform static, rider
+not grounded).
 
 ## The undef-ret allowlist (rule 8)
 

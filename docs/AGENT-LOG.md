@@ -2644,3 +2644,121 @@ MILESTONE PASS: M2-CAL
   updatePlatform + pstadium if live; the M1-externals-stubbed god-module
   bodies; stage pre/post-state capture; rule 18's chain instrument
   applies to the stage plane).
+
+## iter 33 — 2026-07-15 — M2 task 14: movingPlatforms stage-tick logic — PLATFORMS MATCH
+
+- phase M2, task 14 (fix_plan §M2). done-check:
+  `bash port/sim/calib/check-platforms-replay.sh` -> PLATFORMS MATCH,
+  exit 0 (.loop/task14-donecheck.log). Conformance guard
+  `bash port/sim/check-envcoll.sh` -> ENVCOLL MATCH
+  (.loop/task14-reg-envcoll.log).
+- WHAT: the last M1-externals-stubbed god-module bodies became real C.
+  Capture spec `spec-platforms.js` (6 wrapped: every VS stage object's
+  movingPlatforms — main.js:1058, the FIRST call of the mode-3 tick, one
+  record per frame; per-call assert getActiveStage() === the owning
+  stage object). C `port/sim/stages/{moving_platforms.{h,c},ystory.c,
+  fountain.c}`: MpSim slice struct (full platform plane, platformStates,
+  starting, 4x player {grounded,onSurface,pos}); ystory = Randall's
+  four sequential NON-exclusive rail arms + rider loop; fountain =
+  updatePlatform's private state machine (seeded draws via ml_random) +
+  starting reset arm + transfer arms; the four other stages are EMPTY
+  upstream (measured) — literal no-ops behind the mp_movingPlatforms
+  dispatcher. Replay driver `replay_platforms.c` + pins + check script.
+  No M1 tables consumed: the rail/platform constants are upstream CODE
+  literals (edgeOffset precedent); the movingPlats STAB1 presence pins
+  are asserted at install.
+- NEW RIG MECHANISM (the __wpCache injection class, 2nd instance):
+  fountain's platformStates is module-PRIVATE (a closure `let` no export
+  reaches) — run-capture.js's served dist/js/main.js gains a SECOND
+  behavior-neutral injection: a quote/newline-free window getter
+  (`window.__mpFountainPS`) right after the declaration (unique-match
+  hard-fail; safe inside the webpack eval-wrapped module string; disk
+  untouched). This made rule 18's chain-verify DIRECT (ps observable in
+  every pre/post) instead of effects-only, let survey-shapes measure the
+  real ps value domain capture-FIRST, and let the sweep drive the
+  private machine through its live entry objects.
+- RULE 18 EXTENDED: the chain carrier is the FULL platform plane (static
+  platforms included) in every record — the "nothing else writes the
+  platform plane" enclosure assumption is now a per-record MEASUREMENT.
+  g01 (battlefield) is captured as the static-stage class representative:
+  3600 lean {plat} records pin the one-call-per-tick contract and prove
+  plane non-drift on a static stage.
+- CARRIERS g01/g02/g06 — by STAGE IDENTITY, a measured-coverage
+  degenerate case: only ystory (g02) and fountain (g06) have non-empty
+  movingPlatforms bodies (the brief's "pstadium if live" resolved: its
+  body is EMPTY, nothing to translate). Live coverage measured
+  (.loop/task14-cap-g06.log + probe): g06 fields the FULL fountain
+  machine — 90 starting-arm frames, 27 owner draws over 26 records, 15
+  distinct destinations incl. the sink (-additionalOffset) and
+  base-return (19.875) arms, both newTimer formulas; g02 fields
+  Randall's full rail loop (~3 circuits, all arms + both double-fire
+  corners). ZERO live anywhere: the ystory rider arm and all four
+  fountain transfer arms — sweep-covered (52 rule-11/12 calls;
+  platformStates restored by the starting arm itself: the reset IS the
+  restore).
+- RESULT: 3787 + 3778 + 3786 records over g01/g02/g06 (3652
+  movingPlatforms each = 3600 live + 52 sweep), byte-stable x2, 6x
+  STREAM MATCH, 0 replay divergences on the FIRST successful build
+  (rules 1-18 held; divergence ledger opened and closed at zero).
+- upstream shapes carried verbatim: the rail arms' last-arm-wins `move`
+  reassignment (corner frames run TWO arms in one call: arm1->arm3
+  bottom-left, arm2->arm4 top-right; a bottom-right double is IMPOSSIBLE
+  — arm 2 is tested before arm 3); the commented-out `pos.y += move[1]`
+  rider line (pos.y snaps to plat[0].y instead); fountain's selection
+  draw CONSUMED even when the |y|<0.075 base-return arm ignores t;
+  `timer--` on fractional timers; the transfer guard reading the
+  POST-update platform y (a rising platform transfers only while still
+  below 0.075 after its +0.075 step).
+- comparator negative tests (all restored, tree re-verified 0 div):
+  (a) corrupted POST nibble -> exactly 1; (b) rail step
+  0.354845->0.354846 -> 7206 live on g02; (c) arrival band 0.075->0.076
+  -> 1927 live on g06; (d) selection draw hoisted out of the base-return
+  arm -> 199 on g06 (the consumed-but-ignored draw bites); (e) starting
+  reset 22.125->22.126 -> 272 live on g06; (f) chain corruption after a
+  clean record -> 2/1 PURE chain divergences (chain-plat + chain-ps on
+  g06, chain-plat on g02; zero record divergences — rule 18's own
+  teeth); (g) ground->platform transfer dropped -> 1 sweep-only
+  (rule-12 corollary, 6th instance); (h) rider arm dropped -> 8
+  sweep-only on both goldens.
+- honest coverage: live riders and transfers are ZERO over the carriers
+  (falcon/marth never rode a moving platform when it mattered) — all
+  sweep-covered; no reachable arm is unswept; the four empty stage
+  bodies are vacuously exact (their records still pin count + plane
+  non-drift).
+- REGRESSIONS: ALL thirteen prior cluster checks re-run GREEN cold
+  (UTIL/PLAYER MODEL/INPUT/ASSHORT/PHYSICS/HITDET/MOVES SHARED/fox/
+  falco/falcon/marth/puff/ARTICLE MATCH) + ENVCOLL MATCH
+  (.loop/task14-reg-*.log) — required this iteration because the diff
+  touches shared rig infrastructure (run-capture.js's second injection);
+  the green re-runs prove the injection behavior-neutral across every
+  spec.
+- artifacts (sha256/12): moving_platforms.h 8d041e360561 ·
+  moving_platforms.c 40a5a23fb093 · ystory.c 55f4d3169a8e · fountain.c
+  e22982bc5aea · spec-platforms.js 2b8a74b9e9ff · replay_platforms.c
+  67b76e864e47 · expected-capture-platforms.json 0f7bb8ba4f15 ·
+  check-platforms-replay.sh 0c18da95178b · run-capture.js a6d8f4d45bb4 ·
+  FORMAT.md 6dc43ee74db9. Logs: .loop/task14-donecheck.log,
+  .loop/task14-cap-g06.log, .loop/task14-survey-g06.log,
+  .loop/task14-reg-*.log.
+- zoom-out: (1) The platformStates getter is the instrument-level answer
+  (hierarchy: instrument > class fix) to a CLASS this task surfaced:
+  module-private closure state that a boundary's behavior depends on.
+  The alternatives — mirroring the state machine JS-side (transcription
+  the capture could not check: curve-fitting hazard) or chaining it
+  blind in C (effects-only verification with reconstruction ambiguity) —
+  were both rejected for direct observation via a served-bytes exposure,
+  the same mechanism class that already exposes the webpack cache. Task
+  17's integration inherits the lesson: any remaining private state
+  (main.js's module lets) must be observed, not reconstructed. (2)
+  Rule-18's chain carrier widened from "the state the module owns" to
+  "the whole plane the module is ASSUMED to own exclusively" — turning
+  an enclosure assumption into a measurement for free (~300 B/record).
+  That generalizes: task 17's per-frame checksum IS this instrument at
+  full scope. (3) Carrier-by-measurement hit its degenerate case: when
+  coverage is determined by stage identity (a per-golden constant),
+  probing all eight goldens would have been ritual — the measurement was
+  reading the six stage bodies. Measurement discipline includes knowing
+  when the measurement is already done.
+- next: task 15 (ECMAScript shortest-float formatter + CHECKSUM.md ser
+  in C — differential against JS String(x) over captured snapshots + an
+  adversarial sweep; done-check check-format.sh -> FORMAT MATCH).

@@ -593,6 +593,32 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   hit.hitPoint aliasing instance.pos (unobservable — measured by
   reading). Task check: `bash port/sim/calib/check-article-replay.sh` →
   `ARTICLE MATCH`.
+- **movingPlatforms stage-tick logic (M2 task 14 committed form):** `node
+  port/sim/calib/run-capture.js --spec platforms --golden <id>` — wraps
+  all six VS stage objects' movingPlatforms (one record per tick;
+  main.js:1058 — the FIRST call of the mode-3 tick) with per-stage
+  read/write-set envelopes: plat = the FULL platform plane in every
+  record (rule 18's chain carrier — statics included, so "nothing else
+  writes the plane" is measured per record, not assumed), ystory adds the
+  4-slot player slice {grounded,onSurface,pos} (rider loop UNGUARDED by
+  playerType upstream — inactive slots are page-start CSS-era
+  playerObjects), fountain adds platformStates + starting + owner rng.
+  fountain's platformStates is module-PRIVATE (a closure `let`) — exposed
+  by a SECOND run-capture.js served-bytes injection (the __wpCache
+  mechanism class): a quote-free window getter after the declaration,
+  unique-match hard-fail, disk untouched. C: `port/sim/stages/
+  {moving_platforms,ystory,fountain}.c` (MpSim slice struct; the rail/
+  platform constants are upstream CODE literals, NOT STAB1 data; state
+  string "moving"/"static" ↔ isStatic). Carriers g01/g02/g06 by STAGE
+  IDENTITY (only ystory/fountain have non-empty bodies — the other four
+  are EMPTY upstream; g01 = the static-stage class representative).
+  Gotcha classes: ystory's rail arms are sequential NON-exclusive ifs —
+  corner frames run TWO arms in one call and `move` keeps the LAST arm's
+  value (arm order makes a bottom-right double impossible); fountain's
+  selection draw is CONSUMED even when the base-return arm ignores it;
+  the sweep restores fountain via the starting arm itself (the reset IS
+  the restore — poke-free net restoration). Task check:
+  `bash port/sim/calib/check-platforms-replay.sh` → `PLATFORMS MATCH`.
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;

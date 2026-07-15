@@ -1,0 +1,31 @@
+{
+  "comment": "Measured-then-frozen platforms-spec capture pins (M2 task 14, 2026-07-15). Boundary: every VS stage object's movingPlatforms (6 wrapped; main.js:1058 calls getActiveStage().movingPlatforms() first thing in the mode-3 tick, so exactly ONE record fires per frame — 3600 live per golden + the 52-call rule-11/12 sweep at frame 0). GOLDENS g01/g02/g06: g02 (ystory) and g06 (fountain) are the only goldens whose stage has a non-empty movingPlatforms body (battlefield/dreamland/pstadium/fdest bodies are EMPTY upstream — measured; carrier membership by stage identity, not probe); g01 (battlefield) represents the static-stage class — its 3600 lean records pin the call-per-tick contract and chain-verify that the platform plane never drifts on a static stage. Live coverage measured: g06 fields the full fountain machine (90 starting-arm frames, 27 owner draws over 26 records, sink -additionalOffset + base-return 19.875 + both newTimer formulas all live); g02 fields Randall's full rail loop (~3 circuits). Zero live anywhere: the ystory rider arm and all fountain player-transfer arms (sweep-covered; teeth negative-test-proven). undefRetAllowed: movingPlatforms is a void mutator (the value is the post envelope).",
+  "undefRetAllowed": ["movingPlatforms"],
+  "postStateFns": ["movingPlatforms"],
+  "goldens": {
+    "g01": {
+      "records": 3787,
+      "counts": {
+        "rngBoot": 1,
+        "Math.random": 134,
+        "movingPlatforms": 3652
+      }
+    },
+    "g02": {
+      "records": 3778,
+      "counts": {
+        "rngBoot": 1,
+        "Math.random": 125,
+        "movingPlatforms": 3652
+      }
+    },
+    "g06": {
+      "records": 3786,
+      "counts": {
+        "rngBoot": 1,
+        "Math.random": 133,
+        "movingPlatforms": 3652
+      }
+    }
+  }
+}
