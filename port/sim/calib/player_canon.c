@@ -517,6 +517,7 @@ static void cv_phys(const CanonVal *v, MlPhysics *out) {
     REQ_NUM("rollOutDistance", rollOutDistance)
     OPT_BOOL("rollOutPlayerHit", hasRollOutPlayerHit, rollOutPlayerHit)
     OPT_NUM("rollOutPlayerHitTimer", hasRollOutPlayerHitTimer, rollOutPlayerHitTimer)
+    OPT_NUM("rollOutTurnTimer", hasRollOutTurnTimer, rollOutTurnTimer)
     OPT_NUM("rollOutVel", hasRollOutVel, rollOutVel)
     OPT_BOOL("rollOutWallHit", hasRollOutWallHit, rollOutWallHit)
     REQ_NUM("shieldAnalog", shieldAnalog)
@@ -723,6 +724,10 @@ static void ser_phys(CanonBuf *b, const MlPhysics *p) {
   if (p->hasRollOutPlayerHitTimer) {
     cb_puts(b, ",\"rollOutPlayerHitTimer\":");
     cb_num(b, p->rollOutPlayerHitTimer);
+  }
+  if (p->hasRollOutTurnTimer) {
+    cb_puts(b, ",\"rollOutTurnTimer\":");
+    cb_num(b, p->rollOutTurnTimer);
   }
   if (p->hasRollOutVel) {
     cb_puts(b, ",\"rollOutVel\":");

@@ -525,6 +525,44 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   (clamp-first vs guard-first — verbatim per file). Task check:
   `bash port/sim/calib/check-moves-marth-replay.sh` →
   `MOVES marth MATCH`.
+- **characters/puff moves (M2 task 12 committed form; the LAST per-char
+  cluster — tasks 7-12 now cover all five chars + shared):** `node
+  port/sim/calib/run-capture.js --spec moves-puff --golden <id>` — the
+  task-8 recipe over goldens **g02/g04/g08** (the puff carriers,
+  probe-measured live coverage 843/1215/1037; g08's CPU puff attacks,
+  unlike g07's falcon — and fires the FIRST LIVE mdispatch seam of any
+  per-char cluster: its THROWBACK dispatches fox's THROWNPUFFBACK).
+  221 puff-origin fns on table 1 (217 phase fns + onPlayerHit ×3 on
+  NEUTRALSPECIAL{GROUND,AIR,GROUNDTURN} + onWallCollide on
+  NEUTRALSPECIALAIR — the task-10 hook) + the 2 article inits pinned
+  ZERO (puff has no `articles` references, marth-strength). Puff
+  OVERRIDES shared FURAFURA/JUMPAERIALB/JUMPAERIALF on ITS table only
+  (rule 15's fn-identity origin map, asserted both directions); puff's
+  FURAFURA is trivial (WAIT.init — NO furaloop: the task-11 sbid seam
+  measured unnecessary). NEW (fix_plan §M2 rule 17): every move
+  record's pre carries **"chd"** — the EXECUTED charHitboxes
+  {moveKey:{idN:{dmg,size}}} VALUE plane — because puff WRITES the
+  M1-owned plane through STALE id aliases (rollout's post-release dmg
+  even uncharged; sing's id[0].size cycles): measured LIVE drift on
+  g04 (jab1 dmg 3→7, frame 1038). C `pf_assign_hitbox_id` feeds
+  dmg/size from chd, never assumed-pristine CTAB1 (dmg/size = the only
+  createHitbox fields with upstream write sites, grep-measured). C:
+  `port/sim/characters/puff/moves/*.c` (71 files) + puff moves_index/
+  moves.h + `puff_{multi_jump_drift,next_jump}.c` (helper modules;
+  puffNextJump's COMPUTED "AERIALTURN/JUMPAERIAL"+(1+jumpsUsed) keys —
+  rung 6 unreachable, trapped); rule-8 read/write helpers for the
+  runtime-added rollOut* plane (rollOutTurnTimer widened this task —
+  rule 16). Gotcha classes: NSG/NSA mains do NOT advance timer at the
+  top (mid-body charge-scaled advance — sweep presets must hit EXACT
+  arm timers) and their interrupts ALWAYS return false (the WAIT/
+  FALLSPECIAL arms fire inits and still return false); THROWBACK's
+  window carries a floor-over-COMPARISON typo (`Math.floor(t+0.01<37)`
+  — floor of a boolean, truthiness preserved verbatim); upstream typo
+  fields hitboxes.FRAMES++ / lowercase phys.autocancel carried
+  verbatim; per-file THROWN* snap/flip/negX/clamp-order variation
+  (read every body — the task-11 lesson held). Task check:
+  `bash port/sim/calib/check-moves-puff-replay.sh` →
+  `MOVES puff MATCH`.
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;

@@ -226,6 +226,7 @@ typedef struct {
   bool hasRollOutCharging;      bool rollOutCharging;
   bool hasRollOutPlayerHit;     bool rollOutPlayerHit;
   bool hasRollOutPlayerHitTimer;double rollOutPlayerHitTimer;
+  bool hasRollOutTurnTimer;     double rollOutTurnTimer;    // puff NEUTRALSPECIALGROUNDTURN (M2 task 12)
   bool hasRollOutVel;           double rollOutVel;
   bool hasRollOutWallHit;       bool rollOutWallHit;
   bool hasShieldBreakerCharge;        double shieldBreakerCharge;  // marth NEUTRALSPECIAL family (M2 task 9)

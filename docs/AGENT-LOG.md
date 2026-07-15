@@ -2339,3 +2339,188 @@ MILESTONE PASS: M2-CAL
   onPlayerHit/onWallCollide (the task-10 hook); FURAFURA's furaLoopID
   = sounds.furaloop.play() un-traps with the task-11 sbid mechanism;
   ROLLOUT family fields modeled since task 2).
+
+## iter 31 — 2026-07-14 — M2 task 12: characters/puff moves — MOVES puff MATCH
+
+- phase M2, task 12 (the puff per-char move set: 71 move objects, 221
+  puff-origin fns — the fifth and LAST per-char cluster; first with
+  table OVERRIDES of shared states, the first LIVE mdispatch seam, and
+  the chd char-data-plane mechanism — NEW RULE 17).
+- done-check: `bash port/sim/calib/check-moves-puff-replay.sh` → exit 0,
+  `MOVES puff MATCH` (.loop/task12-donecheck.log). Per golden
+  (g02/g04/g08): two fresh captures byte-identical (cmp), STREAM MATCH
+  ×2 against the frozen streams (non-perturbation; finalCheck mvData
+  re-dump drift-guarded), pins green
+  (expected-capture-moves-puff.json), strict C replay 0 divergences —
+  1362 + 1716 + 2935 = 6013 records: 4307 mutation-captured puff-origin
+  fn calls (404 frame-0 rule-11/12 sweep records per golden on a
+  separate sweep mulberry32), 1 LIVE mdispatch seam (g08 — see below),
+  0 article records (puff has ZERO `articles` references anywhere under
+  characters/puff/, marth-strength; pinned ZERO with the
+  unconsumed-FIFO tripwire), 1699 standalone seeded draws (1491 on
+  g08's AI plane, chain-verified draw-for-draw), 3 mvData + 3 rngBoot
+  records.
+- GOLDENS: g02 falco/PUFF/ystory · g04 PUFF/falcon/dreamland · g08
+  fox/CPU-PUFF/fdest — the puff carriers, PROBE-MEASURED per the
+  task-10 carrier convention (live puff-origin move records:
+  843/1215/1037). g08's d5 CPU puff ATTACKS (unlike g07's falcon) and
+  fires the FIRST LIVE mdispatch seam of any per-char cluster: its
+  THROWBACK dispatches fox's THROWNPUFFBACK on the victim's table at
+  frame 353 — the seam FIFO's first live exercise (args verified in
+  call order, post resynced).
+- conformance guard + regressions ALL GREEN (.loop/task12-reg-*.log):
+  ENVCOLL MATCH · UTIL MATCH · PLAYER MODEL MATCH · INPUT MATCH ·
+  ASSHORT MATCH · PHYSICS MATCH · HITDET MATCH · MOVES SHARED MATCH ·
+  MOVES fox MATCH · MOVES falco MATCH · MOVES falcon MATCH · MOVES
+  marth MATCH — every prior spec re-verified against the edited shared
+  TUs (ml_player.h/player_canon.c gained rollOutTurnTimer).
+- design: task 8's recipe followed (wrap puff-origin by module-index
+  identity on table 1 — 217 phase fns + 3 onPlayerHit + 1
+  onWallCollide; shared entries unwrapped; non-puff per-char entries
+  mdispatch seams; mvData extended with puff {origin, data} — served by
+  mv_puff_arr/pair/len, rule 15; sweep scaffolding reused with
+  puff-measured arms). TABLE OVERRIDES measured and asserted BOTH
+  directions (rule 15's origin map): puff's index REPLACES shared
+  FURAFURA/JUMPAERIALB/JUMPAERIALF on table 1; fn identity classifies
+  them puff-origin there, shared on tables 0/2/3/4. Puff's FURAFURA is
+  TRIVIAL (WAIT.init only — NO furaloop/furaLoopID), so the task
+  brief's planned sbid un-trap is measured-moot: no puff move consumes
+  a Howl id (no `= sounds.` assignment under characters/puff/ — the
+  sbid mechanism is NOT carried; deviation from the brief, measured).
+  NEW MECHANISM (rule 17, the char-data-plane class resolved at CLASS
+  level): every move record's pre carries "chd" — the EXECUTED
+  charHitboxes {moveKey: {idN: {dmg, size}}} VALUE plane at record
+  time. Puff writes the M1-owned plane at runtime through
+  player.hitboxes.id ALIASES: NEUTRALSPECIAL{GROUND,AIR}'s post-release
+  dmg writes run EVEN WHEN UNCHARGED — through whatever STALE id
+  objects the previous move assigned (cross-move provenance that a
+  value-copy C model cannot track) — and UPSPECIAL (sing) cycles
+  id[0].size through 10.937/1/12.890. MEASURED before building: g04's
+  live puff drifted jab1's dmg 3→7 at frame 1038 (983 records carry
+  the drifted plane; g02/g08 live-clean — their non-baseline chd
+  variants are the sweep's own restored mutations). The C's
+  pf_assign_hitbox_id feeds dmg/size from chd, never assumed-pristine
+  CTAB1 — dmg/size are the ONLY createHitbox fields with upstream
+  write sites (grep-measured over characters/ + physics/ + main/);
+  task 11's marth-style documented hole would have produced LOUD live
+  divergences here. Special phases: onPlayerHit ×3 + onWallCollide
+  through the task-10 mv_register_special_phases hook;
+  mv_register_char_module(1, puff_move_def) makes checkForIASA's
+  char-1 PUFFMOVES arm real (dead-by-construction upstream — marth
+  precedent). Helper modules puff_multi_jump_drift/puff_next_jump
+  (characters/puff/*.js level — the dancing-blade-helpers analogue);
+  puffNextJump dispatches COMPUTED index keys
+  "AERIALTURN"/"JUMPAERIAL" + (1 + jumpsUsed) — rung 6 unreachable
+  (every multijump dispatch jumpsUsed<5-guarded or capped by
+  JUMPAERIAL5's armless interrupt), trapped.
+- puff STRUCTURE deltas (measured per-file diffs BEFORE translating —
+  bodies read in full, the task-11 lesson held; all carried verbatim):
+  ROLLOUT (NSG/NSA/NSGT) is a movement special with its own
+  charge/launch/turn machine on runtime-added phys.rollOut* — NSG/NSA
+  mains do NOT advance timer at the top (the charge-scaled advance
+  `timer += 1 + 2*(charge/44)` sits MID-BODY; sweep presets must hit
+  exact arm timers) and their interrupts ALWAYS return false (the
+  WAIT/FALLSPECIAL arms fire the inits and still return false); NSG's
+  overlay check runs AFTER its timer advance, NSA's BEFORE (per-file);
+  the multijump ladder AERIALTURN1-5/JUMPAERIAL1-5 (cVel.y rungs
+  1.65/1.59/1.47/1.36/1.25, rungs 2-5 set doubleJumped, AERIALTURN
+  flips face at t===6 and hands off at t===13, JUMPAERIAL1-4 carry the
+  t>28 multijump arm, 5 does not); ATTACKAIRN's t===7 increments
+  hitboxes.FRAMES (plural) and ATTACKAIRB's t===8 writes lowercase
+  phys.autocancel — upstream typos on runtime-added fields (modeled
+  since task 2); THROW* dispatch victims 2-ARG through the TABLE with
+  fractional timers (K/releaseFrame, floor(+0.01) crossings);
+  THROWBACK's window carries the floor-over-COMPARISON typo
+  (`Math.floor(timer + 0.01 < 37)` — floor of a boolean, truthiness
+  kept verbatim, rule-13 family); THROWDOWN's crossing has NO
+  grabbing===-1 guard where FORWARD/BACK do; THROWN{PUFF,MARTH,FOX}*
+  guarded with per-file variation (THROWNPUFFUP's vacuous
+  `if(player[p].phys)` nesting, THROWNMARTHFORWARD's clamp-BEFORE-guard
+  order, THROWNMARTH* init pos snaps, THROWNMARTHBACK/THROWNFALCOBACK
+  flip face but keep PLAIN-face x, THROWNFALCONDOWN has reverseModel
+  but NO flip); THROWN{FALCO,FALCON}* are the old-style unguarded
+  family (init pos snap; player[-1]/overruns throw — traps);
+  THROWNPUFFBACK's offsetVel arm is COMMENTED OUT upstream (dead data,
+  dumped anyway); all 8 CLIFF* keep the canGrabLedge table-write trap
+  arm and CLIFFGETUPQUICK alone sets ledgeRegrabCount=TRUE; pound
+  rotates airVelocities by lsY*PI*(20/180) via fdlibm sin/cos.
+- DIVERGENCE LEDGER: EMPTY — 0 replay divergences on the first
+  successful build across all 6013 records (rules 1-17 held). The
+  class work was front-loaded and capture-first: (1) the chd mechanism
+  was designed from the measured g04 drift BEFORE any C ran; (2)
+  phys.rollOutTurnTimer was widened (rule 16's budgeted round — the
+  only value-model change); (3) two sweep-preset authoring fixes
+  (NSG/NSA's no-top-advance timers) were caught by reading the bodies,
+  pre-capture.
+- comparator negative tests (all restored, tree re-verified 0 div):
+  (a) corrupted POST players nibble → exactly 1; (b) FORWARDTILT
+  active 6→5 → 5/19/5 live divergences (bites occurring values — rule
+  12); (c) THROWUP hq-push flag → exactly 1; (d) THROWUP dispatched
+  through an unregistered state → seam-underflow (FIFO teeth); (e) chd
+  IGNORED (pristine CTAB1 dmg/size) → 2/8/2 — bites g04's LIVE drifted
+  assigns, the mechanism's own teeth; (f) extra UPSMASH randomShout
+  draw → 16 each (chain cascade); (g) release-vel 0.09→0.08 → 2
+  sweep-only (live releases were charge-0: the formula is invariant
+  there — rule-12 corollary, 4th measured instance); (g2) newDmg base
+  12→11 → 8/378/8 (bites g04's 378 live dmg-write records); (h)
+  onPlayerHit registration removed → OUT OF DOMAIN at the first record
+  (the upstream missing-property TypeError); (i) sing size 12.890→12.5
+  → exactly 1 each.
+- honest coverage (documented, not silent): live puff
+  THROW*/THROWN*/CLIFF*/sing-late-windows/rest are zero-to-thin over
+  g02/g04/g08 — sweep-covered (404 calls incl. the full rollout
+  machine both environments with the STALE-id dmg arms, all sing size
+  windows, rest twins, pound incl. the rotated arm, the whole
+  multijump ladder, THROW* crossings + CATCHCUT/-1 arms, all 20
+  THROWN* inits + guard/clamp/order arms, all 8 CLIFF*), seams/traps
+  loud on first live record; CLIFF* canGrabLedge write arm traps
+  (mvData drift-guarded); unguarded-THROWN -1/overrun arms unswept
+  (upstream throws); AERIALTURN6/JUMPAERIAL6 unreachable by
+  construction. Live coverage DID include: the FULL live rollout
+  domain (g04's 378-record dmg-write arc — the drifted chd plane
+  replayed bit-exactly — plus g08 CPU rollouts and a live NSGT turn),
+  the multijump ladder, JAB1/JAB2, all tilts and smashes, aerials
+  incl. land arms, GRAB, DOWNATTACK, and puff as grab victim
+  (THROWNPUFFBACK live via the g08 seam).
+- artifacts (sha256/12): puff moves.h b87d97b1a350 · puff
+  moves_index.c 53173218a916 · puff moves/*.c (71 files, 5658 lines)
+  29f846131b54 · puff_multi_jump_drift.c 2be58fb5ffea ·
+  puff_next_jump.c e2dce0763bd6 · spec-moves-puff.js bda8ad01d79d ·
+  replay_moves_puff.c ffd31fa39602 · expected-capture-moves-puff.json
+  3fb98382ae10 · check-moves-puff-replay.sh 931ffc04db74 · ml_player.h
+  762cc6131113 · player_canon.c c5cff799396c · FORMAT.md 18ac9fab0f75.
+  Logs: .loop/task12-donecheck.log, .loop/task12-probe-*.log,
+  .loop/task12-cap-*.log, .loop/task12-reg-*.log.
+- zoom-out: (1) NEW RULE 17 (fix_plan §M2): the M1-owned char-data
+  VALUE plane is MEASURED per record where upstream writes it. The
+  falcon-canEdgeCancel → marth-dmg → puff-dmg/size progression was one
+  CLASS growing: flags (module state), then a benign value write
+  (documented hole), then live-drifting values with cross-move STALE-id
+  provenance no value-copy model can track. The class fix is the chd
+  pre-projection — executed data per record, instrument > documented
+  hole — and it was chosen from MEASUREMENT (the g04 drift probe),
+  not speculation; the marth approach would have diverged loudly on
+  g04. Task 17's integration replaces the projection with the sim's
+  own live plane (C owns charHitboxes then — the projection is exactly
+  the state the integrated sim maintains anyway). (2) The sbid
+  non-carry is the same discipline in reverse: the brief predicted the
+  mechanism would be needed; measurement (no Howl-id consumption in
+  puff) deleted the surface instead of porting it. Briefs predict;
+  captures decide. (3) Cost curve across the per-char ladder: task 8
+  two class fixes → 9 two widenings → 10 zero → 11 one recipe miss →
+  12 ZERO divergences with one planned widening — but 12's real cost
+  moved UP-FRONT into measurement (probe + drift diff + body reading).
+  The recipe's final form: measure carriers, diff and READ bodies,
+  survey the value domain, design seams from measured chains, THEN
+  translate. (4) The per-char surface is COMPLETE (tasks 7-12, five
+  chars + shared, ~28.7k upstream lines translated at 0-2 divergences
+  per cluster); the remaining M2 surface is articles (13), platforms
+  (14), the formatter (15), the AI bridge (16), and integration (17) —
+  no more per-char unknowns; rule 17's chd hand-off is the only new
+  contract task 17 inherits from this iteration.
+- next: task 13 (articles — article.js 639 ln: fox/falco laser +
+  ILLUSION queues and article hit detection; articles are CHECKSUMMED
+  (CHECKSUM.md §2 `articles` key); the task-8/9 article-seam FIFOs
+  (LASER/ILLUSION init args verified bit-exactly on g01/g03/g08 +
+  g02/g05/g07) become real C bodies; puff/falcon/marth pinned
+  article-zero).

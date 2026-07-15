@@ -862,7 +862,110 @@ grabbedBy=-1 arms (upstream throws), interrupt-tail WALK arms shadowed
 by checkForTilts.
 
 
+
+## The moves-puff spec (M2 task 12)
+
+Task 8's fox spec followed per the per-char recipe (the "moves-fox"
+section above applies with fox→puff) — deltas only:
+
+- Wrapped boundary (223 fns): puff-origin lives ONLY on table 1 — 71
+  module keys, 217 phase fns (56 moves × init/main/interrupt + 9 ×
+  +land: ATTACKAIR*×5, DOWNSPECIAL{AIR,GROUND}, SIDESPECIALAIR,
+  UPSPECIAL; NEUTRALSPECIALGROUND/GROUNDTURN ×3, NEUTRALSPECIALAIR ×4
+  incl. land; and the three single-init TABLE OVERRIDES
+  FURAFURA/JUMPAERIALB/JUMPAERIALF) PLUS puff's four NON-phase move fns:
+  `onPlayerHit(p)` on NEUTRALSPECIAL{GROUND,AIR,GROUNDTURN}
+  (hitDetection.js:493's specialOnHit arm) and `onWallCollide(p, input,
+  wallFace, wallNum)` on NEUTRALSPECIALAIR (physics.js:122's
+  specialWallCollide arm; args canon `[slot, wallFace, wallNum]`) —
+  plus the two article init boundaries as the zero-pin tripwire (puff
+  has ZERO `articles` references anywhere under characters/puff/,
+  marth-strength; measured).
+- TABLE OVERRIDES measured (rule 15's origin map): puff's index REPLACES
+  the shared FURAFURA/JUMPAERIALB/JUMPAERIALF on table 1
+  ({...baseActionStates, ...puffMoves}) — fn identity classifies them
+  puff-origin there and shared on every other table (both directions
+  asserted at install). Puff's FURAFURA is TRIVIAL (WAIT.init — no
+  furaloop/furaLoopID: the shared version's Howl-id chain state never
+  enters this cluster, so the task-11 sbid seam is NOT carried; no puff
+  move consumes a Howl id — measured, no `= sounds.` assignment under
+  characters/puff/).
+- The pre envelope gains **"chd"** (canon-sorted after
+  characterSelections): the EXECUTED charHitboxes `{moveKey: {idN:
+  {dmg, size}}}` VALUE plane of the puff char at record time. Puff
+  WRITES the M1-owned char-data plane at runtime through
+  player.hitboxes.id ALIASES (player.js:132): NEUTRALSPECIAL{GROUND,
+  AIR}'s post-release dmg writes run EVEN WHEN UNCHARGED — through
+  whatever STALE id objects the previous move assigned (cross-move
+  provenance) — and UPSPECIAL (sing) cycles id[0].size. Unlike marth's
+  benign charge<30 domain, the live domain genuinely DRIFTS the plane
+  (MEASURED: g04's jab1 dmg 3→7 from frame 1038, 983 records carry the
+  drifted plane). The replay's pf_assign_hitbox_id feeds dmg/size from
+  chd instead of assumed-pristine CTAB1 — dmg/size are the ONLY
+  createHitbox fields with upstream write sites (measured by grep over
+  characters/ + physics/ + main/); everything else stays CTAB1's. The
+  falcon-canEdgeCancel / marth-dmg class, resolved at CLASS level.
+- Structure deltas (measured per-file diffs): ROLLOUT (NSG/NSA/NSGT) is
+  a movement special with its own charge/launch/turn machine on
+  runtime-added phys.rollOut* (rollOutTurnTimer presence-modeled THIS
+  task — rule 16); NSG/NSA mains do NOT advance timer at the top (the
+  charge-scaled advance sits mid-body) and their interrupts ALWAYS
+  return false (the WAIT/FALLSPECIAL arms fire the init and still
+  return false — verbatim); the multijump ladder (AERIALTURN1-5 /
+  JUMPAERIAL1-5, cVel.y rungs 1.65/1.59/1.47/1.36/1.25) dispatches
+  through the puffNextJump/puffMultiJumpDrift helper modules with
+  COMPUTED index keys ("AERIALTURN"+(1+jumpsUsed) — AERIALTURN6
+  unreachable, every dispatch jumpsUsed<5-guarded); ATTACKAIRN's t===7
+  increments hitboxes.FRAMES and ATTACKAIRB's t===8 writes
+  phys.AUTOCANCEL (lowercase) — upstream typos on runtime-added fields;
+  THROW* dispatch victims 2-ARG through the TABLE with fractional
+  timers (K/releaseFrame, floor(+0.01) crossings; THROWBACK's window
+  carries the floor-over-comparison typo `Math.floor(timer+0.01 < 37)`;
+  THROWDOWN's crossing has NO grabbing===-1 guard where FORWARD/BACK
+  do); THROWN{PUFF,MARTH,FOX}* are guarded (THROWNPUFFUP's vacuous
+  `if(player[p].phys)` nesting, THROWNMARTHFORWARD's clamp-before-guard
+  order, THROWNMARTH* init pos snaps, THROWNMARTHBACK's flip-without-
+  negated-x) and THROWN{FALCO,FALCON}* are the old-style unguarded
+  family (THROWNFALCOBACK flips without negating x; THROWNFALCONDOWN
+  has reverseModel but NO flip) — per-file verbatim; CLIFF* keep the
+  onLedge===-1 canGrabLedge table-write arm (C traps) and
+  CLIFFGETUPQUICK alone sets ledgeRegrabCount=TRUE.
+- GOLDENS: g02/g04/g08 — the puff carriers, probe-measured live
+  coverage 843/1215/1037 (all three carry live puff moves; g08's CPU
+  puff attacks, unlike g07's falcon). g08 carries the FIRST LIVE
+  mdispatch seam of any per-char cluster: the CPU puff's THROWBACK
+  dispatching fox's THROWNPUFFBACK on the victim's table.
+- Value model: ONE widening — phys.rollOutTurnTimer (runtime-added by
+  NEUTRALSPECIALGROUNDTURN; no prior golden fired it). The rest of the
+  rollout family was modeled since task 2.
+
+moves-puff sweep (rules 11/12, 404 calls): the task-8 scaffolding
+reused (slot-3 playerObject(1,·) + characterSelections[3]=1, slot-2
+injection for grabbedBy<p, sweep mulberry32, hq splice-restore, default
+pre-match stage cliffs — its walls serve the onWallCollide vfx read)
+with puff-measured arms; puff-specific coverage: the FULL rollout
+machine both environments (charge/clamp/release charged AND uncharged,
+the STALE-id dmg arms writing through jab1's global objects, distance/
+wrap/decel/turn-chain arms, onWallCollide both faces + the no-op arm,
+onPlayerHit ×3), sing's five size windows + both interrupt exits, rest
+twins, pound both environments incl. the lsY-angle and rotated-
+airVelocities arms + the SIDESPECIALAIR land write, the multijump
+ladder (all 10 rung inits, the t===13 handoff, face-flip arm,
+puffNextJump both branches from JUMPAERIALB/F and the >28 multijump
+arms, JUMPAERIAL5's armless FALL), THROW* fractional-timer crossings +
+CATCHCUT/-1 arms, all 20 THROWN* inits + guard/clamp/order arms, all 8
+CLIFF*. The sweep snapshots dmg+size of the WHOLE puff charHitboxes
+plane up front and restores it in the finally (rule 12 net-restore —
+the rollout/sing arms mutate the GLOBAL plane; mid-sweep records
+legitimately observe the mutated chd). Unswept (documented): CLIFF*
+onLedge===-1 canGrabLedge table-write arm (C traps; mvData
+drift-guarded), unguarded THROWN{FALCO,FALCON}* grabbedBy=-1/overrun
+arms and guarded-THROWN overruns past the clamp window (upstream
+throws), interrupt-tail WALK arms shadowed by checkForTilts,
+AERIALTURN6/JUMPAERIAL6 (unreachable by construction).
+
 ## The undef-ret allowlist (rule 8)
+
 
 The no-undef-in-returns pin (soundness of the marshaller's
 ToNumber(undefined)→NaN argument mapping) applies per function, not

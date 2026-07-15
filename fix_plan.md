@@ -687,9 +687,76 @@ coverage DID include: 531-call live NEUTRALSPECIALGROUND arcs on g05
 (the charge window, blend overlay, play-id, and release-stop arms live),
 JAB1/JAB2 chains, FORWARDTILT, GRAB, DOWNATTACK (g06), and
 ATTACKAIRN/F/B incl. land arms.)
-12. characters/puff moves (4,599 ln).
-    done-check: `bash port/sim/calib/check-moves-puff-replay.sh` →
-    `MOVES puff MATCH`, exit 0.
+- **RULE 17 — the M1-owned char-data VALUE plane is MEASURED per record
+  where upstream writes it (adopted task 12)**: move code writes fields
+  of the GLOBAL charHitboxes objects through player.hitboxes.id ALIASES
+  (player.js:132 — falcon canEdgeCancel's class): marth's dmg write was
+  benign over its live domain (task 11's documented hole), but puff's
+  rollout writes id[0..2].dmg after release EVEN WHEN UNCHARGED —
+  through whatever STALE id objects the previous move assigned
+  (cross-move provenance a value-copy C model cannot track) — and sing
+  cycles id[0].size. MEASURED live drift on g04 (jab1 dmg 3→7 from
+  frame 1038; 983 records). The class fix is the "chd" PRE-PROJECTION:
+  every move record's pre carries the EXECUTED {moveKey:{idN:{dmg,
+  size}}} plane and the C's hitbox assigns feed dmg/size from it, never
+  from assumed-pristine CTAB1 (dmg/size are the only createHitbox
+  fields with upstream write sites — measured by grep). Instrument >
+  documented hole: task 17's integration replaces the projection with
+  the sim's own live plane; any cluster consuming M1-owned data that
+  upstream mutates at runtime inherits this discipline.
+
+(task 12 — characters/puff moves — DONE iter 31:
+`bash port/sim/calib/check-moves-puff-replay.sh` → MOVES puff MATCH,
+exit 0. 1362 + 1716 + 2935 = 6013 records over g02/g04/g08 — the puff
+carriers, probe-measured live coverage 843/1215/1037 (g08's CPU puff
+attacks, unlike g07's falcon). 4307 mutation-captured puff-origin fn
+calls (404 frame-0 rule-11/12 sweep records per golden on the sweep RNG
+chain), 1 LIVE mdispatch seam (g08's CPU puff THROWBACK dispatching
+fox's THROWNPUFFBACK — the FIRST live per-char-cluster seam; verified
+in call order), 0 article records — puff has ZERO `articles` references
+(marth-strength; pinned ZERO with the unconsumed-FIFO tripwire), 1699
+standalone seeded draws (1491 on g08's AI plane), 3 mvData + 3 rngBoot
+records, byte-stable ×2, 6× STREAM MATCH, 0 replay divergences on the
+FIRST successful build (rules 1-17 held; the chd mechanism and the
+rollOutTurnTimer widening were built capture-first, before any C ran).
+C: `port/sim/characters/puff/moves/*.c` (71 files) + puff
+`moves_index.c`/`moves.h` + the two helper modules
+`puff_multi_jump_drift.c`/`puff_next_jump.c` (characters/puff/*.js
+level; puffNextJump dispatches COMPUTED module-index keys
+"AERIALTURN"/"JUMPAERIAL"+(1+jumpsUsed) — rung 6 unreachable, trapped).
+Puff OVERRIDES shared FURAFURA/JUMPAERIALB/JUMPAERIALF on table 1
+(rule 15's origin map measures them puff-origin there, shared
+elsewhere — both directions asserted); puff's FURAFURA is TRIVIAL
+(WAIT.init — no furaloop: the task-11 sbid mechanism is NOT needed,
+measured, no Howl-id consumption anywhere under characters/puff/).
+NEUTRALSPECIAL{GROUND,AIR,GROUNDTURN} onPlayerHit + NEUTRALSPECIALAIR
+onWallCollide route through the task-10 mv_register_special_phases
+hook; mv_register_char_module(1, puff_move_def) makes checkForIASA's
+char-1 PUFFMOVES arm real (dead-by-construction upstream — marth
+precedent). Puff structure deltas carried verbatim: ROLLOUT's
+mid-body charge-scaled timer advance + always-false NSG/NSA
+interrupts; the multijump ladder's cVel.y rungs + AERIALTURN's t===13
+handoff; ATTACKAIRN's hitboxes.FRAMES++ / ATTACKAIRB's lowercase
+phys.autocancel typos; THROW* fractional timers with floor(+0.01)
+crossings + THROWBACK's floor-over-comparison typo + THROWDOWN's
+unguarded crossing; the guarded/unguarded THROWN* split with per-file
+snap/flip/negX/clamp-order variation; CLIFFGETUPQUICK's lone
+ledgeRegrabCount=TRUE. Teeth: POST nibble → exactly 1; FORWARDTILT
+active 6→5 → 5/19/5 live; THROWUP hq flag → exactly 1; THROWUP through
+an unregistered state → seam-underflow; chd IGNORED (pristine CTAB1) →
+2/8/2 — bites g04's LIVE drifted assigns; extra UPSMASH draw → 16 each
+(chain cascade); release-vel 0.09→0.08 → 2 sweep-only (live releases
+were charge-0 — rule-12 corollary, 4th instance); newDmg base 12→11 →
+8/378/8 (bites g04's live rolls massively); onPlayerHit registration
+removed → OUT OF DOMAIN at the first record; sing size 12.890→12.5 →
+exactly 1. Honest coverage: live puff THROW*/THROWN*/CLIFF*/sing/rest
+are zero-to-thin over g02/g04/g08 — sweep-covered (404 calls), seams/
+traps loud on first live record; live coverage DID include the FULL
+rollout family (g04's 378-record live dmg-write arc + the g08 CPU
+rollouts), JAB1/JAB2, tilts, smashes, aerials incl. land arms, the
+multijump ladder, GRAB, DOWNATTACK, and puff as grab victim. The
+per-char surface is COMPLETE: tasks 7-12 cover all five characters +
+shared — next is task 13 (articles).)
 13. articles (article.js 639 — fox/falco lasers, ILLUSION etc.) — article
     queues + article hit detection; articles are checksummed
     (CHECKSUM.md §2 `articles` key).

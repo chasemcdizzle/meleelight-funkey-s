@@ -1,0 +1,40 @@
+{
+  "comment": "Measured-then-frozen moves-puff-spec capture pins (M2 task 12, 2026-07-14). Boundary: every PUFF-ORIGIN actionStates entry's function property (221 wrapped, all on table 1: 217 phase fns — 56 moves x init/main/interrupt + 9 x +land (ATTACKAIR*x5, DOWNSPECIALAIR, DOWNSPECIALGROUND, SIDESPECIALAIR, UPSPECIAL) + NEUTRALSPECIALGROUND(3)/NEUTRALSPECIALAIR(4 incl. land)/NEUTRALSPECIALGROUNDTURN(3) + the three single-init table OVERRIDES FURAFURA/JUMPAERIALB/JUMPAERIALF — plus puff's four NON-phase dispatch surfaces: onPlayerHit(p) on NEUTRALSPECIAL{GROUND,AIR,GROUNDTURN} (hitDetection.js:493's specialOnHit arm) and onWallCollide(p,input,wallFace,wallNum) on NEUTRALSPECIALAIR (physics.js:122's specialWallCollide arm)) plus the 2 article init boundaries as a MEASUREMENT instrument = 223. Puff has ZERO `articles` references anywhere under characters/puff/ (marth-strength — measured): the article count is pinned ZERO on every golden. GOLDENS g02/g04/g08 — the puff carriers, probe-measured for live puff-origin coverage (g02 843 / g04 1215 / g08 1037 live move records; g08's CPU puff fires live moves, unlike g07's falcon). 'move' = a puff-origin fn entered outside any move record's scope, mutation-captured with [phase,name,[slot(,wallFace,wallNum)],inputs|null,pre] args (THROWN* inits can arrive from other chars' THROW dispatch sites; onWallCollide is the only >2-arg site) and the {alias,hq,players,rng,snd,vfx} post envelope; the PRE envelope carries 'chd' — the EXECUTED charHitboxes {moveKey:{idN:{dmg,size}}} VALUE plane at record time (puff's rollout writes id[0..2].dmg after release even UNCHARGED, through whatever STALE id objects the previous move assigned — MEASURED live drift on g04 from frame 1038: jab1 dmg 3->7 — and sing cycles id[0].size; the replay's pf_assign_hitbox_id feeds dmg/size from chd, never assumed-pristine CTAB1); 404 frame-0 records per golden = the rule-11/12 sweep on the sweep RNG chain, incl. the full rollout machine both environments (charge/clamp/release charged+uncharged, the STALE-id dmg arms, distance/wrap/decel/turn-chain arms, onWallCollide both faces + the no-op arm, onPlayerHit x3), sing's size windows, rest, pound both environments incl. the rotated-airVelocities arm, the multijump ladder (AERIALTURN/JUMPAERIAL rungs + puffNextJump both branches), THROW* fractional-timer crossings + CATCHCUT/-1 arms, all 20 THROWN* inits + guard/clamp/order arms, all 8 CLIFF* — with the sweep-mutated GLOBAL dmg/size plane snapshot-restored (rule 12 net-restore); 'mdispatch' = non-puff per-char dispatches from inside a puff record — g08 carries the FIRST LIVE per-char-cluster seam (the CPU puff's THROWBACK dispatching fox's THROWNPUFFBACK); Math.random = standalone seeded draws (g08's 1491 = the CPU golden's AI plane, chain-verified); mvData = the frame-0 executed move-data dump (task-7 dump + puff {origin,data} incl. the override map, finalCheck-drift-guarded). undefRetAllowed: move rets echo the phase's return (init/main/land/onPlayerHit/onWallCollide return undefined; THROW* interrupts' grabbing===-1 arms bare-return — rule 13's family); mvData's ret is a data dump.",
+  "undefRetAllowed": ["move", "mdispatch", "article", "mvData"],
+  "postStateFns": ["move", "mdispatch"],
+  "goldens": {
+    "g02": {
+      "records": 1362,
+      "counts": {
+        "rngBoot": 1,
+        "mvData": 1,
+        "Math.random": 113,
+        "move": 1247,
+        "mdispatch": 0,
+        "article": 0
+      }
+    },
+    "g04": {
+      "records": 1716,
+      "counts": {
+        "rngBoot": 1,
+        "mvData": 1,
+        "Math.random": 95,
+        "move": 1619,
+        "mdispatch": 0,
+        "article": 0
+      }
+    },
+    "g08": {
+      "records": 2935,
+      "counts": {
+        "rngBoot": 1,
+        "mvData": 1,
+        "Math.random": 1491,
+        "move": 1441,
+        "mdispatch": 1,
+        "article": 0
+      }
+    }
+  }
+}
