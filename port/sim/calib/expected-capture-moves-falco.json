@@ -1,0 +1,40 @@
+{
+  "comment": "Measured-then-frozen moves-falco-spec capture pins (M2 task 9, 2026-07-14). Boundary: every FALCO-ORIGIN actionStates entry's phase fns (214 wrapped, all on table 3: 53 moves x init/main/interrupt + 13 x +land + the 3 init-only delegates UPSPECIAL/DOWNSPECIALAIR/DOWNSPECIALGROUND) plus the 2 article init boundaries (LASER/ILLUSION) = 216. GOLDENS g02/g05/g07 — the falco carriers (g07 is the SECOND CPU-golden capture: the AI plane stays JS-side and its seeded draws land as standalone Math.random records, chain-verified draw-for-draw). 'move' = a falco-origin phase entered outside any move record's scope, mutation-captured with [phase,name,[slot],inputs|null,pre] args (THROWN*{BACK,DOWN} inits arrive 1-arg — inputs null) and the {alias,hq,players,rng,snd,vfx} post envelope (217 frame-0 records per golden = the rule-11/12 sweep on the sweep RNG chain, incl. the falco shine 4-sub-state machine, THROW* laser/hq crossings, and the interrupt-only grabbing===-1 bare-return arms); 'mdispatch' = non-falco per-char dispatches from inside a falco move record (the victim's THROWNFALCO* arms — measured ZERO live over g02/g05/g07: falco never threw a non-falco victim live; the seam FIFO's teeth are negative-test-proven); 'article' = articles.{LASER,ILLUSION}.init crossings under a falco frame (the task-13 oracle boundary; falco options carry isFox:false, the THROWDOWN lasers additionally partOfThrow:true, ILLUSION always type 0; 19 live on g02/g07, 0 live on g05, + 15 sweep spawns each); Math.random = standalone seeded draws; mvData = the frame-0 executed move-data dump (task-7 dump + falco {origin,data}, finalCheck-drift-guarded). undefRetAllowed: move rets echo the phase's return (init/main/land return undefined; THROW*'s grabbing===-1 interrupt guards fall through — rule 13's family); article rets echo LASER/ILLUSION init's undefined; mvData's ret is a data dump.",
+  "undefRetAllowed": ["move", "mdispatch", "article", "mvData"],
+  "postStateFns": ["move", "mdispatch"],
+  "goldens": {
+    "g02": {
+      "records": 1779,
+      "counts": {
+        "rngBoot": 1,
+        "mvData": 1,
+        "Math.random": 97,
+        "move": 1646,
+        "mdispatch": 0,
+        "article": 34
+      }
+    },
+    "g05": {
+      "records": 1240,
+      "counts": {
+        "rngBoot": 1,
+        "mvData": 1,
+        "Math.random": 169,
+        "move": 1054,
+        "mdispatch": 0,
+        "article": 15
+      }
+    },
+    "g07": {
+      "records": 1619,
+      "counts": {
+        "rngBoot": 1,
+        "mvData": 1,
+        "Math.random": 65,
+        "move": 1518,
+        "mdispatch": 0,
+        "article": 34
+      }
+    }
+  }
+}

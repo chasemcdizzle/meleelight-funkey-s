@@ -440,6 +440,29 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   construction); CLIFF*'s onLedge===-1 arm WRITES the move table
   (`this.canGrabLedge = false`) — C traps at the site and the mvData
   finalCheck would catch the drift.
+- **characters/falco moves (M2 task 9 committed form):** `node
+  port/sim/calib/run-capture.js --spec moves-falco --golden <id>` — task
+  8's fox recipe followed exactly over goldens **g02/g05/g07** (the falco
+  carriers; g07 = second CPU golden): 214 falco-origin fns (69 module
+  keys, table 3) + LASER/ILLUSION inits = 216 wrapped; falco article
+  options carry isFox:false (+ partOfThrow:true on THROWDOWN lasers,
+  ILLUSION always type 0). C: `port/sim/characters/falco/moves/*.c` (69
+  files) + falco moves_index/moves.h; NO char-module registration
+  (upstream checkForIASA has no char-3 branch — a falco IASA aerial
+  payload dispatches nothing, verbatim). Falco structure deltas (measured
+  per-file diffs, carried verbatim): THROW* inits unguarded
+  (interrupt-only grabbing===-1 bare return), THROWN* without -1
+  guards/offset clamps, CLIFF* without the canGrabLedge table-write arm
+  (upstream throws — the mv_player/mv_falco_pair/mv_ledge_point traps),
+  shine = 4-sub-state machine per environment with actionState-write
+  land/platform-drop arms. Task check: `bash
+  port/sim/calib/check-moves-falco-replay.sh` → `MOVES falco MATCH`.
+  Gotcha class (rule 16 EXTENDED): ANY new golden widens the player-plane
+  value domain for all four slots — g05's marth fired NEUTRALSPECIAL for
+  the first time across all captures (runtime-added phys.shieldBreaker*
+  trio + player.shieldBreakerID, presence-modeled in ml_player.h after a
+  rule-7 marshal hard-fail); re-survey whenever a spec adopts a new
+  golden.
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;

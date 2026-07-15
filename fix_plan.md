@@ -493,7 +493,14 @@ seam rng lists).)
   button propagation into player state anywhere in characters/ or
   actionStateShortcuts.js — so CV_NUM buttons marshal by JS truthiness).
   Task 16's AI-input bridge inherits this: aiInputBank rows are NOT
-  shape-identical to human Input objects.
+  shape-identical to human Input objects. EXTENDED task 9: not just the
+  AI plane — ANY new golden widens the player-plane value domain for all
+  four slots (g05's MARTH fired NEUTRALSPECIAL for the first time across
+  all captures: runtime-added phys.shieldBreakerCharge/ChargeAttempt/
+  Charging + player.shieldBreakerID entered the domain, caught by the
+  rule-7 marshal). A cluster's value model is verified over the UNION of
+  goldens captured so far, nothing more — budget a re-survey (or a
+  marshal hard-fail round) whenever a spec adopts a new golden.
 
 (task 8 — characters/fox moves — DONE iter 27:
 `bash port/sim/calib/check-moves-fox-replay.sh` → MOVES fox MATCH, exit 0.
@@ -527,9 +534,38 @@ THROWNFALCO*/FALCON* offset overruns trap (upstream throws), THROW*
 against a live non-fox victim stays seam-guarded (loud on first live
 record).)
 
-9. characters/falco moves (4,488 ln).
-   done-check: `bash port/sim/calib/check-moves-falco-replay.sh` →
-   `MOVES falco MATCH`, exit 0.
+(task 9 — characters/falco moves — DONE iter 28:
+`bash port/sim/calib/check-moves-falco-replay.sh` → MOVES falco MATCH,
+exit 0. 1779 + 1240 + 1619 = 4638 records over g02/g05/g07 — the falco
+carriers (g07 = the second CPU golden; AI JS-side, seeded draws
+chain-verify), 4218 mutation-captured falco-origin phase calls (217
+frame-0 rule-11/12 sweep records per golden on the sweep RNG chain), 83
+article seams (falco options carry isFox:false, THROWDOWN's lasers add
+partOfThrow:true, ILLUSION always type 0), 0 live mdispatch seams (falco
+never threw a non-falco live; FIFO teeth negative-test-proven),
+byte-stable ×2, 6× STREAM MATCH, 0 replay divergences after two
+value-model class fixes (marth's runtime-added phys.shieldBreaker* trio +
+player.shieldBreakerID — rule 16 EXTENDED above: new goldens widen the
+whole player-plane domain). C: `port/sim/characters/falco/moves/*.c`
+(69 files, structure-parallel; task 8's fox recipe followed exactly) +
+falco `moves_index.c`/`moves.h`. Falco structure deltas carried verbatim:
+THROW* inits have NO grabbing===-1 guard (interrupt-only bare-return
+arm), THROWN* have NO -1 guards/offset clamps (upstream throws — traps),
+CLIFF* have NO canGrabLedge table-write arm (ledge[-1] throws —
+mv_ledge_point traps), the shine is a 4-sub-state machine per environment
+with actionState-write land/platform-drop arms, checkForIASA has NO
+char-3 branch (no module registration — a falco IASA aerial payload
+dispatches nothing, verbatim). Falco data arrays (THROWN*.offset, CLIFF*
+offset/setVelocities, THROWFORWARD/ATTACKDASH/FIREFOXBOUNCE
+setVelocities) come from the mvData falco dump (rule 15). Teeth: POST
+nibble → exactly 1; FORWARDTILT actives flip (the falco-vs-fox delta) →
+11/12/9; NSG laser y 7→8 → 31/13/29 article-args; THROWDOWN hq flag →
+exactly 1; THROWUP through marth's table → seam-underflow; circleDust
+4→3 → 77/62/42 cascade; THROWFORWARD setVel index → 1; shine AIRTURN
+threshold 3→4 → 2 each. Honest coverage: THROW*.init ungrabbed and
+snap-family THROWN*.init with grabbedBy=-1 unswept (upstream itself
+throws), THROWN* offset overruns trap, live mdispatch zero
+(seam-guarded, loud on first live record).)
 10. characters/falcon moves (4,432 ln).
     done-check: `bash port/sim/calib/check-moves-falcon-replay.sh` →
     `MOVES falcon MATCH`, exit 0.

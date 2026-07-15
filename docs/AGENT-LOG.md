@@ -1889,3 +1889,120 @@ MILESTONE PASS: M2-CAL
   registry instrument to falco; falco carries g02/g05/g07 (g07 = the
   second CPU golden); falco's laser/THROWFORWARD article sites reuse the
   article-seam pattern with isFox:false options).
+
+## iter 28 — 2026-07-14 — M2 task 9: characters/falco moves — MOVES falco MATCH
+
+- phase M2, task 9 (the falco per-char move set: 69 move objects, 214
+  phase fns — the second per-char cluster, executed with task 8's
+  now-mechanical recipe; first cluster to run on the g02/g05/g07 falco
+  carriers).
+- done-check: `bash port/sim/calib/check-moves-falco-replay.sh` → exit 0,
+  `MOVES falco MATCH` (.loop/task9-donecheck.log). Per golden
+  (g02/g05/g07): two fresh captures byte-identical, STREAM MATCH ×2
+  against the frozen streams (non-perturbation), pins green, C replay
+  0 divergences over 1779 + 1240 + 1619 = 4638 records (4218 move
+  records incl. 217 sweep calls per golden, 83 article seams, 0 live
+  mdispatch, 331 standalone draws, 3 mvData + 3 rngBoot records).
+- GOLDENS: g02 falco/puff/ystory · g05 marth/falco/fdest · g07
+  falco/CPU-falcon/battlefield — the falco carriers per the task-8
+  carrier convention; g07 is the SECOND CPU-golden capture (AI JS-side,
+  81 rngCalls reproduced, seeded draws chain-verified draw-for-draw).
+- conformance guard + regressions ALL GREEN (.loop/task9-reg-*.log):
+  ENVCOLL MATCH · UTIL MATCH · PLAYER MODEL MATCH · INPUT MATCH ·
+  ASSHORT MATCH · PHYSICS MATCH · HITDET MATCH · MOVES SHARED MATCH ·
+  MOVES fox MATCH — every prior spec re-verified against the edited
+  shared TUs (ml_player.h/player_canon.c gained the marth shieldBreaker
+  fields).
+- design: task 8's recipe followed EXACTLY (wrap falco-origin by
+  module-index identity on table 3; shared entries unwrapped; non-falco
+  per-char entries mdispatch seams; article inits as 4-field FIFO seams;
+  mvData dump extended with falco {origin, data}; per-char data arrays
+  served by mv_falco_arr/pair/len — rule 15; sweep scaffolding reused
+  with falco-measured timer arms). Falco's article options carry
+  isFox:false on every LASER/ILLUSION init, THROWDOWN's four lasers add
+  partOfThrow:true, ILLUSION is always type 0 — the C seams serialize
+  the extra keys in canon-sorted position. checkForIASA has NO
+  characterSelections==3 branch upstream: a falco IASA aerial payload
+  dispatches NOTHING (returns true bare) — no char-module registration
+  in the falco replay, verbatim fidelity.
+- falco STRUCTURE deltas vs fox (measured by per-file diff BEFORE
+  translating — the recipe's cheapest instrument; all carried verbatim):
+  THROW* inits have NO grabbing===-1 guard (the guard lives only in the
+  interrupts as a bare-return arm — swept, ret undef); THROWN* have NO
+  grabbedBy===-1 guards and NO offset-length clamps (player[-1]/offset
+  overruns throw upstream — mv_player/mv_falco_pair trap; the no-snap
+  THROWNPUFF{UP,FORWARD,DOWN} family tolerates grabbedBy=-1 until
+  timer>0 — swept); CLIFF* have NO onLedge===-1 canGrabLedge table-write
+  arm (fox's quirk; ledge[-1] throws upstream — mv_ledge_point traps);
+  the shine is a 4-sub-state machine per environment
+  (DOWNSPECIAL{AIR,GROUND}{START,LOOP,END,TURN} + init-only delegate
+  entries) whose land/platform-drop arms write actionState directly;
+  THROWFORWARD's setVelocities index is Math.max(0,·)-clamped; APPEAL
+  carries no setVelocities plane; falco throws FIRE LASERS (the THROW*
+  mains are laser-crossing chains).
+- DIVERGENCE LEDGER (root-cause class · fix · min):
+  1. marth phys.shieldBreakerCharge/ChargeAttempt/Charging (g05 marshal
+     hard-fail, rule 7 by design) · runtime-added by marth
+     NEUTRALSPECIAL* — a move family NO prior golden ever fired; the
+     task-2 player model was verified over g01/g04/g06 (+g03/g08) only ·
+     presence-modeled trio in ml_player.h + player_canon marshal/ser ·
+     15m.
+  2. player.shieldBreakerID (same records) · marth's Howl play id,
+     furaLoopID's runtime-added cousin · presence-modeled number ·
+     5m.
+  Replay divergences after those two model widenings: ZERO on all three
+  goldens on the first C build (rules 1-16 held; no expression-shape,
+  desugaring, alias, chain-order, or data-plane misses across 4638
+  records — the recipe is mechanical as advertised).
+- comparator negative tests (all restored, tree re-verified 0 div):
+  (a) corrupted POST players nibble → exactly 1; (b) FORWARDTILT actives
+  [T,T,T,F]→[T,T,F,F] (the falco-vs-fox delta itself) → 11/12/9 live
+  divergences (bites occurring values — rule 12); (c) NSG laser article
+  y 7→8 → 31/13/29 (article-args; live lasers on g02/g07, sweep-only on
+  g05); (d) THROWDOWN hq-push flag true→false → exactly 1 (hq append
+  model teeth); (e) THROWUP dispatched through marth's table →
+  seam-underflow divergence (mdispatch FIFO teeth despite zero live
+  seams); (f) circleDust 4→3 draws → 77/62/42 (sweep-chain cascade);
+  (g) THROWFORWARD setVelocities index off-by-one → 1 (rule-15 data
+  plane); (h) shine AIRTURN threshold 3→4 → 2 each (sub-state machine
+  teeth).
+- honest coverage (documented, not silent): THROW*.init without a grab
+  and snap-family THROWN*.init with grabbedBy=-1 are unsweepable
+  (upstream itself throws on actionStates[undefined]/player[-1]);
+  THROWN* offset overruns trap (no clamps in falco's family); live
+  mdispatch (non-falco THROW victims) zero over g02/g05/g07 —
+  seam-guarded, loud on first live record. Live coverage DID include:
+  NSG laser loops (621 main calls on g02/g07 with 19 live LASER spawns
+  each), JAB1/FORWARDTILT/DOWNTILT/GRAB chains, ATTACKAIRB/F/N incl.
+  land arms, JAB2 (g07), and falco as marth's grab victim on g05.
+- artifacts (sha256/12): falco moves.h b53d576076ad · falco
+  moves_index.c c907f45bf12c · falco moves/*.c (69 files, 5168 lines)
+  6f9462403421 · spec-moves-falco.js df86b801cbb0 ·
+  replay_moves_falco.c ea9a11bf1106 · expected-capture-moves-falco.json
+  4c8545cca73b · check-moves-falco-replay.sh 2d1373d338a7 · ml_player.h
+  1f7ee1a501d8 · player_canon.c fb2bf8436208 · FORMAT.md ead02ca29e6b.
+  Logs: .loop/task9-donecheck.log, .loop/task9-cap-*.log,
+  .loop/task9-reg-*.log.
+- zoom-out: (1) rule 16 EXTENDED (fix_plan §M2): the CPU-golden lesson
+  generalizes — ANY new golden widens the player-plane value domain for
+  ALL FOUR slots, not just the newly-captured char's (g05's marth had
+  never charged a shield breaker in any prior capture; the falco capture
+  inherited the miss because envelopes carry every player). "Verified"
+  still means verified OVER THE CAPTURED DOMAIN; the class-level defense
+  stays capture-FIRST + rule-7 hard-fail marshalling, which caught both
+  instances in minutes. Budget one marshal-widening round whenever a
+  spec adopts a golden no prior spec captured. (2) The per-char recipe
+  held at zero translation divergences — the structure-delta diff pass
+  (diff fox/moves vs falco/moves BEFORE translating) is the step that
+  made it mechanical: every falco quirk (guard removals, shine machine,
+  laser throws, isFox options) was known before a line of C was written.
+  Tasks 10-12 (falcon/marth/puff) should keep that pass; marth/puff have
+  no fox sibling, so diff against the closest translated char and expect
+  more fresh files. (3) No new rule minted beyond the rule-16 extension —
+  zero one-offs registered; both fixes were class-level model widenings.
+- next: task 10 (characters/falcon moves, 4,432 ln — falcon carriers are
+  g03 falcon/fox/pstadium, g04 puff/falcon/dreamland, g06
+  falcon/marth/fountain; g07's CPU falcon is ALSO a falcon carrier —
+  pick per the live-coverage convention; extend the mvData/registry
+  instrument to falcon; falcon has no articles, so the article seam
+  list should pin to zero unless raptorBoost spawns one — measure).

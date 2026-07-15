@@ -518,6 +518,11 @@ static void cv_phys(const CanonVal *v, MlPhysics *out) {
     OPT_NUM("rollOutVel", hasRollOutVel, rollOutVel)
     OPT_BOOL("rollOutWallHit", hasRollOutWallHit, rollOutWallHit)
     REQ_NUM("shieldAnalog", shieldAnalog)
+    OPT_NUM("shieldBreakerCharge", hasShieldBreakerCharge, shieldBreakerCharge)
+    OPT_BOOL("shieldBreakerChargeAttempt", hasShieldBreakerChargeAttempt,
+             shieldBreakerChargeAttempt)
+    OPT_BOOL("shieldBreakerCharging", hasShieldBreakerCharging,
+             shieldBreakerCharging)
     REQ_NUM("shieldHP", shieldHP)
     REQ_VEC("shieldPosition", shieldPosition)
     REQ_VEC("shieldPositionReal", shieldPositionReal)
@@ -719,6 +724,18 @@ static void ser_phys(CanonBuf *b, const MlPhysics *p) {
   }
   cb_puts(b, ",\"shieldAnalog\":");
   cb_num(b, p->shieldAnalog);
+  if (p->hasShieldBreakerCharge) {
+    cb_puts(b, ",\"shieldBreakerCharge\":");
+    cb_num(b, p->shieldBreakerCharge);
+  }
+  if (p->hasShieldBreakerChargeAttempt) {
+    cb_puts(b, ",\"shieldBreakerChargeAttempt\":");
+    ser_bool(b, p->shieldBreakerChargeAttempt);
+  }
+  if (p->hasShieldBreakerCharging) {
+    cb_puts(b, ",\"shieldBreakerCharging\":");
+    ser_bool(b, p->shieldBreakerCharging);
+  }
   cb_puts(b, ",\"shieldHP\":");
   cb_num(b, p->shieldHP);
   cb_puts(b, ",\"shieldPosition\":");
@@ -840,6 +857,9 @@ void cv_player(const CanonVal *v, MlPlayer *out) {
     } else if (strcmp(key, "rotationPoint") == 0) {
       out->rotationPoint = pc_vec2d(val, "player.rotationPoint");
       required++;
+    } else if (strcmp(key, "shieldBreakerID") == 0) {
+      out->hasShieldBreakerID = true;
+      out->shieldBreakerID = pc_num(val, "player.shieldBreakerID");
     } else if (strcmp(key, "shineLoop") == 0) {
       out->shineLoop = pc_num(val, "player.shineLoop");
       required++;
@@ -924,6 +944,10 @@ void ser_player(CanonBuf *b, const MlPlayer *p) {
   cb_num(b, p->rotation);
   cb_puts(b, ",\"rotationPoint\":");
   ser_vec2d_pc(b, p->rotationPoint);
+  if (p->hasShieldBreakerID) {
+    cb_puts(b, ",\"shieldBreakerID\":");
+    cb_num(b, p->shieldBreakerID);
+  }
   cb_puts(b, ",\"shineLoop\":");
   cb_num(b, p->shineLoop);
   cb_puts(b, ",\"shocked\":");

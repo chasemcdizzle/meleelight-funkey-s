@@ -23,7 +23,8 @@
 //   per rule 3): player.IASATimer, player.inAerial, hit.reverse,
 //   hitboxes.frames, phys.{grabTech,laserCombo,ledgeHangTimer,autocancel,
 //   rollOutCharge,rollOutChargeAttempt,rollOutCharging,rollOutPlayerHit,
-//   rollOutPlayerHitTimer,rollOutVel,rollOutWallHit}. Note phys.autocancel
+//   rollOutPlayerHitTimer,rollOutVel,rollOutWallHit,shieldBreakerCharge,
+//   shieldBreakerChargeAttempt,shieldBreakerCharging}. Note phys.autocancel
 //   (lowercase, runtime-added by move code) COEXISTS with constructor
 //   autoCancel — two distinct upstream fields, carried verbatim.
 // - phys.canWallJump holds undefined AT REST (survey: undef in 18,837 of
@@ -225,6 +226,9 @@ typedef struct {
   bool hasRollOutPlayerHitTimer;double rollOutPlayerHitTimer;
   bool hasRollOutVel;           double rollOutVel;
   bool hasRollOutWallHit;       bool rollOutWallHit;
+  bool hasShieldBreakerCharge;        double shieldBreakerCharge;  // marth NEUTRALSPECIAL family (M2 task 9)
+  bool hasShieldBreakerChargeAttempt; bool shieldBreakerChargeAttempt;
+  bool hasShieldBreakerCharging;      bool shieldBreakerCharging;
 } MlPhysics;
 
 // --- playerObject (player.js:126-167) ----------------------------------------
@@ -250,6 +254,10 @@ typedef struct {
   Vec2D miniViewPoint;
   bool inCSS;
   double furaLoopID;
+  // runtime-added by marth NEUTRALSPECIAL* (Howl play id, furaLoopID's
+  // cousin; first live appearance g05 moves-falco, M2 task 9):
+  bool hasShieldBreakerID;
+  double shieldBreakerID;
   // percentShake: excluded (header note; CHECKSUM.md §7)
   double shineLoop;
   bool laserCombo;

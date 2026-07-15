@@ -80,6 +80,13 @@ Specs (`node run-capture.js --spec <name>`):
   goldens g01/g03/g08 — the fox carriers). See "The moves-fox spec"
   below. Pins: `expected-capture-moves-fox.json`.
 
+- `moves-falco` (M2 task 9, `spec-moves-falco.js`): the falco per-char
+  move set (src/characters/falco/moves/, 69 move objects) + the
+  LASER/ILLUSION article-init boundary → `replay_moves_falco.c`
+  (translations `port/sim/characters/falco/moves/*.c` + `moves_index.c`
+  + `moves.h`; goldens g02/g05/g07 — the falco carriers). See "The
+  moves-falco spec" below. Pins: `expected-capture-moves-falco.json`.
+
 Method records use `Mod#method` names (args prepended with the canon of
 `this`); constructor records use `Mod.new` (ret = canon of the built
 instance, per-instance closures serializing as `fn`). Argument canon is
@@ -591,6 +598,70 @@ the CLIFF* onLedge===-1 canGrabLedge table-write arm (C traps; mvData
 drift-guarded), THROWNFALCO*/FALCON* offset overruns past the array end
 (upstream throws; C traps at mv_fox_pair), and interrupt-tail WALK arms
 shadowed by checkForTilts on the same axis domain.
+
+## The moves-falco spec (M2 task 9)
+
+Task 8's fox spec followed exactly (the "moves-fox" section above applies
+verbatim with fox→falco) — deltas only:
+
+- Wrapped boundary (216 fns): falco-origin lives ONLY on table 3 — 69
+  module keys, 214 fns (53 moves × init/main/interrupt + 13 × +land +
+  the 3 init-only delegates UPSPECIAL/DOWNSPECIALAIR/DOWNSPECIALGROUND) —
+  plus the two article init boundaries.
+- GOLDENS: g02/g05/g07 — the falco carriers (g02 falco/puff/ystory, g05
+  marth/falco/fdest, g07 falco/CPU-falcon/battlefield: the second
+  CPU-golden capture, AI JS-side as on g08).
+- ARTICLE options: falco passes `isFox: false` on every LASER/ILLUSION
+  init; the THROWDOWN lasers additionally `partOfThrow: true`; ILLUSION
+  is always `type: 0`. The C seams (`mv_article_laser_falco` /
+  `mv_article_illusion_falco`) serialize the extra keys in canon-sorted
+  position.
+- STRUCTURE deltas vs fox (measured per-file diffs; C carries each
+  verbatim): falco THROW* inits have NO grabbing===-1 guard (the guard
+  lives only in the interrupts' bare-return arm); falco THROWN* have NO
+  grabbedBy===-1 guards and NO offset-length clamps (player[-1]/offset
+  overruns throw upstream — mv_player/mv_falco_pair trap); falco CLIFF*
+  have NO onLedge===-1 canGrabLedge table-write arm (ledge[-1] throws
+  upstream — mv_ledge_point traps); the shine is a 4-sub-state machine
+  per environment (START/LOOP/END/TURN ×{AIR,GROUND}) whose land/
+  platform-drop arms write `actionState` directly; THROWFORWARD's
+  setVelocities index is Math.max(0,·)-clamped; falco's APPEAL carries
+  no setVelocities data plane.
+- checkForIASA: upstream has NO characterSelections==3 branch — a falco
+  IASA aerial payload dispatches NOTHING (returns true bare); the falco
+  replay registers no char module (mv_register_char_module unused).
+- `mvData` carries `falco: {origin, data}` (falco-origin map measured on
+  table 3 + every array-valued own prop of falco-origin entries: 20
+  THROWN*.offset (+offsetVel dead data), CLIFF* offset/setVelocities,
+  THROWFORWARD/ATTACKDASH/FIREFOXBOUNCE setVelocities, canGrabLedge
+  pairs), served through `mv_falco_arr`/`mv_falco_pair`/
+  `mv_falco_arr_len`.
+
+Value-model extensions measured by this capture (rule 7's marshal caught
+both; rule 16's re-survey discipline — falco appears in NO prior capture
+golden, and g05's MARTH exercised a move family no prior golden did):
+- phys.shieldBreakerCharge (number) / shieldBreakerChargeAttempt (bool) /
+  shieldBreakerCharging (bool): runtime-added by marth NEUTRALSPECIAL*
+  (presence-modeled, rule 3/8 family).
+- player.shieldBreakerID (number): marth's Howl play id, furaLoopID's
+  cousin — runtime-added, presence-modeled.
+
+moves-falco sweep (rules 11/12, 217 calls): the task-8 scaffolding reused
+(slot-3 playerObject(3,·) + characterSelections[3]=3, slot-2 injection
+for grabbedBy<p, sweep mulberry32, article/hq splice-restore, default
+pre-match stage cliffs) with falco-measured timer arms; falco-specific
+coverage: the shine 4-sub-state machine in BOTH environments (decel
+branches, shineLoop reset, platform drops, turn/end/jump-out/re-init
+arms, land actionState writes), THROW* laser crossings (THROWUP 18/20/24,
+THROWBACK 15/18/21 + face flip, THROWDOWN 23/25/28/31 with partOfThrow,
+THROWFORWARD's clamp arm) + hq crossings + the interrupt-only
+grabbing===-1 bare-return arms, the no-snap THROWNPUFF{UP,FORWARD} inits
+with grabbedBy=-1 (safe upstream: no deref until timer>0), ATTACKAIRD's
+dair1→dair2 mid-move swap, and the checkForIASA no-dispatch payload arm.
+Unswept (documented): THROW*.init without a grab and snap-family
+THROWN*.init with grabbedBy=-1 (upstream itself throws), THROWN* offset
+overruns (upstream throws), interrupt-tail WALK arms shadowed by
+checkForTilts.
 
 ## The undef-ret allowlist (rule 8)
 
