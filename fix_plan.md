@@ -615,9 +615,78 @@ Honest coverage: live falcon throws/raptor-boost hits/wall collides are
 zero over g03/g04/g06 (sweep-covered; seams loud on first live record);
 THROWN{FALCO,FALCON}* guard arms unswept (upstream throws); the CLIFF*
 canGrabLedge arm traps.)
-11. characters/marth moves (5,659 ln).
-    done-check: `bash port/sim/calib/check-moves-marth-replay.sh` →
-    `MOVES marth MATCH`, exit 0.
+(task 11 — characters/marth moves — DONE iter 30:
+`bash port/sim/calib/check-moves-marth-replay.sh` → MOVES marth MATCH,
+exit 0. 1608 + 1986 + 1586 = 5180 records over g01/g05/g06 — the marth
+carriers, probe-MEASURED live coverage 1082/1417/1054 marth-origin move
+records (g04 fields no marth). 4735 mutation-captured marth-origin fn
+calls (394 frame-0 rule-11/12 sweep records per golden on the sweep RNG
+chain), 0 live mdispatch seams, 0 article records — marth has ZERO
+`articles` imports anywhere under characters/marth/ (stronger than
+falcon's dead imports; pinned ZERO with the unconsumed-FIFO tripwire),
+439 standalone seeded draws, 3 mvData + 3 rngBoot records, byte-stable
+×2, 6× STREAM MATCH, 0 replay divergences after ONE translation fix (the
+THROWNFALCOBACK face-flip delta, caught by the g01 probe — see the
+AGENT-LOG iter 30 ledger). C: `port/sim/characters/marth/moves/*.c`
+(75 files, structure-parallel) + marth `moves_index.c`/`moves.h` + the
+two helper modules `dancing_blade_{combo,air_mobility}.c`
+(characters/marth/*.js level). NEW oracle-fed seam class: `player[p].
+shieldBreakerID = sounds.shieldbreakercharge.play()` CONSUMES the Howl
+play id — a GLOBAL howler counter (advanced by every sound in the match,
+mostly outside this cluster's records: unrecoverable chain state, rule
+14's value-plane cousin) — the capture records each consumed id in the
+record's post "sbid" list and the replay injects it via mv_howl_play_id,
+re-emitting the consumed list (count/order teeth in the post compare +
+the value lands in player.shieldBreakerID; 12 live ids on g05).
+`sounds.shieldbreakercharge.stop(id)` = the token
+"shieldbreakercharge.stop". NEW char-data-plane write instance (falcon
+canEdgeCancel's class, VALUE-plane sub-shape): NEUTRALSPECIAL*'s
+timer-46 `hitboxes.id[i].dmg = newDmg` MUTATES the global charHitboxes
+objects (player.js:132 aliases chars data, no copy) — newDmg == the
+authored 7 for charge < 30 (measured live domain {0,1}); a live CHARGED
+punch followed by a later nsg/nsa hitbox assign would diverge LOUD at
+that init record (C reads pristine CTAB1); the sweep exercises the >=120
+arm and restores all 8 dmg fields (rule 12). mv_dispatch's special-phase
+arm gained "onClank" (marth DOWNSPECIAL{GROUND,AIR}, hitDetection.js:
+71-72's specialClank arm — the task-10 hook reused via
+mv_register_special_phases(marth_special_phase)); mv_register_char_
+module(0, marth_move_def) makes checkForIASA's char-0 MARTHMOVES arm
+REAL dispatch — measured dead-by-construction upstream (only fox/falco/
+falcon aerials call checkForIASA; marth's ATTACKAIRF/B INLINE the
+aerial-IASA logic incl. `marth[a[1]].init` payload dispatch). Marth
+structure deltas carried verbatim: THROW* dispatch victims 2-ARG
+(.init(grabbing, input) — fox's THROWBACK/THROWDOWN are 1-arg); THROWUP's
+interrupt -1 arm returns false where the other three fall through;
+THROWN{PUFF,MARTH,FOX}* are guarded with per-file clamp-vs-guard ORDER
+variation (+ THROWNMARTHBACK has NO init guard; THROWNPUFFUP wraps its
+body in a vacuous `if(player[p].phys)`); THROWN{FALCO,FALCON}* are fox's
+unguarded family with ONE body delta (THROWNFALCOBACK adds `face *= -1`);
+all 8 CLIFF* keep fox's canGrabLedge table-write trap arm and
+CLIFFGETUPQUICK sets ledgeRegrabCount=TRUE (authored quirk); smashes
+charge via the timer==3/7/3 hold machine; dancing blade's
+phys.dancingBlade/dancingBladeDisable are runtime-added
+(presence-modeled, rule 16). Data arrays (ATTACKDASH/SSG3*/SSG4*/CLIFF*
+setVelocities, UPSPECIAL's PAIR setVelocities rotated by
+upbAngleMultiplier via fdlibm sin/cos, CLIFF*/THROWN* offsets) come from
+the mvData marth dump (rule 15); SIDESPECIAL{GROUND,AIR}4DOWN compute
+their charHitboxes key ("db{ground,air}4down"+floor((timer-7)/6)) at
+runtime. Teeth: POST nibble → exactly 1; FORWARDTILT active 7→6 →
+11/15/11 live; THROWUP hq flag → exactly 1; THROWUP through an
+unregistered state → seam-underflow (mdispatch FIFO teeth despite zero
+live seams); sbid injection dropped → 2/14/2 (bites g05's live
+shieldBreakerID records); blend-overlay string format → 3/6/3;
+dancingBladeCombo window 26→9 → exactly 1 each; onClank registration
+removed → OUT OF DOMAIN at the first onClank record; UPSPECIAL setVel
+index off-by-one → post divergence + the out-of-range trap. Honest
+coverage: live marth THROW*/THROWN*/CLIFF*/dancing-blade/counter/
+UPSPECIAL are ZERO over g01/g05/g06 — sweep-covered (394 calls incl.
+every chain dispatch and the charge family), seams/traps loud on first
+live record; a live charged shield-breaker punch (charge >= 30) is the
+documented char-data-plane hole (loud on the next hitbox assign). Live
+coverage DID include: 531-call live NEUTRALSPECIALGROUND arcs on g05
+(the charge window, blend overlay, play-id, and release-stop arms live),
+JAB1/JAB2 chains, FORWARDTILT, GRAB, DOWNATTACK (g06), and
+ATTACKAIRN/F/B incl. land arms.)
 12. characters/puff moves (4,599 ln).
     done-check: `bash port/sim/calib/check-moves-puff-replay.sh` →
     `MOVES puff MATCH`, exit 0.

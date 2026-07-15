@@ -24,7 +24,9 @@
 //   hitboxes.frames, phys.{grabTech,laserCombo,ledgeHangTimer,autocancel,
 //   rollOutCharge,rollOutChargeAttempt,rollOutCharging,rollOutPlayerHit,
 //   rollOutPlayerHitTimer,rollOutVel,rollOutWallHit,shieldBreakerCharge,
-//   shieldBreakerChargeAttempt,shieldBreakerCharging}. Note phys.autocancel
+//   shieldBreakerChargeAttempt,shieldBreakerCharging,dancingBlade,
+//   dancingBladeDisable (marth SIDESPECIAL family, M2 task 11)}. Note
+//   phys.autocancel
 //   (lowercase, runtime-added by move code) COEXISTS with constructor
 //   autoCancel — two distinct upstream fields, carried verbatim.
 // - phys.canWallJump holds undefined AT REST (survey: undef in 18,837 of
@@ -229,6 +231,8 @@ typedef struct {
   bool hasShieldBreakerCharge;        double shieldBreakerCharge;  // marth NEUTRALSPECIAL family (M2 task 9)
   bool hasShieldBreakerChargeAttempt; bool shieldBreakerChargeAttempt;
   bool hasShieldBreakerCharging;      bool shieldBreakerCharging;
+  bool hasDancingBlade;               bool dancingBlade;           // marth SIDESPECIAL family (M2 task 11)
+  bool hasDancingBladeDisable;        bool dancingBladeDisable;
 } MlPhysics;
 
 // --- playerObject (player.js:126-167) ----------------------------------------

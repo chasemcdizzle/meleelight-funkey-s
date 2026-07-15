@@ -127,16 +127,18 @@ struct MlMoveDef {
   MvFn land; // NULL where the JS object has no land property
 };
 
-// --- special phase surfaces (M2 task 10) -------------------------------------
+// --- special phase surfaces (M2 tasks 10/11) ----------------------------------
 // A few per-char move objects carry NON-phase dispatch functions:
 // onPlayerHit(p) — hitDetection.js:493's specialOnHit arm (falcon
 // SIDESPECIAL{GROUND,AIR}, puff NEUTRALSPECIAL*); onWallCollide(p,input,
 // wallFace,wallNum) — physics.js:122's specialWallCollide arm (falcon
 // DOWNSPECIALGROUND, puff NEUTRALSPECIALAIR; extras carry
-// [wallFace(DX_STR), wallNum(DX_NUM)]). Rather than widening every
-// MlMoveDef initializer, the owning cluster's driver registers a lookup;
-// mv_dispatch routes the two phase names through it (unregistered ->
-// mv_out_of_domain, the upstream missing-property TypeError).
+// [wallFace(DX_STR), wallNum(DX_NUM)]); onClank(p,input) —
+// hitDetection.js:71-72's specialClank arm (marth DOWNSPECIAL{GROUND,AIR},
+// M2 task 11). Rather than widening every MlMoveDef initializer, the
+// owning cluster's driver registers a lookup; mv_dispatch routes the
+// three phase names through it (unregistered -> mv_out_of_domain, the
+// upstream missing-property TypeError).
 typedef MvFn (*MvSpecialPhaseLookup)(const char *state, const char *phase);
 void mv_register_special_phases(MvSpecialPhaseLookup lookup);
 

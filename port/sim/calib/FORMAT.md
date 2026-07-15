@@ -766,6 +766,102 @@ table-write arm (C traps; mvData drift-guarded), THROWN* overruns
 SIDESPECIALGROUNDHIT's phys.timer and DOWNSPECIALGROUNDENDAIR's
 player.timer dead arms (unreachable by construction upstream).
 
+## The moves-marth spec (M2 task 11)
+
+Task 8's fox spec followed per the per-char recipe (the "moves-fox"
+section above applies with fox→marth) — deltas only:
+
+- Wrapped boundary (246 fns): marth-origin lives ONLY on table 0 — 75
+  module keys, 242 phase fns (58 moves × init/main/interrupt + 17 ×
+  +land: ATTACKAIR*×5, NEUTRALSPECIALAIR, DOWNSPECIALAIR, SIDESPECIALAIR
+  + its 8 chain states, UPSPECIAL) PLUS marth's two NON-phase move fns:
+  `onClank(p, input)` on DOWNSPECIAL{GROUND,AIR} (hitDetection.js:71-72's
+  specialClank arm — 2-arg, the standard wrapper shape) — 244 marth fns
+  + the 2 article inits as the zero-pin tripwire (marth has ZERO
+  `articles` imports anywhere under characters/marth/, measured).
+- Post envelope gains **"sbid"** (canon-sorted between rng and snd):
+  the Howl play ids returned by `sounds.shieldbreakercharge.play()` and
+  CONSUMED by the sim (`player[p].shieldBreakerID = ...`,
+  NEUTRALSPECIAL* timer-11). Howler ids are a GLOBAL counter
+  (Howler._counter, advanced by every sound in the match — mostly
+  outside this spec's records): unrecoverable chain state, so they are
+  ORACLE-FED (task-5 launch-getter discipline). The replay FIFOs the
+  recorded list per record, injects through `mv_howl_play_id`, and
+  re-emits the CONSUMED ids into the compared post — count/order
+  mismatches bite in the compare and the value itself lands in
+  player.shieldBreakerID. NOT checksummed (no Howl id reaches the
+  CHECKSUM.md field list) — the ×2 byte-stability + STREAM MATCH guards
+  remain the determinism proof. `sounds.shieldbreakercharge.stop(id)`
+  is the token "shieldbreakercharge.stop" (furaloop.stop's cousin).
+- The timer-46 dmg write (`hitboxes.id[i].dmg = newDmg`) MUTATES the
+  global charHitboxes objects upstream (player.js:132 aliases the chars
+  data, no copy) — a runtime write to the M1-owned char-data plane
+  (falcon canEdgeCancel's class, value-plane sub-shape). newDmg equals
+  the authored 7 whenever shieldBreakerCharge < 30 (measured live
+  domain {0,1} on g05); a live CHARGED punch followed by another
+  nsg/nsa hitbox assign would surface as an init-record divergence
+  (loud — C reads pristine CTAB1). The sweep exercises the ≥120 arm and
+  RESTORES all 8 dmg fields (rule 12 net-restore).
+- Dispatch graph: nearly every marth move imports the marth index
+  (`marth[b[1]].init(p,input)` payload dispatch → marth_moves_init);
+  marth aerials do NOT call checkForIASA — ATTACKAIRF/B INLINE the
+  aerial-IASA logic (checkForDoubleJump → shared JUMPAERIALB/F modules;
+  checkForAerials payload → marth[a[1]].init). checkForIASA's char-0
+  MARTHMOVES arm (actionStateShortcuts.js:400-401) is therefore
+  dead-by-construction upstream (only fox/falco/falcon aerials call
+  checkForIASA, and only for their own char) — the replay registers the
+  marth module anyway (mv_register_char_module(0, marth_move_def)),
+  faithful to the source. THROW* dispatch victims 2-ARG
+  (.init(grabbing, input) — unlike fox's 1-arg THROWBACK/THROWDOWN).
+- Structure deltas (measured per-file diffs): THROWN{PUFF,MARTH,FOX}*
+  are GUARDED (grabbedBy===-1 init guard — EXCEPT THROWNMARTHBACK,
+  which has NONE — plus a -1 main guard and a `timer > len → len-1`
+  clamp whose ORDER vs the guard varies per file; THROWNPUFFUP wraps
+  its body in a vacuous `if(player[p].phys)`); THROWN{FALCO,FALCON}*
+  are fox's unguarded family with ONE body delta — THROWNFALCOBACK
+  ADDS `face *= -1` in init (caught by the g01 probe replay); CLIFF*
+  keep fox's onLedge===-1 canGrabLedge table-write arm (C traps) and
+  CLIFFGETUPQUICK sets ledgeRegrabCount=TRUE (others false); THROWUP's
+  interrupt -1 arm returns false where the other three throws fall
+  through undefined; phys.dancingBlade/dancingBladeDisable are
+  runtime-added (rule 16 — presence-modeled in ml_player.h this task).
+- mvData extension: `marth: {origin, data}` — array-valued props of
+  every marth-origin entry (setVelocities incl. UPSPECIAL's PAIR array,
+  ATTACKDASH/SSG3*/SSG4*/CLIFF* setVelocities, CLIFF*/THROWN* offsets,
+  THROWNPUFFBACK.offsetVel (dead data), canGrabLedge pairs), served
+  through `mv_marth_arr`/`mv_marth_pair`/`mv_marth_arr_len`.
+- Value model: ONE widening — phys.dancingBlade/dancingBladeDisable
+  (runtime-added by the dancing-blade family; no prior golden fired
+  marth SIDESPECIAL*). shieldBreaker* trio + shieldBreakerID were
+  already modeled (task 9).
+
+moves-marth sweep (rules 11/12, 394 calls): the task-8 scaffolding
+reused (slot-3 playerObject(0,·) + characterSelections[3]=0, slot-2
+injection for grabbedBy<p, sweep mulberry32, hq splice-restore, default
+pre-match stage cliffs) with marth-measured timer arms; marth-specific
+coverage: the NEUTRALSPECIAL charge family (B-held charge + blend +
+dashDust at charge%6==0, release-stop + charge==122 auto-stop tokens,
+the timer-11 play-id records (sbid), the timer-46 dmg-write arm
+uncharged AND ≥120-charged — global dmg fields restored — and the
+timer-50 groundBounce arm), DOLPHINSLASH (angle-multiplier + face-flip
+arms, the rotated PAIR setVelocities window at pi/16, the >22 drift +
+0.36 clamp, all three land-guard disjuncts + the all-false no-init
+arm), the DANCINGBLADE chains (combo-window disable/enable/disabled-b
+arms, every UP/DOWN/FORWARD chain dispatch across both environments,
+the 4DOWN multi-hit timer%6 switch incl. the shout6 cutoff at 37, air
+mobility + the landing actionState writes, SIDESPECIALAIR's
+sideBJumpFlag/no-flag/grounded init arms), COUNTER both environments
+(white/grey/purple colour-cycle arms, onClank → DOWNSPECIAL{GROUND,
+AIR}2 chains, the DSA land actionState write), THROW* (guard arms,
+2-arg self-grab victim-dispatch chains, hq crossings, CATCHCUT +
+WAIT + -1 arms), all 20 THROWN* inits + guard/clamp/order arms, all 8
+CLIFF*. Unswept (documented): CLIFF* onLedge===-1 canGrabLedge
+table-write arm (C traps; mvData drift-guarded), guarded-THROWN offset
+overruns past the clamp window and THROWNMARTHBACK/-unguarded-family
+grabbedBy=-1 arms (upstream throws), interrupt-tail WALK arms shadowed
+by checkForTilts.
+
+
 ## The undef-ret allowlist (rule 8)
 
 The no-undef-in-returns pin (soundness of the marshaller's

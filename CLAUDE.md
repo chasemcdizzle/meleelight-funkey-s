@@ -494,6 +494,37 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   as commented dead arms, never "fixed". Task check:
   `bash port/sim/calib/check-moves-falcon-replay.sh` →
   `MOVES falcon MATCH`.
+- **characters/marth moves (M2 task 11 committed form):** `node
+  port/sim/calib/run-capture.js --spec moves-marth --golden <id>` — the
+  task-8 recipe over goldens **g01/g05/g06** (the marth carriers,
+  probe-measured live coverage 1082/1417/1054; g04 fields no marth): 244
+  marth-origin fns on table 0 (242 phase fns — 58×3 + 17 land — plus the
+  NON-phase `onClank(p,input)` pair on DOWNSPECIAL{GROUND,AIR},
+  hitDetection.js:71-72's specialClank arm, routed through the task-10
+  `mv_register_special_phases` hook whose mv_dispatch arm now also
+  accepts "onClank") + the 2 article inits as the zero-pin tripwire
+  (marth has ZERO `articles` imports — measured). C:
+  `port/sim/characters/marth/moves/*.c` (75 files) + marth
+  moves_index/moves.h + `dancing_blade_{combo,air_mobility}.c`;
+  `mv_register_char_module(0, marth_move_def)` makes checkForIASA's
+  char-0 MARTHMOVES arm real (measured dead-by-construction upstream —
+  marth aerials INLINE their aerial-IASA logic instead). NEW oracle-fed
+  seam: `player.shieldBreakerID = sounds.shieldbreakercharge.play()`
+  consumes a GLOBAL howler-counter id (unrecoverable chain state) — the
+  capture records it in the post "sbid" list, the replay injects it via
+  `mv_howl_play_id` and re-emits the consumed list; `.stop(id)` is the
+  "shieldbreakercharge.stop" token. Gotcha classes: NEUTRALSPECIAL*'s
+  timer-46 `hitboxes.id[i].dmg` write MUTATES the GLOBAL charHitboxes
+  plane (player.js:132 aliases chars data — the falcon canEdgeCancel
+  class, VALUE-plane sub-shape; benign while charge < 30, the measured
+  live domain; the sweep's >=120 arm restores the 8 dmg fields, rule 12);
+  a "delta-2" per-file diff can be two SEMANTIC lines, not imports —
+  THROWNFALCOBACK's 2-line delta vs fox was the offset DATA plus an ADDED
+  `face *= -1` (caught by the probe replay: always read the diff BODY,
+  never trust the line count); THROWN guard/clamp ORDER varies per file
+  (clamp-first vs guard-first — verbatim per file). Task check:
+  `bash port/sim/calib/check-moves-marth-replay.sh` →
+  `MOVES marth MATCH`.
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;

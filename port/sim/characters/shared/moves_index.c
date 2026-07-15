@@ -57,7 +57,8 @@ AsTri mv_dispatch(MlSim *S, double charId, const char *state,
   else if (strcmp(phase, "interrupt") == 0) fn = def->interrupt;
   else if (strcmp(phase, "land") == 0) fn = def->land;
   else if (strcmp(phase, "onPlayerHit") == 0 ||
-           strcmp(phase, "onWallCollide") == 0) {
+           strcmp(phase, "onWallCollide") == 0 ||
+           strcmp(phase, "onClank") == 0) {
     // special phase surfaces (M2 task 10; see moves.h) — routed through
     // the owning cluster's registered lookup
     if (g_special_phases != 0) fn = g_special_phases(state, phase);

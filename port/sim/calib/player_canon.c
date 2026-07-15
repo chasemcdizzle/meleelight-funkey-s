@@ -444,6 +444,8 @@ static void cv_phys(const CanonVal *v, MlPhysics *out) {
     }
     REQ_NUM("chargeFrames", chargeFrames)
     REQ_BOOL("charging", charging)
+    OPT_BOOL("dancingBlade", hasDancingBlade, dancingBlade)
+    OPT_BOOL("dancingBladeDisable", hasDancingBladeDisable, dancingBladeDisable)
     REQ_BOOL("dashbuffer", dashbuffer)
     REQ_BOOL("doubleJumped", doubleJumped)
     REQ_NUM("face", face)
@@ -580,6 +582,14 @@ static void ser_phys(CanonBuf *b, const MlPhysics *p) {
   cb_num(b, p->chargeFrames);
   cb_puts(b, ",\"charging\":");
   ser_bool(b, p->charging);
+  if (p->hasDancingBlade) {
+    cb_puts(b, ",\"dancingBlade\":");
+    ser_bool(b, p->dancingBlade);
+  }
+  if (p->hasDancingBladeDisable) {
+    cb_puts(b, ",\"dancingBladeDisable\":");
+    ser_bool(b, p->dancingBladeDisable);
+  }
   cb_puts(b, ",\"dashbuffer\":");
   ser_bool(b, p->dashbuffer);
   cb_puts(b, ",\"doubleJumped\":");
