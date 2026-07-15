@@ -563,6 +563,36 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   (read every body — the task-11 lesson held). Task check:
   `bash port/sim/calib/check-moves-puff-replay.sh` →
   `MOVES puff MATCH`.
+- **articles (M2 task 13 committed form):** `node
+  port/sim/calib/run-capture.js --spec article --golden <id>` — wraps
+  the article module (src/physics/article.js): the 4 gameTick pipeline
+  calls mutation-captured over the three article queues (aArticles ==
+  CHECKSUM.md §2's checksummed `articles` key) with LEAN-WHEN-EMPTY
+  envelopes, articles.{LASER,ILLUSION}.init as first-class "ainit"
+  mutation records (the task-8/9 article-seam crossings), resetAArticles
+  (endGame-only) + the 6 internal-only collision helpers pinned ZERO,
+  per-char entries as mdispatch seam loggers (measured zero). Carriers
+  g01/g02/g08 — probe-MEASURED over all six fox/falco goldens (g03/g05
+  field zero live articles; g07's lasers never connect; zero live
+  ILLUSIONs anywhere — sweep-only, 72 rule-11/12 calls). C:
+  `port/sim/article.{c,h}` (MlArticle value model; REAL bodies for the
+  task-8/9 init seams — task 17 swaps mv_article_* for direct calls,
+  FORMAT.md "The article spec"; executeArticleHits runs task-7 shared
+  bodies via mv_dispatch + task-6 hit_detection getters + screenShake's
+  4 draws). NEW rig instrument (fix_plan §M2 rule 18): module state
+  fully enclosed by captured boundaries is CHAINED in C and
+  chain-verified against every in-match record's pre (a wrong queue
+  mutation flags at the NEXT record even when its own record replays
+  clean); lean-when-empty is the read-set projection gated on the
+  driving queue's emptiness (~20x capture-size cut, zero teeth loss).
+  Gotcha classes: fox lasers are ZERO-knockback (kg=bk=sk=0 — live fox
+  hits are percent-only; kb>0 arms live only on falco carriers), and
+  upstream quirks carried verbatim: ILLUSION `isFox || true`
+  always-true, duplicate-destroy `splice(queue[k]-k)` going NEGATIVE
+  (JS removes from the END), wall-death truthiness (sweep 0 falsy),
+  hit.hitPoint aliasing instance.pos (unobservable — measured by
+  reading). Task check: `bash port/sim/calib/check-article-replay.sh` →
+  `ARTICLE MATCH`.
   `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
   `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
   docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;

@@ -2524,3 +2524,123 @@ MILESTONE PASS: M2-CAL
   (LASER/ILLUSION init args verified bit-exactly on g01/g03/g08 +
   g02/g05/g07) become real C bodies; puff/falcon/marth pinned
   article-zero).
+
+## iter 32 — 2026-07-15 — M2 task 13: articles (article.js -> port/sim/article.{c,h})
+
+- phase M2, task 13 (fix_plan §M2). done-check:
+  `bash port/sim/calib/check-article-replay.sh` -> ARTICLE MATCH, exit 0
+  (.loop/task13-donecheck.log). Conformance guard
+  `bash port/sim/check-envcoll.sh` -> ENVCOLL MATCH (task13-reg logs).
+- WHAT: the fox/falco projectile plane became real C. Capture spec
+  `spec-article.js` (1101 wrapped: 4 gameTick pipeline calls
+  mutation-captured over the three article queues — aArticles IS
+  CHECKSUM.md §2's checksummed `articles` key — + resetAArticles
+  endGame-only pinned ZERO + LASER/ILLUSION init as first-class "ainit"
+  mutation records + 6 internal-only helpers pinned ZERO + 1088 per-char
+  seam loggers, moves-shared machinery). C `port/sim/article.{c,h}`
+  (750+131 ln): MlArticle/MlArticles value model (LASER 13-key /
+  ILLUSION 8-key instance shapes, survey-measured; hb = per-article
+  12-key createHitbox with offsetSingle — article-owned, NO rule-17
+  global-plane aliasing), structure-parallel bodies for init/main/
+  execute/destroy/hitDetection/executeHits/wallDetection + the 5
+  collision helpers; executeArticleHits dispatches GUARD/SHIELDBREAKFALL/
+  DAMAGEFLYN/DAMAGEN2/CAPTUREDAMAGE through mv_dispatch into task-7's
+  REAL shared bodies, with task-6 hit_detection linked (getKnockback/
+  getHitstun/knockbackSounds real; hd_flags crouch/vCancel; CTAB1
+  weight) and screenShake's 4 seeded draws. Replay driver
+  `replay_article.c` (1422 ln) + pins + check script.
+- CARRIERS (probe-MEASURED over all six fox/falco goldens — the task-10
+  discipline): g01 27 live spawns / 12 live hits (fox, battlefield),
+  g02 19/6 (falco, ystory), g08 27/21 (fox CPU, fdest; 1496 AI draws).
+  Measured OUT: g03/g05 field ZERO live articles; g07 spawns 19 lasers
+  that never connect. Measured: ZERO live ILLUSIONs on ANY golden (all
+  live articles are lasers); all live eah rows are HURT rows on victim
+  slot 1; live fox laser hits are ZERO-KNOCKBACK (kg=bk=sk=0 —
+  percent-only; g01/g08's 33 hits never draw/dispatch); g02's falco
+  lasers are the ONLY live kb>0 hits (live screenShake draws + live
+  DAMAGEN2 dispatches). All six goldens replayed: 0 divergences each
+  (the three non-carriers as free extra evidence).
+- RESULT: 45,229 records over g01/g02/g08 (14,400 live pipeline + 41
+  sweep records per golden + ainit + dumps), byte-stable x2, 6x STREAM
+  MATCH, 0 replay divergences on the FIRST successful build across all
+  SIX goldens (rules 1-18 held; divergence ledger opened and closed at
+  zero). Sweep: 72 rule-11/12 calls covering every reachable zero-live
+  arm (spawn variants, movement/death ladders, duplicate-destroy
+  splice(-1) quirk, reflect/powershield/shieldbreak/vCancel/crouch/
+  CAPTUREDAMAGE/groundBounce/blunthit, interpolated arms, clank-loop
+  read path, clean miss); no reachable arm is unswept.
+- NEW RULE 18 (fix_plan §M2): module state fully enclosed by captured
+  boundaries gets a QUEUE-CHAIN instrument (C chains it across records;
+  the replay compares chained state against every in-match record's pre
+  before re-marshaling — a wrong mutation flags at the NEXT record even
+  when its own record replays clean) + LEAN-WHEN-EMPTY envelopes (the
+  read-set projection gated on driving-queue emptiness: ~20x capture
+  size cut, zero teeth loss). Tasks 14 (movingPlatforms stage state)
+  and 17 inherit both.
+- UN-SEAMING (tasks 8/9 -> 13): the moves-fox/falco article-seam FIFOs
+  stay as-is (their checks re-run GREEN); the article capture records
+  the SAME upstream crossings at the article module boundary and replays
+  them through the REAL C bodies — the seam's [name, options] canon is
+  byte-identical to the ainit args prefix, so task 17's integration
+  replaces mv_article_laser*/mv_article_illusion* driver seams with
+  direct article.c calls (documented, FORMAT.md "The article spec").
+- upstream quirks carried verbatim (never fixed): ILLUSION init's
+  `options.isFox || true` is ALWAYS true (falco illusions get fox hb
+  values); LASER wall-death consumes the sweep parameter by TRUTHINESS
+  (sweep 0 falsy); the hurt arm never sets articleDestroyed ->
+  duplicate destroy pushes -> `splice(queue[k]-k, 1)` can go NEGATIVE
+  (JS splice removes from the END — art_splice1 implements ToInteger +
+  negative-start); executeArticleHits ALIASES hit.hitPoint to the
+  article's pos (modeled by value — unobservable: destroyOnHit lasers
+  never run another main, ILLUSION main reassigns pos first); the clank
+  block is commented upstream but its GUARD evaluates (id[k].clank reads
+  through both hitbox shapes); LASER.init's strokeStyle/fillStyle are
+  render-only table writes; SHIELDBREAKFALL's `break` exits the whole
+  row loop skipping GUARD.init.
+- comparator negative tests (all restored, tree re-verified 0 div):
+  (a) corrupted POST nibble -> exactly 1; (b) fox laser speed 7->6 ->
+  77/23/77 live; (c) screenShake 4->3 draws -> 1/99/1 (bites g02's live
+  kb>0 hits); (d) ahd hitList push dropped -> 26/14/44 live; (e)
+  DAMAGEN2 dispatch dropped -> 6 live on g02, 0/0 elsewhere (kb=0 hits
+  never dispatch — measured, not assumed); (f) splice -k dropped -> 1
+  each (sweep-only: live dstq len <= 1 — rule-12 corollary, 5th
+  instance); (g) foxshinereflect typo / ILLUSION kg 40->41 -> 1 each
+  (sweep); (h) post-record chain corruption -> 27/19/27 PURE chain
+  divergences with zero record divergences (rule 18's own teeth).
+- honest coverage: live reflects, shield hits, powershield reflects,
+  shieldbreaks, illusions, multi-destroy frames, CAPTUREDAMAGE/
+  groundBounce/vCancel/blunthit arms are ZERO over the carriers — all
+  sweep-covered; mdispatch measured zero (FIFO teeth proven); the dead
+  else of ILLUSION's ground patch is unreachable by construction
+  (isFox always true).
+- REGRESSIONS: ALL twelve prior cluster checks re-run GREEN cold (UTIL/
+  PLAYER MODEL/INPUT/ASSHORT/PHYSICS/HITDET/MOVES SHARED/fox/falco/
+  falcon/marth/puff MATCH) + ENVCOLL MATCH (.loop/task13-reg-*.log) —
+  the diff touches no prior C or spec surface (new files + docs only).
+- artifacts (sha256/12): article.h a0a7664259fc · article.c 1e6d3140e680
+  · spec-article.js a864d6d882fe · replay_article.c d60bd510f595 ·
+  expected-capture-article.json 59418efa1f9e · check-article-replay.sh
+  e94a4633c7ef · FORMAT.md ac9cc2885090. Logs: .loop/task13-donecheck.log,
+  .loop/task13-probe-g0{1,2,3,5,7,8}.log, .loop/task13-survey-g01.log,
+  .loop/task13-reg-*.log.
+- zoom-out: (1) NEW RULE 18 — the chain-verify + lean-when-empty pair is
+  an INSTRUMENT-level answer (hierarchy: instrument > class fix) to two
+  latent classes at once: silent inter-record queue drift (previously
+  only caught when a later record's own body happened to read the
+  drifted state) and capture-size bloat from full envelopes on
+  no-op-frame records (hitdet's 542 MB class). It was designed BEFORE
+  any C ran, capture-first. (2) The un-seaming closes the loop the task-8
+  brief opened: seams are IOUs, and this task shows the redemption
+  pattern — capture the same crossings at the owning module's boundary,
+  replay with real bodies, prove the seam args byte-identical. Task 14
+  (platforms: the M1-externals-stubbed god-module bodies) and task 17
+  redeem the remaining IOUs the same way. (3) Measurement again beat
+  the brief: "laser spam is common" predicted rich hit coverage, but
+  fox lasers turned out ZERO-knockback — without the g02 falco carrier
+  the entire kb>0 arm family (draws + dispatches) would have been
+  sweep-only; carrier choice by measured live coverage (not char
+  presence, not spawn counts) is now three-times-proven doctrine.
+- next: task 14 (movingPlatforms stage-tick logic — ystory/fountain
+  updatePlatform + pstadium if live; the M1-externals-stubbed god-module
+  bodies; stage pre/post-state capture; rule 18's chain instrument
+  applies to the stage plane).

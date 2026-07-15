@@ -964,6 +964,98 @@ arms and guarded-THROWN overruns past the clamp window (upstream
 throws), interrupt-tail WALK arms shadowed by checkForTilts,
 AERIALTURN6/JUMPAERIAL6 (unreachable by construction).
 
+## The article spec (M2 task 13)
+
+Wrapped boundary (1101 fns): the 4 gameTick article pipeline calls
+(destroyArticles, executeArticles, articlesHitDetection,
+executeArticleHits — main.js:1059-1060/1077-1078) + resetAArticles
+(endGame-only upstream, main.js:1376 — goldens never end the match:
+pinned ZERO live) + articles.{LASER,ILLUSION}.init ("ainit" — the SAME
+crossings tasks 8/9 recorded as 4-field article seams from the fox/falco
+side, here first-class mutation records) + the 6 exported collision
+helpers (internal-only callers upstream — identity-wrapped, pinned 0) +
+every NON-shared actionStates entry fn as an mdispatch seam logger (the
+moves-shared machinery verbatim: marth 244 / puff 221 / fox 192 /
+falco 214 / falcon 217). renderArticles / LASER.draw are render-only —
+asserted present, never wrapped (drawECB precedent).
+
+GOLDENS g01/g02/g08 — probe-MEASURED live coverage over all six
+fox/falco goldens (live ainit / live hit records): g01 27/12 (fox lasers,
+battlefield; the 12 hits are ZERO-knockback — fox laser kg=bk=sk=0, so
+percent-only), g02 19/6 (falco lasers, ystory — the ONLY live kb>0
+article hits: screenShake draws + live DAMAGEN2 dispatch), g08 27/21
+(fox CPU lasers, fdest; 1496 standalone AI draws). g03/g05 field ZERO
+live articles; g07 spawns 19 lasers that never connect. Every golden
+fields ZERO live ILLUSIONs (all live articles are lasers) — illusions
+are sweep-covered only.
+
+- **Lean-when-empty envelopes** (a measured READ-SET projection gated on
+  queue emptiness): when the driving queue is empty at entry the
+  upstream body reads nothing beyond the queues (its loops never run),
+  so the record carries only `{aArt, ahq, dstq}` (the three article
+  queues; aArt is CHECKSUM.md §2's `articles` key). Full shapes:
+  * ainit / executeArticles(aArt non-empty): pre {aArt, ahq, dstq,
+    playerType, players, stage} — stage is the FIVE-LIST projection
+    (wallDetection's read set, the envcoll rule); post lean (inits/mains
+    write only article state; events asserted empty).
+  * articlesHitDetection(aArt non-empty): pre {aArt, ahq, dstq,
+    playerType, players}; post {aArt, ahq, dstq, players, snd}
+    (players: the canTurboCancel hasHit write; snd: foxshinereflect;
+    rng/vfx asserted empty).
+  * executeArticleHits(ahq non-empty): args [inputs(8-deep ×4), pre],
+    pre = the moves-record superset {aArt, ahq, alias(probe4),
+    characterSelections, dstq, gameMode, gameSettings{tapJumpOffp1..4},
+    hq(opaque), playerType, players, stage, versusMode}; post {aArt,
+    ahq, alias, dstq, hq, players, rng, snd, vfx}. Dispatched
+    GUARD/SHIELDBREAKFALL/DAMAGEFLYN/DAMAGEN2/CAPTUREDAMAGE inits are
+    all SHARED-origin — the replay runs task 7's real bodies; a nested
+    per-char dispatch records "mdispatch" (measured ZERO; FIFO teeth
+    negative-test-proven).
+  * destroyArticles / resetAArticles: lean always (queue-only sets).
+- **QUEUE CHAIN instrument** (fix_plan §M2 rule 18): the article queues
+  are C module state chained across records — every upstream mutation
+  site is a captured boundary — and the replay COMPARES the chained
+  state against each in-match record's pre queues before re-marshaling
+  them (authoritative). A queue mutation the C got wrong flags at the
+  very next record even when that record's own body replays clean
+  (negative-test-proven: post-record chain corruption → 27/19/27 pure
+  chain divergences, zero record divergences). Frame-0 sweep records
+  tear state down by direct pokes — the chain only arms from the first
+  in-match record.
+- RNG/snd/vfx: the moves discipline (owner draws in eah posts —
+  screenShake's 4 per kb>0 hit; window draws in mdispatch seam posts;
+  everything else standalone). hdFlags + mvData frame-0 dumps
+  (finalCheck drift-guarded) serve hd_flags (crouch/vCancel) and the
+  shared-body registration/data seams.
+- SEAM-TO-BODY CONVERSION (the task-8/9 un-seaming): the moves-fox/falco
+  replays keep their article-seam FIFOs (unchanged, still green); this
+  spec captures the SAME upstream crossings at the article module
+  boundary and replays them through the REAL C bodies
+  (art_laser_init/art_illusion_init). The seam's verified [name,
+  options] canon is byte-identical to the ainit record's args prefix, so
+  task 17's integration replaces the driver's mv_article_* seams with
+  direct article.c calls assembling the same options — verified here
+  bit-exactly, spawn-frame main (movement + wall check) included.
+
+article sweep (rules 11/12, 72 calls): owner slot 2 + victim slot 3 as
+REAL playerObject(2,·) injections (restored; Math.random swapped for the
+sweep mulberry32 that the replay mirrors on frame-0 records; queues
+emptied between arms by frame-0 pokes and net-restored). Covers: fox
+default-isFox / falco / partOfThrow lasers + both ILLUSION types (the
+`options.isFox || true` always-true quirk arm), the posPrev ladder
+(timers 2..6), timer>200 death, wall death, the duplicate-destroy
+splice(-1) quirk, reflect (type-7 hitbox + DOWNSPECIAL shine sound + vel
+flip + dmg*1.5, ILLUSION vel-absent arm, interpolated circle straddle),
+shield hits (push both signs + the >2 cap, shieldbreak `break` arm,
+powershield reflect LASER/ILLUSION), hurt arms (kb>=80 DAMAGEFLYN,
+angle-361 both branches, groundBounce, vCancel, crouch, CAPTUREDAMAGE +
+THROWNPUFFDOWN skip, grabbedBy kb>50, blunthit), hitList skip, the
+evaluated-but-empty clank loop, hurtBoxState==1 skip, interpolated
+hurt/shield arms, and a clean miss. Zero-live surfaces without a sweep
+(documented): none — every reachable article arm is either live or
+swept; the dead `else` of ILLUSION's ground patch (isFox always true)
+is carried verbatim as an unreachable arm.
+
 ## The undef-ret allowlist (rule 8)
 
 

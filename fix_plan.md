@@ -757,11 +757,62 @@ rollouts), JAB1/JAB2, tilts, smashes, aerials incl. land arms, the
 multijump ladder, GRAB, DOWNATTACK, and puff as grab victim. The
 per-char surface is COMPLETE: tasks 7-12 cover all five characters +
 shared — next is task 13 (articles).)
-13. articles (article.js 639 — fox/falco lasers, ILLUSION etc.) — article
-    queues + article hit detection; articles are checksummed
-    (CHECKSUM.md §2 `articles` key).
-    done-check: `bash port/sim/calib/check-article-replay.sh` → prints
-    `ARTICLE MATCH`, exit 0.
+- **RULE 18 — module-owned queue/state planes fully enclosed by captured
+  boundaries get a CHAIN-VERIFY instrument + lean-when-empty envelopes
+  (adopted task 13)**: when every upstream mutation site of a module's
+  state is itself a captured boundary (the article queues: spawns,
+  per-tick mains, destroys, hit rows), the C replay CHAINS that state
+  across records and COMPARES it against each in-match record's pre
+  before re-marshaling (authoritative) — a wrong mutation flags at the
+  very next record even when that record's own body replays clean
+  (instrument > per-record trust; proven by a post-record chain
+  corruption tooth: 27/19/27 pure chain divergences, zero record
+  divergences). Complement: when the module's driving queue is EMPTY at
+  entry the body reads nothing else (loops never run), so the envelope
+  is a measured read-set projection gated on queue emptiness
+  ("lean-when-empty", FORMAT.md) — capture size drops ~20x with zero
+  teeth loss (non-trivial frames carry full state). Task 14's
+  movingPlatforms (stage module state) and task 17's integration inherit
+  both instruments.
+
+(task 13 — articles — DONE iter 32:
+`bash port/sim/calib/check-article-replay.sh` → ARTICLE MATCH, exit 0.
+14636 + 14595 + 15998 = 45229 records over g01/g02/g08 — the article
+carriers, probe-MEASURED live coverage over ALL SIX fox/falco goldens
+(live spawns/hits: g01 27/12 fox lasers battlefield — the 12 live hits
+are ZERO-knockback, fox laser kg=bk=sk=0, percent-only; g02 19/6 falco
+lasers ystory — the ONLY live kb>0 article hits: live screenShake draws
++ live DAMAGEN2 dispatches; g08 27/21 fox CPU lasers fdest, 1496
+standalone AI draws; g03/g05 field ZERO live articles, g07's 19 lasers
+never connect; ZERO live ILLUSIONs anywhere — sweep-covered only).
+14400 live + 41 sweep pipeline records per golden (lean-when-empty
+envelopes, rule 18), 24 sweep + live ainit spawn records, 0 mdispatch
+(FIFO teeth negative-test-proven), byte-stable ×2, 6× STREAM MATCH,
+0 replay divergences on the FIRST successful build across all six
+goldens (rules 1-18 held). C: `port/sim/article.{c,h}` — MlArticle/
+MlArticles value model (LASER 13-key / ILLUSION 8-key instances, key
+presence == kind; hb = per-article 12-key createHitbox with
+offsetSingle — article-OWNED, no rule-17 aliasing), REAL bodies for the
+task-8/9 article-init seams (the seam-to-body conversion: ainit args ==
+the seam's [name,options] canon byte-identically; task 17 replaces
+mv_article_* with direct article.c calls — documented in FORMAT.md),
+executeArticleHits dispatches GUARD/SHIELDBREAKFALL/DAMAGEFLYN/DAMAGEN2/
+CAPTUREDAMAGE through mv_dispatch into task 7's REAL shared bodies
+(hit_detection.c linked for getKnockback/getHitstun/knockbackSounds;
+hd_flags for crouch/vCancel; CTAB1 weight). Upstream quirks carried
+verbatim: ILLUSION's `isFox || true` always-true, wall-death sweep-0
+falsiness, duplicate-destroy splice(-1)-from-END, hit.hitPoint pos
+aliasing (unobservable — measured by reading), the evaluated-but-empty
+commented clank block, LASER's strokeStyle table write (render-only).
+Teeth: fox laser speed 7→6 → 77/23/77 live; screenShake 4→3 → 1/99/1
+(bites g02's live kb>0 hits); hitList push drop → 26/14/44 live;
+DAMAGEN2 dispatch drop → 6 live on g02 (0/0 elsewhere — kb=0 hits never
+dispatch, measured); splice −k drop → 1 each (sweep-only: live dstq len
+≤ 1 — rule-12 corollary, 5th instance); foxshinereflect typo + ILLUSION
+kg 40→41 → 1 each (sweep); chain corruption → 27/19/27 (rule 18's own
+teeth); corrupted POST nibble → exactly 1. Honest coverage: live
+reflects/shield-hits/illusions/multi-destroys are ZERO over the carriers
+— all sweep-covered (72 calls); no reachable arm is unswept.)
 14. movingPlatforms stage-tick logic (ystory/fountain updatePlatform +
     pstadium if live) — the M1-externals-stubbed god-module bodies;
     stage pre/post-state capture.
