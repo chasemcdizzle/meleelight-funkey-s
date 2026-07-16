@@ -706,6 +706,32 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   (4) bash 3.2 `set -u` rejects empty-array `"${a[@]}"` (use
   `${a[@]+"${a[@]}"}`) and `node -e console.log(<number>)` can emit ANSI
   colour — String() it in scripts.
+- **M3 EXIT GATE (concretized by REPLAN, iter 37):**
+  `bash port/sim/device/verify_m3.sh` — implements PLAN §4/M3's EXIT
+  verbatim, ALL evidence pulled from the device and judged ON THE HOST
+  (fix_plan §M3 conventions; this adbd drops exit codes — every device
+  step is RC-echo checked): (1) DEVICE CONFORMANCE — every golden in
+  `oracle/goldens/manifest.json` replayed ON the FunKey-S (static armv7
+  build of the full headless sim, SDK gcc `-O2 -ffp-contract=off`;
+  AI-bridge artifacts for g07/g08), each stream judged by the UNCHANGED
+  `oracle/harness/verify-stream.js` against the frozen
+  `oracle/goldens/*.sha256.json` — exact per-frame hash equality, FULL
+  length, rngCalls/rngCallsOutsideStep/specVersion pins; (2) PERF — the
+  OPK build replays g01 full-match ON DEVICE with live SDL1.2 render AND
+  the audio callback running (44100/S16LSB/2ch/512 + the 8-voice SFX
+  mixer), per-frame wall-clock logged in-app to tmpfs and pulled:
+  **p99 < 16.67 ms**, audio underruns == 0; (3) OPK — packaged with the
+  SDK container's mksquashfs 4.4 ONLY, launched via the FRONTEND path,
+  boot marker + in-app screenshot pulled; (4) LIVE SESSION — an S1-input
+  session driven through the real SDL keysym path (uinput injector) whose
+  recorded input trace replays to byte-identical checksum streams
+  host×2 + device (three-way cmp). Prints `M3 GATE OK`, exit 0; any
+  mismatch, shortfall, or missing evidence → nonzero. HUMAN GATE: a pass
+  is followed by the sentinel
+  `LOOP STOP: m3-device — needed: Chase S1 ratification playtest`
+  (LOOP §F-advance.3/§H) — Chase ratifies/amends the S1 mapping before
+  M4. (Script assembled by fix_plan §M3 task 7; per-task `done-check:`s
+  never substitute for this gate.)
 - **Upstream clone + build (proven twice — determinism spike + prototype):**
   ```
   git clone https://github.com/schmooblidon/meleelight "$MELEELIGHT_CLONE"

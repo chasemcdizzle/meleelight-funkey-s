@@ -1,6 +1,6 @@
 # fix_plan — the loop's priority queue
 
-Current phase: M2
+Current phase: M3
 
 Rules: items live under their phase heading; an actionable item needs an
 exact runnable `done-check:` (see `docs/LOOP.md` §C). Items below are
@@ -986,9 +986,156 @@ exit 0 — this is the M2 exit gate command (§Commands).)
 
 ## M3 — On-device at 60 fps
 
-(seed items — REPLAN concretizes on phase entry: platform seam SDL1.2 TU,
-S1 input table wiring, OPK packaging, ADB conformance + perf rig, Chase
-ratification playtest escalation)
+(concretized by REPLAN, iter 37, 2026-07-16. The FunKey-S is ON ADB
+(id `12c00003237f5528`) — the iter-36 `m3-device` LOOP STOP is cleared.
+M2 passed its exit gate (SIM CONFORMS, driver-verified cold; issue #17
+closed). CONVENTIONS fixed here:
+
+- **Device hygiene (hard)**: device writes go ONLY to `/tmp/mlfk` (tmpfs,
+  128 MB — measured this REPLAN) and the SD scratch dir `/mnt/mlfk-scratch`;
+  both removed at the end of every check script (trap-guarded). Park the
+  frontend (`touch /mnt/disable_frontend; pkill gmenu2x`) ONLY for
+  SDL-video/live tasks and ALWAYS restore (`rm /mnt/disable_frontend`);
+  headless compute runs (conformance, sweeps) don't park. Kill own
+  processes on exit; never touch firmware/saves/other SD content; if the
+  device drops off ADB, retry/replug-wait briefly then BLOCKER — never
+  reset the device.
+- **ADB facts (measured this REPLAN)**: this adbd does NOT propagate exit
+  codes (`adb shell false` → host exit 0) — every device command runs
+  through a helper that appends `; echo MLFK_RC=$?` and the host parses
+  it (`port/sim/device/adbsh.sh`). Launch via login shell `sh -lc`
+  (`/etc/profile` sets SDL_NOMOUSE=1); detached SDL runs need
+  `setsid … </dev/null … & sleep 2`. Big artifacts (format corpus) go to
+  `/mnt/mlfk-scratch`, small ones to `/tmp/mlfk`. Device runs are SLOW —
+  generous host-side timeouts, foreground.
+- **Cross-build recipe**: docker `jondbell/funkey-s-sdk` (SERIAL only),
+  `arm-funkey-linux-musleabihf-gcc -O2 -ffp-contract=off -Wall -Wextra
+  -Werror -static` over the EXACT TU list of `port/sim/check-sim.sh`;
+  `-O3` only ever on the hot raster TU (PLAN §5). Arm binaries land in
+  `port/sim/calib/build/device/` (gitignored `build*/`), stamp-cached
+  (build-extractor.sh precedent; `MLFK_FORCE_ARM=1` rebuilds).
+- **Judgment lives on the HOST**: device outputs are pulled and judged by
+  the unchanged `oracle/harness/verify-stream.js` / `cmp` — the device
+  never self-reports success. Exact equality only; an armv7 divergence
+  from a frozen stream is a REAL finding (fdlibm/flags/promotion class) —
+  ledger + class fix, never epsilon.
+- **Renderer**: PLAN §5 verbatim — the measured rastbench variant
+  (adaptive cubic flatten tol 0.25 px, nonzero-winding scanline fill via
+  active-edge table, 4× vertical subsample AA with fractional span-end
+  coverage, 565 blend, x-mirror facing, `pos*scale+offset` to 240×240,
+  zero frame-loop allocations). Rasterization is NOT checksummed — sim
+  state stays the only bit-exact surface; visual checks are STRUCTURAL
+  (silhouette overlap vs the oracle's canvas render), measured-then-frozen
+  thresholds, never loosened after freezing.
+- **Input**: PLAN §6's S1 table verbatim — a data-driven chord table
+  injecting FINAL Melee-unit values quantized to 1/80 at the pollInputs
+  seam (bypasses tasRescale); tapJumpOffp1=true; left stick neutral while
+  the Y C-layer is held; SOCD neutral; digital shield r=true rA=1.0.
+- **Audio placement (PROVISIONAL, auto-adopted)**: PLAN §4/M3's EXIT says
+  perf "with audio on" while §7's full mixer is listed under M4.
+  Resolution: M3 ships the MEASURED audio-spike path (SDL 44100 Hz/
+  S16LSB/2ch/512 callback + 8-voice 22050-mono SFX mixer, 16.16 resample,
+  Q8 gain, int32 accumulate+clamp) fed by the sim's ml_events sound queue
+  with SND1 pipeline blobs, so the p99 gate includes the real
+  audio-callback cost; music streaming + full mixer polish stay M4. SND1
+  blobs are Nintendo-derived: device scratch/SD only, never committed.
+- **Live-session policy (PROVISIONAL, auto-adopted)**: the autonomous
+  "live played session" is uinput-injected (own uinput device — writing
+  the existing event device does NOT inject; ssb64 fk_input pattern)
+  through the REAL SDL keysym path; Chase's hands-on S1 ratification
+  playtest is the phase-end HUMAN GATE (sentinel per LOOP §H).)
+
+Tasks (dependency order; each < ~400-line diff where possible):
+
+1. armv7 correctness rung — cross-build the FULL headless sim
+   (check-sim.sh's exact TU list, static armv7) + the fdlibm sweep
+   (`oracle/fdlibm-crosscheck/csweep.c`) + the format differential
+   (`port/sim/calib/fmt_diff.c`); push over ADB; ON THE DEVICE run the
+   ~257k-input fdlibm sweep, `fmt_diff --self-test`, the full
+   5.47M-pattern adversarial format sweep (corpus GENERATED on device,
+   byte-compared to the host corpus), and the full g01 golden replay;
+   judge everything on the host (`cmp` vs host-C references;
+   verify-stream.js vs the frozen g01 stream). Wall-clock the device sim
+   run (informational). — done-check:
+   `bash port/sim/device/check-device-g01.sh` → prints
+   `DEVICE CONFORMS g01`, exit 0.
+
+2. device conformance ALL 8 goldens + sim-only timing — replay every
+   golden in `oracle/goldens/manifest.json` on the device (AI-bridge
+   artifacts for g07/g08), verify-stream all 8 on the host; add a
+   `--timing <file>` flag to sim_main (CLOCK_MONOTONIC per-frame ns,
+   buffered in RAM, written post-run — no I/O inside the frame loop);
+   record p50/p99 sim-only ms/frame per golden into
+   `docs/research/device-perf.md` (measured table, append-only); assert
+   p99 sim-only < 16.67 ms on every golden. — done-check:
+   `bash port/sim/device/check-device-conform.sh` → prints
+   `DEVICE CONFORMS 8/8` and `SIM P99 OK`, exit 0.
+
+3. renderer core, host-side first — `port/gfx/`: C ANIM1 consumption
+   (pipeline/FORMATS.md §2 decoder), adaptive cubic flattening, the AA
+   scanline rasterizer (rastbench.c's measured variant restructured as a
+   real module), camera/zoom logic ported verbatim sim-side, stage +
+   players + articles + vfx into ONE 240×240 RGB565 buffer; headless
+   backend dumps frames (PPM/PNG). Visual check (HONEST-structural): for
+   ≥12 sampled frames spread across the g01 replay, silhouette overlap
+   (IoU) between the C render and the browser oracle's canvas capture
+   (harness run WITHOUT __harnessNoRender, canvas dumped per sampled
+   frame, downscaled to 240×240) ≥ a threshold measured-then-frozen in
+   `port/gfx/expected-render.json` BEFORE first pass (seed 0.90; never
+   loosened after freezing), plus ×2 byte-stable C renders, plus the g01
+   checksum stream STILL verifying during the render-on replay (renderer
+   must not perturb the sim). — done-check:
+   `bash port/gfx/check-render.sh` → prints `RENDER OK`, exit 0.
+
+4. platform seam + SDL1.2 device backend + live device render — the
+   CLAUDE.md three-backend seam (`platform_init/present/poll/quit` +
+   input struct; headless TU = the loop/CI backend, SDL2 TU = host dev
+   window, SDL1.2 TU = device: 240×240×16 SetVideoMode fallback chain,
+   verify BitsPerPixel==16 or bail, SDL_ShowCursor off, SDL_Flip present;
+   exactly ONE TU linked per target); wall-clock-sim/skippable-render
+   frameskip loop (~30 lines, safety valve); per-frame timing logged
+   in-app to tmpfs (no SD writes during play). Trace-fed g01 replays LIVE
+   on the device with rendering; in-app framebuffer screenshot dumped +
+   pulled; p99 full frame (sim+render+present, audio not yet in)
+   < 16.67 ms AND p99 render-only ≤ 8 ms (PLAN §5 allowance) over the
+   full 3600-frame match; frontend parked + restored around the run. —
+   done-check: `bash port/gfx/check-device-render.sh` → prints
+   `DEVICE RENDER OK` (includes measured p99s), exit 0.
+
+5. S1 input layer at the poll seam — SDL keysym poll (letter keysyms
+   u/d/l/r/a/b/x/y/s/k/n, q=MENU→quit; SDL_GetKeyState, desktop keys
+   OR'd in so one table serves SDL2 host + SDL1.2 device) → S1 chord
+   table (PLAN §6 values verbatim, data-driven) → Melee-unit Input rows
+   at the pollInputs seam; per-frame input RECORDING to tmpfs (trace
+   format). Build the uinput injector (`port/tools/fk_input.c`, static,
+   pushed to device) and drive a scripted live session through the real
+   SDL event path on device; pull the recorded input trace; replay it
+   through the host headless sim TWICE and the device sim binary once —
+   three-way byte-identical checksum streams; chord-table unit sweep
+   asserts all 15 PLAN §6 chord→coordinate rows exactly (1/80 quantized).
+   — done-check: `bash port/gfx/check-device-input.sh` → prints
+   `S1 INPUT OK`, exit 0.
+
+6. audio-on — SDL1.2 audio 44100/S16LSB/2ch/512 + the audio-spike
+   8-voice SFX mixer consuming the sim's per-frame sound-event queue
+   (SND1 name→blob map; blobs pushed to device scratch, never committed);
+   underrun counter instrumented; full g01 replay on device with render +
+   audio: p99 full frame < 16.67 ms, underruns == 0. — done-check:
+   `bash port/gfx/check-device-audio.sh` → prints `DEVICE AUDIO OK`
+   (includes measured p99 + underruns=0), exit 0.
+
+7. OPK + frontend launch + M3 exit-gate assembly — launcher script (tmpfs
+   log + copy-back trap, SD data-dir env chain), `.desktop` with trailing
+   empty line + 32×32 icon, packaged with the SDK container's mksquashfs
+   4.4 ONLY; push to `/mnt/Applications`; launch via the FRONTEND path
+   (frontend restored, driven by the uinput injector); app writes a boot
+   marker + in-app screenshot pulled as evidence; assemble
+   `port/sim/device/verify_m3.sh` (the §Gates M3 command — see CLAUDE.md
+   §Commands "M3 EXIT GATE"). NOTE for the phase-advance iteration: a
+   gate pass is followed by the human-gate sentinel
+   `LOOP STOP: m3-device — needed: Chase S1 ratification playtest`
+   (LOOP §F-advance.3/§H). — done-check:
+   `bash port/sim/device/verify_m3.sh` → prints `M3 GATE OK`, exit 0.
 
 ## M4 — Full-game parity
 

@@ -3096,3 +3096,45 @@ MILESTONE PASS: M2-CAL
 ## LOOP STOP: m3-device (2026-07-16, driver)
 
 M2 gate passed (SIM CONFORMS, driver-verified cold). M3 (#18) claimed; its first work (device backend bring-up, OPK, device conformance, perf) requires the FunKey-S on ADB — no device attached at phase entry. Loop stopped per protocol; restart the /loop with the device plugged in and powered on. fix_plan Current phase should flip to M3 at the REPLAN when the loop resumes.
+
+## iter 37 — 2026-07-16 — M3 REPLAN: phase entry, task ladder + exit-gate concretization
+
+MILESTONE PASS: M2 — `bash port/sim/check-sim.sh` -> SIM CONFORMS, exit 0
+(all 8 goldens bit-exact through the headless C sim, driver-verified cold
+at the phase-advance; issue #17 closed). The iter-36 `m3-device` LOOP STOP
+is CLEARED: the FunKey-S is attached and healthy on ADB
+(id 12c00003237f5528, `adb devices` -> device; /tmp tmpfs 128 MB, /mnt SD
+18 GB free, kernel 4.14.14-funkey armv7l).
+
+- Type: REPLAN (LOOP §C-b) — fix_plan `Current phase:` flipped M2 -> M3;
+  §M3 seed items rewritten as 7 dependency-ordered tasks, each with an
+  exact runnable done-check; the §Gates M3 *(REPLAN)* cell concretized
+  into CLAUDE.md §Commands ("M3 EXIT GATE": `bash
+  port/sim/device/verify_m3.sh` — device conformance all 8 + p99 < 16.67
+  ms full frame w/ render+audio + OPK frontend launch + live S1 session
+  replay, host-judged; human-gate sentinel on pass).
+- Ladder: (1) armv7 correctness rung — the FULL sim + fdlibm sweep +
+  format differential cross-built static, run ON DEVICE, g01 conformance
+  host-judged (validates the entire M2 result on the real CPU before
+  anything visual); (2) all-8 device conformance + sim-only p99
+  instrumentation; (3) renderer core host-side (ANIM1 + AA scanline
+  rasterizer per PLAN §5, structural silhouette check vs the oracle
+  canvas, measured-then-frozen threshold); (4) three-backend platform
+  seam + SDL1.2 live device render (p99 render ≤ 8 ms, full frame
+  < 16.67 ms); (5) S1 input layer at the poll seam + uinput-driven live
+  session with three-way replay determinism; (6) audio-on perf (spike
+  mixer fed by ml_events, underruns == 0); (7) OPK + frontend launch +
+  gate assembly.
+- Judgment calls tagged PROVISIONAL (auto-adopted) in fix_plan §M3:
+  audio placement (M3 ships the measured spike audio path so the perf
+  gate honestly includes the audio callback; full mixer/music stay M4);
+  live-session policy (autonomous sessions are uinput-injected through
+  the real SDL path; Chase's hands-on S1 ratification stays the phase-end
+  human gate).
+- Measured this REPLAN (conventions now pinned in fix_plan §M3): this
+  adbd does NOT propagate exit codes (`adb shell false` -> host exit 0) —
+  all device steps RC-echo checked; /tmp is a 128 MB tmpfs (big sweep
+  artifacts go to /mnt/mlfk-scratch); busybox 1.32 + /usr/bin/time
+  present.
+- No implementation this commit (REPLAN contract). next: task 1 (armv7
+  correctness rung — DEVICE CONFORMS g01).
