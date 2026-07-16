@@ -63,6 +63,20 @@ Review ≠ verification: GO never substitutes for the done-check, and a
 clean done-check never substitutes for Tier A review of a non-checksummed
 surface.
 
+**Review bar for rig/check scripts (threat model; iter 40).** Check
+scripts must fail CLOSED against accident, corruption, partial failure,
+staleness, and self-deception — every plumbing edge (cache keys, pulls,
+parses, locks, rc propagation) dies loudly rather than reading as clean.
+Findings that require an adversary with repo-write access or hostile
+crafted payloads are dispositioned in writing by default, not fixed: an
+adversary who can write the repo can edit the check script itself, so no
+in-script defense is coherent against that actor. EXCEPTION: a
+hostile-input fix is still taken when it is ≤ trivial AND closes the
+whole class (the nonce-marker / no-eval pattern) — cheap class closure
+beats a disposition. Reviewers should be pointed at this bar so rounds
+converge on the accident/corruption classes instead of re-raising
+adversary-with-write-access scenarios.
+
 ## 4. Artifact identity pins (narrow form)
 
 - Every device check script sha256-verifies the ON-DEVICE binary against
@@ -113,6 +127,9 @@ row → back off one heartbeat; persistent → notify once, keep heartbeating.
 7. Tool lies — verify critical comparisons with checksums (this project's
    instance: zsh `time cmd | tee` masking mid-pipe failures — exit codes
    by direct invocation).
+8. Backgrounded interactive CLIs — a `codex exec` migrated
+   foreground→background dead-parks reading stdin; launch
+   background-from-start with stdin `</dev/null`.
 
 ## 8. Instrument exposure
 

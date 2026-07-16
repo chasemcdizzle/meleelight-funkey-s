@@ -46,19 +46,38 @@ DTMP=/tmp/mlfk
 DSD=/mnt/mlfk-scratch
 mkdir -p "$DEVB"
 
-# exclusive rig lock (iter 39, review H3): fixed shared artifact paths
-# mean two concurrent runs could judge each other's pulls. mkdir is the
-# atomic primitive here (flock(1) does not exist on macOS hosts); die
-# loudly when held by a LIVE pid, reclaim only a provably dead holder's
-# leftover.
+# exclusive rig lock (iter 39, review H3; SIMPLIFIED iter 40, review H3
+# round 2 — the split-brain race is closed by REMOVING the clever part):
+# mkdir is the atomic primitive (flock(1) does not exist on macOS
+# hosts); pid written inside AFTER acquisition. On an existing lock we
+# NEVER auto-delete unless the holder is PROVABLY dead: pid file
+# missing/unreadable/non-numeric → die loudly instructing a manual
+# rm -rf (a mid-acquisition peer, a crashed pre-pid run, or corruption
+# all look identical — fail closed); recorded pid alive → die loudly;
+# recycle ONLY when a numeric pid exists and its process is verifiably
+# gone.
 LOCK=$DEVB/.rig.lock
 if ! mkdir "$LOCK" 2>/dev/null; then
   otherpid="$(cat "$LOCK/pid" 2>/dev/null || true)"
-  if [ -n "$otherpid" ] && kill -0 "$otherpid" 2>/dev/null; then
+  if [ -z "$otherpid" ]; then
+    echo "DEVICE FAIL: lock $LOCK exists with no readable pid file —" \
+      "refusing to auto-remove (possible live acquirer). If no rig run" \
+      "is alive, manually: rm -rf '$LOCK'" >&2
+    exit 1
+  fi
+  case "$otherpid" in
+    *[!0-9]*)
+      echo "DEVICE FAIL: lock $LOCK pid file is corrupt ('$otherpid') —" \
+        "refusing to auto-remove. If no rig run is alive, manually:" \
+        "rm -rf '$LOCK'" >&2
+      exit 1
+      ;;
+  esac
+  if kill -0 "$otherpid" 2>/dev/null; then
     echo "DEVICE FAIL: another device-rig run holds $LOCK (pid $otherpid)" >&2
     exit 1
   fi
-  echo "   reclaiming stale device-rig lock (dead holder pid ${otherpid:-unknown})"
+  echo "   reclaiming stale device-rig lock (dead holder pid $otherpid)"
   rm -rf "$LOCK"
   mkdir "$LOCK" || { echo "DEVICE FAIL: cannot acquire $LOCK" >&2; exit 1; }
 fi
@@ -118,7 +137,10 @@ echo "== [1/7] host data plane (M1 tables + SIMDATA1 + g01 trace text) =="
 # g01 match params — SINGLE SOURCE: the goldens manifest. Extracted HERE,
 # before any device work, with explicit failure checks (iter 39, review
 # M4: eval "$(node …)" swallowed a node failure; set -u alone can't catch
-# inherited/partial values, so unset first).
+# inherited/partial values, so unset first). NO EVAL (iter 40, review M4
+# round 2: manifest values are data, never shell text) — parsed
+# line-by-line into variables under strict per-field validation; any
+# unexpected key, malformed value, or out-of-range param is a loud death.
 unset name seed p1 p2 stage frames
 gparams="$(node -e "
   const m=require('./oracle/goldens/manifest.json');
@@ -134,8 +156,34 @@ if [ -z "$gparams" ]; then
   echo "DEVICE FAIL: g01 manifest param extraction returned nothing" >&2
   exit 1
 fi
-eval "$gparams"
+while IFS='=' read -r gk gv; do
+  case "$gk" in
+    name)
+      if ! [[ "$gv" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+        echo "DEVICE FAIL: manifest g01.name fails validation ('$gv')" >&2
+        exit 1
+      fi
+      name=$gv
+      ;;
+    seed|p1|p2|stage|frames)
+      if ! [[ "$gv" =~ ^[0-9]+$ ]]; then
+        echo "DEVICE FAIL: manifest g01.$gk not a decimal integer ('$gv')" >&2
+        exit 1
+      fi
+      printf -v "$gk" '%s' "$gv"
+      ;;
+    *)
+      echo "DEVICE FAIL: unexpected manifest extraction line '$gk=$gv'" >&2
+      exit 1
+      ;;
+  esac
+done <<< "$gparams"
 : "$name" "$seed" "$p1" "$p2" "$stage" "$frames" # set -u backstop: all six present
+# domain sanity (manifest is trusted-but-verified data)
+[ "$frames" -le 5000 ] || { echo "DEVICE FAIL: g01 frames $frames > 5000" >&2; exit 1; }
+[ "$stage" -le 5 ] || { echo "DEVICE FAIL: g01 stage $stage > 5" >&2; exit 1; }
+[ "$p1" -le 4 ] || { echo "DEVICE FAIL: g01 p1 $p1 > 4" >&2; exit 1; }
+[ "$p2" -le 4 ] || { echo "DEVICE FAIL: g01 p2 $p2 > 4" >&2; exit 1; }
 bash pipeline/extractor/build-extractor.sh
 node pipeline/run.js --only animations,tables,stages --out "$TABLES"
 test -f "$TABLES/ml_tables.c"
@@ -145,7 +193,19 @@ node "$SIM/trace-to-txt.js" \
   oracle/goldens/g01-fox-marth-battlefield.trace.json "$DEVB/g01.trace.txt"
 
 echo "== [2/7] host references (fdlibm sweep + libm anchor + pinned format corpus) =="
+# FROZEN corpus size (iter 40, review M3 round 2): the expected line
+# count is a LITERAL measured-then-frozen from gen-inputs.js
+# (2026-07-16: 257,287 lines — deterministic generator), never
+# re-derived from the freshly generated file, so a generator regression
+# can no longer satisfy its own trailer checks. The generated corpus
+# AND both sweep legs' `n` trailers are asserted against this literal.
+CORPUS_LINES=257287
 node "$FDC/gen-inputs.js" "$DEVB/fdlibm-inputs.txt"
+corpuslines="$(wc -l < "$DEVB/fdlibm-inputs.txt" | tr -d ' ')"
+if [ "$corpuslines" != "$CORPUS_LINES" ]; then
+  echo "DEVICE FAIL: generated corpus has $corpuslines lines, frozen pin is $CORPUS_LINES" >&2
+  exit 1
+fi
 cc -O2 -ffp-contract=off -std=c99 -Wall -Iport/fdlibm \
   "$FDC/csweep.c" port/fdlibm/fdlibm.c -o "$DEVB/csweep_host"
 "$DEVB/csweep_host" "$DEVB/fdlibm-inputs.txt" > "$DEVB/fdlibm-host.txt"
@@ -154,10 +214,10 @@ cc -O2 -ffp-contract=off -Wall -Wextra -Werror -Iport/sim \
   port/sim/device/mathsweep.c -o "$DEVB/mathsweep_host" -lm
 "$DEVB/mathsweep_host" "$DEVB/fdlibm-inputs.txt" > "$DEVB/mathsweep-host.txt"
 # review M3: the sweep must have consumed the WHOLE corpus (host leg;
-# the device leg is asserted in step [5] after the pull)
-corpuslines="$(wc -l < "$DEVB/fdlibm-inputs.txt" | tr -d ' ')"
-tail -1 "$DEVB/mathsweep-host.txt" | grep -qx "n $corpuslines" || {
-  echo "DEVICE FAIL: host mathsweep trailer != corpus line count ($corpuslines)" >&2
+# the device leg is asserted in step [5] after the pull) — judged
+# against the FROZEN literal, never the regenerated file
+tail -1 "$DEVB/mathsweep-host.txt" | grep -qx "n $CORPUS_LINES" || {
+  echo "DEVICE FAIL: host mathsweep trailer != frozen corpus pin ($CORPUS_LINES)" >&2
   exit 1
 }
 cc -O2 -ffp-contract=off -Wall -Wextra -Werror \
@@ -186,25 +246,38 @@ ARMBINS="sim_device csweep_arm fmt_diff_arm mathsweep_arm"
 srchash() {
   # review M1: this runs inside $() where errexit is cleared — pipefail +
   # explicit stage checks + a minimum-file-count floor, so a failed find
-  # can never yield a partial-but-plausible hash.
+  # can never yield a partial-but-plausible hash. Round 2 (iter 40,
+  # review M1/H2): the find predicate includes SYMLINKS (-type l — the
+  # compiler globs follow them, so a retargeted symlink must change the
+  # hash; shasum follows links) and the file list stays -print0/NUL-
+  # framed end to end (a newline in a filename can never split one
+  # record into two).
   set -o pipefail
-  local files n
-  files="$(find port/sim port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
-    -type f \( -name '*.c' -o -name '*.h' \) | LC_ALL=C sort)" || {
+  local listf n
+  listf="$DEVB/.srclist.$$"
+  find port/sim port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
+    \( -type f -o -type l \) \( -name '*.c' -o -name '*.h' \) -print0 \
+    > "$listf" || {
     echo "DEVICE FAIL: srchash: find failed" >&2
+    rm -f "$listf"
     return 1
   }
-  n="$(printf '%s\n' "$files" | grep -c .)"
+  n="$(tr -cd '\0' < "$listf" | wc -c | tr -d ' ')"
   if [ "$n" -lt 450 ]; then
     echo "DEVICE FAIL: srchash: only $n source files found (>= 450 expected)" >&2
+    rm -f "$listf"
     return 1
   fi
   {
-    printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 shasum -a 256 || exit 1
+    LC_ALL=C sort -z < "$listf" | xargs -0 shasum -a 256 || exit 1
     shasum -a 256 "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" \
       port/sim/device/check-device-g01.sh port/sim/device/adbsh.sh || exit 1
     printf 'dockerimage %s\n' "$ARMIMGID"
-  } | shasum -a 256 | cut -d' ' -f1
+  } | shasum -a 256 | cut -d' ' -f1 || {
+    rm -f "$listf"
+    return 1
+  }
+  rm -f "$listf"
 }
 STAMP=$DEVB/arm-build.stamp
 want="$(srchash)"
@@ -227,8 +300,11 @@ stamp_ok() {
 if [ "${MLFK_FORCE_ARM:-0}" != 0 ] || ! stamp_ok; then
   rm -f "$STAMP"
   echo "   stamp MISS (or forced) — rebuilding armv7 binaries"
-  # SERIAL docker only (CLAUDE.md §Commands arm32 recipe)
-  docker run --rm -v "$PWD":/work -w /work "$ARMIMG" bash -lc '
+  # SERIAL docker only (CLAUDE.md §Commands arm32 recipe). Run by the
+  # RESOLVED image Id — the same Id the stamp records — never the
+  # mutable tag (iter 40, review M2 round 2: closes the inspect-to-run
+  # tag-drift window).
+  docker run --rm -v "$PWD":/work -w /work "$ARMIMGID" bash -lc '
     set -e
     export PATH=/opt/FunKey-sdk-2.3.0/bin:$PATH
     CC=arm-funkey-linux-musleabihf-gcc
@@ -289,14 +365,24 @@ if [ "${MLFK_FORCE_ARM:-0}" != 0 ] || ! stamp_ok; then
     }
   done
   # H4 residue (iter 39): the fdlibm strong overrides must BE the linked
-  # definitions in the device sim — exactly one T symbol each.
+  # definitions in the device sim — exactly one T symbol each. Round 2
+  # (iter 40, review L1): nm's exit status is checked explicitly (its
+  # output goes to a file first — no || true, no grep in the pipeline;
+  # a truncated symbol table can never pass on a lucky prefix).
+  nmout="$DEVB/.nm-sim_device.$$"
+  if ! nm "$DEVB/sim_device" > "$nmout"; then
+    rm -f "$nmout"
+    echo "DEVICE FAIL: nm failed on sim_device — cannot verify fdlibm overrides" >&2
+    exit 1
+  fi
   for s in floor ceil fmod; do
-    cnt="$(nm "$DEVB/sim_device" | awk -v s="$s" '$2=="T" && $3==s' | grep -c . || true)"
+    cnt="$(awk -v s="$s" '$2=="T" && $3==s {n++} END {print n+0}' "$nmout")"
     if [ "$cnt" != 1 ]; then
       echo "DEVICE FAIL: expected exactly 1 T definition of $s in sim_device, found $cnt" >&2
       exit 1
     fi
   done
+  rm -f "$nmout"
   {
     printf 'srchash=%s\n' "$want"
     for f in $ARMBINS; do
@@ -309,6 +395,22 @@ else
 fi
 
 echo "== [4/7] device: fdlibm sweep (armv7 vs host, byte-exact) =="
+# rehash ADJACENT to the push (iter 40, review M2 round 2): every binary
+# is re-verified against the stamp's recorded sha256 immediately before
+# it leaves the host — nothing can mutate between the stamp check in
+# step [3] and the push.
+for f in $ARMBINS; do
+  rec="$(awk -v f="$f" '$1=="bin" && $2==f {print $3}' "$STAMP")"
+  if [ -z "$rec" ]; then
+    echo "DEVICE FAIL: no stamp sha256 record for $f — refusing to push" >&2
+    exit 1
+  fi
+  cur="$(shasum -a 256 "$DEVB/$f" | cut -d' ' -f1)"
+  if [ "$cur" != "$rec" ]; then
+    echo "DEVICE FAIL: $f changed between stamp verification and push ($cur != $rec)" >&2
+    exit 1
+  fi
+done
 dsh "rm -rf $DTMP $DSD && mkdir -p $DTMP $DSD"
 adb -s "$DEV" push \
   "$DEVB/csweep_arm" "$DEVB/fmt_diff_arm" "$DEVB/mathsweep_arm" \
@@ -326,8 +428,9 @@ echo "== [5/7] device: exact-math family sweep (floor/ceil/sqrt/fabs/fmod/js_rou
 dsh "sh -lc '$DTMP/mathsweep_arm $DTMP/fdlibm-inputs.txt > $DSD/mathsweep-device.txt'"
 pullv "$DSD/mathsweep-device.txt" "$DEVB/mathsweep-device.txt"
 # review M3, device leg: the sweep must have consumed the WHOLE corpus
-tail -1 "$DEVB/mathsweep-device.txt" | grep -qx "n $corpuslines" || {
-  echo "DEVICE FAIL: device mathsweep trailer != corpus line count ($corpuslines)" >&2
+# (judged against the FROZEN literal, never the regenerated file)
+tail -1 "$DEVB/mathsweep-device.txt" | grep -qx "n $CORPUS_LINES" || {
+  echo "DEVICE FAIL: device mathsweep trailer != frozen corpus pin ($CORPUS_LINES)" >&2
   exit 1
 }
 cmp "$DEVB/mathsweep-host.txt" "$DEVB/mathsweep-device.txt"
@@ -362,14 +465,27 @@ echo "   device sim wall clock: $((t1-t0)) s for $frames frames (informational)"
 dsh "rm -rf $DTMP"
 
 # no-commit guard: build output is never tracked (iter 39, review L1:
-# a git ERROR must be loud, never read as clean output)
-gitout="$(git status --porcelain -- "$BUILD" "$TABLES")" || {
+# a git ERROR must be loud, never read as clean output). Round 2 (iter
+# 40, review L2): --untracked-files=all overrides any
+# status.showUntrackedFiles=no config, and `git ls-files` proves
+# untracked-ness DIRECTLY — already-tracked-but-clean build output can
+# no longer read as clean porcelain.
+gitout="$(git status --porcelain --untracked-files=all -- "$BUILD" "$TABLES")" || {
   echo "DEVICE FAIL: git status failed — cannot prove build output is untracked" >&2
   exit 1
 }
 if [ -n "$gitout" ]; then
   echo "DEVICE FAIL: build output not gitignored:" >&2
   printf '%s\n' "$gitout" >&2
+  exit 1
+fi
+lsout="$(git ls-files -- "$BUILD" "$TABLES")" || {
+  echo "DEVICE FAIL: git ls-files failed — cannot prove build output is untracked" >&2
+  exit 1
+}
+if [ -n "$lsout" ]; then
+  echo "DEVICE FAIL: build output is TRACKED by git:" >&2
+  printf '%s\n' "$lsout" >&2
   exit 1
 fi
 

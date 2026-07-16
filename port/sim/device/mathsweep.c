@@ -69,6 +69,69 @@ static void sweep2(uint64_t a, uint64_t b) {
          b, canon_bits(fmod(u2d(a), u2d(b))), canon_bits(fmod(u2d(b), u2d(a))));
 }
 
+// --- strict corpus grammar (iter 40, review M3 round 2) --------------------
+// A corpus line is EXACTLY one of (measured gen-inputs.js emission set):
+//   <op> ' ' <hex16> '\n'                 op in {sin, cos, tan, atan}
+//   <op> ' ' <hex16> ' ' <hex16> '\n'     op in {atan2, pow}
+// where <hex16> is exactly 16 LOWERCASE hex chars. Anything else —
+// unknown op, wrong arity, wrong operand width/case, trailing junk, an
+// overlong or unterminated line — is corruption: exit 3 at the caller.
+
+static int hex16(const char *s, uint64_t *out) {
+  uint64_t v = 0;
+  for (int i = 0; i < 16; i++) {
+    char c = s[i];
+    uint64_t d;
+    if (c >= '0' && c <= '9')
+      d = (uint64_t)(c - '0');
+    else if (c >= 'a' && c <= 'f')
+      d = (uint64_t)(c - 'a' + 10);
+    else
+      return 0;
+    v = (v << 4) | d;
+  }
+  *out = v;
+  return 1;
+}
+
+static const struct {
+  const char *op;
+  int arity;
+} kOps[] = {
+    {"sin", 1}, {"cos", 1}, {"tan", 1}, {"atan", 1}, {"atan2", 2}, {"pow", 2},
+};
+
+// Returns NULL on success (a/b/arity filled), else a reason string.
+static const char *parse_line(const char *line, uint64_t *a, uint64_t *b,
+                              int *arity) {
+  size_t len = strlen(line);
+  if (len == 0 || line[len - 1] != '\n')
+    return "no terminating newline (overlong or truncated line)";
+  int found = -1;
+  size_t i = 0;
+  for (size_t k = 0; k < sizeof kOps / sizeof *kOps; k++) {
+    size_t ol = strlen(kOps[k].op);
+    // the required following space disambiguates the "atan"/"atan2" prefix
+    if (strncmp(line, kOps[k].op, ol) == 0 && line[ol] == ' ') {
+      found = (int)k;
+      i = ol + 1;
+      break;
+    }
+  }
+  if (found < 0) return "unknown op token";
+  if (!hex16(line + i, a)) return "operand 1 not exactly 16 lowercase hex";
+  i += 16;
+  if (kOps[found].arity == 2) {
+    if (line[i] != ' ') return "missing second operand";
+    i++;
+    if (!hex16(line + i, b)) return "operand 2 not exactly 16 lowercase hex";
+    i += 16;
+  }
+  if (line[i] != '\n' || line[i + 1] != '\0') return "trailing junk";
+  *arity = kOps[found].arity;
+  return NULL;
+}
+
 int main(int argc, char **argv) {
   if (argc != 2) {
     fprintf(stderr, "usage: mathsweep <inputs.txt>\n");
@@ -113,23 +176,28 @@ int main(int argc, char **argv) {
     return 2;
   }
   char line[256];
-  char fn[16];
   long n = 0, lineno = 0;
   while (fgets(line, sizeof line, f)) {
     lineno++;
     uint64_t a = 0, b = 0;
-    // STRICT parse (iter 39, review M3): the corpus is machine-generated
-    // (gen-inputs.js), so a line that does not yield "<fn> <hex> [<hex>]"
-    // is CORRUPTION, never something to skip silently.
-    int got = sscanf(line, "%15s %" SCNx64 " %" SCNx64, fn, &a, &b);
-    if (got < 2) {
-      fprintf(stderr, "mathsweep: malformed input line %ld: %s", lineno,
-              line);
+    // STRICT grammar (iter 39 review M3; tightened iter 40, round 2):
+    // the corpus is machine-generated (gen-inputs.js), so anything but
+    //   <op> SP <hex16> ["\n"]          op in {sin,cos,tan,atan}
+    //   <op> SP <hex16> SP <hex16> ["\n"]  op in {atan2,pow}
+    // — whitelisted op token, EXACTLY 16 lowercase hex chars per
+    // operand, exact arity, single spaces, no trailing junk, no
+    // overlong lines — is CORRUPTION, never something to skip silently.
+    int arity = 0;
+    const char *why = parse_line(line, &a, &b, &arity);
+    if (why) {
+      fprintf(stderr, "mathsweep: malformed input line %ld (%s): %s%s",
+              lineno, why, line,
+              line[0] && line[strlen(line) - 1] == '\n' ? "" : "\n");
       fclose(f);
       return 3;
     }
     sweep1(a);
-    if (got == 3) {
+    if (arity == 2) {
       sweep1(b);
       sweep2(a, b);
     }

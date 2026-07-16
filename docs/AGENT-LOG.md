@@ -3428,3 +3428,183 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   and every error path is an explicit DEVICE FAIL/FATAL. Task 2's
   check-device-conform.sh must INHERIT this plumbing (adbsh.sh + the
   pullv/stamp/lock patterns), not re-derive it.
+
+## iter 40 — 2026-07-16 — M3 task 1 REVIEW-HARDENING ROUND 2: Codex round-2 findings (nonce RC markers, no-eval manifest, frozen sweep pins) + rig threat model
+
+- PRE-REGISTRATION (frozen before first edit; method per PROCESS §2).
+  Scope: the driver's triage of `.loop/review-39-1.log` (Tier-A round 2,
+  VERDICT: NO-GO) — 9 class-closing fixes + 2 written dispositions + the
+  rig threat model into docs/PROCESS.md §3/§7. Per item — fix, tooth:
+  - **1 (RC-marker nonce; closes the forged/stale-marker class incl. the
+    EXIT-trap bypass)**: dsh() generates a per-invocation random token
+    (`$RANDOM$RANDOM$$`); device marker becomes `MLFK_RC_<token>=<rc>`
+    with the existing guaranteed leading newline; parser accepts ONLY the
+    exact-token marker (last such wins), same integer-0-255 validation;
+    non-token `MLFK_RC*` lines are ordinary output. Tooth T1 (unit, real
+    device): payload `trap 'printf "\nMLFK_RC_00000=0\n"' 0; false` →
+    dsh returns 1 (the round-2 reproduced bypass now fails); plus a
+    forged inline `MLFK_RC_0000=0` + `exit 3` payload → dsh returns 3.
+  - **2 (manifest extraction WITHOUT raw eval; closes shell-text
+    execution)**: parse node's `k=v` output line-by-line into variables
+    with strict validation — name must match `^[a-z0-9][a-z0-9-]*$`,
+    seed/p1/p2/stage/frames `^[0-9]+$`, sanity frames<=5000 stage<=5
+    p1/p2<=4, unknown key = loud death; no eval anywhere. Tooth T2:
+    temp manifest COPY (oracle/goldens/manifest.json NEVER touched —
+    HARD RULE 3) with name = `x; echo DEVICE CONFORMS g01; exit 0; #`,
+    script's require path temp-pointed at the copy → loud validation
+    death in step [1], no success marker, no device traffic; restore.
+  - **3 (mathsweep INDEPENDENT count pin + strict grammar)**: (a) frozen
+    literal CORPUS_LINES=257287 in check-device-g01.sh (measured this
+    iter: gen-inputs.js emits 257,287 lines; matches iter-39's recorded
+    trailer) — the regenerated corpus wc AND both legs' `n` trailers must
+    equal the LITERAL, not each other; (b) mathsweep.c strict per-line
+    grammar — whitelisted op token (sin|cos|tan|atan arity 1,
+    atan2|pow arity 2 — the measured gen-inputs.js op set), operands
+    exactly 16 lowercase hex chars, exact spacing, no trailing junk,
+    overlong line = violation → exit 3 with line number. Teeth T3a:
+    1-line corpus (script's gen step temp-edited to emit 1 line) → dies
+    against the frozen pin in step [2], before any device work; restore.
+    T3b (unit): `fmod 3ff0000000000000 NOTHEX` line → mathsweep_host
+    exit 3 (both the non-whitelisted op and the non-hex operand are
+    violations); positive control: well-formed corpus still rc 0.
+  - **4 (srchash symlinks + NUL framing)**: find predicate
+    `( -type f -o -type l )`, `-print0 | sort -z | xargs -0` end to end
+    (no newline-joined scalar anywhere); file-count floor kept (NUL
+    count). Tooth T4: dangling symlink `port/sim/tooth_dangling.c` →
+    srchash's hash stage fails loudly at step [3] (a symlink is now
+    INCLUDED — the old `-type f` silently skipped it); restore.
+  - **5 (nm assertion fail-loud)**: drop `|| true`; nm output captured
+    to a file with explicit exit-code check; count via pure awk
+    (`END{print n+0}` — no grep in the pipeline). Executes on the
+    rebuild path of the cold run (script bytes changed → rebuild).
+  - **6 (git guard proves untracked-ness)**: porcelain gains
+    `--untracked-files=all`; additionally `git ls-files -- $BUILD
+    $TABLES` must be EMPTY (direct proof nothing under build dirs is
+    tracked); both with explicit exit-code capture.
+  - **7 (cached-binary rehash adjacent to push)**: the per-binary
+    sha-vs-stamp verification re-runs immediately before the adb push
+    (step [4]) — nothing can mutate between stamp check and push.
+  - **8 (docker image by Id)**: `docker run` receives $ARMIMGID (the
+    resolved `.Id` already captured for the stamp), never the mutable
+    tag — the inspect-to-run drift window is gone.
+  - **9 (lock split-brain removed by removing the clever part)**:
+    mkdir-atomic acquire kept, pid written inside; on an existing lock:
+    pid file MISSING or unreadable or non-numeric → die loudly
+    instructing manual `rm -rf` (NEVER auto-delete); recorded pid alive
+    → die loudly; recycle ONLY when a pid file exists, is numeric, and
+    its process is verifiably dead. Tooth T9: pre-made pid-file-less
+    lock dir → loud death, dir left untouched; restore (manual rm, as
+    the message instructs).
+  - Run cap: ≤ 6 full check-device-g01.sh invocations (planned 4:
+    T2 manifest, T3a corpus pin, T4 symlink — all early-death, no
+    device traffic — + the final cold done-check) + unit teeth (T1
+    dsh on-device one-liners, T3b/T3-positive mathsweep_host direct,
+    T9 lock immediate-death run — counted in the 6). Pass criteria:
+    cold `bash port/sim/device/check-device-g01.sh` → DEVICE CONFORMS
+    g01, exit 0 (one expected ~4-min docker rebuild — script bytes are
+    stamp input), AND every tooth above fires as specified. Refutation
+    shapes: a tooth that does not fire = defective guard → fix, re-run
+    THAT tooth once (one bounded round); a done-check failure not
+    explained by an intended guard → STOP and report, never weaken.
+    Docker SERIAL; FOREGROUND polling; logs → .loop/m3-task1r40-*.
+- RESULTS (all teeth fired as pre-registered; logs `.loop/m3-task1r40-*`):
+  - **1 fixed + T1 proven** (adbsh.sh): per-invocation nonce token in the
+    marker (`MLFK_RC_<tok>=`), exact-token-only parse, last-wins among
+    exact-token markers, 0-255 validation kept. Teeth on the real device:
+    the round-2 REPRODUCED bypass `trap 'printf "\nMLFK_RC_00000=0\n"' 0;
+    false` → dsh rc 1 (forged line echoed as ordinary output); inline
+    forged marker + exit 3 → rc 3; iter-39 regressions re-proven
+    (no-trailing-newline → rc 0; exit 7 → rc 7)
+    (.loop/m3-task1r40-teeth-dsh.log).
+  - **2 fixed + T2 proven**: manifest params parsed line-by-line, per-key
+    whitelist, name `^[a-z0-9][a-z0-9-]*$`, numerics `^[0-9]+$` +
+    domain sanity (frames<=5000, stage<=5, p1/p2<=4), unknown key = loud
+    death; zero eval. Tooth: hostile name `x; echo DEVICE CONFORMS g01;
+    exit 0; #` injected via a temp manifest COPY (frozen manifest
+    untouched) → `DEVICE FAIL: manifest g01.name fails validation`,
+    exit 1, no forged success marker, no device traffic
+    (.loop/m3-task1r40-tooth-manifest.log).
+  - **3 fixed + T3a/T3b proven**: (a) CORPUS_LINES=257287 frozen literal
+    (measured this iter; == iter-39's recorded trailer) — generated
+    corpus wc AND both legs' trailers judged against the LITERAL. Tooth:
+    gen step temp-regressed to 1 line → `DEVICE FAIL: generated corpus
+    has 1 lines, frozen pin is 257287`, exit 1, pre-device
+    (.loop/m3-task1r40-tooth-corpuspin.log). (b) mathsweep.c strict
+    grammar (whitelisted op {sin,cos,tan,atan}×1/{atan2,pow}×2, exactly
+    16 lowercase hex per operand, exact spacing, no trailing junk, no
+    overlong/unterminated lines → exit 3 + line number + reason). Teeth
+    (direct invocation, exit codes NOT via pipes — the iter-34 pipestatus
+    gotcha): `fmod … NOTHEX` → rc 3 "unknown op token"; uppercase hex →
+    rc 3; trailing junk → rc 3; atan2 arity-1 → rc 3; empty → rc 3;
+    10-line + full-257287 positives → rc 0, trailers exact
+    (.loop/m3-task1r40-teeth-mathsweep.log).
+  - **4 fixed + T4 proven**: srchash find predicate `\( -type f -o -type
+    l \)`, `-print0 | sort -z | xargs -0` end to end (count via NUL
+    bytes; no newline-joined filename scalar anywhere). Tooth: dangling
+    symlink `port/sim/tooth_dangling.c` → shasum fails on it inside
+    srchash, run dies at step [3] pre-docker (the old `-type f` silently
+    SKIPPED symlinks) (.loop/m3-task1r40-tooth-symlink.log).
+  - **5 fixed**: nm output → file with explicit nm exit-code check; count
+    via pure awk `END{print n+0}` (no grep, no || true). Positive path
+    exercised by the cold run's rebuild (all three overrides == 1).
+  - **6 fixed**: porcelain gains `--untracked-files=all`; NEW direct
+    proof `git ls-files -- $BUILD $TABLES` must be empty (tracked-but-
+    clean build output can no longer read as clean); explicit exit-code
+    capture on both. Exercised on both full runs.
+  - **7 fixed**: per-binary sha-vs-stamp re-verification duplicated
+    IMMEDIATELY before the adb push (step [4]) — no mutation window
+    between stamp check and push. Exercised on both full runs (MISS and
+    HIT paths).
+  - **8 fixed**: `docker run` receives the resolved `$ARMIMGID` (same Id
+    the stamp records), never the tag. Exercised by the cold run's
+    rebuild.
+  - **9 fixed + T9 proven**: lock keeps mkdir-atomic acquire + pid
+    inside; existing lock with pid file missing/unreadable/non-numeric →
+    die loudly instructing manual `rm -rf` (NEVER auto-delete); live
+    pid → die; recycle only a verifiably dead numeric holder. Tooth:
+    pid-file-less lock dir → `DEVICE FAIL: lock … exists with no
+    readable pid file — refusing to auto-remove`, exit 1, dir left
+    untouched (.loop/m3-task1r40-tooth-lock.log).
+- done-check: cold `bash port/sim/device/check-device-g01.sh` →
+  **DEVICE CONFORMS g01** through the full REBUILD path (script bytes are
+  stamp input; docker run by Id; nm + rehash + git guards live) —
+  .loop/m3-task1r40-donecheck.log, STREAM MATCH 3600/3600, device wall
+  21 s, lock + scratch released. Second run (cache-HIT path, direct rc):
+  `donecheck cache-HIT rc=0`, `arm binaries up to date … sha-verified`,
+  DEVICE CONFORMS g01 (.loop/m3-task1r40-donecheck-hit.log). Run count:
+  6 full invocations (T9, T2, T3a, T4, cold, cache-HIT) — at the
+  pre-registered cap, none wasted.
+- **DISPOSITIONS IN WRITING (per driver triage; do NOT implement):**
+  (a) A→B→A source mutation during the compile window and other
+  TOCTOU-during-run scenarios — these require a CONCURRENT MUTATOR,
+  which the serial single-writer loop excludes by construction; the lock
+  (item 9) + stamp + rehash-before-push (item 7) cover the entire
+  accident class (a crashed/overlapping run). (b) Hostile repo content —
+  newline-crafted filenames, adversarial symlink retargeting as an
+  ATTACK: an adversary with repo write access can edit
+  check-device-g01.sh itself, so no in-script defense is coherent
+  against that actor; item 4 covers the ACCIDENTAL-symlink/filename
+  class (and the NUL framing incidentally removes the newline-filename
+  ambiguity). Both dispositions are now backed by the PROCESS.md §3
+  review bar (this iter): adversary-with-repo-write findings are
+  dispositioned by default; trivial whole-class hostile-input fixes
+  (nonce, no-eval) are still taken.
+- docs/PROCESS.md: §3 gains "Review bar for rig/check scripts" (fail
+  CLOSED against accident/corruption/partial failure/staleness/
+  self-deception; adversary-with-write findings dispositioned by
+  default; ≤-trivial whole-class hostile-input fixes still taken) —
+  round 3's convergence bar. §7 gains failure mode 8 (backgrounded
+  interactive CLIs dead-park reading stdin; launch background-from-start
+  with stdin </dev/null).
+- ZOOM OUT (rule 8): round 2's findings split into exactly two classes,
+  and the fix is class-shaped in both: (i) "a check derives its
+  expectation from the thing it checks" (trailer==regenerated-wc,
+  stamp-then-push window, inspect-then-run-by-tag, last-marker-wins) —
+  closed by INDEPENDENT pins: frozen literals, nonce tokens, resolved
+  Ids, adjacency of verification to use; (ii) "a guard trusts
+  well-formedness it never enforces" (eval of manifest text, sscanf's
+  lax grammar, -type f vs compiler globs, || true on nm, porcelain
+  without untracked-files) — closed by strict whitelisted grammars +
+  explicit exit-status checks. The PROCESS.md threat-model paragraph is
+  the class-level residue: it names the review bar so future rounds
+  argue accident-vs-adversary ONCE instead of per finding.

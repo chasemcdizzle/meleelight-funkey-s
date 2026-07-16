@@ -24,21 +24,25 @@ require_device() {
 #
 # The RC marker is emitted with a GUARANTEED leading newline (iter 39,
 # review H1): a device command whose output ends without a trailing
-# newline can never concatenate into the genuine marker line. Last
-# marker wins — any forged MLFK_RC= line inside command output is by
-# construction OLDER than the genuine marker, which is printed after
-# it. The parsed rc must be an integer in 0-255 (bash `return` wraps
-# mod 256 — anything unparseable/out-of-range is a 71-class FATAL,
-# never a silent wrap).
+# newline can never concatenate into the genuine marker line. The
+# marker carries a per-invocation NONCE (iter 40, review H1 round 2):
+# the parser accepts ONLY the exact-token marker `MLFK_RC_<token>=`,
+# so a forged or stale `MLFK_RC*` line in command output — including
+# one printed by a device-side EXIT trap AFTER the genuine marker —
+# is ordinary output, never an rc. Last exact-token marker wins. The
+# parsed rc must be an integer in 0-255 (bash `return` wraps mod 256 —
+# anything unparseable/out-of-range is a 71-class FATAL, never a
+# silent wrap).
 dsh() {
-  local out rc
-  out="$(adb -s "$DEV" shell "$1; printf '\nMLFK_RC=%s\n' \$?" </dev/null)" || {
+  local out rc tok
+  tok="$RANDOM$RANDOM$$"
+  out="$(adb -s "$DEV" shell "$1; printf '\nMLFK_RC_${tok}=%s\n' \$?" </dev/null)" || {
     echo "FATAL: adb shell transport failure" >&2
     return 70
   }
   out="${out//$'\r'/}"
-  rc="$(printf '%s\n' "$out" | sed -n 's/^MLFK_RC=//p' | tail -1)"
-  printf '%s\n' "$out" | grep -v '^MLFK_RC=' || true
+  rc="$(printf '%s\n' "$out" | sed -n "s/^MLFK_RC_${tok}=//p" | tail -1)"
+  printf '%s\n' "$out" | grep -v "^MLFK_RC_${tok}=" || true
   if [ -z "$rc" ]; then
     echo "FATAL: no RC marker came back from the device" >&2
     return 71

@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-16, post-iter-39 writer)
+## Live right now (updated: 2026-07-16, post-iter-40 writer)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -23,11 +23,24 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   lock; visible-WARN cleanup; nm override assertion). H1's
   "overrides absent" claim REFUTED on record (fdlibm.c:156/174/200).
   Cold done-check `DEVICE CONFORMS g01` exit 0; logs `.loop/m3-task1r39-*`.
-- **In flight**: Tier-A Codex review ROUND 2 over the hardened rig
-  pending (`.loop/review-38-2.log` was round 1, NO-GO — all findings now
-  addressed); M3 task 2 writer launches on GO (all-8 device conformance
-  + sim-only p99, `check-device-conform.sh` — must inherit adbsh.sh +
-  pullv/stamp/lock plumbing).
+- **Iter 40 (M3 task 1 review-hardening ROUND 2) DONE**: all 9 triaged
+  round-2 findings (`.loop/review-39-1.log`, NO-GO) class-fixed with
+  teeth proven — nonce RC markers (EXIT-trap bypass now fails), no-eval
+  manifest parse with strict validation, frozen CORPUS_LINES=257287 pin
+  + strict mathsweep grammar, symlink-aware NUL-framed srchash,
+  fail-loud nm/git guards, rehash-adjacent-to-push, docker run by Id,
+  fail-closed lock (never auto-delete a pid-less lock). TOCTOU-with-
+  concurrent-mutator + hostile-repo-content dispositioned in writing
+  (AGENT-LOG iter 40); rig threat model ("Review bar for rig/check
+  scripts") added to PROCESS.md §3 + failure mode 8 to §7. Cold
+  done-check DEVICE CONFORMS g01 through BOTH rebuild and cache-HIT
+  paths; logs `.loop/m3-task1r40-*`.
+- **In flight**: Tier-A Codex review ROUND 3 over the round-2-hardened
+  rig pending (point the reviewer at PROCESS.md §3's new review bar so
+  the arc converges on accident/corruption classes); M3 task 2 writer
+  launches on GO (all-8 device conformance + sim-only p99,
+  `check-device-conform.sh` — must inherit adbsh.sh + pullv/stamp/lock
+  plumbing).
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
