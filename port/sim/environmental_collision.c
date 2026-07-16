@@ -451,7 +451,8 @@ CollisionDatum findCollision(ECB ecb1, ECB ecbp,
       break;
     case 'p': // platform
       isPlatform = true;
-      // fallthrough (JS case fallthrough is intentional upstream)
+      // JS case fallthrough is intentional upstream
+      __attribute__((fallthrough));
     case 'g': // ground
       same = 0;
       wallTopOrRight = wallRight;
