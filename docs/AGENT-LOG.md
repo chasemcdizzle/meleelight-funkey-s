@@ -2989,3 +2989,105 @@ MILESTONE PASS: M2-CAL
   ml_fmt/ml_ser, headless platform TU), replay ALL 8 goldens
   end-to-end vs the oracle streams; done-check `bash
   port/sim/check-sim.sh` -> SIM CONFORMS — the M2 exit gate.
+
+## iter 36 — 2026-07-16 — M2 task 17: INTEGRATION — the full C gameTick, SIM CONFORMS (M2 exit gate seed)
+
+- done-check: `bash port/sim/check-sim.sh` -> **SIM CONFORMS**, exit 0 —
+  ALL 8 goldens (g01–g06 human, g07/g08 CPU via the task-16 AI bridge)
+  replayed end-to-end by the headless C sim, judged by the UNCHANGED
+  oracle/harness/verify-stream.js against the frozen streams: 3600/3600
+  frames exact per golden, rngCalls equal (134/125/119/115/185/160/81/
+  1496), rngCallsOutsideStep == 1 everywhere, specVersion 1.
+- WHAT LANDED (the composition layer; sixteen bit-verified clusters
+  become one simulator):
+  - `port/sim/sim/` — sim.h (GameState: the flattened god-module struct),
+    sim_boot.c (player.js constructors + start()/harnessSetupMatch/
+    startGame verbatim; STAB1->MlStageX; the startingPoint-array .x/.y
+    quirk -> frame-1 ECB undef masks), sim_tick.c (main.js:1050-1092
+    mode-3 tick in call order + update(i) + matchTimerTick + the
+    movingPlatforms MpSim bridge + ALL host seams: mlp_dispatch/
+    hd_dispatch -> mv_dispatch, mlp_hd_* -> hit_detection.c bodies,
+    mv_article_* -> article.c inits (the task-13 seam-to-body swap),
+    mv_hq_push6 -> the live hitQueue, runAI -> ml_ai_bridge_apply with
+    the pollInputs bank-row alias re-copy, rule-16 truthiness projection
+    of the tagged AI buffers, every *_out_of_domain -> sim_fatal),
+    sim_ser.c (per-frame CHECKSUM envelope: ser_player + lifted article
+    canon ser -> canon parse -> the fmt_diff §3.1 envelope -> SHA-256;
+    sim_frame_envelope = the localization instrument), sim_data.c
+    (SIMDATA1 loader + asFlags/hdFlags tables + rule-15 move-data seams
+    for all five chars + the registries incl. fox/marth/puff char-module
+    registration + composed special-phase lookup + falcon SSG
+    canEdgeCancel runtime overlay + the rule-17 LIVE charHitboxes plane),
+    sim_main.c (trace loader, boot-RNG parity: 465 boot draws + counter
+    reset + the ONE off-step startGame draw; draw counts recovered from
+    the mulberry32 state delta via the modular inverse of 0x6D2B79F5 —
+    no wrapper on the hot path), trace-to-txt.js / wrap-run.js.
+  - `port/sim/calib/dump-sim-data.js` — SIMDATA1 dumper (boot-time page
+    dump of asFlags + hdFlags + the mvData union + palettes0; ×2
+    byte-identical in the gate; every section byte-equal to the frozen
+    captures' frame-0 records — cross-validated).
+  - `port/sim/check-sim.sh` — the M2 exit gate (CLAUDE.md §Commands).
+  - rule-17 instrument: WEAK-default hooks mv_chd_assign_note /
+    mv_chd_write_dmg / mv_chd_write_size in shared moves_index.c (strong
+    overrides in sim_data.c own the live plane; every existing replay
+    driver keeps its exact per-record-chd behavior — no driver or check
+    script changed); puff pf_hb_set_* + marth mv_hb_set_dmg call the
+    write hooks; falcon gained mv_falcon_ssg_get_canEdgeCancel.
+- LEDGER (integration divergences; M2CAL localization: first divergent
+  frame -> oracle --capture-frames envelope byte-diff -> per-stage NaN
+  probe -> capture attribution across g08's moves/article/hitdet specs):
+  | # | golden/frame | module | cause class | fix | min |
+  |---|---|---|---|---|---|
+  | 1 | g08 f371 (first divergent hash; surfaced as an AI-bridge chain mismatch at f602 — 4 unconsumed screenShake draws) | hit_detection.c executeRegularHit THROW arm | cross-cluster value-model staleness: the offsetSingle CHARDATA sub-shape (discovered task 8) was never back-propagated into task 6's zero-live throw arm — `hitbox.offset.x` read NaN'd on the thrown hitbox | accept `ML_HB_CHARDATA && offsetSingle` in the single-Vec2D offset read (hit_detection.c:975) | ~45 |
+  plus two non-sim infra rows: bash-3.2 `set -u` empty-array expansion
+  and ANSI-coloured `node -e console.log(number)` output in check-sim.sh
+  (script fixes, no sim surface).
+- Re-verification after the fix + hooks: `bash port/sim/check-envcoll.sh`
+  -> ENVCOLL MATCH (standing guard); `bash
+  port/sim/calib/check-hitdet-replay.sh` -> HITDET MATCH (fresh ×2
+  captures, 18344 records, 0 divergences — the touched cluster's own
+  done-check); binary replays of the moves-shared/fox/falco/falcon/
+  marth/puff and article clusters against their existing frozen captures
+  all 0 divergences (weak hooks proven behavior-neutral; their full
+  re-record done-checks not re-run this iteration by judgment — the
+  hooks are no-ops there by construction and the replays prove it).
+- HONEST NOTES / registered items:
+  - outOfCameraTimer RESOLVED honestly: the only ++ sites are
+    render.js:183/200 (renderPlayer's miniView arm) and the ORACLE ITSELF
+    ran with __harnessNoRender=true (renderTick returns before them), so
+    the frozen streams' domain has outOfCameraTimer ≡ 0 except the
+    explicit =0 writes already in the translated moves/physics. The C
+    sim carries the field + physics' outOfCameraUpdate read site
+    verbatim; the render-plane increment belongs to the M3/M4 renderer
+    (startGame's one renderPlayer call is an =0/=false no-op at spawn).
+  - mv_howl_play_id returns a monotone counter: howler's global play-id
+    is audio-plane state consumed into player.shieldBreakerID, which is
+    NOT on the checksum surface (only .stop(id) reads it back); the M4
+    mixer owns real ids.
+  - marth's charged shield-breaker (charge >= 30) global-plane write now
+    flows through the live chd plane (mv_chd_write_dmg), closing task
+    11's documented hole at the class level.
+  - shared-move hitbox assigns read the live plane via the assign-note
+    overlay; a chd write through an id slot with UNKNOWN provenance and
+    CHARDATA shape traps loudly (never silent).
+  - ml_events queues are reset per tick stage (observability channels;
+    the M4 mixer owns a real per-frame drain).
+  - matchTimer <= 0 (finishGame) and physics stage-damage hq rows trap
+    (outside the golden domain / M4 target stages).
+- ZOOM OUT: the ledger's one sim divergence is an instance of a CLASS —
+  "a value-model sub-shape discovered by a LATER cluster is not
+  back-propagated into EARLIER clusters' zero-live arms" (offsetSingle:
+  task 8 discovery vs task 6 consumer). Instrument applied: grepped every
+  shape-conditional offset read across hit_detection.c/article.c/
+  physics.c — exactly one instance existed (article.c and physics.c
+  already handle offsetSingle/array-index correctly); fixed at the site
+  with the class documented in the code comment. Not promoted to a
+  numbered rule (first occurrence; rule threshold 3) but recorded here:
+  any future value-model widening should grep earlier clusters'
+  consumers of that model for stale shape conditionals. Second zoom-out:
+  the integration itself validated the M2 method — with 16
+  capture-verified clusters, the WHOLE 8-golden composition produced
+  exactly ONE divergence, and it lived in a documented zero-live arm.
+- next: M2 EXIT GATE is runnable and green (`bash port/sim/check-sim.sh`
+  -> SIM CONFORMS). Phase-advance iteration (CHECKER gate run + REPLAN
+  M3 concretization) is the loop's next step.

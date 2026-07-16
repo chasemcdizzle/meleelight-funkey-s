@@ -968,11 +968,16 @@ static void executeRegularHit(MlSim *S, HdQueues *q, double v, const HdRow *row,
     pv->phys.thrownHitbox = true;
     pv->phys.thrownHitboxOwner = row->a;
     // `pos = new Vec2D(...)` — fresh object: breaks the pos-ECB1[0] alias.
-    // hitbox.offset here is the SINGLE-Vec2D read (:594): a CHARDATA
-    // offset ARRAY gives offset.x === undefined -> NaN components.
+    // hitbox.offset here is the SINGLE-Vec2D read (:594): thrown hitboxes
+    // are CHARDATA entries with a SINGLE Vec2D offset (offsetSingle — the
+    // M2 task 8 sub-shape, discovered AFTER this module's translation; the
+    // arm was zero-live over g01/g04/g06 and the first LIVE throw — g08
+    // frame 371, task 17 ledger — exposed the miss). Only a CHARDATA
+    // per-frame ARRAY gives offset.x === undefined -> NaN components.
     {
       double ox, oy;
-      if (hitbox->shape == ML_HB_CONSTRUCTOR) {
+      if (hitbox->shape == ML_HB_CONSTRUCTOR ||
+          (hitbox->shape == ML_HB_CHARDATA && hitbox->offsetSingle)) {
         ox = hitbox->offset.x;
         oy = hitbox->offset.y;
       } else {

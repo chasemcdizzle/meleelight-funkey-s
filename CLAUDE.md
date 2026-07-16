@@ -675,6 +675,37 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   bank's s by truthiness) is live on CPU slots; the raw*/deaden AI arm
   never runs in the captured domain. (4) recon canon of FULL players ×2
   per call costs ~nothing (26s captures) — prefer airtight over sampled.
+- **Integrated headless sim (M2 task 17 committed form; the M2 EXIT GATE
+  is live):** `bash port/sim/check-sim.sh` → `SIM CONFORMS`, exit 0 — the
+  §Gates M2 command, now runnable: regenerates CTAB1/STAB1
+  (pipeline/build/sim-tables), dumps the SIMDATA1 executed move-data
+  plane ×2 byte-identical (`node port/sim/calib/dump-sim-data.js` —
+  boot-time asFlags/hdFlags/mvData-union/palettes0, each section
+  byte-equal to the frozen captures' frame-0 records), builds
+  `port/sim/calib/build/sim_host` from `port/sim/sim/` + every module
+  cluster (all TUs `cc -O2 -ffp-contract=off -Wall -Wextra -Werror`),
+  then per golden: trace → text (`port/sim/sim/trace-to-txt.js`, IEEE
+  bit-pattern tokens), replay, wrap (`port/sim/sim/wrap-run.js`), judge
+  with the UNCHANGED verify-stream.js. Manual single-golden run + the
+  divergence instrument: `sim_host --trace t.txt --simdata s.txt --seed
+  N --p1 N --p2 N --stage N --frames N [--cpu --difficulty N --ai-bridge
+  f] [--dump-frames a,b]` — `--dump-frames` prints frame envelopes to
+  stderr; byte-diff them against `oracle/harness/run.js
+  --capture-frames` output to localize a divergence (M2CAL procedure).
+  Gotcha classes: (1) later-cluster value-model widenings must be
+  back-propagated to earlier clusters' ZERO-LIVE arms (task 8's
+  offsetSingle vs task 6's throw arm — the iter-36 ledger's one sim
+  divergence; grep earlier consumers' shape conditionals whenever a
+  value model widens); (2) integration seams that must stay LIVE state,
+  not data: falcon SSG canEdgeCancel (mlp_flags runtime overlay), the
+  rule-17 charHitboxes plane (WEAK-default hooks in shared
+  moves_index.c; strong overrides in port/sim/sim/sim_data.c), the
+  aiInputBank row alias (buffer slot 0 re-copied post-runAI); (3) draw
+  COUNTS are recoverable from mulberry32's state delta (odd additive
+  constant ⇒ modular inverse) — no wrapper needed on the hot path;
+  (4) bash 3.2 `set -u` rejects empty-array `"${a[@]}"` (use
+  `${a[@]+"${a[@]}"}`) and `node -e console.log(<number>)` can emit ANSI
+  colour — String() it in scripts.
 - **Upstream clone + build (proven twice — determinism spike + prototype):**
   ```
   git clone https://github.com/schmooblidon/meleelight "$MELEELIGHT_CLONE"

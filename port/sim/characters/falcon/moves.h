@@ -89,6 +89,8 @@ static inline Vec2D mv_falcon_hb0_off(const MlPlayer *pl, const char *what) {
 // (scalar move-table state; write-only within this cluster — the reader is
 // physics' flag table, task 17)
 void mv_falcon_ssg_set_canEdgeCancel(bool v);
+// task 17's reader (physics' mlp_flags overlay for (falcon, SSG)):
+bool mv_falcon_ssg_get_canEdgeCancel(void);
 
 // --- the falcon module index (characters/falcon/moves/index.js) -------------
 const MlMoveDef *falcon_move_def(const char *name);

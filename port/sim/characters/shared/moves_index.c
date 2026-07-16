@@ -222,10 +222,31 @@ void mv_assign_hitbox_id(MlSim *S, double p, const char *moveKey, int srcIdx,
   pl->hitboxes.id[dstIdx] = hb;
   // element write THROUGH the id alias mirrors (rule 10):
   if (S->aliasHbId[(int)p]) pl->phys.prevFrameHitboxes.id[dstIdx] = hb;
+  // rule-17 live-plane provenance (weak no-op outside the task-17 sim
+  // host — see moves.h; the host also overlays live dmg/size here):
+  mv_chd_assign_note(S, p, moveKey, srcIdx, dstIdx);
 }
 
 void mv_assign_thrown_id0(MlSim *S, double p) {
   mv_assign_hitbox_id(S, p, "thrown", 0, 0);
+}
+
+// --- rule-17 live charHitboxes plane hooks (M2 task 17; moves.h note) --------
+// WEAK defaults: exact pre-task-17 behavior (the replay drivers' measured
+// chd projections stay authoritative there). The sim host's strong
+// definitions own the live plane.
+__attribute__((weak)) void mv_chd_assign_note(MlSim *S, double p,
+                                              const char *moveKey, int srcIdx,
+                                              int dstIdx) {
+  (void)S; (void)p; (void)moveKey; (void)srcIdx; (void)dstIdx;
+}
+__attribute__((weak)) void mv_chd_write_dmg(MlSim *S, double p, int idx,
+                                            double v) {
+  (void)S; (void)p; (void)idx; (void)v;
+}
+__attribute__((weak)) void mv_chd_write_size(MlSim *S, double p, int idx,
+                                             double v) {
+  (void)S; (void)p; (void)idx; (void)v;
 }
 
 // activeStage[l[0]][l[1]][l[2]] for l = activeStage.ledge[onLedge] — the

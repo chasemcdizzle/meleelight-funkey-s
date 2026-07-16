@@ -207,6 +207,23 @@ void mv_assign_hitbox_id(MlSim *S, double p, const char *moveKey, int srcIdx,
                          int dstIdx);
 void mv_assign_thrown_id0(MlSim *S, double p);
 
+// --- the LIVE charHitboxes value plane (rule 17, M2 task 17) -----------------
+// Upstream player.hitboxes.id[j] ALIASES the GLOBAL charHitboxes objects
+// (player.js:132 — no copy): dmg/size writes through those aliases mutate
+// the global plane (puff rollout/sing measured LIVE on g04; marth
+// NEUTRALSPECIAL's charge write), and every later id assign reads the
+// LIVE values. The replay drivers measured the plane per record (the
+// "chd" pre-projection); the integrated sim owns it live. These hooks
+// carry (a) assign provenance — which (char,moveKey,srcIdx) global object
+// each player id slot aliases — and (b) dmg/size write-throughs. WEAK
+// no-op defaults live in moves_index.c so every existing replay driver
+// keeps its exact per-record-chd behavior with no link or script changes;
+// the task-17 sim host overrides them with its live plane.
+extern void mv_chd_assign_note(MlSim *S, double p, const char *moveKey,
+                               int srcIdx, int dstIdx);
+extern void mv_chd_write_dmg(MlSim *S, double p, int idx, double v);
+extern void mv_chd_write_size(MlSim *S, double p, int idx, double v);
+
 // activeStage[l[0]][l[1]][l[2]] for l = activeStage.ledge[onLedge] — the
 // CLIFF* coordinate read (M2 task 8; CLIFFCATCH.c carries the original
 // static copy). Out-of-range mirrors upstream's throw via mv_out_of_domain.

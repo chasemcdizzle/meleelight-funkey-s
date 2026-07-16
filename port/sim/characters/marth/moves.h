@@ -111,6 +111,9 @@ static inline void mv_hb_set_dmg(MlSim *S, double p, int idx, double v) {
   pl->hitboxes.id[idx].dmg = v;
   // field write through the SAME object: visible via the id-array alias
   if (S->aliasHbId[(int)p]) pl->phys.prevFrameHitboxes.id[idx].dmg = v;
+  // rule-17: upstream this write mutates the GLOBAL charHitboxes object
+  // (weak no-op outside the task-17 sim host — shared moves.h):
+  mv_chd_write_dmg(S, p, idx, v);
 }
 
 // --- the shield-breaker charge tint ------------------------------------------

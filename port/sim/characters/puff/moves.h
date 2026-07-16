@@ -118,15 +118,20 @@ extern void pf_assign_hitbox_id(MlSim *S, double p, const char *moveKey,
                                 int srcIdx, int dstIdx);
 
 // --- hitboxes.id[idx].{dmg,size} writes (rule-10 element-field mirror) --------
+// Upstream these writes go THROUGH the global charHitboxes alias (rule 17):
+// mv_chd_write_* (weak no-op outside the task-17 sim host, shared moves.h)
+// carries the write into the live plane.
 static inline void pf_hb_set_dmg(MlSim *S, double p, int idx, double v) {
   MlPlayer *pl = mv_player(S, p);
   pl->hitboxes.id[idx].dmg = v;
   if (S->aliasHbId[(int)p]) pl->phys.prevFrameHitboxes.id[idx].dmg = v;
+  mv_chd_write_dmg(S, p, idx, v);
 }
 static inline void pf_hb_set_size(MlSim *S, double p, int idx, double v) {
   MlPlayer *pl = mv_player(S, p);
   pl->hitboxes.id[idx].size = v;
   if (S->aliasHbId[(int)p]) pl->phys.prevFrameHitboxes.id[idx].size = v;
+  mv_chd_write_size(S, p, idx, v);
 }
 
 // --- rule-8 read/write helpers for the runtime-added rollOut plane ------------

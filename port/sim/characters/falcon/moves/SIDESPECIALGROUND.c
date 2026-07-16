@@ -13,6 +13,7 @@
 static bool g_ssg_canEdgeCancel = false; // this.canEdgeCancel (runtime)
 
 void mv_falcon_ssg_set_canEdgeCancel(bool v) { g_ssg_canEdgeCancel = v; }
+bool mv_falcon_ssg_get_canEdgeCancel(void) { return g_ssg_canEdgeCancel; }
 
 static AsTri fc4_main(MlSim *S, double p, const MlInputBuffer in[4],
                       const MvX *ex);
