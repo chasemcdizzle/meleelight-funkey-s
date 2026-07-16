@@ -114,11 +114,20 @@ int main(int argc, char **argv) {
   }
   char line[256];
   char fn[16];
-  long n = 0;
+  long n = 0, lineno = 0;
   while (fgets(line, sizeof line, f)) {
+    lineno++;
     uint64_t a = 0, b = 0;
+    // STRICT parse (iter 39, review M3): the corpus is machine-generated
+    // (gen-inputs.js), so a line that does not yield "<fn> <hex> [<hex>]"
+    // is CORRUPTION, never something to skip silently.
     int got = sscanf(line, "%15s %" SCNx64 " %" SCNx64, fn, &a, &b);
-    if (got < 2) continue;
+    if (got < 2) {
+      fprintf(stderr, "mathsweep: malformed input line %ld: %s", lineno,
+              line);
+      fclose(f);
+      return 3;
+    }
     sweep1(a);
     if (got == 3) {
       sweep1(b);
@@ -127,6 +136,15 @@ int main(int argc, char **argv) {
     n++;
   }
   fclose(f);
+  if (n == 0) {
+    fprintf(stderr, "mathsweep: zero input lines accepted — empty corpus "
+                    "(review M3: an empty sweep proves nothing)\n");
+    return 3;
+  }
+  // Accepted-line trailer INSIDE the compared stream: the host<->device
+  // cmp also judges count equality, and check-device-g01.sh asserts this
+  // trailer equals the host corpus `wc -l` on both legs.
+  printf("n %ld\n", n);
   fprintf(stderr, "mathsweep: %ld input lines swept\n", n);
   return 0;
 }

@@ -3,27 +3,37 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-16, post-iter-38 driver turn)
+## Live right now (updated: 2026-07-16, post-iter-39 writer)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
-  (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact).
-- **Iter 38 (M3 task 1) DONE + driver-cold-verified**: commit af06bb7 —
-  `DEVICE CONFORMS g01` (armv7 static sim, 3600/3600 STREAM MATCH on the
-  FunKey, 21 s wall ≈ 5.8 ms/frame sim-only avg). Class finding: SDK
-  static musl libm is FP-unsafe (floor/ceil/round identity, fmod(0,0),
-  strtod misrounding) → exact floor/ceil/fmod strong overrides in
-  fdlibm.c + strtod-free fmt_diff --gen + standing mathsweep instrument
-  (432,319-line differential in every check run). round/trunc also broken
+  (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
+  re-verified iter 39).
+- **Iter 38 (M3 task 1) DONE**: commit af06bb7 — `DEVICE CONFORMS g01`
+  (armv7 static sim, 3600/3600 STREAM MATCH on the FunKey, 21 s wall ≈
+  5.8 ms/frame sim-only avg). Class finding: SDK static musl libm is
+  FP-unsafe (floor/ceil/round identity, fmod(0,0), strtod misrounding) →
+  exact floor/ceil/fmod strong overrides in fdlibm.c + strtod-free
+  fmt_diff --gen + standing mathsweep instrument. round/trunc also broken
   on device, zero sim call sites — extend overrides+sweep before any use.
-- **In flight**: Tier-A Codex review arc over the iter-38 device scripts
-  (`.loop/review-38-*.log`); M3 task 2 writer launches on GO (all-8
-  device conformance + sim-only p99, `check-device-conform.sh`).
+- **Iter 39 (M3 task 1 review-hardening) DONE**: all 9 verified Codex
+  round-1 findings fixed with teeth proven (stamp authenticates
+  script+image+binary bytes; digest-proven pulls via pullv; strict
+  mathsweep corpus parse + count pins; fail-loud manifest eval/srchash/
+  git guard; RC-marker leading-newline + 0-255 validation; mkdir rig
+  lock; visible-WARN cleanup; nm override assertion). H1's
+  "overrides absent" claim REFUTED on record (fdlibm.c:156/174/200).
+  Cold done-check `DEVICE CONFORMS g01` exit 0; logs `.loop/m3-task1r39-*`.
+- **In flight**: Tier-A Codex review ROUND 2 over the hardened rig
+  pending (`.loop/review-38-2.log` was round 1, NO-GO — all findings now
+  addressed); M3 task 2 writer launches on GO (all-8 device conformance
+  + sim-only p99, `check-device-conform.sh` — must inherit adbsh.sh +
+  pullv/stamp/lock plumbing).
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
   time). Arm build stamp-cached (`MLFK_FORCE_ARM=1` forces).
-- **Branch**: agent/auto @ af06bb7 + process-docs commit, clean between
-  iterations. Origin only.
+- **Branch**: agent/auto, clean between iterations (iter-39 hardening
+  commit on top of af06bb7 + process-docs commit). Origin only.
 - **Loop**: dynamic self-paced driver; ~20-30 min heartbeat; writer
   completion notifications are the primary wake signal.
 

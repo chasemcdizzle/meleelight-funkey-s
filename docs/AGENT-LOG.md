@@ -3248,3 +3248,183 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   `DEVICE CONFORMS g01`, exit 0 (.loop/driver-cold-task1-donecheck.log),
   device wall 21 s / 3600 frames. First Tier-A Codex arc opened over the
   iter-38 device rig (.loop/review-38-*.log); task 2 dispatches on GO.
+
+## iter 39 — 2026-07-16 — M3 task 1 REVIEW-HARDENING: Codex round-1 findings (device rig identity pins + fail-loud guards)
+
+- PRE-REGISTRATION (frozen before first edit; method per PROCESS §2).
+  Scope: ONLY the verified findings from `.loop/review-38-2.log`
+  (Tier-A round 1, VERDICT: NO-GO); no rig restructuring (task 2 owns
+  the generalization). Per finding — fix, tooth, expected observation:
+  - **H2 (stamp doesn't authenticate the build)**: fold the check
+    script's own bytes + adbsh.sh bytes (the build recipe/flags live in
+    the script's heredoc) + the docker image Id into the stamp input;
+    stamp file additionally records each produced binary's sha256;
+    cache-HIT path re-hashes all 4 cached binaries against the recorded
+    values — any mismatch forces a rebuild. Tooth T2: corrupt one byte
+    of cached `mathsweep_arm` with the stamp intact → the run must NOT
+    print "up to date" (must print the mismatch + rebuild); restore =
+    the rebuild itself. Expected: rebuild fires, run passes.
+  - **M1 (srchash partial-hash risk)**: `set -o pipefail` inside the
+    function, explicit failure checks on the find stage and hash stage,
+    minimum-file-count floor (>= 450; measured today: 528 .c/.h).
+    Tooth T1: temp-edit one find path to `port/simX` → the run must die
+    loudly at step [3] with a srchash error, never emit a hash.
+  - **M2 (pull freshness)**: new `pullv()` — `rm -f` host dest before
+    every pull; after the pull, device-side busybox `sha256sum` (routed
+    through dsh; the tool itself self-tested once per run against the
+    empty-input vector e3b0c442…) must equal the host sha256 of the
+    pulled bytes; hard fail on mismatch; applied to ALL 5 pulls
+    (fdlibm-device.txt, fmt-adv.device.hex, fmt-adv.device.txt,
+    mathsweep-device.txt, g01.sim-out). Tooth T-M2: pre-plant a stale
+    host dest AND temp-sabotage that one pull to a no-op → the digest
+    check must hard-fail (never judge the stale file); restore.
+  - **M3 (mathsweep tolerates empty/malformed corpus)**: strict parse —
+    ANY line yielding <2 parsed fields → exit 3 with the line number
+    (corpus is machine-generated; malformed = corruption); zero accepted
+    lines → exit 3; accepted count printed as a final stdout trailer
+    `n <count>` (inside the cmp'd stream, so device==host count equality
+    is also byte-judged); the script asserts trailer == corpus `wc -l`
+    on BOTH legs. Teeth T3a: empty corpus → nonzero. T3b: one malformed
+    line → nonzero. (Host binary, direct invocation.)
+  - **M4 (manifest eval swallows node failure)**: extraction MOVED to
+    step [1] (loud failure before any device work), `unset` of all 6
+    params first (set -u backstop), node output captured to a variable
+    with explicit exit-code + nonemptiness checks, only then eval'd.
+    Tooth T4: temp-edit the manifest require path to a missing file →
+    loud death in step [1], before any adb/device traffic.
+  - **H1-downgraded (RC marker robustness)**: device-side marker emitted
+    as `printf '\nMLFK_RC=%s\n' $?` (guaranteed leading newline — a
+    no-trailing-newline command output can never concatenate into the
+    marker); parsed rc validated integer 0-255 (else 71-class FATAL —
+    bash `return` wraps mod 256); last-marker-wins kept (the genuine
+    marker is always emitted after any forged line). Teeth T5a: device
+    command printing output WITHOUT a trailing newline → parses rc 0 and
+    echoes the output (was FATAL 71 before). T5b: `exit 7` on device →
+    dsh returns 7. T5c (unit): fake-adb function override emitting
+    `MLFK_RC=banana` as the only marker → FATAL, nonzero, never `return
+    banana`.
+  - **H3-downgraded (concurrent runs)**: exclusive lock under
+    `port/sim/calib/build/device/.rig.lock` at script start. DEVIATION
+    from the brief's `flock -n`: flock(1) does not exist on macOS hosts —
+    mkdir-atomic lock + pid liveness check is the equivalent (die loudly
+    when held by a live pid; reclaim only a provably dead holder's
+    lock); released by the EXIT trap. No run-unique naming churn (per
+    brief). Tooth T6: pre-held lock with a live pid → immediate loud
+    death before any work.
+  - **L1 (no-commit guard fails open)**: `git status --porcelain`
+    output captured with explicit exit-code check, then emptiness test —
+    a git error is now a loud DEVICE FAIL, never read as clean. Tooth
+    T7: temp-edit the guard's git invocation to `GIT_DIR=/nonexistent
+    git status …` (env-level sabotage would break step [1]'s legitimate
+    git uses first) → full run must die AT THE GUARD, nonzero, after
+    all 7 device steps pass.
+  - **L2 (cleanup trap)**: trap routed through dsh (RC-parsed), still
+    best-effort (never masks the real exit code), but a visible
+    `WARN: device scratch cleanup failed` line on stderr when cleanup
+    fails; also releases the H3 lock. Demo T8 (unit): DEV=bogus subshell
+    → WARN visible, preserved exit code.
+  - **H4 residue (optional, adopted — trivial)**: post-build nm
+    assertion that floor/ceil/fmod each have EXACTLY one T definition in
+    `sim_device` (host llvm-nm reads the ARM ELF; verified today).
+  - Run caps: hard cap 8 invocations of check-device-g01.sh (planned 6:
+    T4, T1, T7, T-M2, T2, final cold done-check) + unit teeth (no
+    device build cost) + `bash port/sim/check-sim.sh` once (host
+    regression). Pass criteria: final cold done-check prints
+    `DEVICE CONFORMS g01`, exit 0, AND every tooth fires as specified.
+    Refutation shapes: a tooth that does NOT fire = the guard is
+    defective → fix the guard, re-run THAT tooth only (one bounded
+    round each); a done-check failure not explained by an intended
+    guard → STOP and report, never weaken. Docker builds SERIAL;
+    3 rebuilds expected (script bytes are now stamp input, so each
+    temp-edit run and the corruption tooth rebuild by design).
+- RESULTS (all teeth fired as pre-registered; logs `.loop/m3-task1r39-*`):
+  - **H2 fixed + T2 proven**: stamp now `srchash=<h>` + one `bin <name>
+    <sha256>` row per binary; inputs include the script's own bytes,
+    adbsh.sh, and the docker image Id (sha256:7bad75c5…). Tooth: 1 byte
+    of cached mathsweep_arm corrupted with stamp intact → run printed
+    `cached mathsweep_arm sha256 != stamp record — forcing rebuild`
+    (never "up to date"), rebuilt, passed
+    (.loop/m3-task1r39-tooth-stampbin.log).
+  - **M1 fixed + T1 proven**: srchash pipefail + explicit find check +
+    >= 450 file floor (528 measured). Tooth: find path temp-edited to
+    `port/simBOGUS` → `DEVICE FAIL: srchash: find failed`, exit 1, no
+    hash emitted (.loop/m3-task1r39-tooth-srchash.log).
+  - **M2 fixed + T-M2 proven**: pullv() on ALL 5 pulls — rm -f dest
+    pre-pull, device busybox sha256 (tool self-tested against the
+    empty-input vector at startup) vs host sha of pulled bytes. Tooth:
+    stale corrupt fdlibm-device.txt pre-planted + rm/pull temp-sabotaged
+    to no-ops → `DEVICE FAIL: pulled … != device …` digest mismatch,
+    exit 1, stale file never judged
+    (.loop/m3-task1r39-tooth-pullfresh.log).
+  - **M3 fixed + T3a/T3b proven**: mathsweep strict parse (exit 3 +
+    line number on any <2-field line), exit 3 on zero accepted, stdout
+    trailer `n <count>` inside the cmp'd stream; script asserts trailer
+    == corpus wc -l on host AND device legs (257,287 both legs in the
+    done-check). Teeth: empty corpus → rc 3; injected `garbage` line →
+    `malformed input line 6`, rc 3; 10-line positive control → rc 0,
+    trailer `n 10` (.loop/m3-task1r39-teeth-mathsweep.log).
+  - **M4 fixed + T4 proven**: manifest extraction moved to step [1]
+    (before any device push/run), unset-first + captured node output +
+    explicit rc/nonempty checks before eval. Tooth: require path
+    temp-edited to manifest.MISSING.json → node MODULE_NOT_FOUND +
+    `DEVICE FAIL: g01 manifest param extraction failed`, exit 1, in
+    seconds (.loop/m3-task1r39-tooth-manifest.log).
+  - **H1 fixed + T5a-d proven**: dsh marker now `printf '\nMLFK_RC=%s\n'
+    $?` (guaranteed leading newline); rc validated integer 0-255 else
+    FATAL 71; last-marker-wins kept. Teeth: no-trailing-newline device
+    output → rc 0 + correct echo (was FATAL 71 pre-fix); `sh -c "exit
+    7"` → rc 7 (NOTE: a bare `exit 7` payload kills the device shell
+    before the marker prints — true of the old rig too, invalid dsh
+    payload, first probe corrected); fake-adb `MLFK_RC=banana` → FATAL
+    71 (no mod-256 wrap); `MLFK_RC=999` → FATAL 71
+    (.loop/m3-task1r39-teeth-unit.log).
+  - **H3 fixed + T6 proven**: mkdir-atomic lock $DEVB/.rig.lock + pid
+    liveness (flock(1) absent on macOS — documented deviation from the
+    brief's flock, same semantics: die loudly if held by a live pid,
+    reclaim only a dead holder's leftover; EXIT trap releases). Tooth:
+    pre-held lock with live pid → `DEVICE FAIL: another device-rig run
+    holds … (pid …)`, exit 1, before any work
+    (.loop/m3-task1r39-teeth-lock-cleanup.log).
+  - **L1 fixed + T7 proven**: git guard captures porcelain output with
+    explicit exit check. Tooth: guard's git temp-prefixed
+    `GIT_DIR=/nonexistent` (env-level would break step [1]'s legitimate
+    git uses) → ALL 7 device steps passed (STREAM MATCH 3600/3600) then
+    `DEVICE FAIL: git status failed — cannot prove build output is
+    untracked`, exit 1 (.loop/m3-task1r39-tooth-gitguard.log).
+  - **L2 fixed + T8 demoed**: trap → rig_cleanup() through dsh,
+    best-effort kept, visible `WARN: device scratch cleanup failed` on
+    stderr; unit demo with DEV=bogus showed the WARN and preserved
+    exit 42 (.loop/m3-task1r39-teeth-lock-cleanup.log).
+  - **H4 residue adopted**: post-build nm assertion — floor/ceil/fmod
+    each exactly one T definition in sim_device (runs on every rebuild;
+    cache-HIT binaries are sha-pinned to a build that passed it).
+- **REFUTATION RECORD (permanent — do NOT retry blind)**: review H1
+  claim "floor/ceil/fmod overrides absent from fdlibm.c" is REFUTED.
+  They exist at port/fdlibm/fdlibm.c:156 (floor), :174 (ceil), :200
+  (fmod); `nm sim_device` shows exactly one T definition of each; the
+  device fdlibm sweep failed pre-override at line 25 (iter 38) and
+  passes post-override; the mathsweep corpus is runtime-parsed, not
+  foldable. The reviewer was scoped to the file TAIL by the review
+  prompt (driver scoping error, acknowledged in the brief). The nm
+  assertion stands as cheap permanent residue.
+- done-check: final COLD run → **DEVICE CONFORMS g01**, exit 0
+  (.loop/m3-task1r39-donecheck.log) — cache-HIT path exercised (`arm
+  binaries up to date … cached binaries sha-verified`), STREAM MATCH
+  3600/3600, device wall 21 s, device scratch + lock verified absent
+  after. Stamp-priming pristine run (rebuild, expected under the new
+  stamp scheme) also CONFORMS (.loop/m3-task1r39-primerun.log). Run
+  count: 6 full script invocations + unit teeth — within the
+  pre-registered cap of 8.
+- Host regression: `bash port/sim/check-sim.sh` → SIM CONFORMS
+  (.loop/m3-task1r39-reg-sim.log; scripts/mathsweep are outside the sim
+  TU set — run per brief anyway).
+- ZOOM OUT (rule 8): the round-1 findings are ONE class — "a check
+  script's own plumbing (cache keys, pulls, eval, rc parsing, locks)
+  can fail SILENTLY-CLEAN even when every judged comparison is
+  bit-exact". The class fix is identity pins + fail-loud on every
+  plumbing edge (PROCESS §4's narrow form, now fully instantiated in
+  the rig): stamp authenticates recipe+image+binaries, pulls are
+  digest-proven end-to-end, device rc parsing validates its domain,
+  and every error path is an explicit DEVICE FAIL/FATAL. Task 2's
+  check-device-conform.sh must INHERIT this plumbing (adbsh.sh + the
+  pullv/stamp/lock patterns), not re-derive it.

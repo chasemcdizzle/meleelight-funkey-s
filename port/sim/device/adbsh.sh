@@ -21,9 +21,18 @@ require_device() {
 
 # dsh <command-string> — run on the device, echo the device's stdout,
 # return the DEVICE command's exit code (not adb's).
+#
+# The RC marker is emitted with a GUARANTEED leading newline (iter 39,
+# review H1): a device command whose output ends without a trailing
+# newline can never concatenate into the genuine marker line. Last
+# marker wins — any forged MLFK_RC= line inside command output is by
+# construction OLDER than the genuine marker, which is printed after
+# it. The parsed rc must be an integer in 0-255 (bash `return` wraps
+# mod 256 — anything unparseable/out-of-range is a 71-class FATAL,
+# never a silent wrap).
 dsh() {
   local out rc
-  out="$(adb -s "$DEV" shell "$1; echo MLFK_RC=\$?" </dev/null)" || {
+  out="$(adb -s "$DEV" shell "$1; printf '\nMLFK_RC=%s\n' \$?" </dev/null)" || {
     echo "FATAL: adb shell transport failure" >&2
     return 70
   }
@@ -32,6 +41,16 @@ dsh() {
   printf '%s\n' "$out" | grep -v '^MLFK_RC=' || true
   if [ -z "$rc" ]; then
     echo "FATAL: no RC marker came back from the device" >&2
+    return 71
+  fi
+  case "$rc" in
+    *[!0-9]*)
+      echo "FATAL: malformed RC marker from device: '$rc'" >&2
+      return 71
+      ;;
+  esac
+  if [ "$rc" -gt 255 ]; then
+    echo "FATAL: RC marker out of range (0-255): $rc" >&2
     return 71
   fi
   return "$rc"
