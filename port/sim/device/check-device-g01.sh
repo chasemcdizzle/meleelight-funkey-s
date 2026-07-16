@@ -9,11 +9,19 @@
 # DEVICE:
 #   [4] the ~257k-input fdlibm sweep      -> cmp vs the host-C output
 #       (which the standing M0 gate proves == JS == browser)
-#   [5] fmt_diff --self-test, then the FULL adversarial format corpus:
+#   [5] the exact-math family sweep (mathsweep.c: floor/ceil/sqrt/fabs/
+#       fmod/js_round — the sim's whole non-transcendental libm surface)
+#       -> cmp vs the HOST-LIBM ANCHOR build (mathsweep_host is
+#       deliberately NOT linked with fdlibm.c, so the device's fdlibm.c
+#       floor/ceil strong overrides are proven equal to a known-good
+#       libm, never merely to themselves). Background: the SDK's static
+#       musl libc.a floor/ceil/round are BROKEN (identity for
+#       non-integers — measured iter 38); fdlibm.c carries the fix.
+#   [6] fmt_diff --self-test, then the FULL adversarial format corpus:
 #       GENERATED on the device (cmp vs the host corpus, whose sha is the
 #       frozen expected-format.json pin) and formatted on the device
 #       (cmp vs the host output, which check-format.sh proves == V8/oracle)
-#   [6] the full g01 golden replay        -> pulled and judged by the
+#   [7] the full g01 golden replay        -> pulled and judged by the
 #       UNCHANGED oracle/harness/verify-stream.js against the frozen
 #       g01 stream (exact per-frame equality, full length, rng pins)
 #
@@ -42,7 +50,7 @@ require_device
 # hygiene: device scratch never outlives the script
 trap 'adb -s "$DEV" shell "rm -rf '"$DTMP"' '"$DSD"'" </dev/null >/dev/null 2>&1 || true' EXIT
 
-echo "== [1/6] host data plane (M1 tables + SIMDATA1 + g01 trace text) =="
+echo "== [1/7] host data plane (M1 tables + SIMDATA1 + g01 trace text) =="
 bash pipeline/extractor/build-extractor.sh
 node pipeline/run.js --only animations,tables,stages --out "$TABLES"
 test -f "$TABLES/ml_tables.c"
@@ -51,11 +59,15 @@ node "$CAL/dump-sim-data.js" --out "$DEVB/simdata.txt"
 node "$SIM/trace-to-txt.js" \
   oracle/goldens/g01-fox-marth-battlefield.trace.json "$DEVB/g01.trace.txt"
 
-echo "== [2/6] host references (fdlibm sweep + pinned format corpus) =="
+echo "== [2/7] host references (fdlibm sweep + libm anchor + pinned format corpus) =="
 node "$FDC/gen-inputs.js" "$DEVB/fdlibm-inputs.txt"
 cc -O2 -ffp-contract=off -std=c99 -Wall -Iport/fdlibm \
   "$FDC/csweep.c" port/fdlibm/fdlibm.c -o "$DEVB/csweep_host"
 "$DEVB/csweep_host" "$DEVB/fdlibm-inputs.txt" > "$DEVB/fdlibm-host.txt"
+# HOST-LIBM ANCHOR: no fdlibm.c in this link (see header note [5])
+cc -O2 -ffp-contract=off -Wall -Wextra -Werror -Iport/sim \
+  port/sim/device/mathsweep.c -o "$DEVB/mathsweep_host" -lm
+"$DEVB/mathsweep_host" "$DEVB/fdlibm-inputs.txt" > "$DEVB/mathsweep-host.txt"
 cc -O2 -ffp-contract=off -Wall -Wextra -Werror \
   -Iport/ryu -Iport/sim -Ioracle/qjs \
   -o "$DEVB/fmt_diff_host" \
@@ -65,7 +77,7 @@ cc -O2 -ffp-contract=off -Wall -Wextra -Werror \
 node "$CAL/check-format-pins.js" adversarial "$DEVB/fmt-adv.hex"
 "$DEVB/fmt_diff_host" --format "$DEVB/fmt-adv.hex" "$DEVB/fmt-adv.host.txt"
 
-echo "== [3/6] armv7 static cross-build (SDK gcc; stamp-cached) =="
+echo "== [3/7] armv7 static cross-build (SDK gcc; stamp-cached) =="
 srchash() {
   {
     find port/sim port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
@@ -80,7 +92,7 @@ have=""
 [ -f "$STAMP" ] && have="$(cat "$STAMP")"
 if [ "${MLFK_FORCE_ARM:-0}" != 0 ] || [ "$have" != "$want" ] \
    || [ ! -f "$DEVB/sim_device" ] || [ ! -f "$DEVB/csweep_arm" ] \
-   || [ ! -f "$DEVB/fmt_diff_arm" ]; then
+   || [ ! -f "$DEVB/fmt_diff_arm" ] || [ ! -f "$DEVB/mathsweep_arm" ]; then
   rm -f "$STAMP"
   # SERIAL docker only (CLAUDE.md §Commands arm32 recipe)
   docker run --rm -v "$PWD":/work -w /work jondbell/funkey-s-sdk bash -lc '
@@ -127,13 +139,17 @@ if [ "${MLFK_FORCE_ARM:-0}" != 0 ] || [ "$have" != "$want" ] \
     $CC -O2 -ffp-contract=off -std=c99 -Wall -static -Iport/fdlibm \
       oracle/fdlibm-crosscheck/csweep.c port/fdlibm/fdlibm.c \
       -o "$DEVB/csweep_arm"
+    # fdlibm.c linked (exactly like sim_device): floor/ceil overrides live
+    $CC -O2 -ffp-contract=off -Wall -Wextra -Werror -static -Iport/sim \
+      port/sim/device/mathsweep.c port/fdlibm/fdlibm.c \
+      -o "$DEVB/mathsweep_arm" -lm
     $CC -O2 -ffp-contract=off -Wall -Wextra -Werror -static \
       -Iport/ryu -Iport/sim -Ioracle/qjs \
       -o "$DEVB/fmt_diff_arm" \
       "$CAL/fmt_diff.c" "$CAL/canon.c" port/sim/ml_ser.c port/sim/ml_fmt.c \
       oracle/qjs/sha256.c -lm
   '
-  for f in sim_device csweep_arm fmt_diff_arm; do
+  for f in sim_device csweep_arm fmt_diff_arm mathsweep_arm; do
     file "$DEVB/$f" | grep -q "ELF 32-bit LSB executable, ARM" || {
       echo "DEVICE FAIL: $f is not an armv7 static executable" >&2
       exit 1
@@ -145,20 +161,29 @@ else
   echo "   arm binaries up to date (stamp $want)"
 fi
 
-echo "== [4/6] device: fdlibm sweep (armv7 vs host, byte-exact) =="
+echo "== [4/7] device: fdlibm sweep (armv7 vs host, byte-exact) =="
 dsh "rm -rf $DTMP $DSD && mkdir -p $DTMP $DSD"
 adb -s "$DEV" push \
-  "$DEVB/csweep_arm" "$DEVB/fmt_diff_arm" "$DEVB/sim_device" \
+  "$DEVB/csweep_arm" "$DEVB/fmt_diff_arm" "$DEVB/mathsweep_arm" \
+  "$DEVB/sim_device" \
   "$DEVB/fdlibm-inputs.txt" "$DEVB/g01.trace.txt" "$DEVB/simdata.txt" \
   "$DTMP/" >/dev/null
-dsh "chmod +x $DTMP/csweep_arm $DTMP/fmt_diff_arm $DTMP/sim_device"
+dsh "chmod +x $DTMP/csweep_arm $DTMP/fmt_diff_arm $DTMP/mathsweep_arm $DTMP/sim_device"
 dsh "sh -lc '$DTMP/csweep_arm $DTMP/fdlibm-inputs.txt > $DTMP/fdlibm-device.txt'"
 adb -s "$DEV" pull "$DTMP/fdlibm-device.txt" "$DEVB/fdlibm-device.txt" >/dev/null
 cmp "$DEVB/fdlibm-host.txt" "$DEVB/fdlibm-device.txt"
 echo "   fdlibm sweep: device == host ($(wc -l < "$DEVB/fdlibm-device.txt" | tr -d ' ') lines)"
-dsh "rm -f $DTMP/fdlibm-inputs.txt $DTMP/fdlibm-device.txt"
+dsh "rm -f $DTMP/fdlibm-device.txt"
 
-echo "== [5/6] device: formatter self-test + FULL adversarial corpus =="
+echo "== [5/7] device: exact-math family sweep (floor/ceil/sqrt/fabs/fmod/js_round) =="
+dsh "sh -lc '$DTMP/mathsweep_arm $DTMP/fdlibm-inputs.txt > $DSD/mathsweep-device.txt'"
+adb -s "$DEV" pull "$DSD/mathsweep-device.txt" "$DEVB/mathsweep-device.txt" >/dev/null
+cmp "$DEVB/mathsweep-host.txt" "$DEVB/mathsweep-device.txt"
+echo "   exact-math sweep: device(fdlibm overrides) == host libm anchor ($(wc -l < "$DEVB/mathsweep-device.txt" | tr -d ' ') lines)"
+dsh "rm -f $DTMP/fdlibm-inputs.txt $DSD/mathsweep-device.txt"
+rm -f "$DEVB/mathsweep-device.txt" # byte-dup of the kept host anchor
+
+echo "== [6/7] device: formatter self-test + FULL adversarial corpus =="
 dsh "sh -lc '$DTMP/fmt_diff_arm --self-test'"
 dsh "sh -lc '$DTMP/fmt_diff_arm --gen $DSD/fmt-adv.hex'"
 adb -s "$DEV" pull "$DSD/fmt-adv.hex" "$DEVB/fmt-adv.device.hex" >/dev/null
@@ -171,7 +196,7 @@ echo "   adversarial format sweep: device == host ($(wc -l < "$DEVB/fmt-adv.devi
 dsh "rm -rf $DSD"
 rm -f "$DEVB/fmt-adv.device.hex" "$DEVB/fmt-adv.device.txt" # byte-dups of the kept host copies
 
-echo "== [6/6] device: g01 golden replay, judged by the frozen stream =="
+echo "== [7/7] device: g01 golden replay, judged by the frozen stream =="
 eval "$(node -e "
   const m=require('./oracle/goldens/manifest.json');
   const g=m.goldens.find(x=>x.id==='g01');

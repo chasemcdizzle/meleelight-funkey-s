@@ -3138,3 +3138,89 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   present.
 - No implementation this commit (REPLAN contract). next: task 1 (armv7
   correctness rung — DEVICE CONFORMS g01).
+
+
+## iter 38 — 2026-07-16 — M3 task 1: armv7 correctness rung — DEVICE CONFORMS g01
+
+- done-check: `bash port/sim/device/check-device-g01.sh` -> **DEVICE
+  CONFORMS g01**, exit 0 (clean invocation, 3:58 wall; log
+  `.loop/m3-task1-donecheck.log`). All seven rungs green: host data
+  plane + references; stamp-cached armv7 static cross-build (SDK gcc
+  10.2, every TU `-O2 -ffp-contract=off -Wall -Wextra -Werror -static`);
+  ON DEVICE: 257,287-line fdlibm sweep == host byte-exact; 432,319-line
+  exact-math family sweep == the HOST-LIBM ANCHOR byte-exact;
+  fmt_diff --self-test (28 anchors); the 5,469,538-pattern adversarial
+  corpus GENERATED ON DEVICE == the frozen-pin host corpus byte-exact
+  and its full format sweep == host byte-exact; the full g01 golden
+  replay -> UNCHANGED verify-stream.js: STREAM MATCH 3600/3600 frames,
+  rngCalls=134, rngCallsOutsideStep=1, specVersion=1. **Device g01 wall
+  clock: 21 s / 3600 frames (~5.8 ms/frame sim-only average,
+  informational — p99 instrumentation is task 2).**
+- WIP REVIEW (ccebc9b, the 529-storm handoff): adbsh.sh verified against
+  live adbd behavior (RC-echo + CR strip correct); check-device-g01.sh
+  scaffolding reviewed line-by-line against the task spec — TU list
+  matched check-sim.sh exactly, all helper CLIs matched; kept, then
+  EXTENDED (mathsweep step [5], renumbered 7 steps). The
+  `__attribute__((fallthrough))` envcoll edit verified: gcc 10.2's
+  -Wextra implicit-fallthrough level rejects the old prose comment;
+  grep swept the whole sim — that case is the ONLY C switch fallthrough
+  (other "fall through" hits are JS-`||`/return-shape comments), and the
+  -Werror cross-build is the standing class instrument. Stale partial
+  cross-build discarded (forced rebuild).
+- LEDGER (armv7 divergences; localized per the documented procedure —
+  sweep-first ladder meant NO sim frame diff was ever needed):
+  | # | surfaced at | cause class | fix | 
+  |---|---|---|---|
+  | 1 | fdlibm sweep line 25 (sin/cos/tan of DBL_MAX, 2^66, >medium-path args — Payne-Hanek only; 15,640 diff lines) | device libm floor() is IDENTITY for non-integers — the SDK's static musl libc.a math objects were built with unsafe-FP optimization, folding the ±2^52 "toint" trick (floor(1.5)==1.5 measured; -O0 == -O2, semantic not optimizer) | exact floor/ceil vendored into port/fdlibm/fdlibm.c as STRONG symbol overrides (Sun s_floor/s_ceil restated 64-bit; NOTICES extended) — fd__rem_pio2 and all ~86 sim floor sites + js_round's ceil inherit with ZERO call-site churn |
+  | 2 | mathsweep fmod rows (fmod(0,0)==1.0 on device; -0 results -> +0) | same libc class: `(x*y)/(x*y)` NaN arm folds to 1.0, `0*x` signed-zero arm folds to +0 | exact fmod vendored as third strong override (Sun e_fmod restated 64-bit; NaN arm returns the canonical qNaN per rule 9) |
+  | 3 | device-generated corpus line 58,441 (subnormal anchors ±1 ulp, 000/800-exponent lines) | device libc strtod mis-rounds SUBNORMAL results (same class, floatscan's FP paths) | fmt_diff --gen sections 4/5 made strtod-free via machine-generated bit-pattern anchor tables — corpus BYTE-IDENTICAL, proven by the untouched expected-format.json pin (count+sha256) every run |
+  | 4 | device-generated corpus line 4,569,768 (1,653 lines, all -0 -> +0) | device libc strtod drops the SIGN OF ZERO (`sign*y` folded); count matches the "-0e<k>" literal frequency exactly | section 8 computes ±0 without the parser (m==0 arm); its remaining strtod use is normal-range by construction and re-proven by the corpus cmp every run. Also sequenced the previously-unsequenced sm64() snprintf args (latent cross-compiler order hazard; pinned order confirmed by the corpus cmp) |
+- Verification chain (all fresh this iteration): host anchor differential
+  — mathsweep host-with-fdlibm == host-libm over all 432,319 lines
+  (proves the overrides equal a known-good libm, not just themselves);
+  device == host anchor over the same corpus; fdlibm crosscheck
+  `bash oracle/fdlibm-crosscheck/run.sh` -> CROSSCHECK OK (constants +
+  C/JS sweep + browser golden stream three-way, fdlibm.c edit guarded);
+  `bash port/sim/calib/check-format.sh` -> FORMAT MATCH (fmt_diff.c edit
+  guarded; adversarial pin sha unchanged e3d542b79b19…);
+  `bash port/sim/check-sim.sh` -> SIM CONFORMS (host sim now links the
+  overrides — all 8 goldens still bit-exact);
+  `bash port/sim/check-envcoll.sh` -> ENVCOLL MATCH (fallthrough edit).
+  Device hygiene verified: /tmp/mlfk + /mnt/mlfk-scratch absent after
+  the run (trap), no leftover processes.
+- Logs: `.loop/m3-task1-{hostrefs,armbuild,armbuild2,armbuild3,
+  dev-fdlibm,o0-discriminator,dev-fix-verify,dev-fix-verify2,dev-fmt,
+  dev-fmt2,dev-fmt3,dev-g01,donecheck,reg-sim,reg-envcoll,reg-format,
+  reg-fdlibm}.log`.
+- ZOOM OUT (rule 8): the four ledger rows are ONE class — "the device
+  toolchain's libc math/parse symbols are untrusted: its libc.a was
+  built with unsafe-FP flags, so every algebraic-identity code path
+  (toint rounding, (x*y)/(x*y), 0*x, sign*y) is folded away". Fixed at
+  class level, not per-symptom: (a) LINK-level strong overrides in the
+  one TU every sim/oracle binary already links (fdlibm.c) — no call-site
+  edits, qjs-oracle device builds inherit automatically; (b) the
+  generator's parser dependence REMOVED where the breakage lives,
+  guarded by the frozen pin; (c) a STANDING INSTRUMENT (mathsweep, in
+  the done-check forever) that differentially sweeps the whole reachable
+  non-transcendental libm surface against a host anchor every run —
+  instrument > class fix > one-off, all three rungs applied. Rule
+  candidate for future device tasks (recorded in fix_plan §M3 task-1
+  DONE note): trust NO device-libc math symbol without a differential
+  sweep; sqrt/fabs pass only because they compile to VFP instructions.
+- HONEST NOTES: round/trunc are also broken on device (round loses -0
+  and rounds nothing) but have ZERO call sites in the sim — not
+  overridden, and mathsweep deliberately sweeps only the reachable
+  surface {floor, ceil, sqrt, fabs, fmod, js_round}; any future use
+  must extend the overrides + sweep. Host mathsweep-with-fdlibm
+  comparison may partially inline-fold on clang (frintm/frintp) — the
+  binding-level proof is the DEVICE leg, where gcc emits real calls.
+  fmt_diff --self-test runs on-device by design (its judgment is the
+  28 pinned anchors compiled in; the 5.47M differential is host-judged).
+  The 21 s device wall clock includes trace/simdata parse + stream
+  write to tmpfs; per-frame p99 timing (the M3 perf gate's real
+  currency) lands with task 2's --timing flag.
+- next: task 2 — all-8 device conformance + sim-only p99 timing
+  (`check-device-conform.sh`). Note for task 2: AI-bridge artifacts for
+  g07/g08 must ride to the device; reuse adbsh.sh + the stamp-cached
+  build; big pulls run ~4.4 MB/s (58 s for the 238 MB format output —
+  budget pull time, not compute).

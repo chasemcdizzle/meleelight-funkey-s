@@ -64,7 +64,11 @@ fdlibm — Copyright (C) 1993 Sun Microsystems (freely-distributable notice)
   notices (Sun's "Developed at SunSoft ... freely granted" and V8's
   copyright line) are carried verbatim in each vendored file's header,
   with a list of the mechanical transformations applied (C++ → C99 /
-  → JS). scalbn is from classic Sun fdlibm s_scalbn.c (same Sun notice).
+  → JS). scalbn is from classic Sun fdlibm s_scalbn.c (same Sun notice);
+  floor/ceil (added M3 task 1, 2026-07-16, as strong overrides of the
+  broken FunKey-SDK musl libc.a versions) are the classic Sun fdlibm
+  s_floor.c / s_ceil.c algorithms restated over the 64-bit bit pattern
+  (same Sun notice).
   Location note: port/fdlibm/, NOT vendor/ (gitignored scratch).
 
 --------------------------------------------------------------------------------

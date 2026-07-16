@@ -45,12 +45,30 @@
  *     whether folded at compile time or done at run time).
  *   - scalbn: host <math.h> scalbn replaced by fd__scalbn (classic
  *     fdlibm s_scalbn) so no libm behavior leaks in; fabs → fd__fabs
- *     (bit mask). floor/sqrt stay <math.h> (IEEE-exact operations).
+ *     (bit mask). sqrt stays <math.h> (IEEE-exact operation, and
+ *     bit-verified against the host anchor by the M3 device mathsweep).
+ *   - floor/ceil/fmod: vendored here as STRONG OVERRIDES of the libm
+ *     symbols (classic Sun fdlibm s_floor.c / s_ceil.c / e_fmod.c
+ *     algorithms restated over the 64-bit pattern — pure bit/integer
+ *     manipulation). MEASURED (M3 task 1, iter 38): the FunKey SDK's
+ *     static musl libc.a math objects were built with unsafe-FP
+ *     optimization — every algebraic-identity code path is folded away:
+ *     floor/ceil/round's ±2^52 "toint" trick collapses (on device
+ *     floor(1.5) == 1.5, identity for every non-integer — this silently
+ *     corrupted fd__rem_pio2's Payne-Hanek path and every sim
+ *     Math.floor), fmod's `(x*y)/(x*y)` NaN arm folds to 1.0
+ *     (fmod(0,0) == 1.0 on device) and its `0*x` signed-zero arm loses
+ *     the sign of -0 results. sqrt/fabs resolve to VFP instructions and
+ *     measured healthy. Any TU that links fdlibm.c (host + device sim,
+ *     csweep, fmt tools, qjs-oracle) resolves floor/ceil/fmod to these
+ *     exact implementations; equality with a known-good libm is proven
+ *     differentially by port/sim/device/mathsweep.c vs the macOS-host
+ *     libm anchor (NaN outputs canon-collapsed, fix_plan §M2 rule 9).
  *
  * MUST be compiled with -ffp-contract=off (no fused multiply-add).
  */
 
-#include <math.h>    /* floor, sqrt — IEEE-exact operations only */
+#include <math.h>    /* sqrt — IEEE-exact operation; floor/ceil overridden below */
 #include <stdint.h>
 #include <string.h>
 
@@ -123,6 +141,119 @@ static double fd__copysign(double x, double y) {
 }
 
 static double fd__qnan(void) { return fd__u2d(0x7FF8000000000000ULL); }
+
+/* floor(x)/ceil(x) — classic Sun fdlibm s_floor.c / s_ceil.c (netlib
+ * 5.3) restated over the single 64-bit pattern (the two-word original
+ * splits the same masks across hi/lo words; the mantissa-increment for
+ * the away-from-zero case is the identical add, 1 << (52 - e), carried
+ * through the exponent field). Pure bit manipulation — exact for every
+ * double under any rounding mode, no libm dependence. Deliberately NOT
+ * kept: the original's `if (huge + x > 0.0)` guard, whose only effect
+ * is raising FE_INEXACT (always true in the guarded range; nothing in
+ * this project observes FP exception flags). STRONG OVERRIDES: see the
+ * header note — the FunKey SDK's musl libc.a floor/ceil are broken
+ * (identity for non-integers, measured on device iter 38). */
+double floor(double x) {
+  uint64_t u = fd__d2u(x);
+  int e = (int)((u >> 52) & 0x7FF) - 1023; /* unbiased exponent */
+  if (e >= 52) {
+    if (e == 1024) return x + x; /* inf or NaN */
+    return x;                    /* already integral */
+  }
+  if (e < 0) { /* |x| < 1 */
+    if ((u & 0x7FFFFFFFFFFFFFFFULL) == 0) return x; /* +-0 preserved */
+    return (u >> 63) ? -1.0 : 0.0;
+  }
+  uint64_t frac = 0x000FFFFFFFFFFFFFULL >> e; /* fractional mantissa bits */
+  if ((u & frac) == 0) return x;              /* already integral */
+  if (u >> 63) u += 0x0010000000000000ULL >> e; /* negative: away from zero */
+  u &= ~frac;
+  return fd__u2d(u);
+}
+
+double ceil(double x) {
+  uint64_t u = fd__d2u(x);
+  int e = (int)((u >> 52) & 0x7FF) - 1023; /* unbiased exponent */
+  if (e >= 52) {
+    if (e == 1024) return x + x; /* inf or NaN */
+    return x;                    /* already integral */
+  }
+  if (e < 0) { /* |x| < 1 */
+    if ((u & 0x7FFFFFFFFFFFFFFFULL) == 0) return x; /* +-0 preserved */
+    return (u >> 63) ? -0.0 : 1.0; /* C99: ceil of (-1,0) is -0 */
+  }
+  uint64_t frac = 0x000FFFFFFFFFFFFFULL >> e; /* fractional mantissa bits */
+  if ((u & frac) == 0) return x;              /* already integral */
+  if (!(u >> 63)) u += 0x0010000000000000ULL >> e; /* positive: away from zero */
+  u &= ~frac;
+  return fd__u2d(u);
+}
+
+/* fmod(x,y) — classic Sun fdlibm e_fmod.c fixed-point algorithm
+ * restated over the 64-bit pattern (the original's hi/lo-word shift
+ * ladder is the same 53-bit-significand long division). fmod is EXACT:
+ * pure integer manipulation end to end. Deliberately NOT kept from the
+ * original: the `(x*y)/(x*y)` invalid-operand arm (returns the
+ * canonical quiet NaN directly — NaN payloads are canon-collapsed
+ * everywhere in this project, fix_plan §M2 rule 9) and the Zero[] table
+ * (signed zero built by bit ops). STRONG OVERRIDE: see header note. */
+double fmod(double x, double y) {
+  uint64_t ux = fd__d2u(x), uy = fd__d2u(y);
+  uint64_t sx = ux & 0x8000000000000000ULL;      /* sign of x */
+  uint64_t ax = ux & 0x7FFFFFFFFFFFFFFFULL;      /* |x| pattern */
+  uint64_t ay = uy & 0x7FFFFFFFFFFFFFFFULL;      /* |y| pattern */
+
+  /* purge off exception values: y = 0, x inf/NaN, y NaN */
+  if (ay == 0 || ax >= 0x7FF0000000000000ULL || ay > 0x7FF0000000000000ULL)
+    return fd__qnan();
+  if (ax < ay) return x;            /* |x| < |y|: x is the remainder */
+  if (ax == ay) return fd__u2d(sx); /* |x| == |y|: signed zero */
+
+  /* ilogb + 53-bit significand aligned at bit 52 (subnormals normalized) */
+  int ix, iy;
+  uint64_t mx, my;
+  if (ax >= 0x0010000000000000ULL) {
+    ix = (int)(ax >> 52) - 1023;
+    mx = (ax & 0x000FFFFFFFFFFFFFULL) | 0x0010000000000000ULL;
+  } else {
+    ix = -1022;
+    for (mx = ax; mx < 0x0010000000000000ULL; mx <<= 1) ix--;
+  }
+  if (ay >= 0x0010000000000000ULL) {
+    iy = (int)(ay >> 52) - 1023;
+    my = (ay & 0x000FFFFFFFFFFFFFULL) | 0x0010000000000000ULL;
+  } else {
+    iy = -1022;
+    for (my = ay; my < 0x0010000000000000ULL; my <<= 1) iy--;
+  }
+
+  /* fix point fmod (e_fmod's shift-subtract ladder) */
+  for (int n = ix - iy; n; n--) {
+    if (mx >= my) {
+      mx -= my;
+      if (mx == 0) return fd__u2d(sx); /* exact multiple: signed zero */
+    }
+    mx <<= 1;
+  }
+  if (mx >= my) {
+    mx -= my;
+    if (mx == 0) return fd__u2d(sx);
+  }
+
+  /* normalize the (exact) remainder up to bit 52 */
+  while (mx < 0x0010000000000000ULL) {
+    mx <<= 1;
+    iy--;
+  }
+
+  /* convert back to floating value and restore the sign */
+  if (iy >= -1022) { /* normal result */
+    return fd__u2d(sx | ((uint64_t)(iy + 1023) << 52) |
+                   (mx & 0x000FFFFFFFFFFFFFULL));
+  }
+  /* subnormal result: fmod is exact, the shifted-out bits are zero */
+  return fd__u2d(sx | (mx >> (-1022 - iy)));
+}
 
 /* scalbn(x,n) — classic Sun fdlibm s_scalbn.c: x * 2**n computed by
  * exponent manipulation. */

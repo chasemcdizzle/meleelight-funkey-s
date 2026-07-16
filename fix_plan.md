@@ -1047,18 +1047,19 @@ closed). CONVENTIONS fixed here:
 
 Tasks (dependency order; each < ~400-line diff where possible):
 
-1. armv7 correctness rung — cross-build the FULL headless sim
-   (check-sim.sh's exact TU list, static armv7) + the fdlibm sweep
-   (`oracle/fdlibm-crosscheck/csweep.c`) + the format differential
-   (`port/sim/calib/fmt_diff.c`); push over ADB; ON THE DEVICE run the
-   ~257k-input fdlibm sweep, `fmt_diff --self-test`, the full
-   5.47M-pattern adversarial format sweep (corpus GENERATED on device,
-   byte-compared to the host corpus), and the full g01 golden replay;
-   judge everything on the host (`cmp` vs host-C references;
-   verify-stream.js vs the frozen g01 stream). Wall-clock the device sim
-   run (informational). — done-check:
-   `bash port/sim/device/check-device-g01.sh` → prints
-   `DEVICE CONFORMS g01`, exit 0.
+(task 1 — armv7 correctness rung — DONE iter 38:
+`bash port/sim/device/check-device-g01.sh` → DEVICE CONFORMS g01, exit 0.
+FOUND + CLASS-FIXED: the SDK's static musl libc.a math was built with
+unsafe-FP optimizations — floor/ceil/round are IDENTITY for non-integers,
+fmod(0,0)==1.0 and -0 results lose their sign, strtod mis-rounds
+subnormals and drops -0. port/fdlibm/fdlibm.c now carries exact
+floor/ceil/fmod as STRONG symbol overrides; fmt_diff --gen is strtod-free
+where the breakage lives (pin-verified byte-identical corpus);
+port/sim/device/mathsweep.c is the standing device-vs-host-libm-anchor
+instrument. NEW RULE for all M3/M4 device work: trust NO device-libc
+math/parse symbol — differential-sweep it against a host anchor before
+relying on it (sqrt/fabs measured healthy: VFP instructions). Device g01
+wall clock ~21 s / 3600 frames, sim-only avg ~5.8 ms/frame.)
 
 2. device conformance ALL 8 goldens + sim-only timing — replay every
    golden in `oracle/goldens/manifest.json` on the device (AI-bridge

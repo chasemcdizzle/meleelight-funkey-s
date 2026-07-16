@@ -732,6 +732,39 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   (LOOP §F-advance.3/§H) — Chase ratifies/amends the S1 mapping before
   M4. (Script assembled by fix_plan §M3 task 7; per-task `done-check:`s
   never substitute for this gate.)
+- **armv7 correctness rung (M3 task 1 committed form):**
+  `bash port/sim/device/check-device-g01.sh` → `DEVICE CONFORMS g01`,
+  exit 0 — cross-builds the FULL headless sim (check-sim.sh's exact TU
+  list, kept in sync), csweep, fmt_diff and `port/sim/device/mathsweep.c`
+  static armv7 (SDK gcc, every TU `-O2 -ffp-contract=off -Wall -Wextra
+  -Werror -static`; stamp-cached, `MLFK_FORCE_ARM=1` rebuilds), pushes
+  over ADB (`port/sim/device/adbsh.sh` RC-echo dsh — this adbd drops exit
+  codes), runs ON DEVICE the 257k fdlibm sweep, the exact-math family
+  sweep, `fmt_diff --self-test`, 5.47M-corpus gen+format (corpus
+  GENERATED on device), and the full g01 replay — ALL judged on the host
+  (`cmp` vs host references; unchanged verify-stream.js vs the frozen
+  stream; device writes only /tmp/mlfk + /mnt/mlfk-scratch, trap-removed).
+  FOUND (class, measured iter 38): **the SDK's static musl libc.a math
+  was built with unsafe-FP optimizations** — every algebraic-identity
+  path is folded: floor/ceil/round are IDENTITY for non-integers (±2^52
+  toint trick), fmod(0,0)==1.0 (`(x*y)/(x*y)`) and -0 results lose their
+  sign (`0*x`), strtod mis-rounds SUBNORMALS by 1 ulp and drops -0
+  (`sign*y`). This silently corrupted fd__rem_pio2's Payne-Hanek path
+  (sin/cos/tan of huge args) and every sim Math.floor. CLASS FIX:
+  `port/fdlibm/fdlibm.c` carries exact floor/ceil/fmod as STRONG symbol
+  overrides (Sun s_floor/s_ceil/e_fmod restated over the 64-bit pattern;
+  every fdlibm.c-linking TU inherits them, incl. qjs-oracle);
+  `fmt_diff --gen` is strtod-free where the breakage lives
+  (machine-generated bit-pattern anchor tables — corpus byte-identical,
+  the frozen expected-format.json pin proves it every run). STANDING
+  INSTRUMENT: mathsweep_arm (fdlibm.c linked, like the sim) vs
+  mathsweep_host (deliberately NOT linked with fdlibm.c = the host-libm
+  anchor), 432,319 lines byte-compared per run. Gotcha classes: trust NO
+  device-libc math/parse symbol — differential-sweep against a host
+  anchor before use (sqrt/fabs measured healthy — VFP instructions);
+  side-effectful calls as unsequenced snprintf args (sm64()) are a
+  corpus-determinism hazard across compilers — sequence explicitly.
+  Device g01 wall clock ~21 s / 3600 frames (~5.8 ms/frame sim-only avg).
 - **Upstream clone + build (proven twice — determinism spike + prototype):**
   ```
   git clone https://github.com/schmooblidon/meleelight "$MELEELIGHT_CLONE"
