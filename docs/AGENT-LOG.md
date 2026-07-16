@@ -3091,3 +3091,8 @@ MILESTONE PASS: M2-CAL
 - next: M2 EXIT GATE is runnable and green (`bash port/sim/check-sim.sh`
   -> SIM CONFORMS). Phase-advance iteration (CHECKER gate run + REPLAN
   M3 concretization) is the loop's next step.
+
+
+## LOOP STOP: m3-device (2026-07-16, driver)
+
+M2 gate passed (SIM CONFORMS, driver-verified cold). M3 (#18) claimed; its first work (device backend bring-up, OPK, device conformance, perf) requires the FunKey-S on ADB — no device attached at phase entry. Loop stopped per protocol; restart the /loop with the device plugged in and powered on. fix_plan Current phase should flip to M3 at the REPLAN when the loop resumes.
