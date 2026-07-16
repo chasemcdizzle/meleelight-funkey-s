@@ -3224,3 +3224,27 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   g07/g08 must ride to the device; reuse adbsh.sh + the stamp-cached
   build; big pulls run ~4.4 MB/s (58 s for the 238 MB format output —
   budget pull time, not compute).
+
+## driver — 2026-07-16 — PROCESS ADOPTION (owner ruling) + iter-38 driver verification
+
+- OWNER RULING (Chase, 2026-07-16): apply the brawlback-lab
+  PROCESS-EXPORT loop standards wherever applicable. Binding adaptation
+  installed as `docs/PROCESS.md`; one-page current-truth surface
+  installed as `docs/STATE.md`. Adopted deltas: tiered adversarial Codex
+  review arcs (Tier A to VERDICT: GO for non-checksummed surfaces —
+  check scripts/device rig/renderer/input/OPK; tier-up + second reviewer
+  for judge-path changes; Tier B for oracle-checksummed sim TUs),
+  pre-registered refutation shapes for measurement work, sha256 identity
+  pins on device binaries/evidence, ground-truth-from-disk on every
+  writer completion + outage resume, respawn-with-context, failure-mode
+  catalog, instrument-exposure reporting, batched run matrices.
+  Explicitly NOT adopted (reasons + reopen conditions in PROCESS.md):
+  parallel lanes/claim files (conflicts with HARD RULES 4/6), full
+  pin/parking ceremony (frozen oracle streams already gate accepted
+  results), softer checker-amendment path (HARD RULE 3 stays stricter),
+  DIGEST reordering.
+- Iter-38 driver verification per PROCESS §5: commit af06bb7 verified on
+  agent/auto, tree clean; done-check re-run COLD →
+  `DEVICE CONFORMS g01`, exit 0 (.loop/driver-cold-task1-donecheck.log),
+  device wall 21 s / 3600 frames. First Tier-A Codex arc opened over the
+  iter-38 device rig (.loop/review-38-*.log); task 2 dispatches on GO.

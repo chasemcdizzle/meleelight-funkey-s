@@ -910,3 +910,7 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
 - Upstream expected console noise: 404 for `/favicon.ico`; webpack
   localforage warning. Sim frames before ~frame 91 (match `starting`
   window) ignore inputs.
+- Process standards (owner ruling 2026-07-16): `docs/PROCESS.md` binds
+  driver + writer briefs (tiered Codex review arcs, pre-registration,
+  identity pins, ground-truth ritual); current truth lives in
+  `docs/STATE.md` (driver-updated every turn).
