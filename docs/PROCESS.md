@@ -134,9 +134,17 @@ row → back off one heartbeat; persistent → notify once, keep heartbeating.
 
 ## 7. Failure-mode catalog (watch specifically)
 
-1. Dead-parked waiters — writers park on background tasks and die.
-   FOREGROUND polls only (chunked `sleep N; check` inside one shell call);
-   driver heartbeat catches slips. (Bit this project 3+ times.)
+1. Dead-parked waiters — writers park on background tasks/monitors and
+   end their turn. FOREGROUND polls only. The EXACT sanctioned pattern
+   for runs longer than the shell-call cap (amended after 3 writer
+   instances in one day, iters 42/45/47): start the run detached ONCE
+   (`nohup <cmd> > <log> 2>&1 &` — capture the pid; wrap the cmd so the
+   log's LAST LINE carries an explicit rc marker), then issue REPEATED
+   foreground shell calls — each a BOUNDED until-loop (bare `sleep` may
+   be blocked by the harness; use `for i in $(seq 1 8); do sleep 15;
+   kill -0 <pid> || break; done; tail -3 <log>`) — read the result,
+   issue the next, and NEVER end the turn while the run is live. Ending
+   a turn "to wait for a notification" IS the failure mode.
 2. Session/credit kills mid-task — state lives in notes/logs/commits on
    disk; §5/§6 recover it. Wakeups stall during outages too.
 3. Build-system traps — a "successful" build that didn't refresh the
