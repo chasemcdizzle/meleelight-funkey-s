@@ -12,12 +12,17 @@
 # DATA-DIR ENV CHAIN (the app's SD data: SIMDATA1, golden trace texts,
 # GFXDATA, ANIM1 bins, SNDPACK1):
 #   1. $MLFK_DATA_DIR when set (check-device-opk.sh sets nothing — it
-#      provisions /mnt/mlfk-scratch, found by the chain);
+#      provisions /mnt/mlfk-scratch, found by the chain). An EXPLICIT
+#      dir MUST itself carry simdata.txt: when it does not, the
+#      launcher REFUSES LOUD (log line naming the path + opk.rc RC=7 +
+#      exit 7) — the fallback chain is NOT consulted (iter 60,
+#      review-58 L2: a stale exported path must never silently
+#      suppress or redirect data selection);
 #   2. /mnt/mlfk-scratch (the rig scratch dir — evidence runs);
 #   3. /mnt/mlfk-data   (the persistent SD install for human play —
 #      provisioned at the M3 human gate, survives rig cleanup).
-# A dir qualifies only if it carries simdata.txt (the one file every
-# mode needs).
+# A fallback dir qualifies only if it carries simdata.txt (the one
+# file every mode needs); no qualifying dir anywhere = RC=8, exit 8.
 #
 # MODES:
 #   evidence — when $DATA/opk-args exists, its single line is passed
@@ -50,7 +55,16 @@ LOG="$EV/mlfk.log"
 : > "$LOG"
 
 DATA="${MLFK_DATA_DIR:-}"
-if [ -z "$DATA" ]; then
+DATA_ERR=""
+if [ -n "$DATA" ]; then
+  # explicit selection: must qualify itself; NEVER falls through to the
+  # chain (iter 60, review-58 L2 — loud refusal instead of silent
+  # fallback suppression/redirect)
+  if [ ! -f "$DATA/simdata.txt" ]; then
+    DATA_ERR="MLFK_DATA_DIR=$DATA is set but $DATA/simdata.txt is missing — refusing (explicit data dir must qualify; fallback chain not consulted)"
+    DATA=""
+  fi
+else
   for d in /mnt/mlfk-scratch /mnt/mlfk-data; do
     if [ -f "$d/simdata.txt" ]; then DATA="$d"; break; fi
   done
@@ -74,6 +88,11 @@ if [ -n "$DATA" ] && [ -f "$DATA/opk-args" ]; then MODE=evidence; fi
   echo "mode $MODE"
 } > "$EV/boot-marker"
 
+if [ -n "$DATA_ERR" ]; then
+  echo "mlfk.sh: $DATA_ERR" >> "$LOG"
+  echo "RC=7" > "$EV/opk.rc"
+  exit 7
+fi
 if [ -z "$DATA" ]; then
   echo "mlfk.sh: no data dir found (MLFK_DATA_DIR / /mnt/mlfk-scratch / /mnt/mlfk-data need simdata.txt)" >> "$LOG"
   echo "RC=8" > "$EV/opk.rc"

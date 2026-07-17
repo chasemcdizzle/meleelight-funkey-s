@@ -7475,3 +7475,230 @@ callback-observable starvation", not "no audible dropout".
   standing per-run instrument (the "prove the instrument, not just the
   judge" class — same family as the mathsweep standing instrument and
   the qjs boot pins). No new one-offs; no retry-budget widening.
+
+## iter 60 — 2026-07-17 — M3 task 7 hardening PRE-REGISTRATION: gate-assembly round-1 triage closure (frozen before any run/edit; PROCESS §2)
+
+- **Scope (driver triage .loop/review-58-triage.md, BINDING — ALL items)**:
+  H1 status enforcement, H2 fake-leg sentinel lockout, M1 manifest
+  integrity anchor, M2 verdict-resemblance rule at the aggregator,
+  L1 verified frontend restoration in check-device-opk.sh, L2 mlfk.sh
+  explicit-data-dir refusal. Surface: port/sim/device/{verify_m3.sh,
+  m3-freeze-manifest.txt} + port/gfx/check-device-opk.sh +
+  port/gfx/opk/mlfk.sh + port/sim/device/riglib.sh (shared respawn-poll
+  helper). NOT touched (concurrent audio closure review):
+  port/gfx/{check-device-audio.sh,judge-audio-summary.js} + audio TUs.
+- **Method / design decisions frozen**:
+  - H1: step-0 collects each producer's manifest status; AUTHORITATIVE
+    mode (default) hard-refuses BEFORE any leg unless every status ∈
+    {reviewed-go, oracle-frozen, grandfathered-m2}, naming the
+    producers. MLFK_M3_DEV=1 bypasses ONLY status enforcement
+    (byte pins + anchor + grammar stay enforced).
+  - H2: AUTHORITATIVE computed ONCE at top (0 iff MLFK_M3_DEV=1 or
+    MLFK_M3_FAKE_LEG_DIR nonempty), then readonly; the literal
+    `M3 GATE OK` sits ONLY inside the AUTHORITATIVE=1 branch; all other
+    paths print `M3 GATE (DEV — NON-AUTHORITATIVE)` + exit 3
+    (structural sentinel lockout).
+  - M1: MANIFEST_SHA256=<64hex> literal in verify_m3.sh
+    (CORPUS_SHA256 precedent, check-device-g01.sh), verified via
+    rig_host_sha256 BEFORE parsing the manifest. CIRCULARITY (found in
+    orientation): the manifest's verify_m3.sh row + the in-file anchor
+    form a two-unknown hash fixed point with no solution — resolved by
+    NORMALIZED SELF-REFERENCE (the reviewer's own naming): the
+    verify_m3.sh row pins sha256 of its bytes EXCLUDING the single
+    `^MANIFEST_SHA256=` line; the excluded line is protected by the
+    anchor equality itself (wrong literal = refusal). Update discipline
+    documented in BOTH headers: any manifest edit requires the literal
+    to change in the SAME commit.
+  - M2: expect_verdict(<leg log>, <exact literal>, <resemblance ERE>)
+    — exact-match count must be 1 AND resemblance-match count must be
+    1 (the verdict itself); any additional verdict-RESEMBLING line =
+    corruption death. Discriminators MEASURED from the real passing
+    corpus (leg logs of the iter-58 real gate run at
+    port/sim/calib/build/device/verify-m3/leg-{audio,opk,input}.log +
+    conform corpus .loop/m3-task2{,r45,r47}-donecheck.log +
+    .loop/m3-task6r59-donecheck2.log + .loop/m3-task5r53-donecheck.log):
+    lines starting `DEVICE CONFORMS ` / `SIM P99 ` / `DEVICE AUDIO ` /
+    `OPK LAUNCH OK` / `S1 INPUT OK` appear in passing producer logs
+    EXACTLY once each and only as the full verdict — the anchored
+    line-start prefix IS the discriminator, zero false rejections on
+    the genuine corpus by construction. (The iter-51-era shorter
+    S1 INPUT OK form exists only in pre-r53 logs — not current pinned
+    producer output; the current producer emits the long form.)
+  - L1: NEW riglib rig_proc_respawn_poll <proc> <tries> (bounded
+    foreground poll, RC-checked nonce-dsh pidof, single-pid grammar —
+    the measured step-6 pattern factored as a CLASS); check-device-opk
+    step 8 captures the final pkill rc (busybox case-split 0=killed /
+    1=no-match / else DEVICE FAIL) then REQUIRES a verified respawn
+    (poll success) BEFORE the verdict prints; FRONTEND_VERIFIED flag
+    makes the EXIT-trap cycle conditional (no re-kill after a verified
+    respawn — the exact accident the finding described); cleanup's
+    pkills get per-process rc capture + case-split, cleanup respawn
+    poll is WARN-loud (trap must never mask the real rc).
+  - L2: mlfk.sh — nonempty MLFK_DATA_DIR whose dir lacks simdata.txt =
+    LOUD refusal (log line + opk.rc RC=7 + exit 7, distinct from the
+    no-data-anywhere RC=8); the fallback chain is NOT consulted
+    (explicit selection never silently falls through).
+- **Run caps (frozen)**: ZERO authoritative/real-leg verify_m3.sh runs
+  (the full real gate run is the driver's phase-advance duty; device
+  legs not re-run). Host-only gate invocations (status refusal, anchor
+  tooth, fake-good, resemblance teeth): ≤ 6. mlfk.sh host-sandbox runs
+  (sha256sum shim + dummy gfx_device): ≤ 5. Device probes: ≤ 2 short
+  dsh sessions for the L1 poll (pkill gmenu2x + poll; absent-process
+  negative poll) — no arm build, no docker. Docker runs: 0. The
+  iter-58 real leg logs are backed up before any fake-leg run
+  overwrites $VDIR.
+- **Pass criteria / teeth (per fix)**:
+  - T-H1: default `bash port/sim/device/verify_m3.sh` (current manifest
+    truthfully carries 9 unresolved statuses) → refusal NAMING the 9
+    producers, rc != 0, and NO leg started (no `[1/4]` line). This IS
+    the brief's step-0 regression run.
+  - T-H2: MLFK_M3_DEV=1 MLFK_M3_FAKE_LEG_DIR=<canned real logs> → all
+    4 legs parse PASS, summary prints, banner
+    `M3 GATE (DEV — NON-AUTHORITATIVE)`, exit 3, and
+    `grep -cx 'M3 GATE OK'` == 0 over the whole output (sentinel
+    structurally absent). Doubles as the zero-false-rejection corpus
+    validation of the M2 parsers (the canned logs ARE the real corpus).
+  - T-M1: append a comment byte to the manifest → anchor refusal
+    (names the update discipline) BEFORE grammar/pins; restore +
+    cmp-verify.
+  - T-M2: canned leg log carrying the complete verdict PLUS a
+    truncated duplicate → corruption death; ASSERT THE DEATH REASON
+    line (verdict-RESEMBLING), never the exit alone (fake mode is
+    nonzero by design). Two variants: conform (leg 1) + input (leg 4).
+  - T-L1 (device, light): probe A — dsh pkill gmenu2x (rc captured)
+    then rig_proc_respawn_poll gmenu2x 15 → pid within bound; probe B —
+    rig_proc_respawn_poll gmenu2x-absent 3 → returns 1 (loud failure
+    direction). No scratch writes; lock held.
+  - T-L2: sandboxed mlfk.sh — (a) MLFK_DATA_DIR=/nonexistent → rc 7 +
+    refusal log line + opk.rc `RC=7`; (b) valid MLFK_DATA_DIR with
+    simdata.txt + dummy binary → rc 0 accept; (c) no env, no fallback
+    dirs → rc 8 (existing path unchanged).
+- **Refutation shapes**: a false rejection of any genuine corpus log by
+  the M2 discriminators → the measured grammar is wrong → re-measure
+  the corpus, never loosen ad hoc; the L1 poll missing a healthy
+  respawn within 15 s → the iter-58 supervisor measurement no longer
+  holds → STOP and report (one bounded evidence round);
+  normalized-self-hash instability across the anchor write → the
+  normalization is unsound → STOP, report, do not ship M1 in that
+  form. Manifest statuses stay arc-pending/arc-in-flight per truth;
+  the driver flips to reviewed-go at phase-advance after closure.
+
+## iter 60 — 2026-07-17 — M3 task 7 hardening DONE: gate status enforcement, sentinel lockout, manifest anchor (gate-assembly round-1 triage closed)
+
+- **Fixes landed (driver triage .loop/review-58-triage.md, ALL items)**:
+  - H1 STATUS ENFORCEMENT: verify_m3.sh step [0b] — AUTHORITATIVE mode
+    (default) hard-refuses BEFORE any leg unless every manifest
+    producer's status ∈ {reviewed-go, oracle-frozen, grandfathered-m2},
+    NAMING the offenders. MLFK_M3_DEV=1 bypasses ONLY status
+    enforcement (anchor + byte pins + grammar stay enforced) and
+    forces the non-authoritative outcome.
+  - H2 FAKE-LEG SENTINEL LOCKOUT: AUTHORITATIVE computed once up top
+    (0 iff MLFK_M3_DEV=1 or MLFK_M3_FAKE_LEG_DIR nonempty), then
+    `readonly`; the literal `M3 GATE OK` exists ONLY inside the
+    AUTHORITATIVE=1 branch; every other completion prints
+    `M3 GATE (DEV — NON-AUTHORITATIVE)` + reason list + exit 3.
+    MLFK_M3_FAKE_LEG_DIR kept as the aggregation-teeth instrument —
+    now structurally incapable of the sentinel.
+  - M1 MANIFEST INTEGRITY ANCHOR: MANIFEST_SHA256=b1cb3ac9…95bd
+    literal in verify_m3.sh (CORPUS_SHA256 precedent), verified via
+    rig_host_sha256 BEFORE any row is trusted; exactly-one-anchor-line
+    self-assert. UPDATE DISCIPLINE (documented in BOTH headers): any
+    manifest edit requires the literal to change in the SAME commit.
+    CIRCULARITY RESOLVED by normalized self-reference (the reviewer's
+    own term): the manifest's verify_m3.sh row pins sha256 of the
+    gate's bytes EXCLUDING the single ^MANIFEST_SHA256= line
+    (ca21b4a5…d970); the excluded line is protected by the anchor
+    equality itself (wrong literal = refusal). A full-byte self-row +
+    in-file anchor is a two-unknown hash fixed point with no solution
+    — recorded so nobody "simplifies" it back.
+  - M2 RESEMBLANCE AT THE AGGREGATOR: expect_verdict(log, exact,
+    resemblance-ERE) — exact count must be 1 AND resemblance count
+    must be 1; audio's regex verdict gets the same rule vs
+    '^DEVICE AUDIO '. Discriminators MEASURED from the real passing
+    corpus (iter-58 gate leg logs port/sim/calib/build/device/
+    verify-m3/leg-{audio,opk,input}.log, backed up to
+    verify-m3-iter58-backup/ before the fake-leg teeth overwrote
+    $VDIR; conform corpus .loop/m3-task2{,r45,r47}-donecheck.log;
+    .loop/m3-task6r59-donecheck2.log; .loop/m3-task5r53-donecheck.log):
+    the line-start prefixes `DEVICE CONFORMS ` / `SIM P99 ` /
+    `DEVICE AUDIO ` / `OPK LAUNCH OK` / `S1 INPUT OK` each occur
+    EXACTLY once in every passing producer log, only as the full
+    verdict — zero false rejections on genuine corpus (proven live by
+    T-H2, which parses exactly those logs).
+  - L1 VERIFIED FRONTEND RESTORATION: NEW riglib
+    rig_proc_respawn_poll <proc> <tries> (bounded foreground poll,
+    RC-checked nonce-dsh pidof, single-pid grammar — the measured
+    step-6 pattern factored as a CLASS; step 6 now uses it too).
+    check-device-opk.sh step 8: final pkill rc captured (busybox
+    case-split 0/1-no-match-WARN/else-FAIL) then the poll must SEE
+    gmenu2x running BEFORE the verdict prints; FRONTEND_VERIFIED flag
+    makes the EXIT-trap cycle conditional (never re-kills a verified
+    frontend — the exact reviewed accident); cleanup pkills per-process
+    rc-captured + case-split, cleanup poll WARN-loud (trap never masks
+    the real rc).
+  - L2 mlfk.sh EXPLICIT-DIR REFUSAL: nonempty MLFK_DATA_DIR lacking
+    simdata.txt → loud refusal (log line naming the path + opk.rc
+    `RC=7` + exit 7, distinct from no-data-anywhere RC=8); fallback
+    chain NOT consulted on explicit selection. Header env-chain doc
+    updated.
+- **Mechanics evidence (.loop/m3-task7r60-*.log)**:
+  - manifest-selfcheck.log: direct shasum 23/23 + anchor GREEN
+    (`SELF-CHECK 23/23 + ANCHOR GREEN`; normalized rule applied to the
+    verify_m3.sh row).
+  - status-refusal.log (T-H1 — ALSO the brief's step-0 regression run):
+    default `bash port/sim/device/verify_m3.sh` → anchor + 23 byte
+    pins verified, then `M3 GATE REFUSED: 9 producer(s) lack review
+    closure` naming all 9 (riglib, audio trio, opk/gate surface), rc 1,
+    ZERO legs started.
+  - anchor-tooth.log (T-M1): one appended comment line →
+    `M3 GATE REFUSED: … bytes do not match the in-script anchor` +
+    the update-discipline text, BEFORE grammar/pins/status; restore
+    cmp-verified.
+  - fakegood.log (T-H2 + M2 corpus validation): MLFK_M3_DEV=1 +
+    MLFK_M3_FAKE_LEG_DIR over REAL canned producer logs → all 4 legs
+    parse PASS, summary prints, then exactly
+    `M3 GATE (DEV — NON-AUTHORITATIVE)` + exit 3;
+    `grep -cx 'M3 GATE OK'` == 0 (sentinel structurally absent).
+  - resemblance-tooth.log (T-M2, both variants): complete verdict +
+    truncated duplicate (input `S1 INPUT OK (session 1080 frames live
+    on de`; conform `DEVICE CONFORMS 8/`) → corruption DEATH with the
+    exact reason line (`carries 2 lines matching the
+    verdict-resemblance grammar … CORRUPTION, never ignorable`), rc 1
+    — the death reason asserted, never the exit alone.
+  - tooth-l1.log (T-L1, device, light): pkill gmenu2x rc=0 captured →
+    respawn VERIFIED (pid via the poll) within bound; absent-process
+    poll returned 1 with no pid (loud failure direction). No arm
+    build, no docker, no scratch writes; lock held + released.
+  - tooth-l2.log (T-L2): refusal rc 7 + `RC=7` byte-exact; valid
+    explicit dir accepted rc 0 (mode live, marker line 3 `mode live`);
+    no-data fallback rc 8 unchanged.
+- **Freeze manifest (PROCESS §4, documented update path)**: the 4
+  touched producers re-pinned in THIS commit — riglib.sh 099851f2…,
+  check-device-opk.sh 0c244eef…, mlfk.sh 4c31b73c…, verify_m3.sh
+  ca21b4a5… (NORMALIZED — see both headers); manifest itself anchored
+  b1cb3ac9… via the new MANIFEST_SHA256 literal. Statuses stay
+  arc-pending/arc-in-flight per truth (cites now
+  `.loop/review-58-1.log+iter60-r1-fixes-r2-closure-pending`); the
+  driver flips to reviewed-go at phase-advance AFTER the gate arc's
+  round-2 closure + the audio arc's closure, in the same commit as the
+  phase-advance (sequencing per the triage).
+- **Run ledger (caps held)**: 0 authoritative/real-leg verify_m3.sh
+  runs (driver owns the phase-advance cold run — NOTE it will trigger
+  one arm-stamp rebuild: riglib/opk/verify_m3 bytes are RIG_SCRIPTS
+  stamp input); 5 host-only gate invocations (status refusal, anchor
+  tooth, fake-good, resemblance ×2) of cap 6; 3 mlfk sandbox runs of
+  cap 5; 1 device probe session of cap 2; docker 0.
+- **Zoom-out (HARD RULE 8)**: all six fixes are class-level — status
+  enforcement turns the manifest's status COLUMN from provenance
+  metadata into a mechanical precondition (the same "recorded ≠
+  enforced" hole class the anchor closes for the manifest bytes and
+  the lockout closes for the sentinel: every trust signal the gate
+  emits is now either mechanically derived or mechanically refused);
+  expect_verdict extends the measured whitelist-grammar discipline to
+  the LAST permissive acceptance at the aggregator; the respawn poll
+  is a shared riglib body (launch precondition + restoration + any
+  future frontend-cycling site); mlfk's refusal closes the
+  "explicit selection silently falls through" class for env-chain
+  selectors. No new one-offs. The normalized-self-reference note is
+  the reusable answer for every future gate that must pin both itself
+  and its manifest.

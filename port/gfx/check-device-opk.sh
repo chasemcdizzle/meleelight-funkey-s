@@ -79,7 +79,12 @@
 #   5. HYGIENE: the OPK is REMOVED from /mnt/Applications at check end
 #      (evidence lives in pulled host artifacts; nothing stays
 #      installed — trap-guarded, also on failure) and gmenu2x is
-#      respawned to a clean menu; device writes only /tmp/mlfk +
+#      respawn-cycled with the restoration VERIFIED (iter 60, review-58
+#      L1: pkill rcs captured + busybox no-match case-split, then a
+#      bounded rig_proc_respawn_poll must SEE gmenu2x running before
+#      the verdict prints; the EXIT trap performs the same verified
+#      cycle — WARN-loud — only when step 8 did not already verify,
+#      never re-killing a verified frontend); device writes only /tmp/mlfk +
 #      /mnt/mlfk-scratch (+ the OPK file itself, removed); own
 #      processes killed on exit; the frontend is NEVER parked by this
 #      check (it IS the surface under test).
@@ -139,18 +144,47 @@ source port/sim/device/riglib.sh
 
 rig_lock_acquire
 
+# FRONTEND_VERIFIED — set to 1 ONLY after step 8's pkill+respawn-poll
+# has VERIFIED gmenu2x running (iter 60, review-58 L1). The EXIT-trap
+# frontend cycle is conditional on it: re-killing an already-verified
+# frontend from the trap would end the run frontend-down UNVERIFIED —
+# the exact accident the finding described.
+FRONTEND_VERIFIED=0
+
 opk_cleanup() {
-  local prc
-  prc=0
-  rig_dsh_retry "pkill gfx_device; pkill fk_input; true" || prc=$?
-  [ "$prc" = 0 ] || echo "WARN: could not pkill gfx_device/fk_input on the device (rc $prc)" >&2
+  local prc pn cpid
+  # own processes: per-process pkill with the rc CAPTURED and busybox
+  # case-split (0 = killed, 1 = no match — nothing of ours running;
+  # anything else is a real failure, loud) — never masked with `; true`
+  # (iter 60, review-58 L1).
+  for pn in gfx_device fk_input; do
+    prc=0
+    rig_dsh_retry "pkill $pn" || prc=$?
+    case "$prc" in
+      0|1) : ;;
+      *) echo "WARN: could not pkill $pn on the device (rc $prc)" >&2 ;;
+    esac
+  done
   # the OPK must never stay installed past the check (hygiene §5)
   rig_dsh_retry "rm -f $DEVAPPS/$OPK_NAME" \
     || echo "WARN: could not remove $DEVAPPS/$OPK_NAME — remove it by hand" >&2
   # leave the frontend RUNNING on a clean menu (we never park; a fresh
-  # respawn rescans /mnt/Applications without our OPK)
-  rig_dsh_retry "pkill gmenu2x; true" \
-    || echo "WARN: could not respawn-cycle gmenu2x" >&2
+  # respawn rescans /mnt/Applications without our OPK). Skip when step 8
+  # already VERIFIED the respawn; otherwise cycle + verify here, WARN
+  # loud on failure (a trap must never mask the run's real exit code).
+  if [ "$FRONTEND_VERIFIED" != 1 ]; then
+    prc=0
+    rig_dsh_retry "pkill gmenu2x" || prc=$?
+    case "$prc" in
+      0|1) : ;;
+      *) echo "WARN: cleanup pkill gmenu2x failed (rc $prc)" >&2 ;;
+    esac
+    if cpid="$(rig_proc_respawn_poll gmenu2x "$RESPAWN_TRIES")"; then
+      echo "   cleanup: gmenu2x respawned (pid $cpid) — frontend RUNNING" >&2
+    else
+      echo "WARN: cleanup could NOT verify a gmenu2x respawn within ${RESPAWN_TRIES}s — the frontend may be DOWN; check the device" >&2
+    fi
+  fi
   rig_cleanup
 }
 trap opk_cleanup EXIT
@@ -534,17 +568,11 @@ case "$prc" in
   1) echo "WARN: gmenu2x was not running before the cycle (supervisor should respawn it)" >&2 ;;
   *) echo "DEVICE FAIL: pkill gmenu2x failed (rc $prc)" >&2; exit 1 ;;
 esac
-respawned=0
-for _ in $(seq 1 "$RESPAWN_TRIES"); do # §7#1 bounded foreground poll
-  sleep 1
-  gpid="$(dsh "pidof gmenu2x" 2>/dev/null)" || continue
-  gpid="${gpid%$'\n'}"
-  if [[ "$gpid" =~ ^[0-9]{1,7}$ ]]; then respawned=1; break; fi
-done
-if [ "$respawned" != 1 ]; then
+# §7#1 bounded foreground poll (shared riglib body, iter 60)
+gpid="$(rig_proc_respawn_poll gmenu2x "$RESPAWN_TRIES")" || {
   echo "DEVICE FAIL: gmenu2x did not respawn within ${RESPAWN_TRIES}s of pkill (frontend supervisor defect?)" >&2
   exit 1
-fi
+}
 echo "   gmenu2x respawned (pid $gpid) — menu at the deterministic start state"
 if [ "${MLFK_OPK_SKIP_NAV:-0}" = 1 ]; then
   echo "WARN: MLFK_OPK_SKIP_NAV=1 — SKIPPING injection (negative testing only)" >&2
@@ -675,16 +703,27 @@ if [ "$au_cnt" != 1 ]; then
 fi
 echo "   evidence run: skips=$ev_skips (unGated here) presentFails=0 wall=${ev_wall}ms; audio summary line present"
 
-echo "== [8/8] hygiene: remove the OPK, respawn a clean menu, no-commit guard =="
+echo "== [8/8] hygiene: remove the OPK, respawn a clean menu VERIFIED, no-commit guard =="
 dsh "rm -f $DEVAPPS/$OPK_NAME"
 dsh "test ! -f $DEVAPPS/$OPK_NAME"
+# final frontend cycle is a VERIFIED restoration (iter 60, review-58
+# L1): pkill rc captured + busybox case-split (1 = no match is a WARN —
+# the supervisor should have had it running; any other nonzero = loud
+# fail), then the bounded respawn poll must SEE gmenu2x running BEFORE
+# the verdict can print — OPK LAUNCH OK never coexists with a dead menu.
 prc=0
 dsh "pkill gmenu2x" >/dev/null 2>&1 || prc=$?
 case "$prc" in
-  0|1) : ;;
-  *) echo "WARN: final gmenu2x respawn cycle failed (rc $prc)" >&2 ;;
+  0) : ;;
+  1) echo "WARN: gmenu2x was not running at the final cycle (supervisor gap?) — poll below must still verify a respawn" >&2 ;;
+  *) echo "DEVICE FAIL: final pkill gmenu2x failed (rc $prc)" >&2; exit 1 ;;
 esac
-echo "   OPK removed from $DEVAPPS (verified gone); frontend respawn-cycled"
+fpid="$(rig_proc_respawn_poll gmenu2x "$RESPAWN_TRIES")" || {
+  echo "DEVICE FAIL: gmenu2x did not respawn within ${RESPAWN_TRIES}s after the final cycle — the frontend is DOWN; refusing to print the verdict" >&2
+  exit 1
+}
+FRONTEND_VERIFIED=1
+echo "   OPK removed from $DEVAPPS (verified gone); frontend respawn-cycled and VERIFIED RUNNING (pid $fpid)"
 # $OPKDIR (mlfk.sh, .desktop, icon32.png) is COMMITTED source — the OPK
 # assets, tracked and freeze-pinned; only build output is guarded.
 rig_no_commit_guard "$BUILD" "$DEVB" "$TABLES"

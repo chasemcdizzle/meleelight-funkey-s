@@ -17,13 +17,30 @@
 # bytes mismatch its pin ("hashes prove identity, not approval" — a
 # producer change invalidates prior gate evidence).
 #
+# verify_m3.sh [0b] additionally HARD-REFUSES (AUTHORITATIVE mode) when
+# any status is arc-in-flight/arc-pending — review closure is enforced,
+# not just recorded (iter 60, review-58 H1). MLFK_M3_DEV=1 bypasses
+# ONLY that, and the outcome is then NON-AUTHORITATIVE + nonzero.
+#
 # UPDATE PATH (reviewed change only): a producer edit lands through its
 # review arc; the SAME commit re-pins it here by regenerating its line:
 #   shasum -a 256 <path>   -> replace the record's sha field
 # (full regeneration recipe: docs/AGENT-LOG.md iter 58). The driver's
 # ground-truth ritual re-runs the gate cold after any re-pin.
+#
+# INTEGRITY ANCHOR (iter 60, review-58 M1): THIS FILE's own sha256 is
+# pinned as the MANIFEST_SHA256= literal inside verify_m3.sh, verified
+# BEFORE any row is trusted. UPDATE DISCIPLINE (binding): ANY edit to
+# this file — any row, any comment byte — requires updating that
+# literal in port/sim/device/verify_m3.sh IN THE SAME COMMIT.
+# NORMALIZED SELF-REFERENCE: the verify_m3.sh row below pins sha256 of
+# that file's bytes EXCLUDING its single ^MANIFEST_SHA256= line
+# (compute: grep -v '^MANIFEST_SHA256=' port/sim/device/verify_m3.sh |
+# shasum -a 256) — a full-byte self-row plus the anchor would be a
+# circular fixed point; the excluded line is protected by the anchor
+# equality itself.
 7b031055e2329269e4e207012202cd772a75b604bd37ab3df8de9db325e4a254 port/sim/device/adbsh.sh reviewed-go .loop/review-42-1.log
-606fb6e0574407926d2ff4af6921d87ddc82afcec93f4668d1e89382908b8ccc port/sim/device/riglib.sh arc-pending iter58-roster-delta-on-.loop/review-42-1.log
+099851f2c968e1994754915a7dcd169f33f69cf893c3ee76a9050b9a6520c14b port/sim/device/riglib.sh arc-pending iter58-roster-delta+iter60-l1-poll-on-.loop/review-42-1.log
 d52f42f6eb9156c7c3a7116fcc3a6f4c3b4c6c223d06b476ede8665eebafeff8 port/sim/device/check-device-g01.sh reviewed-go .loop/review-42-1.log
 f4bff53ba987316d83d127b0a92d281263f66a19d1aca49dcd18969af63352de port/sim/device/check-device-conform.sh reviewed-go .loop/review-47-1.log
 4034ad81601de4e25b85658095ebfd38de2cc813fad594164afb563d6deb81ad port/sim/device/percentiles.js reviewed-go .loop/review-47-1.log
@@ -37,11 +54,11 @@ cf2adcd60e9866c38696d3406cdbb87930ef2043112edbc1942686fcf7c8099f port/gfx/judge-
 5f22ddff5529b752b264022e230c17cc4d1e4fb697b0c116716005e08273ec66 port/gfx/check-device-audio.sh arc-in-flight .loop/review-57-1.log+iter59-r1-fixes-r2-closure-pending
 8ceaf028fe5740a1c0bb384e2eae113996bdb5c3db5720f1337af068266b966f port/gfx/judge-audio-summary.js arc-in-flight .loop/review-57-1.log+iter59-r1-fixes-r2-closure-pending
 bf29fa7cba83708cfff093195f48ad20a8eda2ad794fe25b270f211b08876eee port/gfx/pack-snd.js arc-in-flight .loop/review-57-1.log
-2a48fbccc1d6a31d58cd2dc2092d0e276d2d63671642de99a14d170f0500669a port/gfx/check-device-opk.sh arc-pending iter58
-b4bd4ba415f5d63e70895087204586846bede5b372422fce4292399e97ebb5ca port/gfx/opk/mlfk.sh arc-pending iter58
+0c244eef6ea469e50fa916347d38a75624783c9610dc2a653eabd745d6d5ae07 port/gfx/check-device-opk.sh arc-pending .loop/review-58-1.log+iter60-r1-fixes-r2-closure-pending
+4c31b73c643f27621ffffed389c89e5f1f2ebbc9f013ef1b233c1145c62e6ee7 port/gfx/opk/mlfk.sh arc-pending .loop/review-58-1.log+iter60-r1-fixes-r2-closure-pending
 8b24efb23d678ce3f1a2acfed29c3b5f5ec66224fffe84daa004569cc90d0a9d port/gfx/opk/meleelight.funkey-s.desktop arc-pending iter58
 efea406086050d51b3894692c6030afef1b0cc7ed06de442b728ef2e6072fe99 port/gfx/opk/icon32.png arc-pending iter58
 fc6aa569d4efc731509a9ebc9c5b7857bb00896d41aeaeb82c9ee7de1d0592e5 port/sim/sim/wrap-run.js grandfathered-m2 M2-exit-gate-SIM-CONFORMS
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js grandfathered-m2 M2-exit-gate-SIM-CONFORMS
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js oracle-frozen M0-task5-HARD-RULE-3
-ffdd8fb73a226aee17af7691d7893ac24a5b21ca0bb2d7d198096ce34ed018ae port/sim/device/verify_m3.sh arc-pending iter58
+ca21b4a5fbf25a2e00f342e16428297922eaa8875aecaaba28c736cd9c36d970 port/sim/device/verify_m3.sh arc-pending .loop/review-58-1.log+iter60-r1-fixes-r2-closure-pending-NORMALIZED-see-header

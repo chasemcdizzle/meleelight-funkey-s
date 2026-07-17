@@ -3,7 +3,38 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-17, iter-59 writer completion)
+## Live right now (updated: 2026-07-17, iter-60 writer completion)
+
+- **Iter 60 (M3 task 7 hardening — gate-assembly round-1 triage
+  closure) DONE**: all 6 triage items (.loop/review-58-triage.md
+  H1/H2/M1/M2/L1/L2) landed on port/sim/device/{verify_m3.sh,
+  m3-freeze-manifest.txt} + port/gfx/check-device-opk.sh +
+  port/gfx/opk/mlfk.sh + riglib.sh (shared respawn-poll body). The
+  gate now: [0] verifies the manifest's own bytes vs the in-script
+  MANIFEST_SHA256 anchor (update discipline: any manifest edit changes
+  the literal in the SAME commit; verify_m3.sh's manifest row is the
+  NORMALIZED digest excluding that line — circularity, see both
+  headers); [0b] HARD-REFUSES in AUTHORITATIVE mode while any producer
+  status is arc-in-flight/arc-pending (currently 9 — the refusal IS
+  the expected default-run outcome until closure); `M3 GATE OK` prints
+  ONLY on a fully-authoritative all-real run — MLFK_M3_DEV=1 or
+  MLFK_M3_FAKE_LEG_DIR force `M3 GATE (DEV — NON-AUTHORITATIVE)` +
+  exit 3 (readonly flag, sentinel structurally locked out);
+  verdict-RESEMBLING malformed lines at every leg parse = corruption
+  death (discriminators measured from the real corpus);
+  check-device-opk.sh restores the frontend VERIFIED (pkill rcs
+  case-split + bounded rig_proc_respawn_poll before the verdict; trap
+  never re-kills a verified frontend); mlfk.sh refuses loud (RC=7)
+  when MLFK_DATA_DIR lacks simdata.txt. All teeth fired
+  (.loop/m3-task7r60-*.log); 23/23 + anchor self-check green; ZERO
+  real-leg gate runs consumed (driver owns the phase-advance cold run;
+  it will trigger one arm-stamp rebuild — RIG_SCRIPTS bytes changed).
+  Manifest re-pinned for the 4 touched producers, statuses kept
+  arc-pending/arc-in-flight per truth. **GATE ARC ROUND 2 = CLOSURE
+  PENDING (driver). Sequencing unchanged: audio round-2 closure +
+  gate-arc round-2 closure → driver flips ALL statuses to reviewed-go
+  (cites = closure logs) in the phase-advance commit → cold
+  authoritative verify_m3.sh → sentinel + Chase S1 ratification.**
 
 - **Iter 59 (M3 task 6 hardening — audio round-1 triage closure) DONE**:
   all 5 triage items (.loop/review-57-triage.md H/M1/M2/M3/L) landed;
@@ -430,8 +461,9 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   M4 seeds registered (mixer fidelity + music, stop-path coverage,
   skip-burst instrument). Regressions green: DEVICE RENDER OK (11.065
   ms full p99) + SIM CONFORMS (.loop/m3-task6-reg-{render,sim}.log).
-- **Latest AGENT-LOG entry**: iter 58 (M3 task 7 DONE — the M3 EXIT
-  GATE is live); latest log id: .loop/m3-task7-donecheck.log.
+- **Latest AGENT-LOG entry**: iter 60 (M3 task 7 hardening DONE —
+  gate status enforcement, sentinel lockout, manifest anchor); latest
+  log id: .loop/m3-task7r60-manifest-selfcheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
@@ -443,19 +475,19 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## Next
 
-1. Driver: ground-truth iter 58 (cold
-   `bash port/sim/device/verify_m3.sh` → `M3 GATE OK`, exit 0) → this
-   is the M3 EXIT GATE: on a clean cold pass, emit the human-gate
-   sentinel `LOOP STOP: m3-device — needed: Chase S1 ratification
-   playtest` (LOOP §F-advance.3/§H — the GATE itself does NOT print it)
-   + push-notify Chase → close #18 on ratification.
-2. Tier-A review arcs still owed (do NOT block the sentinel — the gate
-   freeze-manifest already pins them, and a producer change re-runs the
-   gate): the iter-57 audio trio (check-device-audio.sh,
-   judge-audio-summary.js, pack-snd.js — arc-in-flight, running
-   concurrently) and the iter-58 OPK/gate surface (check-device-opk.sh,
-   verify_m3.sh, the opk assets, the riglib roster delta — arc-pending).
-   Any Medium+ finding re-pins the manifest + re-runs the gate.
+1. Driver: audio arc round-2 closure review (iter-59 bytes) + gate arc
+   round-2 closure review (iter-60 bytes). On BOTH closures: flip ALL
+   manifest statuses to reviewed-go (cites = the closure logs) +
+   update MANIFEST_SHA256 in verify_m3.sh, same commit as the
+   phase-advance.
+2. Driver: cold AUTHORITATIVE `bash port/sim/device/verify_m3.sh` →
+   `M3 GATE OK`, exit 0 (expect one arm-stamp rebuild — RIG_SCRIPTS
+   bytes changed iter 60; a default run BEFORE the status flip
+   correctly REFUSES naming the 9 unresolved producers — that is the
+   designed outcome, not a defect) → emit the human-gate sentinel
+   `LOOP STOP: m3-device — needed: Chase S1 ratification playtest`
+   (LOOP §F-advance.3/§H — the GATE itself does NOT print it) +
+   push-notify Chase → close #18 on ratification.
 3. Ladder after Chase's S1 ratification: M4 REPLAN (PLAN §4/M4) →
    Chase acceptance → LOOP STOP: m4-complete.
 

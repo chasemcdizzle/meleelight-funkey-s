@@ -119,6 +119,33 @@ rig_dsh_retry() {
   done
 }
 
+# rig_proc_respawn_poll <procname> <tries> — bounded FOREGROUND poll
+# (PROCESS §7#1) for a device process to be RUNNING, via RC-checked
+# nonce-dsh `pidof`. Added iter 60 (review-58 L1: frontend restoration
+# must be VERIFIED, never assumed from a masked pkill rc) — the
+# measured check-device-opk.sh step-6 respawn-poll pattern factored as
+# a CLASS so launch-precondition and restoration sites share ONE body.
+# Measured producer grammar (busybox pidof, single-instance gmenu2x):
+# one line, one bounded decimal pid; anything else (multi-pid, empty,
+# junk) is NOT a verified respawn and the poll keeps waiting. Echoes
+# the pid on success; returns 1 when the process never verifies within
+# <tries> x 1 s — the CALLER decides loud-fail vs loud-warn.
+rig_proc_respawn_poll() {
+  local pname tries ppid
+  pname="$1"
+  tries="$2"
+  for _ in $(seq 1 "$tries"); do
+    sleep 1
+    ppid="$(dsh "pidof $pname" 2>/dev/null)" || continue
+    ppid="${ppid%$'\n'}"
+    if [[ "$ppid" =~ ^[0-9]{1,7}$ ]]; then
+      printf '%s\n' "$ppid"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # rig_dev_sha256 <device-path> — device-side sha256, WHITELIST-GRAMMAR
 # parsed (iter 52, PROCESS §3 rule; replaces every permissive
 # `| awk 'NF{print $1; exit}'` first-nonempty-line scrape). Measured
