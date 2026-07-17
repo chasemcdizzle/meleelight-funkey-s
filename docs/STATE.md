@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-16, post-iter-46 writer)
+## Live right now (updated: 2026-07-16, post-iter-47 writer)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -145,13 +145,28 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   5). All 4 teeth fired (.loop/m3-task3r46-tooth-*.log); cold
   done-check RENDER OK exit 0 (.loop/m3-task3r46-donecheck.log),
   IOU MIN 0.9149 ≥ 0.91, both STREAM MATCH 3600/3600.
-- **In flight**: task-2 Tier-A arc round 2 PENDING (closure review of
-  the iter-45 fixes) + task-3 Tier-A arc round 2 PENDING (closure
+- **Iter 47 (M3 task 2 review-hardening ROUND 2) DONE**: the round-2
+  Medium (.loop/review-45-triage.md) closed — the matrix pin's
+  exact-set comparison no longer word-splits manifest data (unquoted
+  $gids could drop a stub id:"" entry): validation now runs INSIDE
+  node on the parsed JSON (count == 8, ids nonempty + ^g0[1-8]$ +
+  unique, CPU role on exactly {g07 g08} via env from the shell pin),
+  emitting ONE validated line the shell consumes QUOTED.
+  MLFK_MANIFEST override kept for teeth. Tooth fired: 9-entry stub
+  id:"" manifest copy → loud pin death before any build/device work
+  (.loop/m3-task2r47-tooth-blankid.log). Cold done-check DEVICE
+  CONFORMS 8/8 + SIM P99 OK (.loop/m3-task2r47-donecheck.log; one
+  expected arm rebuild — script bytes are stamp input). PROCESS
+  honesty: monitor-park again (nudged once; fix = foreground bounded
+  until-loop) + nohup launched without rc-echo (exit 0 evidenced by
+  final markers + trap-clean lock removal; wrapper pattern noted).
+- **In flight**: task-2 Tier-A arc round 3 = closure pending (review
+  of the iter-47 fix) + task-3 Tier-A arc round 2 PENDING (closure
   review of the iter-46 fixes; concurrent read-only review of
   port/sim/device/* + sim_main.c), then task 4 (platform seam + SDL1.2
   device backend + live device render).
-- **Latest AGENT-LOG entry**: iter 46 (M3 task 3 hardening); latest log
-  id: .loop/m3-task3r46-donecheck.log.
+- **Latest AGENT-LOG entry**: iter 47 (M3 task 2 hardening round 2);
+  latest log id: .loop/m3-task2r47-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull

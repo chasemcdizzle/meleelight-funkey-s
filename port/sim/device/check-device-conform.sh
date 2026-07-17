@@ -43,6 +43,11 @@
 # oracle/goldens/manifest.json unchanged; traces and frozen streams
 # always resolve under oracle/goldens/ regardless, so a doctored copy
 # can rename nothing past the pin + the frozen-stream judgment).
+# NODE-VALIDATED (iter 47, review 45-1 Medium): the pin's structural
+# checks run INSIDE node on the parsed JSON (count == 8, ids nonempty +
+# ^g0[1-8]$ + unique, CPU role on exactly the pinned CPU set) and node
+# emits ONE validated line the shell consumes QUOTED — shell
+# word-splitting can never drop a blank/whitespace-only stub id.
 #
 # Rig plumbing is INHERITED from port/sim/device/riglib.sh (the
 # iters-38-42 Tier-A arc's package, VERDICT: GO): nonce-dsh for every
@@ -186,34 +191,59 @@ if [ ! -f "$MANIFEST" ]; then
   echo "DEVICE FAIL: manifest $MANIFEST missing" >&2
   exit 1
 fi
-gids="$(MLFK_MANIFEST="$MANIFEST" node -e "
-  const m=require(require('path').resolve(process.env.MLFK_MANIFEST));
-  if(!Array.isArray(m.goldens)||m.goldens.length===0) throw new Error('manifest has no goldens');
-  console.log(m.goldens.map(g=>String(g.id)).join('\n'));
-")" || { echo "DEVICE FAIL: golden id extraction failed" >&2; exit 1; }
-if [ -z "$gids" ]; then
-  echo "DEVICE FAIL: golden id extraction returned nothing" >&2
-  exit 1
-fi
 for id in $PINNED_GOLDEN_SET; do
   if ! [[ "$id" =~ ^g[0-9]{2}$ ]]; then
     echo "DEVICE FAIL: golden id fails validation ('$id')" >&2
     exit 1
   fi
 done
-# MATRIX PIN (iter 45, review 43-1 High) — BEFORE any build/device work:
-# (a) exact-set: the sorted manifest id list must be string-identical to
-# the pinned set (implies exactly 8 entries, unique, exactly those ids —
-# a duplicate g07 replacing g08, or a truncated 7-entry manifest, dies
-# HERE, never as a smaller-but-passing matrix);
-# (b) CPU role: g07/g08 (and only they) must carry cpu=1 (checked below
-# via golden_params, whose strict parser also validates every field).
-sorted_gids="$(printf '%s\n' $gids | LC_ALL=C sort | tr '\n' ' ')"
-sorted_gids="${sorted_gids% }"
-if [ "$sorted_gids" != "$PINNED_GOLDEN_SET" ]; then
+# MATRIX PIN (iter 45, review 43-1 High; NODE-VALIDATED iter 47, review
+# 45-1 Medium) — BEFORE any build/device work. The former shell-side
+# comparison expanded the extracted id list UNQUOTED, so word-splitting
+# silently DROPPED blank/whitespace-only ids — a malformed manifest
+# padded with a stub id:"" entry could still pass the exact-set pin.
+# ALL structural validation now happens INSIDE node, directly on the
+# parsed JSON, before any shell splitting:
+#   (a) entry count == 8 (the pinned cardinality — a 9-entry stub-padded
+#       or truncated 7-entry manifest dies HERE);
+#   (b) every id a nonempty string matching ^g0[1-8]$;
+#   (c) all ids unique (a duplicate g07 replacing g08 dies HERE);
+#   (d) cpu truthy on exactly the pinned CPU set (role-flip dies HERE;
+#       the set is passed via env from $PINNED_CPU_SET — one source of
+#       truth, re-checked per golden below via golden_params' strict
+#       no-eval parser as belt).
+# Node emits ONE validated line (the sorted id list); the shell consumes
+# it QUOTED for the exact-set comparison against the pin. (The
+# `for id in $PINNED_GOLDEN_SET` loops throughout intentionally split
+# the script's own frozen constant, never manifest data.)
+manifest_ids="$(MLFK_MANIFEST="$MANIFEST" MLFK_PIN_CPU="$PINNED_CPU_SET" node -e "
+  const m=require(require('path').resolve(process.env.MLFK_MANIFEST));
+  if(!Array.isArray(m.goldens)) throw new Error('manifest has no goldens array');
+  if(m.goldens.length!==8)
+    throw new Error('manifest has '+m.goldens.length+' goldens, pinned count is 8');
+  const ids=m.goldens.map(g=>g.id);
+  for(const id of ids){
+    if(typeof id!=='string'||!/^g0[1-8]\$/.test(id))
+      throw new Error('golden id fails validation: '+JSON.stringify(id));
+  }
+  if(new Set(ids).size!==ids.length)
+    throw new Error('duplicate golden ids: '+JSON.stringify(ids));
+  const pinCpu=process.env.MLFK_PIN_CPU.split(' ');
+  for(const g of m.goldens){
+    const want=pinCpu.includes(g.id);
+    if(Boolean(g.cpu)!==want)
+      throw new Error('cpu role violation: '+g.id+' cpu='+Boolean(g.cpu)+', pinned '+want);
+  }
+  console.log(ids.slice().sort().join(' '));
+")" || { echo "DEVICE FAIL: matrix pin — node manifest validation failed" >&2; exit 1; }
+if [ -z "$manifest_ids" ]; then
+  echo "DEVICE FAIL: matrix pin — node validation emitted nothing" >&2
+  exit 1
+fi
+if [ "$manifest_ids" != "$PINNED_GOLDEN_SET" ]; then
   echo "DEVICE FAIL: matrix pin — manifest golden set is not the pinned matrix" >&2
   echo "  pinned:   {$PINNED_GOLDEN_SET}" >&2
-  echo "  manifest: {$sorted_gids}" >&2
+  echo "  manifest: {$manifest_ids}" >&2
   exit 1
 fi
 for id in $PINNED_GOLDEN_SET; do

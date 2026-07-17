@@ -4717,3 +4717,101 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   pins what iter-44's IoU actually measured against. Item 5 joins the
   rule-13 family (expression-shape faithfulness: division-by-zero
   semantics are part of the expression, not an error to guard).
+
+## iter 47 — 2026-07-16 — M3 task 2 HARDENING ROUND 2 PRE-REGISTRATION: node-validated manifest pin (review-45 round-2 Medium)
+
+- PRE-REGISTRATION (frozen before first edit; PROCESS §2. Task: close
+  the task-2 Tier-A arc's round-2 finding per the driver triage
+  `.loop/review-45-triage.md` / `.loop/review-45-1.log` — ONE Medium).
+  - **Surface**: `port/sim/device/check-device-conform.sh` ONLY.
+    oracle/goldens/manifest.json NEVER touched — the tooth uses a
+    doctored COPY fed through the existing MLFK_MANIFEST override
+    (override KEPT for teeth; default unchanged).
+  - **The finding (Medium, conform.sh:211)**: the matrix pin's
+    exact-set comparison expands `$gids` UNQUOTED
+    (`printf '%s\n' $gids | sort`) — word-splitting silently DROPS
+    blank/whitespace-only ids, so a malformed manifest (e.g. a 9-entry
+    manifest padded with a stub `id:""` entry) still passes the
+    exact-set pin.
+  - **The fix**: validation moves INSIDE node, directly on the parsed
+    JSON, BEFORE any shell splitting: entry count == 8, every id a
+    nonempty string matching `^g0[1-8]$`, all ids unique, cpu=1 on
+    exactly the pinned CPU set ({g07 g08}, passed in via env — one
+    source of truth, the shell constant). Node emits ONE validated
+    line (the sorted id list); the shell consumes it QUOTED for the
+    exact-set comparison against `$PINNED_GOLDEN_SET`. Every data
+    expansion in the surrounding block is quoted; the
+    `golden_params`-based per-golden field/role validation stays as
+    belt. `for id in $PINNED_GOLDEN_SET` loops iterate the script's
+    own frozen constant (intentional split of a fixed literal, not
+    manifest data) — unchanged.
+  - **Tooth (pre-registered)**: manifest COPY with a 9th stub entry
+    `id:""` appended, fed via MLFK_MANIFEST → the run must die LOUD at
+    the pin (node validation error + `DEVICE FAIL: matrix pin`),
+    nonzero exit, BEFORE any extractor/docker/device replay work
+    (.loop/m3-task2r47-tooth-blankid.log). Under the old code this
+    exact copy passes the set comparison (the word-split drop).
+  - **Run cap**: ≤ 2 conform-script invocations — (A) the blank-id
+    tooth (dies in seconds at the pin), (B) the cold done-check
+    (absorbs the ONE expected arm rebuild: this script's bytes are
+    RIG_SCRIPTS stamp input). No sim TU touched → no check-sim.sh
+    rerun owed.
+  - **Pass**: cold `bash port/sim/device/check-device-conform.sh` →
+    `DEVICE CONFORMS 8/8` + `SIM P99 OK` exit 0
+    (.loop/m3-task2r47-donecheck.log), tooth fired and logged, clean
+    tree after the single atomic commit.
+
+## iter 47 — 2026-07-16 — M3 task 2 HARDENING ROUND 2 DONE: node-validated manifest pin (review-45 round 2 closed)
+
+- **The fix (Medium, conform.sh:211)**: the matrix pin's shell-side
+  exact-set comparison (`printf '%s\n' $gids | sort` — `$gids`
+  UNQUOTED) word-split away blank/whitespace-only ids, so a malformed
+  manifest padded with a stub `id:""` entry passed the pin. All
+  structural validation now runs INSIDE node on the parsed JSON before
+  any shell splitting: entry count == 8, every id a nonempty string
+  matching `^g0[1-8]$`, all unique, cpu truthy on exactly the pinned
+  CPU set (passed via env from `$PINNED_CPU_SET` — one source of
+  truth). Node emits ONE validated line (the sorted id list); the
+  shell consumes it QUOTED (plus a non-empty guard) for the exact-set
+  compare against `$PINNED_GOLDEN_SET`. The `golden_params` per-golden
+  strict-parser loop stays as belt; `for id in $PINNED_GOLDEN_SET`
+  loops iterate the script's own frozen constant, never manifest data.
+  MLFK_MANIFEST override KEPT (negative-testing seam, default
+  unchanged). Surface: `port/sim/device/check-device-conform.sh` only.
+- **Tooth (as pre-registered)**: manifest COPY with a 9th `id:""`
+  stub entry via MLFK_MANIFEST → died LOUD at the pin in seconds —
+  `Error: manifest has 9 goldens, pinned count is 8` +
+  `DEVICE FAIL: matrix pin — node manifest validation failed`, rc=1,
+  ZERO extractor/docker/device work in the log
+  (.loop/m3-task2r47-tooth-blankid.log). Under the old code this exact
+  copy passes the set comparison (word-split drops the empty id and
+  golden_params only ever iterates the pinned set). Stub copy deleted
+  after the tooth.
+- **Cold done-check**: `bash port/sim/device/check-device-conform.sh`
+  → matrix pin OK on the real manifest, ONE arm rebuild (stamp MISS as
+  pre-registered — script bytes are RIG_SCRIPTS stamp input), all 8
+  goldens replayed on device, 16 STREAM MATCH lines, all p99 under
+  budget (worst g08 10.959 ms), perf-history presence OK,
+  `DEVICE CONFORMS 8/8` + `SIM P99 OK` as the final log lines
+  (.loop/m3-task2r47-donecheck.log). Run cap: 2/2 conform invocations
+  (tooth + done-check). No sim TU touched → no check-sim.sh rerun owed.
+- **PROCESS honesty**: (1) the done-check was launched via bare nohup
+  WITHOUT an rc-echo wrapper — exit 0 is evidenced by the two pass
+  markers being the final log lines (set -euo pipefail; they are the
+  script's last statements), zero FAIL/MISMATCH lines, and the shared
+  rig lock being removed (EXIT trap ran on the normal exit path), not
+  by a recorded `rc=0`; future long runs get `; echo rc=$?` inside the
+  nohup'd command line. (2) monitor-park again (failure mode #1):
+  after arming the completion Monitor I ended the turn instead of
+  actively polling; driver-nudged, resumed with a foreground bounded
+  until-loop (the harness blocks bare foreground `sleep`, so the
+  sanctioned wait form is `until <pid gone>; do sleep 10; done` in ONE
+  foreground call) — that pattern is the reusable fix for the class.
+- **ZOOM OUT**: same class as iter 40's no-eval manifest parse —
+  validation belongs in the parser that OWNS the structure (node, on
+  the parsed JSON), never in shell string-space where quoting/IFS
+  semantics silently normalize malformed data; the shell should only
+  ever compare one quoted, already-validated scalar against its frozen
+  pin. That rule now covers both device rigs' manifest paths; any
+  future list handed from node to shell crosses as a single validated
+  line, consumed quoted.
