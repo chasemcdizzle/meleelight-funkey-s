@@ -41,3 +41,30 @@ Append new entries at the bottom; never edit or delete a recorded row.
   AI-bridge slot replaces a human input column and its match fields the
   fewest live hitboxes; g07/g08 bridge parse cost lands outside the
   timed region (boot), visible only in wall.
+
+## 2026-07-16 — iter 45 (M3 task 2 hardening): post-hardening cold matrix re-measure
+
+- Source: `.loop/m3-task2r45-donecheck.log` — cold
+  `bash port/sim/device/check-device-conform.sh` → `DEVICE CONFORMS 8/8`
+  + `SIM P99 OK`, exit 0, after the review-43 round-1 fixes (matrix pin,
+  timing-buffer overflow guard, perf-history presence assertion). Same
+  device/toolchain/methodology as the iter-43 entry; binaries rebuilt
+  this iteration (script bytes are stamp input — stamp
+  96f711a71501a867192bb1cae33bf9a60e987b5799c1b2db2ca7964dfd80c5c6).
+
+| golden | frames | p50 ms | p99 ms | wall s |
+|---|---|---|---|---|
+| g01 | 3600 | 5.672 | 9.850 | 21 |
+| g02 | 3600 | 5.420 | 10.049 | 20 |
+| g03 | 3600 | 5.072 | 9.166 | 19 |
+| g04 | 3600 | 5.031 | 9.250 | 19 |
+| g05 | 3600 | 5.564 | 9.765 | 21 |
+| g06 | 3600 | 5.805 | 11.004 | 22 |
+| g07 | 3600 | 4.257 | 8.137 | 16 |
+| g08 | 3600 | 5.444 | 10.893 | 21 |
+
+- Consistent with iter 43 (p50 within 0.02 ms per golden; p99 within
+  0.6 ms — worst now g06 11.004 ms, still > 5.6 ms headroom under the
+  16.67 ms budget). The perf-history presence assertion in the check
+  script asserts these tables EXIST per pinned golden; appending them
+  stays this writer duty.

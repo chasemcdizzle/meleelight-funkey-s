@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-16, post-iter-44 writer)
+## Live right now (updated: 2026-07-16, post-iter-45 writer)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -110,12 +110,28 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   VFX excluded BOTH sides — registered deferral (ml_events seam is
   name-only; M4 seed "vfx render seam widening"). Regression green:
   check-sim.sh SIM CONFORMS 8/8.
-- **In flight**: nothing — task-2 Tier-A arc (driver-owned) + task-3
-  Tier-A arc (check-render.sh + capture-canvas.js + gfx-pagelib.js +
-  iou.js + renderer, non-checksummed surfaces) open on landing, then
-  task 4 (platform seam + SDL1.2 device backend + live device render).
-- **Latest AGENT-LOG entry**: iter 44 (M3 task 3); latest log id:
-  .loop/m3-task3-donecheck.log.
+- **Iter 45 (M3 task 2 review-hardening) DONE**: task-2 arc round-1
+  findings closed — (1) MATRIX PIN: conform.sh asserts the manifest ==
+  frozen {g01..g08}, unique, CPU role on exactly {g07,g08}, BEFORE any
+  build/device work; 8/8 derives from the pinned set (MLFK_MANIFEST
+  override = negative-testing seam, default unchanged); (2) sim_main.c
+  --timing malloc guarded (frames > 10^7 or SIZE_MAX/8 wrap → sim_fatal
+  before malloc); (3) perf-history PRESENCE: read-only assert that
+  docs/research/device-perf.md carries a measured row per pinned golden
+  (content stays writer duty; split documented in the script header).
+  All three teeth fired (.loop/m3-task2r45-tooth-*.log); cold
+  done-check DEVICE CONFORMS 8/8 + SIM P99 OK
+  (.loop/m3-task2r45-donecheck.log); check-sim.sh SIM CONFORMS.
+  PROCESS honesty: writer dead-parked on background watchers again
+  (nudged 3x) + one verify-then-destroy-in-one-call incident that
+  sabotaged its own live run — class lessons in the AGENT-LOG entry.
+- **In flight**: task-2 Tier-A arc round 2 PENDING (closure review of
+  the iter-45 fixes) + task-3 Tier-A arc (check-render.sh +
+  capture-canvas.js + gfx-pagelib.js + iou.js + renderer,
+  non-checksummed surfaces) open, then task 4 (platform seam + SDL1.2
+  device backend + live device render).
+- **Latest AGENT-LOG entry**: iter 45 (M3 task 2 hardening); latest log
+  id: .loop/m3-task2r45-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull

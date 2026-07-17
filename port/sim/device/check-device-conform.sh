@@ -21,9 +21,28 @@
 # port/sim/device/percentiles.js (nearest-rank p50/p99, strict grammar).
 # ASSERT per golden: p99_ns < 16670000 (16.67 ms). The measured table
 # (golden, frames, p50, p99, wall) is printed and written to
-# $DEVB/device-perf-rows.md — docs/research/device-perf.md is maintained
-# by the WRITER from that printed table (a check script must never dirty
-# the tracked tree; the doc is append-only measured history).
+# $DEVB/device-perf-rows.md.
+#
+# PERF-HISTORY SPLIT (iter 45, review 43-1 Medium): the tracked
+# docs/research/device-perf.md is append-only measured history whose
+# CONTENT is maintained by the WRITER from the printed rows artifact — a
+# check script must never dirty the tracked tree (rig_no_commit_guard).
+# This script's duty is a READ-ONLY structural PRESENCE assertion: after
+# the current run's percentiles are judged, device-perf.md must carry a
+# measured table row (golden id + numeric p50/p99 columns) for EVERY
+# golden in the pinned matrix — stale/missing history (a skipped writer
+# duty) is a loud death, never a silent pass.
+#
+# MATRIX PIN (iter 45, review 43-1 High): the task-2 matrix is EXACTLY
+# the 8 frozen goldens g01..g08 with g07/g08 (and ONLY they) in the CPU
+# role. That set is asserted against the manifest BEFORE any build or
+# device work, and the <n>/<n> count derives from the PINNED set — a
+# truncated, duplicated, or role-flipped manifest can never shrink the
+# matrix and still print DEVICE CONFORMS. The manifest path is
+# MLFK_MANIFEST-overridable for NEGATIVE TESTING ONLY (default
+# oracle/goldens/manifest.json unchanged; traces and frozen streams
+# always resolve under oracle/goldens/ regardless, so a doctored copy
+# can rename nothing past the pin + the frozen-stream judgment).
 #
 # Rig plumbing is INHERITED from port/sim/device/riglib.sh (the
 # iters-38-42 Tier-A arc's package, VERDICT: GO): nonce-dsh for every
@@ -39,7 +58,8 @@
 # Device hygiene: writes only under /tmp/mlfk + /mnt/mlfk-scratch, both
 # removed on exit (trap).
 #
-# Env: FUNKEY_ADB_ID (device id), MLFK_FORCE_ARM=1 (ignore build stamp).
+# Env: FUNKEY_ADB_ID (device id), MLFK_FORCE_ARM=1 (ignore build stamp),
+# MLFK_MANIFEST (manifest path override — negative testing only).
 # Prints DEVICE CONFORMS <n>/<n> and SIM P99 OK, exit 0.
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
@@ -52,7 +72,15 @@ TABLES=pipeline/build/sim-tables
 FDC=oracle/fdlibm-crosscheck
 DTMP=/tmp/mlfk
 DSD=/mnt/mlfk-scratch
+MANIFEST="${MLFK_MANIFEST:-oracle/goldens/manifest.json}"
 mkdir -p "$DEVB"
+
+# THE PINNED MATRIX (iter 45, review 43-1 High) — the frozen golden set
+# this check exists to prove, and the ONLY set it will accept from the
+# manifest. Sorted, space-separated (set equality below is string
+# equality on the sorted id list — implies count AND uniqueness).
+PINNED_GOLDEN_SET="g01 g02 g03 g04 g05 g06 g07 g08"
+PINNED_CPU_SET="g07 g08" # exactly these carry the CPU role (cpu=1)
 
 # 16.67 ms in integer ns — the PLAN §4/M3 frame budget. The compare is
 # integer (p99_ns < P99_LIMIT_NS): no float arithmetic in the gate.
@@ -77,8 +105,8 @@ golden_params() {
   local id gp gk gv
   id="$1"
   unset name seed p1 p2 stage frames cpu difficulty trace
-  gp="$(node -e "
-    const m=require('./oracle/goldens/manifest.json');
+  gp="$(MLFK_MANIFEST="$MANIFEST" node -e "
+    const m=require(require('path').resolve(process.env.MLFK_MANIFEST));
     const g=m.goldens.find(x=>x.id==='$id');
     if(!g) throw new Error('$id missing from manifest');
     console.log('name='+g.name);
@@ -153,9 +181,13 @@ golden_params() {
   fi
 }
 
-echo "== [1/5] host data plane (M1 tables + SIMDATA1 + all trace texts) =="
-gids="$(node -e "
-  const m=require('./oracle/goldens/manifest.json');
+echo "== [1/5] host data plane (matrix pin + M1 tables + SIMDATA1 + all trace texts) =="
+if [ ! -f "$MANIFEST" ]; then
+  echo "DEVICE FAIL: manifest $MANIFEST missing" >&2
+  exit 1
+fi
+gids="$(MLFK_MANIFEST="$MANIFEST" node -e "
+  const m=require(require('path').resolve(process.env.MLFK_MANIFEST));
   if(!Array.isArray(m.goldens)||m.goldens.length===0) throw new Error('manifest has no goldens');
   console.log(m.goldens.map(g=>String(g.id)).join('\n'));
 ")" || { echo "DEVICE FAIL: golden id extraction failed" >&2; exit 1; }
@@ -163,15 +195,43 @@ if [ -z "$gids" ]; then
   echo "DEVICE FAIL: golden id extraction returned nothing" >&2
   exit 1
 fi
-n=0
-for id in $gids; do
+for id in $PINNED_GOLDEN_SET; do
   if ! [[ "$id" =~ ^g[0-9]{2}$ ]]; then
     echo "DEVICE FAIL: golden id fails validation ('$id')" >&2
     exit 1
   fi
-  n=$((n + 1))
 done
-echo "   $n goldens in the manifest"
+# MATRIX PIN (iter 45, review 43-1 High) — BEFORE any build/device work:
+# (a) exact-set: the sorted manifest id list must be string-identical to
+# the pinned set (implies exactly 8 entries, unique, exactly those ids —
+# a duplicate g07 replacing g08, or a truncated 7-entry manifest, dies
+# HERE, never as a smaller-but-passing matrix);
+# (b) CPU role: g07/g08 (and only they) must carry cpu=1 (checked below
+# via golden_params, whose strict parser also validates every field).
+sorted_gids="$(printf '%s\n' $gids | LC_ALL=C sort | tr '\n' ' ')"
+sorted_gids="${sorted_gids% }"
+if [ "$sorted_gids" != "$PINNED_GOLDEN_SET" ]; then
+  echo "DEVICE FAIL: matrix pin — manifest golden set is not the pinned matrix" >&2
+  echo "  pinned:   {$PINNED_GOLDEN_SET}" >&2
+  echo "  manifest: {$sorted_gids}" >&2
+  exit 1
+fi
+for id in $PINNED_GOLDEN_SET; do
+  golden_params "$id"
+  case " $PINNED_CPU_SET " in
+    *" $id "*) want_cpu=1 ;;
+    *) want_cpu=0 ;;
+  esac
+  if [ "$cpu" != "$want_cpu" ]; then
+    echo "DEVICE FAIL: matrix pin — $id cpu role is $cpu, pinned $want_cpu (CPU set = {$PINNED_CPU_SET})" >&2
+    exit 1
+  fi
+done
+# the <n>/<n> count derives from the PINNED set, never raw manifest
+# cardinality; every later loop iterates the pinned set.
+n=0
+for id in $PINNED_GOLDEN_SET; do n=$((n + 1)); done
+echo "   matrix pin OK: manifest == pinned set {$PINNED_GOLDEN_SET}, CPU role on {$PINNED_CPU_SET} only ($n goldens)"
 bash pipeline/extractor/build-extractor.sh
 rm -f "$TABLES/ml_tables.c" "$TABLES/ml_tables.h" \
   "$TABLES/ml_stages.c" "$TABLES/ml_stages.h"
@@ -181,7 +241,7 @@ made "$TABLES/ml_tables.c" "$TABLES/ml_tables.h" \
 rm -f "$DEVB/simdata.txt"
 node "$CAL/dump-sim-data.js" --out "$DEVB/simdata.txt"
 made "$DEVB/simdata.txt"
-for id in $gids; do
+for id in $PINNED_GOLDEN_SET; do
   golden_params "$id"
   rm -f "$DEVB/$id.trace.txt"
   node "$SIM/trace-to-txt.js" "oracle/goldens/$trace" "$DEVB/$id.trace.txt"
@@ -197,7 +257,7 @@ echo "== [2/5] AI-bridge artifacts for the CPU goldens =="
 # A wrong/stale bridge cannot yield a passing stream. Fresh builds
 # (absent artifact) get the full rm-before-produce + made() +
 # STREAM-MATCH-guarded capture treatment (fix_plan §M2 task 16 recipe).
-for id in $gids; do
+for id in $PINNED_GOLDEN_SET; do
   golden_params "$id"
   [ "$cpu" = 1 ] || continue
   if [ ! -f "$BUILD/$id.ai-bridge.txt" ]; then
@@ -225,7 +285,7 @@ echo "== [4/5] device: replay all $n goldens (streams + --timing pulled, judged 
 rig_stamp_rehash sim_device
 dsh "rm -rf $DTMP $DSD && mkdir -p $DTMP $DSD"
 push_files=("$DEVB/sim_device" "$DEVB/simdata.txt")
-for id in $gids; do
+for id in $PINNED_GOLDEN_SET; do
   push_files+=("$DEVB/$id.trace.txt")
   golden_params "$id"
   if [ "$cpu" = 1 ]; then
@@ -238,7 +298,7 @@ dsh "chmod +x $DTMP/sim_device"
 
 pass=0
 rows=""
-for id in $gids; do
+for id in $PINNED_GOLDEN_SET; do
   golden_params "$id"
   cmd="$DTMP/sim_device --trace $DTMP/$id.trace.txt --simdata $DTMP/simdata.txt"
   cmd="$cmd --seed $seed --p1 $p1 --p2 $p2 --stage $stage --frames $frames"
@@ -310,6 +370,26 @@ rm -f "$DEVB/device-perf-rows.md"
 } > "$DEVB/device-perf-rows.md"
 made "$DEVB/device-perf-rows.md"
 cat "$DEVB/device-perf-rows.md"
+
+# PERF-HISTORY PRESENCE (iter 45, review 43-1 Medium; header "PERF-
+# HISTORY SPLIT"): READ-ONLY structural assertion that the tracked
+# append-only history carries a measured table row for EVERY pinned
+# golden — `| gNN | <int> | <numeric p50> | <numeric p99> | <int> |`.
+# The row CONTENT (appending the fresh table above) stays a WRITER duty;
+# this script never writes the tracked tree (rig_no_commit_guard).
+# Missing/mangled history = the writer duty was skipped = loud death.
+PERFDOC=docs/research/device-perf.md
+if [ ! -f "$PERFDOC" ]; then
+  echo "DEVICE FAIL: $PERFDOC missing — the measured perf history is a tracked writer-maintained doc" >&2
+  exit 1
+fi
+for id in $PINNED_GOLDEN_SET; do
+  if ! grep -Eq "^\| $id \| [0-9]+ \| [0-9]+(\.[0-9]+)? \| [0-9]+(\.[0-9]+)? \| [0-9]+ \|" "$PERFDOC"; then
+    echo "DEVICE FAIL: $PERFDOC has no measured table row for $id — append the printed rows artifact ($DEVB/device-perf-rows.md) to the doc (writer duty; the check only asserts presence)" >&2
+    exit 1
+  fi
+done
+echo "   perf-history presence: $PERFDOC carries a measured row for all $n pinned goldens"
 
 if [ "$pass" != "$n" ]; then
   echo "DEVICE FAIL: $pass of $n goldens verified" >&2

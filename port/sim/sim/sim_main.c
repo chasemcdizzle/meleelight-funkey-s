@@ -26,6 +26,7 @@
 // draws = (state_end - state_start) * inverse(0x6D2B79F5) mod 2^32 —
 // exact, with no wrapper around the hot ml_rng_next path.
 #include <inttypes.h>
+#include <stdint.h> // SIZE_MAX (timing-buffer overflow guard)
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -236,6 +237,17 @@ int main(int argc, char **argv) {
 
   uint64_t *tbuf = 0; // --timing: RAM buffer, flushed after the loop
   if (timingPath) {
+    // Overflow guard (iter 45, review 43-1 Medium): frames*8 must never
+    // wrap size_t (arm32: size_t is 32-bit — an accidental
+    // --frames 536870913 would wrap the allocation to 8 bytes and the
+    // frame loop would write out of bounds). Hard cap 10^7 timing frames
+    // (a full match is 3600; 10^7*8 = 80 MB fits any size_t here) plus
+    // the explicit SIZE_MAX wrap check — loud death, never a wrapped
+    // malloc.
+    if (frames > 10000000L ||
+        (uint64_t)frames > SIZE_MAX / sizeof *tbuf) {
+      sim_fatal("--timing: --frames exceeds the timing-buffer cap (10^7)");
+    }
     tbuf = malloc((size_t)frames * sizeof *tbuf);
     if (!tbuf) sim_fatal("oom (timing buffer)");
   }
