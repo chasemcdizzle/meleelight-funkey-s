@@ -3,7 +3,40 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-17, iter-60 writer completion)
+## Live right now (updated: 2026-07-17, iter-61 writer completion)
+
+- **Iter 61 (M3 task 6 hardening ROUND 2 — audio round-2 triage
+  closure) DONE**: both .loop/review-59-triage.md items landed. (M)
+  platform_audio_sdl.h platform_audio_stop: SDL_PauseAudio(1) BEFORE
+  the terminal gap sample (quiesce the callback source, then sample
+  under SDL_LockAudio — no callback can start after the sample;
+  accounting semantics otherwise identical). (L) check-device-audio.sh
+  reads judge + pack producer outputs from FILE BYTES (judge stdout →
+  file + byte-exact 'judge_complete=1\n' tail assert; pack verdict →
+  file + wc -c == one-verdict-line + one final newline), so trailing
+  blank lines violate the grammar as written. NEW teeth T9/T10
+  (trailing-blank → death, positive controls pass) + T8 file-based;
+  standing T5 probe through the reordered path: 24 underruns counted +
+  rejected. Cold `bash port/gfx/check-device-audio.sh` → `DEVICE AUDIO
+  OK (full p99 12.952 ms, underruns=0, attempts=1; cbs=5166 starts=274
+  stops=0 skips=0/3600)`, exit 0 (.loop/m3-task6r61-donecheck.log; run
+  cap 1/1, no retry consumed, one pre-registered arm rebuild).
+  Manifest: check-device-audio.sh re-pinned (c5471dd5…, status
+  truthfully arc-in-flight) + verify_m3.sh MANIFEST_SHA256 →
+  7e148d8c… in the SAME commit per the documented discipline (the
+  anchor line is verify_m3.sh's ONLY change; its NORMALIZED manifest
+  row ca21b4a5… unchanged — see AGENT-LOG iter 61 for the driver's
+  gate-closure review); `SELF-CHECK 23/23 + ANCHOR GREEN`
+  (.loop/m3-task6r61-manifest-selfcheck.log). Residual class instance
+  flagged (not fixed, out of triaged scope): parse_timing_judge's
+  $()-captured timing-judge stdout still normalizes a TRAILING blank
+  line (inherited task-4 apparatus — driver may queue with the render
+  check). **AUDIO ARC ROUND 3 = SCOPED CONFIRM PENDING (driver)**:
+  round-2 fix bytes (platform_audio_sdl.h + check-device-audio.sh)
+  are the confirm surface; sequencing unchanged — audio round-3
+  closure + gate-arc round-2 closure → driver flips statuses to
+  reviewed-go in the phase-advance commit → cold authoritative
+  verify_m3.sh → sentinel + Chase S1 ratification.
 
 - **Iter 60 (M3 task 7 hardening — gate-assembly round-1 triage
   closure) DONE**: all 6 triage items (.loop/review-58-triage.md

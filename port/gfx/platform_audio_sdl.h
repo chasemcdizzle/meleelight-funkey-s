@@ -23,9 +23,12 @@
 // review-57 M2): the gap chain is SEEDED at audio-open (the unpause
 // timestamp), so the open->first-callback interval is judged by the
 // same rule, and platform_audio_stop judges the terminal
-// last-callback->stop interval under SDL_LockAudio — a stalled callback
-// START, a late finish, or a callback thread that silently died mid-run
-// all land in `underruns` (a dead thread's terminal gap is open->stop).
+// last-callback->stop interval — SDL_PauseAudio(1) FIRST (quiescing
+// the callback source), then the sample under SDL_LockAudio (iter 61,
+// review-59 M: no callback can START after the terminal sample) — a
+// stalled callback START, a late finish, or a callback thread that
+// silently died mid-run all land in `underruns` (a dead thread's
+// terminal gap is open->stop).
 // badlen counts callbacks whose len differs from the granted spec's
 // byte size — the ABI tripwire (SDL_AudioSpec layout: int freq, Uint16
 // format, Uint8 channels, Uint8 silence, Uint16 samples, Uint16
@@ -167,12 +170,19 @@ int platform_audio_start(PlatformAudioFill fill, void *ud, int samples) {
 
 void platform_audio_stop(void) {
   if (!g_pa_open) return;
-  // Terminal boundary interval (iter 59, review-57 M2): judge the
-  // last-callback->stop gap by the same >2-period rule, under the SDL
-  // audio lock so the callback thread is quiescent while the counters
-  // are read/adjusted. A callback thread that silently died mid-run
+  // Terminal boundary interval (iter 59, review-57 M2; ORDERING iter
+  // 61, review-59 M): SDL_PauseAudio(1) FIRST — pausing quiesces the
+  // callback source, so no NEW callback can start after the terminal
+  // sample below is taken (the old sample->pause order left a window
+  // where a callback could run AFTER the terminal gap was judged and
+  // never be gap-checked). Then the sample is taken under the SDL
+  // audio lock, which waits out any IN-FLIGHT callback (the callback
+  // runs with the audio mutex held), so its g_pa_last_ns write is
+  // ordered before the read. Same >2-period rule, accounting semantics
+  // otherwise identical: a callback thread that silently died mid-run
   // lands here as underruns (its terminal gap spans to open/last-cb)
   // even when the coarse cbs window would not notice.
+  SDL_PauseAudio(1);
   SDL_LockAudio();
   {
     const uint64_t tEnd = pa_now_ns();
@@ -184,7 +194,6 @@ void platform_audio_stop(void) {
     }
   }
   SDL_UnlockAudio();
-  SDL_PauseAudio(1);
   SDL_CloseAudio(); // joins the callback thread — stats are safe after
   g_pa_open = 0;
 }
