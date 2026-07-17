@@ -25,6 +25,11 @@ now (phase, in-flight task + writer state, device state, last commit,
 gates green/red); §rulings = standing owner directives, day-tagged;
 superseded bullets get marked, not deleted. A fresh context reads
 CLAUDE.md then STATE.md and is oriented.
+**Recovery pointer (amended 2026-07-16)**: AGENT-LOG entries carry
+monotonic ids (iter N / driver day-tags); STATE.md records the latest
+entry id, both updated in the same commit. Recovery reads STATE, then
+AGENT-LOG from that id to EOF; a mismatch means STATE is stale — 
+reconcile before doing any work.
 
 ## 2. Pre-registration
 
@@ -55,9 +60,16 @@ FILE, never from an agent's summary.
   (verify-stream wrappers, check-script comparison logic, canon/ser):
   independent second review (different reviewer) + byte-identity
   regression on archived results.
-- **Tier B (1-2 rounds, driver's judgment to skip)** — sim TUs whose
-  done-check is a bit-exact oracle replay (the frozen checksum stream is
-  the stronger reviewer), and diagnostic-only instruments.
+- **Tier B (light, never wholly skippable — amended per the reviewed
+  reservations arc, 2026-07-16)** — sim TUs whose done-check is a
+  bit-exact oracle replay, and diagnostic-only instruments. The stream
+  proves behavioral equality ONLY inside the tested corpus — it cannot
+  see UB, out-of-bounds writes later overwritten, or branches no golden
+  exercises. Every shipping sim-TU change therefore gets at least ONE
+  structural/coverage review round; skipping entirely is reserved for
+  non-shipping diagnostics. Any Medium+ finding, or any change touching
+  ABI/linkage/layout/lifetimes/bounds/pointers/overflow/build flags/
+  error paths, escalates to a full Tier A arc.
 
 Review ≠ verification: GO never substitutes for the done-check, and a
 clean done-check never substitutes for Tier A review of a non-checksummed
@@ -91,6 +103,16 @@ adversary-with-write-access scenarios.
 - Build stamp-caches must hash INPUTS (TU list + flags + sources), so a
   half-refreshed build cannot masquerade as current (`MLFK_FORCE_ARM=1`
   escape hatch stays).
+- **Reviewed-pin freeze manifest for GATE evidence (adopted from the
+  reservations arc, 2026-07-16 — R3's mechanical core)**: hashes prove
+  identity, not approval. Every phase EXIT-GATE script (verify_m3.sh
+  onward) carries a freeze manifest recording sha256 + review-GO status
+  for each of its evidence PRODUCERS (check scripts, adbsh, judge tools,
+  build recipe/image) and HARD-REFUSES to run when installed bytes don't
+  match a reviewed pin. Any producer change invalidates prior gate
+  evidence — the gate reruns with the new pins after their arc reaches
+  GO. Per-task done-checks stay covered by the driver's ground-truth
+  ritual; the manifest is a GATE-layer guarantee.
 
 ## 5. Ground-truth from disk (driver ritual)
 
@@ -156,17 +178,31 @@ events and genuine decisions, not progress noise.
 ## Explicitly NOT adopted (with reasons; reopen only with new evidence)
 
 - **Parallel lanes / claim files / host-idle multi-lane dispatch** —
-  conflicts with HARD RULES 4/6 (one branch, one atomic commit per
-  iteration, clean tree between). Reopen condition: wall-clock becomes
-  the binding constraint (M4-scale), and then via git worktrees, not
-  claim files.
-- **Full pin/parking ceremony** (candidate bundles, OFF-hatch binaries,
-  streak counters, integration windows) — the frozen oracle streams
-  already make unreviewed-code-producing-accepted-results structurally
-  impossible for checksummed surfaces; deterministic builds + git are the
-  revert levers. §4's narrow form is the kept residue.
-- **Checker amendment via evidence package** — HARD RULE 3 is stricter
-  (never weaken; spec change = version bump + re-freeze all goldens in
-  one change). Kept stricter.
+  rejection scope NARROWED 2026-07-16 (reservations arc): what stays
+  rejected is multiple WRITERS and claim files (conflict with HARD RULES
+  4/6 — one branch, one atomic commit per iteration, clean tree between).
+  A read-only pinned host lane overlapping ONE offline lane (worktrees,
+  driver as sole merger) becomes eligible when its pre-registered trigger
+  fires: across 5 completed iterations, serialized host waiting ≥ 20% of
+  critical-path wall-clock while a consumer-registered offline task sat
+  ready.
+- **Full pin/parking ceremony** — rejection NARROWED 2026-07-16
+  (reservations arc, R3 judged UNSOUND as originally stated): the
+  mechanical core IS adopted — §4's reviewed-pin freeze manifest with
+  gate-level hard refusal ("hashes prove identity, not approval").
+  Still rejected: parked candidate bundles, byte-exact OFF-hatch
+  binaries, and integration windows — artifacts here are
+  deterministically rebuilt from a pinned commit with per-run recorded
+  hashes, so git + the stamp already provide byte-exact restoration and
+  attribution controls.
+- **Checker amendment via evidence package** — AMENDED 2026-07-16 (the
+  reservations arc found the laundering hole): HARD RULE 3's never-weaken
+  stays, and version bumps alone prove CONSISTENCY, not LEGITIMACY. Any
+  successor checksum-spec/checker version additionally requires an
+  EVIDENCE PACKAGE: the demonstrated miss/defect, a minimal old-vs-new
+  discriminating case pair, an anti-gaming argument in writing, an
+  independent review, and a regression proving archived verdicts
+  unchanged under the old checker — and the lane seeking relief from a
+  verdict may not approve its own package.
 - **DIGEST newest-on-top reordering** — AGENT-LOG stays append-at-bottom;
-  STATE.md covers fast orientation.
+  STATE.md + the §1 recovery pointer cover fast, non-stale orientation.

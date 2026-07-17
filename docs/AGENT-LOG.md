@@ -3608,3 +3608,24 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   explicit exit-status checks. The PROCESS.md threat-model paragraph is
   the class-level residue: it names the review bar so future rounds
   argue accident-vs-adversary ONCE instead of per finding.
+
+## driver — 2026-07-16 — reservations arc resolved: PROCESS.md amendments (post-iter-40)
+
+- Codex reservations review (.loop/review-reservations-2.log): R1/R2/R4/R5
+  SOUND-WITH-AMENDMENT, R3 UNSOUND-as-stated. All four amendments adopted
+  verbatim into docs/PROCESS.md (Tier B never wholly skippable + escalation
+  conditions; concrete parallel-lane trigger [5 iters, ≥20% serialized host
+  wait, registered consumer]; checker-succession evidence packages
+  [anti-laundering: miss + discriminating pair + anti-gaming + independent
+  review + archived-verdict regression, proposer ≠ approver]; STATE.md
+  recovery pointer via monotonic log ids). R3 resolved at the mechanical
+  core: §4 gains the reviewed-pin freeze manifest — every phase EXIT GATE
+  hard-refuses evidence producers whose bytes don't match a reviewed pin
+  (lands in verify_m3.sh via fix_plan §M3 task 7); parking/OFF-bundles/
+  integration windows stay rejected (deterministic rebuild + stamp hashes
+  are the existing byte-exact restoration path). Chase was given findings
+  + recommendation; no objection at adoption time — remains overridable.
+- Iter-40 driver verification per PROCESS §5: 19ede79 verified, tree
+  clean, done-check re-run COLD → DEVICE CONFORMS g01 exit 0
+  (.loop/driver-cold-task1r40-donecheck.log, cache-HIT path). Round-3
+  review arc opens next (diff-scoped, pointed at the §3 review bar).

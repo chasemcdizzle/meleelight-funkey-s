@@ -35,12 +35,21 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   scripts") added to PROCESS.md §3 + failure mode 8 to §7. Cold
   done-check DEVICE CONFORMS g01 through BOTH rebuild and cache-HIT
   paths; logs `.loop/m3-task1r40-*`.
+- **PROCESS.md amended (reservations arc resolved, post-iter-40 driver
+  turn)**: Tier B never wholly skippable (+ escalation conditions);
+  concrete parallel-lane trigger (5 iters / ≥20% serialized host wait /
+  registered consumer); checker-succession EVIDENCE PACKAGES
+  (anti-laundering); STATE recovery pointer (monotonic log ids);
+  reviewed-pin FREEZE MANIFEST for gate evidence — verify_m3.sh must
+  hard-refuse unreviewed evidence producers (task-7 requirement).
 - **In flight**: Tier-A Codex review ROUND 3 over the round-2-hardened
-  rig pending (point the reviewer at PROCESS.md §3's new review bar so
-  the arc converges on accident/corruption classes); M3 task 2 writer
-  launches on GO (all-8 device conformance + sim-only p99,
-  `check-device-conform.sh` — must inherit adbsh.sh + pullv/stamp/lock
-  plumbing).
+  rig (diff-scoped, pointed at PROCESS.md §3's review bar); M3 task 2
+  writer launches on GO (all-8 device conformance + sim-only p99,
+  `check-device-conform.sh` — must inherit adbsh.sh nonce-dsh +
+  pullv/stamp/lock/rehash-before-push plumbing verbatim; sweep pin
+  referenced, not re-derived).
+- **Latest AGENT-LOG entry**: driver 2026-07-16 post-iter-40
+  (reservations amendments); latest iter entry: 40.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
