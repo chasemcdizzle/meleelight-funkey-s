@@ -6752,3 +6752,28 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   parsers accept the WHOLE producer line against the expected grammar
   including the argument echo, never a plausible first field
   (rig_dev_sha256's rule now uniform host-side via rig_host_sha256).
+
+## driver — 2026-07-17 — task-4 Tier-A arc CAPPED-CLOSED (round 4 + iter-56 fixes)
+
+- Task-4 (render rig) arc: CAPPED-CLOSED after 4 rounds + 4 hardening
+  iterations (52/54/55/56; ~20 findings fixed with teeth). Named
+  recurring class at cap: "cross-run frontend-park/deadman sequencing
+  before startup normalization owns inherited state" — structurally
+  answered by lock-time pessimism (RIG_PRESERVE_DTMP at acquire) + the
+  step-0 normalization chokepoint + pid-scoped deadman kills; residual =
+  operator-error concurrency, dispositioned Low WITH reviewer
+  concurrence (.loop/review-55-1.log endorsed the cap). Review-50's
+  gfx_app getline/ferror Low remains open-by-declaration (registered).
+- Iter-56 driver verification: 4487191 verified, pushed. Cold re-run
+  attempt 1 FAILED CORRECTLY on the transient single-frame spike class
+  (1 skip/3600, all p99s healthy); attempt 2 clean (DEVICE RENDER OK,
+  0 skips). That is now TWO spike occurrences in ~6 recent gate runs
+  (iter-54 attempt 1 frame 1190; this run) — MEASURED EXPOSURE for task
+  7: verify_m3.sh must implement an explicit bounded retry (≤2, each
+  attempt logged + surfaced in output, never silent) for the skips==0
+  leg, and the spike class (~19 ms single-frame sim overrun on device)
+  is registered as a candidate M4 instrument (attribute: kernel/adbd
+  contention vs sim-internal) — not blocking M3 (p99 legs unaffected).
+- Arc-length trend final: task-1: 5 rounds, task-2: 3, task-3: 3(cap),
+  task-4: 4(cap), task-5: 2.
+- next: task 6 (audio-on), task 7 (OPK + gate assembly).

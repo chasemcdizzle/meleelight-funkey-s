@@ -346,7 +346,7 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   (.loop/m3-task4r56-reg-g01.log). Zoom-out: protection flags default
   to PRESERVE from resource-acquisition time; only positive
   verification flips them.
-- **In flight**: task-4 arc CAPPED-CLOSED pending driver record (iter
+- **In flight**: task-4 arc CAPPED-CLOSED (driver-recorded; class + Low disposition in AGENT-LOG) (iter
   56 was the pre-announced FINAL round; recurring class named:
   "cross-run frontend-park/deadman sequencing before startup
   normalization owns inherited state"; residual = operator-error
