@@ -39,7 +39,7 @@ static AsTri mr_main(MlSim *S, double p, const MlInputBuffer in[4],
                                    "setVelocities", pl->timer - 1) *
                       pl->phys.face;
     if (pl->timer > 10 && pl->timer < 18) {
-      mv_drawVfx("swing");
+      ml_drawVfx_swing("swing", 0, 0, pl->phys.face, p, "SIDESPECIALGROUND3FORWARD", pl->timer - 11);
     }
     if (pl->timer == 11) {
       pl->hitboxes.active[0] = true;

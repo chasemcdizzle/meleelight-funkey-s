@@ -224,3 +224,74 @@ void cb_qstr(CanonBuf *b, const char *s) {
   cb_puts(b, s);
   cb_putc(b, '"');
 }
+
+// --- vfx config canon (M4 task 1) ----------------------------------------
+// Emits the canon-v1.1 serialization of an MlVfx config snapshot,
+// byte-identical to the capture side's ctx.canon(vfxConfig) at call time:
+// an object with SORTED present keys out of
+// {color1, color2, f, face, name, pos}; pos/Vec2D as {"x":d:…,"y":d:…};
+// colors as {"b":d:…,"g":d:…,"r":d:…}; the marth swing f as
+// {"frame":d:…,"pNum":d:…,"swingType":"…"}.
+void cb_vfx(CanonBuf *b, const MlVfx *v) {
+  int first = 1;
+  cb_putc(b, '{');
+  if (v->has_color) {
+    cb_puts(b, "\"color1\":{\"b\":");
+    cb_num(b, v->c1b);
+    cb_puts(b, ",\"g\":");
+    cb_num(b, v->c1g);
+    cb_puts(b, ",\"r\":");
+    cb_num(b, v->c1r);
+    cb_puts(b, "},\"color2\":{\"b\":");
+    cb_num(b, v->c2b);
+    cb_puts(b, ",\"g\":");
+    cb_num(b, v->c2g);
+    cb_puts(b, ",\"r\":");
+    cb_num(b, v->c2r);
+    cb_puts(b, "}");
+    first = 0;
+  }
+  if (v->f_kind != ML_VFX_F_NONE) {
+    if (!first) cb_putc(b, ',');
+    cb_puts(b, "\"f\":");
+    switch (v->f_kind) {
+      case ML_VFX_F_NUM:
+        cb_num(b, v->f_num);
+        break;
+      case ML_VFX_F_VEC:
+        cb_puts(b, "{\"x\":");
+        cb_num(b, v->f_x);
+        cb_puts(b, ",\"y\":");
+        cb_num(b, v->f_y);
+        cb_puts(b, "}");
+        break;
+      case ML_VFX_F_SWING:
+        cb_puts(b, "{\"frame\":");
+        cb_num(b, v->f_frame);
+        cb_puts(b, ",\"pNum\":");
+        cb_num(b, v->f_pnum);
+        cb_puts(b, ",\"swingType\":");
+        cb_qstr(b, v->f_swing);
+        cb_puts(b, "}");
+        break;
+      default:
+        cb_puts(b, "undef"); // unreachable; loud in any diff
+        break;
+    }
+    first = 0;
+  }
+  if (v->has_face) {
+    if (!first) cb_putc(b, ',');
+    cb_puts(b, "\"face\":");
+    cb_num(b, v->face);
+    first = 0;
+  }
+  if (!first) cb_putc(b, ',');
+  cb_puts(b, "\"name\":");
+  cb_qstr(b, v->name);
+  cb_puts(b, ",\"pos\":{\"x\":");
+  cb_num(b, v->px);
+  cb_puts(b, ",\"y\":");
+  cb_num(b, v->py);
+  cb_puts(b, "}}");
+}

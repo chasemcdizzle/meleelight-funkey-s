@@ -55,7 +55,7 @@
 // shared-origin, task 7's real bodies; unregistered states cross
 // mv_seam), hd_flags (crouch/vCancel reads), hd_getKnockback/
 // hd_getHitstun/hd_knockbackSounds (task 6's real bodies),
-// mv_screenShake (4 seeded draws), mv_drawVfx / ml_sound_play
+// mv_screenShake (4 seeded draws), ml_drawVfx* / ml_sound_play
 // (ml_events.h), mv_attr (CTAB1 weight), ml_art_out_of_domain (rule-7
 // traps at upstream throw sites / outside the captured domain).
 // percentShake is the CHECKSUM.md §7 native-RNG exclusion (no-op).

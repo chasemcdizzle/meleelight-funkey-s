@@ -42,8 +42,8 @@ static AsTri mv_init(MlSim *S, double p, const MlInputBuffer in[4],
   pl->phys.chargeFrames = 0;
   pl->phys.charging = false;
   mv_turnOffHitboxes(S, p);
-  (void)ledge_point(S, pl->phys.onLedge); // const l = ...; coordinate read
-  mv_drawVfx("cliffcatchspark");
+  const Vec2D lp = ledge_point(S, pl->phys.onLedge); // const l = ...
+  ml_drawVfx("cliffcatchspark", lp.x, lp.y, pl->phys.face);
   mv_dispatch(S, MV_CS(S, p), "CLIFFCATCH", "main", p, in, 0);
   return AS_UNDEF;
 }

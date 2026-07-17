@@ -194,6 +194,40 @@ shortest-float formatter is a known one-time M2 component priced
 separately; the calibration measures the TRANSLATION divergence rate, and
 bit-pattern comparison is equally injective and strictly as sensitive.
 
+## vfx posts (WIDENED, M4 task 1 — full drawVfx configs)
+
+Through M3 the capture specs projected drawVfx down to its NAME and the C
+seam carried a name-only queue (the iter-44 registered deferral). M4
+task 1 retires that projection — a CAPTURE-FORMAT change, not a check
+weakening (the name-only list retires WITH its projection; every affected
+capture re-recorded under the same STREAM-MATCH + byte-stability x2
+guards; record-count pins unchanged by construction):
+
+- Every `vfx` post list entry is now the CALL-TIME canon (v1.1) of the
+  upstream `vfxConfig` object passed to drawVfx — snapshot semantics
+  (upstream drawVfx itself snapshots: `instance.newPos = new Vec2D(
+  cfg.pos.x, cfg.pos.y)`), so live-reference `pos` values (phys.pos,
+  hit.hitPoint, article instance.pos) serialize their at-call values.
+- Measured config domain (static sweep of all 193 sim-plane sites +
+  dynamic survey `survey-vfx.js` over fresh g01 captures, AGENT-LOG
+  iter 64): keys are a subset of {name, pos, face, f, color1, color2};
+  `pos` always {x,y}; `f` is a number | Vec2D {x,y} (wall/ceiling
+  normals) | the marth swing object {frame, pNum, swingType};
+  color1/color2 are {b,g,r} laser colors. Sorted-key canon as always.
+- C side: `MlVfx` (port/sim/ml_events.h) carries the config; the
+  `ml_drawVfx*` shape emitters mirror each measured call-expression key
+  set; `cb_vfx` (canon.c) emits the byte-identical canon. "circleDust"
+  still consumes its 4 seeded draws inside the central emitter.
+- Specs whose posts carry vfx lists: moves-* (all six) + article
+  (existing channels widened), physics/asshort/hitdet (channels ADDED —
+  `"vfx":[…]` appended after `"snd"` in their fixed-literal envelopes).
+  Attribution scoping is unchanged: vfx inside dispatch/seam windows
+  stay subsumed by the seam (the C replays resync, never run seam
+  bodies); pure-boundary frames hard-throw if a vfx escapes.
+- shieldDepletion's read set WIDENED (+pos, +face — the breakShield vfx
+  reads them): its args projection carries 7 keys, AsShieldDepState
+  gained pos/face (in-only).
+
 ## The stage argument (projection rule)
 
 `runCollisionRoutine`'s `stage` argument is captured as its module-read
@@ -252,9 +286,11 @@ credited to the innermost frame if attributing; otherwise sounds and
 dispatches are ignored (they belong to the moves clusters) and RNG draws
 are emitted as standalone `Math.random` records. Mutation-captured
 boundaries carry the 5th post field as the envelope
-`{"dsp":[...],"mut":{...},"rng":[...],"snd":[...]}` (sorted keys): direct
-dispatch notes as `"<phase>:<MOVENAME>"` strings, the fn's mutated
-write-set, seeded draws consumed, sound names played.
+`{"dsp":[...],"mut":{...},"rng":[...],"snd":[...],"vfx":[...]}` (sorted
+keys): direct dispatch notes as `"<phase>:<MOVENAME>"` strings, the fn's
+mutated write-set, seeded draws consumed, sound names played, and (M4
+task 1) full-config vfx — shieldDepletion's breakShield is the module's
+one site.
 
 RNG channel records (oracle/CHECKSUM.md §6): a frame-0 `rngBoot` record
 (`args [seed, bootDraws]`, ret = the fast-forwarded mulberry32 state;
@@ -315,12 +351,14 @@ The physics record:
   (normalized: absent key → null) + `ledge` + `blastzone` — captured per
   record, so fountain's per-frame moving-platform mutations are recorded
   faithfully), `versusMode`.
-- post = `{"alias":…,"hq":[…],"players":…,"snd":[…]}` — post-call alias
-  probe (3 hitbox flags, compared against the C tracking), physics' OWN
-  hitQueue rows (mark/collect attribution: hitQueue is reassigned by
-  resetHitQueue each tick so its `push` cannot be wrapped once; rows
-  appended during dispatch windows belong to the moves), post players,
-  physics' own direct sound plays.
+- post = `{"alias":…,"hq":[…],"players":…,"snd":[…],"vfx":[…]}` —
+  post-call alias probe (3 hitbox flags, compared against the C
+  tracking), physics' OWN hitQueue rows (mark/collect attribution:
+  hitQueue is reassigned by resetHitQueue each tick so its `push` cannot
+  be wrapped once; rows appended during dispatch windows belong to the
+  moves), post players, physics' own direct sound plays, and (M4 task 1)
+  physics' own full-config vfx (wallBounce/ceilingBounce/shocked/
+  burning; dispatch-window vfx stay subsumed by the seam).
 
 ORACLE-FED SEAMS (moves are tasks 7-12, the getters task 6): every
 top-level move dispatch from inside physics produces a `dispatch` record —
@@ -383,7 +421,9 @@ means a new external caller and fails the pins.
   (args `[pre]`): mutation-captured with ONE uniform envelope — pre
   `{alias, characterSelections, gameMode, gameSettings {phantomThreshold},
   hq, phq, playerType, players}`, post `{alias(3-flag), hq, phq, players,
-  rng, snd}`. `hq`/`phq` are the FULL exported queues (rows enter from
+  rng, snd, vfx}` (vfx: M4 task 1 full configs — clank/impactLand/
+  powershield/breakShield/groundBounce/hit-effect families;
+  dispatch-window vfx subsumed by the seam). `hq`/`phq` are the FULL exported queues (rows enter from
   other clusters' windows — THROW moves during update, physics'
   damaging-stage rows — so the replay marshals them per record, never
   chains). hq rows: 6/7-element arrays `[v, a, h, shieldHit, isThrow,
@@ -468,7 +508,8 @@ get the SEAM logger below.
   reassignment/component-write sites), hq, players, rng (owner draws:
   CAPTUREWAIT's mash wiggle, FURAFURA's vfx jitter, screenShake's 4 per
   DEAD call, drawVfx("circleDust")'s 4), snd (incl. "furaloop.stop"),
-  vfx (drawVfx name queue — the ml_vfx seam's oracle)}. ret is
+  vfx (M4 task 1: full drawVfx configs, call-time canon — see "vfx
+  posts" above)}. ret is
   T | F | undef (several upstream interrupt arms fall through without a
   return — carried verbatim as AS_UNDEF).
 - `mdispatch` (5-field seam): a NON-shared move fn entered while the TOP
@@ -892,6 +933,10 @@ section above applies with fox→puff) — deltas only:
   enters this cluster, so the task-11 sbid seam is NOT carried; no puff
   move consumes a Howl id — measured, no `= sounds.` assignment under
   characters/puff/).
+- The pre `stage` projection is SEVEN keys (+wallL/wallR — M4 task 1:
+  NSA onWallCollide's wallBounce vfx reads
+  `activeStage.wall{L,R}[wallNum][1].x`, putting the wall plane in
+  puff's read set; the other move specs keep the 5-key projection).
 - The pre envelope gains **"chd"** (canon-sorted after
   characterSelections): the EXECUTED charHitboxes `{moveKey: {idN:
   {dmg, size}}}` VALUE plane of the puff char at record time. Puff

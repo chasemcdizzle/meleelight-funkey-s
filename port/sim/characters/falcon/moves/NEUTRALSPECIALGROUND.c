@@ -56,11 +56,13 @@ static AsTri fc4_main(MlSim *S, double p, const MlInputBuffer in[4],
     if (pl->timer >= 52 && pl->timer < 57) {
       const Vec2D off =
           mv_falcon_hb0_off(pl, "NEUTRALSPECIALGROUND: vfx offset");
-      (void)off; // position is render-only; the vfx queue keeps names
-      mv_drawVfx("firefoxtail");
+      ml_drawVfx("firefoxtail",
+                 pl->phys.pos.x + (off.x + 2) * pl->phys.face,
+                 pl->phys.pos.y + off.y - 3, pl->phys.face);
     }
     if (pl->timer == 50) {
-      mv_drawVfx("falconpunch");
+      ml_drawVfx_f("falconpunch", pl->phys.pos.x, pl->phys.pos.y,
+                   pl->phys.face, p);
     }
   }
   return AS_UNDEF;

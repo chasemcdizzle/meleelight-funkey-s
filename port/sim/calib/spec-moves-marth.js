@@ -224,7 +224,7 @@
         const orig = VFX.drawVfx;
         VFX.drawVfx = function (cfg) {
           const t = top();
-          if (t && t.attr) t.vfx.push(cfg.name);
+          if (t && t.attr) t.vfx.push(ctx.canon(cfg)); // M4 task 1: full config, CALL-TIME canon (snapshot semantics)
           return orig.apply(this, arguments);
         };
       }
@@ -348,7 +348,7 @@
               ',"rng":' + ctx.canon(fr.rng) +
               ',"sbid":' + ctx.canon(fr.sbid) +
               ',"snd":' + ctx.canon(fr.snd) +
-              ',"vfx":' + ctx.canon(fr.vfx) + "}";
+              ',"vfx":[' + fr.vfx.join(",") + ']' + "}";
           ctx.push("move", argsCanon, ctx.canon(ret), post);
           return ret;
         };

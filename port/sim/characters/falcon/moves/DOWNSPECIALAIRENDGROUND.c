@@ -22,7 +22,8 @@ static AsTri fc4_init(MlSim *S, double p, const MlInputBuffer in[4],
   mv_assign_hitbox_id(S, p, "falconkickland", 1, 1);
   mv_assign_hitbox_id(S, p, "falconkickland", 2, 2);
   ml_sound_play("land");
-  mv_drawVfx("groundBounce");
+  ml_drawVfx_f("groundBounce", pl->phys.pos.x, pl->phys.pos.y,
+               pl->phys.face, pl->phys.groundAngle);
   mv_turnOffHitboxes(S, p);
   fc4_main(S, p, in, 0);
   return AS_UNDEF;

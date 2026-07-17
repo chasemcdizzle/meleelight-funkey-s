@@ -8,7 +8,8 @@ static AsTri mv_init(MlSim *S, double p, const MlInputBuffer in[4],
   MlPlayer *pl = mv_player(S, p);
   strcpy(pl->actionState, "LANDINGFALLSPECIAL");
   pl->timer = 0;
-  mv_drawVfx("circleDust"); // 4 seeded draws
+  ml_drawVfx("circleDust", pl->phys.pos.x, pl->phys.pos.y,
+             pl->phys.face); // 4 seeded draws
   ml_sound_play("land");
   mv_dispatch(S, MV_CS(S, p), "LANDINGFALLSPECIAL", "main", p, in, 0);
   return AS_UNDEF;

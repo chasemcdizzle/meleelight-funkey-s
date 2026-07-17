@@ -55,7 +55,7 @@ static AsTri mv_interrupt(MlSim *S, double p, const MlInputBuffer in[4],
       return AS_UNDEF; // upstream bare `return;`
     }
     mv_dispatch(S, MV_CS(S, p), "CATCHWAIT", "init", grabbedBy, in, 0);
-    mv_drawVfx("tech");
+    ml_drawVfx_p("tech", pl->phys.pos.x, pl->phys.pos.y + 10);
     return AS_TRUE;
   } else {
     return AS_FALSE;

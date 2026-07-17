@@ -8216,3 +8216,265 @@ folded into the M4 ladder below. Issue #18 closed by the driver.
   already emits the music PCM (22050 stereo S16) task 7 streams.
 - No implementation this commit (REPLAN contract). next: task 1 (vfx
   seam widening — VFX SEAM MATCH).
+
+## iter 64 — 2026-07-17 — M4 task 1 PRE-REGISTRATION: vfx seam widening, sim + capture side (frozen before any run/edit; PROCESS §2)
+
+- **Task (fix_plan §M4 task 1)**: widen ml_events vfx events from
+  name-only to the full drawVfx config; capture specs stop projecting
+  vfx posts; re-record affected captures (STREAM-MATCH guarded, ×2
+  byte-stable); every affected cluster replay 0-divergence; SIM
+  CONFORMS unchanged. done-check:
+  `bash port/sim/calib/check-vfx-seam.sh` → `VFX SEAM MATCH`, exit 0.
+- **Static site survey (comment-stripped scan of upstream src/, the
+  measured producer grammar)**: 204 live-code drawVfx call sites total.
+  Sim-plane: moves-shared 37 · moves-fox 27 · moves-falco 29 ·
+  moves-falcon 13 · moves-marth 43 · moves-puff 12 (= 161 move sites;
+  the iter-44 "174" = these + article 9 + physics 4) · article 9 ·
+  physics 4 · asshort 1 (shieldDepletion breakShield) · **hitdet 17
+  literal + 1 string-arg throw site** (hitDetection.js:482, C-trapped)
+  · main.js 3 (entrance ×2 + start; god module = integrated sim).
+  Out of scope: target 2 (M4 task 11), render-plane spawns in
+  main/vfx/* (dVfx/burning, firehit, stars, lines — task 2's renderVfx
+  surface, they fire DURING render, not in the sim tick).
+- **MEASURED REFUTATION of the brief's affected-list guess**: the brief
+  pre-registered "moves-* all six, article, asshort, physics; confirm
+  by grep + capture counts". Grep REFUTES the exact list: hitDetection
+  .js carries 18 sites (the largest single-file emitter — impactLand/
+  hitSparks/hitFlair/hitCurve/powershield/breakShield/groundBounce/
+  clank families, the most visible hit vfx) and spec-hitdet currently
+  captures NO vfx channel at all (hit_detection.c: comment-only
+  no-ops). Per the confirm-by-grep instruction + HARD RULE 8 (class
+  fix), the affected-cluster list is WIDENED to include hitdet (spec
+  channel + C emissions + re-record over its carriers g01/g04/g06).
+  main.js's 3 sites are emitted from sim_boot.c's structure-parallel
+  startGame/initializePlayers sites (boot-time; no capture spec covers
+  main.js — honest-coverage note below). Affected spec list (final):
+  moves-shared, moves-fox, moves-falco, moves-falcon, moves-marth,
+  moves-puff, article, asshort, physics, hitdet (10 specs).
+- **Static config-shape domain (all sim-plane literal sites)**: key
+  sets {name,pos} · {name,pos,face} · {name,pos,face,f} ·
+  {name,pos,face,f,color1,color2}. Value types: name string literal;
+  pos Vec2D {x,y} (fresh `new Vec2D(...)` or LIVE references —
+  player[v].phys.pos / hit.hitPoint / shieldPositionReal / ecbTop /
+  aArticles[a].instance.pos / clankHit[1] — so the capture MUST canon
+  the config AT CALL TIME, snapshot semantics, mirroring the C
+  emit-at-site); face number; f ∈ number (angles/slots/frame/0/1/3) |
+  Vec2D (wallNormal/ceilingNormal/normal — outwardsWallNormal returns
+  Vec2D) | swing object {pNum,swingType,frame} (35 marth sites);
+  color1/color2 objects {r,g,b} (fox/falco laser sites, 24).
+- **Capture-FIRST dynamic survey (rule 7, survey-shapes precedent)**:
+  BEFORE finalizing the C MlVfx struct, record run-A captures for the
+  shape-family representatives — moves-shared g01, moves-marth g01
+  (swing f), moves-fox g01 (laser colors + f), article g01, physics
+  g01, hitdet g01 (6 browser runs; asshort/falco/falcon/puff shapes
+  are class-covered by these) — and survey the widened vfx channel
+  with a NEW standing instrument `port/sim/calib/survey-vfx.js`
+  (streams a capture JSONL, extracts vfx lists from post envelopes,
+  prints distinct config key-sets + per-key token classes + counts).
+  Any live shape outside the static domain → widen MlVfx + cb_vfx
+  before translation. Non-surveyed clusters are guarded by the replay
+  itself (bit-exact post compare = loud divergence on any unmodeled
+  shape); refutation handling: widen + re-run that ONE cluster's
+  check, cap 2 extra rounds per cluster, then STOP and report.
+- **Design (frozen)**: ml_events.h gains MlVfx {name; pos x,y;
+  has_face+face; f_kind ∈ {NONE,NUM,VEC,SWING} + payload;
+  color presence + {r,g,b} doubles ×2} and a drawVfx-mirroring
+  `ml_drawVfx*` shape-emitter family (one per measured key-set/f-arm;
+  "circleDust" consumes its 4 seeded draws INSIDE the central emitter,
+  order preserved from mv_drawVfx — draw-chain unchanged), plus
+  `ml_vfx_sink` (enqueue-time tap, ml_snd_sink twin, default NULL —
+  task 2's renderer consumption path). calib canon.{h,c} gain
+  cb_vfx() emitting the canon-v1.1 object (sorted present keys:
+  color1,color2,f,face,name,pos; swing keys frame,pNum,swingType; rgb
+  keys b,g,r; pos keys x,y). Specs: vfx wrapper pushes
+  ctx.canon(cfg) at CALL time; post envelopes carry
+  "vfx":[<canon>,...] — moves-*/article widen their existing lists;
+  physics/asshort/hitdet ADD the channel after "snd" (fixed-literal
+  envelope order), scoped by the SAME owner-stack attr rules as snd
+  (seam-window vfx stay subsumed — C replays don't run seam bodies).
+  C sites: mechanical per-site translation of the upstream call
+  expressions (rule 6/13 expression shapes verbatim; no logic
+  changes); hit_detection.c/physics.c/action_state_shortcuts.c
+  comment-only sites become real emissions; sim_boot.c emits
+  entrance/start at its documented sites. The checksum stream is
+  untouched by construction (emitters append to the vfx queue only;
+  the only RNG in the path is circleDust's existing 4 draws).
+- **Re-record matrix + caps**: 10 specs × 3 carriers × 2 runs = 60
+  fresh browser captures per full done-check invocation (the cluster
+  checks re-record ×2 fresh per run by design — convention inherited,
+  byte-stability is record-time evidence). Carriers (frozen, from the
+  committed check scripts): moves-shared/asshort/physics/hitdet
+  g01+g04+g06 · moves-fox g01+g03+g08 · moves-falco g02+g05+g07 ·
+  moves-falcon g03+g04+g06 · moves-marth g01+g05+g06 · moves-puff
+  g02+g04+g08 · article g01+g02+g08. Every capture run remains
+  STREAM-MATCH guarded + pins-checked (unchanged script logic).
+  Expected wall-clock: captures are the M2-era costs (largest: hitdet
+  ~0.5 GB JSONL per run); budget 1.5-3.5 h for a full cold
+  check-vfx-seam.sh; ALL long runs via nohup + bounded foreground
+  until-loop polls (PROCESS §7#1 verbatim — never end a turn on a
+  wait). Iteration discipline: divergence fixes re-run the REPLAY
+  BINARY against the kept run-A capture (no browser); full check
+  re-runs only per completed fix batch; cap 3 full check runs per
+  cluster, then STOP and report.
+- **Pins/format**: expected-capture-*.json record-count pins are
+  UNCHANGED by construction (same wrapped calls, wider post payload) —
+  they re-verify against the re-recorded sets; comments updated to
+  document the widened vfx post. This is a capture-FORMAT change, not
+  a check weakening: FORMAT.md gains the widened vfx post spec (the
+  name-only vfx list retires WITH its projection, §8-precedent
+  versioning note). No oracle/ bytes touched; frozen goldens never
+  move.
+- **Teeth (pre-registered)**: (T1 nibble) perturb ONE C site's pos
+  expression (+0.5) → that cluster's replay diverges at exactly that
+  site's occurrences (count printed), restore cmp-verified; (T2
+  name-only regression) cb_vfx emits the bare name string → first vfx
+  post diverges; (T3 shape regression) drop has_face at one live site
+  → divergence; (T4 new-channel tooth on a LIVE cluster) omit the
+  ",\"vfx\"" field in replay_hitdet.c's post builder → every
+  vfx-carrying hitdet record diverges (hitdet chosen because physics/
+  asshort may be zero-live — measured counts reported); (T5
+  stream-guard) the existing per-run STREAM MATCH + SIM CONFORMS
+  prove sim non-perturbation. Pass criteria: all teeth fire with the
+  predicted shape, zero false rejections on genuine reruns.
+- **Refutation shapes**: (a) live config shape outside the widened
+  domain → widen struct/serializer, 1 bounded round per cluster; (b)
+  capture A/B byte-instability after widening → a nondeterministic
+  config VALUE (would implicate the sim itself — investigate once
+  against the STREAM-MATCH guard, then STOP and report; do NOT weaken
+  to name-only); (c) SIM CONFORMS breaks → an emitter perturbed sim
+  state (bug in MY edit; the queue append + circleDust-only draws are
+  the whole legal effect surface) — fix, never relax; (d) live vfx
+  counts all-zero in a cluster whose upstream sites are live-reachable
+  → suspect the attribution scoping (wrapper installed after module
+  copy, wrong stack condition) — instrument, don't assume.
+- **Honest coverage (declared up front)**: sim_boot.c's entrance/start
+  emissions have NO capture verification (main.js is not a captured
+  module; they are boot-time, off-step) — verified structurally by
+  reading + covered by task 2's render checks; zero-live sites
+  (shocked/burning, breakShield if unfired, falcon zero-article class)
+  are covered by structure-parallel translation + existing sweeps
+  only where sweeps exist; per-cluster LIVE vfx record counts are
+  measured and reported in the DONE entry.
+
+## iter 64 — 2026-07-17 — M4 task 1 DONE: vfx seam widening, sim + capture side — VFX SEAM MATCH
+
+- **Done-check (cold)**: `bash port/sim/calib/check-vfx-seam.sh` →
+  `VFX SEAM MATCH`, exit 0 (.loop/m4-task1-donecheck.log; ~7 min wall,
+  10:34:30→10:41 — far under the 1.5-3.5 h budget: a full 3600-frame
+  instrumented browser capture is ~15-25 s, the M2-era "26 s captures"
+  figure held). Composition: all 10 affected cluster checks re-recorded
+  their captures FRESH ×2 (30 byte-identical cmp pairs), every capture
+  run STREAM-MATCH guarded (60 capture-run verifications + 8 sim
+  replays = 68 STREAM MATCH lines in the log), pins green, then
+  check-sim.sh → SIM CONFORMS 8/8 (checksum stream untouched — vfx is
+  not on the CHECKSUM.md surface; frozen goldens never moved).
+  Component evidence logs: port/sim/calib/build/vfx-seam.<check>.log.
+- **Per-cluster replays, ALL 0-divergence** (records replayed per
+  carrier): moves-shared 4985/5351/5061 (g01/g04/g06) · moves-fox
+  1738/888/2934 (g01/g03/g08) · moves-falco 1779/1240/1619
+  (g02/g05/g07) · moves-falcon 1847/1316/1810 (g03/g04/g06) ·
+  moves-marth 1608/1986/1586 (g01/g05/g06) · moves-puff 1362/1716/2935
+  (g02/g04/g08) · article 14636/14595/15998 (g01/g02/g08) · asshort
+  32201/35076/30239 (g01/g04/g06) · physics 17188/14805/15067
+  (g01/g04/g06) · hitdet 18348/18285/18344 (g01/g04/g06).
+- **Config-shape survey (capture-FIRST, rule 7 — the pre-registered
+  step)**: 6 run-A captures (moves-shared/marth/fox, article, physics,
+  hitdet × g01) surveyed with the NEW standing instrument
+  `port/sim/calib/survey-vfx.js` (.loop/m4-task1-survey-shapes.log).
+  Live shapes CONFIRMED the static domain exactly, nothing outside it:
+  {name,pos} · {name,pos,face} · {name,pos,face,f:num} · marth swing
+  f:{frame,pNum,swingType} (489 in marth g01 alone) · fox/falco laser
+  {color1/color2:{b,g,r}, f:num}. f:Vec2D (wall/ceiling normals) fired
+  live later in the full matrix (physics wallBounce). MEASURED LIVE
+  totals over each cluster's 3 carriers (final canonical captures):
+  shared 153 · fox 209 · falco 259 · falcon 321 · marth 1338 · puff
+  102 · article 141 · physics 8 (wallBounce live!) · hitdet 61 ·
+  asshort 0 — 2592 live full-config vfx events replayed bit-exactly.
+- **What shipped**: ml_events.{h,c} — MlVfx value model (name; pos;
+  face presence; f_kind NONE/NUM/VEC/SWING; laser colors {r,g,b}×2) +
+  the drawVfx-mirroring `ml_drawVfx*` shape-emitter family (ONE central
+  ml_drawVfx_cfg: enqueue + circleDust's 4 seeded draws, order
+  preserved from the retired mv_drawVfx) + `ml_vfx_sink` (enqueue-time
+  chokepoint, ml_snd_sink twin, default NULL — task 2's renderer
+  consumption path); canon.{h,c} cb_vfx (sorted-present-key canon,
+  byte-identical to the JS call-time ctx.canon(cfg)); 193 emitting
+  sites translated with their upstream config expressions — 161 move
+  sites (112 TUs incl. per-char helper files), article.c 9,
+  hit_detection.c 17 real emissions (the :482 string-arg clank THROW
+  stays a trap), physics.c 4 (wallBounce/ceilingBounce/shocked/burning
+  — the burning %6 branch restored as a real branch), asshort 1
+  (breakShield), sim_boot.c entrance×1+start×1 (main.js boot sites;
+  the target-arm entrance is M4 task 11). Capture side: 7 specs widened
+  push (cfg canon at CALL time — snapshot semantics; live-reference pos
+  proven necessary by upstream aliases), 3 specs (physics/asshort/
+  hitdet) gained the vfx channel appended after "snd" with the same
+  owner-stack scoping (seam-window vfx subsumed); replay drivers ser
+  via cb_vfx; FORMAT.md "vfx posts (WIDENED)" section + per-spec notes;
+  expected-capture-*.json comments updated (record-count pins unchanged
+  by construction — verified by the re-record).
+- **READ-SET WIDENINGS the configs forced (2 instances, same class —
+  "a projection that dropped a value the vfx needs is a measurement
+  hole")**: (1) shieldDepletion: breakShield reads phys.pos/face →
+  AsShieldDepState +pos/face (in-only), spec proj 5→7 keys, GUARD/
+  GUARDON marshal, replay obj_expect_keys 7 — caught by the replay's
+  strict key-count marshal on the first cold run; (2) puff NSA
+  onWallCollide: wallBounce reads activeStage.wall{L,R}[wallNum][1].x
+  → the puff spec's stage projection is now SEVEN keys (+wallL/wallR;
+  puff-only), replay marshals the wall plane — caught as a 2-divergence
+  sweep mismatch (expected ±68.4 ystory wall x, C read a zeroed plane).
+  Zoom-out (HARD RULE 8): both were latent instances of "the capture
+  projection defines the C-visible domain — widening the OBSERVABLE
+  (vfx) widens read sets transitively"; the strict marshals + bit-exact
+  posts caught both mechanically, no silent arms.
+- **Other fixes en route**: SHIELDBREAKDOWNBOUND normal domain — the
+  rule-11 sweep passes a NUMBER (0.5) where the old C model pinned
+  DX_VEC; C now accepts num→_f / vec→_fv, else traps (upstream's only
+  live caller chain would pass the god input array — zero-live,
+  trapped). Falcon UPSPECIALCATCH/THROW + shared FURAFURA: the
+  formerly-discarded jitter draws now FEED pos — hoisted into
+  sequenced locals (x-draw then y-draw; C args are unsequenced — the
+  iter-38 snprintf class, now a translation rule). Fox/falco
+  UPSPECIALCHARGE materialized upstream's `const frame = (timer-1)%10`
+  (previously elided as render-only).
+- **Teeth (all fired with the predicted shape; every restore verified
+  by a 0-divergence re-replay — .loop/m4-task1-teeth.log)**: T1 pos
+  nibble +0.5 at LANDING impactLand → EXACTLY 11 divergences (the
+  site's 11 g01 occurrences); T2 cb_vfx name-only regression → 34
+  divergences = exactly the g01 records with non-empty vfx (the
+  name-only surface is dead: the full config is load-bearing); T3 face
+  key dropped at one site → 11 divergences; T4 replay_hitdet vfx field
+  omitted → 14400 divergences (every pipeline record — the recorded
+  posts always carry "vfx":[]). Restore discipline lesson (cost one
+  re-edit): `git checkout --` restores from the INDEX — with unstaged
+  translations that reverts real work; teeth restores are done by
+  reverse-edit + 0-divergence proof, never git checkout.
+- **Honest coverage**: asshort breakShield emission is ZERO-LIVE (no
+  shield break in any golden) — its pos/face plumbing is
+  marshal-verified but the emitted config is sweep/structure-verified
+  only; physics shocked/burning are zero-live (no electric/fire
+  stage); sim_boot entrance/start emissions have NO capture (main.js
+  is uncaptured; boot-time) — structure-verified, exercised by task
+  2's render checks; hitdet's cssHits impactLand/powershield pair sits
+  in the rpsPoints-trapped css arm (unreachable in-match). The
+  renderer (task 2) is the consumer that closes the loop visually.
+- **Notes for task 2 (renderer vfx)**: events arrive via ml_vfx_sink
+  at enqueue time (queue resets per tick stage — do NOT read post-tick)
+  carrying MlVfx = the full drawVfx config; renderer must apply
+  upstream drawVfx's DEFAULTS (facing = f, -1 when f absent;
+  instance.newPos = snapshot pos; timer = 0) and deepCopy the vfx[name]
+  template — the seam deliberately carries the CONFIG, not the
+  instance. circleDust's 4 draws already burn inside ml_drawVfx_cfg —
+  the renderer must NOT redraw them (values are unrecoverable
+  render-plane; upstream discards them into circles[0..3] — task 2
+  decides whether to re-derive visuals from its own non-sim RNG).
+  render-plane spawn sites (main/vfx/stars.js, lines.js, dVfx/burning
+  +firehit re-spawns) are task 2's own surface — NOT on this seam.
+- **Unaffected clusters (envcoll/util/player/input/platforms/ai/format)
+  not re-run — justification**: their specs/captures/formats are
+  byte-untouched (zero vfx-emitting surfaces, grep-measured) and the
+  only shared code touched is ml_events.{h,c}'s vfx arm + canon.{h,c}'s
+  additive cb_vfx; replay_platforms's `ml_events.vfx_count` guard is
+  count-only (semantics unchanged) and both replay_platforms and
+  replay_util compile clean against the new headers (proven in-session).
+  check-sim.sh (which links EVERY cluster TU) passing 8/8 inside the
+  done-check is the integration proof.

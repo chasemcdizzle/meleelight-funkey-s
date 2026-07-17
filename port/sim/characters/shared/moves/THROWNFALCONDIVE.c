@@ -13,7 +13,7 @@ static AsTri mv_init(MlSim *S, double p, const MlInputBuffer in[4],
   pl->phys.kVel.y = 0;
   pl->phys.grounded = false;
   pl->timer = 0;
-  mv_drawVfx("tech");
+  ml_drawVfx_p("tech", pl->phys.pos.x, pl->phys.pos.y + 10);
   mv_dispatch(S, MV_CS(S, p), "THROWNFALCONDIVE", "main", p, in, 0);
   return AS_UNDEF;
 }

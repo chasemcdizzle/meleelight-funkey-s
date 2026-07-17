@@ -42,17 +42,23 @@ static AsTri fx_main(MlSim *S, double p, const MlInputBuffer in[4],
       mv_article_laser(S, p, 5.2, 10, js_pi() * 0.22);
       ml_sound_play("foxlaserfire");
       // 135
-      mv_drawVfx("laser");
+      ml_drawVfx_laser("laser", pl->phys.pos.x + (5.2 * pl->phys.face),
+                       pl->phys.pos.y + 10, pl->phys.face, js_pi() * 0.22, 255,
+                       59, 59, 255, 57, 87);
     } else if (prevFrame < 16 && pl->timer >= 16) {
       mv_article_laser(S, p, 5.4, 9.7, js_pi() * 0.20);
       ml_sound_play("foxlaserfire");
       // 135
-      mv_drawVfx("laser");
+      ml_drawVfx_laser("laser", pl->phys.pos.x + (5.4 * pl->phys.face),
+                       pl->phys.pos.y + 9.7, pl->phys.face, js_pi() * 0.20, 255,
+                       59, 59, 255, 57, 87);
     } else if (prevFrame < 19 && pl->timer >= 19) {
       mv_article_laser(S, p, 5.3, 9.8, js_pi() * 0.22);
       ml_sound_play("foxlaserfire");
       // 135
-      mv_drawVfx("laser");
+      ml_drawVfx_laser("laser", pl->phys.pos.x + (5.3 * pl->phys.face),
+                       pl->phys.pos.y + 9.8, pl->phys.face, js_pi() * 0.22, 255,
+                       59, 59, 255, 57, 87);
     }
     if (floor(pl->timer + 0.01) >= 8 && floor(prevFrame + 0.01) < 8) {
       mv_hq_push6(S, pl->phys.grabbing, p, 0, false, true, false);

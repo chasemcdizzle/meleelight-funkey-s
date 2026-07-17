@@ -34,10 +34,10 @@ static AsTri mr_main(MlSim *S, double p, const MlInputBuffer in[4],
                 MV_IN(in, p));
     as_airDrift((int)MV_CS(S, p), &pl->phys.cVel.x, MV_IN(in, p));
     if (pl->timer > 4 && pl->timer < 9) {
-      mv_drawVfx("swing"); // NAIR1
+      ml_drawVfx_swing("swing", 0, 0, pl->phys.face, p, "NAIR1", pl->timer - 5); // NAIR1
     }
     if (pl->timer > 13 && pl->timer < 21) {
-      mv_drawVfx("swing"); // NAIR2
+      ml_drawVfx_swing("swing", 0, 0, pl->phys.face, p, "NAIR2", pl->timer - 14); // NAIR2
     }
     if (pl->timer == 6) {
       pl->hitboxes.active[0] = true;

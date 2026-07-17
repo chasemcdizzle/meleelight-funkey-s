@@ -37,7 +37,8 @@ static AsTri fc4_main(MlSim *S, double p, const MlInputBuffer in[4],
     if (pl->timer >= 12) {
       pl->phys.cVel.x = 2.67586 * pl->phys.face;
       if (fmod(pl->timer, 2) != 0) { // if (player[p].timer%2) truthiness
-        mv_drawVfx("firefoxtail");
+        ml_drawVfx("firefoxtail", pl->phys.pos.x + 12 * pl->phys.face,
+                   pl->phys.pos.y + 3, pl->phys.face);
       }
     }
     if (pl->timer == 14) {

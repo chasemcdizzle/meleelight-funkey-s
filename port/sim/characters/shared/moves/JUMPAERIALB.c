@@ -15,7 +15,8 @@ static AsTri mv_init(MlSim *S, double p, const MlInputBuffer in[4],
   pl->phys.cVel.y = ml_f64(at->fHopInitV) * ml_f64(at->djMultiplier);
 
   pl->phys.cVel.x = i0->lsX * ml_f64(at->djMomentum);
-  mv_drawVfx("doubleJumpRings");
+  ml_drawVfx("doubleJumpRings", pl->phys.pos.x, pl->phys.pos.y,
+             pl->phys.face);
   ml_sound_play("jump2");
   mv_dispatch(S, MV_CS(S, p), "JUMPAERIALB", "main", p, in, 0);
   return AS_UNDEF;

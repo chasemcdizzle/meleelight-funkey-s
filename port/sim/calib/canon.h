@@ -49,4 +49,9 @@ void cb_num(CanonBuf *b, double d);       // d:<16 hex>
 void cb_str1(CanonBuf *b, char c);        // "c"
 void cb_qstr(CanonBuf *b, const char *s); // "s" (no escaping in domain)
 
+// M4 task 1: canon of one MlVfx config snapshot (the widened vfx post
+// entries — byte-identical to the capture's call-time ctx.canon(cfg)).
+#include "../ml_events.h"
+void cb_vfx(CanonBuf *b, const MlVfx *v);
+
 #endif // ML_CANON_H

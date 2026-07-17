@@ -9,7 +9,8 @@ static AsTri mv_init(MlSim *S, double p, const MlInputBuffer in[4],
   pl->timer = 0;
   pl->phys.kVel.y = 0;
   pl->phys.jabReset = false;
-  mv_drawVfx("groundBounce");
+  ml_drawVfx_f("groundBounce", pl->phys.pos.x, pl->phys.pos.y, pl->phys.face,
+               pl->phys.groundAngle);
   ml_sound_play("bounce");
   mv_dispatch(S, MV_CS(S, p), "DOWNBOUND", "main", p, in, 0);
   return AS_UNDEF;

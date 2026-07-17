@@ -1,37 +1,44 @@
 {
-  "comment": "Measured-then-frozen moves-shared-spec capture pins (M2 task 7, 2026-07-14). Boundary: every shared-origin actionStates entry's phase fns (1212 wrapped incl. the shared JUMPAERIALB/F module objects; puff's FURAFURA/JUMPAERIALB/JUMPAERIALF are per-char overrides). 'move' = a shared-move phase entered outside any move record's scope, mutation-captured with [phase,name,[slot,...extras],inputs,pre] args and the {alias,hq,players,rng,snd,vfx} post envelope (44 frame-0 records per golden = the rule-11/12 sweep on the sweep RNG chain); 'mdispatch' = per-char move dispatches from inside a move record (oracle-fed seams, post {alias,hq,players,rng} — the rng list is the rule-14 instrument, measured EMPTY on every live seam across g01/g04/g06); Math.random = standalone seeded draws (draws under top-level per-char windows + the startGame off-step draw); mvData = the frame-0 executed move-data dump (finalCheck-drift-guarded). undefRetAllowed: move rets echo the phase's return (init/main/land return undefined; several interrupt arms fall through without a return — SMASHTURN/TILTTURN tilt arms, OTTOTTO/OTTOTTOWAIT's second GUARDON arm, RUN's chain end, SQUATWAIT's restart arm, ENTRANCE, STOPCEIL's FALL arm, the CAPTURE* grabbedBy===-1 guards); mdispatch rets echo per-char inits (undefined); mvData's ret is a data dump.",
-  "undefRetAllowed": ["move", "mdispatch", "mvData"],
-  "postStateFns": ["move", "mdispatch"],
-  "goldens": {
-    "g01": {
-      "records": 4985,
-      "counts": {
-        "rngBoot": 1,
-        "mvData": 1,
-        "Math.random": 73,
-        "move": 4832,
-        "mdispatch": 78
-      }
-    },
-    "g04": {
-      "records": 5351,
-      "counts": {
-        "rngBoot": 1,
-        "mvData": 1,
-        "Math.random": 65,
-        "move": 5218,
-        "mdispatch": 66
-      }
-    },
-    "g06": {
-      "records": 5061,
-      "counts": {
-        "rngBoot": 1,
-        "mvData": 1,
-        "Math.random": 100,
-        "move": 4893,
-        "mdispatch": 66
-      }
-    }
+ "comment": "Measured-then-frozen moves-shared-spec capture pins (M2 task 7, 2026-07-14). Boundary: every shared-origin actionStates entry's phase fns (1212 wrapped incl. the shared JUMPAERIALB/F module objects; puff's FURAFURA/JUMPAERIALB/JUMPAERIALF are per-char overrides). 'move' = a shared-move phase entered outside any move record's scope, mutation-captured with [phase,name,[slot,...extras],inputs,pre] args and the {alias,hq,players,rng,snd,vfx} post envelope (44 frame-0 records per golden = the rule-11/12 sweep on the sweep RNG chain); 'mdispatch' = per-char move dispatches from inside a move record (oracle-fed seams, post {alias,hq,players,rng} — the rng list is the rule-14 instrument, measured EMPTY on every live seam across g01/g04/g06); Math.random = standalone seeded draws (draws under top-level per-char windows + the startGame off-step draw); mvData = the frame-0 executed move-data dump (finalCheck-drift-guarded). undefRetAllowed: move rets echo the phase's return (init/main/land return undefined; several interrupt arms fall through without a return — SMASHTURN/TILTTURN tilt arms, OTTOTTO/OTTOTTOWAIT's second GUARDON arm, RUN's chain end, SQUATWAIT's restart arm, ENTRANCE, STOPCEIL's FALL arm, the CAPTURE* grabbedBy===-1 guards); mdispatch rets echo per-char inits (undefined); mvData's ret is a data dump. M4 task 1 (iter 64): the vfx post lists carry FULL drawVfx configs (call-time canon; FORMAT.md 'vfx posts') — captures re-recorded under the same STREAM-MATCH + byte-stability guards; record counts unchanged by construction.",
+ "undefRetAllowed": [
+  "move",
+  "mdispatch",
+  "mvData"
+ ],
+ "postStateFns": [
+  "move",
+  "mdispatch"
+ ],
+ "goldens": {
+  "g01": {
+   "records": 4985,
+   "counts": {
+    "rngBoot": 1,
+    "mvData": 1,
+    "Math.random": 73,
+    "move": 4832,
+    "mdispatch": 78
+   }
+  },
+  "g04": {
+   "records": 5351,
+   "counts": {
+    "rngBoot": 1,
+    "mvData": 1,
+    "Math.random": 65,
+    "move": 5218,
+    "mdispatch": 66
+   }
+  },
+  "g06": {
+   "records": 5061,
+   "counts": {
+    "rngBoot": 1,
+    "mvData": 1,
+    "Math.random": 100,
+    "move": 4893,
+    "mdispatch": 66
+   }
   }
+ }
 }

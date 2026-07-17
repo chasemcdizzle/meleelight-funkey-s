@@ -46,8 +46,9 @@ static AsTri fc4_main(MlSim *S, double p, const MlInputBuffer in[4],
     if (pl->timer >= 4 && pl->timer < 9) {
       const Vec2D off =
           mv_falcon_hb0_off(pl, "SIDESPECIALAIRHIT: vfx offset");
-      (void)off; // position is render-only; the vfx queue keeps names
-      mv_drawVfx("firefoxtail");
+      ml_drawVfx("firefoxtail",
+                 pl->phys.pos.x + off.x * pl->phys.face,
+                 pl->phys.pos.y + off.y, pl->phys.face);
     }
   }
   return AS_UNDEF;

@@ -12,7 +12,7 @@ static AsTri mv_init(MlSim *S, double p, const MlInputBuffer in[4],
   pl->phys.kVel.x = 0;
   pl->phys.kVel.y = 0;
   pl->percent = 0;
-  mv_drawVfx("blastzoneExplosion");
+  ml_drawVfx("blastzoneExplosion", pl->phys.pos.x, pl->phys.pos.y, 180);
   if (!mv_isFinalDeath(S)) {
     mv_screenShake();
     // percentShake: native-RNG HUD shake (CHECKSUM.md §7) — no-op

@@ -44,9 +44,11 @@ static AsTri fc_main(MlSim *S, double p, const MlInputBuffer in[4],
   if (fc_interrupt(S, p, in, 0) != AS_TRUE) {
     if (pl->timer < 23) {
       if (fmod(pl->timer, 2) != 0) { // JS truthiness of timer%2
-        mv_drawVfx("firefoxtail");
+        ml_drawVfx("firefoxtail", pl->phys.posPrev.x, pl->phys.posPrev.y,
+                   pl->phys.face);
       }
-      mv_drawVfx("firefoxlaunch");
+      ml_drawVfx_f("firefoxlaunch", pl->phys.pos.x, pl->phys.pos.y,
+                   pl->phys.face, p);
     }
     if (pl->phys.grounded) {
       as_reduceByTraction(false, (int)MV_CS(S, p), &pl->phys.cVel.x);
@@ -112,10 +114,12 @@ static AsTri fc_land(MlSim *S, double p, const MlInputBuffer in[4],
   MlPlayer *pl = mv_player(S, p);
   if (pl->timer < 23) {
     // BOUNCE
-    mv_drawVfx("groundBounce");
+    ml_drawVfx("groundBounce", pl->phys.pos.x, pl->phys.pos.y,
+               pl->phys.face);
     falco_FIREFOXBOUNCE.init(S, p, in, 0);
   } else {
-    mv_drawVfx("impactLand");
+    ml_drawVfx("impactLand", pl->phys.pos.x, pl->phys.pos.y,
+               pl->phys.face);
   }
   return AS_UNDEF;
 }

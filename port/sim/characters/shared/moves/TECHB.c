@@ -7,7 +7,7 @@ static AsTri mv_init(MlSim *S, double p, const MlInputBuffer in[4],
   MlPlayer *pl = mv_player(S, p);
   strcpy(pl->actionState, "TECHB");
   pl->timer = 0;
-  mv_drawVfx("tech");
+  ml_drawVfx_p("tech", pl->phys.pos.x, pl->phys.pos.y);
   ml_sound_play("tech");
   mv_dispatch(S, MV_CS(S, p), "TECHB", "main", p, in, 0);
   return AS_UNDEF;

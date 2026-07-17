@@ -1079,7 +1079,7 @@ int main(int argc, char **argv) {
         cb_puts(&out, "],\"vfx\":[");
         for (int s = 0; s < ml_events.vfx_count; s++) {
           if (s) cb_putc(&out, ',');
-          cb_qstr(&out, ml_events.vfx[s]);
+          cb_vfx(&out, &ml_events.vfx[s]); // M4 task 1: full-config canon
         }
         cb_puts(&out, "]}");
         if (strcmp(out.buf, post_s) != 0) {

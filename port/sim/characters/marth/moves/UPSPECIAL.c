@@ -92,7 +92,7 @@ static AsTri mr_main(MlSim *S, double p, const MlInputBuffer in[4],
       mv_turnOffHitboxes(S, p);
     }
     if (pl->timer > 2 && pl->timer < 12) {
-      mv_drawVfx("swing");
+      ml_drawVfx_swing("swing", 0, 0, pl->phys.face, p, "UPSPECIAL", pl->timer - 3);
     }
   }
   return AS_UNDEF;

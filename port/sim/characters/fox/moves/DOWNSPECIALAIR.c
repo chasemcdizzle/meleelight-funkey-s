@@ -19,8 +19,8 @@ static AsTri fx_init(MlSim *S, double p, const MlInputBuffer in[4],
   pl->shineLoop = 6;
   pl->phys.inShine = 0;
   ml_sound_play("foxshine");
-  mv_drawVfx("impactLand");
-  mv_drawVfx("shine");
+  ml_drawVfx("impactLand", pl->phys.pos.x, pl->phys.pos.y, pl->phys.face);
+  ml_drawVfx_p("shine", pl->phys.pos.x, pl->phys.pos.y + 6);
   mv_turnOffHitboxes(S, p);
   mv_assign_hitbox_id(S, p, "downspecial", 0, 0);
   fx_main(S, p, in, 0);
@@ -72,7 +72,7 @@ static AsTri fx_main(MlSim *S, double p, const MlInputBuffer in[4],
           pl->shineLoop = 0;
         }
         pl->shineLoop += 1;
-        mv_drawVfx("shineloop");
+        ml_drawVfx("shineloop", 0, 0, p);
       }
 
       if (pl->timer == 35) {

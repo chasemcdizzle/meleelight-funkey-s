@@ -13,7 +13,7 @@
 #include <string.h>
 
 #include "../fdlibm/fdlibm.h" // fd_cos / fd_sin / fd_pow (Math.* shimmed)
-#include "characters/shared/moves.h" // mv_dispatch/mv_player/mv_drawVfx/
+#include "characters/shared/moves.h" // mv_dispatch/mv_player/
                                      // mv_screenShake/mv_attr, MvX
 #include "environmental_collision.h" // findCollision
 #include "interpolated_collision.h"  // sweepCircleVsSweepCircle / VsAABB
@@ -445,7 +445,8 @@ void art_executeArticleHits(MlSim *S, MlArticles *A,
 
     if (shieldHit) {
       if (pv->phys.powerShieldReflectActive) {
-        mv_drawVfx("powershieldreflect");
+        ml_drawVfx("powershieldreflect", pv->phys.shieldPositionReal.x,
+                   pv->phys.shieldPositionReal.y, pv->phys.face);
         ml_sound_play("powershieldreflect");
         it->player = v; // change ownership to victim
         // reflects velocity (vel != undefined: key presence == kind)
@@ -462,7 +463,8 @@ void art_executeArticleHits(MlSim *S, MlArticles *A,
           pv->phys.cVel.y = 2.5;
           pv->phys.grounded = false;
           pv->phys.shieldHP = 0;
-          mv_drawVfx("breakShield");
+          ml_drawVfx("breakShield", pv->phys.pos.x, pv->phys.pos.y,
+                     pv->phys.face);
           mv_dispatch(S, MV_CS(S, v), "SHIELDBREAKFALL", "init", v, in, 0);
           ml_sound_play("shieldbreak");
           break; // exits the whole row loop (GUARD.init skipped)
@@ -470,7 +472,7 @@ void art_executeArticleHits(MlSim *S, MlArticles *A,
         if (it->destroyOnHit) {
           art_destroy_push(A, a);
         }
-        mv_drawVfx("clank");
+        ml_drawVfx("clank", it->pos.x, it->pos.y, 1);
         pv->hit.hitlag = floor(damage * (1.0 / 3.0) + 3);
         pv->hit.shieldstun =
             ((floor(damage) *
@@ -523,11 +525,15 @@ void art_executeArticleHits(MlSim *S, MlArticles *A,
         // switch (hb.type) — article types are authored 0 (laser) /
         // 1 (illusion); default falls through.
         if (hb->type == 0) {
-          mv_drawVfx("normalhit");
+          ml_drawVfx("normalhit", pv->hit.hitPoint.x, pv->hit.hitPoint.y,
+                     pv->phys.face);
         } else if (hb->type == 1) {
-          mv_drawVfx("hitSparks");
-          mv_drawVfx("hitFlair");
-          mv_drawVfx("hitCurve");
+          ml_drawVfx("hitSparks", pv->hit.hitPoint.x, pv->hit.hitPoint.y,
+                     pv->phys.face);
+          ml_drawVfx("hitFlair", pv->hit.hitPoint.x, pv->hit.hitPoint.y,
+                     pv->phys.face);
+          ml_drawVfx_f("hitCurve", pv->hit.hitPoint.x, pv->hit.hitPoint.y,
+                       pv->phys.face, pv->hit.angle);
         }
 
         hd_knockbackSounds(hb->type, pv->hit.knockback, MV_CS(S, v));
@@ -574,7 +580,8 @@ void art_executeArticleHits(MlSim *S, MlArticles *A,
           if (pv->phys.grounded && pv->hit.angle > 180) {
             if (pv->hit.knockback >= 80) {
               ml_sound_play("bounce");
-              mv_drawVfx("groundBounce");
+              ml_drawVfx("groundBounce", pv->phys.pos.x, pv->phys.pos.y,
+                         pv->phys.face);
               pv->hit.angle = 360 - pv->hit.angle;
               pv->hit.knockback *= 0.8;
             }
@@ -586,7 +593,7 @@ void art_executeArticleHits(MlSim *S, MlArticles *A,
 
       } else {
         ml_sound_play("blunthit");
-        mv_drawVfx("clank");
+        ml_drawVfx_p("clank", it->pos.x, it->pos.y);
       }
     }
   }

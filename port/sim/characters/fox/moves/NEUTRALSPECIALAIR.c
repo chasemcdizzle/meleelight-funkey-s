@@ -47,7 +47,9 @@ static AsTri fx_main(MlSim *S, double p, const MlInputBuffer in[4],
     }
     if (pl->timer == 10) {
       ml_sound_play("foxlaserfire");
-      mv_drawVfx("laser");
+      ml_drawVfx_laser("laser", pl->phys.pos.x + (8 * pl->phys.face),
+                       pl->phys.pos.y + 9, pl->phys.face, 0, 255, 59, 59, 255,
+                       57, 87);
       mv_article_laser(S, p, 8, 9, 0);
     }
     if (pl->timer == 30) {

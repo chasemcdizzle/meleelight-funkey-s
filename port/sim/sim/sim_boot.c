@@ -403,8 +403,13 @@ void sim_setup_match(GameState *g, int p1, int p2, int p2type, int difficulty,
   for (int n = 0; n < 4; n++) {
     if (g->sim.playerType[n] > -1) {
       // initializePlayers(n, false): buildPlayerObject + drawVfx
-      // "entrance" (render; not circleDust — no draws)
+      // {name:"entrance", pos:new Vec2D(startingPoint[i][0],
+      //  startingPoint[i][1])} (main.js:1313-1316; M4 task 1 — full
+      // config; not circleDust, no draws). Boot-time: no capture spec
+      // covers main.js — structure-verified only (AGENT-LOG iter 64
+      // honest-coverage note); consumed via ml_vfx_sink by the renderer.
       sim_build_player(g, n);
+      ml_drawVfx_p("entrance", kStartingPoint[n][0], kStartingPoint[n][1]);
       // renderPlayer(n): render plane. Its outOfCameraTimer/miniView
       // writes are =0/=false no-ops at spawn (on-screen); the oracle's
       // own renderTick is OFF (__harnessNoRender) — see AGENT-LOG task-17
@@ -417,7 +422,10 @@ void sim_setup_match(GameState *g, int p1, int p2, int p2type, int difficulty,
   g->matchTimer = 480;
   g->startTimer = 1.5;
   g->starting = true;
-  // MusicManager / drawVfx("start"): audio+render planes, no seeded draws
+  // MusicManager: audio plane, no seeded draws. drawVfx({name:"start",
+  // pos:new Vec2D(0, 0)}) (main.js:1364-1367; M4 task 1 — same
+  // boot-time coverage note as "entrance" above).
+  ml_drawVfx_p("start", 0, 0);
   g->inp.playing = true; // playing = true (findingPlayers = false)
   // gameSettings (settings.js:44-56 defaults; header note)
   g->sim.lCancelType = 0;

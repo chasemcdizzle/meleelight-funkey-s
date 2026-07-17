@@ -44,7 +44,7 @@ static AsTri pf_main(MlSim *S, double p, const MlInputBuffer in[4],
   MlPlayer *pl = mv_player(S, p);
   const MlInput *i0 = &MV_IN(in, p)[0];
   if (pl->timer == 15) {
-    mv_drawVfx("dashDust");
+    ml_drawVfx("dashDust", pl->phys.pos.x, pl->phys.pos.y, pl->phys.face);
   }
   if (pl->timer >= 16 && pl->timer <= 45 && pf_rollOutChargeAttempt(pl)) {
     if (i0->b) {
@@ -55,7 +55,8 @@ static AsTri pf_main(MlSim *S, double p, const MlInputBuffer in[4],
       }
       if (pf_rollOutCharge(pl) >= 19) {
         if (pl->timer == 16) {
-          mv_drawVfx("dashDust");
+          ml_drawVfx("dashDust", pl->phys.pos.x, pl->phys.pos.y,
+                     pl->phys.face);
         }
       }
       pl->phys.cVel.x = 0.0001 * pl->phys.face;
@@ -105,7 +106,8 @@ static AsTri pf_main(MlSim *S, double p, const MlInputBuffer in[4],
         pf_hb_set_dmg(S, p, 2, newDmg);
         if (pf_rollOutCharge(pl) >= 19) {
           if (fmod(pl->phys.rollOutDistance, 10) == 0) {
-            mv_drawVfx("dashDust");
+            ml_drawVfx("dashDust", pl->phys.pos.x, pl->phys.pos.y,
+                       pl->phys.face);
           }
         }
       }

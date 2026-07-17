@@ -31,7 +31,7 @@ static AsTri mr_main(MlSim *S, double p, const MlInputBuffer in[4],
     pl->phys.cVel.x = mv_marth_arr("ATTACKDASH", "setVelocities",
                                    pl->timer - 1) * pl->phys.face;
     if (pl->timer > 9 && pl->timer < 21) {
-      mv_drawVfx("swing");
+      ml_drawVfx_swing("swing", 0, 0, pl->phys.face, p, "DASHATTACK", pl->timer - 10);
     }
     if (pl->timer == 12) {
       pl->hitboxes.active[0] = true;

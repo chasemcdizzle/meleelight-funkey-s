@@ -956,6 +956,31 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   launcher script, not the binary. OPK mounts read-only: write to `/tmp`
   (RAM, wiped at power-off) or `/mnt` (SD).
 
+- **vfx seam widening, sim + capture side (M4 task 1 committed form):**
+  `bash port/sim/calib/check-vfx-seam.sh` → `VFX SEAM MATCH`, exit 0 —
+  composes the 10 vfx-affected cluster checks (moves-shared/fox/falco/
+  falcon/marth/puff, article, asshort, physics, hitdet — the
+  grep-MEASURED emitter set; the pre-registered guess lacked hitdet's
+  18 sites) + `check-sim.sh` (stream untouched: vfx is not on the
+  CHECKSUM.md surface). ml_events vfx events carry the FULL drawVfx
+  config: `MlVfx` + the `ml_drawVfx*` shape-emitter family (central
+  ml_drawVfx_cfg keeps circleDust's 4 seeded draws) + `ml_vfx_sink`
+  (enqueue-time renderer chokepoint, ml_snd_sink twin — the queue
+  resets per tick stage, consume at enqueue). Captures record
+  ctx.canon(cfg) at CALL time (snapshot semantics — live-reference pos
+  is real); C replays compare via calib cb_vfx. Measured config domain
+  (FORMAT.md "vfx posts"): keys ⊆ {name,pos,face,f,color1,color2}; f =
+  num | Vec2D | {frame,pNum,swingType}. Gotcha classes: (1) widening
+  an OBSERVABLE widens read sets transitively — shieldDepletion needed
+  +pos/face (AsShieldDepState + 7-key pre), puff's stage projection
+  needed +wallL/wallR (NSA onWallCollide wallBounce) — trust the
+  strict marshals to find these; (2) config expressions consuming
+  seeded draws (FURAFURA jitter, falcon UPSPECIALCATCH/THROW) must
+  hoist draws into sequenced locals (C args are unsequenced — the
+  sm64() class); (3) teeth restores by reverse-edit + 0-divergence
+  re-replay, never `git checkout --` (index-restore reverts unstaged
+  work).
+
 ## Build/gotcha notes (the loop appends here)
 
 - Log to tmpfs during play, copy to SD on exit (SD streaming = multi-second

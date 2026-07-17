@@ -1,77 +1,91 @@
 {
-  "comment": "Measured-then-frozen article-spec capture pins (M2 task 13, 2026-07-14). Boundary: the 4 gameTick article pipeline calls (destroyArticles/executeArticles/articlesHitDetection/executeArticleHits, mutation-captured with lean-when-empty envelopes) + resetAArticles (endGame lifecycle — pinned ZERO live: goldens never end the match) + the 2 ainit boundaries (articles.{LASER,ILLUSION}.init — the task-8/9 article-seam crossings as REAL mutation records) + 6 zero-pinned internal-only collision helpers + 1088 per-char seam fns (mdispatch, moves-shared machinery). GOLDENS g01/g02/g08 — the article carriers, probe-MEASURED live coverage over all six fox/falco goldens (live ainit/eah-hit records: g01 27/12 fox lasers on battlefield incl. 12 zero-knockback laser hits; g02 19/6 falco lasers on ystory — the ONLY live kb>0 article hits: screenShake draws + live DAMAGE dispatch domain; g08 27/21 fox CPU lasers on fdest — the CPU-plane widening, 1496 standalone AI draws; g03/g05 field ZERO live articles, g07 spawns 19 lasers that never connect — carrier membership is measured live coverage, tasks 8/10 precedent). Every golden fields ZERO live ILLUSIONs (all live articles are lasers — illusions are sweep-covered only, documented honest coverage). Pipeline counts are 3600 live + sweep extras (8 exec / 3 destroy / 15 ahd / 15 eah at frame 0); ainit = live lasers + 24 sweep spawns. undefRetAllowed: the pipeline/ainit/mdispatch rets are void-mutator undefined; mvData/hdFlags rets are data dumps (may contain the undef token).",
-  "undefRetAllowed": ["ainit", "articlesHitDetection", "destroyArticles",
-                      "executeArticleHits", "executeArticles",
-                      "resetAArticles", "mdispatch", "mvData", "hdFlags"],
-  "postStateFns": ["ainit", "articlesHitDetection", "destroyArticles",
-                   "executeArticleHits", "executeArticles",
-                   "resetAArticles", "mdispatch"],
-  "goldens": {
-    "g01": {
-      "records": 14636,
-      "counts": {
-        "rngBoot": 1,
-        "mvData": 1,
-        "hdFlags": 1,
-        "Math.random": 134,
-        "ainit": 58,
-        "executeArticles": 3608,
-        "destroyArticles": 3603,
-        "articlesHitDetection": 3615,
-        "executeArticleHits": 3615,
-        "resetAArticles": 0,
-        "mdispatch": 0,
-        "wallDetection": 0,
-        "articleHitCollision": 0,
-        "articleShieldCollision": 0,
-        "articleHurtCollision": 0,
-        "interpolatedArticleCircleCollision": 0,
-        "interpolatedArticleHurtCollision": 0
-      }
-    },
-    "g02": {
-      "records": 14595,
-      "counts": {
-        "rngBoot": 1,
-        "mvData": 1,
-        "hdFlags": 1,
-        "Math.random": 101,
-        "ainit": 50,
-        "executeArticles": 3608,
-        "destroyArticles": 3603,
-        "articlesHitDetection": 3615,
-        "executeArticleHits": 3615,
-        "resetAArticles": 0,
-        "mdispatch": 0,
-        "wallDetection": 0,
-        "articleHitCollision": 0,
-        "articleShieldCollision": 0,
-        "articleHurtCollision": 0,
-        "interpolatedArticleCircleCollision": 0,
-        "interpolatedArticleHurtCollision": 0
-      }
-    },
-    "g08": {
-      "records": 15998,
-      "counts": {
-        "rngBoot": 1,
-        "mvData": 1,
-        "hdFlags": 1,
-        "Math.random": 1496,
-        "ainit": 58,
-        "executeArticles": 3608,
-        "destroyArticles": 3603,
-        "articlesHitDetection": 3615,
-        "executeArticleHits": 3615,
-        "resetAArticles": 0,
-        "mdispatch": 0,
-        "wallDetection": 0,
-        "articleHitCollision": 0,
-        "articleShieldCollision": 0,
-        "articleHurtCollision": 0,
-        "interpolatedArticleCircleCollision": 0,
-        "interpolatedArticleHurtCollision": 0
-      }
-    }
+ "comment": "Measured-then-frozen article-spec capture pins (M2 task 13, 2026-07-14). Boundary: the 4 gameTick article pipeline calls (destroyArticles/executeArticles/articlesHitDetection/executeArticleHits, mutation-captured with lean-when-empty envelopes) + resetAArticles (endGame lifecycle — pinned ZERO live: goldens never end the match) + the 2 ainit boundaries (articles.{LASER,ILLUSION}.init — the task-8/9 article-seam crossings as REAL mutation records) + 6 zero-pinned internal-only collision helpers + 1088 per-char seam fns (mdispatch, moves-shared machinery). GOLDENS g01/g02/g08 — the article carriers, probe-MEASURED live coverage over all six fox/falco goldens (live ainit/eah-hit records: g01 27/12 fox lasers on battlefield incl. 12 zero-knockback laser hits; g02 19/6 falco lasers on ystory — the ONLY live kb>0 article hits: screenShake draws + live DAMAGE dispatch domain; g08 27/21 fox CPU lasers on fdest — the CPU-plane widening, 1496 standalone AI draws; g03/g05 field ZERO live articles, g07 spawns 19 lasers that never connect — carrier membership is measured live coverage, tasks 8/10 precedent). Every golden fields ZERO live ILLUSIONs (all live articles are lasers — illusions are sweep-covered only, documented honest coverage). Pipeline counts are 3600 live + sweep extras (8 exec / 3 destroy / 15 ahd / 15 eah at frame 0); ainit = live lasers + 24 sweep spawns. undefRetAllowed: the pipeline/ainit/mdispatch rets are void-mutator undefined; mvData/hdFlags rets are data dumps (may contain the undef token). M4 task 1 (iter 64): the vfx post lists carry FULL drawVfx configs (call-time canon; FORMAT.md 'vfx posts') — captures re-recorded under the same STREAM-MATCH + byte-stability guards; record counts unchanged by construction.",
+ "undefRetAllowed": [
+  "ainit",
+  "articlesHitDetection",
+  "destroyArticles",
+  "executeArticleHits",
+  "executeArticles",
+  "resetAArticles",
+  "mdispatch",
+  "mvData",
+  "hdFlags"
+ ],
+ "postStateFns": [
+  "ainit",
+  "articlesHitDetection",
+  "destroyArticles",
+  "executeArticleHits",
+  "executeArticles",
+  "resetAArticles",
+  "mdispatch"
+ ],
+ "goldens": {
+  "g01": {
+   "records": 14636,
+   "counts": {
+    "rngBoot": 1,
+    "mvData": 1,
+    "hdFlags": 1,
+    "Math.random": 134,
+    "ainit": 58,
+    "executeArticles": 3608,
+    "destroyArticles": 3603,
+    "articlesHitDetection": 3615,
+    "executeArticleHits": 3615,
+    "resetAArticles": 0,
+    "mdispatch": 0,
+    "wallDetection": 0,
+    "articleHitCollision": 0,
+    "articleShieldCollision": 0,
+    "articleHurtCollision": 0,
+    "interpolatedArticleCircleCollision": 0,
+    "interpolatedArticleHurtCollision": 0
+   }
+  },
+  "g02": {
+   "records": 14595,
+   "counts": {
+    "rngBoot": 1,
+    "mvData": 1,
+    "hdFlags": 1,
+    "Math.random": 101,
+    "ainit": 50,
+    "executeArticles": 3608,
+    "destroyArticles": 3603,
+    "articlesHitDetection": 3615,
+    "executeArticleHits": 3615,
+    "resetAArticles": 0,
+    "mdispatch": 0,
+    "wallDetection": 0,
+    "articleHitCollision": 0,
+    "articleShieldCollision": 0,
+    "articleHurtCollision": 0,
+    "interpolatedArticleCircleCollision": 0,
+    "interpolatedArticleHurtCollision": 0
+   }
+  },
+  "g08": {
+   "records": 15998,
+   "counts": {
+    "rngBoot": 1,
+    "mvData": 1,
+    "hdFlags": 1,
+    "Math.random": 1496,
+    "ainit": 58,
+    "executeArticles": 3608,
+    "destroyArticles": 3603,
+    "articlesHitDetection": 3615,
+    "executeArticleHits": 3615,
+    "resetAArticles": 0,
+    "mdispatch": 0,
+    "wallDetection": 0,
+    "articleHitCollision": 0,
+    "articleShieldCollision": 0,
+    "articleHurtCollision": 0,
+    "interpolatedArticleCircleCollision": 0,
+    "interpolatedArticleHurtCollision": 0
+   }
   }
+ }
 }

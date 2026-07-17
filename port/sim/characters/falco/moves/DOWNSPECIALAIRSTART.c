@@ -19,8 +19,8 @@ static AsTri fc_init(MlSim *S, double p, const MlInputBuffer in[4],
   pl->phys.cVel.y = 0;
   pl->phys.cVel.x *= 0.5;
   ml_sound_play("foxshine");
-  mv_drawVfx("impactLand");
-  mv_drawVfx("shine");
+  ml_drawVfx("impactLand", pl->phys.pos.x, pl->phys.pos.y, pl->phys.face);
+  ml_drawVfx_p("shine", pl->phys.pos.x, pl->phys.pos.y + 6);
   mv_turnOffHitboxes(S, p);
   mv_assign_hitbox_id(S, p, "downspecial", 0, 0);
   fc_main(S, p, in, 0);

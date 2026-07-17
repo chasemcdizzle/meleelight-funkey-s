@@ -90,16 +90,10 @@ double mv_frames(double charId, const char *state) {
 }
 
 // --- event helpers ---------------------------------------------------------------
-void mv_drawVfx(const char *name) {
-  ml_vfx(name);
-  if (strcmp(name, "circleDust") == 0) {
-    // drawVfx.js:15-18 — 4 seeded draws (values render-only, discarded).
-    (void)ml_random();
-    (void)ml_random();
-    (void)ml_random();
-    (void)ml_random();
-  }
-}
+// (M4 task 1: mv_drawVfx(name) retired — every site now calls the
+// ml_drawVfx* shape emitters in ml_events.c with its upstream config
+// values; circleDust's 4 seeded draws live in ml_drawVfx_cfg, same
+// enqueue-then-draw order as the old mv_drawVfx.)
 
 void mv_screenShake(void) {
   // main.js:352-358 — 4 seeded draws; fg1.translate is render-only.

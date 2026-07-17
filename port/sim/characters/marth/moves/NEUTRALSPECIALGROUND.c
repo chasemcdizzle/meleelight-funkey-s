@@ -57,7 +57,7 @@ static AsTri mr_main(MlSim *S, double p, const MlInputBuffer in[4],
       pl->phys.shieldBreakerCharge += 1;
       marth_blend_overlay(S, p); // colourOverlay + colourOverlayBool=true
       if (fmod(pl->phys.shieldBreakerCharge, 6) == 0) {
-        mv_drawVfx("dashDust");
+        ml_drawVfx("dashDust", pl->phys.pos.x, pl->phys.pos.y, pl->phys.face);
       }
     } else {
       pl->phys.shieldBreakerCharging = false;
@@ -127,7 +127,7 @@ static AsTri mr_main(MlSim *S, double p, const MlInputBuffer in[4],
 
     if (pl->timer == 50) {
       if (pl->phys.shieldBreakerCharge >= 120) {
-        mv_drawVfx("groundBounce");
+        ml_drawVfx("groundBounce", pl->phys.pos.x + 18 * pl->phys.face, pl->phys.pos.y, pl->phys.face);
       }
     }
   }

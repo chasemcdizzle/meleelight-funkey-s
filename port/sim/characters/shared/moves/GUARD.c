@@ -35,6 +35,8 @@ static void shield_depletion(MlSim *S, double p, const MlInputBuffer in[4]) {
   st.kVel = pl->phys.kVel;
   st.shieldHP = pl->phys.shieldHP;
   st.shielding = pl->phys.shielding;
+  st.pos = pl->phys.pos;   // M4 task 1: breakShield vfx read set
+  st.face = pl->phys.face;
   as_shieldDepletion((int)MV_CS(S, p), &st, MV_IN(in, p));
   pl->phys.grounded = st.grounded;
   pl->phys.kDec = st.kDec;

@@ -46,11 +46,11 @@ static AsTri pf_main(MlSim *S, double p, const MlInputBuffer in[4],
   pl->timer += 1;
   if (pf_interrupt(S, p, in, 0) != AS_TRUE) {
     if (pl->timer == 23) {
-      mv_drawVfx("sing");
+      ml_drawVfx("sing", 0, 0, p); // pos: new Vec2D(0, 0), face: p
     } else if (pl->timer == 71) {
-      mv_drawVfx("sing2");
+      ml_drawVfx("sing2", 0, 0, p);
     } else if (pl->timer == 122) {
-      mv_drawVfx("sing3");
+      ml_drawVfx("sing3", 0, 0, p);
     }
     if (pl->phys.grounded) {
       as_reduceByTraction(false, (int)MV_CS(S, p), &pl->phys.cVel.x);

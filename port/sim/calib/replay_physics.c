@@ -822,7 +822,8 @@ int main(int argc, char **argv) {
         seam_free(r);
         fifo_drain();
       } else {
-        // post envelope compare: {"alias":...,"hq":...,"players":...,"snd":...}
+        // post envelope compare (M4 task 1 widened):
+        // {"alias":...,"hq":...,"players":...,"snd":...,"vfx":[...]}
         out.len = 0; out.buf[0] = 0;
         cb_puts(&out, "{\"alias\":");
         ser_alias3(&out, &g_sim);
@@ -834,6 +835,11 @@ int main(int argc, char **argv) {
         for (int s = 0; s < ml_events.snd_count; s++) {
           if (s) cb_putc(&out, ',');
           cb_qstr(&out, ml_events.snd[s]);
+        }
+        cb_puts(&out, "],\"vfx\":[");
+        for (int s = 0; s < ml_events.vfx_count; s++) {
+          if (s) cb_putc(&out, ',');
+          cb_vfx(&out, &ml_events.vfx[s]);
         }
         cb_puts(&out, "]}");
         if (strcmp(out.buf, post_s) != 0) {

@@ -12,10 +12,11 @@ static AsTri mv_init(MlSim *S, double p, const MlInputBuffer in[4],
   strcpy(pl->actionState, "FURAFURA");
   pl->timer = 0;
   pl->phys.stuckTimer = 490;
-  // furaFura vfx position jitter: 2 seeded draws (values render-only)
-  (void)ml_random();
-  (void)ml_random();
-  mv_drawVfx("furaFura");
+  // furaFura vfx position jitter: 2 seeded draws (x expr, then y expr —
+  // sequenced via locals; C arg evaluation order is unspecified)
+  const double vfxX = pl->phys.pos.x + (4 + ml_random() * 2) * pl->phys.face;
+  const double vfxY = pl->phys.pos.y + 11 + ml_random() * 3;
+  ml_drawVfx("furaFura", vfxX, vfxY, pl->phys.face);
   // player[p].furaLoopID = sounds.furaloop.play() — the Howl play id is an
   // emulator-environment value outside the sim domain (rule 7; zero-live:
   // no shieldbreak reaches FURAFURA over the goldens).
@@ -40,14 +41,16 @@ static AsTri mv_main(MlSim *S, double p, const MlInputBuffer in[4],
     }
     as_reduceByTraction(true, (int)MV_CS(S, p), &pl->phys.cVel.x);
     if (fmod(pl->timer, 49) == 0) {
-      (void)ml_random();
-      (void)ml_random();
-      mv_drawVfx("furaFura");
+      const double vfxX =
+          pl->phys.pos.x + (3 + ml_random() * 2) * pl->phys.face;
+      const double vfxY = pl->phys.pos.y + 11 + ml_random() * 3;
+      ml_drawVfx("furaFura", vfxX, vfxY, pl->phys.face);
     }
     if (fmod(pl->timer, 49) == 20) {
-      (void)ml_random();
-      (void)ml_random();
-      mv_drawVfx("furaFura");
+      const double vfxX =
+          pl->phys.pos.x + (5 + ml_random() * 2) * pl->phys.face;
+      const double vfxY = pl->phys.pos.y + 8 + ml_random() * 3;
+      ml_drawVfx("furaFura", vfxX, vfxY, pl->phys.face);
     }
     if (pl->phys.shieldHP > 30) {
       pl->phys.shieldHP = 30;

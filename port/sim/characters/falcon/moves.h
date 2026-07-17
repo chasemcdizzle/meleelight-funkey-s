@@ -70,8 +70,8 @@ extern double mv_falcon_arr_len(const char *state, const char *key);
 
 // --- hitboxes.id[0].offset[hitboxes.frame] read ------------------------------
 // Falcon's firefoxtail vfx windows compute their (render-only) position
-// from the ACTIVE hitbox's per-frame offset array. The VALUE is discarded
-// (the capture compares vfx NAMES only), but the READ is crash-fidelity:
+// from the ACTIVE hitbox's per-frame offset array. The VALUE feeds the
+// widened ml_drawVfx* config (M4 task 1); the READ is also crash-fidelity:
 // upstream throws when offset is not an array (constructor/offsetSingle
 // hitbox) or the frame overruns it — the C traps at the same site.
 static inline Vec2D mv_falcon_hb0_off(const MlPlayer *pl, const char *what) {

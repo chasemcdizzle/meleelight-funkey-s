@@ -53,7 +53,7 @@ static AsTri mr_main(MlSim *S, double p, const MlInputBuffer in[4],
       ml_sound_play("sword3");
     }
     if (pl->timer > 5 && pl->timer < 14) {
-      mv_drawVfx("swing");
+      ml_drawVfx_swing("swing", 0, 0, pl->phys.face, p, "FORWARDSMASH", pl->timer - 6);
     }
     if (pl->timer == 10) {
       pl->hitboxes.active[0] = true;

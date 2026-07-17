@@ -27,7 +27,7 @@ static AsTri mv_main(MlSim *S, double p, const MlInputBuffer in[4],
       }
     }
     if (pl->timer == 4) {
-      mv_drawVfx("dashDust");
+      ml_drawVfx("dashDust", pl->phys.pos.x, pl->phys.pos.y, pl->phys.face);
     }
     if (pl->timer > 1) {
       if (js_abs(i0->lsX) < 0.3) {

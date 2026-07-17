@@ -817,10 +817,14 @@ static void marshal_surface_list(const CanonVal *v, SurfaceList *out,
 static void marshal_stage(const CanonVal *v, MlStageX *out) {
   memset(out, 0, sizeof *out);
   if (v->type == CV_NULL) return; // pre-setupMatch sweep records
-  if (v->type != CV_OBJ || v->nkeys != 5) fail("stage projection shape");
+  // M4 task 1: 7-key puff projection (+wallL/wallR — NSA onWallCollide's
+  // wallBounce vfx reads the wall plane).
+  if (v->type != CV_OBJ || v->nkeys != 7) fail("stage projection shape");
   marshal_surface_list(obj_req(v, "ground"), &out->s.ground, "stage.ground");
   marshal_surface_list(obj_req(v, "platform"), &out->s.platform,
                        "stage.platform");
+  marshal_surface_list(obj_req(v, "wallL"), &out->s.wallL, "stage.wallL");
+  marshal_surface_list(obj_req(v, "wallR"), &out->s.wallR, "stage.wallR");
   const CanonVal *ledge = obj_req(v, "ledge");
   if (ledge->type != CV_ARR || ledge->count > ML_MAX_LEDGES) fail("stage.ledge");
   out->ledgeCount = ledge->count;
@@ -1174,7 +1178,7 @@ int main(int argc, char **argv) {
         cb_puts(&out, "],\"vfx\":[");
         for (int s = 0; s < ml_events.vfx_count; s++) {
           if (s) cb_putc(&out, ',');
-          cb_qstr(&out, ml_events.vfx[s]);
+          cb_vfx(&out, &ml_events.vfx[s]); // M4 task 1: full-config canon
         }
         cb_puts(&out, "]}");
         if (strcmp(out.buf, post_s) != 0) {

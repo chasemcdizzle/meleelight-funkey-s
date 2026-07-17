@@ -39,7 +39,8 @@ static AsTri pf_main(MlSim *S, double p, const MlInputBuffer in[4],
         (pf_rollOutVel(pl) * 0.045 * pf_rollOutTurnTimer(pl) *
          pl->phys.face * -1);
     if (fmod(pl->phys.rollOutDistance, 5) == 0) {
-      mv_drawVfx("dashDust");
+      ml_drawVfx("dashDust", pl->phys.pos.x, pl->phys.pos.y,
+                 pl->phys.face);
     }
   }
   return AS_UNDEF;

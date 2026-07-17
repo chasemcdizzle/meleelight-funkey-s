@@ -29,7 +29,8 @@ static AsTri fc4_init(MlSim *S, double p, const MlInputBuffer in[4],
   pl->phys.landingMultiplier = 30.0 / 34;
   mv_assign_hitbox_id(S, p, "falcondive1", 0, 0);
   mv_assign_hitbox_id(S, p, "falcondive1", 1, 1);
-  mv_drawVfx("groundBounce");
+  ml_drawVfx_f("groundBounce", pl->phys.pos.x, pl->phys.pos.y,
+               pl->phys.face, js_pi() / 2);
   fc4_main(S, p, in, 0);
   return AS_UNDEF;
 }

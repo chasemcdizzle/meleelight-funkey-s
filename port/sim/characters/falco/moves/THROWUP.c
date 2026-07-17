@@ -42,16 +42,22 @@ static AsTri fc_main(MlSim *S, double p, const MlInputBuffer in[4],
     if (prevFrame < 18 && pl->timer >= 18) {
       mv_article_laser_falco(S, p, 0, 18, js_pi() / 2, false);
       ml_sound_play("foxlaserfire");
-      mv_drawVfx("laser");
+      ml_drawVfx_laser("laser", pl->phys.pos.x + (0 * pl->phys.face),
+                       pl->phys.pos.y + 18, pl->phys.face, js_pi() / 2, 137,
+                       255, 255, 157, 255, 255);
     } else if (prevFrame < 20 && pl->timer >= 20) {
       mv_article_laser_falco(S, p, 0, 18, js_pi() / 2, false);
       // rotate 90
       ml_sound_play("foxlaserfire");
-      mv_drawVfx("laser");
+      ml_drawVfx_laser("laser", pl->phys.pos.x + (0 * pl->phys.face),
+                       pl->phys.pos.y + 18, pl->phys.face, js_pi() / 2, 137,
+                       255, 255, 157, 255, 255);
     } else if (prevFrame < 24 && pl->timer >= 24) {
       mv_article_laser_falco(S, p, 0, 18, js_pi() / 2, false);
       ml_sound_play("foxlaserfire");
-      mv_drawVfx("laser");
+      ml_drawVfx_laser("laser", pl->phys.pos.x + (0 * pl->phys.face),
+                       pl->phys.pos.y + 18, pl->phys.face, js_pi() / 2, 137,
+                       255, 255, 157, 255, 255);
     } else if (prevFrame < 33 && pl->timer >= 33) {
       ml_sound_play("foxlaserholster");
     }

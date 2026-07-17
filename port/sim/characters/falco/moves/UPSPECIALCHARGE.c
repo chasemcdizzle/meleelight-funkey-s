@@ -33,8 +33,10 @@ static AsTri fc_main(MlSim *S, double p, const MlInputBuffer in[4],
   const MlInput *i0 = &MV_IN(in, p)[0];
   pl->timer += 1;
   if (fc_interrupt(S, p, in, 0) != AS_TRUE) {
-    // const frame = (timer-1) % 10 — drawVfx's f field (render-only)
-    mv_drawVfx("firefoxcharge");
+    // const frame = (player[p].timer-1) % 10 — drawVfx's f field
+    const double frame = fmod(pl->timer - 1, 10);
+    ml_drawVfx_f("firefoxcharge", pl->phys.pos.x, pl->phys.pos.y,
+                 pl->phys.face, frame);
 
     if (pl->phys.grounded) {
       as_reduceByTraction(false, (int)MV_CS(S, p), &pl->phys.cVel.x);

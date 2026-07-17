@@ -34,7 +34,7 @@ static AsTri mr_main(MlSim *S, double p, const MlInputBuffer in[4],
                 MV_IN(in, p));
     as_airDrift((int)MV_CS(S, p), &pl->phys.cVel.x, MV_IN(in, p));
     if (pl->timer > 4 && pl->timer < 12) {
-      mv_drawVfx("swing");
+      ml_drawVfx_swing("swing", 0, 0, pl->phys.face, p, "DAIR", pl->timer - 5);
     }
     if (pl->timer == 6) {
       pl->hitboxes.active[0] = true;

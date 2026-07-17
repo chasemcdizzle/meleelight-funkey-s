@@ -53,7 +53,7 @@ static AsTri fc_main(MlSim *S, double p, const MlInputBuffer in[4],
       pl->shineLoop = 0;
     }
     pl->shineLoop += 1;
-    mv_drawVfx("shineloop");
+    ml_drawVfx("shineloop", 0, 0, p);
   }
   return AS_UNDEF;
 }

@@ -20,9 +20,9 @@ static AsTri mv_init(MlSim *S, double p, const MlInputBuffer in[4],
   pl->hit.hitlag = 5;
   pl->hit.knockback = 0;
   if (pl->phys.face == 1) {
-    mv_drawVfx("tech"); // pos: ECBp[3]
+    ml_drawVfx_p("tech", pl->phys.ECBp[3].x, pl->phys.ECBp[3].y);
   } else {
-    mv_drawVfx("tech"); // pos: ECBp[1]
+    ml_drawVfx_p("tech", pl->phys.ECBp[1].x, pl->phys.ECBp[1].y);
   }
   mv_dispatch(S, MV_CS(S, p), "WALLJUMP", "main", p, in, 0);
   return AS_UNDEF;

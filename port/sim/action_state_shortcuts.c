@@ -305,8 +305,10 @@ void as_shieldDepletion(int charId, AsShieldDepState *st, const MlInput in[4]) {
     st->kDec.x = 0;
     st->grounded = false;
     st->shieldHP = 0;
-    // drawVfx({name:"breakShield",...}): render-only vfx queue — no sim
-    // effect (drawECB no-op precedent, fix_plan M2-CAL conventions).
+    // drawVfx({name:"breakShield", pos:phys.pos, face:phys.face})
+    // (actionStateShortcuts.js:291-295; M4 task 1 — full config through
+    // the widened seam; pos/face arrive via AsShieldDepState)
+    ml_drawVfx("breakShield", st->pos.x, st->pos.y, st->face);
     ml_sound_play("shieldbreak");
     as_dispatch(charId, "SHIELDBREAKFALL", "init");
   }

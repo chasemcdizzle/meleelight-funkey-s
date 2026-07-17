@@ -31,8 +31,9 @@
 // SIDE-EFFECT SEAMS: sounds via ml_sound_play/_stop; seeded draws via
 // ml_random (CAPTUREWAIT's mash wiggle, FURAFURA's vfx jitter,
 // screenShake's 4 draws per call, drawVfx("circleDust")'s 4 draws —
-// main/vfx/drawVfx.js:15-18); vfx spawns via ml_vfx (render-only except
-// the circleDust draws; the capture compares the name queue).
+// main/vfx/drawVfx.js:15-18); vfx spawns via the ml_drawVfx* emitters
+// (render-only except the circleDust draws; the capture compares the
+// full-config queue — M4 task 1).
 // percentShake is the CHECKSUM.md §7 native-RNG exclusion (no-op);
 // finishGame is match-end (isFinalDeath true — zero-live, task 17's
 // lifecycle surface: mv_out_of_domain).
@@ -52,7 +53,7 @@
 
 #include "../../../fdlibm/fdlibm.h"
 #include "../../action_state_shortcuts.h"
-#include "../../ml_events.h" // ml_sound_play/_stop, ml_vfx, ml_random
+#include "../../ml_events.h" // ml_sound_play/_stop, ml_drawVfx*, ml_random
 #include "../../ml_js.h"
 #include "../../physics.h" // MlSim, MlDispExtra
 #include "../../util/lin_alg.h" // reflect, dotProd (STOPCEIL/WALLDAMAGE)
@@ -180,10 +181,10 @@ extern const char *mv_palette0(double slot);
 double mv_frames(double charId, const char *state);
 const ml_attributes_t *mv_attr(double charId);
 
-// drawVfx(name): ml_vfx note; "circleDust" additionally consumes 4 seeded
-// draws (drawVfx.js:15-18 — the values are render-only, the DRAWS are
-// chain state). screenShake: 4 seeded draws (main.js:352-358).
-void mv_drawVfx(const char *name);
+// drawVfx: M4 task 1 — sites call the ml_drawVfx* shape emitters
+// (ml_events.h) with their upstream config values; "circleDust"'s 4
+// seeded draws live in ml_drawVfx_cfg (same order as the retired
+// mv_drawVfx). screenShake: 4 seeded draws (main.js:352-358).
 void mv_screenShake(void);
 // playSounds(state, p) — actionStateShortcuts.js:144 via the mvData rows.
 void mv_playSounds(MlSim *S, const char *state, double p);

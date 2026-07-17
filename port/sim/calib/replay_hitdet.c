@@ -808,6 +808,11 @@ int main(int argc, char **argv) {
           if (s) cb_putc(&out, ',');
           cb_qstr(&out, ml_events.snd[s]);
         }
+        cb_puts(&out, "],\"vfx\":["); // M4 task 1: full-config vfx
+        for (int s = 0; s < ml_events.vfx_count; s++) {
+          if (s) cb_putc(&out, ',');
+          cb_vfx(&out, &ml_events.vfx[s]);
+        }
         cb_puts(&out, "]}");
         if (strcmp(out.buf, post_s) != 0) {
           report_div("pipeline-post", g_lineno, post_s, out.buf);

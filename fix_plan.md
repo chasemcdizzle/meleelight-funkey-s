@@ -1367,6 +1367,26 @@ overruns):
   done-check: `bash port/sim/calib/check-vfx-seam.sh` → prints
   `VFX SEAM MATCH`, exit 0 (composes re-recorded capture byte-stability
   ×2, affected cluster replays, and `bash port/sim/check-sim.sh`).
+  **DONE (iter 64, 2026-07-17) — committed form**: cold done-check
+  `VFX SEAM MATCH` exit 0 (.loop/m4-task1-donecheck.log, ~7 min).
+  Affected-cluster list MEASURED (grep + survey; the brief's guess
+  widened): moves-* ×6 + article + asshort + physics + **hitdet** (18
+  upstream sites — the largest single-file emitter) = 10 specs, all
+  re-recorded ×2/STREAM-MATCH/0-divergence; + sim_boot.c entrance/
+  start (main.js boot sites, capture-less, structure-verified).
+  MlVfx + ml_drawVfx* emitters + ml_vfx_sink in ml_events.{h,c};
+  cb_vfx canon in calib/canon.{h,c}; 193 sites translated; capture
+  side pushes ctx.canon(cfg) at CALL time (snapshot semantics).
+  2592 live full-config events replayed bit-exactly (physics
+  wallBounce live ×8; asshort breakShield zero-live — honest-coverage
+  note in AGENT-LOG). NEW rule instance (§M2 rule-7 corollary,
+  measured twice): widening an OBSERVABLE widens read sets
+  transitively — shieldDepletion pre 5→7 keys (+pos/face), puff stage
+  projection 5→7 keys (+wallL/wallR); the strict marshals caught both.
+  Teeth: nibble→11 (site occurrences exactly), name-only→34 (= all
+  non-empty-vfx records), face-drop→11, hitdet-field-drop→14400;
+  restores proven by 0-divergence re-replay (never `git checkout` —
+  index-restore reverts unstaged work, lesson on record).
 - task 2 — **renderer vfx + overlay/banner/background + IoU
   re-freeze**: port renderVfx/dVfx draw fns (circleDust's 4 seeded
   draws already chain), HUD renderOverlay, Ready-GO banner, background

@@ -90,6 +90,8 @@ typedef struct {
   Vec2D kVel;      // in/out
   double shieldHP; // in/out
   bool shielding;  // in/out
+  Vec2D pos;       // in (M4 task 1: breakShield vfx reads phys.pos)
+  double face;     // in (breakShield vfx reads phys.face)
 } AsShieldDepState;
 
 typedef struct {

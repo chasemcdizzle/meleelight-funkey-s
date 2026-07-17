@@ -50,7 +50,7 @@ static AsTri mr_main(MlSim *S, double p, const MlInputBuffer in[4],
       ml_sound_play("dancingBlade");
     }
     if (pl->timer > 4 && pl->timer < 12) {
-      mv_drawVfx("swing");
+      ml_drawVfx_swing("swing", 0, 0, pl->phys.face, p, "SIDESPECIALAIR1", pl->timer - 5);
     }
     marth_dancingBladeAirMobility(S, p);
     // upstream carries an empty `if (timer > 4 && timer < 12) {}` here

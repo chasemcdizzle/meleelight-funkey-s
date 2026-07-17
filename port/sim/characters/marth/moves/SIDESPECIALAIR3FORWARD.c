@@ -35,7 +35,7 @@ static AsTri mr_main(MlSim *S, double p, const MlInputBuffer in[4],
   marth_dancingBladeCombo(S, p, 16, 37, in);
   if (mr_interrupt(S, p, in, 0) != AS_TRUE) {
     if (pl->timer > 9 && pl->timer < 18) {
-      mv_drawVfx("swing");
+      ml_drawVfx_swing("swing", 0, 0, pl->phys.face, p, "SIDESPECIALAIR3FORWARD", pl->timer - 10);
     }
     marth_dancingBladeAirMobility(S, p);
     pl->phys.cVel.x = 0;

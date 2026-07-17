@@ -156,6 +156,21 @@
         };
       }
 
+      // --- vfx attribution (M4 task 1: hitDetection's own drawVfx sites —
+      // impactLand/powershield/breakShield/groundBounce/clank/hit-spark
+      // families; full config, CALL-TIME canon. Move-dispatch-window vfx
+      // stay subsumed by the seam ({attr:false} frame), mirroring the C
+      // replay's resync-not-run treatment.) ------------------------------
+      {
+        const VFX = find((ex) => typeof ex.drawVfx === "function", "drawVfx");
+        const origDraw = VFX.drawVfx;
+        VFX.drawVfx = function (cfg) {
+          const t = top();
+          if (t && t.attr) t.vfx.push(ctx.canon(cfg));
+          return origDraw.apply(this, arguments);
+        };
+      }
+
       // --- projections (physics-spec discipline) ------------------------
       const projectPlayer = (p) => {
         const out = {};
@@ -197,7 +212,8 @@
         ',"phq":' + ctx.canon(HD.phantomQueue) +
         ',"players":' + playersCanon() +
         ',"rng":' + ctx.canon(fr.rng) +
-        ',"snd":' + ctx.canon(fr.snd) + "}";
+        ',"snd":' + ctx.canon(fr.snd) +
+        ',"vfx":[' + fr.vfx.join(",") + "]}"; // M4 task 1: full-config vfx
 
       // --- the three pipeline mutators (uniform envelopes) ---------------
       const wrapPipeline = (name, argProj) => {
@@ -206,7 +222,7 @@
           const args = Array.prototype.slice.call(arguments);
           const argsCanon = "[" +
               argProj(args).concat([preEnvelope()]).join(",") + "]";
-          const fr = { attr: true, hd: true, rng: [], snd: [] };
+          const fr = { attr: true, hd: true, rng: [], snd: [], vfx: [] };
           stack.push(fr);
           let ret;
           try {
@@ -278,7 +294,7 @@
         HD[name] = function () {
           const args = Array.prototype.slice.call(arguments);
           const argsCanon = ctx.canon(proj(args)); // PRE-call state
-          const fr = { attr: true, hd: false, rng: [], snd: [] };
+          const fr = { attr: true, hd: false, rng: [], snd: [], vfx: [] };
           stack.push(fr);
           let ret;
           try {
@@ -286,7 +302,7 @@
           } finally {
             stack.pop();
           }
-          if (fr.rng.length || fr.snd.length) {
+          if (fr.rng.length || fr.snd.length || fr.vfx.length) {
             throw new Error("hitdet spec: events escaped pure boundary " + name);
           }
           ctx.push(name, argsCanon, ctx.canon(ret));
@@ -302,13 +318,16 @@
         HD.knockbackSounds = function (type, knockback, v) {
           const argsCanon = ctx.canon([type, knockback,
                                        M.characterSelections[v]]);
-          const fr = { attr: true, hd: false, rng: [], snd: [] };
+          const fr = { attr: true, hd: false, rng: [], snd: [], vfx: [] };
           stack.push(fr);
           let ret;
           try {
             ret = orig.apply(this, arguments);
           } finally {
             stack.pop();
+          }
+          if (fr.vfx.length) { // measured zero: no drawVfx in the body
+            throw new Error("hitdet spec: vfx escaped knockbackSounds");
           }
           ctx.push("knockbackSounds", argsCanon, ctx.canon(ret),
                    '{"rng":' + ctx.canon(fr.rng) +

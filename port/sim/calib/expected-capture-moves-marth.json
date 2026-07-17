@@ -1,40 +1,48 @@
 {
-  "comment": "Measured-then-frozen moves-marth-spec capture pins (M2 task 11, 2026-07-14). Boundary: every MARTH-ORIGIN actionStates entry's function property (244 wrapped, all on table 0: 242 phase fns — 58 moves x init/main/interrupt + 17 x +land (ATTACKAIR*x5, NEUTRALSPECIALAIR, DOWNSPECIALAIR, SIDESPECIALAIR + its 8 chain states, UPSPECIAL) — plus marth's two NON-phase dispatch surfaces: onClank(p,input) on DOWNSPECIAL{GROUND,AIR} (hitDetection.js:71-72's specialClank arm)) plus the 2 article init boundaries as a MEASUREMENT instrument = 246. Marth has ZERO `articles` imports anywhere under characters/marth/ (stronger than falcon's dead imports — measured): the article count is pinned ZERO on every golden; a nonzero count means the measured claim broke. GOLDENS g01/g05/g06 — the marth carriers, probe-measured for live marth-origin coverage (g01 1082 / g05 1417 / g06 1054 live move records; g04 fields no marth). 'move' = a marth-origin fn entered outside any move record's scope, mutation-captured with [phase,name,[slot],inputs|null,pre] args (THROWN* inits can arrive 1-arg from fox/falco THROWBACK/THROWDOWN dispatch sites — inputs null) and the {alias,hq,players,rng,sbid,snd,vfx} post envelope — 'sbid' carries the Howl play ids consumed by player.shieldBreakerID = sounds.shieldbreakercharge.play() (a GLOBAL howler counter: unrecoverable chain state, oracle-fed — the replay injects the recorded ids via mv_howl_play_id and re-emits the CONSUMED list; live on g05: 12 live NEUTRALSPECIALGROUND plays); 394 frame-0 records per golden = the rule-11/12 sweep on the sweep RNG chain, incl. the NEUTRALSPECIAL charge family (B-held charge/blend/dashDust, release-stop + auto-stop tokens, the charged >=120 dmg-write arm — the global charHitboxes dmg fields are restored, rule 12), DOLPHINSLASH angle/flip/rotated-setVel/land-guard arms, all DANCINGBLADE chain dispatches + the 4DOWN multi-hit switch, COUNTER both environments + onClank -> DOWNSPECIAL*2, THROW* 2-arg victim-dispatch chains + hq crossings + CATCHCUT arms, all 20 THROWN* inits + guard/clamp arms, all 8 CLIFF*; 'mdispatch' = non-marth per-char dispatches from inside a marth record (measured ZERO live over g01/g05/g06: marth's live throws grabbed no non-marth victim — its sweep throws self-grab; seam FIFO teeth negative-test-proven); Math.random = standalone seeded draws; mvData = the frame-0 executed move-data dump (task-7 dump + marth {origin,data}, finalCheck-drift-guarded). undefRetAllowed: move rets echo the phase's return (init/main/land/onClank return undefined; THROW{FORWARD,BACK,DOWN}'s grabbing===-1 interrupt arms fall through — rule 13's family; THROWUP's returns false); mvData's ret is a data dump.",
-  "undefRetAllowed": ["move", "mdispatch", "article", "mvData"],
-  "postStateFns": ["move", "mdispatch"],
-  "goldens": {
-    "g01": {
-      "records": 1608,
-      "counts": {
-        "rngBoot": 1,
-        "mvData": 1,
-        "Math.random": 130,
-        "move": 1476,
-        "mdispatch": 0,
-        "article": 0
-      }
-    },
-    "g05": {
-      "records": 1986,
-      "counts": {
-        "rngBoot": 1,
-        "mvData": 1,
-        "Math.random": 173,
-        "move": 1811,
-        "mdispatch": 0,
-        "article": 0
-      }
-    },
-    "g06": {
-      "records": 1586,
-      "counts": {
-        "rngBoot": 1,
-        "mvData": 1,
-        "Math.random": 136,
-        "move": 1448,
-        "mdispatch": 0,
-        "article": 0
-      }
-    }
+ "comment": "Measured-then-frozen moves-marth-spec capture pins (M2 task 11, 2026-07-14). Boundary: every MARTH-ORIGIN actionStates entry's function property (244 wrapped, all on table 0: 242 phase fns — 58 moves x init/main/interrupt + 17 x +land (ATTACKAIR*x5, NEUTRALSPECIALAIR, DOWNSPECIALAIR, SIDESPECIALAIR + its 8 chain states, UPSPECIAL) — plus marth's two NON-phase dispatch surfaces: onClank(p,input) on DOWNSPECIAL{GROUND,AIR} (hitDetection.js:71-72's specialClank arm)) plus the 2 article init boundaries as a MEASUREMENT instrument = 246. Marth has ZERO `articles` imports anywhere under characters/marth/ (stronger than falcon's dead imports — measured): the article count is pinned ZERO on every golden; a nonzero count means the measured claim broke. GOLDENS g01/g05/g06 — the marth carriers, probe-measured for live marth-origin coverage (g01 1082 / g05 1417 / g06 1054 live move records; g04 fields no marth). 'move' = a marth-origin fn entered outside any move record's scope, mutation-captured with [phase,name,[slot],inputs|null,pre] args (THROWN* inits can arrive 1-arg from fox/falco THROWBACK/THROWDOWN dispatch sites — inputs null) and the {alias,hq,players,rng,sbid,snd,vfx} post envelope — 'sbid' carries the Howl play ids consumed by player.shieldBreakerID = sounds.shieldbreakercharge.play() (a GLOBAL howler counter: unrecoverable chain state, oracle-fed — the replay injects the recorded ids via mv_howl_play_id and re-emits the CONSUMED list; live on g05: 12 live NEUTRALSPECIALGROUND plays); 394 frame-0 records per golden = the rule-11/12 sweep on the sweep RNG chain, incl. the NEUTRALSPECIAL charge family (B-held charge/blend/dashDust, release-stop + auto-stop tokens, the charged >=120 dmg-write arm — the global charHitboxes dmg fields are restored, rule 12), DOLPHINSLASH angle/flip/rotated-setVel/land-guard arms, all DANCINGBLADE chain dispatches + the 4DOWN multi-hit switch, COUNTER both environments + onClank -> DOWNSPECIAL*2, THROW* 2-arg victim-dispatch chains + hq crossings + CATCHCUT arms, all 20 THROWN* inits + guard/clamp arms, all 8 CLIFF*; 'mdispatch' = non-marth per-char dispatches from inside a marth record (measured ZERO live over g01/g05/g06: marth's live throws grabbed no non-marth victim — its sweep throws self-grab; seam FIFO teeth negative-test-proven); Math.random = standalone seeded draws; mvData = the frame-0 executed move-data dump (task-7 dump + marth {origin,data}, finalCheck-drift-guarded). undefRetAllowed: move rets echo the phase's return (init/main/land/onClank return undefined; THROW{FORWARD,BACK,DOWN}'s grabbing===-1 interrupt arms fall through — rule 13's family; THROWUP's returns false); mvData's ret is a data dump. M4 task 1 (iter 64): the vfx post lists carry FULL drawVfx configs (call-time canon; FORMAT.md 'vfx posts') — captures re-recorded under the same STREAM-MATCH + byte-stability guards; record counts unchanged by construction.",
+ "undefRetAllowed": [
+  "move",
+  "mdispatch",
+  "article",
+  "mvData"
+ ],
+ "postStateFns": [
+  "move",
+  "mdispatch"
+ ],
+ "goldens": {
+  "g01": {
+   "records": 1608,
+   "counts": {
+    "rngBoot": 1,
+    "mvData": 1,
+    "Math.random": 130,
+    "move": 1476,
+    "mdispatch": 0,
+    "article": 0
+   }
+  },
+  "g05": {
+   "records": 1986,
+   "counts": {
+    "rngBoot": 1,
+    "mvData": 1,
+    "Math.random": 173,
+    "move": 1811,
+    "mdispatch": 0,
+    "article": 0
+   }
+  },
+  "g06": {
+   "records": 1586,
+   "counts": {
+    "rngBoot": 1,
+    "mvData": 1,
+    "Math.random": 136,
+    "move": 1448,
+    "mdispatch": 0,
+    "article": 0
+   }
   }
+ }
 }

@@ -292,7 +292,9 @@ void hd_hitDetect(MlSim *S, HdQueues *q, double p) {
                       const double diff = hbj->dmg - hbk->dmg;
                       if (hb_clank_eq(hbj, 6)) {
                         attackerClank = true;
-                        // drawVfx clank: render-only no-op
+                        // drawVfx({name:"clank", pos:clankHit[1]})
+                        // (hitDetection.js:64-67; M4 task 1)
+                        ml_drawVfx_p("clank", clankHit.pt.x, clankHit.pt.y);
                         pp->phys.hurtBoxState = 1;
                         pp->phys.intangibleTimer = 1;
                         // double check still in action state (:71)
@@ -332,7 +334,9 @@ void hd_hitDetect(MlSim *S, HdQueues *q, double p) {
                                S->characterSelections[slot(p)], p);
                         }
                         ml_sound_play("clank");
-                        // drawVfx clank: render-only no-op
+                        // drawVfx({name:"clank", pos:clankHit[1]})
+                        // (hitDetection.js:99-102; M4 task 1)
+                        ml_drawVfx_p("clank", clankHit.pt.x, clankHit.pt.y);
                         hitlist_push(S, p, (double)i);
                         pp->hasHit = true;
                       }
@@ -715,7 +719,12 @@ static void cssHits(MlSim *S, HdQueues *q) {
       if (P(S, v)->phys.powerShieldActive) {
         P(S, v)->phys.powerShielded = true;
         P(S, v)->hit.powershield = true;
-        // drawVfx impactLand + powershield: render-only no-ops
+        // drawVfx impactLand + powershield (hitDetection.js:377-386;
+        // M4 task 1)
+        ml_drawVfx("impactLand", P(S, v)->phys.pos.x, P(S, v)->phys.pos.y,
+                   P(S, v)->phys.face);
+        ml_drawVfx("powershield", P(S, v)->phys.shieldPositionReal.x,
+                   P(S, v)->phys.shieldPositionReal.y, P(S, v)->phys.face);
         ml_sound_play("powershield");
       }
       P(S, v)->hit.shieldstun =
@@ -744,7 +753,10 @@ static void executeShieldHit(MlSim *S, HdQueues *q, double v, double a,
       pv->phys.cVel.y = 2.5;
       pv->phys.grounded = false;
       pv->phys.shieldHP = 0;
-      // drawVfx breakShield: render-only no-op
+      // drawVfx({name:"breakShield", pos:phys.pos, face:phys.face})
+      // (hitDetection.js:419-423; M4 task 1)
+      ml_drawVfx("breakShield", pv->phys.pos.x, pv->phys.pos.y,
+                 pv->phys.face);
       dsp0(S, q, "init", "SHIELDBREAKFALL", S->characterSelections[slot(v)],
            v);
       ml_sound_play("shieldbreak");
@@ -758,7 +770,11 @@ static void executeShieldHit(MlSim *S, HdQueues *q, double v, double a,
     vPushMultiplier = 1;
     pv->phys.powerShielded = true;
     pv->hit.powershield = true;
-    // drawVfx impactLand + powershield: render-only no-ops
+    // drawVfx impactLand + powershield (hitDetection.js:436-445;
+    // M4 task 1)
+    ml_drawVfx("impactLand", pv->phys.pos.x, pv->phys.pos.y, pv->phys.face);
+    ml_drawVfx("powershield", pv->phys.shieldPositionReal.x,
+               pv->phys.shieldPositionReal.y, pv->phys.face);
     ml_sound_play("powershield");
   } else {
     // `let frame` (:448-451) computed upstream but unused; the clank vfx
@@ -769,7 +785,11 @@ static void executeShieldHit(MlSim *S, HdQueues *q, double v, double a,
                       P(S, a)->hitboxes.frame, &o)) {
       ml_hd_out_of_domain("executeShieldHit clank vfx offset");
     }
-    (void)o; // vfx position only
+    // drawVfx({name:"clank", pos:new Vec2D(pos.x + offset.x*face,
+    //          pos.y + offset.y)}) (hitDetection.js:452-455; M4 task 1)
+    ml_drawVfx_p("clank",
+                 P(S, a)->phys.pos.x + (o.x * P(S, a)->phys.face),
+                 P(S, a)->phys.pos.y + o.y);
   }
   pv->hit.shieldstun =
       ((floor(damage) *
@@ -999,7 +1019,11 @@ static void executeRegularHit(MlSim *S, HdQueues *q, double v, const HdRow *row,
     }
     if (drawBounce) {
       ml_sound_play("bounce");
-      // drawVfx groundBounce: render-only no-op
+      // drawVfx({name:"groundBounce", pos:phys.pos, face:phys.face,
+      //          f:Math.PI/2}) (hitDetection.js:605-610 / :646-651;
+      //          M4 task 1)
+      ml_drawVfx_f("groundBounce", pv->phys.pos.x, pv->phys.pos.y,
+                   pv->phys.face, js_pi() / 2);
     }
   }
 
@@ -1044,7 +1068,11 @@ static void executeRegularHit(MlSim *S, HdQueues *q, double v, const HdRow *row,
   if (pv->phys.grounded && pv->hit.angle > 180) {
     if (pv->hit.knockback >= 80) {
       ml_sound_play("bounce");
-      // drawVfx groundBounce: render-only no-op
+      // drawVfx({name:"groundBounce", pos:phys.pos, face:phys.face,
+      //          f:Math.PI/2}) (hitDetection.js:605-610 / :646-651;
+      //          M4 task 1)
+      ml_drawVfx_f("groundBounce", pv->phys.pos.x, pv->phys.pos.y,
+                   pv->phys.face, js_pi() / 2);
       pv->hit.angle = 360 - pv->hit.angle;
       pv->hit.knockback *= 0.8;
     }
@@ -1075,18 +1103,32 @@ static void hitEffectsAndSound(MlSim *S, double v, bool isThrow,
 // --- hitEffect (:670) — strict switch; vfx are render-only -----------------------------------------
 
 static void hitEffect(MlSim *S, HdTypeVal type, double v) {
+  // M4 task 1: vfx configs emitted verbatim (hitDetection.js:670-718);
+  // pos is the live hit.hitPoint reference — snapshot at call, like
+  // upstream drawVfx's instance.newPos.
+  MlPlayer *pv = P(S, v);
   if (tv_strict_eq(type, 0)) {
-    // normal: drawVfx normalhit (no-op)
+    // normal (:674-678)
+    ml_drawVfx("normalhit", pv->hit.hitPoint.x, pv->hit.hitPoint.y,
+               pv->phys.face);
   } else if (tv_strict_eq(type, 1)) {
-    // slash: drawVfx hitSparks + hitFlair + hitCurve (no-ops)
+    // slash (:682-697)
+    ml_drawVfx("hitSparks", pv->hit.hitPoint.x, pv->hit.hitPoint.y,
+               pv->phys.face);
+    ml_drawVfx("hitFlair", pv->hit.hitPoint.x, pv->hit.hitPoint.y,
+               pv->phys.face);
+    ml_drawVfx_f("hitCurve", pv->hit.hitPoint.x, pv->hit.hitPoint.y,
+                 pv->phys.face, pv->hit.angle);
   } else if (tv_strict_eq(type, 3)) {
-    // fire
-    P(S, v)->burning = 20;
-    // drawVfx firehit (no-op)
+    // fire (:702-706)
+    pv->burning = 20;
+    ml_drawVfx("firehit", pv->hit.hitPoint.x, pv->hit.hitPoint.y,
+               pv->phys.face);
   } else if (tv_strict_eq(type, 4)) {
-    // electric
-    P(S, v)->shocked = 20;
-    // drawVfx electrichit (no-op)
+    // electric (:711-715)
+    pv->shocked = 20;
+    ml_drawVfx("electrichit", pv->hit.hitPoint.x, pv->hit.hitPoint.y,
+               pv->phys.face);
   }
   // default: break
 }
@@ -1261,7 +1303,11 @@ static void executeGrabTech(MlSim *S, HdQueues *q, double a, double v) {
   dsp0(S, q, "init", "CAPTURECUT", S->characterSelections[slot(a)], a);
   dsp0(S, q, "init", "CAPTURECUT", S->characterSelections[slot(v)], v);
   ml_sound_play("parry");
-  // drawVfx shieldup: render-only no-op
+  // drawVfx({name:"shieldup", pos:new Vec2D((a.pos.x+v.pos.x)/2,
+  //          a.pos.y+12), face:v.face, f:3}) (hitDetection.js:848-853;
+  //          M4 task 1)
+  ml_drawVfx_f("shieldup", (pa->phys.pos.x + pv->phys.pos.x) / 2,
+               pa->phys.pos.y + 12, pv->phys.face, 3);
 }
 
 // --- getKnockback (:856) -----------------------------------------------------------------------------

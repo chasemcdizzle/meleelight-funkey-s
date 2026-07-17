@@ -47,7 +47,7 @@ static AsTri mv_main(MlSim *S, double p, const MlInputBuffer in[4],
       AS_TRUE) {
     if (pl->hit.hitstun > 0) {
       if (fmod(pl->hit.hitstun, 10) == 0) {
-        mv_drawVfx("flyingDust");
+        ml_drawVfx_p("flyingDust", pl->phys.pos.x, pl->phys.pos.y);
       }
       pl->hit.hitstun -= 1;
       pl->phys.cVel.y -= ml_f64(at->gravity);

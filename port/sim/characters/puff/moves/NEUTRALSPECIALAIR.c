@@ -3,8 +3,8 @@
 // after — verbatim per file); carries land + the two special-phase
 // surfaces onWallCollide/onPlayerHit. The interrupt's FALLSPECIAL arm
 // returns FALSE (verbatim quirk). onWallCollide's wall-coordinate read
-// feeds only the vfx position (render-only; wallNum is valid by physics
-// construction) — the C emits the "wallBounce" note.
+// feeds the widened "wallBounce" vfx config (M4 task 1; wallNum is valid
+// by physics construction).
 #include "../moves.h"
 
 static AsTri pf_main(MlSim *S, double p, const MlInputBuffer in[4],
@@ -43,7 +43,7 @@ static AsTri pf_main(MlSim *S, double p, const MlInputBuffer in[4],
   MlPlayer *pl = mv_player(S, p);
   const MlInput *i0 = &MV_IN(in, p)[0];
   if (pl->timer == 15) {
-    mv_drawVfx("dashDust");
+    ml_drawVfx("dashDust", pl->phys.pos.x, pl->phys.pos.y, pl->phys.face);
   }
   if (pl->timer >= 16 && pl->timer <= 45 && pf_rollOutChargeAttempt(pl)) {
     if (i0->b) {
@@ -54,7 +54,8 @@ static AsTri pf_main(MlSim *S, double p, const MlInputBuffer in[4],
       }
       if (pf_rollOutCharge(pl) >= 21) {
         if (pl->timer == 16) {
-          mv_drawVfx("dashDust");
+          ml_drawVfx("dashDust", pl->phys.pos.x, pl->phys.pos.y,
+                     pl->phys.face);
         }
       }
     } else {
@@ -107,7 +108,8 @@ static AsTri pf_main(MlSim *S, double p, const MlInputBuffer in[4],
         pf_hb_set_dmg(S, p, 2, newDmg);
         if (pf_rollOutCharge(pl) >= 21) {
           if (fmod(pl->phys.rollOutDistance, 10) == 0) {
-            mv_drawVfx("dashDust");
+            ml_drawVfx("dashDust", pl->phys.pos.x, pl->phys.pos.y,
+                       pl->phys.face);
           }
         }
       }
@@ -174,8 +176,8 @@ AsTri puff_NEUTRALSPECIALAIR_onWallCollide(MlSim *S, double p,
   }
   const char *wallFace = ex->x[0].str;
   // upstream reads activeStage.wall{R,L}[wallNum][1].x for the vfx
-  // POSITION only (render-only; wallNum is a valid index by physics
-  // construction) — the C emits the note.
+  // position (wallNum is a valid index by physics construction).
+  const double wallNum = ex->x[1].num;
   if (!pf_rollOutCharging(pl) && !pf_rollOutChargeAttempt(pl) &&
       !pf_rollOutPlayerHit(pl)) {
     pl->phys.cVel.x *= -0.75;
@@ -184,9 +186,13 @@ AsTri puff_NEUTRALSPECIALAIR_onWallCollide(MlSim *S, double p,
     pl->phys.face *= -1;
     ml_sound_play("rollouthit");
     if (strcmp(wallFace, "R") == 0) {
-      mv_drawVfx("wallBounce");
+      ml_drawVfx_f("wallBounce",
+                   S->stage.s.wallR.items[(int)wallNum].p1.x,
+                   pl->phys.ECBp[3].y, 1, 1);
     } else {
-      mv_drawVfx("wallBounce");
+      ml_drawVfx_f("wallBounce",
+                   S->stage.s.wallL.items[(int)wallNum].p1.x,
+                   pl->phys.ECBp[1].y, -1, 0);
     }
   }
   return AS_UNDEF;

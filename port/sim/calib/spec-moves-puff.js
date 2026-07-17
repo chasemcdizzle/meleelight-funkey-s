@@ -239,7 +239,7 @@
         const orig = VFX.drawVfx;
         VFX.drawVfx = function (cfg) {
           const t = top();
-          if (t && t.attr) t.vfx.push(cfg.name);
+          if (t && t.attr) t.vfx.push(ctx.canon(cfg)); // M4 task 1: full config, CALL-TIME canon (snapshot semantics)
           return orig.apply(this, arguments);
         };
       }
@@ -298,6 +298,12 @@
           platform: st.platform,
           respawnFace: st.respawnFace,
           respawnPoints: st.respawnPoints,
+          // M4 task 1: NSA onWallCollide's wallBounce vfx reads
+          // activeStage.wallL/wallR[wallNum][1].x — the widened config
+          // put the wall plane in puff's read set (puff-only widening;
+          // the other move specs keep the 5-key projection).
+          wallL: st.wallL,
+          wallR: st.wallR,
         };
       };
       // the chd plane: the LIVE puff charHitboxes {moveKey: {idN: {dmg,
@@ -399,7 +405,7 @@
               ',"players":' + playersCanon() +
               ',"rng":' + ctx.canon(fr.rng) +
               ',"snd":' + ctx.canon(fr.snd) +
-              ',"vfx":' + ctx.canon(fr.vfx) + "}";
+              ',"vfx":[' + fr.vfx.join(",") + ']' + "}";
           ctx.push("move", argsCanon, ctx.canon(ret), post);
           return ret;
         };

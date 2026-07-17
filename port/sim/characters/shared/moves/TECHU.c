@@ -15,7 +15,7 @@ static AsTri mv_init(MlSim *S, double p, const MlInputBuffer in[4],
   pl->hit.knockback = 0;
   pl->hit.hitstun = 0;
   pl->phys.intangibleTimer = js_max(pl->phys.intangibleTimer, 14);
-  mv_drawVfx("tech"); // pos: ECBp[2] (render-only coordinates)
+  ml_drawVfx_p("tech", pl->phys.ECBp[2].x, pl->phys.ECBp[2].y);
   ml_sound_play("tech");
   mv_turnOffHitboxes(S, p);
   mv_dispatch(S, MV_CS(S, p), "TECHU", "main", p, in, 0);

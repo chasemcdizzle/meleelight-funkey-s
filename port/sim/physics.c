@@ -334,7 +334,10 @@ static void dealWithWallCollision(MlSim *S, double i, Vec2D newPosition,
              p->hit.hitlag == 0 &&
              fd_pow(p->phys.kVel.x, 2) + fd_pow(p->phys.kVel.y, 2) >= 2.25) {
     p->phys.face = sign;
-    // drawVfx({name:"wallBounce", ...}) — render plane, no-op in C.
+    // drawVfx({name:"wallBounce", pos:new Vec2D(pos.x, ECBp[1].y),
+    //          face:sign, f:wallNormal}) (physics.js:107-112; M4 task 1)
+    ml_drawVfx_fv("wallBounce", p->phys.pos.x, p->phys.ECBp[1].y, sign,
+                  wallNormal.x, wallNormal.y);
     dispatch_vec(S, "init", "WALLDAMAGE", S->characterSelections[slot(i)], i,
                  wallNormal);
   } else if (p->hit.hitlag == 0) {
@@ -665,8 +668,10 @@ static void dealWithCeilingCollision(MlSim *S, double i, Vec2D newPosition,
       if (p->phys.techTimer > 0) {
         dsp(S, "init", "TECHU", i);
       } else {
-        // drawVfx({name:"ceilingBounce", pos: ecbTop, ...}) — render plane.
-        (void)ecbTop;
+        // drawVfx({name:"ceilingBounce", pos:ecbTop, face:1,
+        //          f:ceilingNormal}) (physics.js:366-371; M4 task 1)
+        ml_drawVfx_fv("ceilingBounce", ecbTop.x, ecbTop.y, 1,
+                      ceilingNormal.x, ceilingNormal.y);
         ml_sound_play("bounce");
         dispatch_vec(S, "init", "STOPCEIL", S->characterSelections[slot(i)],
                      i, ceilingNormal);
@@ -789,12 +794,19 @@ static void hitlagSwitchUpdate(MlSim *S, double i, const MlInput in[4]) {
       if (fmod(p->shocked, 5) == 0) {
         ml_sound_play("electricfizz");
       }
-      // drawVfx({name:"shocked", ...}) — render plane.
+      // drawVfx({name:"shocked", pos:new Vec2D(pos.x, pos.y+5),
+      //          face:phys.face}) (physics.js:572-576; M4 task 1)
+      ml_drawVfx("shocked", p->phys.pos.x, p->phys.pos.y + 5, p->phys.face);
     }
 
     if (p->burning > 0) {
       p->burning--;
-      // drawVfx({name:"burning", ...}) every 6 — render plane.
+      if (fmod(p->burning, 6) == 0) {
+        // drawVfx({name:"burning", pos:new Vec2D(pos.x, pos.y+5),
+        //          face:phys.face}) (physics.js:579-587; M4 task 1)
+        ml_drawVfx("burning", p->phys.pos.x, p->phys.pos.y + 5,
+                   p->phys.face);
+      }
     }
 
     // TURBO MODE — structurally off in every golden (gameSettings.turbo

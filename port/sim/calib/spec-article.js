@@ -209,7 +209,7 @@
         const orig = VFX.drawVfx;
         VFX.drawVfx = function (cfg) {
           const t = top();
-          if (t && t.attr) t.vfx.push(cfg.name);
+          if (t && t.attr) t.vfx.push(ctx.canon(cfg)); // M4 task 1: full config, CALL-TIME canon (snapshot semantics)
           return orig.apply(this, arguments);
         };
       }
@@ -306,7 +306,7 @@
         ',"players":' + playersCanon() +
         ',"rng":' + ctx.canon(fr.rng) +
         ',"snd":' + ctx.canon(fr.snd) +
-        ',"vfx":' + ctx.canon(fr.vfx) + "}";
+        ',"vfx":[' + fr.vfx.join(",") + ']' + "}";
 
       // --- the pipeline wrappers ------------------------------------------------
       // preFn() -> {canon, lean}: leanness is decided ONCE at pre time and

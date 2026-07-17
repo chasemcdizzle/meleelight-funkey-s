@@ -116,6 +116,18 @@
         throw new Error("asshort: expected 180 Howl sounds, wrapped " + sndWrapped);
       }
 
+      // --- vfx instrumentation (M4 task 1: shieldDepletion's breakShield
+      // is asshort's ONE drawVfx site; full config, CALL-TIME canon) ----
+      {
+        const VFX = find((ex) => typeof ex.drawVfx === "function", "drawVfx");
+        const origDraw = VFX.drawVfx;
+        VFX.drawVfx = function (cfg) {
+          const t = top();
+          if (t && t.attr) t.vfx.push(ctx.canon(cfg));
+          return origDraw.apply(this, arguments);
+        };
+      }
+
       // --- dispatch loggers (state-machine scaffolding surface) --------
       // Wrap every function property of every move object reachable from:
       // (a) the actionStates deep copies (setupActionStates output),
@@ -282,10 +294,14 @@
           }),
         ],
         shieldDepletion: [
+          // M4 task 1: +face/pos — the breakShield vfx reads them, so
+          // they joined the boundary's read set (7-key pre).
           (a) => [chr(a[0]), {
+            face: phys(a[0]).face,
             grounded: phys(a[0]).grounded,
             kDec: phys(a[0]).kDec,
             kVel: phys(a[0]).kVel,
+            pos: phys(a[0]).pos,
             shieldHP: phys(a[0]).shieldHP,
             shielding: phys(a[0]).shielding,
           }, buf4(a[1], a[0])],
@@ -392,7 +408,7 @@
         AS[name] = function () {
           const args = Array.prototype.slice.call(arguments);
           const argsCanon = ctx.canon(proj(args)); // PRE-call state
-          const fr = { attr: true, dsp: [], rng: [], snd: [] };
+          const fr = { attr: true, dsp: [], rng: [], snd: [], vfx: [] };
           stack.push(fr);
           let ret;
           try {
@@ -401,11 +417,18 @@
             stack.pop();
           }
           if (mutProj !== null) {
-            ctx.push(name, argsCanon, ctx.canon(ret), ctx.canon({
-              dsp: fr.dsp, mut: mutProj(args, ret), rng: fr.rng, snd: fr.snd,
-            }));
+            // M4 task 1: manual envelope (sorted keys, byte-compatible
+            // with the old ctx.canon({dsp,mut,rng,snd}) form) + the
+            // widened vfx list (entries are CALL-TIME canon strings).
+            ctx.push(name, argsCanon, ctx.canon(ret),
+              '{"dsp":' + ctx.canon(fr.dsp) +
+              ',"mut":' + ctx.canon(mutProj(args, ret)) +
+              ',"rng":' + ctx.canon(fr.rng) +
+              ',"snd":' + ctx.canon(fr.snd) +
+              ',"vfx":[' + fr.vfx.join(",") + "]}");
           } else {
-            if (fr.dsp.length || fr.rng.length || fr.snd.length) {
+            if (fr.dsp.length || fr.rng.length || fr.snd.length ||
+                fr.vfx.length) {
               throw new Error("asshort: events escaped pure boundary " + name);
             }
             ctx.push(name, argsCanon, ctx.canon(ret));

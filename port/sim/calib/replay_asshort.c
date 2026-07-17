@@ -178,8 +178,10 @@ static void ser_hitboxes(CanonBuf *b, const MlHitboxes *hb) {
   cb_puts(b, "]}");
 }
 
-// post-state envelope: {"dsp":[...],"mut":<mut>,"rng":[...],"snd":[...]}
-// (keys sorted d < m < r < s), event lists from the ml_events queues.
+// post-state envelope (M4 task 1 widened):
+// {"dsp":[...],"mut":<mut>,"rng":[...],"snd":[...],"vfx":[...]}
+// (keys sorted d < m < r < s < v), event lists from the ml_events queues;
+// vfx entries are full-config canon (cb_vfx).
 static void ser_post(CanonBuf *b, const char *mut) {
   cb_puts(b, "{\"dsp\":[");
   for (int i = 0; i < ml_events.dsp_count; i++) {
@@ -197,6 +199,11 @@ static void ser_post(CanonBuf *b, const char *mut) {
   for (int i = 0; i < ml_events.snd_count; i++) {
     if (i) cb_putc(b, ',');
     cb_qstr(b, ml_events.snd[i]);
+  }
+  cb_puts(b, "],\"vfx\":[");
+  for (int i = 0; i < ml_events.vfx_count; i++) {
+    if (i) cb_putc(b, ',');
+    cb_vfx(b, &ml_events.vfx[i]);
   }
   cb_puts(b, "]}");
 }
@@ -369,8 +376,10 @@ static void dispatch(const char *fn, long frame, const CanonVal *args,
   } else if (strcmp(fn, "shieldDepletion") == 0) {
     expect_argc(args, 3);
     const CanonVal *pre = args->items[1];
-    obj_expect_keys(pre, 5);
+    obj_expect_keys(pre, 7); // M4 task 1: + pos/face (breakShield vfx)
     AsShieldDepState st;
+    st.pos = cv_vec2(obj_req(pre, "pos"));
+    st.face = cv_num(obj_req(pre, "face"));
     st.grounded = cv_bool(obj_req(pre, "grounded"));
     st.kDec = cv_vec2(obj_req(pre, "kDec"));
     st.kVel = cv_vec2(obj_req(pre, "kVel"));

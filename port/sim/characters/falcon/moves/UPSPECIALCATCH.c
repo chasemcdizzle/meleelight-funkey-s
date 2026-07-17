@@ -45,11 +45,12 @@ static AsTri fc4_main(MlSim *S, double p, const MlInputBuffer in[4],
       S->aliasHbActive[(int)p] = false; // fresh array upstream
       pl->hitboxes.frame = 0;
       for (int n = 0; n < 3; n++) {
-        // pos = (-0.5+Math.random())*17 offsets — values render-only,
-        // the two seeded DRAWS per spawn are chain state
-        (void)ml_random();
-        (void)ml_random();
-        mv_drawVfx("firefoxtail");
+        // pos = new Vec2D(pos.x+(-0.5+Math.random())*17,
+        //                 pos.y+5+(-0.5+Math.random())*17) — JS evaluates
+        // the x draw first; C args are unsequenced, so sequence explicitly
+        const double vfxX = pl->phys.pos.x + (-0.5 + ml_random()) * 17;
+        const double vfxY = pl->phys.pos.y + 5 + (-0.5 + ml_random()) * 17;
+        ml_drawVfx("firefoxtail", vfxX, vfxY, pl->phys.face);
       }
     }
     if (pl->timer == 4) {

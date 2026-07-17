@@ -20,7 +20,7 @@ static AsTri fx_init(MlSim *S, double p, const MlInputBuffer in[4],
     pl->phys.cVel.y = 0;
   }
   pl->phys.landingMultiplier = 1.5;
-  mv_drawVfx("dashDust");
+  ml_drawVfx("dashDust", pl->phys.pos.x, pl->phys.pos.y, pl->phys.face);
   mv_turnOffHitboxes(S, p);
   ml_sound_play("star");
   fx_main(S, p, in, 0);
@@ -84,7 +84,8 @@ static AsTri fx_main(MlSim *S, double p, const MlInputBuffer in[4],
       fx_main(S, p, in, 0); // upstream: this.main(p,input)
     }
     if (pl->timer >= 21 && pl->timer <= 24) {
-      mv_drawVfx("illusion");
+      ml_drawVfx("illusion", pl->phys.posPrev.x, pl->phys.posPrev.y,
+                 pl->phys.face);
     }
   }
   return AS_UNDEF;

@@ -19,7 +19,7 @@ static AsTri fc_init(MlSim *S, double p, const MlInputBuffer in[4],
   pl->phys.cVel.x *= 0.667;
   pl->phys.cVel.y = 0;
   pl->phys.landingMultiplier = 1.5;
-  mv_drawVfx("dashDust");
+  ml_drawVfx("dashDust", pl->phys.pos.x, pl->phys.pos.y, pl->phys.face);
   mv_turnOffHitboxes(S, p);
   ml_sound_play("star");
   fc_main(S, p, in, 0);
@@ -78,7 +78,8 @@ static AsTri fc_main(MlSim *S, double p, const MlInputBuffer in[4],
     }
 
     if (pl->timer >= 18 && pl->timer <= 21) {
-      mv_drawVfx("phantasm");
+      ml_drawVfx("phantasm", pl->phys.posPrev.x, pl->phys.posPrev.y,
+                 pl->phys.face);
     }
   }
   return AS_UNDEF;

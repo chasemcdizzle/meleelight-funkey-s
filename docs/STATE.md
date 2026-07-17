@@ -3,7 +3,33 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-17, iter 63 — PHASE M4, REPLAN done)
+## Live right now (updated: 2026-07-17, iter 64 — M4 task 1 DONE)
+
+- **Iter 64 (M4 task 1 — vfx seam widening, sim + capture side) DONE**:
+  cold `bash port/sim/calib/check-vfx-seam.sh` → `VFX SEAM MATCH`,
+  exit 0 (.loop/m4-task1-donecheck.log; ~7 min — captures are ~15-25 s
+  each, not minutes). ml_events vfx plane widened name-only → FULL
+  drawVfx config (MlVfx + ml_drawVfx* emitters + ml_vfx_sink renderer
+  chokepoint; cb_vfx canon); 193 sites translated (112 move TUs +
+  article 9 + hitdet 17 + physics 4 + asshort 1 + sim_boot
+  entrance/start); affected-cluster list MEASURED to include hitdet
+  (brief's guess refuted by grep — 18 upstream sites); 10 specs
+  re-recorded ×2 byte-stable, every run STREAM-MATCH guarded, ALL
+  cluster replays 0-divergence (2592 live full-config events);
+  SIM CONFORMS 8/8 unchanged (frozen goldens untouched). Read-set
+  widenings forced by the configs (rule-7 corollary, 2×):
+  shieldDepletion +pos/face (7-key pre), puff stage projection
+  +wallL/wallR. Teeth: nibble→11 exact, name-only→34 (= non-empty-vfx
+  records), face-drop→11, hitdet-field-drop→14400; restores proven by
+  0-divergence re-replay. Honest coverage: asshort breakShield +
+  physics shocked/burning zero-live; sim_boot boot vfx capture-less
+  (task 2's render checks exercise them). Task-2 handoff notes in
+  AGENT-LOG iter 64 (sink semantics, drawVfx defaults, circleDust
+  draws already burned, render-plane spawn sites out of seam).
+  Tier-B review round for the sim TUs: PENDING (driver queues it —
+  mechanical arg-threading, done-check is the bit-exact oracle).
+
+## [superseded by iter 64] (updated: 2026-07-17, iter 63 — PHASE M4, REPLAN done)
 
 - **Phase: M4 — Full-game parity (REPLAN complete, iter 63)**: fix_plan
   `Current phase: M4`; §M4 concretized as a conventions block + 14
@@ -567,10 +593,10 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   M4 seeds registered (mixer fidelity + music, stop-path coverage,
   skip-burst instrument). Regressions green: DEVICE RENDER OK (11.065
   ms full p99) + SIM CONFORMS (.loop/m3-task6-reg-{render,sim}.log).
-- **Latest AGENT-LOG entry**: iter 63 (M4 REPLAN — phase entry, 14-task
-  ladder + verify_m4.sh exit-gate concretization); latest log id:
-  .loop/m3-task7r62-audio-donecheck.log (no new .loop logs — REPLAN ran
-  no commands beyond orientation greps).
+- **Latest AGENT-LOG entry**: iter 64 (M4 task 1 DONE — vfx seam
+  widening; pre-registration + DONE entries); latest log id:
+  .loop/m4-task1-donecheck.log (also m4-task1-{survey,survey-shapes,
+  teeth,tail3}.log).
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
@@ -582,12 +608,15 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## Next
 
-1. Writer: M4 task 1 — vfx seam widening, sim + capture side
-   (fix_plan §M4; done-check `bash port/sim/calib/check-vfx-seam.sh`
-   → `VFX SEAM MATCH`, exit 0). Pre-registration required (PROCESS §2);
-   mechanical arg-threading across ~174 sites pre-registers a likely
-   >400-line diff.
-2. Then the ladder in order (fix_plan §M4 tasks 2-14), Tier-A arcs on
+1. Driver: Tier-B review round for the iter-64 sim-TU surface
+   (PROCESS §3 — mechanical vfx arg-threading across 116 TUs +
+   ml_events/canon; done-check is a bit-exact oracle replay, so one
+   structural round; escalate on any Medium+).
+2. Writer: M4 task 2 — renderer vfx + overlay/banner/background + IoU
+   re-freeze (fix_plan §M4; done-check `bash port/gfx/check-render.sh`
+   → `RENDER OK`; consume ml_vfx_sink — handoff notes in AGENT-LOG
+   iter 64).
+3. Then the ladder in order (fix_plan §M4 tasks 3-14), Tier-A arcs on
    every non-checksummed shipping surface, Tier B ≥1 round on sim TUs.
 3. Phase end: driver cold AUTHORITATIVE `bash
    port/sim/device/verify_m4.sh` → `M4 GATE OK` → sentinel

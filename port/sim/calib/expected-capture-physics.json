@@ -1,59 +1,59 @@
 {
-  "comment": "Measured-then-frozen physics-spec capture pins (M2 task 5, 2026-07-14). Boundary: physics(i, inputBuffers) mutation-captured with the {alias,hq,players,snd} post envelope + pre-state args envelope; 'dispatch' = top-level actionStates move dispatches from inside physics (oracle-fed seams, post {alias,players}); the 5 hitDetection launch getters are oracle-fed seams recorded only inside physics; sweepCircleVs* are the interpolatedCollision translations' own records (live + the 35-call rule-11 sweep); asFlags = the frame-0 actionStates flag-table dump (finalCheck-drift-guarded). undefRetAllowed: physics is a void mutator; dispatch rets echo the move's return (usually undefined) and are not consumed by the replay. asFlags is additionally undef-ret-allowlisted: its ret is the flag-table DUMP whose values legitimately include undef (undefined move flags echoed verbatim) \u2014 the pin is a substring check on the ret field.",
-  "undefRetAllowed": [
-    "physics",
-    "dispatch",
-    "asFlags"
-  ],
-  "postStateFns": [
-    "physics",
-    "dispatch"
-  ],
-  "goldens": {
-    "g01": {
-      "records": 17188,
-      "counts": {
-        "asFlags": 1,
-        "dispatch": 7131,
-        "physics": 7200,
-        "getLaunchAngle": 12,
-        "getHorizontalVelocity": 12,
-        "getVerticalVelocity": 12,
-        "getHorizontalDecay": 12,
-        "getVerticalDecay": 12,
-        "sweepCircleVsSweepCircle": 33,
-        "sweepCircleVsAABB": 2763
-      }
-    },
-    "g04": {
-      "records": 14805,
-      "counts": {
-        "asFlags": 1,
-        "dispatch": 7180,
-        "physics": 7200,
-        "getLaunchAngle": 3,
-        "getHorizontalVelocity": 3,
-        "getVerticalVelocity": 3,
-        "getHorizontalDecay": 3,
-        "getVerticalDecay": 3,
-        "sweepCircleVsSweepCircle": 25,
-        "sweepCircleVsAABB": 384
-      }
-    },
-    "g06": {
-      "records": 15067,
-      "counts": {
-        "asFlags": 1,
-        "dispatch": 7130,
-        "physics": 7200,
-        "getLaunchAngle": 9,
-        "getHorizontalVelocity": 9,
-        "getVerticalVelocity": 9,
-        "getHorizontalDecay": 9,
-        "getVerticalDecay": 9,
-        "sweepCircleVsSweepCircle": 116,
-        "sweepCircleVsAABB": 575
-      }
-    }
+ "comment": "Measured-then-frozen physics-spec capture pins (M2 task 5, 2026-07-14). Boundary: physics(i, inputBuffers) mutation-captured with the {alias,hq,players,snd} post envelope + pre-state args envelope; 'dispatch' = top-level actionStates move dispatches from inside physics (oracle-fed seams, post {alias,players}); the 5 hitDetection launch getters are oracle-fed seams recorded only inside physics; sweepCircleVs* are the interpolatedCollision translations' own records (live + the 35-call rule-11 sweep); asFlags = the frame-0 actionStates flag-table dump (finalCheck-drift-guarded). undefRetAllowed: physics is a void mutator; dispatch rets echo the move's return (usually undefined) and are not consumed by the replay. asFlags is additionally undef-ret-allowlisted: its ret is the flag-table DUMP whose values legitimately include undef (undefined move flags echoed verbatim) — the pin is a substring check on the ret field. M4 task 1 (iter 64): posts gained the \"vfx\" field (full drawVfx configs, call-time canon; FORMAT.md 'vfx posts') — captures re-recorded under the same STREAM-MATCH + byte-stability guards; record counts unchanged by construction.",
+ "undefRetAllowed": [
+  "physics",
+  "dispatch",
+  "asFlags"
+ ],
+ "postStateFns": [
+  "physics",
+  "dispatch"
+ ],
+ "goldens": {
+  "g01": {
+   "records": 17188,
+   "counts": {
+    "asFlags": 1,
+    "dispatch": 7131,
+    "physics": 7200,
+    "getLaunchAngle": 12,
+    "getHorizontalVelocity": 12,
+    "getVerticalVelocity": 12,
+    "getHorizontalDecay": 12,
+    "getVerticalDecay": 12,
+    "sweepCircleVsSweepCircle": 33,
+    "sweepCircleVsAABB": 2763
+   }
+  },
+  "g04": {
+   "records": 14805,
+   "counts": {
+    "asFlags": 1,
+    "dispatch": 7180,
+    "physics": 7200,
+    "getLaunchAngle": 3,
+    "getHorizontalVelocity": 3,
+    "getVerticalVelocity": 3,
+    "getHorizontalDecay": 3,
+    "getVerticalDecay": 3,
+    "sweepCircleVsSweepCircle": 25,
+    "sweepCircleVsAABB": 384
+   }
+  },
+  "g06": {
+   "records": 15067,
+   "counts": {
+    "asFlags": 1,
+    "dispatch": 7130,
+    "physics": 7200,
+    "getLaunchAngle": 9,
+    "getHorizontalVelocity": 9,
+    "getVerticalVelocity": 9,
+    "getHorizontalDecay": 9,
+    "getVerticalDecay": 9,
+    "sweepCircleVsSweepCircle": 116,
+    "sweepCircleVsAABB": 575
+   }
   }
+ }
 }

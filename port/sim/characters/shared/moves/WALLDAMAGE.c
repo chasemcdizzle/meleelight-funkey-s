@@ -45,7 +45,7 @@ static AsTri mv_main(MlSim *S, double p, const MlInputBuffer in[4],
   const ml_attributes_t *at = mv_attr(MV_CS(S, p));
   pl->timer += 1;
   if (fmod(pl->hit.hitstun, 10) == 0) {
-    mv_drawVfx("flyingDust");
+    ml_drawVfx_p("flyingDust", pl->phys.pos.x, pl->phys.pos.y);
   }
   if (mv_dispatch(S, MV_CS(S, p), "WALLDAMAGE", "interrupt", p, in, 0) !=
       AS_TRUE) {

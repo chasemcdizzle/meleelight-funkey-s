@@ -160,7 +160,7 @@
       PHYS.physics = function (i, inputBuffers) {
         const argsCanon = "[" + ctx.canon(i) + "," +
             ctx.canon(inputBuffers[i].slice(0, 4)) + "," + preEnvelope() + "]";
-        const fr = { attr: true, phys: true, snd: [], hq: [],
+        const fr = { attr: true, phys: true, snd: [], vfx: [], hq: [],
                      hqMark: HD.hitQueue.length };
         stack.push(fr);
         let ret;
@@ -174,7 +174,8 @@
             ',"hq":[' + fr.hq.join(",") + "]" +
             ',"players":' + playersCanon() +
             ',"snd":[' + fr.snd.map((n) => JSON.stringify(n)).join(",") +
-            "]}";
+            "]" +
+            ',"vfx":[' + fr.vfx.join(",") + "]}";
         ctx.push("physics", argsCanon, ctx.canon(ret), post);
         return ret;
       };
@@ -281,6 +282,20 @@
         }
       }
       ctx.declare("dispatch");
+
+      // --- vfx attribution (M4 task 1: physics' own drawVfx sites —
+      // wallBounce/ceilingBounce/shocked/burning; full config, CALL-TIME
+      // canon. Dispatch-window vfx stay subsumed by the seam ({attr:false}
+      // frame), mirroring the C replay's resync-not-run treatment.) ------
+      {
+        const VFX = find((ex) => typeof ex.drawVfx === "function", "drawVfx");
+        const orig = VFX.drawVfx;
+        VFX.drawVfx = function (cfg) {
+          const t = top();
+          if (t && t.attr) t.vfx.push(ctx.canon(cfg));
+          return orig.apply(this, arguments);
+        };
+      }
 
       // --- sound attribution (physics' own 4 direct sites) ---------------
       let sndWrapped = 0;

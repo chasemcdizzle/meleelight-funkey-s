@@ -1,40 +1,48 @@
 {
-  "comment": "Measured-then-frozen moves-falcon-spec capture pins (M2 task 10, 2026-07-14). Boundary: every FALCON-ORIGIN actionStates entry's function property (217 wrapped, all on table 4: 214 phase fns — 53 moves x init/main/interrupt + 13 x +land + SIDESPECIALGROUNDTOAIR's lone init/main pair — plus falcon's three NON-phase dispatch surfaces: onPlayerHit on SIDESPECIAL{GROUND,AIR} (hitDetection.js:493 specialOnHit) and onWallCollide on DOWNSPECIALGROUND (physics.js:122 specialWallCollide, extras [wallFace,wallNum])) plus the 2 article init boundaries as a MEASUREMENT instrument = 219. Falcon has NO article call sites (it imports `articles` in 6 files and never dereferences it — dead imports): the article count is pinned ZERO on every golden; a nonzero count means the measured claim broke. GOLDENS g03/g04/g06 — the falcon carriers, back on the g01/g04/g06-era convention with g03 replacing g01 (g01 fields no falcon); g07's CPU falcon was MEASURED and fired ZERO live falcon-origin moves over its 3600 frames (its capture would add sweep-only records), so it is not a carrier. 'move' = a falcon-origin fn entered outside any move record's scope, mutation-captured with [phase,name,[slot(,wallFace,wallNum)],inputs|null,pre] args (THROWN*{BACK,DOWN} inits and onPlayerHit arrive 1-arg — inputs null) and the {alias,hq,players,rng,snd,vfx} post envelope (294 frame-0 records per golden = the rule-11/12 sweep on the sweep RNG chain, incl. FALCONPUNCH both environments, the FALCONKICK 6-state family with the onWallCollide->UPSPECIALTHROW arm, FALCONDIVE catch/throw chains with their INLINE seeded draws + hq pushes, raptor boost + onPlayerHit, THROW* with fox-style init guards, all 20 THROWN* + guard/clamp arms, all 8 CLIFF*, and the SIDESPECIALGROUND canEdgeCancel scalar-table-write arm — table value restored); 'mdispatch' = non-falcon per-char dispatches from inside a falcon record (the victim's THROWNFALCON* arms — measured ZERO live over g03/g04/g06: falcon never threw a non-falcon victim live; seam FIFO teeth negative-test-proven); Math.random = standalone seeded draws; mvData = the frame-0 executed move-data dump (task-7 dump + falcon {origin,data}: 85 arrays over 50 states, finalCheck-drift-guarded). undefRetAllowed: move rets echo the phase's return (init/main/land/onPlayerHit/onWallCollide return undefined; THROW*'s grabbing===-1 guards and UPSPECIALCATCH's bare return — rule 13's family); mvData's ret is a data dump.",
-  "undefRetAllowed": ["move", "mdispatch", "article", "mvData"],
-  "postStateFns": ["move", "mdispatch"],
-  "goldens": {
-    "g03": {
-      "records": 1847,
-      "counts": {
-        "rngBoot": 1,
-        "mvData": 1,
-        "Math.random": 95,
-        "move": 1750,
-        "mdispatch": 0,
-        "article": 0
-      }
-    },
-    "g04": {
-      "records": 1316,
-      "counts": {
-        "rngBoot": 1,
-        "mvData": 1,
-        "Math.random": 91,
-        "move": 1223,
-        "mdispatch": 0,
-        "article": 0
-      }
-    },
-    "g06": {
-      "records": 1810,
-      "counts": {
-        "rngBoot": 1,
-        "mvData": 1,
-        "Math.random": 148,
-        "move": 1660,
-        "mdispatch": 0,
-        "article": 0
-      }
-    }
+ "comment": "Measured-then-frozen moves-falcon-spec capture pins (M2 task 10, 2026-07-14). Boundary: every FALCON-ORIGIN actionStates entry's function property (217 wrapped, all on table 4: 214 phase fns — 53 moves x init/main/interrupt + 13 x +land + SIDESPECIALGROUNDTOAIR's lone init/main pair — plus falcon's three NON-phase dispatch surfaces: onPlayerHit on SIDESPECIAL{GROUND,AIR} (hitDetection.js:493 specialOnHit) and onWallCollide on DOWNSPECIALGROUND (physics.js:122 specialWallCollide, extras [wallFace,wallNum])) plus the 2 article init boundaries as a MEASUREMENT instrument = 219. Falcon has NO article call sites (it imports `articles` in 6 files and never dereferences it — dead imports): the article count is pinned ZERO on every golden; a nonzero count means the measured claim broke. GOLDENS g03/g04/g06 — the falcon carriers, back on the g01/g04/g06-era convention with g03 replacing g01 (g01 fields no falcon); g07's CPU falcon was MEASURED and fired ZERO live falcon-origin moves over its 3600 frames (its capture would add sweep-only records), so it is not a carrier. 'move' = a falcon-origin fn entered outside any move record's scope, mutation-captured with [phase,name,[slot(,wallFace,wallNum)],inputs|null,pre] args (THROWN*{BACK,DOWN} inits and onPlayerHit arrive 1-arg — inputs null) and the {alias,hq,players,rng,snd,vfx} post envelope (294 frame-0 records per golden = the rule-11/12 sweep on the sweep RNG chain, incl. FALCONPUNCH both environments, the FALCONKICK 6-state family with the onWallCollide->UPSPECIALTHROW arm, FALCONDIVE catch/throw chains with their INLINE seeded draws + hq pushes, raptor boost + onPlayerHit, THROW* with fox-style init guards, all 20 THROWN* + guard/clamp arms, all 8 CLIFF*, and the SIDESPECIALGROUND canEdgeCancel scalar-table-write arm — table value restored); 'mdispatch' = non-falcon per-char dispatches from inside a falcon record (the victim's THROWNFALCON* arms — measured ZERO live over g03/g04/g06: falcon never threw a non-falcon victim live; seam FIFO teeth negative-test-proven); Math.random = standalone seeded draws; mvData = the frame-0 executed move-data dump (task-7 dump + falcon {origin,data}: 85 arrays over 50 states, finalCheck-drift-guarded). undefRetAllowed: move rets echo the phase's return (init/main/land/onPlayerHit/onWallCollide return undefined; THROW*'s grabbing===-1 guards and UPSPECIALCATCH's bare return — rule 13's family); mvData's ret is a data dump. M4 task 1 (iter 64): the vfx post lists carry FULL drawVfx configs (call-time canon; FORMAT.md 'vfx posts') — captures re-recorded under the same STREAM-MATCH + byte-stability guards; record counts unchanged by construction.",
+ "undefRetAllowed": [
+  "move",
+  "mdispatch",
+  "article",
+  "mvData"
+ ],
+ "postStateFns": [
+  "move",
+  "mdispatch"
+ ],
+ "goldens": {
+  "g03": {
+   "records": 1847,
+   "counts": {
+    "rngBoot": 1,
+    "mvData": 1,
+    "Math.random": 95,
+    "move": 1750,
+    "mdispatch": 0,
+    "article": 0
+   }
+  },
+  "g04": {
+   "records": 1316,
+   "counts": {
+    "rngBoot": 1,
+    "mvData": 1,
+    "Math.random": 91,
+    "move": 1223,
+    "mdispatch": 0,
+    "article": 0
+   }
+  },
+  "g06": {
+   "records": 1810,
+   "counts": {
+    "rngBoot": 1,
+    "mvData": 1,
+    "Math.random": 148,
+    "move": 1660,
+    "mdispatch": 0,
+    "article": 0
+   }
   }
+ }
 }

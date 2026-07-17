@@ -23,8 +23,8 @@ static AsTri mr_init(MlSim *S, double p, const MlInputBuffer in[4],
   ml_sound_play("powershield");
   ml_sound_play("marthcounterclank");
   ml_sound_play("marthcountershout");
-  mv_drawVfx("impactLand");
-  mv_drawVfx("powershield");
+  ml_drawVfx("impactLand", pl->phys.pos.x, pl->phys.pos.y, pl->phys.face);
+  ml_drawVfx("powershield", pl->phys.pos.x, pl->phys.pos.y + 8, pl->phys.face);
   mr_main(S, p, in, 0);
   return AS_UNDEF;
 }

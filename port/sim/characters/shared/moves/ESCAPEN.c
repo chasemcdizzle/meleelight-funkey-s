@@ -8,7 +8,8 @@ static AsTri mv_init(MlSim *S, double p, const MlInputBuffer in[4],
   strcpy(pl->actionState, "ESCAPEN");
   pl->timer = 0;
   pl->phys.shielding = false;
-  mv_drawVfx("circleDust"); // 4 seeded draws
+  ml_drawVfx("circleDust", pl->phys.pos.x, pl->phys.pos.y,
+             pl->phys.face); // 4 seeded draws
   mv_dispatch(S, MV_CS(S, p), "ESCAPEN", "main", p, in, 0);
   return AS_UNDEF;
 }
