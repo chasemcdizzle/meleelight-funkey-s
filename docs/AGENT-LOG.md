@@ -3931,3 +3931,25 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
     EVERY host-side artifact between producer and judge — enumerate
     write sites mechanically (`>` redirections, `-o`, `--out`/
     positional outputs, pull destinations) at review time.
+
+## driver — 2026-07-16 — Tier-A device-rig arc CLOSED: VERDICT: GO (round 5)
+
+- Arc summary (PROCESS §3's first full arc): 5 rounds over the task-1
+  device rig (.loop/review-38-2 → review-42-1.log). Rounds 1-4 raised ~30
+  findings; iters 39-42 fixed the verified ones with teeth (identity-
+  pinned stamp + push provenance, digest-proven pulls, nonce RC markers,
+  no-eval manifest, corpus identity pins, shared no-reclaim lock,
+  rm-before-produce + made() freshness sweep), 1 finding REFUTED on
+  record (fdlibm overrides "absent"), 2 classes DISPOSITIONED in writing
+  (adversary-with-repo-write; TOCTOU-with-concurrent-mutator) and
+  codified as the §3 review bar. Round 5: NO findings, VERDICT: GO from
+  the log file. Driver cold-verified every iteration's done-check
+  (DEVICE CONFORMS g01 ×5 driver runs).
+- Zoom-out: the arc's yield was almost entirely FAIL-OPEN plumbing
+  classes invisible to the checksum oracle — exactly the surface the
+  2026-07-16 owner ruling adopted review arcs for. The named recurring
+  objection class across rounds (locking/TOCTOU) converged once the
+  threat model was written down (iter 40) — codify the bar EARLY in
+  future arcs. Rig plumbing is now the inheritance package for every
+  M3 device script (task 2 onward).
+- next: task 2 (all-8 device conformance + sim-only p99).
