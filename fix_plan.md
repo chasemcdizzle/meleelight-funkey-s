@@ -1121,20 +1121,35 @@ task-17 gotcha, new surface); render instrumentation must guard RNG
 stream + render-written sim fields, sufficiency PROVEN by the capture's
 STREAM MATCH; silhouette checks need an explicit ink plane.)
 
-4. platform seam + SDL1.2 device backend + live device render — the
-   CLAUDE.md three-backend seam (`platform_init/present/poll/quit` +
-   input struct; headless TU = the loop/CI backend, SDL2 TU = host dev
-   window, SDL1.2 TU = device: 240×240×16 SetVideoMode fallback chain,
-   verify BitsPerPixel==16 or bail, SDL_ShowCursor off, SDL_Flip present;
-   exactly ONE TU linked per target); wall-clock-sim/skippable-render
-   frameskip loop (~30 lines, safety valve); per-frame timing logged
-   in-app to tmpfs (no SD writes during play). Trace-fed g01 replays LIVE
-   on the device with rendering; in-app framebuffer screenshot dumped +
-   pulled; p99 full frame (sim+render+present, audio not yet in)
-   < 16.67 ms AND p99 render-only ≤ 8 ms (PLAN §5 allowance) over the
-   full 3600-frame match; frontend parked + restored around the run. —
-   done-check: `bash port/gfx/check-device-render.sh` → prints
-   `DEVICE RENDER OK` (includes measured p99s), exit 0.
+(task 4 — platform seam + SDL1.2 device backend + live device render —
+DONE iter 50: `bash port/gfx/check-device-render.sh` → DEVICE RENDER OK
+(full p99 10.743 ms, render-only p99 2.568 ms, sim p99 7.527 ms, present
+p99 1.479 ms, skips 0/3600), exit 0 (.loop/m3-task4-donecheck.log).
+The CLAUDE.md three-backend seam is live: `port/gfx/platform.h`
+(platform_init/present/poll/quit + PlatformInput, FunKey letter-keysym
+map ready for task 5) with platform_headless.c (loop/CI) /
+platform_sdl2.c (host dev window, built not run) / platform_sdl1.c
+(device: SetVideoMode fallback chain hit step 0 HWSURFACE|DOUBLEBUF,
+BitsPerPixel==16 + RGB565 masks verified or bail, ShowCursor off,
+SDL_Flip; DYNAMIC libSDL-1.2 asserted — LGPL) — exactly ONE TU per
+binary; gfx_app.c = the paced replay app (absolute-deadline schedule,
+~30-line frameskip valve skipping RENDER never SIM, RAM-buffered
+stream/timing/screenshot written post-run to tmpfs, zero frame-loop
+I/O). Device g01 STREAM MATCH 3600/3600 with render+present live;
+screenshot (own fb, frame 900) structurally judged AND bit-identical to
+the host render; frontend parked/restored (trap). gfx_device joined the
+SHARED rig build (ARMBINS + port/gfx in srchash + RIG_SCRIPTS).
+GFXDATA: committed gfxdata-frozen.txt (sha-pinned, browser-free device
+path; check-render.sh cmp tripwire vs every fresh capture). CLASS
+FIXES: device-libm float plane pre-empted (raster ifloorf/iceilf
+integer helpers, fd_sin/fd_cos/fd_atan2 routing — render now
+cross-platform deterministic; mathsweep gained sqrtf/fabsf columns,
+measured healthy); per-script push provenance (G01_BINS — shared-roster
+asserts break when the roster grows); pkill -f self-match gotcha.
+Teeth: standing in-check valve tooth (1000 ns budget → 119/120 flagged
+skips), stream nibble → MISMATCH frame 1800, blank shot → judge death,
+pullv freshness → stale dst gone. Perf table:
+docs/research/device-perf.md; ~5.9 ms p99 headroom for task-6 audio.)
 
 5. S1 input layer at the poll seam — SDL keysym poll (letter keysyms
    u/d/l/r/a/b/x/y/s/k/n, q=MENU→quit; SDL_GetKeyState, desktop keys

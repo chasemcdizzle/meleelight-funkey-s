@@ -68,3 +68,36 @@ Append new entries at the bottom; never edit or delete a recorded row.
   16.67 ms budget). The perf-history presence assertion in the check
   script asserts these tables EXIST per pinned golden; appending them
   stays this writer duty.
+
+## 2026-07-16 — iter 50 (M3 task 4): first LIVE device render — g01 full match, SDL1.2, paced 60 fps
+
+- Source: `.loop/m3-task4-donecheck.log` — cold
+  `bash port/gfx/check-device-render.sh` → `DEVICE RENDER OK`, exit 0
+  (stamp 335a0f1a…). Same device/toolchain; the measured binary is
+  `gfx_device` (SDL1.2 backend, DYNAMIC libSDL-1.2, raster TU -O3), the
+  full headless sim + port/gfx compositor, paced at 16,666,667 ns/frame
+  with the frameskip valve armed. Buckets are WORK time around
+  tick+hash / render / lock+blit+SDL_Flip; pacing sleep excluded.
+  SetVideoMode succeeded at chain step 0 (HWSURFACE|DOUBLEBUF,
+  16bpp RGB565). Stream STREAM MATCH 3600/3600 with render+present live.
+
+| golden | frames | bucket | p50 ms | p99 ms | max ms |
+|---|---|---|---|---|---|
+| g01 | 3600 | full (sim+render+present) | 7.399 | 10.743 | 18.907 |
+| g01 | 3600 | sim | 5.051 | 7.527 | — |
+| g01 | 3600 | render | 1.316 | 2.568 | 10.264 |
+| g01 | 3600 | present | 0.958 | 1.479 | — |
+
+- Skips: **0/3600** (the single worst frame, full 18.907 ms, overran the
+  budget in its RENDER phase — the valve only skips when the SIM
+  finishes past the deadline, so that frame rendered late and the next
+  frame absorbed the ~2 ms without a skip; the standing
+  in-check tooth proves it fires at a 1000 ns budget). Render p99
+  2.568 ms vs the 8 ms PLAN §5 allowance (3.1x margin — right on the
+  rastbench 2.54/3.21 prediction); full-frame p99 10.743 ms leaves
+  ~5.9 ms for the M3 task-6 audio callback. Device screenshot (own
+  framebuffer, frame 900) BIT-IDENTICAL to the host headless render —
+  the render float plane is cross-platform deterministic after the
+  iter-50 device-libm class fix (integer floor/ceil helpers + fdlibm
+  trig routing; sqrtf/fabsf swept healthy in mathsweep's new float
+  columns).

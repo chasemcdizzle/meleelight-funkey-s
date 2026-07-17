@@ -214,15 +214,19 @@ rig_arm_build
 echo "== [4/7] device: fdlibm sweep (armv7 vs host, byte-exact) =="
 # rehash ADJACENT to the push + PUSH PROVENANCE (riglib.sh: iter 40
 # review M2 round 2 / iter 41 review M round 3 — provenance comments at
-# the definitions).
-rig_stamp_rehash $ARMBINS
+# the definitions). Rehash/provenance cover exactly the binaries THIS
+# script pushes and runs (iter 50: $ARMBINS also carries the task-4
+# gfx_device, which this headless-compute check neither pushes nor runs
+# — the conform.sh per-script enumeration pattern).
+G01_BINS="sim_device csweep_arm fmt_diff_arm mathsweep_arm"
+rig_stamp_rehash $G01_BINS
 dsh "rm -rf $DTMP $DSD && mkdir -p $DTMP $DSD"
 adb -s "$DEV" push \
   "$DEVB/csweep_arm" "$DEVB/fmt_diff_arm" "$DEVB/mathsweep_arm" \
   "$DEVB/sim_device" \
   "$DEVB/fdlibm-inputs.txt" "$DEVB/g01.trace.txt" "$DEVB/simdata.txt" \
   "$DTMP/" >/dev/null
-rig_push_provenance "$DTMP" $ARMBINS
+rig_push_provenance "$DTMP" $G01_BINS
 dsh "chmod +x $DTMP/csweep_arm $DTMP/fmt_diff_arm $DTMP/mathsweep_arm $DTMP/sim_device"
 dsh "sh -lc '$DTMP/csweep_arm $DTMP/fdlibm-inputs.txt > $DTMP/fdlibm-device.txt'"
 pullv "$DTMP/fdlibm-device.txt" "$DEVB/fdlibm-device.txt"

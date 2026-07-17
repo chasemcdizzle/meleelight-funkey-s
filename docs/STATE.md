@@ -198,11 +198,32 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   task-2 GO at round 3; task-3 CAPPED-CLOSED at round 3 (named class:
   TOCTOU re-raises; trivial fix taken iter 49). Rig inheritance packages:
   riglib.sh + capture-closure.js.
-- **In flight**: task-4 writer iter 50 (platform seam + SDL1.2 device
-  backend + live device render, `check-device-render.sh` → DEVICE
-  RENDER OK; its check script gets a Tier-A arc on landing).
-- **Latest AGENT-LOG entry**: iter 49 (M3 task 3 hardening round 3);
-  latest log id: .loop/m3-task3r49-donecheck.log.
+- **Iter 50 (M3 task 4) DONE**: `bash port/gfx/check-device-render.sh`
+  → DEVICE RENDER OK (full p99 10.743 ms, render-only p99 2.568 ms, sim
+  p99 7.527 ms, present p99 1.479 ms, skips 0/3600), exit 0
+  (.loop/m3-task4-donecheck.log) — FIRST PIXELS ON THE FUNKEY'S SCREEN:
+  g01 replayed live, paced 60 fps, SDL1.2 240x240x16 (chain step 0,
+  RGB565 verified), STREAM MATCH 3600/3600 with render+present live,
+  screenshot (own fb, f900) structurally judged + BIT-IDENTICAL to the
+  host render. Three-backend platform seam shipped (port/gfx/platform.h
+  + headless/sdl2/sdl1 TUs, ONE per binary; PlatformInput carries the
+  FunKey letter-keysym map for task 5). gfx_device joined the shared
+  rig build (ARMBINS + port/gfx srchash + RIG_SCRIPTS — stamp now
+  335a0f1a…). GFXDATA staged as committed gfxdata-frozen.txt
+  (sha-pinned; check-render.sh cmp tripwire). Class fixes: device-libm
+  FLOAT plane pre-empted (integer floor/ceil helpers + fdlibm trig →
+  render cross-platform deterministic; mathsweep +sqrtf/fabsf columns,
+  healthy); per-script push provenance (G01_BINS); pkill -f self-match.
+  All 4 teeth fired (.loop/m3-task4-tooth-*.log + the standing in-check
+  valve tooth). Regressions green: check-sim SIM CONFORMS, check-render
+  RENDER OK (IoU min unchanged 0.9149 with fdlibm-routed trig),
+  check-device-g01 DEVICE CONFORMS g01. Perf: ~5.9 ms p99 headroom left
+  for task-6 audio (docs/research/device-perf.md iter-50 table).
+- **In flight**: nothing — task-4 check script (check-device-render.sh,
+  gfx_app.c, platform TUs, judges) awaits its Tier-A arc; then task 5
+  (S1 input at the platform_poll seam).
+- **Latest AGENT-LOG entry**: iter 50 (M3 task 4);
+  latest log id: .loop/m3-task4-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
@@ -214,12 +235,13 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## Next
 
-1. Driver: ground-truth iter 44 (cold `bash port/gfx/check-render.sh`)
-   + open the task-3 Tier-A arc (check-render.sh, capture-canvas.js,
-   gfx-pagelib.js, iou.js, port/gfx renderer TUs) alongside/after the
-   task-2 arc → launch task-4 writer (platform seam + SDL1.2 device
-   backend + live device render) on GO.
-2. Ladder: fix_plan §M3 tasks 4-7 → M3 gate (`verify_m3.sh`) →
+1. Driver: ground-truth iter 50 (cold
+   `bash port/gfx/check-device-render.sh`) + open the task-4 Tier-A arc
+   (check-device-render.sh, gfx_app.c, platform_{headless,sdl1,sdl2}.c,
+   platform.h, judge-render-timing.js, judge-shot.js, the riglib.sh +
+   check-device-g01.sh + check-render.sh + mathsweep.c edits) → launch
+   task-5 writer (S1 input layer at the platform_poll seam) on GO.
+2. Ladder: fix_plan §M3 tasks 5-7 → M3 gate (`verify_m3.sh`) →
    LOOP STOP: m3-device + push-notify Chase for S1 ratification →
    close #18 → M4 REPLAN (PLAN §4/M4) → Chase acceptance →
    LOOP STOP: m4-complete.

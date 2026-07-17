@@ -36,6 +36,13 @@
 #include <string.h>
 
 #include "ml_tables.h" // CTAB1 (generated; -I the tables build dir)
+#include "../fdlibm/fdlibm.h" // fd_sin/fd_cos/fd_atan2 — device-libm class:
+// the device's static musl transcendentals are UNSWEPT (and its floor
+// family measured broken, iter 38); all render trig routes through the
+// vendored fdlibm doubles — bit-exact host==device AND the more faithful
+// translation (the browser renders under the fdlibm Math shim). floor/
+// fmod below stay naked: fdlibm.c's strong overrides make them exact on
+// every fdlibm.c-linking target (this TU is always linked with it).
 
 // --- camera ---------------------------------------------------------------
 // world (stage units) -> canvas px (1200x750, doubles, VERBATIM upstream
@@ -218,12 +225,12 @@ static void draw_stage_init_layer(Gfx *g) {
     const double ay = ml_stage_f64(e->side == 0 ? sf->y1 : sf->y2);
     const double bx = ml_stage_f64(e->side == 0 ? sf->x2 : sf->x1);
     const double by = ml_stage_f64(e->side == 0 ? sf->y2 : sf->y1);
-    const double ang = atan2(by - ay, bx - ax);
+    const double ang = fd_atan2(by - ay, bx - ax);
     const double mag = sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
     double len = 0.4 * mag;
     const double cap = 20.0 / g->scale;
     if (cap < len) len = cap;
-    const double cxp = ax + len * cos(ang), cyp = ay + len * sin(ang);
+    const double cxp = ax + len * fd_cos(ang), cyp = ay + len * fd_sin(ang);
     stroke_cseg(g, canvas_x(g, ax), canvas_y(g, ay),
                 canvas_x(g, cxp), canvas_y(g, cyp), 2.0, col_rgb(COL_LEDGE));
   }
@@ -323,7 +330,7 @@ static void draw_anim_frame(Gfx *g, const Anim1 *anim, const Anim1State *st,
   uint32_t cursor = 0;
   const uint32_t nPaths = anim1_frame(anim, st, frameIdx, &cursor, &absent);
   if (absent) return; // spec §2.4: absent frame -> skip draw
-  const double cr = cos(rotate), sr = sin(rotate);
+  const double cr = fd_cos(rotate), sr = fd_sin(rotate);
   const double tx = tX - rpX, ty = tY - rpY;
   rast_path_reset();
   for (uint32_t j = 0; j < nPaths; j++) {
@@ -586,7 +593,7 @@ static void render_articles(Gfx *g, const GameState *st) {
     const double d = hx > tx ? 1.0 : -1.0;
     const double r = a->rotate;
     // rotateVector(vx, vy, -r) (render.js:30-34)
-    const double cr = cos(-r), sr = sin(-r);
+    const double cr = fd_cos(-r), sr = fd_sin(-r);
     const double v1x = -4 * cr - 2 * sr, v1y = -4 * sr + 2 * cr;
     const double v2x = 4 * cr - 2 * sr, v2y = 4 * sr + 2 * cr;
     const double v3x = 4 * cr + 2 * sr, v3y = 4 * sr - 2 * cr;
@@ -594,8 +601,8 @@ static void render_articles(Gfx *g, const GameState *st) {
     const double px[6] = { hx, hx + v1x * d, tx + v2x * d, tx, tx + v3x * d,
                            hx + v4x * d };
     const double py[6] = { hy, hy + v1y, ty + v2y, ty, ty + v3y, hy + v4y };
-    const double vx = -0.3 * sin(r) * g->scale;
-    const double vy = -0.3 * cos(r) * g->scale;
+    const double vx = -0.3 * fd_sin(r) * g->scale;
+    const double vy = -0.3 * fd_cos(r) * g->scale;
     laser_pass(g, px, py, 0, 0, stroke, fill);        // G pass site
     laser_pass(g, px, py, -vx, -vy, stroke, fill);    // R pass (translate(-vec))
     laser_pass(g, px, py, vx, vy, stroke, fill);      // B pass (translate(2vec))

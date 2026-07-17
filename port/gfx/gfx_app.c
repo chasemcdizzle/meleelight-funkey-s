@@ -1,0 +1,457 @@
+// port/gfx/gfx_app.c — the platform-seam replay app (M3 task 4).
+//
+// gfx_replay.c's replay loop (itself the cited sim_main.c loop) rebuilt
+// on the CLAUDE.md platform seam: render EVERY frame through the
+// port/gfx compositor and PRESENT through whichever backend TU this
+// binary linked (headless = host/CI, SDL2 = host dev window, SDL1.2 =
+// the FunKey device — exactly ONE per target).
+//
+//   gfx_app --trace t.txt --simdata s.txt --gfxdata g.txt --anim-dir D
+//           --seed N --p1 N --p2 N --stage N --frames N
+//           --out stream.txt --timing timing.txt
+//           [--cpu --difficulty N --ai-bridge f]
+//           [--pace 0|1] [--budget-ns N]
+//           [--shot-frame N --shot-ppm f.ppm --shot-pgm f.pgm]
+//
+// LIVE LOOP (fix_plan §M3 task 4):
+//   - wall-clock schedule: deadline(f) = t0 + (f+1)*budget (absolute —
+//     no drift). The SIM always runs; when the sim finishes past its
+//     frame deadline the RENDER+PRESENT are skipped (the ~30-line
+//     frameskip valve — sim at wall-clock rate, render skippable;
+//     PLAN §5 / funkey-envelope §1). Skips are counted, flagged
+//     per-frame in the timing artifact, and listed on stderr post-run.
+//   - --pace 1 (the live device mode) sleeps to each frame deadline
+//     after presenting; --pace 0 (host/CI mode) runs flat out and
+//     disables the valve (every frame renders — deterministic dumps).
+//   - NO file I/O inside the frame loop (CLAUDE.md tmpfs gotcha): the
+//     checksum stream, the per-frame timing rows and the screenshot are
+//     RAM-buffered and written AFTER the loop. Timing writes go to
+//     tmpfs on the device; judgment is host-side (judge-render-timing.js).
+//   - SCREENSHOT: at --shot-frame the app copies its OWN framebuffer +
+//     ink plane (RAM staging; render is FORCED on that frame even if
+//     the valve would skip) and writes PPM/PGM post-run — never the
+//     kernel fb (240x720 triple-page, wrong-page reads; CLAUDE.md).
+//   - platform_poll runs every frame (event pump); input is recorded
+//     into a PlatformInput but not yet consumed — M3 task 5 wires it
+//     into the pollInputs seam. Quit requests are ignored during a
+//     trace-fed replay (a truncated stream must never look like a pass).
+//
+// TIMING ROWS: "<sim> <render> <present> <skipped>" ns per frame
+// (render/present are 0 on a skipped frame). full = sim+render+present;
+// pacing sleep and the poll pump are excluded from all buckets (work
+// time, not schedule time).
+#include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#include "../sim/sim/sim.h"
+#include "../sim/ml_events.h"
+#include "../sim/ml_js.h"
+#include "gfx.h"
+#include "platform.h"
+
+#define ML_BOOT_DRAWS 465 // the qjs boot pin (oracle/qjs/replay.sh)
+
+void gfx_fatal(const char *what) { sim_fatal(what); }
+// (sim_fatal is noreturn; the attribute on the gfx_fatal decl is satisfied)
+
+// --- trace loading (sim_main.c:39-148, duplicated verbatim) --------------------
+
+typedef struct {
+  bool present[4];
+  MlInput in[4];
+} TraceRow;
+
+static TraceRow *g_trace;
+static long g_trace_len;
+
+static uint64_t parse_hex16(const char *s) {
+  uint64_t v = 0;
+  for (int k = 0; k < 16; k++) {
+    const char c = s[k];
+    v <<= 4;
+    if (c >= '0' && c <= '9') v |= (uint64_t)(c - '0');
+    else if (c >= 'a' && c <= 'f') v |= (uint64_t)(c - 'a' + 10);
+    else sim_fatal("trace: bad hex16 token");
+  }
+  return v;
+}
+
+static const char *tok_next(const char *s, bool *bout, double *dout,
+                            bool isNum) {
+  while (*s == ' ') s++;
+  if (*s == 0 || *s == '|') sim_fatal("trace: short slot token list");
+  if (isNum) {
+    const uint64_t bits = parse_hex16(s);
+    double d;
+    memcpy(&d, &bits, 8);
+    *dout = d;
+    return s + 16;
+  }
+  if (*s != '0' && *s != '1') sim_fatal("trace: bad bool token");
+  *bout = *s == '1';
+  return s + 1;
+}
+
+static const char *parse_slot(const char *s, MlInput *in) {
+  *in = nullInput();
+  double d = 0;
+  bool b = false;
+  s = tok_next(s, &in->a, &d, false);
+  s = tok_next(s, &in->b, &d, false);
+  s = tok_next(s, &in->x, &d, false);
+  s = tok_next(s, &in->y, &d, false);
+  s = tok_next(s, &in->z, &d, false);
+  s = tok_next(s, &in->r, &d, false);
+  s = tok_next(s, &in->l, &d, false);
+  s = tok_next(s, &in->s, &d, false);
+  s = tok_next(s, &in->du, &d, false);
+  s = tok_next(s, &in->dr, &d, false);
+  s = tok_next(s, &in->dd, &d, false);
+  s = tok_next(s, &in->dl, &d, false);
+  s = tok_next(s, &b, &in->lsX, true);
+  s = tok_next(s, &b, &in->lsY, true);
+  s = tok_next(s, &b, &in->csX, true);
+  s = tok_next(s, &b, &in->csY, true);
+  s = tok_next(s, &b, &in->lA, true);
+  s = tok_next(s, &b, &in->rA, true);
+  s = tok_next(s, &b, &in->rawX, true);
+  s = tok_next(s, &b, &in->rawY, true);
+  s = tok_next(s, &b, &in->rawcsX, true);
+  s = tok_next(s, &b, &in->rawcsY, true);
+  while (*s == ' ') s++;
+  return s;
+}
+
+static void load_trace(const char *path) {
+  FILE *f = fopen(path, "r");
+  if (!f) sim_fatal("cannot open trace");
+  size_t cap = 4096;
+  g_trace = malloc(cap * sizeof *g_trace);
+  if (!g_trace) sim_fatal("oom");
+  char *line = NULL;
+  size_t lcap = 0;
+  ssize_t n;
+  g_trace_len = 0;
+  while ((n = getline(&line, &lcap, f)) > 0) {
+    if (line[n - 1] == '\n') line[--n] = 0;
+    if (n == 0) continue;
+    if ((size_t)g_trace_len == cap) {
+      cap *= 2;
+      g_trace = realloc(g_trace, cap * sizeof *g_trace);
+      if (!g_trace) sim_fatal("oom");
+    }
+    TraceRow *row = &g_trace[g_trace_len++];
+    const char *s = line;
+    for (int i = 0; i < 4; i++) {
+      if (*s == '|' || *s == 0) {
+        row->present[i] = false;
+        row->in[i] = nullInput();
+      } else {
+        row->present[i] = true;
+        s = parse_slot(s, &row->in[i]);
+      }
+      if (i < 3) {
+        if (*s != '|') sim_fatal("trace: expected slot separator");
+        s++;
+      } else if (*s != 0) {
+        sim_fatal("trace: trailing bytes on a frame line");
+      }
+    }
+  }
+  free(line);
+  fclose(f);
+  if (g_trace_len == 0) sim_fatal("trace: empty");
+}
+
+// --- draw counting (sim_main.c:150-162) -------------------------------------------
+
+static uint32_t mulberry_inv(void) {
+  const uint32_t k = 0x6D2B79F5u;
+  uint32_t x = k;
+  for (int i = 0; i < 5; i++) x *= 2u - k * x;
+  return x;
+}
+
+static uint32_t draws_between(uint32_t from, uint32_t to) {
+  return (to - from) * mulberry_inv();
+}
+
+// --- timing --------------------------------------------------------------------------
+
+static uint64_t now_ns(void) {
+  struct timespec ts;
+  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+    sim_fatal("clock_gettime(CLOCK_MONOTONIC) failed");
+  }
+  return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+
+static void sleep_until_ns(uint64_t target) {
+  for (;;) {
+    const uint64_t now = now_ns();
+    if (now >= target) return;
+    const uint64_t rem = target - now;
+    struct timespec ts;
+    ts.tv_sec = (time_t)(rem / 1000000000ull);
+    ts.tv_nsec = (long)(rem % 1000000000ull);
+    nanosleep(&ts, 0); // EINTR: loop re-derives the remainder
+  }
+}
+
+// --- RAM-staged screenshot writers (post-run; gfx_dump_ppm conventions) ---------------
+
+static void write_shot_ppm(const uint16_t *fb, const char *path) {
+  FILE *f = fopen(path, "wb");
+  if (!f) sim_fatal("shot: cannot open ppm for writing");
+  fprintf(f, "P6\n%d %d\n255\n", RAST_W, RAST_H);
+  for (int i = 0; i < RAST_W * RAST_H; i++) {
+    const uint16_t p = fb[i];
+    const uint8_t rgb[3] = {
+        (uint8_t)(((p >> 11) & 31) << 3),
+        (uint8_t)(((p >> 5) & 63) << 2),
+        (uint8_t)((p & 31) << 3),
+    };
+    if (fwrite(rgb, 1, 3, f) != 3) sim_fatal("shot: ppm write failed");
+  }
+  if (fclose(f) != 0) sim_fatal("shot: ppm close failed");
+}
+
+static void write_shot_pgm(const uint8_t *ink, const char *path) {
+  FILE *f = fopen(path, "wb");
+  if (!f) sim_fatal("shot: cannot open pgm for writing");
+  fprintf(f, "P5\n%d %d\n255\n", RAST_W, RAST_H);
+  for (int i = 0; i < RAST_W * RAST_H; i++) {
+    const uint8_t v = ink[i] ? 255 : 0;
+    if (fwrite(&v, 1, 1, f) != 1) sim_fatal("shot: pgm write failed");
+  }
+  if (fclose(f) != 0) sim_fatal("shot: pgm close failed");
+}
+
+// --- main -----------------------------------------------------------------------------
+
+static Gfx g_gfx; // big (framebuffer + anim tables); static, not stack
+static uint16_t g_shot_fb[RAST_W * RAST_H];
+static uint8_t g_shot_ink[RAST_W * RAST_H];
+
+int main(int argc, char **argv) {
+  const char *tracePath = 0, *simdataPath = 0, *bridgePath = 0;
+  const char *gfxdataPath = 0, *animDir = 0, *outPath = 0, *timingPath = 0;
+  const char *shotPpm = 0, *shotPgm = 0;
+  long seed = -1, p1 = -1, p2 = -1, stage = -1, frames = -1, difficulty = 3;
+  long shotFrame = -1;
+  long pace = 1;
+  uint64_t budgetNs = 16666667ull; // 60 fps frame budget (default)
+  bool cpu = false;
+  for (int i = 1; i < argc; i++) {
+    const char *a = argv[i];
+    const bool hasV = i + 1 < argc;
+    if (strcmp(a, "--trace") == 0 && hasV) tracePath = argv[++i];
+    else if (strcmp(a, "--simdata") == 0 && hasV) simdataPath = argv[++i];
+    else if (strcmp(a, "--gfxdata") == 0 && hasV) gfxdataPath = argv[++i];
+    else if (strcmp(a, "--anim-dir") == 0 && hasV) animDir = argv[++i];
+    else if (strcmp(a, "--out") == 0 && hasV) outPath = argv[++i];
+    else if (strcmp(a, "--timing") == 0 && hasV) timingPath = argv[++i];
+    else if (strcmp(a, "--shot-ppm") == 0 && hasV) shotPpm = argv[++i];
+    else if (strcmp(a, "--shot-pgm") == 0 && hasV) shotPgm = argv[++i];
+    else if (strcmp(a, "--shot-frame") == 0 && hasV) shotFrame = strtol(argv[++i], 0, 10);
+    else if (strcmp(a, "--ai-bridge") == 0 && hasV) bridgePath = argv[++i];
+    else if (strcmp(a, "--seed") == 0 && hasV) seed = strtol(argv[++i], 0, 10);
+    else if (strcmp(a, "--p1") == 0 && hasV) p1 = strtol(argv[++i], 0, 10);
+    else if (strcmp(a, "--p2") == 0 && hasV) p2 = strtol(argv[++i], 0, 10);
+    else if (strcmp(a, "--stage") == 0 && hasV) stage = strtol(argv[++i], 0, 10);
+    else if (strcmp(a, "--frames") == 0 && hasV) frames = strtol(argv[++i], 0, 10);
+    else if (strcmp(a, "--difficulty") == 0 && hasV) difficulty = strtol(argv[++i], 0, 10);
+    else if (strcmp(a, "--pace") == 0 && hasV) pace = strtol(argv[++i], 0, 10);
+    else if (strcmp(a, "--budget-ns") == 0 && hasV) budgetNs = strtoull(argv[++i], 0, 10);
+    else if (strcmp(a, "--cpu") == 0) cpu = true;
+    else {
+      fprintf(stderr, "gfx_app: bad argument %s\n", a);
+      return 1;
+    }
+  }
+  if (!tracePath || !simdataPath || !gfxdataPath || !animDir || !outPath ||
+      !timingPath || seed < 0 || p1 < 0 || p2 < 0 || stage < 0 ||
+      frames <= 0 || (cpu && !bridgePath) || (pace != 0 && pace != 1) ||
+      budgetNs == 0 ||
+      (shotFrame > 0) != (shotPpm && shotPgm) ||
+      (shotFrame > 0 && shotFrame > frames)) {
+    fprintf(stderr,
+            "usage: gfx_app --trace t.txt --simdata s.txt --gfxdata g.txt "
+            "--anim-dir D --seed N --p1 N --p2 N --stage N --frames N "
+            "--out stream.txt --timing timing.txt "
+            "[--cpu --difficulty N --ai-bridge f] [--pace 0|1] "
+            "[--budget-ns N] [--shot-frame N --shot-ppm f --shot-pgm f]\n");
+    return 1;
+  }
+  // RAM-buffer overflow guards (sim_main.c --timing precedent, iter 45):
+  // frames bounds every post-run buffer; cap hard, die loud, never wrap.
+  if (frames > 1000000L) sim_fatal("gfx_app: --frames exceeds the buffer cap (10^6)");
+
+  sim_boot_page(&G);
+  sim_data_load(simdataPath);
+  sim_data_register();
+  load_trace(tracePath);
+
+  gfx_data_load(&g_gfx.data, gfxdataPath);
+  gfx_load_anim(&g_gfx, animDir, (int)p1);
+  gfx_load_anim(&g_gfx, animDir, (int)p2);
+
+  ml_active_rng = &G.rng;
+  ml_rng_seed(&G.rng, (uint32_t)seed);
+  for (int k = 0; k < ML_BOOT_DRAWS; k++) (void)ml_rng_next(&G.rng);
+  G.rngStateAtReset = G.rng.a;
+
+  if (cpu) {
+    if (ml_ai_bridge_load(&G.bridge, bridgePath) != 0) {
+      sim_fatal("AI bridge artifact failed to load");
+    }
+    if (G.bridge.seed != (uint32_t)seed || G.bridge.boot != ML_BOOT_DRAWS) {
+      sim_fatal("AI bridge header (seed/boot) disagrees with the run");
+    }
+    G.hasBridge = true;
+  }
+
+  // Peek startGame's background draw from a COPY of the RNG state (the
+  // live stream is untouched; sim_setup_match burns the real draw).
+  MlRng peek = G.rng;
+  const int backgroundType = (int)js_round(ml_rng_next(&peek));
+
+  sim_setup_match(&G, (int)p1, (int)p2, cpu ? 1 : 0, (int)difficulty,
+                  (int)stage);
+  G.rngStateAtFrame1 = G.rng.a;
+
+  gfx_init(&g_gfx, (int)stage, backgroundType);
+
+  if (platform_init("meleelight") != 0) {
+    sim_fatal("platform_init failed (display unavailable)");
+  }
+
+  // RAM buffers (post-run flush; NO file I/O in the frame loop)
+  typedef struct { uint64_t sim, render, present; uint8_t skipped; } FrameNs;
+  FrameNs *tim = malloc((size_t)frames * sizeof *tim);
+  const size_t streamCap = (size_t)frames * 80 + 128;
+  char *stream = malloc(streamCap);
+  if (!tim || !stream) sim_fatal("oom (RAM buffers)");
+  size_t streamLen = 0;
+  long skips = 0;
+  bool shotTaken = false;
+
+  PlatformInput pin;
+  char hex[65];
+  const uint64_t tStart = now_ns();
+  for (long f = 0; f < frames; f++) {
+    platform_poll(&pin); // event pump; input unconsumed until M3 task 5
+    const uint64_t deadline = tStart + (uint64_t)(f + 1) * budgetNs;
+
+    const long idx = f < g_trace_len - 1 ? f : g_trace_len - 1;
+    const TraceRow *row = &g_trace[idx];
+    const MlInput *rows[4];
+    for (int i = 0; i < 4; i++) rows[i] = row->present[i] ? &row->in[i] : 0;
+    G.frame = f + 1;
+
+    const uint64_t t0 = now_ns();
+    sim_game_tick(&G, rows);
+    sim_frame_hash(&G, hex);
+    const uint64_t t1 = now_ns();
+
+    // Frameskip valve: the sim ran; if it finished past this frame's
+    // deadline, skip render+present to catch up (never the sim). The
+    // pinned screenshot frame always renders (evidence beats one skip).
+    const bool isShot = shotFrame > 0 && f + 1 == shotFrame;
+    const bool skip = pace == 1 && t1 > deadline && !isShot;
+    uint64_t t2 = t1, t3 = t1;
+    if (!skip) {
+      gfx_render_frame(&g_gfx, &G);
+      t2 = now_ns();
+      platform_present(g_gfx.rz.fb);
+      t3 = now_ns();
+      if (isShot) {
+        memcpy(g_shot_fb, g_gfx.rz.fb, sizeof g_shot_fb);
+        memcpy(g_shot_ink, g_gfx.rz.ink, sizeof g_shot_ink);
+        shotTaken = true;
+      }
+    } else {
+      skips++;
+    }
+    tim[f].sim = t1 - t0;
+    tim[f].render = t2 - t1;
+    tim[f].present = t3 - t2;
+    tim[f].skipped = skip ? 1 : 0;
+
+    const int w = snprintf(stream + streamLen, streamCap - streamLen,
+                           "F %ld %s\n", f + 1, hex);
+    if (w < 0 || (size_t)w >= streamCap - streamLen) {
+      sim_fatal("stream buffer overflow");
+    }
+    streamLen += (size_t)w;
+
+    if (pace == 1) sleep_until_ns(deadline);
+  }
+  const uint64_t tEnd = now_ns();
+
+  if (G.hasBridge && ml_ai_bridge_peek(&G.bridge) != 0) {
+    sim_fatal("AI bridge has unconsumed entries after the last frame");
+  }
+
+  const uint32_t total = draws_between(G.rngStateAtReset, G.rng.a);
+  const uint32_t outside = draws_between(G.rngStateAtReset, G.rngStateAtFrame1);
+  {
+    const int w = snprintf(stream + streamLen, streamCap - streamLen,
+                           "RNG %" PRIu32 " %" PRIu32 "\nSIM OK\n", total,
+                           outside);
+    if (w < 0 || (size_t)w >= streamCap - streamLen) {
+      sim_fatal("stream buffer overflow (trailer)");
+    }
+    streamLen += (size_t)w;
+  }
+
+  platform_quit();
+
+  // --- post-run flushes (the ONLY file writes) ---------------------------------
+  FILE *of = fopen(outPath, "w");
+  if (!of) sim_fatal("cannot open --out file for writing");
+  if (fwrite(stream, 1, streamLen, of) != streamLen) {
+    sim_fatal("--out write failed");
+  }
+  if (fclose(of) != 0) sim_fatal("--out close/flush failed");
+
+  FILE *tf = fopen(timingPath, "w");
+  if (!tf) sim_fatal("cannot open --timing file for writing");
+  for (long f = 0; f < frames; f++) {
+    if (fprintf(tf, "%" PRIu64 " %" PRIu64 " %" PRIu64 " %u\n", tim[f].sim,
+                tim[f].render, tim[f].present, (unsigned)tim[f].skipped) < 0) {
+      sim_fatal("--timing write failed");
+    }
+  }
+  if (fclose(tf) != 0) sim_fatal("--timing close/flush failed");
+
+  if (shotFrame > 0) {
+    if (!shotTaken) sim_fatal("shot frame never rendered");
+    write_shot_ppm(g_shot_fb, shotPpm);
+    write_shot_pgm(g_shot_ink, shotPgm);
+  }
+
+  // post-run summary (stderr; informational — the host judge decides)
+  fprintf(stderr,
+          "gfx_app: %ld frames, %ld render skips, wall %" PRIu64
+          " ms, pace=%ld budget=%" PRIu64 " ns\n",
+          frames, skips, (tEnd - tStart) / 1000000ull, pace, budgetNs);
+  if (skips > 0) {
+    fprintf(stderr, "gfx_app: skipped frames:");
+    int listed = 0;
+    for (long f = 0; f < frames && listed < 64; f++) {
+      if (tim[f].skipped) {
+        fprintf(stderr, " %ld", f + 1);
+        listed++;
+      }
+    }
+    if (skips > 64) fprintf(stderr, " ... (%ld total)", skips);
+    fprintf(stderr, "\n");
+  }
+  free(tim);
+  free(stream);
+  return 0;
+}

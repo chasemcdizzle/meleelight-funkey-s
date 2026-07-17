@@ -14,6 +14,30 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../fdlibm/fdlibm.h" // fd_sin/fd_cos — see device-libm note below
+
+// DEVICE-LIBM CLASS (M3 task 4; fix_plan §M3 task 1 rule "trust NO
+// device-libc math symbol"): the FunKey SDK's static musl libm ships a
+// BROKEN floor family (identity for non-integers — measured iter 38),
+// and its float transcendentals are unswept. This TU therefore consumes
+// NO device-libm floor/ceil/trig:
+//   - the (int)floorf/(int)ceilf sites use the exact integer helpers
+//     below (pure casts + compares, no libm);
+//   - circle/ring vertices route through the vendored fd_cos/fd_sin
+//     doubles (bit-exact on both host and device — and the more
+//     faithful choice anyway: the browser renders under the fdlibm
+//     Math shim).
+// Remaining libm surface here: sqrtf/fabsf only — both exactly-rounded
+// IEEE operations, swept device-vs-host by port/sim/device/mathsweep.c.
+static inline int ifloorf(float x) {
+  const int i = (int)x;
+  return i - (x < (float)i);
+}
+static inline int iceilf(float x) {
+  const int i = (int)x;
+  return i + (x > (float)i);
+}
+
 #define RAST_TWO_PI 6.28318530717958647692f
 
 #define SUBS 4
@@ -135,8 +159,8 @@ void rast_fill(Raster *rz, RastCol col) {
     if (g_edges[i].ymax > ymax) ymax = g_edges[i].ymax;
   }
   qsort(g_order, (size_t)g_nedges, sizeof(int), cmp_edge_ymin);
-  int y0 = (int)floorf(ymin); if (y0 < rz->clipY0) y0 = rz->clipY0;
-  int y1 = (int)ceilf(ymax);  if (y1 > rz->clipY1) y1 = rz->clipY1;
+  int y0 = ifloorf(ymin); if (y0 < rz->clipY0) y0 = rz->clipY0;
+  int y1 = iceilf(ymax);  if (y1 > rz->clipY1) y1 = rz->clipY1;
   int next = 0, nact = 0;
   const float substep = 1.0f / SUBS;
   const unsigned cov_inc = 256 / SUBS;
@@ -176,7 +200,7 @@ void rast_fill(Raster *rz, RastCol col) {
           if (xa < 0) xa = 0;
           if (xb > RAST_W) xb = RAST_W;
           if (xb <= xa) continue;
-          const int ia = (int)floorf(xa), ib = (int)floorf(xb);
+          const int ia = ifloorf(xa), ib = ifloorf(xb);
           if (ia == ib) {
             g_cov[ia] += (uint16_t)((xb - xa) * (float)cov_inc);
           } else {
@@ -232,7 +256,8 @@ void rast_circle(Raster *rz, float cx, float cy, float rad, RastCol col) {
   rast_sub_begin(cx + rad, cy);
   for (int i = 1; i < CIRCLE_SEGS; i++) {
     const float t = (float)i * (RAST_TWO_PI / CIRCLE_SEGS);
-    rast_sub_line(cx + rad * cosf(t), cy + rad * sinf(t));
+    rast_sub_line(cx + rad * (float)fd_cos((double)t),
+                  cy + rad * (float)fd_sin((double)t));
   }
   rast_sub_close();
   rast_fill(rz, col);
@@ -247,14 +272,16 @@ void rast_ring(Raster *rz, float cx, float cy, float rad, float w,
   rast_sub_begin(cx + ro, cy);
   for (int i = 1; i < CIRCLE_SEGS; i++) {
     const float t = (float)i * (RAST_TWO_PI / CIRCLE_SEGS);
-    rast_sub_line(cx + ro * cosf(t), cy + ro * sinf(t));
+    rast_sub_line(cx + ro * (float)fd_cos((double)t),
+                  cy + ro * (float)fd_sin((double)t));
   }
   rast_sub_close();
   // inner contour wound the other way -> nonzero-winding annulus
   rast_sub_begin(cx + ri, cy);
   for (int i = CIRCLE_SEGS - 1; i >= 1; i--) {
     const float t = (float)i * (RAST_TWO_PI / CIRCLE_SEGS);
-    rast_sub_line(cx + ri * cosf(t), cy + ri * sinf(t));
+    rast_sub_line(cx + ri * (float)fd_cos((double)t),
+                  cy + ri * (float)fd_sin((double)t));
   }
   rast_sub_close();
   rast_fill(rz, col);

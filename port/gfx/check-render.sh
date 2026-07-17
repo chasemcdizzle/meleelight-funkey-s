@@ -195,6 +195,18 @@ if [ "$NEED_CAPTURE" = "1" ]; then
     --gfxdata "$BUILD/gfxdata.txt"
 fi
 made "$BUILD/g01.render-run.json" "$BUILD/gfxdata.txt" "$CANVAS/capture.digests.json"
+
+# GFXDATA freeze tripwire (M3 task 4, iter 50): the committed
+# port/gfx/gfxdata-frozen.txt is the browser-free device-path copy of
+# this capture's GFXDATA1 dump (deterministic executed page data;
+# sha-pinned by check-device-render.sh). Every fresh capture must
+# byte-match it — legitimate upstream drift becomes a REVIEWED re-freeze
+# of the committed artifact + its pin, never silent divergence.
+cmp "$BUILD/gfxdata.txt" "$GFX/gfxdata-frozen.txt" || {
+  echo "check-render: captured GFXDATA differs from the committed port/gfx/gfxdata-frozen.txt (re-freeze is a reviewed change)" >&2
+  exit 1
+}
+echo "captured GFXDATA matches the committed frozen artifact"
 IFS=',' read -r -a SAMPLED <<< "$FRAMES_LIST"
 for f in "${SAMPLED[@]}"; do
   tag=$(printf 'f%04d' "$f")

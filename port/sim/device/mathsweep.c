@@ -56,12 +56,32 @@ static uint64_t canon_bits(double d) {
   return d2u(d);
 }
 
+// float leg (M3 task 4): the RENDER path's remaining device-libm
+// surface is sqrtf/fabsf (port/gfx/raster.c — floorf/ceilf/trig were
+// routed OFF device libm entirely; see the class note there). Both are
+// exactly-rounded IEEE operations, so device vs host-anchor is a
+// byte-compare like every other column. Input: the corpus double cast
+// to float (the cast itself is exactly rounded on both sides).
+static uint32_t f2u(float f) {
+  uint32_t u;
+  memcpy(&u, &f, 4);
+  return u;
+}
+
+static uint32_t canon_bits_f(float f) {
+  if (isnan(f)) return UINT32_C(0x7fc00000);
+  return f2u(f);
+}
+
 static void sweep1(uint64_t bits) {
   double x = u2d(bits);
+  const float xf = (float)x;
   printf("v %016" PRIx64 " f=%016" PRIx64 " c=%016" PRIx64 " s=%016" PRIx64
-         " a=%016" PRIx64 " r=%016" PRIx64 "\n",
+         " a=%016" PRIx64 " r=%016" PRIx64 " sf=%08" PRIx32 " af=%08" PRIx32
+         "\n",
          bits, canon_bits(floor(x)), canon_bits(ceil(x)),
-         canon_bits(sqrt(x)), canon_bits(fabs(x)), canon_bits(js_round(x)));
+         canon_bits(sqrt(x)), canon_bits(fabs(x)), canon_bits(js_round(x)),
+         canon_bits_f(sqrtf(xf)), canon_bits_f(fabsf(xf)));
 }
 
 static void sweep2(uint64_t a, uint64_t b) {

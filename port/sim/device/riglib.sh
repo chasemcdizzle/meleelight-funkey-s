@@ -22,10 +22,15 @@
 # own edits force a rebuild and so ALL rig scripts always compute the
 # SAME stamp (one shared build, no ping-pong between scripts).
 RIG_SCRIPTS="port/sim/device/adbsh.sh port/sim/device/riglib.sh \
-port/sim/device/check-device-g01.sh port/sim/device/check-device-conform.sh"
+port/sim/device/check-device-g01.sh port/sim/device/check-device-conform.sh \
+port/gfx/check-device-render.sh"
 
-# The four armv7 binaries the shared build produces (one docker run).
-ARMBINS="sim_device csweep_arm fmt_diff_arm mathsweep_arm"
+# The armv7 binaries the shared build produces (one docker run).
+# gfx_device (M3 task 4) is the SDL1.2 render app: DYNAMICALLY linked
+# against the sysroot's libSDL-1.2 (LGPL — dynamic only, CLAUDE.md
+# licensing rule; rig_arm_build asserts it), raster TU at -O3 (the ONE
+# -O3 TU), everything else -O2; -ffp-contract=off on every TU.
+ARMBINS="sim_device csweep_arm fmt_diff_arm mathsweep_arm gfx_device"
 
 # rig_lock_acquire — exclusive rig lock (iter 41, review rounds 1-3
 # recurring — the class is closed by REMOVING the cleverness): ONE
@@ -151,7 +156,7 @@ rig_srchash() {
   local listf brokenf n
   listf="$DEVB/.srclist.$$"
   brokenf="$DEVB/.srcbroken.$$"
-  find -L port/sim port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
+  find -L port/sim port/gfx port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
     -type l -print0 > "$brokenf" || {
     echo "DEVICE FAIL: srchash: broken-link scan failed" >&2
     rm -f "$brokenf"
@@ -164,7 +169,7 @@ rig_srchash() {
     return 1
   fi
   rm -f "$brokenf"
-  find -L port/sim port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
+  find -L port/sim port/gfx port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
     -type f \( -name '*.c' -o -name '*.h' \) -print0 \
     > "$listf" || {
     echo "DEVICE FAIL: srchash: find failed" >&2
@@ -247,6 +252,7 @@ rig_arm_build() {
     # docker build — a build that exits 0 without compiling must never
     # re-stamp a PRIOR run's binaries as fresh
     for f in $ARMBINS; do rm -f "$DEVB/$f"; done
+    rm -f "$DEVB/raster_arm.o" # gfx_device's -O3 intermediate (same class)
     echo "   stamp MISS (or forced) — rebuilding armv7 binaries"
     # SERIAL docker only (CLAUDE.md §Commands arm32 recipe). Run by the
     # RESOLVED image Id — the same Id the stamp records — never the
@@ -305,6 +311,51 @@ rig_arm_build() {
         -o "$DEVB/fmt_diff_arm" \
         "$CAL/fmt_diff.c" "$CAL/canon.c" port/sim/ml_ser.c port/sim/ml_fmt.c \
         oracle/qjs/sha256.c -lm
+      # gfx_device (M3 task 4): the SDL1.2 live-render app. DYNAMIC link
+      # (SDL 1.2 is LGPL — dynamic only; asserted after the build), -no-pie
+      # for a deterministic file(1) signature + addr2line-able crashes.
+      # raster.c is the ONE -O3 TU (PLAN 5); every TU -ffp-contract=off.
+      SDLCFG=/opt/FunKey-sdk-2.3.0/arm-funkey-linux-musleabihf/sysroot/usr/bin/sdl-config
+      GFX=port/gfx
+      $CC -O3 -ffp-contract=off -Wall -Wextra -Werror \
+        -I"$TABLES" -Iport/ryu -Iport/sim -Ioracle/qjs \
+        -c "$GFX/raster.c" -o "$DEVB/raster_arm.o"
+      $CC -O2 -ffp-contract=off -Wall -Wextra -Werror -no-pie \
+        -I"$TABLES" -Iport/ryu -Iport/sim -Ioracle/qjs \
+        $($SDLCFG --cflags) \
+        -o "$DEVB/gfx_device" \
+        "$DEVB/raster_arm.o" \
+        "$GFX/gfx_app.c" "$GFX/platform_sdl1.c" \
+        "$GFX/anim1.c" "$GFX/gfx_render.c" \
+        "$SIM/sim_boot.c" "$SIM/sim_tick.c" "$SIM/sim_ser.c" \
+        "$SIM/sim_data.c" \
+        "$CAL/canon.c" "$CAL/player_canon.c" \
+        port/sim/physics.c port/sim/interpolated_collision.c \
+        port/sim/environmental_collision.c port/sim/hit_detection.c \
+        port/sim/article.c port/sim/action_state_shortcuts.c \
+        port/sim/ml_events.c port/sim/ml_fmt.c port/sim/ml_ser.c \
+        port/sim/ai_bridge.c port/sim/input/interpret_inputs.c \
+        port/sim/stages/moving_platforms.c port/sim/stages/ystory.c \
+        port/sim/stages/fountain.c \
+        port/sim/characters/shared/moves_index.c \
+        port/sim/characters/shared/moves/*.c \
+        port/sim/characters/fox/moves_index.c \
+        port/sim/characters/fox/moves/*.c \
+        port/sim/characters/falco/moves_index.c \
+        port/sim/characters/falco/moves/*.c \
+        port/sim/characters/falcon/moves_index.c \
+        port/sim/characters/falcon/moves/*.c \
+        port/sim/characters/marth/moves_index.c \
+        port/sim/characters/marth/dancing_blade_combo.c \
+        port/sim/characters/marth/dancing_blade_air_mobility.c \
+        port/sim/characters/marth/moves/*.c \
+        port/sim/characters/puff/moves_index.c \
+        port/sim/characters/puff/puff_multi_jump_drift.c \
+        port/sim/characters/puff/puff_next_jump.c \
+        port/sim/characters/puff/moves/*.c \
+        "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" \
+        oracle/qjs/sha256.c port/fdlibm/fdlibm.c \
+        $($SDLCFG --libs) -lm
     '
     for f in $ARMBINS; do
       made "$DEVB/$f"
@@ -318,21 +369,39 @@ rig_arm_build() {
     # (iter 40, review L1): nm's exit status is checked explicitly (its
     # output goes to a file first — no || true, no grep in the pipeline;
     # a truncated symbol table can never pass on a lucky prefix).
-    local nmout s cnt
-    nmout="$DEVB/.nm-sim_device.$$"
-    if ! nm "$DEVB/sim_device" > "$nmout"; then
-      rm -f "$nmout"
-      echo "DEVICE FAIL: nm failed on sim_device — cannot verify fdlibm overrides" >&2
-      exit 1
-    fi
-    for s in floor ceil fmod; do
-      cnt="$(awk -v s="$s" '$2=="T" && $3==s {n++} END {print n+0}' "$nmout")"
-      if [ "$cnt" != 1 ]; then
-        echo "DEVICE FAIL: expected exactly 1 T definition of $s in sim_device, found $cnt" >&2
+    # M3 task 4: gfx_device runs the SAME sim, so the same overrides must
+    # be its linked definitions too (dynamic libm.so is only consulted
+    # for symbols the binary does not define — these it defines).
+    local nmout s cnt b
+    for b in sim_device gfx_device; do
+      nmout="$DEVB/.nm-$b.$$"
+      if ! nm "$DEVB/$b" > "$nmout"; then
+        rm -f "$nmout"
+        echo "DEVICE FAIL: nm failed on $b — cannot verify fdlibm overrides" >&2
         exit 1
       fi
+      for s in floor ceil fmod; do
+        cnt="$(awk -v s="$s" '$2=="T" && $3==s {n++} END {print n+0}' "$nmout")"
+        if [ "$cnt" != 1 ]; then
+          echo "DEVICE FAIL: expected exactly 1 T definition of $s in $b, found $cnt" >&2
+          exit 1
+        fi
+      done
+      rm -f "$nmout"
     done
-    rm -f "$nmout"
+    # LGPL compliance + launchability (M3 task 4): gfx_device must be
+    # DYNAMICALLY linked against the shared libSDL-1.2 — file(1) says
+    # "dynamically linked" AND the DT_NEEDED soname string is present in
+    # the binary. A silent static libSDL.a link fails BOTH (no soname
+    # string, "statically linked"), loudly.
+    if ! file "$DEVB/gfx_device" | grep -q "dynamically linked"; then
+      echo "DEVICE FAIL: gfx_device is not dynamically linked (SDL 1.2 is LGPL — dynamic only)" >&2
+      exit 1
+    fi
+    if ! grep -q "libSDL-1.2.so.0" "$DEVB/gfx_device"; then
+      echo "DEVICE FAIL: gfx_device carries no libSDL-1.2.so.0 NEEDED entry — SDL not dynamically linked" >&2
+      exit 1
+    fi
     {
       printf 'srchash=%s\n' "$want"
       for f in $ARMBINS; do

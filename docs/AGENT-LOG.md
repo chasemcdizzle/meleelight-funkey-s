@@ -5106,3 +5106,182 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   3 rounds vs task-1's 5).
 - next: task 4 (platform seam + SDL1.2 device backend + live device
   render — the first pixels on the FunKey's screen).
+
+## iter 50 — 2026-07-16 — M3 task 4: platform seam + SDL1.2 device backend + live device render
+
+### PRE-REGISTRATION (frozen before any run/edit; PROCESS §2)
+
+- **Task**: fix_plan §M3 task 4 — the CLAUDE.md three-backend platform
+  seam (`platform_init/present/poll/quit` + input struct; headless /
+  SDL2-host / SDL1.2-device, exactly ONE backend TU linked per target),
+  frameskip valve, in-app timing to tmpfs, live paced g01 replay ON the
+  FunKey with rendering, in-app framebuffer screenshot, host-judged.
+  done-check: `bash port/gfx/check-device-render.sh` → `DEVICE RENDER OK`.
+- **Run matrix + caps**: host gfx_app (headless backend) replays — x2
+  byte-stability + verify-stream + shot reference + the frameskip tooth
+  (cap 6 host replays); check-render.sh regression (cap 2 — its capture
+  also freezes the GFXDATA artifact); check-sim.sh regression (cap 2);
+  docker arm builds SERIAL (cap 3 — stamp changes: riglib srchash roots
+  + gfx TUs + this script join the stamp); device: check-device-render.sh
+  (cap 3 full invocations; each live run ~62 s paced) +
+  check-device-g01.sh regression (cap 2). Early-stop: first full green
+  pass per script.
+- **Pass criteria (all three, frozen now)**:
+  1. STREAM: the device render-on replay's pulled stream passes the
+     UNCHANGED oracle/harness/verify-stream.js vs frozen g01 — exact
+     per-frame equality, FULL 3600, rng pins (render must not perturb
+     the sim on device either).
+  2. PERF: p99 full-frame WORK time (sim+render+present; pacing sleep
+     excluded; audio not yet in) < 16,670,000 ns AND p99 render-only
+     <= 8,000,000 ns (PLAN §5 allowance), judged host-side
+     (nearest-rank) over the full 3600-frame match; full-frame
+     population = ALL frames, render population = rendered frames with
+     the skip count reported alongside (a skipped frame has no render
+     cost to measure; hiding skips would be the lie — they are printed
+     and logged).
+  3. SCREENSHOT: in-app dump of the app's OWN framebuffer (RAM-staged at
+     the pinned frame, written post-run — never the kernel fb per
+     CLAUDE.md gotcha; no I/O in the frame loop), pulled + judged
+     host-side by a structural non-blank judge (letterbox rows [0,45)
+     and [195,240) uniform background; >= 8 distinct colours in the
+     band; ink fraction in band within [0.5%, 90%]; ZERO ink outside
+     the band) + eyeball note in this entry.
+- **Refutation shapes**: p99 over budget → report the measured
+  sim/render/present split from the per-frame buckets and attribute
+  WHERE before any optimization (render-only overrun = the PLAN §5
+  registered risk — report honestly; one bounded evidence round, then
+  STOP and report). Device stream mismatch with render on → REAL
+  finding (ledger + localize via the M2CAL --dump-frames procedure; the
+  same binary class as iter-38's libc finding — never epsilon, never
+  retry blind). Screenshot structural fail → device render defect;
+  suspect the device-libm float class FIRST (pre-emptively class-fixed
+  this iter, see below) and check the mathsweep float columns before
+  touching render code. SDL init failure (bpp != 16, SetVideoMode
+  NULL) → loud BLOCKER, never a silent headless fallback pass.
+- **Teeth (all logged)**: T1 frameskip — paced host run with
+  --budget-ns 1000000 → skips > 0, flagged in the timing artifact, skip
+  count printed (proves the valve + its logging); T2 stream judge —
+  nibble-perturb a COPY of the pulled device stream → wrap + UNCHANGED
+  verify-stream.js → MISMATCH at the exact frame (run-side, the
+  iter-43 lesson); T3 screenshot — synthesized uniform-background
+  PPM/PGM pair → shot judge loud fail; T4 freshness — pullv from a
+  nonexistent device path with a stale host file planted at the
+  destination → loud death AND the stale file is gone (rm-before-pull).
+- **GFXDATA staging decision (pre-registered)**: committed frozen
+  artifact `port/gfx/gfxdata-frozen.txt` (87 lines) — GFXDATA1 is
+  deterministic EXECUTED data out of the pinned upstream build (same
+  class as the committed oracle goldens: executed, never hand-typed;
+  the capture that produces it is STREAM-MATCH + servedDistSha256
+  guarded). The device path must not require a browser (fix_plan §M3
+  conventions), so the check pins the committed bytes by sha256 and
+  sha-verifies them onto the device; check-render.sh gains a standing
+  tripwire (`cmp` fresh capture gfxdata vs the committed artifact) so
+  legitimate upstream drift surfaces as a reviewed re-freeze, never
+  silent divergence. Bytes frozen from the fresh capture of THIS
+  iteration's check-render.sh regression run.
+- **Device-libm render-float class (pre-emptive class fix, iter-38
+  rule "trust NO device-libc math symbol")**: the render path consumed
+  device-libc floorf/ceilf (the BROKEN floor family), cosf/sinf and
+  double sin/cos/atan2 (unswept transcendentals). Class fix before
+  first device render: raster.c's (int)floorf/(int)ceilf become exact
+  integer helpers (no libm); all render trig routes through the
+  vendored fd_sin/fd_cos/fd_atan2 doubles (bit-exact both sides AND
+  more faithful — the browser renders under the fdlibm Math shim);
+  remaining device-libm surface = sqrtf/fabsf only, added as new
+  columns to mathsweep.c's sweep1 (device vs host-libm anchor,
+  byte-compared — corpus pin `n <CORPUS_LINES>` unchanged: columns,
+  not lines). Render stays non-checksummed; this is about gross
+  breakage (floorf identity = missing scanlines), not ulps.
+
+### RESULTS (iter 50)
+
+- **DONE-CHECK (cold, final tree)**: `bash port/gfx/check-device-render.sh`
+  → `DEVICE RENDER OK (full p99 10.743 ms, render-only p99 2.511-2.617 ms
+  across runs, sim p99 7.527 ms, present p99 1.479 ms, skips 0/3600)`,
+  exit 0 (.loop/m3-task4-donecheck.log; first cold pass
+  .loop/m3-task4-devrender-1.log — three full device passes total, all
+  green, cap 3 respected). Stamp HIT on the final run (335a0f1a…; the
+  one rebuild landed in the g01-regression run after the provenance
+  fix below).
+- **All three pre-registered pass criteria met**:
+  1. STREAM MATCH 3600/3600 on the device with SDL render + SDL_Flip
+     present live (unchanged verify-stream.js; rngCalls=134/1 pins).
+  2. full p99 10,743,042 ns < 16,670,000; render-only p99 2,568,500 ns
+     <= 8,000,000 (measured split in docs/research/device-perf.md —
+     sim 7.527 / render 2.568 / present 1.479 p99 ms; ~5.9 ms headroom
+     for task-6 audio). Honest note: the single worst frame (max
+     18.907 ms) overran in its render phase — p99 is the pinned gate
+     and passes; the valve (which keys on SIM overrun) correctly did
+     not fire, 0 skips.
+  3. Screenshot: the app's OWN framebuffer at pinned frame 900,
+     RAM-staged, written post-run, pulled + judged
+     (`SHOT STRUCTURE OK`: 176-colour band, ink 8.1%, zero ink outside
+     the letterbox) — and BIT-IDENTICAL to the host headless shot
+     (evidence bonus, not pinned). EYEBALL (writer, PNG conversion):
+     Battlefield's blue stage silhouette + top platform line, red fox
+     (slot-0 palette 250/89/89) and green marth (slot-1 95/216/84)
+     mid-stage, clean letterbox bars — a real mid-match frame.
+     SetVideoMode succeeded at chain step 0 (HWSURFACE|DOUBLEBUF,
+     16bpp RGB565 masks verified).
+- **Teeth (all fired)**: T1 frameskip valve = a STANDING in-check tooth
+  (every run: 120-frame paced leg at 1000 ns budget → 119/120 skips
+  flagged in the timing artifact, skip summary asserted; sim ran every
+  frame — the shot-frame render override accounts for the 1);
+  T2 stream judge: nibble-perturbed pulled device stream → STREAM
+  MISMATCH at exactly frame 1800, rc 2
+  (.loop/m3-task4-tooth-stream.log); T3 screenshot: synthesized
+  uniform PPM/PGM → "band has only 1 distinct colours", rc 3
+  (.loop/m3-task4-tooth-blankshot.log); T4 pullv freshness: stale host
+  file + nonexistent device source → loud DEVICE FAIL and the stale
+  destination GONE (.loop/m3-task4-tooth-pullv.log).
+- **Regressions green**: `bash port/sim/check-sim.sh` → SIM CONFORMS
+  (.loop/m3-task4-checksim.log); `bash port/gfx/check-render.sh` →
+  RENDER OK, IoU MIN unchanged 0.9149 >= 0.91 over all 16 frames with
+  the fdlibm-routed trig (.loop/m3-task4-checkrender.log) — the fresh
+  capture also validated the committed GFXDATA artifact byte-for-byte
+  (the new standing tripwire); `bash port/sim/device/check-device-g01.sh`
+  → DEVICE CONFORMS g01 (.loop/m3-task4-g01regress-2.log), with the
+  extended mathsweep (432,320 lines cmp'd incl. the NEW sqrtf/fabsf
+  float columns — both measured HEALTHY on device, closing the render
+  path's last device-libm exposure).
+- **FINDINGS (both fixed, teeth in logs)**: (1) `pkill -f <path>` in the
+  device cleanup SELF-MATCHES the adb shell's own command line and kills
+  it before the dsh RC marker prints (measured: rc 71 on every cleanup)
+  — fixed to name-based pkill; gotcha class: -f patterns vs the shell
+  that carries them. (2) check-device-g01.sh provenanced `$ARMBINS`
+  wholesale, which broke the moment ARMBINS grew gfx_device (a binary
+  that script neither pushes nor runs) — fixed to the conform.sh
+  per-script enumeration (G01_BINS); class rule: rehash/provenance
+  cover exactly what THIS script pushes and runs, never the shared
+  build's whole roster.
+- **GFXDATA staging (as pre-registered)**: committed
+  `port/gfx/gfxdata-frozen.txt` (87 lines, sha
+  5499a3dd…0865c94 pinned in check-device-render.sh), bytes from the
+  iter-49 digest-bound capture and byte-confirmed by THIS iteration's
+  fresh check-render capture; check-render.sh carries the standing cmp
+  tripwire; the device path needs no browser.
+- **Honest coverage / exposure**: the render remains non-checksummed —
+  device visual truth this task = the structural shot judge + the
+  bit-identity cross-check against the host render (which task 3's IoU
+  ties to the browser); IoU itself still runs host-only. The SDL2 dev
+  backend is BUILT, not run (no GUI in a check) — its runtime behavior
+  is unexercised until a human opens it. platform_poll is pumped but
+  its input is unconsumed (task 5 wires it); quit requests are ignored
+  during trace replay BY DESIGN (a truncated stream must never pass).
+  The p99 gate leaves per-frame max unbounded (18.9 ms worst frame
+  observed) — acceptable under the pinned PLAN budget definition;
+  flagged for the task-6 audio iteration since audio underruns care
+  about tails.
+- **ZOOM OUT**: the device-libm class (iter 38) generalized cleanly to
+  the FLOAT plane before it could bite: rendering consumed
+  floorf/ceilf (the broken family's float twins) and unswept
+  transcendentals — the class fix (route through integer helpers +
+  vendored fdlibm doubles; sweep the exactly-rounded remainder) made
+  the render plane cross-platform DETERMINISTIC, proven by the
+  bit-identical device shot. Rule confirmed, now with two instances:
+  any new device-executed surface gets its libm consumption enumerated
+  and either eliminated or swept BEFORE first device run. Second
+  class: "shared-roster asserts break when the roster grows" (the
+  ARMBINS provenance finding) — per-consumer enumeration is the fix,
+  same shape as the task-2 matrix pin lesson (derive from YOUR pinned
+  set, not the shared collection).
