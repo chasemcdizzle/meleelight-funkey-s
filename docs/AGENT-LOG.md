@@ -8073,3 +8073,28 @@ callback-observable starvation", not "no audible dropout".
   the instrument-perturbs-measurement class (measure FIRST, then
   instrument-in-the-failing-direction) — the standing rule for any
   future in-run destructive probe. No new one-offs.
+
+## driver — 2026-07-17 — ALL M3 arcs CLOSED; manifest flipped to reviewed-go; authoritative gate next
+
+- Audio arc (task 6): CLOSED, VERDICT: GO round 3 (.loop/review-61-1.log
+  — codex; covers iters 59/61/62's audio diffs incl. the probe-order
+  attribution fix, driver-cold-verified skips=0 first attempt).
+- Gate arc (task 7): CLOSED, VERDICT: GO round 3
+  (.loop/review-62-grok-go.log — the PROCESS §3 FALLBACK reviewer
+  exercised for the first time: codex hit 'model at capacity' on 3
+  consecutive attempts (.loop/review-62-{1,2,3}.log); grok (balanced,
+  read-only verified) traced every relay path into a closure table and
+  confirmed both residual closures genuine. Capacity incidents are now a
+  measured fallback trigger precedent.)
+- Arc ledger final (7 arcs): task-1 5r, task-2 3r GO, task-3 3r cap,
+  task-4 4r cap, task-5 2r GO, audio 3r GO, gate 3r GO. ~60 findings
+  fixed with teeth across 11 hardening iterations; 2 refutations and 3
+  dispositioned classes on permanent record.
+- m3-freeze-manifest.txt: all 23 producers now reviewed-go /
+  oracle-frozen / grandfathered-m2 with per-producer cites;
+  MANIFEST_SHA256 anchor updated same commit per the documented
+  discipline. verify_m3.sh [0b] status enforcement will now pass —
+  the AUTHORITATIVE gate run is unlocked.
+- next: the driver's cold AUTHORITATIVE verify_m3.sh run (CHECKER,
+  phase-advance). On M3 GATE OK: MILESTONE PASS: M3 + the §H human-gate
+  sentinel.
