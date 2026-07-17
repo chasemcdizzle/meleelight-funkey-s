@@ -3795,3 +3795,139 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   generated inputs get measured-then-frozen content-hash literals, not
   size pins; device-received bytes are verified against the stamp, not
   the host copy.
+
+## iter 42 — 2026-07-16 — M3 task 1 REVIEW-HARDENING ROUND 4: rm-before-produce freshness sweep (class fix)
+
+- PRE-REGISTRATION (frozen before first edit; method per PROCESS §2).
+  Scope: `.loop/review-41-1.log` (Tier-A round 4, VERDICT: NO-GO) left
+  exactly TWO findings, ONE class — "a host-side artifact consumed by a
+  judge is not freshness-proven: a fallible producer exiting 0 without
+  writing leaves a PRIOR run's file to be judged." Named sites:
+  High :534 `g01.sim-run.device.json` not removed before wrap-run.js;
+  Medium :204 the fdlibm-inputs corpus not removed before gen-inputs.js
+  (the frozen sha pin cannot distinguish stale-identical from fresh —
+  identity pins prove CONTENT, never FRESHNESS). Fix is the CLASS SWEEP
+  of port/sim/device/check-device-g01.sh, mechanical, no restructuring:
+  for EVERY host-side file produced during a run by a fallible producer
+  (node scripts, compiled generators, output-writing tools, redirections
+  that could no-op) and later consumed by any judge/comparison —
+  `rm -f` the destination immediately before the producer runs AND
+  assert exists+non-empty immediately after (new `made()` helper;
+  pullv gains an in-function non-empty assert after its digest check).
+  - **Enumeration method**: mechanical scan of every host-side write
+    site in the script — every `>` redirection, every compiler `-o`,
+    every node/tool output argument (`--out` / positional), every adb
+    `pull` destination — then classify by (can the producer exit 0
+    without writing?) × (does a judge/comparison consume it later?).
+  - **Sites to FIX (rm-before + made-after)**: (1) `$TABLES/
+    ml_tables.{c,h}` + `ml_stages.{c,h}` ← `node pipeline/run.js`
+    (compiled into sim_device, srchash input; current `test -f` on the
+    two .c only — no rm, no headers, no non-empty); (2) `$DEVB/
+    simdata.txt` ← dump-sim-data.js (pushed, replay input); (3) `$DEVB/
+    g01.trace.txt` ← trace-to-txt.js (pushed, replay input); (4) `$DEVB/
+    fdlibm-inputs.txt` ← gen-inputs.js [NAMED SITE, Medium :204] (both
+    sweeps, host+device); (5) `$DEVB/csweep_host` ← cc; (6) `$DEVB/
+    fdlibm-host.txt` ← csweep_host redirection (cmp reference, step 4;
+    non-empty assert also closes the both-sides-empty cmp pass); (7)
+    `$DEVB/mathsweep_host` ← cc; (8) `$DEVB/mathsweep-host.txt` ←
+    redirection (cmp reference, step 5); (9) `$DEVB/fmt_diff_host` ←
+    cc; (10) `$DEVB/fmt-adv.hex` ← fmt_diff_host --gen (pin-checked +
+    cmp reference — stale-identical passes the pin without rm); (11)
+    `$DEVB/fmt-adv.host.txt` ← fmt_diff_host --format (cmp reference,
+    step 6); (12) the 4 armv7 binaries ($ARMBINS) ← docker cc, rebuild
+    branch (rm -f before docker run; the existing post-build `file`
+    ELF loop is the type assert, made() added for exists+non-empty —
+    without rm, a heredoc that exits 0 without compiling would re-stamp
+    the PRIOR binaries as fresh); (13) `$DEVB/g01.sim-run.device.json`
+    ← wrap-run.js [NAMED SITE, High :534] (verify-stream.js input).
+  - **Sites EXAMINED, already safe**: the 5 pullv destinations
+    (fdlibm-device.txt, mathsweep-device.txt, fmt-adv.device.hex,
+    fmt-adv.device.txt, g01.sim-out.device.txt) — pullv rm -f's before
+    pull + device↔host digest equality (iter 39; gains the non-empty
+    assert this iter); `$STAMP` — rm -f'd before rebuild, consumers
+    die loud on missing records; `$nmout` — nm status explicitly
+    checked; srchash `$listf`/`$brokenf` — status-checked, $$-suffixed;
+    ALL device-side artifacts — produced under $DTMP/$DSD which are
+    `rm -rf && mkdir -p`'d at step [4] start (no cross-run staleness on
+    device) with every producer RC-echo checked via dsh; `gparams` — a
+    variable, fail-loud parse (iters 39/40); the extractor bundle —
+    outside the repo, own stamp + hard-fail guards, consumed only by
+    pipeline/run.js whose outputs are now guarded at (1).
+  - **Teeth (both named sites; no-op-producer simulation via PROBE
+    copies at port/sim/device/check-device-g01.PROBE-r42.sh — same
+    directory depth so `cd $(dirname $0)/../../..` resolves; deleted
+    before commit)**: T-corpus — probe with `node "$FDC/gen-inputs.js"
+    …` replaced by `true`: the PRIOR run's corpus on disk carries the
+    frozen sha (the exact vacuous pass) → with the fix, rm-before +
+    made() must die loudly PRE-docker, PRE-device. T-wrap — probe with
+    `node "$SIM/wrap-run.js" …` replaced by `true`: prior
+    g01.sim-run.device.json on disk (it is, from iter 41) → made()
+    must die loudly at step [7], never reaching verify-stream.
+  - **Run cap: ≤ 4 invocations** — planned exactly 3: T-corpus probe
+    (dies step [2], no docker), T-wrap probe (script bytes changed →
+    the ONE expected forced arm rebuild happens here, full device run,
+    dies at step [7]), final cold done-check (stamp HIT, full device
+    run → DEVICE CONFORMS g01, exit 0). Pass = cold done-check green
+    AND both teeth fire as specified. Refutation shapes: a tooth that
+    does not fire = defective guard → fix, re-run that tooth once
+    (overage reported); a done-check failure not explained by an
+    intended guard → STOP and report, never weaken. Docker SERIAL;
+    FOREGROUND polling; logs → .loop/m3-task1r42-*.
+- RESULTS (both teeth fired as pre-registered; run count 3/4 — T-corpus,
+  T-wrap probe, cold done-check; none wasted, none over cap; logs
+  `.loop/m3-task1r42-*`):
+  - **Class fix landed**: new `made()` helper (exists + NON-EMPTY assert,
+    loud death naming the artifact) + `rm -f` immediately before every
+    fallible producer whose output a judge later consumes — 13 fixed
+    sites exactly as enumerated in the pre-registration (tables ×4
+    incl. the .h headers the compile consumes via -I, simdata, trace
+    text, fdlibm corpus [Medium :204], csweep_host + its sweep output,
+    mathsweep_host + its sweep output, fmt_diff_host, fmt corpus, fmt
+    host output, the 4 armv7 binaries pre-docker, wrap-run JSON
+    [High :534]); pullv additionally asserts the pulled file non-empty
+    after its digest check (closes the both-sides-empty cmp pass for
+    the 5 pull destinations). No restructuring; `test -f` ×2 upgraded
+    to made().
+  - **T-corpus proven** (.loop/m3-task1r42-tooth-corpus.log): PROBE
+    with gen-inputs.js stubbed to `true`; the prior run's 6.5 MB corpus
+    (frozen-sha-identical — the exact vacuous pass) was on disk →
+    `DEVICE FAIL: artifact port/sim/calib/build/device/
+    fdlibm-inputs.txt missing or empty after its producer ran
+    (rm-before-produce freshness guard)`, rc 1, PRE-docker PRE-device;
+    lock released cleanly.
+  - **T-wrap proven** (.loop/m3-task1r42-tooth-wrap.log): PROBE with
+    wrap-run.js stubbed to `true`; iter-41's 294 KB
+    g01.sim-run.device.json (a prior PASS — the exact vacuous pass) was
+    on disk; the probe carried the one expected forced arm rebuild
+    (script bytes are stamp input) + the FULL device run through the
+    g01 replay and pull, then died at step [7]: `DEVICE FAIL: artifact
+    … g01.sim-run.device.json missing or empty after its producer ran`,
+    rc 1 — verify-stream never consulted; lock released cleanly.
+  - **Cold done-check PASS** (.loop/m3-task1r42-donecheck.log):
+    `bash port/sim/device/check-device-g01.sh` → stamp HIT (cached
+    binaries sha-verified), push provenance all-4 match, STREAM MATCH
+    g01 3600/3600 exact rngCalls=134 rngCallsOutsideStep=1
+    specVersion=1, device wall clock 21 s → `DEVICE CONFORMS g01`,
+    exit 0.
+  - **PROCESS honesty note (failure mode #1, PROCESS §7)**: this writer
+    DEAD-PARKED — launched the T-wrap probe as a background task +
+    monitor and ended its turn waiting, despite the brief's FOREGROUND
+    polling requirement; the driver nudged it awake (~18:03). No state
+    was lost (probe ran to its tooth unattended; lock released; logs
+    intact) and the driver's "probe completed" claim was re-verified
+    against ground truth before acting (it was in fact still
+    mid-rebuild at nudge time — resumed foreground until-loop polling
+    and caught the rc line at completion). Lesson re-affirmed: a
+    background monitor is never a substitute for foreground polling in
+    a writer iteration.
+  - **ZOOM OUT**: this closes round 2's rm-before-pull (pullv) as the
+    GENERAL class it always was — "content pins prove CONTENT, never
+    FRESHNESS; only rm-before-produce + exists-non-empty-after proves a
+    producer actually produced." Instrument > one-off: the fix is one
+    helper + a mechanical sweep of every write site, and the class rule
+    is now stated at the made() definition for every future reader.
+    Class rule for task 2+ (and verify_m3.sh assembly, task 7): any new
+    check script inherits rm-before-produce + made() (or pullv) for
+    EVERY host-side artifact between producer and judge — enumerate
+    write sites mechanically (`>` redirections, `-o`, `--out`/
+    positional outputs, pull destinations) at review time.

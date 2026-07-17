@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-16, post-iter-41 writer)
+## Live right now (updated: 2026-07-16, post-iter-42 writer)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -55,14 +55,31 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   RE-dispositioned pointing at the iter-40 record (fix 3 covers its
   only observable edge). Cold done-check DEVICE CONFORMS g01 exit 0,
   rebuild path; logs `.loop/m3-task1r41-*`.
-- **In flight**: Tier-A Codex review ROUND 4 over the round-3-hardened
-  rig (diff-scoped, pointed at PROCESS.md §3's review bar) pending; M3
-  task 2 writer launches on GO (all-8 device conformance + sim-only
-  p99, `check-device-conform.sh` — must inherit adbsh.sh nonce-dsh +
-  pullv/stamp/shared-lock/push-provenance plumbing verbatim; sweep +
+- **Iter 42 (M3 task 1 review-hardening ROUND 4) DONE**: round-4 triage
+  (`.loop/review-41-1.log`, NO-GO — 2 findings, ONE class: host-side
+  artifact not freshness-proven) closed by a CLASS SWEEP of
+  check-device-g01.sh — rm-before-produce + `made()` exists-non-empty
+  assert on all 13 fixed sites (incl. the two named: wrap-run JSON
+  High :534, fdlibm corpus Medium :204; plus tables/.h headers,
+  simdata, trace text, host sweep binaries+outputs, fmt corpus+output,
+  the 4 armv7 binaries pre-docker); pullv gains a non-empty assert
+  (closes both-sides-empty cmp). Both no-op-producer teeth fired
+  (stale frozen-sha-identical artifacts on disk → loud made() death;
+  T-wrap after the full device run, pre-verify-stream). Class rule:
+  content pins prove CONTENT, never FRESHNESS. Cold done-check DEVICE
+  CONFORMS g01 exit 0 (stamp HIT; the one forced rebuild landed in the
+  T-wrap probe); 3/4 run cap; logs `.loop/m3-task1r42-*`. PROCESS
+  honesty note on record: writer dead-parked on a background monitor
+  (failure mode #1), driver-nudged, resumed foreground.
+- **In flight**: review-arc round 5 (expected CLOSURE — round 4's only
+  class is fixed with teeth) → GO launches the M3 task 2 writer (all-8
+  device conformance + sim-only p99, `check-device-conform.sh` — must
+  inherit adbsh.sh nonce-dsh + pullv/stamp/shared-lock/push-provenance
+  plumbing verbatim AND the iter-42 rm-before-produce + made() pattern
+  for every host-side artifact between producer and judge; sweep +
   corpus pins referenced, not re-derived).
-- **Latest AGENT-LOG entry**: iter 41 (2026-07-16, round-3 hardening);
-  latest log id: .loop/m3-task1r41-donecheck.log.
+- **Latest AGENT-LOG entry**: iter 42 (2026-07-16, round-4 freshness
+  sweep); latest log id: .loop/m3-task1r42-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull

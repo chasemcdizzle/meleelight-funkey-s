@@ -120,6 +120,29 @@ pullv() {
     echo "DEVICE FAIL: pulled $2 != device $1 (device $dsum, host $hsum)" >&2
     return 1
   fi
+  if ! [ -s "$2" ]; then
+    echo "DEVICE FAIL: pulled $2 is empty (device produced no output)" >&2
+    return 1
+  fi
+}
+
+# made <file...> — freshness assert (iter 42, review round 4 — the
+# rm-before-produce CLASS, round-2's rm-before-pull generalized to ALL
+# produced artifacts): every host-side file a judge/comparison later
+# consumes is `rm -f`'d immediately before its producer runs and
+# asserted to exist NON-EMPTY immediately after, so a fallible producer
+# exiting 0 without writing (node script, generator, no-op redirection)
+# can never leave a PRIOR run's file — even a byte-identical one that
+# would satisfy a content pin — to be judged. Content pins prove
+# CONTENT; only rm-before-produce proves FRESHNESS.
+made() {
+  local f
+  for f in "$@"; do
+    if ! [ -s "$f" ]; then
+      echo "DEVICE FAIL: artifact $f missing or empty after its producer ran (rm-before-produce freshness guard)" >&2
+      exit 1
+    fi
+  done
 }
 
 echo "== [1/7] host data plane (M1 tables + SIMDATA1 + g01 trace text) =="
@@ -174,12 +197,18 @@ done <<< "$gparams"
 [ "$p1" -le 4 ] || { echo "DEVICE FAIL: g01 p1 $p1 > 4" >&2; exit 1; }
 [ "$p2" -le 4 ] || { echo "DEVICE FAIL: g01 p2 $p2 > 4" >&2; exit 1; }
 bash pipeline/extractor/build-extractor.sh
+rm -f "$TABLES/ml_tables.c" "$TABLES/ml_tables.h" \
+  "$TABLES/ml_stages.c" "$TABLES/ml_stages.h"
 node pipeline/run.js --only animations,tables,stages --out "$TABLES"
-test -f "$TABLES/ml_tables.c"
-test -f "$TABLES/ml_stages.c"
+made "$TABLES/ml_tables.c" "$TABLES/ml_tables.h" \
+  "$TABLES/ml_stages.c" "$TABLES/ml_stages.h"
+rm -f "$DEVB/simdata.txt"
 node "$CAL/dump-sim-data.js" --out "$DEVB/simdata.txt"
+made "$DEVB/simdata.txt"
+rm -f "$DEVB/g01.trace.txt"
 node "$SIM/trace-to-txt.js" \
   oracle/goldens/g01-fox-marth-battlefield.trace.json "$DEVB/g01.trace.txt"
+made "$DEVB/g01.trace.txt"
 
 echo "== [2/7] host references (fdlibm sweep + libm anchor + pinned format corpus) =="
 # FROZEN corpus size (iter 40, review M3 round 2): the expected line
@@ -201,7 +230,11 @@ CORPUS_LINES=257287
 # (the format corpus already carries its own frozen pin via
 # check-format-pins.js / expected-format.json).
 CORPUS_SHA256=b164802a98932c2c8780febfe2c857d5771d12a327d3465291221861da6b3d05
+rm -f "$DEVB/fdlibm-inputs.txt" # freshness (round 4, Medium :204): a
+# stale corpus carries the frozen sha too — rm-before-produce is the
+# only freshness proof
 node "$FDC/gen-inputs.js" "$DEVB/fdlibm-inputs.txt"
+made "$DEVB/fdlibm-inputs.txt"
 corpuslines="$(wc -l < "$DEVB/fdlibm-inputs.txt" | tr -d ' ')"
 if [ "$corpuslines" != "$CORPUS_LINES" ]; then
   echo "DEVICE FAIL: generated corpus has $corpuslines lines, frozen pin is $CORPUS_LINES" >&2
@@ -212,13 +245,21 @@ if [ "$corpussha" != "$CORPUS_SHA256" ]; then
   echo "DEVICE FAIL: generated corpus sha256 $corpussha != frozen pin $CORPUS_SHA256" >&2
   exit 1
 fi
+rm -f "$DEVB/csweep_host"
 cc -O2 -ffp-contract=off -std=c99 -Wall -Iport/fdlibm \
   "$FDC/csweep.c" port/fdlibm/fdlibm.c -o "$DEVB/csweep_host"
+made "$DEVB/csweep_host"
+rm -f "$DEVB/fdlibm-host.txt"
 "$DEVB/csweep_host" "$DEVB/fdlibm-inputs.txt" > "$DEVB/fdlibm-host.txt"
+made "$DEVB/fdlibm-host.txt"
 # HOST-LIBM ANCHOR: no fdlibm.c in this link (see header note [5])
+rm -f "$DEVB/mathsweep_host"
 cc -O2 -ffp-contract=off -Wall -Wextra -Werror -Iport/sim \
   port/sim/device/mathsweep.c -o "$DEVB/mathsweep_host" -lm
+made "$DEVB/mathsweep_host"
+rm -f "$DEVB/mathsweep-host.txt"
 "$DEVB/mathsweep_host" "$DEVB/fdlibm-inputs.txt" > "$DEVB/mathsweep-host.txt"
+made "$DEVB/mathsweep-host.txt"
 # review M3: the sweep must have consumed the WHOLE corpus (host leg;
 # the device leg is asserted in step [5] after the pull) — judged
 # against the FROZEN literal, never the regenerated file
@@ -226,14 +267,21 @@ tail -1 "$DEVB/mathsweep-host.txt" | grep -qx "n $CORPUS_LINES" || {
   echo "DEVICE FAIL: host mathsweep trailer != frozen corpus pin ($CORPUS_LINES)" >&2
   exit 1
 }
+rm -f "$DEVB/fmt_diff_host"
 cc -O2 -ffp-contract=off -Wall -Wextra -Werror \
   -Iport/ryu -Iport/sim -Ioracle/qjs \
   -o "$DEVB/fmt_diff_host" \
   "$CAL/fmt_diff.c" "$CAL/canon.c" port/sim/ml_ser.c port/sim/ml_fmt.c \
   oracle/qjs/sha256.c -lm
+made "$DEVB/fmt_diff_host"
+rm -f "$DEVB/fmt-adv.hex" # freshness: a stale corpus satisfies the
+# expected-format.json pin too — rm-before-produce
 "$DEVB/fmt_diff_host" --gen "$DEVB/fmt-adv.hex"
+made "$DEVB/fmt-adv.hex"
 node "$CAL/check-format-pins.js" adversarial "$DEVB/fmt-adv.hex"
+rm -f "$DEVB/fmt-adv.host.txt"
 "$DEVB/fmt_diff_host" --format "$DEVB/fmt-adv.hex" "$DEVB/fmt-adv.host.txt"
+made "$DEVB/fmt-adv.host.txt"
 
 echo "== [3/7] armv7 static cross-build (SDK gcc; stamp-cached) =="
 # Stamp inputs (iter 39, review H2): sources + generated tables + THIS
@@ -339,6 +387,10 @@ stamp_ok() {
 }
 if [ "${MLFK_FORCE_ARM:-0}" != 0 ] || ! stamp_ok; then
   rm -f "$STAMP"
+  # freshness (round 4 class): remove the prior binaries before the
+  # docker build — a build that exits 0 without compiling must never
+  # re-stamp a PRIOR run's binaries as fresh
+  for f in $ARMBINS; do rm -f "$DEVB/$f"; done
   echo "   stamp MISS (or forced) — rebuilding armv7 binaries"
   # SERIAL docker only (CLAUDE.md §Commands arm32 recipe). Run by the
   # RESOLVED image Id — the same Id the stamp records — never the
@@ -399,6 +451,7 @@ if [ "${MLFK_FORCE_ARM:-0}" != 0 ] || ! stamp_ok; then
       oracle/qjs/sha256.c -lm
   '
   for f in $ARMBINS; do
+    made "$DEVB/$f"
     file "$DEVB/$f" | grep -q "ELF 32-bit LSB executable, ARM" || {
       echo "DEVICE FAIL: $f is not an armv7 static executable" >&2
       exit 1
@@ -531,8 +584,12 @@ t0=$(date +%s)
 dsh "sh -lc '$DTMP/sim_device --trace $DTMP/g01.trace.txt --simdata $DTMP/simdata.txt --seed $seed --p1 $p1 --p2 $p2 --stage $stage --frames $frames > $DTMP/g01.sim-out.txt'"
 t1=$(date +%s)
 pullv "$DTMP/g01.sim-out.txt" "$DEVB/g01.sim-out.device.txt"
+rm -f "$DEVB/g01.sim-run.device.json" # freshness (round 4, High :534):
+# wrap-run exiting 0 without writing must never let verify-stream judge
+# a PRIOR successful run's wrap
 node "$SIM/wrap-run.js" g01 "$DEVB/g01.sim-out.device.txt" \
   "$DEVB/g01.sim-run.device.json"
+made "$DEVB/g01.sim-run.device.json"
 node oracle/harness/verify-stream.js "$DEVB/g01.sim-run.device.json" \
   "oracle/goldens/$name.sha256.json"
 echo "   device sim wall clock: $((t1-t0)) s for $frames frames (informational)"
