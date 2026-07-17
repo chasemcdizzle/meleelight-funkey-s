@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-17, iter-62 writer completion)
+## Live right now (updated: 2026-07-17, M3 MILESTONE PASS)
 
 - **Iter 62 (M3 hardening — gate relay prefix, true-respawn poll,
   probe-order attribution) DONE**: all three .loop/review-60-triage.md
@@ -162,9 +162,13 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 - **[superseded by iter 58] updated 2026-07-17, iter-57 writer completion**
 
-- **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
-  (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
-  re-verified iter 39).
+- **Phase: M3 — GATE PASSED (MILESTONE PASS: M3, 2026-07-17)**: the
+  authoritative verify_m3.sh printed M3 GATE OK exit 0 (driver-cold, all
+  23 producers reviewed-go). LOOP STOPPED at the §H human gate:
+  **LOOP STOP: m3-device — needed: Chase S1 ratification playtest**.
+  On ratification: close #18 → M4 REPLAN (PLAN §4/M4: thin C menus,
+  full mixer + music, ai.js port, target test, SD persistence, Chase
+  acceptance playthrough).
 - **Iter 38 (M3 task 1) DONE**: commit af06bb7 — `DEVICE CONFORMS g01`
   (armv7 static sim, 3600/3600 STREAM MATCH on the FunKey, 21 s wall ≈
   5.8 ms/frame sim-only avg). Class finding: SDK static musl libm is

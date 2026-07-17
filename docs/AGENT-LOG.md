@@ -8098,3 +8098,32 @@ callback-observable starvation", not "no audible dropout".
 - next: the driver's cold AUTHORITATIVE verify_m3.sh run (CHECKER,
   phase-advance). On M3 GATE OK: MILESTONE PASS: M3 + the §H human-gate
   sentinel.
+
+## driver — 2026-07-17 — MILESTONE PASS: M3
+
+MILESTONE PASS: M3 — `bash port/sim/device/verify_m3.sh` → **M3 GATE OK**,
+exit 0, AUTHORITATIVE (all 23 producers reviewed-go, manifest anchor
+verified), driver-run cold as CHECKER
+(.loop/driver-m3-gate-authoritative.log). Per-leg:
+- [1] conformance: DEVICE CONFORMS 8/8 + SIM P99 OK (every golden
+  bit-exact on the FunKey-S, judged by the unchanged verify-stream.js)
+- [2] perf+audio: DEVICE AUDIO OK — full-frame p99 12.285 ms < 16.67 ms
+  with live render + audio callback, underruns=0, skips 0/3600,
+  attempts=1 (0 retries)
+- [3] opk: OPK LAUNCH OK — frontend-launched via gmenu2x (uinput-driven),
+  boot-marker bin-sha == stamp, 900/900 stream prefix vs frozen g01,
+  structural screenshot
+- [4] live input: S1 INPUT OK — 1080-frame live uinput session, all
+  streams byte-identical host×2 + device + live, 15 chord rows exact,
+  SOCD witness + tapjump oracle green
+Phase summary: 7 tasks, iters 38-62 (25 iterations: 7 task + 11 review-
+hardening + 7 driver turns), 7 Tier-A arcs closed, ~60 findings fixed
+with teeth, 3 device class-findings (FP-unsafe SDK libm; musl/kernel
+input_event ABI; FBIOPAN_DISPLAY signature), perf headroom ~4.4 ms p99.
+
+LOOP STOP: m3-device — needed: Chase S1 ratification playtest
+
+Per LOOP §F-advance.3/§H and PLAN §4/M3's HUMAN ESCALATION: the FunKey-S
+is ready — OPK installable via the packaged path, S1 mapping live
+(PLAN §6 table verbatim). Chase ratifies or amends the S1 mapping before
+M4. On ratification: driver closes #18, M4 REPLAN per PLAN §4/M4.
