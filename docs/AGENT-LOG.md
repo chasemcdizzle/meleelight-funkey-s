@@ -6171,3 +6171,187 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   frames), add a RAW-side sidecar and judge the pair — recording
   fidelity and path liveness are separate claims needing separate
   witnesses.
+
+## iter 54 — 2026-07-17 — M3 task 4 HARDENING ROUND 2: deadman ordering, literal pins, grammar bounds (review-52 round-2 findings)
+
+### PRE-REGISTRATION (frozen before any run/edit; PROCESS §2)
+
+- **Task**: close ALL 5 triaged task-4 round-2 findings
+  (.loop/review-52-triage.md; full review .loop/review-52-1.log).
+  Surface: port/gfx/check-device-render.sh + port/sim/device/riglib.sh
+  ONLY (port/gfx/{check-device-input.sh,judge-s1-coverage.js} and
+  port/tools/fk_input.c are under a concurrent iter-53 closure review —
+  not touched). riglib edits change the shared arm-build stamp →
+  exactly ONE rebuild expected, landing in the first device leg.
+  done-check: cold `bash port/gfx/check-device-render.sh` →
+  `DEVICE RENDER OK`, exit 0.
+- **Fix designs (frozen)**:
+  H deadman disarm ordering — rig_cleanup wipes $DTMP, which holds the
+  deadman NONCE: after a failed frontend restore, a recovered transport
+  let the scratch wipe disarm the backstop while /mnt/disable_frontend
+  remained (review-52 H, the exact stranding the deadman exists to
+  prevent). Fix: (a) task4_cleanup restores then VERIFIES via an
+  RC-checked `test ! -f /mnt/disable_frontend` (rig_dsh_retry both) —
+  restore-command rc alone is never proof; (b) the deadman is cancelled
+  ONLY on verified restore; (c) rig_cleanup gains a RIG_PRESERVE_DTMP=1
+  arm (caller-set on unverified restore): wipes only $DSD, preserves
+  $DTMP so the nonce survives and the deadman STAYS armed — that is its
+  purpose (a later run's re-arm wipe still disarms stale deadmen by
+  design); (d) the main success path also verifies marker-gone via an
+  RC-checked test BEFORE PARKED=0/cancel.
+  M1 literal frame pin — new frozen FRAMES_PIN=3600 in the pins block;
+  step 1 cross-asserts manifest g01.frames == 3600 (a legitimate
+  manifest change fails loudly AT THE PIN, never as a silently
+  shortened gate); the step-7 gate asserts rendered against the LITERAL
+  pin, not the manifest-derived $frames.
+  M2 parse_timing_judge duplicate keys — per-key occurrence count over
+  the judge output BEFORE the parse loop (sort|uniq -d must be empty;
+  duplicate = corruption death) + explicit presence assert of all 8
+  consumed keys after the loop (each key exactly once).
+  M3 digit bounds — every numeric grammar in the two files gains a
+  bound BEFORE any bash arithmetic (oversized value = corruption death,
+  never a status-2-as-false evasion): parse_timing_judge ints
+  ^[0-9]{1,12}$ + ms ^[0-9]{1,9}\.[0-9]{3}$; parse_app_summary
+  skips/fails/wall [0-9]{1,12} in BOTH the count grep and the
+  extraction regex; gparams seed/p1/p2/stage/frames ^[0-9]{1,12}$;
+  riglib rig_stamp_bin_sha + rig_srchash counter values gain
+  non-numeric + <=12-digit guards (grep -c/wc outputs — trusted tools,
+  guarded anyway per the rule's letter).
+  L rig_stamp_ok strict whole-file grammar — one awk pass validates the
+  ENTIRE stamp: line 1 exactly `srchash=<want>`, then EXACTLY one
+  `bin <name> <64-lowercase-hex>` per ARMBINS member (whole-line
+  reconstruction, membership, uniqueness), total line count == 1+#bins,
+  ANY unrecognized/malformed/extra line → return 1 (fail direction
+  stays REBUILD — a corrupt stamp is a stale cache); binary rehash loop
+  unchanged after the grammar gate.
+- **Teeth (all logged; perturb → observe → restore, doctored inputs on
+  COPIES)**: T-H the deadman probe: sed-derived probe COPY of
+  check-device-render.sh (2 mechanical edits: the restore rm stubbed to
+  `false`; `exit 41` injected immediately before the launch at
+  `t0=$(date +%s)`) run with MLFK_DEADMAN_S=20 — parks for real, dies,
+  cleanup's restore+verify FAIL → expect: nonce SURVIVES the trap
+  (DTMP preserved), marker still present at probe exit, deadman FIRES
+  within its window (deadman.fired present, marker GONE), gmenu2x
+  respawned (bounded observe), lock released; probe artifacts cleaned
+  after (device DTMP/DSD wipe + copy deleted). T-M1 doctored manifest
+  copy (frames 3481) through a manifest-redirected probe copy → pin
+  death in step 1 BEFORE any build/device work. T-M2 parse_timing_judge
+  (function bytes eval'd from the REAL script; node stubbed) fed a
+  doctored jout with a failing full_p99_ns followed by a passing
+  duplicate → duplicate-key corruption death (the review's exact
+  vacuous-pass shape); genuine-corpus control: the real judge over the
+  iter-52 valve-tim.txt (120) and g01.dev-tim.txt (3600) parses clean.
+  T-M3a jout with a 20-digit full_p99_ns → bound death; T-M3b crafted
+  app log with a 20-digit wall → summary grammar count != 1 death;
+  T-M3c doctored manifest copy with a 20-digit seed → gparams bound
+  death; genuine control: the real iter-52 device/valve logs parse
+  clean under the bounded grammars. T-L stamp grammar teeth against
+  the REAL arm-build.stamp (want read from its line 1): baseline
+  returns 0; appended junk line → 1; duplicated bin record → 1;
+  double-space bin line → 1; unknown-name bin line → 1 (cache MISS,
+  never a HIT).
+- **Run matrix + caps (frozen)**: paced device runs <= 2 (the cold
+  done-check's gate leg; ONE retry budget). The deadman probe is
+  UNPACED (dies before launch) but includes the round's ONE arm rebuild
+  (docker serial). Regressions after the green done-check, one each:
+  check-device-g01.sh, check-device-conform.sh, check-device-input.sh
+  (riglib touched → shared stamp; expect stamp HIT after the probe's
+  rebuild), all logged. Host teeth uncapped-cheap. Output →
+  .loop/m3-task4r54-*.log; §7#1 foreground polling verbatim for every
+  long run.
+- **Pass criteria**: cold DEVICE RENDER OK exit 0 + all teeth fire with
+  the pre-registered outcomes + zero false rejections on every genuine
+  corpus + all four regressions green.
+- **Refutation shapes**: deadman does NOT fire in the probe (nonce
+  gone / marker still present at window end) → the preserve-DTMP fix is
+  wrong or incomplete — STOP, capture device state (ls DTMP, marker,
+  pid), report; do NOT ship. gmenu2x does not respawn after marker
+  removal → the "restore = marker removal" premise needs evidence —
+  bounded observe, record, report (the deadman's action is the marker;
+  respawn is OS machinery). A bounded grammar rejecting GENUINE corpus
+  (iter-52 logs/stamp/manifest) → the measured grammar was wrong — fix
+  to match the corpus, never relax to permissive, re-validate. Wall/p99
+  outside pins on the paced run → one re-run (the cap's second slot),
+  then STOP and report.
+
+### RESULTS (iter 54)
+
+- **DONE-CHECK (cold, final tree)**: `bash port/gfx/check-device-render.sh`
+  → `DEVICE RENDER OK (full p99 11.725 ms, render-only p99 3.178 ms,
+  sim p99 7.679 ms, present p99 2.234 ms, skips 0/3600)`, exit 0
+  (.loop/m3-task4r54-donecheck.log; stamp HIT — the round's one rebuild
+  landed in the deadman probe). 2/2 paced-run cap used: attempt 1
+  (.loop/m3-task4r54-donecheck-attempt1.log) FAILED the skip gate on a
+  GENUINE transient — frame 1190 sim time spiked to 13.02 ms (vs sim
+  p99 7.99 ms; neighbours normal, all p99s healthy) → 1 skip →
+  rendered 3599 != the literal pin. That is the review-50 H3 gate doing
+  its job on a real one-off scheduler stall, not a defect; retry green
+  0/3600. HONEST EXPOSURE: measured transient single-frame-skip rate is
+  now 1 in 4 gate-shaped paced runs (iters 50/52 clean, r54 attempt 1
+  skipped) — the 0-skip gate will occasionally cost a retry; if it
+  becomes frequent, that is a perf-margin signal, not a gate to weaken.
+- **All 5 triaged findings closed (per-fix)**:
+  H — deadman disarm ordering: task4_cleanup now VERIFIES the marker is
+  gone via an RC-checked `test ! -f /mnt/disable_frontend`
+  (rig_dsh_retry) — restore-command rc alone is never proof; the cancel
+  runs ONLY on verified restore; rig_cleanup gained RIG_PRESERVE_DTMP=1
+  (caller-set on unverified restore): wipes only $DSD so the NONCE
+  survives and the deadman STAYS armed (its purpose). The main success
+  path also RC-verifies marker-gone before PARKED=0/cancel. Tooth H
+  (.loop/m3-task4r54-probe-deadman.log): probe copy (real bytes + 2
+  mechanical edits: restore rm stubbed `false`, exit 41 pre-launch),
+  MLFK_DEADMAN_S=20 — cleanup took the failed-restore arm (all 3 WARNs),
+  nonce SURVIVED the trap, deadman FIRED in-window, marker REMOVED
+  on-device, deadman exited, gmenu2x respawned ≤30 s; probe artifacts
+  cleaned (device scratch wiped, copy deleted, lock released).
+  M1 — FRAMES_PIN=3600 frozen in the pins block; step 1 cross-asserts
+  manifest g01.frames == pin (legitimate change fails loudly AT the
+  pin); the step-7 gate asserts rendered == the LITERAL pin. Tooth M1:
+  manifest-redirected probe copy with frames=3481 → pin death in step 1
+  before any build/device work.
+  M2 — parse_timing_judge: per-key occurrence scan (sort|uniq -d) BEFORE
+  the parse loop — any duplicate key = corruption death (closes the
+  stale-passing-duplicate-after-failing-value vacuous pass) + explicit
+  presence assert of all 8 consumed keys. Tooth M2: doctored jout with
+  failing full_p99_ns followed by a passing duplicate (the review's
+  exact shape) → duplicate-key death; genuine valve-tim (120) +
+  g01.dev-tim (3600) controls parse clean.
+  M3 — digit bounds BEFORE any bash arithmetic, both files: timing-judge
+  ints ^[0-9]{1,12}$ + ms ^[0-9]{1,9}\.[0-9]{3}$; parse_app_summary
+  [0-9]{1,12} in BOTH count grep and extraction; gparams ints
+  ^[0-9]{1,12}$; riglib rig_stamp_bin_sha + rig_srchash counts gain
+  non-numeric + ≤12-digit guards. Teeth: 20-digit full_p99_ns → bound
+  death; 20-digit wall → summary grammar count≠1 death; 20-digit
+  manifest seed → gparams bound death; genuine iter-52 device/valve
+  logs + stamp parse clean (zero false rejections).
+  L — rig_stamp_ok: STRICT whole-file grammar in one awk pass — line 1
+  exactly `srchash=<want>`, exactly one `bin <name> <64hex>` per ARMBINS
+  member (whole-line reconstruction, membership, uniqueness), total
+  line count == 1+#bins, ANY other/extra/malformed line → return 1
+  (fail direction stays REBUILD). Teeth (9): baseline real stamp = HIT;
+  appended junk, appended PARTIAL record (the review's case), duplicated
+  record, double-space line, unknown bin name, truncated stamp,
+  srchash-not-first, uppercase digest → ALL MISS.
+- **Teeth logs**: .loop/m3-task4r54-teeth-host.log (L×9, M2, M3a/b/c,
+  M1, all genuine-corpus controls), .loop/m3-task4r54-probe-deadman.log
+  (tooth H, device). Zero false rejections on every genuine corpus.
+- **Regressions (riglib touched → shared stamp; one rebuild in the
+  probe, HITs after) — ALL GREEN**: check-device-g01.sh `DEVICE
+  CONFORMS g01` (.loop/m3-task4r54-reg-g01.log); check-device-conform.sh
+  `DEVICE CONFORMS 8/8` + `SIM P99 OK` (.loop/m3-task4r54-reg-conform.log);
+  check-device-input.sh `S1 INPUT OK` (.loop/m3-task4r54-reg-input.log);
+  plus the done-check itself. Docker serial throughout; §7#1 foreground
+  polling on every long run.
+- **ZOOM OUT**: the H finding names a class for the registry:
+  **disarm-shares-a-path-with-cleanup** — a backstop whose arming token
+  lives inside a directory that routine cleanup wipes can be disarmed BY
+  the cleanup, exactly when the backstop is needed most. Rule restated
+  for M3/M4 rig work: any watchdog/backstop disarm (cancel file, nonce
+  wipe, kill) must be gated on VERIFIED restoration of the thing it
+  guards, and the verification must be an RC-checked positive test
+  (absence proven), never the restore command's own rc. The M1/M2/M3/L
+  fixes are all the SAME iter-52 whitelist-grammar rule pushed one ring
+  outward (whole-FILE grammars, per-key occurrence counts, value-domain
+  bounds) — the audit's two named shapes gain a third corollary:
+  a grammar without digit bounds leaves bash's status-2-as-false
+  arithmetic hole open even when the SHAPE is anchored.

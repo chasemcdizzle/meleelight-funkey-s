@@ -65,9 +65,26 @@ rig_lock_acquire() {
 # code) but routed through dsh and VISIBLE when it fails (iter 39,
 # review L2). Callers install it: trap rig_cleanup EXIT (AFTER
 # rig_lock_acquire).
+#
+# RIG_PRESERVE_DTMP=1 (iter 54, review-52 H — deadman disarm ordering):
+# a caller that armed an on-device deadman whose NONCE lives in $DTMP
+# sets this when the frontend restore could NOT be verified — the
+# scratch wipe must not disarm the backstop (a recovered transport
+# running `rm -rf $DTMP` would delete the nonce while
+# /mnt/disable_frontend remains, and the deadman would then fail its
+# nonce check and never restore). With it set, only $DSD is wiped and
+# $DTMP (nonce + deadman script) survives so the deadman STAYS armed —
+# that is its purpose. A LATER run's re-arm wipe (`rm -rf $DTMP` before
+# push) still disarms any stale deadman by design. Default unchanged.
 rig_cleanup() {
-  dsh "rm -rf $DTMP $DSD" >/dev/null 2>&1 \
-    || echo "WARN: device scratch cleanup failed — $DTMP $DSD may remain on the device" >&2
+  if [ "${RIG_PRESERVE_DTMP:-0}" = 1 ]; then
+    echo "WARN: preserving $DTMP on the device (armed deadman nonce lives there) — only $DSD is wiped" >&2
+    dsh "rm -rf $DSD" >/dev/null 2>&1 \
+      || echo "WARN: device scratch cleanup failed — $DSD may remain on the device" >&2
+  else
+    dsh "rm -rf $DTMP $DSD" >/dev/null 2>&1 \
+      || echo "WARN: device scratch cleanup failed — $DTMP $DSD may remain on the device" >&2
+  fi
   rm -rf "$LOCK" 2>/dev/null \
     || echo "WARN: could not release rig lock $LOCK — remove manually: rm -rf '$LOCK'" >&2
 }
@@ -266,6 +283,12 @@ rig_srchash() {
       return 1
       ;;
   esac
+  # iter 54 (review-52 M3 sweep): digit bound BEFORE the arithmetic test
+  if [ "${#n}" -gt 12 ]; then
+    echo "DEVICE FAIL: srchash: oversized source-file count ('$n')" >&2
+    rm -f "$listf"
+    return 1
+  fi
   if [ "$n" -lt 450 ]; then
     echo "DEVICE FAIL: srchash: only $n source files found (>= 450 expected)" >&2
     rm -f "$listf"
@@ -298,6 +321,19 @@ rig_stamp_bin_sha() {
   f="$1"
   lines="$(awk -v f="$f" '$1=="bin" && $2==f' "$STAMP")"
   n="$(printf '%s' "$lines" | grep -c '' )" || true
+  # iter 54 (review-52 M3 sweep): the count is guarded non-numeric +
+  # <=12 digits BEFORE the arithmetic test — an oversized/garbage value
+  # must die as corruption, never error the test into a false branch.
+  case "$n" in
+    ''|*[!0-9]*)
+      echo "DEVICE FAIL: stamp record count for $f non-numeric ('$n')" >&2
+      exit 1
+      ;;
+  esac
+  if [ "${#n}" -gt 12 ]; then
+    echo "DEVICE FAIL: stamp record count for $f oversized ('$n')" >&2
+    exit 1
+  fi
   if [ "$n" -ne 1 ]; then
     echo "DEVICE FAIL: stamp has $n 'bin $f' records (want exactly 1) — corrupt stamp" >&2
     exit 1
@@ -318,26 +354,38 @@ rig_stamp_bin_sha() {
 
 # rig_stamp_ok — cache-HIT re-verify: the stamp's srchash line must match
 # $want AND every recorded binary must still hash to its stamped sha256
-# (a stamped-but-tampered binary is never judged). Iter 52: line 1 must
-# be EXACTLY `srchash=<64-lowercase-hex>` and each bin record must parse
-# under the strict grammar — any anomaly returns 1 (the SAFE direction
-# here is rebuild, never a loud stop: a corrupt stamp is a stale cache).
+# (a stamped-but-tampered binary is never judged). Iter 54 (review-52 L,
+# whitelist grammar on the WHOLE FILE — the iter-52 form validated the
+# required records but ignored extra/malformed lines, so an accidentally
+# appended partial record could still ride a cache HIT): one awk pass
+# now requires EVERY line to match a known record form — line 1 exactly
+# `srchash=<want>`, then EXACTLY one `bin <name> <64-lowercase-hex>` per
+# ARMBINS member (whole-line reconstruction, membership, uniqueness),
+# total line count == 1 + #bins, nothing else. ANY unrecognized, extra,
+# or malformed line → return 1 (the SAFE direction here is rebuild,
+# never a loud stop: a corrupt stamp is a stale cache).
 rig_stamp_ok() {
   [ -f "$STAMP" ] || return 1
-  local line1 f lines n rec cur
-  line1="$(sed -n '1p' "$STAMP")"
-  [ "$line1" = "srchash=$want" ] || return 1
-  case "${line1#srchash=}" in *[!0-9a-f]*) return 1 ;; esac
-  [ "${#line1}" -eq 72 ] || return 1 # 'srchash=' + 64 hex
+  local f rec cur
+  awk -v want="$want" -v bins="$ARMBINS" '
+    BEGIN { nb = split(bins, b, " "); for (i = 1; i <= nb; i++) need[b[i]] = 1; bad = 0 }
+    bad { next }
+    NR == 1 { if ($0 != "srchash=" want) bad = 1; next }
+    {
+      if (NF != 3 || $1 != "bin" || !($2 in need) || seen[$2]++ ||
+          length($3) != 64 || $3 ~ /[^0-9a-f]/ || $0 != "bin " $2 " " $3) bad = 1
+      next
+    }
+    END {
+      if (bad || NR != nb + 1) exit 1
+      for (k in need) if (seen[k] != 1) exit 1
+    }
+  ' "$STAMP" 2>/dev/null || return 1
   for f in $ARMBINS; do
     [ -f "$DEVB/$f" ] || return 1
-    lines="$(awk -v f="$f" '$1=="bin" && $2==f' "$STAMP")"
-    n="$(printf '%s' "$lines" | grep -c '')" || true
-    [ "$n" -eq 1 ] || return 1
-    rec="${lines##* }"
-    [ "$lines" = "bin $f $rec" ] || return 1
+    # grammar already validated whole-file above: exactly one record
+    rec="$(awk -v f="$f" '$1=="bin" && $2==f {print $3}' "$STAMP")"
     [ "${#rec}" -eq 64 ] || return 1
-    case "$rec" in *[!0-9a-f]*) return 1 ;; esac
     cur="$(shasum -a 256 "$DEVB/$f" | cut -d' ' -f1)"
     if [ "$cur" != "$rec" ]; then
       echo "   cached $f sha256 != stamp record — forcing rebuild" >&2

@@ -88,6 +88,12 @@ mkdir -p "$BUILD" "$DEVB"
 P99_FULL_LIMIT_NS=16670000  # PLAN §4/M3 frame budget (16.67 ms)
 P99_RENDER_LIMIT_NS=8000000 # PLAN §5 render allowance (8 ms)
 BUDGET_NS=16666667          # 60 fps pacing budget for the live run
+FRAMES_PIN=3600             # review-52 M1: the gate's rendered count is
+                            # asserted against this LITERAL, and the
+                            # manifest's g01.frames is cross-asserted
+                            # equal — a legitimate trace-length change
+                            # fails loudly HERE (reviewed pin change),
+                            # never as a silently shortened gate
 SHOT_FRAME=900              # pinned screenshot frame (mid-match, both players
                             # live — an IoU corpus member, so task 3 keeps a
                             # browser-vs-C reference for the same frame)
@@ -108,14 +114,24 @@ rig_lock_acquire
 
 # Cleanup (installed AFTER lock acquisition, riglib contract): kill our
 # app, RESTORE the frontend if we parked it, cancel the deadman ONLY
-# once the frontend is provably restored (it is the backstop), then the
+# once the frontend is PROVABLY restored (it is the backstop), then the
 # shared rig cleanup. Best-effort by design, WARN-visible; every device
 # command rides rig_dsh_retry (review-50 H1: one attempt through the
 # transport that just died stranded the parked frontend).
+#
+# DISARM ORDERING (iter 54, review-52 H): the deadman's NONCE lives in
+# $DTMP, so rig_cleanup's scratch wipe IS a disarm — a failed restore
+# followed by a transport that recovered just in time for the wipe
+# deleted the nonce while /mnt/disable_frontend remained, and the
+# sleeping deadman then failed its nonce check and never restored the
+# frontend. Now: the marker must be VERIFIED GONE by an RC-checked test
+# (restore-command rc alone is never proof) before EITHER disarm channel
+# (cancel file, nonce wipe) runs; on unverified restore the deadman
+# STAYS armed and rig_cleanup preserves $DTMP (RIG_PRESERVE_DTMP=1).
 PARKED=0
 DEADMAN_ARMED=0
 task4_cleanup() {
-  local prc restore_ok
+  local prc restore_verified
   # pkill by process NAME — a `pkill -f <path>` pattern matches the adb
   # shell's OWN command line and kills it before the dsh RC marker can
   # print (measured iter 50: rc 71 on every cleanup). rc CAPTURED
@@ -128,22 +144,33 @@ task4_cleanup() {
     1) : ;; # no process matched — the healthy path
     *) echo "WARN: could not pkill gfx_device on the device (rc $prc)" >&2 ;;
   esac
-  restore_ok=1
+  restore_verified=0
   if [ "$PARKED" = 1 ]; then
-    rig_dsh_retry "rm -f /mnt/disable_frontend" || {
-      restore_ok=0
-      echo "WARN: could not restore the frontend — the armed deadman will remove /mnt/disable_frontend on-device within ${DEADMAN_S}s of the park (or remove it by hand)" >&2
-    }
+    rig_dsh_retry "rm -f /mnt/disable_frontend" \
+      || echo "WARN: frontend restore command failed" >&2
+    # RC-checked verification — the ONLY evidence that permits a disarm
+    if rig_dsh_retry "test ! -f /mnt/disable_frontend"; then
+      restore_verified=1
+    else
+      echo "WARN: could not VERIFY /mnt/disable_frontend is gone — the armed deadman will remove it on-device within ${DEADMAN_S}s of the park (or remove it by hand)" >&2
+    fi
+  else
+    restore_verified=1 # never parked — nothing to restore, disarm is safe
   fi
   if [ "$DEADMAN_ARMED" = 1 ]; then
-    if [ "$restore_ok" = 1 ]; then
+    if [ "$restore_verified" = 1 ]; then
       rig_dsh_retry "touch $DTMP/deadman.cancel" \
         || echo "WARN: could not cancel the park deadman — it will fire once (idempotent actions) within ${DEADMAN_S}s" >&2
     else
-      echo "WARN: frontend restore failed — leaving the deadman ARMED as the backstop" >&2
+      echo "WARN: frontend restore unverified — leaving the deadman ARMED as the backstop (its purpose)" >&2
     fi
   fi
-  rig_cleanup
+  if [ "$restore_verified" = 1 ]; then
+    rig_cleanup
+  else
+    # preserve $DTMP: the nonce must survive so the deadman stays armed
+    RIG_PRESERVE_DTMP=1 rig_cleanup
+  fi
 }
 trap task4_cleanup EXIT
 
@@ -153,27 +180,40 @@ rig_devsha_selftest
 # parse_timing_judge <timing-file> <frames> — judge-render-timing.js
 # (strict row grammar: exactly <frames> lines, 4 anchored columns) with
 # its key=value output consumed by the reviewed no-eval strict parser
-# (unexpected key = loud death). Sets: full_p99_ns full_p99_ms
-# render_p99_ns render_p99_ms sim_p99_ms present_p99_ms skips rendered.
+# (unexpected key = loud death; iter 54, review-52 M2: duplicate key =
+# corruption death — accidental output concatenation could put a stale
+# PASSING duplicate after a failing value under last-wins; every key
+# must occur exactly once, and every consumed key must be PRESENT).
+# Numeric grammars carry digit bounds (review-52 M3): an oversized value
+# dies as corruption BEFORE any bash arithmetic can see it — a bash
+# integer test on an out-of-range operand exits status 2, which an `if`
+# reads as FALSE (a silent failure-branch evasion). Sets: full_p99_ns
+# full_p99_ms render_p99_ns render_p99_ms sim_p99_ms present_p99_ms
+# skips rendered.
 parse_timing_judge() {
-  local tf="$1" fr="$2" jout jk jv
+  local tf="$1" fr="$2" jout jk jv dup
   unset full_p99_ns full_p99_ms render_p99_ns render_p99_ms sim_p99_ms \
     present_p99_ms skips rendered
   jout="$(node "$GFX/judge-render-timing.js" "$tf" "$fr")" || {
     echo "DEVICE FAIL: timing judgment failed for $tf" >&2
     exit 1
   }
+  dup="$(printf '%s\n' "$jout" | awk -F= '{print $1}' | sort | uniq -d)"
+  if [ -n "$dup" ]; then
+    echo "DEVICE FAIL: timing judge output carries duplicate key(s) — corrupt evidence: $dup" >&2
+    exit 1
+  fi
   while IFS='=' read -r jk jv; do
     case "$jk" in
       full_p99_ns|render_p99_ns|skips|rendered)
-        if ! [[ "$jv" =~ ^[0-9]+$ ]]; then
-          echo "DEVICE FAIL: timing judge $jk not a decimal integer ('$jv')" >&2
+        if ! [[ "$jv" =~ ^[0-9]{1,12}$ ]]; then
+          echo "DEVICE FAIL: timing judge $jk not a bounded decimal integer (1-12 digits) ('$jv')" >&2
           exit 1
         fi
         printf -v "$jk" '%s' "$jv"
         ;;
       full_p99_ms|render_p99_ms|sim_p99_ms|present_p99_ms)
-        if ! [[ "$jv" =~ ^[0-9]+\.[0-9]{3}$ ]]; then
+        if ! [[ "$jv" =~ ^[0-9]{1,9}\.[0-9]{3}$ ]]; then
           echo "DEVICE FAIL: timing judge $jk malformed ('$jv')" >&2
           exit 1
         fi
@@ -188,8 +228,13 @@ parse_timing_judge() {
         ;;
     esac
   done <<< "$jout"
-  : "$full_p99_ns" "$full_p99_ms" "$render_p99_ns" "$render_p99_ms" \
-    "$sim_p99_ms" "$present_p99_ms" "$skips" "$rendered"
+  for jk in full_p99_ns full_p99_ms render_p99_ns render_p99_ms \
+    sim_p99_ms present_p99_ms skips rendered; do
+    if [ -z "${!jk:-}" ]; then
+      echo "DEVICE FAIL: timing judge output missing required key '$jk'" >&2
+      exit 1
+    fi
+  done
   timing_judge_out="$jout" # for display; the judge ran exactly once
 }
 
@@ -207,14 +252,18 @@ parse_timing_judge() {
 parse_app_summary() {
   local log="$1" fr="$2" pace="$3" budget="$4" re cnt line
   unset app_skips app_present_fails app_wall_ms
-  re="^gfx_app: ${fr} frames, [0-9]+ render skips, [0-9]+ failed presents, wall [0-9]+ ms, pace=${pace} budget=${budget} ns\$"
+  # iter 54 (review-52 M3): every numeric field carries a 1-12 digit
+  # bound in BOTH the count grep and the extraction regex — an oversized
+  # value is corruption that dies at the grammar, never a status-2
+  # bash-test evasion downstream.
+  re="^gfx_app: ${fr} frames, [0-9]{1,12} render skips, [0-9]{1,12} failed presents, wall [0-9]{1,12} ms, pace=${pace} budget=${budget} ns\$"
   cnt="$(grep -Ec "$re" "$log")" || true
   if [ "$cnt" != 1 ]; then
     echo "DEVICE FAIL: app log $log has $cnt lines matching the pinned summary grammar (want exactly 1: frames=$fr pace=$pace budget=$budget ns)" >&2
     exit 1
   fi
   line="$(grep -E "$re" "$log")"
-  if [[ "$line" =~ ^gfx_app:\ ${fr}\ frames,\ ([0-9]+)\ render\ skips,\ ([0-9]+)\ failed\ presents,\ wall\ ([0-9]+)\ ms,\ pace=${pace}\ budget=${budget}\ ns$ ]]; then
+  if [[ "$line" =~ ^gfx_app:\ ${fr}\ frames,\ ([0-9]{1,12})\ render\ skips,\ ([0-9]{1,12})\ failed\ presents,\ wall\ ([0-9]{1,12})\ ms,\ pace=${pace}\ budget=${budget}\ ns$ ]]; then
     app_skips="${BASH_REMATCH[1]}"
     app_present_fails="${BASH_REMATCH[2]}"
     app_wall_ms="${BASH_REMATCH[3]}"
@@ -261,8 +310,9 @@ while IFS='=' read -r gk gv; do
       trace=$gv
       ;;
     seed|p1|p2|stage|frames)
-      if ! [[ "$gv" =~ ^[0-9]+$ ]]; then
-        echo "DEVICE FAIL: manifest g01.$gk not a decimal integer ('$gv')" >&2
+      # iter 54 (review-52 M3): digit bound BEFORE any bash arithmetic
+      if ! [[ "$gv" =~ ^[0-9]{1,12}$ ]]; then
+        echo "DEVICE FAIL: manifest g01.$gk not a bounded decimal integer (1-12 digits) ('$gv')" >&2
         exit 1
       fi
       printf -v "$gk" '%s' "$gv"
@@ -274,6 +324,14 @@ while IFS='=' read -r gk gv; do
   esac
 done <<< "$gparams"
 : "$name" "$seed" "$p1" "$p2" "$stage" "$frames" "$trace"
+# review-52 M1: cross-assert the manifest against the frozen literal —
+# the step-7 gate asserts rendered == $FRAMES_PIN (the LITERAL), so a
+# legitimate manifest change must fail loudly here at the pin, never
+# silently shorten the gate.
+if [ "$frames" -ne "$FRAMES_PIN" ]; then
+  echo "DEVICE FAIL: manifest g01.frames ($frames) != pinned FRAMES_PIN ($FRAMES_PIN) — reviewed pin change required" >&2
+  exit 1
+fi
 [ "$frames" -le 5000 ] || { echo "DEVICE FAIL: g01 frames $frames > 5000" >&2; exit 1; }
 [ "$stage" -le 5 ] || { echo "DEVICE FAIL: g01 stage $stage > 5" >&2; exit 1; }
 [ "$p1" -le 4 ] || { echo "DEVICE FAIL: g01 p1 $p1 > 4" >&2; exit 1; }
@@ -594,6 +652,12 @@ if [ "$(cat "$DEVB/render.apprc")" != "RC=0" ]; then # exact whole-file grammar
   exit 1
 fi
 dsh "rm -f /mnt/disable_frontend"
+# iter 54 (review-52 H): RC-checked VERIFICATION that the marker is
+# actually gone — only then may either disarm channel run (PARKED=0
+# skips the trap's restore; the cancel below disarms the deadman). A
+# failure here dies loud (errexit) into the trap with PARKED=1, which
+# retries the restore and leaves the deadman armed if unverifiable.
+dsh "test ! -f /mnt/disable_frontend"
 PARKED=0
 # cancel the deadman and PROVE it exited without firing
 dsh "touch $DTMP/deadman.cancel"
@@ -637,8 +701,12 @@ if [ "$render_p99_ns" -gt "$P99_RENDER_LIMIT_NS" ]; then
 fi
 # review-50 H3 (skip gate): the valve exists for real-time resilience,
 # but a GATE pass may not consume it — every frame must have rendered.
-if [ "$skips" -ne 0 ] || [ "$rendered" -ne "$frames" ]; then
-  echo "DEVICE FAIL: gate run rendered $rendered/$frames with $skips skips — a GATE pass may not consume the frameskip valve" >&2
+# review-52 M1: rendered is asserted against the LITERAL pin ($FRAMES_PIN
+# = 3600, frozen above; the manifest is cross-asserted equal at step 1),
+# never the manifest-derived value alone — an accidentally regenerated
+# shorter corpus can no longer satisfy a shortened gate.
+if [ "$skips" -ne 0 ] || [ "$rendered" -ne "$FRAMES_PIN" ]; then
+  echo "DEVICE FAIL: gate run rendered $rendered/$FRAMES_PIN with $skips skips — a GATE pass may not consume the frameskip valve, and rendered must equal the literal pin" >&2
   exit 1
 fi
 # review-50 M2 + M3: the app summary under the pinned whitelist grammar

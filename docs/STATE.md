@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-17, iter-53 writer completion)
+## Live right now (updated: 2026-07-17, iter-54 writer completion)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -284,13 +284,31 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   check-sim/check-device-render NOT run (no sim TU; riglib untouched)
   — gfx_app --trace guarded by host smoke (F1 == the g01 anchor;
   .loop/m3-task5r53-smoke-host.log).
-- **In flight**: task-4 arc ROUND 2 pending (closure review of iter 52;
-  review-50's untriaged Low — gfx_app getline/ferror — open for its
-  disposition); task-5 arc ROUND 2 pending (closure review of this
-  iteration). Then: both arcs to GO → task 6 (audio-on) → task 7
-  (OPK + verify_m3.sh gate).
-- **Latest AGENT-LOG entry**: iter 53 (M3 task 5 hardening); latest
-  log id: .loop/m3-task5r53-donecheck.log.
+- **Iter 54 (M3 task 4 hardening ROUND 2) DONE**: all 5 triaged
+  review-52 round-2 findings closed (.loop/review-52-triage.md) — H
+  deadman disarm ordering (RC-checked marker-gone VERIFICATION gates
+  both disarm channels; rig_cleanup RIG_PRESERVE_DTMP=1 keeps the nonce
+  alive on unverified restore — deadman probe: nonce survived cleanup,
+  fired in-window, marker removed, gmenu2x respawned); M1 FRAMES_PIN=
+  3600 literal (manifest cross-asserted at the pin; gate asserts the
+  LITERAL); M2 timing-judge duplicate-key = corruption death + 8-key
+  presence; M3 digit bounds on every numeric grammar in both files
+  BEFORE bash arithmetic (status-2-as-false hole closed); L
+  rig_stamp_ok strict WHOLE-FILE grammar (any extra/malformed line =
+  MISS). Cold done-check DEVICE RENDER OK exit 0, skips 0/3600
+  (.loop/m3-task4r54-donecheck.log; 2/2 paced cap — attempt 1's 1-skip
+  fail was a GENUINE transient the H3 gate correctly caught, frame-1190
+  sim spike 13.02 ms). Teeth: 9 stamp-grammar + M1/M2/M3a-c host teeth
+  + the device deadman probe, zero false rejections on genuine corpus.
+  Regressions ALL green: DEVICE CONFORMS g01 · DEVICE CONFORMS 8/8 +
+  SIM P99 OK · S1 INPUT OK (.loop/m3-task4r54-reg-*.log).
+- **In flight**: task-4 arc ROUND 3 = closure review pending (iter 54
+  closed round 2; review-50's untriaged Low — gfx_app getline/ferror —
+  still open for its disposition); task-5 arc ROUND 2 pending (closure
+  review of iter 53). Then: both arcs to GO → task 6 (audio-on) →
+  task 7 (OPK + verify_m3.sh gate).
+- **Latest AGENT-LOG entry**: iter 54 (M3 task 4 hardening round 2);
+  latest log id: .loop/m3-task4r54-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
