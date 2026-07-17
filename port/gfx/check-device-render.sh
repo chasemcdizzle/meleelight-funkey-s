@@ -112,6 +112,26 @@ source port/sim/device/riglib.sh
 
 rig_lock_acquire
 
+# INHERITED-STATE PESSIMISM (iter 56, review-55 H x2 — the arc's
+# principle completed: pessimism precedes the FIRST fallible action):
+# from the instant the lock is held, a PRIOR run's park/deadman state
+# is treated as POSSIBLY PRESENT — before require_device, the devsha
+# selftest, or any device probe can fail into the cleanup trap.
+# RIG_PRESERVE_DTMP=1 (GLOBAL — rig_cleanup reads it at call time)
+# makes ANY cleanup preserve $DTMP: a foreign deadman's nonce may live
+# there, and wiping a nonce this run does not own disarms a backstop
+# whose marker may still be parked (the review-55 stranding). ONLY the
+# step-0 normalization below may clear it, and only after it has
+# POSITIVELY verified inherited-state ownership: marker absent + no
+# foreign deadman state (both RC-verified probes) — or stale state
+# normalized through its designed channels. PARKED / DEADMAN_ARMED
+# stay 0 pre-park: the trap must not touch a marker or a cancel
+# channel it does not own — an inherited marker belongs to the
+# inherited deadman (which the preserved nonce keeps able to fire).
+RIG_PRESERVE_DTMP=1
+PARKED=0
+DEADMAN_ARMED=0
+
 # Cleanup (installed AFTER lock acquisition, riglib contract): kill our
 # app, RESTORE the frontend if we parked it, cancel the deadman ONLY
 # once the frontend is PROVABLY restored (it is the backstop), then the
@@ -129,9 +149,9 @@ rig_lock_acquire
 # (cancel file, nonce wipe) runs; on unverified restore the deadman
 # STAYS armed and rig_cleanup preserves $DTMP (RIG_PRESERVE_DTMP=1).
 # Cross-RUN interleavings of that end state are normalized by the
-# step-0 startup chokepoint of the NEXT run (iter 55, review-54 H).
-PARKED=0
-DEADMAN_ARMED=0
+# step-0 startup chokepoint of the NEXT run (iter 55, review-54 H),
+# and the lock-time pessimism above covers every failure BEFORE that
+# chokepoint has run (iter 56, review-55 H).
 task4_cleanup() {
   local prc restore_verified
   # pkill by process NAME — a `pkill -f <path>` pattern matches the adb
@@ -167,17 +187,25 @@ task4_cleanup() {
       echo "WARN: frontend restore unverified — leaving the deadman ARMED as the backstop (its purpose)" >&2
     fi
   fi
-  if [ "$restore_verified" = 1 ]; then
-    rig_cleanup
-  else
-    # preserve $DTMP: the nonce must survive so the deadman stays armed
-    RIG_PRESERVE_DTMP=1 rig_cleanup
+  if [ "$restore_verified" != 1 ]; then
+    # this run's own restore is unverified: the nonce must survive so
+    # the deadman stays armed (iter 54)
+    RIG_PRESERVE_DTMP=1
   fi
+  # rig_cleanup honors the GLOBAL RIG_PRESERVE_DTMP — still 1 whenever
+  # step-0 normalization has not yet POSITIVELY owned inherited state
+  # (iter 56: a pre-normalization death must never wipe a foreign nonce)
+  rig_cleanup
 }
 trap task4_cleanup EXIT
 
 require_device
-rig_devsha_selftest
+# iter 56 (review-55 H): step 0 runs IMMEDIATELY after require_device —
+# ahead of the devsha selftest and every other fallible probe.
+# require_device is the minimum needed to talk to the device at all;
+# the pessimism flags above are set before even that, so its failure
+# path (and the selftest's, and the step-0 probes' own) preserves any
+# inherited state.
 
 echo "== [0/7] stale-state startup normalization (cross-run chokepoint) =="
 # iter 55 (review-54 H — the iter-54 "disarm-shares-a-path-with-cleanup"
@@ -197,12 +225,13 @@ echo "== [0/7] stale-state startup normalization (cross-run chokepoint) =="
 #      state; a LIVE watcher ignoring its cancel is a defect → loud
 #      death;
 #   3. only then is the stale state wiped (rm -rf $DTMP).
-# While a stale deadman may still be armed and the marker unproven,
-# RIG_PRESERVE_DTMP=1 keeps its nonce alive through ANY
-# mid-normalization death — the old backstop stays armed exactly until
-# the thing it guards is verifiably restored (the iter-54 rule applied
-# across runs). Transport failures during the probes are LOUD deaths,
-# never "no stale state".
+# RIG_PRESERVE_DTMP has been 1 since lock acquisition (iter 56 — the
+# pessimism block above), so ANY death here — a failed probe, a
+# mid-normalization transport loss — preserves the old nonce and keeps
+# the old backstop armed exactly until the thing it guards is
+# verifiably restored (the iter-54 rule applied across runs). ONLY the
+# completed normalization clears it, below. Transport failures during
+# the probes are LOUD deaths, never "no stale state".
 stale_marker=0
 stale_deadman=0
 nrc=0
@@ -221,9 +250,8 @@ case "$nrc" in
 esac
 if [ "$stale_marker" = 1 ] || [ "$stale_deadman" = 1 ]; then
   echo "WARN: stale prior-run state on the device (marker=$stale_marker deadman-state=$stale_deadman) — normalizing before any parking" >&2
-  if [ "$stale_deadman" = 1 ]; then
-    RIG_PRESERVE_DTMP=1 # a death before the disarm-verify must not wipe the old nonce
-  fi
+  # (RIG_PRESERVE_DTMP is already 1 — held since lock acquisition; a
+  # death before the disarm-verify must not wipe the old nonce)
   if [ "$stale_marker" = 1 ]; then
     PARKED=1 # pessimistic: the trap owns the stale marker until verified gone
     dsh "rm -f /mnt/disable_frontend"
@@ -269,13 +297,20 @@ if [ "$stale_marker" = 1 ] || [ "$stale_deadman" = 1 ]; then
       esac
     fi
     dsh "rm -rf $DTMP"
-    RIG_PRESERVE_DTMP=0
     echo "   stale deadman state wiped ($DTMP)"
   fi
   echo "   startup normalization complete — device state is clean"
 else
   echo "   no stale prior-run state (marker absent, no deadman state)"
 fi
+# PESSIMISM CLEARED (iter 56): inherited-state ownership is now
+# POSITIVELY verified — either both RC-verified probes found nothing,
+# or every stale artifact was normalized through its designed channel
+# above. From here $DTMP holds only THIS run's state and cleanup may
+# wipe it (until/unless this run's OWN restore goes unverified, which
+# re-sets the flag in the trap).
+RIG_PRESERVE_DTMP=0
+rig_devsha_selftest
 
 # parse_timing_judge <timing-file> <frames> — judge-render-timing.js
 # (strict row grammar: exactly <frames> lines, 4 anchored columns) with
@@ -459,7 +494,8 @@ ANIM_P2="$(anim_file "$p2")"
 # same class as the frozen goldens). check-render.sh cross-checks these
 # bytes against every fresh browser capture.
 made "$GFXDATA_FROZEN"
-gsum="$(shasum -a 256 "$GFXDATA_FROZEN" | cut -d' ' -f1)"
+# iter 56 (review-55 M): full-line host shasum grammar — never cut -f1
+gsum="$(rig_host_sha256 "$GFXDATA_FROZEN")" || exit 1
 if [ "$gsum" != "$GFXDATA_SHA256" ]; then
   echo "DEVICE FAIL: $GFXDATA_FROZEN sha256 $gsum != pinned $GFXDATA_SHA256" >&2
   exit 1
@@ -633,7 +669,7 @@ dsh "chmod +x $DTMP/gfx_device"
 for hf in "$DEVB/simdata.txt" "$DEVB/g01.trace.txt" "$GFXDATA_FROZEN" \
           "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2"; do
   bn="$(basename "$hf")"
-  hsum="$(shasum -a 256 "$hf" | cut -d' ' -f1)"
+  hsum="$(rig_host_sha256 "$hf")" || exit 1 # full-line grammar (iter 56)
   dsum="$(rig_dev_sha256 "$DTMP/$bn")" || exit 1
   if [ "$dsum" != "$hsum" ]; then
     echo "DEVICE FAIL: pushed $bn device sha ($dsum) != host sha ($hsum)" >&2
@@ -719,7 +755,7 @@ made "$BUILD/render-launch.sh"
 adb -s "$DEV" push "$BUILD/deadman.sh" "$BUILD/render-launch.sh" "$DTMP/" >/dev/null
 for hf in "$BUILD/deadman.sh" "$BUILD/render-launch.sh"; do
   bn="$(basename "$hf")"
-  hsum="$(shasum -a 256 "$hf" | cut -d' ' -f1)"
+  hsum="$(rig_host_sha256 "$hf")" || exit 1 # full-line grammar (iter 56)
   dsum="$(rig_dev_sha256 "$DTMP/$bn")" || exit 1
   if [ "$dsum" != "$hsum" ]; then
     echo "DEVICE FAIL: pushed $bn device sha ($dsum) != host sha ($hsum)" >&2

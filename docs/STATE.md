@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-17, iter-55 writer completion)
+## Live right now (updated: 2026-07-17, iter-56 writer completion)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -324,13 +324,39 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   conform/input skipped with pre-registered justification (stamp-
   machinery-only riglib edits). Zoom-out: cross-run state machines
   get ONE startup chokepoint, never per-sequence patches.
-- **In flight**: task-4 arc ROUND 4 = closure-or-cap pending (iter 55
-  closed round 3; review-50's untriaged Low — gfx_app getline/ferror —
-  still open for its disposition); task-5 arc CLOSED at GO (round 2).
-  Then: task-4 arc to GO/cap → task 6 (audio-on) → task 7 (OPK +
+- **Iter 56 (M3 task 4 hardening ROUND 4, FINAL) DONE**: both
+  review-55 Highs closed by INHERITED-STATE PESSIMISM
+  (RIG_PRESERVE_DTMP=1 set GLOBALLY the instant the rig lock is held —
+  before require_device/selftest/any probe can fail into the trap;
+  trap preserves $DTMP and never touches a marker/cancel it does not
+  own until step-0 normalization POSITIVELY verifies inherited-state
+  ownership and clears the flag; step 0 moved ahead of the devsha
+  selftest); the Medium closed by riglib rig_host_sha256() — FULL-LINE
+  host shasum grammar (`<64hex>  <actual path>` reconstruction, mirror
+  of rig_dev_sha256) at ALL surface extraction sites (pullv, stamp
+  read/write/rehash, srchash stdin form, render gsum/hsum) — zero
+  `cut -f1` scrapes remain. Cold done-check DEVICE RENDER OK exit 0
+  FIRST attempt, skips 0/3600, full p99 11.400 ms
+  (.loop/m3-task4r56-donecheck.log; the round's one rebuild). Teeth
+  8/8: T1/T2 planted-foreign-state preservation through forced
+  require_device + mid-normalization probe failures (live transport —
+  preservation proven as a decision), T3a-f shasum grammar incl. the
+  review's exact 64-hex-field-wrong-tail case, zero false rejections.
+  Regression DEVICE CONFORMS g01, stamp HIT via the new parser
+  (.loop/m3-task4r56-reg-g01.log). Zoom-out: protection flags default
+  to PRESERVE from resource-acquisition time; only positive
+  verification flips them.
+- **In flight**: task-4 arc CAPPED-CLOSED pending driver record (iter
+  56 was the pre-announced FINAL round; recurring class named:
+  "cross-run frontend-park/deadman sequencing before startup
+  normalization owns inherited state"; residual = operator-error
+  concurrency, dispositioned Low with reviewer concurrence in
+  .loop/review-55-1.log; review-50's untriaged Low — gfx_app
+  getline/ferror — left for the driver's cap record). task-5 arc
+  CLOSED at GO (round 2). Then: task 6 (audio-on) → task 7 (OPK +
   verify_m3.sh gate).
-- **Latest AGENT-LOG entry**: iter 55 (M3 task 4 hardening round 3);
-  latest log id: .loop/m3-task4r55-donecheck.log.
+- **Latest AGENT-LOG entry**: iter 56 (M3 task 4 hardening round 4,
+  arc cap); latest log id: .loop/m3-task4r56-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull

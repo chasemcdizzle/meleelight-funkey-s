@@ -6576,3 +6576,179 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   its run can only ever touch its own targets. Registry: this is the
   iter-54 "disarm-shares-a-path-with-cleanup" class closed at the
   CLASS level (all interleavings), not the instance level.
+
+## iter 56 — 2026-07-17 — M3 task 4 HARDENING ROUND 4 (FINAL, arc caps after this): inherited-state pessimism + shasum full-line grammar (review-55 findings)
+
+### PRE-REGISTRATION (frozen before any run/edit; PROCESS §2)
+
+- **Task**: close the review-55 findings (.loop/review-55-1.log,
+  NO-GO): High x2 — inherited-state preservation is enabled only
+  DURING step 0, after fallible actions (require_device / devsha
+  selftest / the step-0 probes themselves); a failure BEFORE the
+  pessimism flags are set reaches a cleanup that treats "nothing
+  parked/armed by ME" as "nothing to preserve" and wipes $DTMP,
+  erasing a prior run's deadman nonce while its marker remains
+  (stranded frontend). Medium — the host-side shasum extraction sites
+  still `cut -d' ' -f1` (first-field scrape) before validating; a
+  malformed/truncated line retaining a 64-hex first field is accepted
+  (PROCESS §3 full-line whitelist-grammar rule). FINAL micro-iteration:
+  the driver CAPS the arc after this — no further review round.
+  Surface: port/gfx/check-device-render.sh + port/sim/device/riglib.sh
+  ONLY. Both are stamp input → exactly ONE arm rebuild expected
+  (docker serial), landing in the done-check.
+  done-check: cold `bash port/gfx/check-device-render.sh` →
+  `DEVICE RENDER OK`, exit 0 (.loop/m3-task4r56-donecheck.log).
+- **Fix designs (frozen)**:
+  Fix 1 — INHERITED-STATE PESSIMISM (the arc's principle completed:
+  pessimism precedes the FIRST fallible action). The instant
+  rig_lock_acquire returns — BEFORE the trap can fire, before
+  require_device, the devsha selftest, or ANY device probe — set
+  RIG_PRESERVE_DTMP=1 (global): inherited park/deadman state is
+  POSSIBLY PRESENT from that instant, and any cleanup that runs before
+  step-0 normalization has POSITIVELY verified inherited-state
+  ownership (marker absent + no foreign deadman state, RC-verified —
+  or stale state normalized through its designed channels) preserves
+  $DTMP and never wipes a nonce it does not own. The trap keeps
+  PARKED=0/DEADMAN_ARMED=0 pre-park (it must not touch a marker or
+  cancel channel it does not own — an inherited marker belongs to the
+  inherited deadman); its tail becomes "set RIG_PRESERVE_DTMP=1 if
+  this run's own restore is unverified, then rig_cleanup" (rig_cleanup
+  reads the GLOBAL, so lock-time pessimism rides through the healthy
+  branch too). Step 0 moves AHEAD of the devsha selftest (require_device
+  stays first — it is the minimum needed to talk to the device; the
+  point is the flags are pessimistic before it). ONLY the completed
+  step-0 normalization clears RIG_PRESERVE_DTMP=0.
+  Fix 2 — host shasum FULL-LINE grammar: new riglib rig_host_sha256()
+  parses the complete `shasum -a 256` output line against
+  `<64-lowercase-hex><SP><SP><path>` with the path matched against the
+  ACTUAL argument (single line, whole-line reconstruction, digest
+  echoed) — mirror of rig_dev_sha256. ALL in-surface host extraction
+  sites route through it: pullv, rig_stamp_ok cached-bin hash (fail
+  direction stays REBUILD), rig_arm_build stamp WRITE (per-bin loud
+  death before recording), rig_stamp_rehash, rig_srchash final digest
+  (stdin form `<sha>  -`, full-line reconstruction before the existing
+  64-hex produce-time assert), check-device-render.sh gsum + the two
+  pushed-file hsum loops. No `cut -f1` remains in the surface.
+- **Teeth (pre-registered)**:
+  T1 (Fix 1, tooth i): plant foreign marker + foreign nonce + orphaned
+  deadman pid file on the device; force require_device to fail via a
+  PATH adb shim (fails ONLY `adb devices`; transport otherwise live) →
+  script dies pre-normalization; assert marker STILL PRESENT, nonce
+  bytes UNCHANGED, no deadman.cancel created (old deadman still able
+  to fire), $DTMP preserved, lock released.
+  T2 (Fix 1, tooth ii): same planted state; shim fails ONLY the step-0
+  marker-probe shell command (`test -f /mnt/disable_frontend`) →
+  mid-normalization loud death; same preservation asserts.
+  T3 (Fix 2): PATH shasum shim → (a) truncated line `<64hex>` (no
+  path), (b) 64-hex first field + WRONG path tail, (c) multi-line
+  output → all corruption deaths in rig_host_sha256; (d) genuine
+  control digest matches real shasum. Plus rig_srchash stdin-form
+  tooth: shimmed final digest line with wrong tail → produce-time
+  death.
+  Manual device cleanup of planted state after T2 (normalization-owns-
+  planted-state was proven as iter-55 T1; the cold done-check then
+  shows the clean-path chokepoint).
+- **Run cap**: <= 2 paced device runs + probes. Expected: probes
+  (no build, fail pre-build) + ONE cold done-check run (contains the
+  round's one rebuild) + regression check-device-g01.sh (stamp HIT,
+  not a paced render run). Pass = cold DEVICE RENDER OK exit 0.
+- **Regression**: `bash port/sim/device/check-device-g01.sh` (riglib
+  touched: rig_host_sha256 rides pullv/stamp paths for every rig
+  consumer; g01 exercises them all). conform/input skipped by the same
+  pre-registered justification as iter 55 (identical shared-path
+  class, no consumer-specific parse touched) — plus the arc caps here.
+
+### COMPLETION (iter 56)
+
+- **done-check**: cold `bash port/gfx/check-device-render.sh` →
+  `DEVICE RENDER OK (full p99 11.400 ms, render-only p99 2.540 ms,
+  sim p99 7.734 ms, present p99 1.471 ms, skips 0/3600)`, exit 0,
+  FIRST attempt (.loop/m3-task4r56-donecheck.log). The round's ONE
+  expected rebuild (both surface files are stamp input; new stamp
+  5869fa12…9cb7); step-0 chokepoint clean path ("no stale prior-run
+  state"); live run 61 s host-observed, frontend restored, deadman
+  cancelled without firing; both host + device STREAM MATCH 3600/3600;
+  device shot bit-identical to host (PPM+PGM).
+- **Fix 1 (inherited-state pessimism) — SHIPPED**: RIG_PRESERVE_DTMP=1
+  is now set GLOBALLY the instant rig_lock_acquire returns — before
+  the trap can fire, before require_device, the devsha selftest, or
+  any device probe. The trap tail became "set preserve if own-restore
+  unverified, then rig_cleanup" so the pre-normalization pessimism
+  rides the healthy branch too (rig_cleanup reads the global);
+  PARKED/DEADMAN_ARMED stay 0 pre-park (the trap never touches a
+  marker/cancel channel it does not own — an inherited marker belongs
+  to the inherited deadman, which the preserved nonce keeps able to
+  fire). Step 0 moved AHEAD of rig_devsha_selftest (require_device
+  stays first: minimum needed to talk to the device; its failure path
+  now preserves). ONLY completed normalization clears the flag —
+  in-branch set/clear removed.
+- **Fix 2 (host shasum full-line grammar) — SHIPPED**: new
+  riglib rig_host_sha256() (mirror of rig_dev_sha256): single line,
+  whole-line reconstruction against `<64-lowercase-hex>  <actual
+  argument path>`, loud corruption death otherwise. All in-surface
+  sites routed through it: pullv, rig_stamp_ok cached-bin hash (fail
+  direction stays REBUILD), rig_arm_build stamp WRITE (per-bin loud
+  death BEFORE recording), rig_stamp_rehash, check-device-render gsum
+  + both pushed-file hsum loops; rig_srchash's final stdin digest now
+  full-line reconstructed (`<sha>  -`) before the iter-55 64-hex
+  produce assert. Zero `cut -f1` shasum scrapes remain in the surface.
+- **Teeth (.loop/m3-task4r56-teeth-host.log,
+  .loop/m3-task4r56-probe-pessimism.log)**: T1 planted foreign marker
+  + nonce + orphaned pid file; require_device forced to fail via a
+  PATH adb shim (fails ONLY `adb devices`; transport otherwise LIVE —
+  so preservation is proven as a decision, not a dead transport) →
+  script died pre-normalization, cleanup took the preserve branch
+  ("preserving /tmp/mlfk" WARN), marker untouched, nonce byte-exact,
+  no cancel created, pid file intact, old deadman still able to fire,
+  lock released. T2 same planted state; shim fails ONLY the step-0
+  marker-probe shell command → mid-normalization loud death ("could
+  not probe the frontend marker"), same preservation asserts, all
+  PASS. T3a truncated 64-hex-only line → death; T3b 64-hex field +
+  WRONG path tail (the review's exact case) → death; T3c multi-line →
+  death; T3d genuine control digest == real shasum; T3e srchash
+  stdin-form wrong tail → produce-time death; T3f genuine srchash
+  control 64-hex. 8/8 teeth, zero false rejections on genuine corpus.
+  Planted state manually cleaned + RC-verified gone before the cold
+  run (normalization-owns-planted-state was proven as iter-55 T1).
+- **Regression**: `bash port/sim/device/check-device-g01.sh` → `DEVICE
+  CONFORMS g01`, exit 0, stamp HIT with cached binaries sha-verified
+  through the NEW rig_host_sha256 path (.loop/m3-task4r56-reg-g01.log).
+  conform/input skipped per pre-registration (shared-path-only riglib
+  change, g01 exercises pullv/stamp for every consumer).
+- **Device hygiene verified post-run**: marker absent, /tmp/mlfk +
+  /mnt/mlfk-scratch gone, no stray gfx_device/deadman processes,
+  gmenu2x alive, rig lock released.
+- **HONEST NOTE (process)**: this writer monitor-parked / stopped-to-
+  wait TWICE during the done-check (failure mode #1, 4th writer
+  instance) and took THREE driver nudges to hold §7#1 bounded
+  foreground polling — the third nudge arrived after wrap-up was in
+  fact complete, but the stop-to-wait pattern itself is the defect.
+  The run was healthy throughout; no evidence impact.
+- **ARC CAP (driver caps after this iteration — no further review
+  round)**: the recurring class is NAMED for the record: **cross-run
+  frontend-park/deadman sequencing before startup normalization owns
+  inherited state**. Rounds 2-4 each closed a face of it (disarm
+  ordering → startup chokepoint → lock-time pessimism); this round
+  completes the principle — pessimism precedes the FIRST fallible
+  action, and preservation is the default until ownership is
+  POSITIVELY verified. RESIDUAL: operator-error concurrency (manual
+  lock bypass/removal, a second host, a different alias/lock root
+  letting run B restore run A's legitimate park) — dispositioned LOW
+  with reviewer concurrence in .loop/review-55-1.log ("not a
+  normal-loop regression"); the no-reclaim device-keyed lock is the
+  standing guard, and the residual requires a human to defeat it by
+  hand. Also still open from review-50: the untriaged Low (gfx_app
+  getline/ferror) — out of this round's surface, for the driver's
+  cap record.
+- **ZOOM OUT**: state-machine hygiene code must be born pessimistic —
+  any flag that decides "is it safe to destroy?" defaults to PRESERVE
+  from the instant the resource can exist (lock acquisition), and
+  only positive verification flips it. Setting protection flags next
+  to the code they protect (instead of at acquisition time) leaves
+  every earlier failure path destructive; the class-level rule is
+  "protection precedes the first fallible action", the same shape as
+  iter-50's PARKED-before-park — now applied to INHERITED state, which
+  closes the last face. Sibling rule shipped with it: extraction
+  parsers accept the WHOLE producer line against the expected grammar
+  including the argument echo, never a plausible first field
+  (rig_dev_sha256's rule now uniform host-side via rig_host_sha256).

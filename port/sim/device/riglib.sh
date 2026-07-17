@@ -183,6 +183,48 @@ rig_devsha_selftest() {
   fi
 }
 
+# rig_host_sha256 <path> — host-side sha256, FULL-LINE whitelist
+# grammar (iter 56, review-55 M — closes the last `| cut -d' ' -f1`
+# first-field scrapes; PROCESS §3 rule, mirror of rig_dev_sha256).
+# Producer grammar (macOS/perl shasum, text mode): EXACTLY
+#   <64-lowercase-hex><SP><SP><path>
+# on one line, path matched against the ACTUAL argument. A malformed or
+# truncated line whose first field merely happens to be 64 hex chars is
+# corruption -> loud death, never an accepted digest. Echoes the digest
+# on success.
+rig_host_sha256() {
+  local p out sum rest
+  p="$1"
+  out="$(shasum -a 256 "$p")" || {
+    echo "DEVICE FAIL: host shasum -a 256 $p failed" >&2
+    return 1
+  }
+  case "$out" in
+    *$'\n'*)
+      echo "DEVICE FAIL: host shasum $p emitted multiple lines (corrupt output):" >&2
+      printf '%s\n' "$out" >&2
+      return 1
+      ;;
+  esac
+  sum="${out%%  *}"
+  rest="${out#*  }"
+  if [ "${#sum}" -ne 64 ]; then
+    echo "DEVICE FAIL: host shasum $p digest not 64 chars ('$sum')" >&2
+    return 1
+  fi
+  case "$sum" in
+    *[!0-9a-f]*)
+      echo "DEVICE FAIL: host shasum $p digest not lowercase hex ('$sum')" >&2
+      return 1
+      ;;
+  esac
+  if [ "$rest" != "$p" ] || [ "$out" != "$sum  $p" ]; then
+    echo "DEVICE FAIL: host shasum $p output is not exactly '<sha>  $p' (got '$out')" >&2
+    return 1
+  fi
+  printf '%s\n' "$sum"
+}
+
 # pullv <device-path> <host-dest> — freshness-proven pull (iter 39,
 # review M2): the host destination is removed BEFORE the pull (a stale
 # file can never be judged), and the device-side sha256 of the source
@@ -195,7 +237,7 @@ pullv() {
   # iter 52 (whitelist grammar): the device digest comes through the
   # strict full-line rig_dev_sha256 parser, never a first-field scrape.
   dsum="$(rig_dev_sha256 "$1")" || return 1
-  hsum="$(shasum -a 256 "$2" | cut -d' ' -f1)"
+  hsum="$(rig_host_sha256 "$2")" || return 1 # full-line grammar (iter 56)
   if [ "$dsum" != "$hsum" ]; then
     echo "DEVICE FAIL: pulled $2 != device $1 (device $dsum, host $hsum)" >&2
     return 1
@@ -244,7 +286,7 @@ made() {
 # record into two).
 rig_srchash() {
   set -o pipefail
-  local listf brokenf n h
+  local listf brokenf n h hline
   listf="$DEVB/.srclist.$$"
   brokenf="$DEVB/.srcbroken.$$"
   find -L port/sim port/gfx port/tools port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
@@ -294,22 +336,36 @@ rig_srchash() {
     rm -f "$listf"
     return 1
   fi
-  h="$({
+  hline="$({
     LC_ALL=C sort -z < "$listf" | xargs -0 shasum -a 256 || exit 1
     # shellcheck disable=SC2086 — RIG_SCRIPTS is a fixed space-separated list
     shasum -a 256 "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" \
       $RIG_SCRIPTS || exit 1
     printf 'dockerimage %s\n' "$ARMIMGID"
-  } | shasum -a 256 | cut -d' ' -f1)" || {
+  } | shasum -a 256)" || {
     rm -f "$listf"
     return 1
   }
   rm -f "$listf"
-  # iter 55 (review-54 M): PRODUCE-TIME grammar — the stamp key must be
-  # exactly 64 lowercase hex BEFORE anything consumes it. An empty or
-  # short digest (broken shasum, truncated pipeline) dies loudly here
-  # and is never stamped; rig_stamp_ok re-asserts the same shape on
-  # every cache-HIT read.
+  # iter 55 (review-54 M) + iter 56 (review-55 M): PRODUCE-TIME grammar
+  # on the FULL output line — shasum on stdin prints exactly
+  # '<64-lowercase-hex><SP><SP>-'; the digest is extracted only after
+  # the whole line reconstructs against that grammar (no first-field
+  # cut: a truncated line with a plausible first field is corruption).
+  # An empty/short/misaligned digest dies loudly here and is never
+  # stamped; rig_stamp_ok re-asserts the value grammar on every
+  # cache-HIT read.
+  case "$hline" in
+    *$'\n'*)
+      echo "DEVICE FAIL: srchash: final shasum emitted multiple lines ('$hline')" >&2
+      return 1
+      ;;
+  esac
+  h="${hline%%  *}"
+  if [ "$hline" != "$h  -" ]; then
+    echo "DEVICE FAIL: srchash: final shasum output is not exactly '<sha>  -' ('$hline')" >&2
+    return 1
+  fi
   case "$h" in
     ''|*[!0-9a-f]*)
       echo "DEVICE FAIL: srchash produced a non-lowercase-hex digest ('$h')" >&2
@@ -406,7 +462,10 @@ rig_stamp_ok() {
     # grammar already validated whole-file above: exactly one record
     rec="$(awk -v f="$f" '$1=="bin" && $2==f {print $3}' "$STAMP")"
     [ "${#rec}" -eq 64 ] || return 1
-    cur="$(shasum -a 256 "$DEVB/$f" | cut -d' ' -f1)"
+    # iter 56 (review-55 M): full-line host grammar; a malformed shasum
+    # line -> rebuild (this path's fail direction), corruption WARN
+    # visible from the helper
+    cur="$(rig_host_sha256 "$DEVB/$f")" || return 1
     if [ "$cur" != "$rec" ]; then
       echo "   cached $f sha256 != stamp record — forcing rebuild" >&2
       return 1
@@ -591,12 +650,15 @@ rig_arm_build() {
       echo "DEVICE FAIL: gfx_device carries no libSDL-1.2.so.0 NEEDED entry — SDL not dynamically linked" >&2
       exit 1
     fi
-    {
-      printf 'srchash=%s\n' "$want"
-      for f in $ARMBINS; do
-        printf 'bin %s %s\n' "$f" "$(shasum -a 256 "$DEVB/$f" | cut -d' ' -f1)"
-      done
-    } > "$STAMP"
+    # iter 56 (review-55 M): full-line host grammar at the stamp WRITE —
+    # a malformed shasum line must die loudly BEFORE it is recorded,
+    # never ride into the stamp as a plausible first field.
+    local bsum
+    printf 'srchash=%s\n' "$want" > "$STAMP"
+    for f in $ARMBINS; do
+      bsum="$(rig_host_sha256 "$DEVB/$f")" || exit 1
+      printf 'bin %s %s\n' "$f" "$bsum" >> "$STAMP"
+    done
     echo "   arm binaries rebuilt (stamp $want)"
   else
     echo "   arm binaries up to date (stamp $want; cached binaries sha-verified)"
@@ -612,7 +674,7 @@ rig_stamp_rehash() {
   for f in "$@"; do
     # iter 52 (whitelist grammar): strict exactly-one-record stamp parse
     rec="$(rig_stamp_bin_sha "$f")"
-    cur="$(shasum -a 256 "$DEVB/$f" | cut -d' ' -f1)"
+    cur="$(rig_host_sha256 "$DEVB/$f")" || exit 1 # full-line grammar (iter 56)
     if [ "$cur" != "$rec" ]; then
       echo "DEVICE FAIL: $f changed between stamp verification and push ($cur != $rec)" >&2
       exit 1
