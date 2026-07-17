@@ -244,7 +244,7 @@ made() {
 # record into two).
 rig_srchash() {
   set -o pipefail
-  local listf brokenf n
+  local listf brokenf n h
   listf="$DEVB/.srclist.$$"
   brokenf="$DEVB/.srcbroken.$$"
   find -L port/sim port/gfx port/tools port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
@@ -294,17 +294,33 @@ rig_srchash() {
     rm -f "$listf"
     return 1
   fi
-  {
+  h="$({
     LC_ALL=C sort -z < "$listf" | xargs -0 shasum -a 256 || exit 1
     # shellcheck disable=SC2086 — RIG_SCRIPTS is a fixed space-separated list
     shasum -a 256 "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" \
       $RIG_SCRIPTS || exit 1
     printf 'dockerimage %s\n' "$ARMIMGID"
-  } | shasum -a 256 | cut -d' ' -f1 || {
+  } | shasum -a 256 | cut -d' ' -f1)" || {
     rm -f "$listf"
     return 1
   }
   rm -f "$listf"
+  # iter 55 (review-54 M): PRODUCE-TIME grammar — the stamp key must be
+  # exactly 64 lowercase hex BEFORE anything consumes it. An empty or
+  # short digest (broken shasum, truncated pipeline) dies loudly here
+  # and is never stamped; rig_stamp_ok re-asserts the same shape on
+  # every cache-HIT read.
+  case "$h" in
+    ''|*[!0-9a-f]*)
+      echo "DEVICE FAIL: srchash produced a non-lowercase-hex digest ('$h')" >&2
+      return 1
+      ;;
+  esac
+  if [ "${#h}" -ne 64 ]; then
+    echo "DEVICE FAIL: srchash digest not 64 chars ('$h')" >&2
+    return 1
+  fi
+  printf '%s\n' "$h"
 }
 
 # rig_stamp_bin_sha <bin> — the stamp's recorded sha256 for one binary,
@@ -359,7 +375,11 @@ rig_stamp_bin_sha() {
 # required records but ignored extra/malformed lines, so an accidentally
 # appended partial record could still ride a cache HIT): one awk pass
 # now requires EVERY line to match a known record form — line 1 exactly
-# `srchash=<want>`, then EXACTLY one `bin <name> <64-lowercase-hex>` per
+# `srchash=<want>` AND anchored ^srchash=[0-9a-f]{64}$ (iter 55,
+# review-54 M: the equality alone accepted `srchash=` under an empty
+# $want — the VALUE grammar is part of the whitelist, so an
+# empty/short/non-hex key can never ride a cache HIT), then EXACTLY one
+# `bin <name> <64-lowercase-hex>` per
 # ARMBINS member (whole-line reconstruction, membership, uniqueness),
 # total line count == 1 + #bins, nothing else. ANY unrecognized, extra,
 # or malformed line → return 1 (the SAFE direction here is rebuild,
@@ -370,7 +390,7 @@ rig_stamp_ok() {
   awk -v want="$want" -v bins="$ARMBINS" '
     BEGIN { nb = split(bins, b, " "); for (i = 1; i <= nb; i++) need[b[i]] = 1; bad = 0 }
     bad { next }
-    NR == 1 { if ($0 != "srchash=" want) bad = 1; next }
+    NR == 1 { if ($0 != "srchash=" want || $0 !~ /^srchash=[0-9a-f]{64}$/) bad = 1; next }
     {
       if (NF != 3 || $1 != "bin" || !($2 in need) || seen[$2]++ ||
           length($3) != 64 || $3 ~ /[^0-9a-f]/ || $0 != "bin " $2 " " $3) bad = 1

@@ -128,6 +128,8 @@ rig_lock_acquire
 # (restore-command rc alone is never proof) before EITHER disarm channel
 # (cancel file, nonce wipe) runs; on unverified restore the deadman
 # STAYS armed and rig_cleanup preserves $DTMP (RIG_PRESERVE_DTMP=1).
+# Cross-RUN interleavings of that end state are normalized by the
+# step-0 startup chokepoint of the NEXT run (iter 55, review-54 H).
 PARKED=0
 DEADMAN_ARMED=0
 task4_cleanup() {
@@ -176,6 +178,104 @@ trap task4_cleanup EXIT
 
 require_device
 rig_devsha_selftest
+
+echo "== [0/7] stale-state startup normalization (cross-run chokepoint) =="
+# iter 55 (review-54 H — the iter-54 "disarm-shares-a-path-with-cleanup"
+# class, SECOND face: cross-RUN sequencing): run A can exit with an
+# unverified restore (marker present, deadman armed, nonce preserved);
+# run B then owns the device, wipes A's nonce at its step-5 wipe, and if
+# B fails pre-park its cleanup "has nothing to restore" while A's
+# deadman rejects the missing nonce → stranded frontend. Instead of
+# patching each interleaving, EVERY stale prior-run state is normalized
+# HERE — one chokepoint, before any of this run's own parking/build:
+#   1. the stale MARKER is restored FIRST and RC-VERIFIED gone
+#      (PARKED=1 pessimistically around it: a mid-restore death hands
+#      the retry-wrapped trap ownership of the marker);
+#   2. only AFTER the marker is proven gone is a stale deadman disarmed
+#      through its DESIGNED cancel channel and its exit VERIFIED — a
+#      reboot/kill-orphaned pid FILE (recorded pid dead) is stale
+#      state; a LIVE watcher ignoring its cancel is a defect → loud
+#      death;
+#   3. only then is the stale state wiped (rm -rf $DTMP).
+# While a stale deadman may still be armed and the marker unproven,
+# RIG_PRESERVE_DTMP=1 keeps its nonce alive through ANY
+# mid-normalization death — the old backstop stays armed exactly until
+# the thing it guards is verifiably restored (the iter-54 rule applied
+# across runs). Transport failures during the probes are LOUD deaths,
+# never "no stale state".
+stale_marker=0
+stale_deadman=0
+nrc=0
+dsh "test -f /mnt/disable_frontend" >/dev/null || nrc=$?
+case "$nrc" in
+  0) stale_marker=1 ;;
+  1) : ;;
+  *) echo "DEVICE FAIL: startup normalization could not probe the frontend marker (rc $nrc)" >&2; exit 1 ;;
+esac
+nrc=0
+dsh "test -e $DTMP/deadman.nonce -o -e $DTMP/deadman.pid" >/dev/null || nrc=$?
+case "$nrc" in
+  0) stale_deadman=1 ;;
+  1) : ;;
+  *) echo "DEVICE FAIL: startup normalization could not probe for stale deadman state (rc $nrc)" >&2; exit 1 ;;
+esac
+if [ "$stale_marker" = 1 ] || [ "$stale_deadman" = 1 ]; then
+  echo "WARN: stale prior-run state on the device (marker=$stale_marker deadman-state=$stale_deadman) — normalizing before any parking" >&2
+  if [ "$stale_deadman" = 1 ]; then
+    RIG_PRESERVE_DTMP=1 # a death before the disarm-verify must not wipe the old nonce
+  fi
+  if [ "$stale_marker" = 1 ]; then
+    PARKED=1 # pessimistic: the trap owns the stale marker until verified gone
+    dsh "rm -f /mnt/disable_frontend"
+    dsh "test ! -f /mnt/disable_frontend" # RC-verified gone; errexit dies loud
+    PARKED=0
+    echo "   stale /mnt/disable_frontend removed (RC-verified gone)"
+  fi
+  if [ "$stale_deadman" = 1 ]; then
+    dsh "mkdir -p $DTMP && touch $DTMP/deadman.cancel"
+    sdm_gone=0
+    for _ in $(seq 1 6); do # §7#1 bounded foreground poll (deadman polls its cancel every 2 s)
+      if dsh "test ! -f $DTMP/deadman.pid" >/dev/null 2>&1; then sdm_gone=1; break; fi
+      sleep 2
+    done
+    if [ "$sdm_gone" = 1 ]; then
+      echo "   stale deadman disarmed via its cancel channel (exit verified: pid file gone)"
+    else
+      # pid file persists — whitelist-grammar pid parse, then fork on
+      # liveness (never dereference /proc with an unvalidated value)
+      sdm_pid="$(dsh "cat $DTMP/deadman.pid")" || {
+        echo "DEVICE FAIL: startup normalization could not read the stale deadman pid file" >&2
+        exit 1
+      }
+      sdm_pid="${sdm_pid%$'\n'}" # the single measured dsh trailing-newline artifact
+      if ! [[ "$sdm_pid" =~ ^[0-9]{1,7}$ ]]; then
+        echo "DEVICE FAIL: stale deadman.pid is not a bounded decimal pid ('$sdm_pid')" >&2
+        exit 1
+      fi
+      nrc=0
+      dsh "test -d /proc/$sdm_pid" >/dev/null || nrc=$?
+      case "$nrc" in
+        0)
+          echo "DEVICE FAIL: stale deadman (pid $sdm_pid) is STILL RUNNING and ignored its cancel for 12 s — a defect, not stale state; inspect the device" >&2
+          exit 1
+          ;;
+        1)
+          echo "   stale deadman.pid was reboot/kill-orphaned (pid $sdm_pid dead) — stale state"
+          ;;
+        *)
+          echo "DEVICE FAIL: startup normalization could not probe pid $sdm_pid liveness (rc $nrc)" >&2
+          exit 1
+          ;;
+      esac
+    fi
+    dsh "rm -rf $DTMP"
+    RIG_PRESERVE_DTMP=0
+    echo "   stale deadman state wiped ($DTMP)"
+  fi
+  echo "   startup normalization complete — device state is clean"
+else
+  echo "   no stale prior-run state (marker absent, no deadman state)"
+fi
 
 # parse_timing_judge <timing-file> <frames> — judge-render-timing.js
 # (strict row grammar: exactly <frames> lines, 4 anchored columns) with
@@ -547,9 +647,13 @@ echo "== [6/7] device: LIVE paced g01 render (deadman-guarded park; detached lau
 # armed BEFORE the park, so a transport death at ANY later point still
 # un-strands the frontend on-device. It polls a cancel file every 2 s
 # inside a $DEADMAN_S window; on expiry it acts ONLY if the nonce file
-# still carries THIS install's nonce (a later run wiping $DTMP disarms
-# any stale deadman) and no cancel exists — actions (rm -f marker,
-# pkill gfx_device) are idempotent by design. The healthy path cancels
+# still carries THIS install's nonce (a later run's startup
+# normalization cancel-disarms any stale deadman at the step-0
+# chokepoint; the $DTMP wipe is a second, incidental disarm) and no
+# cancel exists — actions are idempotent by design: rm -f marker + a
+# NONCE-SCOPED kill (iter 55, review-54 H: only the pid recorded under
+# THIS nonce, and only while its cmdline is still gfx_device — an old
+# deadman can never kill a NEW run's app). The healthy path cancels
 # and VERIFIES the deadman exited without firing (hygiene tooling must
 # never fire during a healthy run — proven every run, not argued).
 DM_NONCE="$RANDOM$RANDOM$$"
@@ -567,7 +671,18 @@ done
 if [ "\$(cat $DTMP/deadman.nonce 2>/dev/null)" = "$DM_NONCE" ] && [ ! -f $DTMP/deadman.cancel ]; then
   echo fired > $DTMP/deadman.fired
   rm -f /mnt/disable_frontend
-  pkill gfx_device
+  # iter 55 (review-54 H): the kill is NONCE-SCOPED — only the pid this
+  # run's launcher recorded under THIS nonce, and only while that pid's
+  # cmdline is still gfx_device (pid-reuse guard). A bare
+  # `pkill gfx_device` could kill a LATER run's app. (An argv nonce tag
+  # is infeasible: gfx_app rejects unknown args and gfx_app.c is
+  # outside this task's surface — the nonce-named pid file is the
+  # equivalent scoping.)
+  gp="\$(cat $DTMP/gfx.pid.$DM_NONCE 2>/dev/null)"
+  case "\$gp" in
+    ''|*[!0-9]*) : ;;
+    *) if grep -q gfx_device "/proc/\$gp/cmdline" 2>/dev/null; then kill "\$gp"; fi ;;
+  esac
 fi
 rm -f $DTMP/deadman.pid
 exit 0
@@ -581,8 +696,11 @@ rm -f "$BUILD/render-launch.sh"
 cat > "$BUILD/render-launch.sh" << EOF
 #!/bin/sh
 # generated by check-device-render.sh — paced live-render launcher
+# iter 55 (review-54 H): gfx_device is backgrounded and its pid recorded
+# under the NONCE-NAMED file the deadman's scoped kill arm reads —
+# `wait \$!` preserves the app's exit code for render.apprc.
 cd $DTMP || exit 9
-rm -f render.apprc
+rm -f render.apprc gfx.pid.$DM_NONCE
 setsid sh -c './gfx_device \
   --trace $DTMP/g01.trace.txt --simdata $DTMP/simdata.txt \
   --gfxdata $DTMP/gfxdata-frozen.txt --anim-dir $DTMP \
@@ -590,7 +708,9 @@ setsid sh -c './gfx_device \
   --pace 1 --budget-ns $BUDGET_NS \
   --out $DTMP/g01.dev-out.txt --timing $DTMP/g01.dev-tim.txt \
   --shot-frame $SHOT_FRAME --shot-ppm $DTMP/g01.dev-shot.ppm \
-  --shot-pgm $DTMP/g01.dev-shot.pgm 2> $DTMP/g01.dev-log.txt; \
+  --shot-pgm $DTMP/g01.dev-shot.pgm 2> $DTMP/g01.dev-log.txt & \
+  echo \$! > $DTMP/gfx.pid.$DM_NONCE; \
+  wait \$!; \
   echo "RC=\$?" > $DTMP/render.apprc' \
   </dev/null >/dev/null 2>&1 &
 sleep 2
@@ -651,6 +771,11 @@ if [ "$(cat "$DEVB/render.apprc")" != "RC=0" ]; then # exact whole-file grammar
   echo "DEVICE FAIL: live render app exited nonzero ($(cat "$DEVB/render.apprc"))" >&2
   exit 1
 fi
+# iter 55: the deadman's scoped-kill arm depends on the launcher's
+# nonce-named pid record — prove it was written on every healthy run
+# (a silently-unwritten pid file = a dead kill arm; the marker-restore
+# arm is independent and unaffected).
+dsh "test -s $DTMP/gfx.pid.$DM_NONCE"
 dsh "rm -f /mnt/disable_frontend"
 # iter 54 (review-52 H): RC-checked VERIFICATION that the marker is
 # actually gone — only then may either disarm channel run (PARKED=0

@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-17, iter-54 writer completion)
+## Live right now (updated: 2026-07-17, iter-55 writer completion)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -302,13 +302,35 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   + the device deadman probe, zero false rejections on genuine corpus.
   Regressions ALL green: DEVICE CONFORMS g01 · DEVICE CONFORMS 8/8 +
   SIM P99 OK · S1 INPUT OK (.loop/m3-task4r54-reg-*.log).
-- **In flight**: task-4 arc ROUND 3 = closure review pending (iter 54
-  closed round 2; review-50's untriaged Low — gfx_app getline/ferror —
-  still open for its disposition); task-5 arc ROUND 2 pending (closure
-  review of iter 53). Then: both arcs to GO → task 6 (audio-on) →
-  task 7 (OPK + verify_m3.sh gate).
-- **Latest AGENT-LOG entry**: iter 54 (M3 task 4 hardening round 2);
-  latest log id: .loop/m3-task4r54-donecheck.log.
+- **Iter 55 (M3 task 4 hardening ROUND 3) DONE**: both review-54
+  round-3 residuals closed — H cross-run deadman sequencing via
+  STALE-STATE STARTUP NORMALIZATION (new step 0 chokepoint in
+  check-device-render.sh: stale marker restored FIRST + RC-verified,
+  stale deadman disarmed via its designed cancel channel with exit
+  verified, state wiped only after; RIG_PRESERVE_DTMP held while an
+  old backstop may still be needed) + NONCE-SCOPED deadman kill (argv
+  tag infeasible — gfx_app rejects unknown args, gfx_app.c out of
+  surface; equivalent: launcher records gfx_device's pid under
+  gfx.pid.<nonce>, deadman kills only that pid and only while its
+  /proc cmdline is still gfx_device); M rig_stamp_ok srchash value
+  grammar restored (^srchash=[0-9a-f]{64}$ AND equality) +
+  rig_srchash produce-time 64-hex assert (empty/short never stamped).
+  Cold done-check DEVICE RENDER OK exit 0 FIRST attempt, skips 0/3600
+  (.loop/m3-task4r55-donecheck.log; the round's one rebuild). Teeth:
+  T1 plant+probe normalization, T2 the review's exact A/B stranding
+  sequence (no stranding), T3 scoped-kill both directions, T4a-d +
+  T5a2/b2/c stamp grammar (zero false rejections). Regression DEVICE
+  CONFORMS g01, stamp HIT (.loop/m3-task4r55-reg-g01.log);
+  conform/input skipped with pre-registered justification (stamp-
+  machinery-only riglib edits). Zoom-out: cross-run state machines
+  get ONE startup chokepoint, never per-sequence patches.
+- **In flight**: task-4 arc ROUND 4 = closure-or-cap pending (iter 55
+  closed round 3; review-50's untriaged Low — gfx_app getline/ferror —
+  still open for its disposition); task-5 arc CLOSED at GO (round 2).
+  Then: task-4 arc to GO/cap → task 6 (audio-on) → task 7 (OPK +
+  verify_m3.sh gate).
+- **Latest AGENT-LOG entry**: iter 55 (M3 task 4 hardening round 3);
+  latest log id: .loop/m3-task4r55-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
