@@ -1,0 +1,47 @@
+# port/sim/device/m3-freeze-manifest.txt — M3 EXIT GATE freeze manifest
+# (PROCESS §4 reviewed-pin rule, adopted 2026-07-16; assembled iter 58).
+#
+# Record grammar (verify_m3.sh parses it anchored, fail-closed):
+#   <sha256> <path> <status> <cite>
+# status tokens:
+#   reviewed-go      — surface closed a Tier-A Codex arc at VERDICT: GO
+#                      (or driver-recorded CAPPED-CLOSED; cite = the
+#                      arc's verdict log or the driver AGENT-LOG entry)
+#   oracle-frozen    — HARD RULE 3 surface (never edited since freeze)
+#   grandfathered-m2 — M2-era judge-path tool predating PROCESS
+#                      adoption; proven by the M2 exit gate corpus
+#   arc-in-flight    — review arc running now (iter-57 audio surface)
+#   arc-pending      — new iter-58 surface awaiting its Tier-A arc
+#
+# verify_m3.sh HARD-REFUSES to run any leg when a producer's current
+# bytes mismatch its pin ("hashes prove identity, not approval" — a
+# producer change invalidates prior gate evidence).
+#
+# UPDATE PATH (reviewed change only): a producer edit lands through its
+# review arc; the SAME commit re-pins it here by regenerating its line:
+#   shasum -a 256 <path>   -> replace the record's sha field
+# (full regeneration recipe: docs/AGENT-LOG.md iter 58). The driver's
+# ground-truth ritual re-runs the gate cold after any re-pin.
+7b031055e2329269e4e207012202cd772a75b604bd37ab3df8de9db325e4a254 port/sim/device/adbsh.sh reviewed-go .loop/review-42-1.log
+606fb6e0574407926d2ff4af6921d87ddc82afcec93f4668d1e89382908b8ccc port/sim/device/riglib.sh arc-pending iter58-roster-delta-on-.loop/review-42-1.log
+d52f42f6eb9156c7c3a7116fcc3a6f4c3b4c6c223d06b476ede8665eebafeff8 port/sim/device/check-device-g01.sh reviewed-go .loop/review-42-1.log
+f4bff53ba987316d83d127b0a92d281263f66a19d1aca49dcd18969af63352de port/sim/device/check-device-conform.sh reviewed-go .loop/review-47-1.log
+4034ad81601de4e25b85658095ebfd38de2cc813fad594164afb563d6deb81ad port/sim/device/percentiles.js reviewed-go .loop/review-47-1.log
+5eba81706943f4594d92f653f4f4ba589b96a6d0605559ad85a5c86b05a720e1 port/gfx/check-device-render.sh reviewed-go .loop/review-55-1.log+capped-close-AGENT-LOG
+11d913173a4cbaa6c1dd68affbffccdbb39a688490b1e3dca18dd5435974ad2d port/gfx/judge-render-timing.js reviewed-go .loop/review-55-1.log+capped-close-AGENT-LOG
+cf2adcd60e9866c38696d3406cdbb87930ef2043112edbc1942686fcf7c8099f port/gfx/judge-shot.js reviewed-go .loop/review-55-1.log+capped-close-AGENT-LOG
+5526c99be30e558960c11ac6c22c27ed735b4f8b478d190203875c3272831dbe port/gfx/check-device-input.sh reviewed-go .loop/review-53-1.log
+12ba15434041dd14e8b787751854b907e7cadf50b3965f1c561fe2ca639ef354 port/gfx/judge-s1-coverage.js reviewed-go .loop/review-53-1.log
+26bdc02bbc3074d2e9defda3db27abb065a227dbfe98e3933efd56dcea208b3a port/gfx/s1-session.script reviewed-go .loop/review-53-1.log
+05ced80f57e993541f6da8b647e63abcac4163cd6e5b275f2a811a49c2faeb76 port/tools/fk_input.c reviewed-go .loop/review-53-1.log
+986e8f6f5ff357a6bd81178d7f57cbd7797b2e1d8e77fc2579edd4e00a2ba9ed port/gfx/check-device-audio.sh arc-in-flight .loop/review-57-1.log
+fafe61ac3ca2a541fdd601dffa08cc32031f27f8fde0c91f310b2908d416ce60 port/gfx/judge-audio-summary.js arc-in-flight .loop/review-57-1.log
+bf29fa7cba83708cfff093195f48ad20a8eda2ad794fe25b270f211b08876eee port/gfx/pack-snd.js arc-in-flight .loop/review-57-1.log
+2a48fbccc1d6a31d58cd2dc2092d0e276d2d63671642de99a14d170f0500669a port/gfx/check-device-opk.sh arc-pending iter58
+b4bd4ba415f5d63e70895087204586846bede5b372422fce4292399e97ebb5ca port/gfx/opk/mlfk.sh arc-pending iter58
+8b24efb23d678ce3f1a2acfed29c3b5f5ec66224fffe84daa004569cc90d0a9d port/gfx/opk/meleelight.funkey-s.desktop arc-pending iter58
+efea406086050d51b3894692c6030afef1b0cc7ed06de442b728ef2e6072fe99 port/gfx/opk/icon32.png arc-pending iter58
+fc6aa569d4efc731509a9ebc9c5b7857bb00896d41aeaeb82c9ee7de1d0592e5 port/sim/sim/wrap-run.js grandfathered-m2 M2-exit-gate-SIM-CONFORMS
+4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js grandfathered-m2 M2-exit-gate-SIM-CONFORMS
+f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js oracle-frozen M0-task5-HARD-RULE-3
+ffdd8fb73a226aee17af7691d7893ac24a5b21ca0bb2d7d198096ce34ed018ae port/sim/device/verify_m3.sh arc-pending iter58

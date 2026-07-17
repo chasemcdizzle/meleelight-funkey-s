@@ -1210,18 +1210,35 @@ Honest coverage: audible fidelity unverified by construction (M4
 seeds: mixer fidelity + music; stop-path live coverage — g01 fires
 zero .stop events; skip-burst attribution instrument).)
 
-7. OPK + frontend launch + M3 exit-gate assembly — launcher script (tmpfs
-   log + copy-back trap, SD data-dir env chain), `.desktop` with trailing
-   empty line + 32×32 icon, packaged with the SDK container's mksquashfs
-   4.4 ONLY; push to `/mnt/Applications`; launch via the FRONTEND path
-   (frontend restored, driven by the uinput injector); app writes a boot
-   marker + in-app screenshot pulled as evidence; assemble
-   `port/sim/device/verify_m3.sh` (the §Gates M3 command — see CLAUDE.md
-   §Commands "M3 EXIT GATE"). NOTE for the phase-advance iteration: a
-   gate pass is followed by the human-gate sentinel
-   `LOOP STOP: m3-device — needed: Chase S1 ratification playtest`
-   (LOOP §F-advance.3/§H). — done-check:
-   `bash port/sim/device/verify_m3.sh` → prints `M3 GATE OK`, exit 0.
+(task 7 — OPK + frontend launch + M3 exit-gate assembly — DONE iter 58:
+`bash port/sim/device/verify_m3.sh` → `M3 GATE OK`, exit 0
+(.loop/m3-task7-donecheck.log). All four legs passed cold: [1]
+`DEVICE CONFORMS 8/8 + SIM P99 OK`; [2] `DEVICE AUDIO OK (full p99
+12.573 ms, underruns=0, attempts=2)`; [3] `OPK LAUNCH OK` (packaged
+with the SDK container's mksquashfs 4.4 ONLY, launched via the REAL
+gmenu2x FRONTEND driven by the fk_input uinput injector, boot-marker
+bin-sha == arm-build stamp record, evidence g01 stream prefix 900/900
+== frozen, in-app screenshot judge-shot structural); [4] `S1 INPUT OK`.
+NEW: port/gfx/opk/{mlfk.sh (launcher — Exec=script, tmpfs log +
+copy-back trap, SD data-dir env chain, boot marker w/ mounted-binary
+sha), meleelight.funkey-s.desktop (trailing empty line asserted),
+icon32.png (32×32, from OUR renderer's g01 f900 host shot — no
+Nintendo asset bytes)}; port/gfx/check-device-opk.sh (leg-3 engine,
+arc-pending); port/sim/device/verify_m3.sh (the gate — REUSES the
+arc-hardened sub-checks, each verdict parsed by exact anchored grammar,
+exactly-one-match posture); port/sim/device/m3-freeze-manifest.txt
+(PROCESS §4 reviewed-pin freeze manifest — 23 producers sha256+status,
+verify_m3.sh HARD-REFUSES before any leg on drift). riglib RIG_SCRIPTS
++= check-device-opk.sh + verify_m3.sh. MEASURED gmenu2x nav (empirical,
+iter 58): conf section/link IGNORED for start; pkill-respawn lands at
+the STABLE persisted section (games); nav `n m r a` normalizes the
+within-games link then selects MeleeLight; wrong section → no boot
+marker → leg FAILS LOUD (fail-closed, never a false pass). NOTE for
+the phase-advance iteration: a gate pass is followed by the human-gate
+sentinel `LOOP STOP: m3-device — needed: Chase S1 ratification
+playtest` (LOOP §F-advance.3/§H) — the GATE does NOT print it (driver
+duty). — done-check:
+`bash port/sim/device/verify_m3.sh` → prints `M3 GATE OK`, exit 0.)
 
 ## M4 — Full-game parity
 

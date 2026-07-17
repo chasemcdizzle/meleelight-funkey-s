@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=MeleeLight
+Comment=MeleeLight port (private build)
+Exec=mlfk.sh
+Terminal=false
+Type=Application
+StartupNotify=true
+Icon=icon32
+Categories=games;
+

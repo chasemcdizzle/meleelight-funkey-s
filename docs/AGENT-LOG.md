@@ -6998,3 +6998,272 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   spec, per-leg assert-in-judge, task-4 park/deadman apparatus,
   rm-before-produce/made, push provenance + frozen content pin).
   No new one-offs.
+
+## iter 58 — 2026-07-17 — M3 task 7 PRE-REGISTRATION: OPK + frontend launch + verify_m3.sh gate assembly (frozen before any run/edit; PROCESS §2)
+
+**Scope (fix_plan §M3 task 7; the done-check IS the gate):** launcher +
+.desktop + 32x32 icon + OPK (SDK-container mksquashfs 4.4 ONLY), pushed
+to /mnt/Applications, launched via the FRONTEND (gmenu2x driven by the
+fk_input uinput injector), boot marker + in-app screenshot pulled as
+evidence; NEW `port/gfx/check-device-opk.sh` (Tier-A arc pending) as the
+leg-3 engine; `port/sim/device/verify_m3.sh` = the CLAUDE.md §Commands
+"M3 EXIT GATE" verbatim, four legs REUSING the arc-hardened sub-checks
+(conform / audio / opk / input), plus the PROCESS §4 reviewed-pin
+FREEZE MANIFEST (`port/sim/device/m3-freeze-manifest.txt`) verified
+BEFORE any leg runs. Constraint honored: the concurrently-reviewed
+audio surface (check-device-audio.sh, judge-audio-summary.js, audio
+portions of gfx_app.c/platform_sdl1.c) is NOT edited — reuse/pin only.
+
+**Method (frozen):**
+1. EMPIRICAL MENU-NAVIGATION MEASUREMENT (bounded instrument, cap 10
+   short device probes): (a) probe gmenu2x respawn behavior after
+   `pkill gmenu2x` with the park marker absent (supervisor respawn =
+   our deterministic menu-state NORMALIZER: respawn starts at a default
+   selection); (b) probe OPK rescan (does a freshly pushed
+   /mnt/Applications OPK appear after respawn?); (c) OBSERVE the menu
+   with the OS screenshot chord (Fn+Up = `q`+`u` letter keysyms via
+   fk_input; PNG lands in /mnt/FunKey/snapshots — pull + read + delete
+   ONLY the snapshots we caused, recorded by name); (d) derive the
+   deterministic navigation key sequence from a respawn-fresh menu to
+   our .desktop entry + accept (`a`); (e) verify by BOOT MARKER, never
+   by screenshot alone. The final sequence is FROZEN as a generated
+   fk_input script inside check-device-opk.sh (pushed + sha-verified
+   like every launcher).
+2. OPK: stage = gfx_device (stamped bytes, rig_stamp_rehash) +
+   `port/gfx/opk/mlfk.sh` launcher (exports SDL_NOMOUSE=1; data-dir env
+   chain MLFK_DATA_DIR -> /mnt/mlfk-scratch -> /mnt/mlfk-data; tmpfs
+   evidence dir /tmp/mlfk/opk + log copy-back trap to the data dir;
+   writes boot marker carrying `sha256sum` of the RUNNING binary =
+   PROCESS §4 installed-artifact identity at launch time; evidence mode
+   via an args FILE `opk-args` in the data dir — the check pins its
+   bytes; default mode = live playable S1 session for the human gate) +
+   `.desktop` (Exec=mlfk.sh, Categories=games, trailing empty line
+   asserted) + committed 32x32 `icon32.png` GENERATED from OUR OWN C
+   renderer's host framebuffer dump of g01 frame 900 (ffmpeg downscale;
+   meleelight-derived vector art rendered by our raster.c — no Nintendo
+   sprite/asset bytes; provenance documented at the pin site in
+   check-device-opk.sh + here). Packaged INSIDE the SDK container
+   (mksquashfs 4.4 — version asserted by anchored grammar BEFORE
+   packaging); contents verified by unsquashfs-in-container + per-file
+   cmp vs the stage (PROCESS §4 "OPK contents verified by checksum");
+   pushed to /mnt/Applications/mlfk-evidence.opk, device-side sha
+   verified vs host. Evidence run: g01 replay, frames=900, pace=1,
+   audio ON (--sndpack), --shot-frame 450 (mid-run, in-match), stream
+   PREFIX-verified host-side against the frozen g01 stream (frames
+   1..900 hash-equal — real conformance teeth on the OPK-installed
+   binary), screenshot judged by the UNCHANGED judge-shot.js
+   (structural + non-blank), boot-marker hash == the stamp's gfx_device
+   record. OPK removed from /mnt/Applications at check end (evidence
+   lives in pulled host artifacts; nothing stays installed) + gmenu2x
+   respawned for a clean menu.
+3. verify_m3.sh: (0) FREEZE-MANIFEST verification FIRST — strict
+   4-field anchored grammar (`<64hex>  <path>  <status>  <cite>`,
+   status in {reviewed-go, oracle-frozen, grandfathered-m2,
+   arc-in-flight, arc-pending}), EXACT producer-set equality vs the
+   in-script REQUIRED_PRODUCERS list (a truncated manifest can never
+   narrow coverage), re-hash every file via rig_host_sha256, ANY
+   mismatch = hard refusal BEFORE any leg (including verify_m3.sh's
+   own self-pin); (1..4) legs in CLAUDE.md gate order — conform, audio
+   (perf), opk, input — each leg = nohup'd sub-check + bounded
+   foreground polls (§7#1), rc captured via wrapper marker, verdict
+   line(s) parsed by EXACT anchored grammar with exactly-one-match
+   posture (conform: two fixed lines `DEVICE CONFORMS 8/8` + `SIM P99
+   OK`; audio: the pinned regex with underruns=0 + skips=0/3600 baked
+   in, attempts extracted; opk: check-device-opk.sh's fixed-grammar OK
+   line; input: the FIXED-LITERAL S1 INPUT OK line — every variable in
+   it is a frozen pin). rc==0 with wrong/absent/duplicated verdict =
+   corruption death. Aggregated per-leg one-liners + audio attempts
+   (the ONLY sanctioned retry — the audio check's internal <=2
+   skip/underrun policy; the gate adds NO retry layer) then
+   `M3 GATE OK`, exit 0. The gate does NOT print the LOOP STOP
+   sentinel (driver duty).
+4. riglib.sh RIG_SCRIPTS += check-device-opk.sh + verify_m3.sh (the
+   roster contract) — forces exactly one shared arm rebuild.
+
+**Run caps (frozen):** <= 10 short navigation/menu probes; <= 3
+check-device-opk.sh full runs standalone; <= 2 FULL verify_m3.sh runs
+(cold done-check = the last); regression `check-device-render.sh` once
+(shared riglib roster touched); 1 docker arm rebuild (serial) + 1
+contingency. Early-stop: first full gate pass after teeth = done.
+
+**Pass criteria:** cold `bash port/sim/device/verify_m3.sh` prints the
+four leg verdicts + `M3 GATE OK`, exit 0 (.loop/m3-task7-donecheck.log).
+
+**Refutation shapes (and what happens then):**
+- OPK pushed but never appears in the menu after respawn -> rescan is
+  boot-only or monitor-based: measure once more with a full frontend
+  restart cycle; if still absent, triage the FunKey OPK-detect path
+  (read-only) — one bounded evidence round, then STOP and report.
+- Frontend launch silently does nothing -> the mksquashfs class (wrong
+  version writes an unmountable squashfs): assert 4.4 grammar BEFORE
+  packaging; if the assert passed and mount still fails, that REFUTES
+  the known class -> honest triage, no blind retry.
+- App dies at SDL init under the frontend -> env class (SDL_NOMOUSE):
+  launcher exports it explicitly; if it still dies, pull the app log +
+  triage (the envelope doc's fallback-chain classes), no blind retry.
+- Navigation sequence lands on the wrong entry (boot marker absent
+  after accept) -> re-observe with the screenshot chord, adjust ONCE
+  within the probe cap; a sequence that cannot be made deterministic
+  from a respawn-fresh menu is a REAL finding (report, do not hide a
+  fuzzy retry loop in the gate).
+- A gate leg fails on the registered transient-spike class -> ONLY the
+  audio check's internal visible <=2 retry absorbs it (attempts
+  surfaced in gate output); any other leg failure = honest triage,
+  never a widened retry budget.
+**Teeth (must fire before done):** T1 freeze-manifest perturbation
+(one producer byte appended) -> verify_m3.sh hard-refuses BEFORE any
+leg, names the file; T2 corrupted sub-check verdict (resembling line
+via MLFK-test seam or doctored log replay) -> corruption death, not a
+pass; T3 boot-marker absence (probe without launch) -> opk leg fails
+loud; T4 blank screenshot -> judge-shot rejection propagates to leg
+failure. Negative-control discipline: perturb -> observe exactly-one
+failure -> restore -> cmp-verify restoration.
+
+## iter 58 — 2026-07-17 — M3 task 7 DONE: OPK + frontend launch + verify_m3.sh gate assembly — M3 GATE OK
+
+- **Done-check (cold)**: `bash port/sim/device/verify_m3.sh` → `M3 GATE OK`,
+  exit 0 (.loop/m3-task7-donecheck.log). Four legs, all judged host-side:
+  - [1] conformance: `DEVICE CONFORMS 8/8 + SIM P99 OK`
+    (engine check-device-conform.sh; 8 goldens replayed on the FunKey).
+  - [2] perf+audio: `DEVICE AUDIO OK (full p99 12.573 ms, underruns=0,
+    attempts=2; cbs=5166 starts=274 stops=0 skips=0/3600)` — 1 retry
+    used (skip/underrun transient class, the ONLY sanctioned retry;
+    surfaced in gate output).
+  - [3] opk: `OPK LAUNCH OK (frontend-launched via gmenu2x, boot marker
+    bin-sha == stamp, evidence rc=0, stream prefix 900/900 vs frozen
+    g01, shot structural)`.
+  - [4] live input: `S1 INPUT OK (... tapjump oracle diverged at frame
+    121)`.
+- **Freeze manifest verified FIRST**: `freeze manifest OK: 23 producers,
+  all bytes match their pins` — HARD REFUSAL before any leg on drift
+  (PROCESS §4). Teeth T1a-d fired (.loop/m3-task7-teeth-manifest.log):
+  flipped icon pin → refusal naming the producer BEFORE any leg; junk
+  data line → grammar refusal; dropped producer → refusal; perturbed
+  producer bytes (newline appended to mlfk.sh) → refusal; each restored
+  + cmp-verified.
+
+### PRE-REGISTRATION — see the iter-58 PRE-REGISTRATION entry above.
+
+### RESULTS (iter 58)
+- **Empirical menu navigation (measured on device, iter 58)**: gmenu2x
+  IGNORES its conf `section`/`link` for the start position (tested:
+  park+write section=3/link=0/saveSelection=1 → still landed at the
+  persisted state). A `pkill gmenu2x` respawn (via /usr/local/sbin/
+  frontend supervisor) lands at the STABLE persisted section, which
+  pkill NEVER advances — only a CLEAN gmenu2x exit does, and launching
+  MeleeLight (a games-section app) keeps section=games. Verified stable
+  across 3+ clean respawns (all games/PicoArch). Sections WRAP (period
+  4 — games+2 altright = applications, measured); a section change
+  RESETS the link to 0 (measured). `q`=home=volume overlay (not a
+  section anchor). FROZEN nav script: `n` (altright → settings, link 0)
+  `m` (altleft → games, link 0 = "Mario 64 (U)" — the n/m round trip
+  NORMALIZES the inherited within-games link) `r` (right → link 1 =
+  "MeleeLight", alphabetical grid order) `a` (accept → launch). Proven:
+  boot marker appeared, evidence run rc 0, 900/900 stream prefix ==
+  frozen g01. SECTION-ANCHOR HONESTY (fail-closed): the sole
+  inherited-state assumption is persisted section == games; it cannot
+  be anchored by fixed key count (wrap) and there is no home-to-section
+  key. A human leaving the menu elsewhere + launching a non-games app
+  between gate runs → nav lands wrong → NO boot marker → the leg FAILS
+  LOUD (never a false pass; the boot-marker bin-sha pin also rejects
+  any other app's bytes). Documented at the check header + here.
+- **OPK evidence (pulled host artifacts, port/sim/calib/build/device/)**:
+  boot marker `MLFK OPK BOOT / bin 203e225a…d3d269 / mode evidence`
+  (opk-boot-marker.txt; the bin sha == the arm-build stamp gfx_device
+  record — PROCESS §4 installed-artifact identity, proving the frontend
+  MOUNTED and ran the packaged bytes); in-app screenshot opk-shot.ppm
+  (`SHOT STRUCTURE OK` via the UNCHANGED judge-shot.js, --shot-frame
+  450, mid-match); opk-out.txt (900-frame stream, every hash ==
+  frozen g01 prefix — real conformance teeth on the OPK-installed
+  binary); opk.rc `RC=0`.
+- **Packaging**: staged {gfx_device (stamped bytes), mlfk.sh, .desktop,
+  icon32.png}; packaged + unsquashed INSIDE the SDK container with its
+  `mksquashfs version 4.4 (2019/08/29)` ONLY (version line asserted by
+  exact anchored cmp BEFORE packaging — a newer mksquashfs writes an
+  unmountable OPK); 4 files cmp-verified byte-identical through
+  unsquashfs (PROCESS §4 "OPK contents verified by checksum").
+- **Icon provenance (documented at the pin site + here)**: icon32.png =
+  a 32×32 downscale (ffmpeg crop=120:96:60:72 → scale 32 area →
+  brightness/saturation) of OUR OWN C renderer's host framebuffer dump
+  of g01 frame 900 (gfx_app_headless --shot; the task-4 artifact) — a
+  meleelight-derived stage silhouette rendered by port/gfx/raster.c; NO
+  Nintendo sprite/asset bytes. sha256
+  efea4060…2fe99. Private project — nothing distributed (hard rule 4).
+- **Freeze manifest (port/sim/device/m3-freeze-manifest.txt)**: 23
+  producers, `<sha256> <path> <status> <cite>` anchored grammar.
+  Statuses: reviewed-go (adbsh/g01/conform/percentiles/render/
+  judge-render-timing/judge-shot/input/judge-s1-coverage/s1-session/
+  fk_input — cite their arc GO logs), arc-in-flight (the iter-57 audio
+  trio: check-device-audio.sh, judge-audio-summary.js, pack-snd.js —
+  concurrent review), arc-pending (riglib roster delta, the new iter-58
+  OPK/gate surface), grandfathered-m2 (wrap-run.js, trace-to-txt.js),
+  oracle-frozen (verify-stream.js). verify_m3.sh re-hashes every
+  producer via rig_host_sha256 + asserts EXACT producer-set equality vs
+  its in-script REQUIRED_PRODUCERS (a truncated manifest can't narrow
+  coverage) BEFORE any leg. Update path (reviewed change only) in the
+  manifest header + AGENT-LOG.
+- **Teeth (all fired)**: T1a-d freeze-manifest perturbations →
+  refusal before any leg (.loop/m3-task7-teeth-manifest.log); T2/T2b
+  corrupted sub-check verdicts (7/8 resembling; audio underruns=1 in an
+  OK-shaped line) via MLFK_M3_FAKE_LEG_DIR → gate corruption death, NOT
+  a pass (.loop/m3-task7-teeth-verdict.log); T3 boot-marker absence
+  (MLFK_OPK_SKIP_NAV=1 device probe) → opk leg FAILS LOUD, rc 1
+  (.loop/m3-task7-tooth-t3.log); T4 blank screenshot → judge-shot.js rc
+  3 rejection (.loop/m3-task7-teeth-verdict.log). Zero false rejections
+  on genuine data (the real gate passed clean).
+- **Run budget (honest count)**: 2 standalone check-device-opk runs (1
+  no-commit-guard-on-source fix, 1 clean past-launch) + 1 T3 probe + 1
+  FULL verify_m3.sh cold run (the done-check) + 1 render regression = 5
+  gate-shaped device runs; ~10 short menu-navigation probes (fk_input
+  screenshot-derivation); 3 docker arm rebuilds (serial; RIG_SCRIPTS
+  roster delta + each check-script edit re-stamps). Under the
+  pre-registered caps (≤2 full gate runs, ≤3 opk standalone, ≤10
+  probes).
+- **verify_m3.sh design (the gate)**: TAKES NO rig lock and runs NO
+  device command itself — the legs own the lock serially. Each leg =
+  the arc-hardened sub-check invoked whole; its PASS verdict parsed by
+  exact anchored grammar (conform: two fixed lines; audio: pinned regex
+  with underruns=0 + skips=0/3600 baked in, attempts [12] extracted;
+  opk + input: fixed-literal lines). rc==0 without the exact verdict =
+  corruption death. Does NOT print the LOOP STOP sentinel (driver's
+  phase-advance duty). MLFK_M3_FAKE_LEG_DIR = a negative-testing seam
+  (replay canned leg logs/rcs) — the freeze manifest is verified
+  regardless.
+- **No-commit-guard lesson (fixed)**: the opk assets (mlfk.sh,
+  .desktop, icon32.png) are COMMITTED source, not build output — the
+  first opk run's rig_no_commit_guard over $OPKDIR wrongly flagged them.
+  Fix: guard only the build dirs ($BUILD $DEVB $TABLES); the assets are
+  tracked + freeze-pinned.
+- **Regression**: cold `bash port/gfx/check-device-render.sh` (riglib
+  RIG_SCRIPTS roster touched) → `DEVICE RENDER OK (full p99 11.194 ms,
+  skips 0/3600)`, exit 0 (.loop/m3-task7-reg-render2.log). Attempt 1
+  (.loop/m3-task7-reg-render.log) hit skips 1/3600 — the REGISTERED
+  transient-spike class (iter-54/57: single-frame sim spike, ~2/6
+  runs), which the strict render gate correctly caught (no retry by
+  design); attempt 2 clean, confirming NOT a regression (my changes
+  touched only the RIG_SCRIPTS roster + new files, no render logic).
+  The gate itself exercised conform + audio + input engines + the
+  shared arm build with the new roster.
+- **Device hygiene**: OPK removed from /mnt/Applications at check end
+  (verified gone); frontend restored/respawned; /tmp/mlfk + scratch
+  wiped; own processes killed; gmenu2x.conf saveSelection restored to
+  its original 0 (probing had set it to 1 — the nav is section-change
+  normalized, independent of saveSelection). Post-run device state:
+  NO-OPK, MARKER-ABSENT, GMENU-RUNNING.
+- **Zoom-out (HARD RULE 8)**: the gate is pure REUSE — no device logic
+  reimplemented; the four arc-hardened check scripts are invoked whole
+  and their verdicts parsed by the class solution (anchored
+  whitelist-grammar, exactly-one-match, corruption-death). The
+  freeze-manifest is the CLASS answer to "hashes prove identity, not
+  approval": one refusal chokepoint over ALL evidence producers instead
+  of per-leg trust. The OPK launcher/data-dir/boot-marker pattern is
+  the ssb64 launcher class carried forward (tmpfs-log + copy-back trap,
+  env-chain data dir, installed-artifact identity at launch). No new
+  one-offs.
+- **HONEST COVERAGE (what M3 GATE OK does NOT prove)**: audible audio
+  FIDELITY (M3 = structural liveness only, iter-57 seed carried); the
+  gmenu2x section-anchor assumption (fail-closed, above); the OPK's
+  live-play mode (default, 10800-frame S1 match) is exercised only by
+  construction — the gate's evidence mode is the bounded g01 replay;
+  the human S1 ratification playtest (the phase-end HUMAN GATE) is
+  Chase's, driven by the sentinel after this pass.

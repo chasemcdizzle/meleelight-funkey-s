@@ -3,7 +3,34 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-17, iter-57 writer completion)
+## Live right now (updated: 2026-07-17, iter-58 writer completion)
+
+- **Iter 58 (M3 task 7, the M3 EXIT GATE) DONE**: cold
+  `bash port/sim/device/verify_m3.sh` → `M3 GATE OK`, exit 0
+  (.loop/m3-task7-donecheck.log). Four legs all passed host-judged:
+  [1] `DEVICE CONFORMS 8/8 + SIM P99 OK`; [2] `DEVICE AUDIO OK (full
+  p99 12.573 ms, underruns=0, attempts=2)`; [3] `OPK LAUNCH OK`
+  (packaged with the SDK container's mksquashfs 4.4 ONLY, launched via
+  the REAL gmenu2x frontend driven by fk_input, boot-marker bin-sha ==
+  arm stamp, evidence g01 900/900 stream prefix == frozen, in-app
+  screenshot judge-shot structural); [4] `S1 INPUT OK`. NEW:
+  port/gfx/opk/{mlfk.sh, meleelight.funkey-s.desktop, icon32.png (from
+  OUR renderer's g01 f900 shot — no Nintendo bytes)},
+  port/gfx/check-device-opk.sh, port/sim/device/verify_m3.sh (REUSES
+  the arc-hardened sub-checks; verdicts parsed by exact anchored
+  grammar), port/sim/device/m3-freeze-manifest.txt (PROCESS §4
+  reviewed-pin freeze — 23 producers; HARD-REFUSES before any leg on
+  drift). Measured gmenu2x nav (empirical): conf ignored for start;
+  pkill-respawn = stable persisted section (games); `n m r a`
+  normalizes link + selects MeleeLight; wrong section → no boot marker
+  → leg FAILS LOUD (fail-closed). Teeth T1-T4 fired. Regression
+  DEVICE RENDER OK skips 0/3600 (attempt 2; attempt 1's 1-skip = the
+  registered transient class, not a regression). **PHASE-ADVANCE IS
+  THE DRIVER'S NEXT TURN**: ground-truth the gate cold, then the
+  human-gate sentinel `LOOP STOP: m3-device — needed: Chase S1
+  ratification playtest` (the GATE does NOT print it — driver duty).
+
+- **[superseded by iter 58] updated 2026-07-17, iter-57 writer completion**
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -379,8 +406,8 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   M4 seeds registered (mixer fidelity + music, stop-path coverage,
   skip-burst instrument). Regressions green: DEVICE RENDER OK (11.065
   ms full p99) + SIM CONFORMS (.loop/m3-task6-reg-{render,sim}.log).
-- **Latest AGENT-LOG entry**: iter 57 (M3 task 6 DONE); latest log
-  id: .loop/m3-task6-donecheck.log.
+- **Latest AGENT-LOG entry**: iter 58 (M3 task 7 DONE — the M3 EXIT
+  GATE is live); latest log id: .loop/m3-task7-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
@@ -392,18 +419,21 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## Next
 
-1. Driver: ground-truth iter 57 (cold
-   `bash port/gfx/check-device-audio.sh`) → Tier-A review arc for the
-   task-6 surface (check-device-audio.sh, judge-audio-summary.js,
-   pack-snd.js, snd_mixer.h, platform_audio_sdl.h, the platform.h
-   audio seam + backend impls, gfx_app.c audio wiring, ml_events sink
-   — note ml_events.c is a sim TU: Tier B minimum, but the new
-   surface's check scripts are Tier A) → launch task-7 writer (OPK +
-   verify_m3.sh gate assembly) on GO.
-2. Ladder: fix_plan §M3 task 7 → M3 gate (`verify_m3.sh`) →
-   LOOP STOP: m3-device + push-notify Chase for S1 ratification →
-   close #18 → M4 REPLAN (PLAN §4/M4) → Chase acceptance →
-   LOOP STOP: m4-complete.
+1. Driver: ground-truth iter 58 (cold
+   `bash port/sim/device/verify_m3.sh` → `M3 GATE OK`, exit 0) → this
+   is the M3 EXIT GATE: on a clean cold pass, emit the human-gate
+   sentinel `LOOP STOP: m3-device — needed: Chase S1 ratification
+   playtest` (LOOP §F-advance.3/§H — the GATE itself does NOT print it)
+   + push-notify Chase → close #18 on ratification.
+2. Tier-A review arcs still owed (do NOT block the sentinel — the gate
+   freeze-manifest already pins them, and a producer change re-runs the
+   gate): the iter-57 audio trio (check-device-audio.sh,
+   judge-audio-summary.js, pack-snd.js — arc-in-flight, running
+   concurrently) and the iter-58 OPK/gate surface (check-device-opk.sh,
+   verify_m3.sh, the opk assets, the riglib roster delta — arc-pending).
+   Any Medium+ finding re-pins the manifest + re-runs the gate.
+3. Ladder after Chase's S1 ratification: M4 REPLAN (PLAN §4/M4) →
+   Chase acceptance → LOOP STOP: m4-complete.
 
 ## Rulings (standing owner directives)
 
