@@ -3,7 +3,31 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-17, iter-58 writer completion)
+## Live right now (updated: 2026-07-17, iter-59 writer completion)
+
+- **Iter 59 (M3 task 6 hardening — audio round-1 triage closure) DONE**:
+  all 5 triage items (.loop/review-57-triage.md H/M1/M2/M3/L) landed;
+  cold `bash port/gfx/check-device-audio.sh` → `DEVICE AUDIO OK (full
+  p99 12.267 ms, underruns=0, attempts=2; cbs=5166 starts=274 stops=0
+  skips=0/3600)`, exit 0 (.loop/m3-task6r59-donecheck2.log; run 1 =
+  .loop/m3-task6r59-donecheck.log, honestly REFUSED on the registered
+  transient skip class — audio legs green both attempts). NEW: judge
+  `judge_complete=1` integrity terminator + counter-bound retry
+  classification (fail_* now reporting-only); STANDING T5 device
+  starvation probe every run (19 underruns counted + rejected);
+  boundary-interval gap accounting in platform_audio_sdl.h (open→first
+  + last→stop; healthy runs still 0); app-summary resemblance rule;
+  exactly-one-line pack verdict; teeth T6/T7/T8 fired. MEASURED
+  EXPOSURE recorded (PROCESS §8): DMA-xrun blindness + no SDL1.2
+  priority API — M4 mixer-fidelity seed is the closure path.
+  m3-freeze-manifest.txt re-pinned for the 2 touched audio producers
+  (same commit, documented path; 23/23 direct-shasum self-check
+  green). **AUDIO ARC ROUND 2 = CLOSURE PENDING (driver): the closure
+  review covers the new bytes; producer edits INVALIDATE prior gate
+  evidence — sequence per triage: audio round-2 closure → task-7 arc →
+  THEN the phase-advance cold verify_m3.sh.** Skip-class measurement
+  for the M4 instrument candidate: 3/4 attempts today (frames
+  466/467/1116/1170/1192), probe after-effect not excluded.
 
 - **Iter 58 (M3 task 7, the M3 EXIT GATE) DONE**: cold
   `bash port/sim/device/verify_m3.sh` → `M3 GATE OK`, exit 0

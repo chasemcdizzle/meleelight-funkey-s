@@ -19,14 +19,34 @@
 // CLOCK_MONOTONIC read inside the callback. A >2-period gap drains more
 // than the two periods of queued audio -> audible dropout (spike §2);
 // gaps below that are absorbed by the queue and NOT counted (matching
-// the spike's clean/dirty classification). The first callback has no
-// predecessor and establishes the baseline. badlen counts callbacks
-// whose len differs from the granted spec's byte size — the ABI
-// tripwire (SDL_AudioSpec layout: int freq, Uint16 format,
-// Uint8 channels, Uint8 silence, Uint16 samples, Uint16 padding,
-// Uint32 size, callback, userdata — verified against the SDK sysroot
-// SDL_audio.h; no time-bearing fields, and the audio spike already
-// exercised this exact struct in-process against the device libSDL).
+// the spike's clean/dirty classification). BOUNDARY INTERVALS (iter 59,
+// review-57 M2): the gap chain is SEEDED at audio-open (the unpause
+// timestamp), so the open->first-callback interval is judged by the
+// same rule, and platform_audio_stop judges the terminal
+// last-callback->stop interval under SDL_LockAudio — a stalled callback
+// START, a late finish, or a callback thread that silently died mid-run
+// all land in `underruns` (a dead thread's terminal gap is open->stop).
+// badlen counts callbacks whose len differs from the granted spec's
+// byte size — the ABI tripwire (SDL_AudioSpec layout: int freq, Uint16
+// format, Uint8 channels, Uint8 silence, Uint16 samples, Uint16
+// padding, Uint32 size, callback, userdata — verified against the SDK
+// sysroot SDL_audio.h; no time-bearing fields, and the audio spike
+// already exercised this exact struct in-process against the device
+// libSDL) — plus clock-anomaly sentinels (below).
+//
+// THREAD PRIORITY (measured exposure, iter 59): SDL 1.2 exposes NO
+// audio-thread priority API (SDL_SetThreadPriority does not exist in
+// 1.2; the callback thread runs at the platform-default scheduling
+// policy). There is nothing to assert — recorded as MEASURED EXPOSURE
+// (PROCESS §8) in docs/AGENT-LOG.md iter 59. Compensating controls:
+// the boundary-inclusive gap accounting above and the check's standing
+// 64-sample starvation probe (proves the accounting live per run).
+// DMA-XRUN BLINDNESS (same exposure entry): a kernel/driver-level xrun
+// that emits silence while callbacks stay timely is invisible to this
+// proxy BY CONSTRUCTION; the closure path is the M4 mixer-fidelity
+// seed (captured-reference audible-plane comparison, AGENT-LOG
+// iter 57). "underruns == 0" reads "no callback-observable
+// starvation", never "no audible dropout".
 //
 // QUEUE EXHAUSTION is structurally impossible in this design: there is
 // no main->callback ring buffer. The main thread mutates mixer state
@@ -128,6 +148,18 @@ int platform_audio_start(PlatformAudioFill fill, void *ud, int samples) {
   }
   g_pa_nominal_ns = (uint64_t)g_pa_granted.samples * 1000000000ull /
                     (uint64_t)g_pa_granted.freq;
+  // Boundary accounting (iter 59, review-57 M2): seed the gap chain at
+  // the OPEN/unpause timestamp so the interval to the FIRST callback is
+  // measured by the same >2-period rule (a stalled callback start is an
+  // underrun, not a blind spot). No callback can run before
+  // SDL_PauseAudio(0), so this write is unraced. Clock failure here is
+  // the same impossible-by-spec class as in-callback: badlen sentinel,
+  // and the chain falls back to first-callback baselining (last_ns 0).
+  {
+    const uint64_t t0 = pa_now_ns();
+    if (t0 == 0) g_pa_badlen++;
+    g_pa_last_ns = t0;
+  }
   g_pa_open = 1;
   SDL_PauseAudio(0);
   return 0;
@@ -135,6 +167,23 @@ int platform_audio_start(PlatformAudioFill fill, void *ud, int samples) {
 
 void platform_audio_stop(void) {
   if (!g_pa_open) return;
+  // Terminal boundary interval (iter 59, review-57 M2): judge the
+  // last-callback->stop gap by the same >2-period rule, under the SDL
+  // audio lock so the callback thread is quiescent while the counters
+  // are read/adjusted. A callback thread that silently died mid-run
+  // lands here as underruns (its terminal gap spans to open/last-cb)
+  // even when the coarse cbs window would not notice.
+  SDL_LockAudio();
+  {
+    const uint64_t tEnd = pa_now_ns();
+    if (tEnd == 0) {
+      g_pa_badlen++; // clock anomaly — impossible-by-spec, counted loud
+    } else if (g_pa_last_ns != 0 &&
+               tEnd - g_pa_last_ns > 2 * g_pa_nominal_ns) {
+      g_pa_underruns++;
+    }
+  }
+  SDL_UnlockAudio();
   SDL_PauseAudio(1);
   SDL_CloseAudio(); // joins the callback thread — stats are safe after
   g_pa_open = 0;

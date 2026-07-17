@@ -18,12 +18,22 @@
 //     [--cbs-min N] [--cbs-max N] [--max-underruns N] [--max-badlen N]
 //     [--expect-starts N] [--expect-stops N]
 //
-// Output: key=value lines (cbs, underruns, badlen, starts, stops,
-// steals), then one fail_<leg>=1 line per violated assertion.
+// Output (iter 59, review-57 H — a MANDATORY COMPLETE verdict block,
+// buffered and written in ONE stdout write): key=value lines (cbs,
+// underruns, badlen, starts, stops, steals), then one fail_<leg>=1
+// line per violated assertion, then the INTEGRITY TERMINATOR
+//   judge_complete=1
+// as the LAST line, ALWAYS (both the pass and the assertion-violated
+// exits). Callers MUST require that terminator: judge output whose
+// last line is not exactly `judge_complete=1` is truncated/partial =
+// corruption, and may never be classified (in particular never as
+// "retryable"). fail_* lines are REPORTING ONLY — callers bind their
+// decisions to the counters, never to fail_* presence.
 // Exit codes: 0 = parsed + all given assertions hold; 2 = parsed but
 // >=1 assertion violated (the gate-fail direction — the caller decides
 // retry policy per leg); 1 = grammar/corruption death (never partially
-// parsed, never silently skipped).
+// parsed, never silently skipped; NO judge_complete line is emitted on
+// this path — all rc-1 deaths precede the verdict block).
 'use strict';
 const fs = require('fs');
 
@@ -90,8 +100,9 @@ const out = {
   stops: Number(m[5]),
   steals: Number(m[6]),
 };
+const outLines = [];
 for (const k of ['cbs', 'underruns', 'badlen', 'starts', 'stops', 'steals']) {
-  console.log(k + '=' + String(out[k]));
+  outLines.push(k + '=' + String(out[k]));
 }
 const fails = [];
 if ('cbs-min' in opt && out.cbs < opt['cbs-min']) fails.push('cbs_low');
@@ -106,5 +117,10 @@ if ('expect-starts' in opt && out.starts !== opt['expect-starts']) {
 if ('expect-stops' in opt && out.stops !== opt['expect-stops']) {
   fails.push('stops');
 }
-for (const f of fails) console.log('fail_' + f + '=1');
+for (const f of fails) outLines.push('fail_' + f + '=1');
+// Integrity terminator (review-57 H): ALWAYS last; the whole verdict
+// block is one write so a partial flush cannot end at a plausible
+// boundary without also dropping this line.
+outLines.push('judge_complete=1');
+process.stdout.write(outLines.join('\n') + '\n');
 process.exit(fails.length ? 2 : 0);

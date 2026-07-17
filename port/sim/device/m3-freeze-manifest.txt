@@ -34,8 +34,8 @@ cf2adcd60e9866c38696d3406cdbb87930ef2043112edbc1942686fcf7c8099f port/gfx/judge-
 12ba15434041dd14e8b787751854b907e7cadf50b3965f1c561fe2ca639ef354 port/gfx/judge-s1-coverage.js reviewed-go .loop/review-53-1.log
 26bdc02bbc3074d2e9defda3db27abb065a227dbfe98e3933efd56dcea208b3a port/gfx/s1-session.script reviewed-go .loop/review-53-1.log
 05ced80f57e993541f6da8b647e63abcac4163cd6e5b275f2a811a49c2faeb76 port/tools/fk_input.c reviewed-go .loop/review-53-1.log
-986e8f6f5ff357a6bd81178d7f57cbd7797b2e1d8e77fc2579edd4e00a2ba9ed port/gfx/check-device-audio.sh arc-in-flight .loop/review-57-1.log
-fafe61ac3ca2a541fdd601dffa08cc32031f27f8fde0c91f310b2908d416ce60 port/gfx/judge-audio-summary.js arc-in-flight .loop/review-57-1.log
+5f22ddff5529b752b264022e230c17cc4d1e4fb697b0c116716005e08273ec66 port/gfx/check-device-audio.sh arc-in-flight .loop/review-57-1.log+iter59-r1-fixes-r2-closure-pending
+8ceaf028fe5740a1c0bb384e2eae113996bdb5c3db5720f1337af068266b966f port/gfx/judge-audio-summary.js arc-in-flight .loop/review-57-1.log+iter59-r1-fixes-r2-closure-pending
 bf29fa7cba83708cfff093195f48ad20a8eda2ad794fe25b270f211b08876eee port/gfx/pack-snd.js arc-in-flight .loop/review-57-1.log
 2a48fbccc1d6a31d58cd2dc2092d0e276d2d63671642de99a14d170f0500669a port/gfx/check-device-opk.sh arc-pending iter58
 b4bd4ba415f5d63e70895087204586846bede5b372422fce4292399e97ebb5ca port/gfx/opk/mlfk.sh arc-pending iter58

@@ -27,7 +27,13 @@
 #      with --drop-name land (g01's first fired sound, frame 75) ->
 #      replay dies loud at the first play; T3 underrun-count
 #      perturbation of a real log -> judge exit 2 (gate-fail); T4
-#      malformed + duplicated audio-summary lines -> judge parse death.
+#      malformed + duplicated audio-summary lines -> judge parse death;
+#      T6 (iter 59, review-57 H) judge output truncated after
+#      fail_underruns=1 (integrity terminator dropped) -> ingest
+#      corruption death, never a retryable classification; T7 (review-57
+#      M3) torn duplicate app-summary line -> parse death; T8 (review-57
+#      L) doubled pack verdict -> death. PLUS the standing DEVICE probe
+#      T5 (review-57 M1), step 7 below.
 #   4. DEVICE LIVE RENDER+AUDIO: g01 replayed ON the FunKey-S through
 #      the SDL1.2 backend with the audio callback LIVE (44100/S16LSB/
 #      2ch/512 — the measured spike config; 8-voice SFX mixer fed by the
@@ -62,6 +68,12 @@
 # and every audio-structural leg must pass on EVERY attempt — any such
 # failure is immediate, unretried gate failure. Every attempt is
 # logged, counted, and the attempt count is printed in the OK line.
+# CLASSIFICATION INTEGRITY (iter 59, review-57 H): retryability is
+# bound to the ACTUAL COUNTERS (skips>0 / underruns>0 with every other
+# counter clean vs its pin), NEVER to the judge's optional fail_*
+# lines; the judge's verdict block must terminate with its
+# judge_complete=1 integrity line — missing/partial/truncated judge
+# output is a CORRUPTION death, never a retry.
 #
 # Rig plumbing INHERITED from port/sim/device/riglib.sh (Tier-A arc,
 # VERDICT: GO): nonce-dsh, pullv, rm-before-produce+made(), shared
@@ -117,8 +129,21 @@ SNDPACK_SHA256=f69579082fe569249879faa5ceccb7a810d94d8092695ddc8bb543f3bda3ccb4
 CBS_MIN=4900
 CBS_MAX=5900
 ATTEMPTS_MAX=2              # retry policy (header) — pre-registered
-DEADMAN_S="${MLFK_DEADMAN_S:-420}" # park deadman window: covers both
-                    # paced attempts (~2x62 s) + pulls/judgment between
+# T5 STANDING STARVATION PROBE (iter 59, review-57 M1 — frozen at the
+# iter-57 measured probe config, which counted 16-17 underruns): a
+# 64-sample buffer under an unpaced CPU-saturating replay (budget 1000
+# ns -> the frame loop never sleeps) starves the callback thread. The
+# probe runs INSIDE every check invocation and MUST count >0 underruns
+# AND be rejected by the judge — proving the gap accounting live in
+# the FAILING direction per run (T3 only proves the judge; T5 proves
+# the device-side instrumentation).
+T5_SAMPLES=64
+T5_FRAMES=600
+T5_BUDGET_NS=1000
+T5_TRIES=20         # x2 s host poll for the probe's detached rc file
+DEADMAN_S="${MLFK_DEADMAN_S:-420}" # park deadman window: covers the T5
+                    # probe (~10 s) + both paced attempts (~2x62 s) +
+                    # pulls/judgment between
                     # (MLFK_DEADMAN_S = negative-testing override ONLY)
 APPRC_TRIES=90      # x2 s host poll per attempt for the detached rc file
 GFXDATA_FROZEN=$GFX/gfxdata-frozen.txt
@@ -302,16 +327,30 @@ parse_timing_judge() {
   timing_judge_out="$jout"
 }
 
-# parse_app_summary <log> <frames> <pace> <budget-ns> — VERBATIM task-4
-# parser (check-device-render.sh provenance: iters 52/54 — anchored
-# full-line whitelist grammar, pinned frames/pace/budget, digit bounds).
+# parse_app_summary <log> <frames> <pace> <budget-ns> — task-4 parser
+# (check-device-render.sh provenance: iters 52/54 — anchored full-line
+# whitelist grammar, pinned frames/pace/budget, digit bounds) PLUS the
+# iter-59 resemblance rule (review-57 M3): the log must carry exactly
+# one FULL-grammar summary line AND zero summary-RESEMBLING malformed
+# lines. Resemblance measured from the full real corpus (gfx_app.c's
+# stderr producers + iter-57/58 host+device logs): ONLY the summary
+# line matches `^gfx_app: [0-9]` — the legit non-summary lines start
+# with letters ("gfx_app: skipped frames:", "gfx_app: bad argument")
+# or use a different prefix ("gfx_app audio:", judged separately). A
+# torn/stale duplicate therefore = corruption death, never acceptance
+# of the one line that happens to parse.
 parse_app_summary() {
-  local log="$1" fr="$2" pace="$3" budget="$4" re cnt line
+  local log="$1" fr="$2" pace="$3" budget="$4" re cnt line rcnt
   unset app_skips app_present_fails app_wall_ms
   re="^gfx_app: ${fr} frames, [0-9]{1,12} render skips, [0-9]{1,12} failed presents, wall [0-9]{1,12} ms, pace=${pace} budget=${budget} ns\$"
   cnt="$(grep -Ec "$re" "$log")" || true
   if [ "$cnt" != 1 ]; then
     echo "DEVICE FAIL: app log $log has $cnt lines matching the pinned summary grammar (want exactly 1: frames=$fr pace=$pace budget=$budget ns)" >&2
+    exit 1
+  fi
+  rcnt="$(grep -Ec '^gfx_app: [0-9]' "$log")" || true
+  if [ "$rcnt" != 1 ]; then
+    echo "DEVICE FAIL: app log $log has $rcnt summary-resembling 'gfx_app: <digit>...' lines but exactly 1 matches the full grammar — torn/stale duplicate summary = corrupt evidence" >&2
     exit 1
   fi
   line="$(grep -E "$re" "$log")"
@@ -326,28 +365,34 @@ parse_app_summary() {
   : "$app_skips" "$app_present_fails" "$app_wall_ms"
 }
 
-# parse_audio_judge <log> <rate> <samples> <channels> [extra judge args...]
-# Runs judge-audio-summary.js (anchored grammar; assertions inside the
-# judge) and strictly re-parses its key=value output (duplicate-key
-# death; digit bounds; unknown-key death — PROCESS §3). Sets: au_cbs
-# au_underruns au_badlen au_starts au_stops au_steals au_fails (space-
-# joined fail legs, empty = all green) and au_rc (0 green, 2 = >=1
-# assertion violated). A judge GRAMMAR death (rc 1/anything else) is an
-# immediate hard failure.
-parse_audio_judge() {
-  local log="$1" rate="$2" samples="$3" channels="$4"
-  shift 4
-  local jout jrc jk jv dup
+# audio_judge_ingest <judge-stdout> <judge-rc> — the strict verdict-
+# block ingester (iter 59, review-57 H; factored out of
+# parse_audio_judge so the T6 truncation tooth exercises the REAL
+# validation path in a subshell). Requirements, all corruption deaths:
+# rc in {0,2}; the LAST line is EXACTLY `judge_complete=1` (the judge's
+# mandatory integrity terminator — truncated/partial judge output can
+# never be classified, in particular never as "retryable"); no
+# duplicate keys; every key from the closed whitelist with bounded
+# values; all six counters present; rc<->fail_* coherence. Sets:
+# au_cbs au_underruns au_badlen au_starts au_stops au_steals au_fails
+# (space-joined fail legs, empty = all green) and au_rc (0 green, 2 =
+# >=1 assertion violated). fail_* lines are REPORTING — decision sites
+# bind to the counters (see the device loop / host truth legs).
+audio_judge_ingest() {
+  local jout="$1" jrc="$2"
+  local jk jv dup last
   unset au_cbs au_underruns au_badlen au_starts au_stops au_steals
   au_fails=""
-  jrc=0
-  jout="$(node "$GFX/judge-audio-summary.js" "$log" \
-    --rate "$rate" --samples "$samples" --channels "$channels" "$@")" || jrc=$?
   if [ "$jrc" != 0 ] && [ "$jrc" != 2 ]; then
-    echo "DEVICE FAIL: audio summary judge died on $log (rc $jrc — grammar/corruption)" >&2
+    echo "DEVICE FAIL: audio summary judge died (rc $jrc — grammar/corruption)" >&2
     exit 1
   fi
   au_rc=$jrc
+  last="$(printf '%s\n' "$jout" | tail -n 1)"
+  if [ "$last" != "judge_complete=1" ]; then
+    echo "DEVICE FAIL: audio judge output does not end with its judge_complete=1 integrity terminator (last line: '$last') — truncated/partial judge output = corruption, never a retry" >&2
+    exit 1
+  fi
   dup="$(printf '%s\n' "$jout" | awk -F= '{print $1}' | sort | uniq -d)"
   if [ -n "$dup" ]; then
     echo "DEVICE FAIL: audio judge output carries duplicate key(s): $dup" >&2
@@ -369,6 +414,12 @@ parse_audio_judge() {
         fi
         au_fails="$au_fails ${jk#fail_}"
         ;;
+      judge_complete)
+        if [ "$jv" != 1 ]; then
+          echo "DEVICE FAIL: audio judge judge_complete carries unexpected value ('$jv')" >&2
+          exit 1
+        fi
+        ;;
       *)
         echo "DEVICE FAIL: unexpected audio judge line '$jk=$jv'" >&2
         exit 1
@@ -388,6 +439,33 @@ parse_audio_judge() {
   fi
   if [ "$au_rc" = 0 ] && [ -n "$au_fails" ]; then
     echo "DEVICE FAIL: audio judge exited 0 but named failed leg(s) '$au_fails' — corrupt judge output" >&2
+    exit 1
+  fi
+}
+
+# parse_audio_judge <log> <rate> <samples> <channels> [extra judge args...]
+# Runs judge-audio-summary.js (anchored grammar; assertions inside the
+# judge) and ingests its verdict block via audio_judge_ingest above.
+parse_audio_judge() {
+  local log="$1" rate="$2" samples="$3" channels="$4"
+  shift 4
+  local jout jrc
+  jrc=0
+  jout="$(node "$GFX/judge-audio-summary.js" "$log" \
+    --rate "$rate" --samples "$samples" --channels "$channels" "$@")" || jrc=$?
+  audio_judge_ingest "$jout" "$jrc"
+}
+
+# pack_verdict_assert <pack-snd-stdout> — the packer verdict grammar
+# (iter 59, review-57 L): the output must be EXACTLY ONE line and that
+# line must match the anchored full-line pattern $pack_line_re (set in
+# step 2). Any extra/malformed/doubled line = death.
+pack_verdict_assert() {
+  local pout="$1" plines pcnt
+  plines="$(printf '%s\n' "$pout" | grep -c '')" || true
+  pcnt="$(printf '%s\n' "$pout" | grep -Ec "$pack_line_re")" || true
+  if [ "$plines" != 1 ] || [ "$pcnt" != 1 ]; then
+    echo "DEVICE FAIL: pack-snd output failed the exactly-one-full-line verdict grammar (lines=$plines full-matches=$pcnt, want 1/1 with count=${SND_COUNT_PIN}): '$pout'" >&2
     exit 1
   fi
 }
@@ -506,10 +584,7 @@ for side in a b; do
     echo "DEVICE FAIL: pack-snd.js failed (side $side)" >&2
     exit 1
   }
-  if ! printf '%s\n' "$pout" | grep -Eq "$pack_line_re"; then
-    echo "DEVICE FAIL: pack-snd output failed the pinned grammar (want count=${SND_COUNT_PIN}): '$pout'" >&2
-    exit 1
-  fi
+  pack_verdict_assert "$pout" # iter 59, review-57 L: exactly-one full line
   made "$BUILD/sndpack-$side.bin"
 done
 cmp "$BUILD/sndpack-a.bin" "$BUILD/sndpack-b.bin"
@@ -616,10 +691,13 @@ if [ "$app_skips" -ne 0 ] || [ "$app_present_fails" -ne 0 ]; then
   echo "DEVICE FAIL: host audio leg reports skips=$app_skips presentFails=$app_present_fails (want 0/0)" >&2
   exit 1
 fi
+# Decision sites bind to the COUNTERS (iter 59, review-57 H), with the
+# judge rc as a cross-check — never to fail_* presence alone.
 parse_audio_judge "$BUILD/g01.au-log-a.txt" 0 0 0 \
   --cbs-min 0 --cbs-max 0 --max-underruns 0 --max-badlen 0
-if [ "$au_rc" != 0 ]; then
-  echo "DEVICE FAIL: host truth run a failed audio legs: $au_fails (headless must report 0 cbs/underruns/badlen)" >&2
+if [ "$au_rc" != 0 ] || [ "$au_cbs" -ne 0 ] || [ "$au_underruns" -ne 0 ] \
+  || [ "$au_badlen" -ne 0 ]; then
+  echo "DEVICE FAIL: host truth run a failed audio legs (rc=$au_rc cbs=$au_cbs underruns=$au_underruns badlen=$au_badlen fails='$au_fails') — headless must report 0 cbs/underruns/badlen" >&2
   exit 1
 fi
 HOST_STARTS=$au_starts
@@ -631,8 +709,10 @@ fi
 parse_audio_judge "$BUILD/g01.au-log-b.txt" 0 0 0 \
   --cbs-min 0 --cbs-max 0 --max-underruns 0 --max-badlen 0 \
   --expect-starts "$HOST_STARTS" --expect-stops "$HOST_STOPS"
-if [ "$au_rc" != 0 ]; then
-  echo "DEVICE FAIL: host truth runs disagree on event counts (a: starts=$HOST_STARTS stops=$HOST_STOPS; b failed legs: $au_fails) — nondeterministic event plane" >&2
+if [ "$au_rc" != 0 ] || [ "$au_cbs" -ne 0 ] || [ "$au_underruns" -ne 0 ] \
+  || [ "$au_badlen" -ne 0 ] || [ "$au_starts" -ne "$HOST_STARTS" ] \
+  || [ "$au_stops" -ne "$HOST_STOPS" ]; then
+  echo "DEVICE FAIL: host truth runs disagree (a: starts=$HOST_STARTS stops=$HOST_STOPS; b: rc=$au_rc starts=$au_starts stops=$au_stops fails='$au_fails') — nondeterministic event plane" >&2
   exit 1
 fi
 echo "   host truth: starts=$HOST_STARTS stops=$HOST_STOPS (x2 agree; cbs=0 headless)"
@@ -706,7 +786,48 @@ for tl in t4a t4b; do
     exit 1
   fi
 done
-echo "   standing teeth OK (T1 truncation death, T2 dropped-blob death at play, T3 underrun leg fires, T4 grammar deaths x2)"
+# T6 (iter 59, review-57 H): judge output TRUNCATED right after
+# fail_underruns=1 (the integrity terminator dropped) must die in the
+# REAL ingest path as corruption — never be classified retryable.
+# Positive control first: the untruncated output ends with the
+# terminator and exits 2.
+t6rc=0
+t6out="$(node "$GFX/judge-audio-summary.js" "$BUILD/t3-log.txt" \
+  --rate 0 --samples 0 --channels 0 --max-underruns 0)" || t6rc=$?
+if [ "$t6rc" -ne 2 ] \
+  || [ "$(printf '%s\n' "$t6out" | tail -n 1)" != "judge_complete=1" ] \
+  || ! printf '%s\n' "$t6out" | grep -q '^fail_underruns=1$'; then
+  echo "DEVICE FAIL: T6 positive control — judge on the T3 log must exit 2 with fail_underruns=1 and the judge_complete=1 terminator (rc $t6rc)" >&2
+  exit 1
+fi
+t6trunc="$(printf '%s\n' "$t6out" | sed -n '1,/^fail_underruns=1$/p')"
+t6irc=0
+( audio_judge_ingest "$t6trunc" 2 ) >/dev/null 2>&1 || t6irc=$?
+if [ "$t6irc" -eq 0 ]; then
+  echo "DEVICE FAIL: T6 tooth — judge output truncated after fail_underruns=1 was ACCEPTED by the ingest (must be corruption death, never a retry)" >&2
+  exit 1
+fi
+# T7 (iter 59, review-57 M3): a torn duplicate of the app summary line
+# appended to a REAL log must be a parse death (summary-resembling
+# malformed line = corruption).
+rm -f "$BUILD/t7-log.txt"
+{ cat "$BUILD/g01.au-log-a.txt"; printf '%s\n' "gfx_app: ${frames} frames, 0 render sk"; } > "$BUILD/t7-log.txt"
+made "$BUILD/t7-log.txt"
+t7rc=0
+( parse_app_summary "$BUILD/t7-log.txt" "$frames" 0 "$BUDGET_NS" ) >/dev/null 2>&1 || t7rc=$?
+if [ "$t7rc" -eq 0 ]; then
+  echo "DEVICE FAIL: T7 tooth — torn duplicate summary line was ACCEPTED by parse_app_summary" >&2
+  exit 1
+fi
+# T8 (iter 59, review-57 L): a doubled pack verdict must die.
+t8rc=0
+( pack_verdict_assert "pack-snd OK count=${SND_COUNT_PIN} dataBytes=1 fileBytes=1
+pack-snd OK count=${SND_COUNT_PIN} dataBytes=1 fileBytes=1" ) >/dev/null 2>&1 || t8rc=$?
+if [ "$t8rc" -eq 0 ]; then
+  echo "DEVICE FAIL: T8 tooth — doubled pack-snd verdict was ACCEPTED" >&2
+  exit 1
+fi
+echo "   standing teeth OK (T1 truncation death, T2 dropped-blob death at play, T3 underrun leg fires, T4 grammar deaths x2, T6 truncated-judge corruption death, T7 torn-summary death, T8 doubled-pack-verdict death)"
 
 echo "== [6/8] armv7 build (shared rig stamp) + push + provenance =="
 rig_arm_build
@@ -737,7 +858,7 @@ if [ "$dsum" != "$SNDPACK_SHA256" ]; then
 fi
 echo "   pushed data sha-verified on device (simdata, trace, gfxdata, 2 anim bins, sndpack -> $DSD)"
 
-echo "== [7/8] device: LIVE paced g01 render+audio (deadman-guarded park; <= $ATTEMPTS_MAX attempts) =="
+echo "== [7/8] device: T5 starvation probe + LIVE paced g01 render+audio (deadman-guarded park; <= $ATTEMPTS_MAX attempts) =="
 # Deadman + launcher: task-4 apparatus VERBATIM (provenance comments in
 # check-device-render.sh, iters 50-55). The launcher takes the attempt
 # number as \$1 so retries never overwrite attempt-1 evidence.
@@ -794,6 +915,33 @@ EOF
   made "$BUILD/audio-launch-$at.sh"
   launch_files+=("$BUILD/audio-launch-$at.sh")
 done
+# T5 standing starvation probe launcher (iter 59, review-57 M1): the
+# frozen iter-57 probe config — 64-sample buffer, unpaced (1000 ns
+# budget -> the frame loop never sleeps) CPU-saturating 600-frame
+# replay. Same detached setsid + rc-file + deadman-pid pattern as the
+# attempts (a hung probe is killed by the armed deadman).
+rm -f "$BUILD/t5-launch.sh"
+cat > "$BUILD/t5-launch.sh" << EOF
+#!/bin/sh
+# generated by check-device-audio.sh — T5 standing starvation probe
+cd $DTMP || exit 9
+rm -f t5.apprc gfx.pid.$DM_NONCE
+setsid sh -c './gfx_device \
+  --trace $DTMP/g01.trace.txt --simdata $DTMP/simdata.txt \
+  --gfxdata $DTMP/gfxdata-frozen.txt --anim-dir $DTMP \
+  --seed $seed --p1 $p1 --p2 $p2 --stage $stage --frames $T5_FRAMES \
+  --pace 1 --budget-ns $T5_BUDGET_NS \
+  --sndpack $DSD/sndpack.bin --audio-samples $T5_SAMPLES \
+  --out $DTMP/t5-out.txt --timing $DTMP/t5-tim.txt \
+  2> $DTMP/t5-log.txt & \
+  echo \$! > $DTMP/gfx.pid.$DM_NONCE; \
+  wait \$!; \
+  echo "RC=\$?" > $DTMP/t5.apprc' \
+  </dev/null >/dev/null 2>&1 &
+sleep 2
+EOF
+made "$BUILD/t5-launch.sh"
+launch_files+=("$BUILD/t5-launch.sh")
 adb -s "$DEV" push "${launch_files[@]}" "$DTMP/" >/dev/null
 for hf in "${launch_files[@]}"; do
   bn="$(basename "$hf")"
@@ -804,7 +952,7 @@ for hf in "${launch_files[@]}"; do
     exit 1
   fi
 done
-dsh "chmod +x $DTMP/deadman.sh $DTMP/audio-launch-*.sh"
+dsh "chmod +x $DTMP/deadman.sh $DTMP/audio-launch-*.sh $DTMP/t5-launch.sh"
 
 dsh "printf '%s' '$DM_NONCE' > $DTMP/deadman.nonce; rm -f $DTMP/deadman.cancel $DTMP/deadman.fired"
 dsh "setsid sh $DTMP/deadman.sh </dev/null >/dev/null 2>&1 & sleep 1"
@@ -824,6 +972,43 @@ case "$prc" in
   1) echo "WARN: gmenu2x was not running at park time" >&2 ;;
   *) echo "DEVICE FAIL: pkill gmenu2x failed (rc $prc)" >&2; exit 1 ;;
 esac
+
+# -- T5 STANDING STARVATION PROBE (iter 59, review-57 M1) --------------------
+# Runs INSIDE every check invocation, in the parked window, BEFORE the
+# gate attempts: the 64-sample buffer under a CPU-saturating replay
+# MUST count >0 underruns and be REJECTED by the judge — proving the
+# device-side gap accounting live in the failing direction per run
+# (T3 proves only the judge; this proves the instrumentation). The
+# samples=64 grammar pin also proves a wrong-spec run cannot pose as
+# the gate run. A CLEAN probe is a check FAILURE (pre-registered,
+# AGENT-LOG iter 59 — never loosened to "record honestly").
+echo "   -- T5 standing starvation probe (samples=$T5_SAMPLES frames=$T5_FRAMES budget=${T5_BUDGET_NS}ns) --"
+dsh "sh -lc $DTMP/t5-launch.sh"
+t5_seen=0
+for _ in $(seq 1 "$T5_TRIES"); do # §7#1 bounded foreground poll
+  if dsh "test -f $DTMP/t5.apprc" >/dev/null 2>&1; then t5_seen=1; break; fi
+  sleep 2
+done
+if [ "$t5_seen" != 1 ]; then
+  dsh "cat $DTMP/t5-log.txt" >&2 || true
+  echo "DEVICE FAIL: T5 probe never finished (rc file absent after $((T5_TRIES * 2))s)" >&2
+  exit 1
+fi
+pullv "$DTMP/t5.apprc" "$DEVB/t5.apprc"
+if [ "$(cat "$DEVB/t5.apprc")" != "RC=0" ]; then
+  dsh "cat $DTMP/t5-log.txt" >&2 || true
+  echo "DEVICE FAIL: T5 probe app exited nonzero ($(cat "$DEVB/t5.apprc"))" >&2
+  exit 1
+fi
+pullv "$DTMP/t5-log.txt" "$DEVB/t5-log.txt"
+parse_audio_judge "$DEVB/t5-log.txt" \
+  "$AUDIO_RATE" "$T5_SAMPLES" "$AUDIO_CHANNELS" --max-underruns 0
+if [ "$au_rc" -ne 2 ] || [ "$au_underruns" -le 0 ] \
+  || [ "$au_fails" != "underruns" ]; then
+  echo "DEVICE FAIL: T5 standing probe did NOT starve (rc=$au_rc underruns=$au_underruns fails='$au_fails') — the gap accounting is not provably live; refutation path per AGENT-LOG iter 59 (one bounded re-measure, then STOP+report)" >&2
+  exit 1
+fi
+echo "   T5 probe OK: underruns=$au_underruns counted and rejected (cbs=$au_cbs starts=$au_starts) — gap accounting LIVE"
 
 attempt=0
 attempt_pass=0
@@ -895,21 +1080,39 @@ while [ "$attempt" -lt "$ATTEMPTS_MAX" ]; do
   # Audio judge under the DEVICE granted-spec grammar. Structural legs
   # (badlen, cbs window, starts/stops vs host truth) are HARD; the
   # underruns leg alone is retryable (the transient-stall class).
+  # CLASSIFICATION IS COUNTER-BOUND (iter 59, review-57 H): the hard/
+  # retryable split below reads the ACTUAL counters, never the judge's
+  # optional fail_* lines; the fail_* set is then CROSS-CHECKED against
+  # a counter-derived expectation — any disagreement (a judge that
+  # under- or over-reports) is a corruption death.
   parse_audio_judge "$DEVB/g01.au-dev-log.$attempt.txt" \
     "$AUDIO_RATE" "$AUDIO_SAMPLES" "$AUDIO_CHANNELS" \
     --cbs-min "$CBS_MIN" --cbs-max "$CBS_MAX" \
     --max-underruns 0 --max-badlen 0 \
     --expect-starts "$HOST_STARTS" --expect-stops "$HOST_STOPS"
   echo "   audio[$attempt]: cbs=$au_cbs underruns=$au_underruns badlen=$au_badlen starts=$au_starts stops=$au_stops steals=$au_steals"
+  exp_fails=""
+  if [ "$au_cbs" -lt "$CBS_MIN" ]; then exp_fails="$exp_fails cbs_low"; fi
+  if [ "$au_cbs" -gt "$CBS_MAX" ]; then exp_fails="$exp_fails cbs_high"; fi
+  if [ "$au_underruns" -gt 0 ]; then exp_fails="$exp_fails underruns"; fi
+  if [ "$au_badlen" -gt 0 ]; then exp_fails="$exp_fails badlen"; fi
+  if [ "$au_starts" -ne "$HOST_STARTS" ]; then exp_fails="$exp_fails starts"; fi
+  if [ "$au_stops" -ne "$HOST_STOPS" ]; then exp_fails="$exp_fails stops"; fi
+  exp_norm="$(printf '%s\n' $exp_fails | sort | tr '\n' ' ')"
+  got_norm="$(printf '%s\n' $au_fails | sort | tr '\n' ' ')"
+  if [ "$exp_norm" != "$got_norm" ]; then
+    echo "DEVICE FAIL: judge fail_* set ('$au_fails') disagrees with the counter-derived expectation ('${exp_fails# }') — corrupt judge output" >&2
+    exit 1
+  fi
   hard_audio_fail=""
-  for leg in $au_fails; do
-    case "$leg" in
-      underruns) : ;; # retryable (with skips) — evaluated below
-      *) hard_audio_fail="$hard_audio_fail $leg" ;;
-    esac
-  done
+  if [ "$au_badlen" -ne 0 ]; then hard_audio_fail="$hard_audio_fail badlen"; fi
+  if [ "$au_cbs" -lt "$CBS_MIN" ] || [ "$au_cbs" -gt "$CBS_MAX" ]; then
+    hard_audio_fail="$hard_audio_fail cbs"
+  fi
+  if [ "$au_starts" -ne "$HOST_STARTS" ]; then hard_audio_fail="$hard_audio_fail starts"; fi
+  if [ "$au_stops" -ne "$HOST_STOPS" ]; then hard_audio_fail="$hard_audio_fail stops"; fi
   if [ -n "$hard_audio_fail" ]; then
-    echo "DEVICE FAIL: audio structural leg(s) failed:$hard_audio_fail (cbs=$au_cbs badlen=$au_badlen starts=$au_starts/$HOST_STARTS stops=$au_stops/$HOST_STOPS — hard, never retried)" >&2
+    echo "DEVICE FAIL: audio structural leg(s) failed:$hard_audio_fail (cbs=$au_cbs badlen=$au_badlen starts=$au_starts/$HOST_STARTS stops=$au_stops/$HOST_STOPS — hard, counter-bound, never retried)" >&2
     exit 1
   fi
 

@@ -7267,3 +7267,211 @@ failure -> restore -> cmp-verify restoration.
   construction — the gate's evidence mode is the bounded g01 replay;
   the human S1 ratification playtest (the phase-end HUMAN GATE) is
   Chase's, driven by the sentinel after this pass.
+
+## iter 59 — 2026-07-17 — M3 task 6 hardening PRE-REGISTRATION: audio round-1 triage closure (frozen before any run/edit; PROCESS §2)
+
+**Scope (driver triage .loop/review-57-triage.md, BINDING — all items):**
+close the task-6 audio arc's round-1 findings (.loop/review-57-1.log,
+VERDICT: NO-GO) on port/gfx/{check-device-audio.sh,
+judge-audio-summary.js, platform_audio_sdl.h}. The concurrently-reviewed
+iter-58 surface (verify_m3.sh, m3-freeze-manifest.txt data OTHER than
+the audio producers' own re-pins, check-device-opk.sh, port/gfx/opk/*)
+is NOT edited. gfx_app.c untouched (no fix strictly needs it).
+
+**Fixes (frozen):**
+- H (retry-classification integrity): judge-audio-summary.js buffers its
+  ENTIRE output and writes it once, terminated by a MANDATORY
+  `judge_complete=1` integrity line; the shell's ingest (factored
+  `audio_judge_ingest`, testable in a subshell) dies as CORRUPTION when
+  the last line is not exactly `judge_complete=1` (missing/partial/
+  truncated judge output can never be read as "retryable"); the device
+  loop binds hard legs to the ACTUAL counters (au_badlen/au_cbs/
+  au_starts/au_stops vs their pins) and retryability to skips>0 /
+  au_underruns>0 ONLY, never to optional fail_* presence; a
+  counter-derived expected-fail set is cross-checked against the
+  judge's fail_* set (any disagreement = corruption death).
+- M1 (T5 STANDING): a device starvation probe (frozen config: the
+  iter-57 measured probe — --audio-samples 64, --frames 600, --pace 1
+  --budget-ns 1000, parked window, deadman-covered) runs INSIDE every
+  check invocation; its log must judge to rc 2 with fail set exactly
+  {underruns} and au_underruns > 0, else the check FAILS — the gap
+  accounting is proven live-in-the-failing-direction per run.
+- M2 (proxy tightening + exposure): platform_audio_sdl.h seeds the gap
+  chain at audio-OPEN (unpause timestamp) and judges the terminal
+  last-callback→stop interval under SDL_LockAudio by the same
+  >2-period rule (a stalled callback START or a mid-run-dead callback
+  thread now lands in underruns); SDL 1.2 exposes NO audio-thread
+  priority API — documented at the site, recorded below as MEASURED
+  EXPOSURE per PROCESS §8; DMA-xrun blindness recorded likewise
+  (structural proxy only; the M4 mixer-fidelity seed — registered
+  iter 57 — is the closure path).
+- M3 (app-summary grammar): parse_app_summary additionally requires
+  ZERO summary-RESEMBLING malformed lines — resemblance measured from
+  the full real corpus: ONLY the summary line matches
+  `^gfx_app: [0-9]` (the legit `gfx_app: skipped frames:` /
+  `gfx_app: bad argument` lines start with letters; `gfx_app audio:`
+  has a different prefix) — exactly one resembling line, and it must be
+  the exactly-one full-grammar match; any torn/stale duplicate =
+  corruption death.
+- L (packer verdict): pack-snd.js output must be EXACTLY one line and
+  that line must match the anchored full-line verdict grammar
+  (factored `pack_verdict_assert`, testable).
+
+**Per-fix teeth (all must fire, logged in the donecheck log):**
+- T6 (H): judge output for the T3 perturbed log, truncated immediately
+  after `fail_underruns=1` (integrity line dropped) and fed to
+  `audio_judge_ingest` in a subshell → nonzero corruption death, never
+  a retryable classification. Positive control: the untruncated output
+  ends with `judge_complete=1` and rc 2.
+- T5 (M1): the standing probe itself IS the tooth — asserted >0
+  underruns + judge rejection every run (iter-57 measured 16-17
+  underruns at this config; a clean probe now FAILS the check).
+- (M2): direction covered by T5 (boundary accounting shares the
+  counter T5 asserts); dead-callback-thread direction is by
+  construction (terminal gap = open→stop when cbs never ran).
+- T7 (M3): real host log + a torn duplicate summary prefix
+  (`gfx_app: <frames> frames, 0 render sk`) appended → subshell
+  parse_app_summary death.
+- T8 (L): two-line doubled verdict fed to pack_verdict_assert →
+  subshell death.
+- Standing T1-T4 unchanged and must still pass (T3/T4 prove the judge
+  edit kept its teeth); zero-false-rejection: the new judge + parsers
+  validated against the REAL iter-57/58 corpus logs (host a/b + device
+  attempts 1-2, including the skips=8→skipped-frames-line log class)
+  before the cold run.
+
+**Run matrix + caps (frozen):** ≤ 2 gate-shaped paced device runs (the
+cold done-check's ≤2 attempts; early-stop on first green) + the standing
+T5 probe inside each check invocation (+1 spare probe budget on
+transient); 1 docker arm rebuild expected (audio TU/script bytes are
+stamp inputs; serial) + 1 contingency; host-side judge/parser
+micro-validations unbounded-cheap, logged. If a SECOND full cold run is
+needed after a fix-defect, that consumes the cap — a third requires
+STOP+report.
+
+**Pass criteria:** cold `bash port/gfx/check-device-audio.sh` →
+`DEVICE AUDIO OK (...)`, exit 0 (.loop/m3-task6r59-donecheck.log), all
+teeth T1-T8 fired in-log, freeze-manifest re-pins for the two touched
+producers assert-verified by direct shasum (logged), tree clean after
+ONE atomic commit.
+
+**Refutation shapes:**
+- T5 probe counts 0 underruns at the frozen config → refutes "the probe
+  reliably starves": ONE bounded re-measure at the same config to split
+  transient vs config drift, then STOP+report; the >0 assertion is
+  never loosened and the probe is never deleted to make the check pass.
+- Boundary-interval accounting (M2) fires underruns>0 on BOTH healthy
+  paced attempts (iter-57/58 baseline: 0) → refutes "boundary gaps are
+  sub-2-period in healthy runs": STOP+report with the cbs/underrun
+  evidence — never widen the window or strip the boundary terms to get
+  green.
+- Any new parser false-rejects a genuine corpus log during
+  pre-validation → fix the parser to the measured grammar (PROCESS §3
+  step 4), never relax to permissive parsing.
+
+**MEASURED EXPOSURE (PROCESS §8, restated in the DONE entry):** the
+underrun counter remains a callback-timing PROXY. After this iteration
+it covers: inter-callback gaps, the open→first-callback interval, the
+last-callback→close interval, and dead-callback-thread runs. It CANNOT
+see: (a) kernel/driver DMA xruns that emit silence while callbacks stay
+timely (no SDL 1.2 surface exposes them); (b) audio-thread priority
+(SDL 1.2 has no priority API — the callback thread runs at platform
+default, nothing to assert). Closure path for (a): the M4
+mixer-fidelity seed (captured-reference audible-plane comparison,
+registered iter 57). "underruns==0" therefore reads "no
+callback-observable starvation", not "no audible dropout".
+
+## iter 59 — 2026-07-17 — M3 task 6 hardening DONE: judge integrity, standing starvation tooth, summary grammar (audio round-1 triage closed)
+
+- **Done-check (cold)**: `bash port/gfx/check-device-audio.sh` →
+  `DEVICE AUDIO OK (full p99 12.267 ms, underruns=0, attempts=2;
+  cbs=5166 starts=274 stops=0 skips=0/3600)`, exit 0
+  (.loop/m3-task6r59-donecheck2.log — the PASSING run). HONEST RUN
+  LEDGER: cold run 1 (.loop/m3-task6r59-donecheck.log) was REFUSED by
+  the strict gate, rc 1 — both attempts audio-green (underruns=0,
+  cbs=5166, starts/stops == host truth) but each hit the REGISTERED
+  transient-spike skip class (skips=1 @ frame 1116; skips=1 @ 1192);
+  run 2 attempt 1 hit it again (skips=3 @ 466/467/1170), attempt 2
+  CLEAN. Per pre-registration the second cold run was the sanctioned
+  final run; the retry budget was NOT widened. MEASUREMENT for the
+  registered M4 instrument candidate (iter 56): today's skip incidence
+  was 3/4 attempts (vs the iter-54/57 baseline ~2/6 runs), frames
+  {466,467,1116,1170,1192} + iter-58's 1292 — a T5-probe after-effect
+  (thermal/scheduler) is NOT excluded as a contributor; attribute with
+  the instrument, never by widening the retry.
+- **Fixes landed (driver triage .loop/review-57-triage.md, ALL items)**:
+  - H: judge-audio-summary.js now emits its verdict block in ONE stdout
+    write terminated by the MANDATORY `judge_complete=1` integrity
+    line; the shell's factored `audio_judge_ingest` dies as CORRUPTION
+    on a missing/partial terminator; the device loop binds hard legs
+    (badlen/cbs-window/starts/stops) and retryability (skips>0 /
+    underruns>0 only) to the ACTUAL COUNTERS, and cross-checks the
+    judge's fail_* set against a counter-derived expectation
+    (disagreement = corruption death). fail_* is now reporting-only.
+  - M1: T5 STANDING device starvation probe inside EVERY check
+    invocation (frozen iter-57 config: samples=64, 600 frames, 1000 ns
+    budget, parked + deadman-covered) — must count >0 underruns AND be
+    judge-rejected, else the check fails. This run: 19 underruns
+    counted + rejected (run 1: 17) — gap accounting proven live in the
+    failing direction per run.
+  - M2: platform_audio_sdl.h gap accounting now covers the BOUNDARY
+    intervals — the chain is seeded at audio-open (open→first-callback
+    judged by the same >2-period rule) and platform_audio_stop judges
+    the terminal last-callback→stop gap under SDL_LockAudio (a mid-run
+    dead callback thread now lands in underruns). Healthy paced runs
+    measured underruns=0 with the new accounting (the pre-registered
+    refutation shape did NOT fire).
+  - M3: parse_app_summary requires exactly one FULL-grammar summary
+    line AND zero summary-RESEMBLING lines (`^gfx_app: [0-9]` — the
+    empirically measured discriminator; legit "skipped frames:"/"bad
+    argument" lines start with letters, "gfx_app audio:" is a
+    different prefix). Validated zero false rejections on the full
+    iter-57/58 corpus incl. the skips>0 log class
+    (.loop/m3-task6r59-hostvalidate.log).
+  - L: pack-snd verdict = exactly-one-line, anchored full-line match
+    (factored pack_verdict_assert).
+- **Teeth (all fired, logged in the donecheck logs)**: standing T1-T4
+  unchanged and green; NEW T6 — judge output truncated right after
+  fail_underruns=1 fed to the REAL ingest in a subshell → corruption
+  death (positive control: untruncated ends judge_complete=1, rc 2);
+  NEW T7 — torn duplicate summary appended to a real log →
+  parse_app_summary death; NEW T8 — doubled pack verdict → death;
+  T5 = the standing probe (above). Host micro-validation: new judge
+  green on all 4 real corpus logs + the iter-57 probe line under the
+  samples=64 grammar (.loop/m3-task6r59-hostvalidate.log).
+- **MEASURED EXPOSURE (PROCESS §8 — the M2 residual, recorded as
+  pre-registered)**: the underrun counter is a callback-timing PROXY.
+  It now covers inter-callback gaps + both boundary intervals + dead
+  callback threads. It CANNOT see (a) kernel/driver DMA xruns emitting
+  silence while callbacks stay timely (no SDL 1.2 surface exposes
+  them) and (b) audio-thread priority (SDL 1.2 has NO priority API —
+  documented at the site; nothing to assert). Closure path for (a):
+  the M4 mixer-fidelity seed (registered iter 57 — captured-reference
+  audible-plane comparison). "underruns==0" = "no callback-observable
+  starvation", never "no audible dropout".
+- **Freeze manifest (PROCESS §4, per its documented update path)**: the
+  two touched pinned producers re-pinned in THIS commit —
+  check-device-audio.sh 5f22ddff…ec66, judge-audio-summary.js
+  8ceaf028…966f, status kept arc-in-flight, cite
+  `.loop/review-57-1.log+iter59-r1-fixes-r2-closure-pending`.
+  pack-snd.js untouched (pin verified unchanged);
+  platform_audio_sdl.h is not a manifest producer (its identity flows
+  through the arm-build stamp → gfx_device binary sha). Full 23-entry
+  direct-shasum self-check green
+  (.loop/m3-task6r59-manifest-selfcheck.log; verify_m3.sh's step-0
+  cannot run standalone, and verify_m3.sh itself was NOT run — the
+  concurrent iter-58 review owns that surface). THE DRIVER'S CLOSURE
+  REVIEW (audio round 2) COVERS THE NEW BYTES; prior gate evidence is
+  invalidated by these producer edits — the phase-advance cold
+  verify_m3.sh run must follow the triage's sequence (audio round-2
+  closure → task-7 arc → gate).
+- **Zoom-out (HARD RULE 8)**: all five fixes are CLASS closures, not
+  spot patches — the integrity-terminator + counter-binding pattern
+  closes the "optional-line-dependent classification" hole for ANY
+  future judge (the same hole class the whitelist-grammar rule closes
+  for parsers); the resemblance rule + exactly-one-line verdict extend
+  the measured-grammar discipline to the two remaining permissive
+  parses on this surface; T5 converts a one-shot measurement into a
+  standing per-run instrument (the "prove the instrument, not just the
+  judge" class — same family as the mathsweep standing instrument and
+  the qjs boot pins). No new one-offs; no retry-budget widening.
