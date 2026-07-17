@@ -6355,3 +6355,20 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   bounds) — the audit's two named shapes gain a third corollary:
   a grammar without digit bounds leaves bash's status-2-as-false
   arithmetic hole open even when the SHAPE is anchored.
+
+## driver — 2026-07-17 — task-5 arc CLOSED at GO (round 2); iter-54 cold-verified
+
+- Task-5 (input rig) Tier-A arc: CLOSED, VERDICT: GO round 2
+  (.loop/review-53-1.log) — all round-1 findings verified genuinely
+  closed by the reviewer (exact stream grammars, whole-line injector
+  parse, dup-key raw validation, SOCD live witness, frozen frame-121
+  tapJump pin with documented update path); the fk_input ferror
+  code-review-only disposition accepted. Arc lengths continue shrinking:
+  task-1: 5 rounds, task-2: 3, task-3: 3(cap), task-5: 2.
+- Iter-54 driver verification: d26a6b6 verified, cold DEVICE RENDER OK
+  (p99 full 11.285 / render 2.990 / skips 0/3600), pushed. Task-4 arc
+  round 3 (closure) opens now. Honest-exposure note carried forward:
+  transient single-frame sim spikes can trip the skips==0 gate on a
+  given run (iter-54 attempt 1, frame 1190) — a rerun is legitimate
+  per-run judgment, but verify_m3.sh assembly (task 7) should surface
+  skip-gate retries visibly, never silently loop.
