@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-16, post-iter-42 writer)
+## Live right now (updated: 2026-07-16, post-iter-43 writer)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -76,12 +76,28 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   The rig plumbing (nonce-dsh, pullv + non-empty assert, stamp + push
   provenance, shared device-keyed lock, rm-before-produce + made()) is
   the inheritance package for every M3 device script.
-- **In flight**: M3 task 2 writer — all-8 device conformance + sim-only
-  p99 (`check-device-conform.sh`, inherits the rig plumbing verbatim;
-  sweep + corpus pins referenced, not re-derived; its new script gets
-  its own Tier-A arc on landing).
-- **Latest AGENT-LOG entry**: driver 2026-07-16 arc-closure (after
-  iter 42); latest log id: .loop/review-42-1.log.
+- **Iter 43 (M3 task 2) DONE**: `bash port/sim/device/
+  check-device-conform.sh` → DEVICE CONFORMS 8/8 + SIM P99 OK, exit 0
+  (.loop/m3-task2-donecheck.log). All 8 goldens replayed ON the FunKey,
+  streams judged host-side by the unchanged verify-stream.js — zero
+  armv7 divergences (empty ledger; the iter-38 libc class fix held).
+  MEASURED sim-only (docs/research/device-perf.md): p50 4.27-5.81 ms,
+  p99 7.95-10.68 ms — worst p99 (g08) leaves ~6 ms for
+  render+present+audio. sim_main gained --timing (CLOCK_MONOTONIC ns,
+  RAM-buffered, post-run write; host+device); percentiles.js is the
+  host-side timing judge. Rig plumbing EXTRACTED into
+  port/sim/device/riglib.sh (both device scripts source it; RIG_SCRIPTS
+  = every rig script's bytes are stamp input → ONE shared arm build).
+  Teeth: no-timing probe (pullv death), run-side stream perturbation
+  (MISMATCH at exact frame; frozen-side perturbation trips the seal
+  first — run side proves the judge), 1 ms threshold probe (SIM P99
+  FAIL after STREAM MATCH). Regressions green: check-sim.sh SIM
+  CONFORMS + check-device-g01.sh DEVICE CONFORMS g01 via the lib.
+- **In flight**: nothing — task-2 Tier-A review arc (conform script +
+  riglib + percentiles.js, non-checksummed surfaces) opens on landing
+  (driver-owned), then task 3 (renderer core, host-side).
+- **Latest AGENT-LOG entry**: iter 43 (M3 task 2); latest log id:
+  .loop/m3-task2-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
@@ -93,9 +109,11 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## Next
 
-1. Codex verdict → launch task-2 writer (g07/g08 AI-bridge artifacts must
-   ride to the device; reuse adbsh.sh + stamp-cached build).
-2. Ladder: fix_plan §M3 tasks 2-7 → M3 gate (`verify_m3.sh`) →
+1. Driver: ground-truth iter 43 (cold done-check re-run) + open the
+   task-2 Tier-A arc (check-device-conform.sh, riglib.sh,
+   percentiles.js) → launch task-3 writer (renderer core, host-side)
+   on GO.
+2. Ladder: fix_plan §M3 tasks 3-7 → M3 gate (`verify_m3.sh`) →
    LOOP STOP: m3-device + push-notify Chase for S1 ratification →
    close #18 → M4 REPLAN (PLAN §4/M4) → Chase acceptance →
    LOOP STOP: m4-complete.

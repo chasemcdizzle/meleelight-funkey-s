@@ -3,11 +3,19 @@
 // Replays ONE golden trace end-to-end and emits the CHECKSUM.md stream:
 //   sim_host --trace <trace.txt> --simdata <simdata.txt> --seed <u32>
 //            --p1 <char> --p2 <char> --stage <id> --frames <n>
-//            [--cpu --difficulty <n> --ai-bridge <file>]
+//            [--cpu --difficulty <n> --ai-bridge <file>] [--timing <file>]
 // stdout: "F <frame> <sha256hex>" per frame (1..n), then
 //         "RNG <rngCalls> <rngCallsOutsideStep>", then "SIM OK".
 // (wrap-run.js turns this into a verify-stream.js-compatible run JSON;
 // the UNCHANGED oracle verifier judges it — writer != checker.)
+//
+// --timing <file> (M3 task 2): per-frame SIM-ONLY wall time —
+// CLOCK_MONOTONIC ns measured around sim_game_tick + sim_frame_hash
+// (the stdout stream print is deliberately OUTSIDE the timed region),
+// buffered in RAM for all frames and written to <file> only AFTER the
+// run loop completes: zero file I/O inside the frame loop. One decimal
+// ns value per line, exactly <frames> lines. The device only records;
+// p50/p99 judgment is host-side (port/sim/device/percentiles.js).
 //
 // Boot RNG parity (CHECKSUM.md §6 + the qjs boot pin, CLAUDE.md M0 task
 // 6): the page burns exactly 465 seeded draws before match setup (menu
@@ -21,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "sim.h"
 #include "../ml_events.h"
@@ -152,11 +161,22 @@ static uint32_t draws_between(uint32_t from, uint32_t to) {
   return (to - from) * mulberry_inv();
 }
 
+// --- timing (--timing; M3 task 2) --------------------------------------------------
+
+static uint64_t now_ns(void) {
+  struct timespec ts;
+  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+    sim_fatal("clock_gettime(CLOCK_MONOTONIC) failed");
+  }
+  return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+
 // --- main --------------------------------------------------------------------------
 
 int main(int argc, char **argv) {
   const char *tracePath = 0, *simdataPath = 0, *bridgePath = 0;
   const char *dumpFrames = 0; // diagnostic: comma-separated frame list
+  const char *timingPath = 0; // per-frame sim-only ns (written post-run)
   long seed = -1, p1 = -1, p2 = -1, stage = -1, frames = -1, difficulty = 3;
   bool cpu = false;
   for (int i = 1; i < argc; i++) {
@@ -165,6 +185,7 @@ int main(int argc, char **argv) {
     if (strcmp(a, "--trace") == 0 && hasV) tracePath = argv[++i];
     else if (strcmp(a, "--simdata") == 0 && hasV) simdataPath = argv[++i];
     else if (strcmp(a, "--ai-bridge") == 0 && hasV) bridgePath = argv[++i];
+    else if (strcmp(a, "--timing") == 0 && hasV) timingPath = argv[++i];
     else if (strcmp(a, "--seed") == 0 && hasV) seed = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--p1") == 0 && hasV) p1 = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--p2") == 0 && hasV) p2 = strtol(argv[++i], 0, 10);
@@ -183,7 +204,7 @@ int main(int argc, char **argv) {
     fprintf(stderr,
             "usage: sim_host --trace t.txt --simdata s.txt --seed N --p1 N "
             "--p2 N --stage N --frames N [--cpu --difficulty N "
-            "--ai-bridge f]\n");
+            "--ai-bridge f] [--timing f]\n");
     return 1;
   }
 
@@ -213,6 +234,12 @@ int main(int argc, char **argv) {
                   (int)stage);
   G.rngStateAtFrame1 = G.rng.a;
 
+  uint64_t *tbuf = 0; // --timing: RAM buffer, flushed after the loop
+  if (timingPath) {
+    tbuf = malloc((size_t)frames * sizeof *tbuf);
+    if (!tbuf) sim_fatal("oom (timing buffer)");
+  }
+
   char hex[65];
   for (long f = 0; f < frames; f++) {
     // pagelib.js:93-96 — held-last past trace end
@@ -221,8 +248,10 @@ int main(int argc, char **argv) {
     const MlInput *rows[4];
     for (int i = 0; i < 4; i++) rows[i] = row->present[i] ? &row->in[i] : 0;
     G.frame = f + 1;
+    const uint64_t t0 = tbuf ? now_ns() : 0;
     sim_game_tick(&G, rows);
     sim_frame_hash(&G, hex);
+    if (tbuf) tbuf[f] = now_ns() - t0; // sim-only: the print below is excluded
     printf("F %ld %s\n", f + 1, hex);
     if (dumpFrames) {
       // diagnostic envelope dump (stderr — stdout is wrap-run's contract)
@@ -241,6 +270,18 @@ int main(int argc, char **argv) {
 
   if (G.hasBridge && ml_ai_bridge_peek(&G.bridge) != 0) {
     sim_fatal("AI bridge has unconsumed entries after the last frame");
+  }
+
+  if (tbuf) {
+    FILE *tf = fopen(timingPath, "w");
+    if (!tf) sim_fatal("cannot open --timing file for writing");
+    for (long f = 0; f < frames; f++) {
+      if (fprintf(tf, "%" PRIu64 "\n", tbuf[f]) < 0) {
+        sim_fatal("--timing file write failed");
+      }
+    }
+    if (fclose(tf) != 0) sim_fatal("--timing file close/flush failed");
+    free(tbuf);
   }
 
   const uint32_t total = draws_between(G.rngStateAtReset, G.rng.a);

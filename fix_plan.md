@@ -1061,16 +1061,28 @@ math/parse symbol — differential-sweep it against a host anchor before
 relying on it (sqrt/fabs measured healthy: VFP instructions). Device g01
 wall clock ~21 s / 3600 frames, sim-only avg ~5.8 ms/frame.)
 
-2. device conformance ALL 8 goldens + sim-only timing — replay every
-   golden in `oracle/goldens/manifest.json` on the device (AI-bridge
-   artifacts for g07/g08), verify-stream all 8 on the host; add a
-   `--timing <file>` flag to sim_main (CLOCK_MONOTONIC per-frame ns,
-   buffered in RAM, written post-run — no I/O inside the frame loop);
-   record p50/p99 sim-only ms/frame per golden into
-   `docs/research/device-perf.md` (measured table, append-only); assert
-   p99 sim-only < 16.67 ms on every golden. — done-check:
-   `bash port/sim/device/check-device-conform.sh` → prints
-   `DEVICE CONFORMS 8/8` and `SIM P99 OK`, exit 0.
+(task 2 — device conformance ALL 8 goldens + sim-only timing — DONE
+iter 43: `bash port/sim/device/check-device-conform.sh` → DEVICE
+CONFORMS 8/8 + SIM P99 OK, exit 0 (.loop/m3-task2-donecheck.log). Every
+golden replayed on the device, streams judged host-side by the UNCHANGED
+verify-stream.js vs the frozen *.sha256.json; g07/g08 rode their
+AIBRIDGE1 artifacts (--cpu --difficulty --ai-bridge, check-sim.sh's
+feed mirrored). sim_main gained `--timing <file>` (CLOCK_MONOTONIC ns
+around tick+hash only, RAM-buffered, written post-run; host + device);
+p50/p99 judged host-side by port/sim/device/percentiles.js
+(nearest-rank), asserted p99_ns < 16670000 per golden. MEASURED
+(docs/research/device-perf.md): p50 4.27-5.81 ms, p99 7.95-10.68 ms —
+worst p99 (g08) leaves ~6 ms of frame budget for render+present+audio.
+Rig plumbing extracted VERBATIM into port/sim/device/riglib.sh (both
+device scripts source it; RIG_SCRIPTS makes every rig script's bytes
+stamp input → ONE shared arm build, no stamp ping-pong; corpus
+pins/sweeps stay g01-script-owned). Teeth: no-timing probe → pullv
+loud death; perturbed RUN-side stream → verify-stream MISMATCH at the
+exact frame (frozen-copy perturbation trips the name/integrity seal
+first — perturb the run side to prove the frame comparator); 1 ms
+threshold probe → SIM P99 FAIL after STREAM MATCH. Regressions green:
+check-sim.sh SIM CONFORMS + check-device-g01.sh DEVICE CONFORMS g01
+through the refactored lib.)
 
 3. renderer core, host-side first — `port/gfx/`: C ANIM1 consumption
    (pipeline/FORMATS.md §2 decoder), adaptive cubic flattening, the AA

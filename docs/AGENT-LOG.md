@@ -3953,3 +3953,236 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   future arcs. Rig plumbing is now the inheritance package for every
   M3 device script (task 2 onward).
 - next: task 2 (all-8 device conformance + sim-only p99).
+
+## iter 43 — 2026-07-16 — M3 task 2: all-8 device conformance + sim-only p99 (check-device-conform.sh)
+
+- PRE-REGISTRATION (frozen before first edit; PROCESS §2. Task: fix_plan
+  §M3 task 2 — replay EVERY golden in oracle/goldens/manifest.json on the
+  FunKey-S, judge all 8 host-side with the UNCHANGED verify-stream.js,
+  add `--timing` to the sim main, record + assert sim-only p99).
+  - **Run matrix (ONE batched device dispatch per PROCESS §9)**: a single
+    `check-device-conform.sh` invocation runs all 8 goldens sequentially
+    on the device in one script run — g01-g06 human traces, g07/g08 CPU
+    with their AIBRIDGE1 artifacts pushed (`--cpu --difficulty 5
+    --ai-bridge`, mirroring check-sim.sh's arg feed). Budget: push ≈
+    16 MB (sim_device 1.2 MB + 8 trace texts ≈ 11.9 MB + 2 bridges ≈
+    1.7 MB + simdata) at ~4.4 MB/s ≈ 4 s; per-golden device run ~21-25 s
+    (g07/g08 + bridge parse extra); pulls are cheap (~260 KB stream +
+    ~30 KB timing per golden). Expected wall for the device phase
+    ≈ 4-6 min + one forced arm rebuild in run 1 (sim_main.c changes are
+    stamp input).
+  - **Timing methodology**: sim_main gains `--timing <file>` —
+    CLOCK_MONOTONIC, per-frame ns measured around sim_game_tick +
+    sim_frame_hash ONLY (the stdout stream print is excluded; sim-only
+    is the currency), buffered in RAM (8 B x frames), written to the
+    file AFTER the run loop completes — zero file I/O inside the frame
+    loop; works on host sim_host and device sim_device (every TU stays
+    -O2 -ffp-contract=off -Wall -Wextra -Werror). The DEVICE only
+    records; p50/p99 are computed HOST-side by
+    port/sim/device/percentiles.js from the pulled ns file:
+    nearest-rank on the ascending sort, idx = ceil(q*n)-1 (n=3600:
+    p50 idx 1799, p99 idx 3563), strict grammar (exactly `frames`
+    decimal-integer lines, loud death otherwise). Threshold compare is
+    integer ns: p99_ns < 16670000 (16.67 ms), per golden, asserted
+    in-loop right after that golden's verify-stream judgment (fail
+    fast). Wall clock per golden = date +%s around the dsh run
+    (informational; includes trace/simdata parse + tmpfs write).
+  - **Pass criteria**: verify-stream.js exit 0 (STREAM MATCH — exact
+    per-frame equality, FULL length, rngCalls/rngCallsOutsideStep/
+    specVersion pins) for ALL 8 goldens, judged host-side against the
+    frozen oracle/goldens/*.sha256.json; AND p99_ns < 16670000 for all
+    8. Script prints `DEVICE CONFORMS 8/8` and `SIM P99 OK`, exit 0.
+    Measured p50/p99/wall per golden recorded in the run log + appended
+    (by the writer, from the printed table) to docs/research/
+    device-perf.md — the SCRIPT never writes tracked files (a
+    done-check that dirties the tree breaks the clean-tree invariant).
+  - **Refutation shapes**: (a) any stream mismatch = a REAL armv7
+    finding (fdlibm/flags/promotion class) → ledger entry + localize
+    via `sim_device --dump-frames` vs `oracle/harness/run.js
+    --capture-frames` (the M2CAL procedure), class fix, NEVER epsilon;
+    if unconverged after one bounded evidence round → honest BLOCKER in
+    docs/AGENT-LOG.md + stop. (b) any p99 >= 16.67 ms = a REAL perf
+    finding → record the measured numbers, STOP and report (no gate
+    weakening; perf remediation is its own task). (c) a tooth that
+    does not fire = defective guard → fix the guard, re-run that tooth
+    once, report the overage.
+  - **Run cap: <= 3 full-matrix invocations + teeth** (teeth die at g01
+    by construction — partial dispatches). Planned: run 1 = cold
+    conform (forced rebuild; expect 8/8 + P99 OK), then the three
+    teeth, then regressions. Docker SERIAL; FOREGROUND polling only;
+    logs → .loop/m3-task2-*.log.
+  - **TEETH (pre-registered)**:
+    - T-timing (freshness/production): PROBE copy of the script
+      (distinct filename — NOT in RIG_SCRIPTS, so no stamp churn) with
+      the `--timing $DTMP/<id>.timing.txt` argument REMOVED from the
+      device invocation: the device produces no timing file → the
+      timing pullv must die loudly at g01 (rm-before-pull + digest +
+      non-empty leave no stale-file path), before any percentile
+      judgment. Expected: `DEVICE FAIL`-class death at g01, rc != 0.
+    - T-judge (stream judge teeth): COPY a frozen stream
+      (g03 …sha256.json) into build output, perturb ONE hash nibble
+      (never touching oracle/goldens — HARD RULE 3), run the UNCHANGED
+      verify-stream.js with the passing run-1 device run JSON against
+      the perturbed copy → must fail naming that frame; the SAME run
+      JSON against the pristine frozen file passes (specificity:
+      exactly that golden's judgment flips).
+    - T-p99 (threshold assert): PROBE copy with P99_LIMIT_NS lowered to
+      1000000 (1 ms — below the measured ~6 ms p99) → the g01 p99
+      assert must fail loudly (`SIM P99 FAIL` line, rc != 0) AFTER its
+      STREAM MATCH, proving the assert path is live; restore (probe
+      deleted; threshold in the committed script stays 16670000).
+  - **Rig inheritance (iters 38-42 arc conclusions, VERBATIM — not
+    re-derived)**: nonce-dsh for every device command; pullv for every
+    pulled artifact; rm-before-produce + made() for every host-side
+    artifact between a fallible producer and a judge; stamp srchash
+    over sources + generated tables + rig script bytes + docker image
+    Id, cache-HIT re-verify, rehash-adjacent-to-push, post-push
+    device-side digest vs stamp; the SHARED no-reclaim device-keyed
+    lock at ${TMPDIR:-/tmp}/mlfk-rig-<dev>.lock (same path as
+    check-device-g01.sh — the device is the resource). Shared plumbing
+    is EXTRACTED into port/sim/device/riglib.sh (class > copy-paste),
+    sourced by both check-device-g01.sh and check-device-conform.sh;
+    RIG_SCRIPTS (stamp input) = adbsh.sh + riglib.sh + both check
+    scripts, so both scripts compute the SAME stamp and share the one
+    arm build. CORPUS pins + sweeps stay g01-script-owned (not
+    duplicated here). g07/g08 AI-bridge artifacts: reused when present
+    (check-sim.sh precedent — their validity is proven downstream by
+    the in-binary header pins seed/boot, the draw-chain bit
+    verification, and the frozen-stream judgment; a wrong bridge
+    cannot yield a passing stream), rebuilt via the task-16 recipe
+    (run-capture --spec ai → STREAM-MATCH guard → build-ai-bridge.js)
+    with rm-before-produce + made() when absent.
+  - **Host-side write sites (mechanical enumeration, rm-before-produce
+    + made()/pullv per the iter-42 class rule)**: (1) $TABLES/
+    ml_tables.{c,h} + ml_stages.{c,h} ← pipeline/run.js; (2) $DEVB/
+    simdata.txt ← dump-sim-data.js; (3) $DEVB/<id>.trace.txt x8 ←
+    trace-to-txt.js; (4) fresh-bridge path only: $BUILD/<id>.ai.jsonl +
+    <id>.ai-run.json + <id>.ai-bridge.txt ← run-capture/build-ai-bridge;
+    (5) the 4 armv7 binaries ← docker cc (inside rig_arm_build,
+    rm-before + made + ELF assert + nm override assert); (6) $DEVB/
+    <id>.sim-out.device.txt ← pullv; (7) $DEVB/<id>.timing.device.txt ←
+    pullv; (8) $DEVB/<id>.sim-run.device.json ← wrap-run.js; (9) $DEVB/
+    device-perf-rows.md ← the script's own table redirection. Percentile
+    output + manifest params are $()-captured variables under the
+    no-eval strict line parser (the reviewed gparams class). Device-side
+    artifacts all live under $DTMP, rm -rf'd + mkdir'd at dispatch
+    start, every producer RC-checked via nonce-dsh.
+  - **Regressions (mandatory: sim main + shared plumbing touched)**:
+    `bash port/sim/check-sim.sh` → SIM CONFORMS (host; sim_main.c
+    edit), host `sim_host --timing` smoke (line count == frames), and
+    `bash port/sim/device/check-device-g01.sh` cold → DEVICE CONFORMS
+    g01 (riglib extraction; expected stamp HIT after run 1). All
+    logged.
+- RESULTS (all pre-registered outcomes met; run count 2/3 full-matrix +
+  3 teeth — none wasted, none over cap):
+  - **done-check PASS (final committed bytes, cold)**:
+    `bash port/sim/device/check-device-conform.sh` → `DEVICE CONFORMS
+    8/8` + `SIM P99 OK`, exit 0 (.loop/m3-task2-donecheck.log; stamp
+    HIT — the shared riglib build: the g01 regression's rebuild and
+    this run compute the SAME stamp 50040fe5…). Run 1 (first full
+    matrix, .loop/m3-task2-run1.log) also passed 8/8 + P99 OK on the
+    forced rebuild path; the only delta between run 1 and the final
+    bytes is one error-message string (stale "(16.67 ms)" parenthetical
+    removed from the SIM P99 FAIL line).
+  - **MEASURED sim-only per-frame timing (device, done-check run;
+    nearest-rank p50/p99; full table + methodology committed in
+    docs/research/device-perf.md)**:
+    | golden | frames | p50 ms | p99 ms | wall s |
+    |---|---|---|---|---|
+    | g01 | 3600 | 5.691 | 10.334 | 21 |
+    | g02 | 3600 | 5.407 | 9.962 | 20 |
+    | g03 | 3600 | 5.068 | 9.624 | 19 |
+    | g04 | 3600 | 5.045 | 9.436 | 19 |
+    | g05 | 3600 | 5.564 | 9.952 | 21 |
+    | g06 | 3600 | 5.814 | 10.445 | 22 |
+    | g07 | 3600 | 4.266 | 7.954 | 16 |
+    | g08 | 3600 | 5.444 | 10.684 | 21 |
+    Worst p99 10.684 ms (g08) — ~6 ms of the 16.67 ms budget left for
+    render+present+audio. Run-to-run: run 1 agreed within 0.02 ms (p50)
+    / 0.35 ms (p99) per golden. NO armv7 divergence anywhere: all 8
+    streams exact full-length, rngCalls/rngCallsOutsideStep/specVersion
+    pins green — the ledger is EMPTY this iteration (the iter-38 libc
+    class fix held across all five chars, all six stages, both CPU
+    goldens).
+  - **T-timing proven** (.loop/m3-task2-tooth-timing.log): PROBE with
+    the `--timing` argument dropped from the device invocation → the
+    device produced no timing file → loud death at g01's timing pullv
+    (`adb: error: remote object '/tmp/mlfk/g01.timing.txt' does not
+    exist`), rc 1, before any percentile judgment; lock released.
+  - **T-p99 proven** (.loop/m3-task2-tooth-p99.log): PROBE with
+    P99_LIMIT_NS=1000000 (1 ms) → g01 STREAM MATCH first, then
+    `SIM P99 FAIL: g01 sim-only p99 10.188 ms (10187875 ns) >= limit
+    1000000 ns`, rc 1 — the assert path is live and fires AFTER stream
+    judgment as designed; probe deleted, committed threshold 16670000.
+  - **T-judge proven BOTH ways** (.loop/m3-task2-tooth-judge.log;
+    oracle/goldens untouched — git-clean asserted in the log): (a) a
+    COPY of the frozen g03 stream with one hash nibble flipped →
+    verify-stream rc 1 — but via the frozen file's NAME/INTEGRITY seal,
+    not the frame comparator (the seal fires first on any frozen-side
+    tamper); so (b) the REAL threat surface was perturbed instead — one
+    nibble in a COPY of the pulled g03 device run JSON vs the PRISTINE
+    frozen file → `STREAM MISMATCH: first divergence at frame 1800 of
+    3600`, rc 2, naming the exact hashes; the same pristine pair passes
+    (rc 0) and g04's judgment is untouched (rc 0). Gotcha class
+    recorded: frozen-copy perturbation teeth test the SEAL; run-side
+    perturbation teeth test the JUDGE — use the run side to prove
+    per-frame comparison.
+  - **Regressions green (sim main + shared plumbing touched — both
+    mandatory)**: host `bash port/sim/check-sim.sh` → SIM CONFORMS
+    (.loop/m3-task2-reg-checksim.log; sim_main.c --timing edit, all 8
+    host goldens exact); host --timing smoke
+    (.loop/m3-task2-host-timing-smoke.log: 3600 lines, host p50
+    0.090 ms / p99 0.247 ms; percentiles.js count-mismatch dies rc 3);
+    `bash port/sim/device/check-device-g01.sh` → DEVICE CONFORMS g01,
+    exit 0 (.loop/m3-task2-reg-g01.log) through the refactored
+    riglib.sh (rebuild path + push provenance all-4 + STREAM MATCH
+    3600/3600).
+  - **Structure**: port/sim/device/riglib.sh — the iters-38-42 arc
+    plumbing extracted VERBATIM (provenance comments carried at the
+    definitions): rig_lock_acquire/rig_cleanup, rig_devsha_selftest,
+    pullv, made, rig_srchash/rig_stamp_ok/rig_arm_build (ONE shared
+    stamp + TU list for both device scripts; RIG_SCRIPTS = adbsh +
+    riglib + both check scripts, so all rig scripts compute the SAME
+    stamp — no rebuild ping-pong, and any rig-script edit forces one
+    rebuild), rig_stamp_rehash, rig_push_provenance,
+    rig_no_commit_guard. check-device-g01.sh now sources it (623 → 281
+    lines, zero behavior change — proven by the cold regression);
+    check-device-conform.sh consumes the same functions. CORPUS
+    pins/sweeps (fdlibm, mathsweep, format) stay g01-script-OWNED —
+    not duplicated. New files: check-device-conform.sh (the task
+    done-check), percentiles.js (host-side timing judge).
+  - **ZOOM OUT (rule 8)**: the extraction is the class fix for "every
+    M3 device script re-derives the reviewed plumbing" — one sourced
+    lib, arc provenance preserved at the definitions, and the stamp
+    input generalized from "this script's bytes" to "every rig
+    script's bytes" (RIG_SCRIPTS), which simultaneously killed the
+    two-stamps-fighting failure mode BEFORE it could exist. Second
+    class note: the T-judge tooth exposed that frozen-side perturbation
+    teeth prove the tamper SEAL, not the frame JUDGE — recorded here +
+    CLAUDE.md so task 7's verify_m3.sh teeth perturb the evidence
+    (run) side.
+  - **HONEST COVERAGE NOTES**: (1) the p99 gate covers SIM-ONLY cost;
+    render/present/audio land in tasks 4/6 with their own full-frame
+    p99 gates — this task proves the sim leaves ~6 ms headroom, not
+    that 60 fps is achieved. (2) --timing measures tick+hash; trace/
+    simdata parse, bridge load, and stream write are outside the timed
+    region (visible in the wall column only). (3) g07/g08 AI-bridge
+    artifacts were REUSED from the M2 task-16/17 builds (check-sim.sh
+    precedent); their validity is proven downstream every run
+    (sim_main header pins seed/boot, draw-chain bit verification,
+    frozen-stream judgment) — the fresh-build arm of step [2] is
+    exercised only when the artifacts are absent, and was NOT exercised
+    this iteration (it is check-sim.sh's proven recipe verbatim).
+    (4) percentiles.js + the timing plumbing are non-checksummed
+    surfaces — this script's Tier-A review arc opens on landing per
+    PROCESS §3 (driver-owned).
+  - Logs: .loop/m3-task2-{reg-checksim,host-timing-smoke,run1,
+    tooth-timing,tooth-p99,tooth-judge,reg-g01,donecheck}.log.
+- next: task 3 — renderer core, host-side first (port/gfx/: ANIM1
+  consumption, cubic flattening, AA scanline rasterizer, camera/zoom,
+  240×240 RGB565 composition; structural IoU check vs the browser
+  canvas, threshold measured-then-frozen in expected-render.json).
+  Notes for task 3: it is HOST-side (no device rig needed) but its
+  check script is a Tier-A surface; the g01 replay must still verify
+  during render-on runs (renderer must not perturb the sim); rule-8
+  reminder — the oracle canvas capture runs WITHOUT __harnessNoRender.

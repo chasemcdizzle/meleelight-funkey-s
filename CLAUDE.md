@@ -765,6 +765,31 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   side-effectful calls as unsequenced snprintf args (sm64()) are a
   corpus-determinism hazard across compilers — sequence explicitly.
   Device g01 wall clock ~21 s / 3600 frames (~5.8 ms/frame sim-only avg).
+- **All-8 device conformance + sim-only p99 (M3 task 2 committed form):**
+  `bash port/sim/device/check-device-conform.sh` → `DEVICE CONFORMS 8/8`
+  + `SIM P99 OK`, exit 0 — replays EVERY golden in
+  `oracle/goldens/manifest.json` on the FunKey-S (g07/g08 via their
+  AIBRIDGE1 artifacts, built by the task-16 recipe when absent, fed as
+  `--cpu --difficulty --ai-bridge`), pulls every stream and judges ALL
+  host-side with the UNCHANGED verify-stream.js vs the frozen
+  `*.sha256.json`. Sim main gained `--timing <file>` (host + device):
+  per-frame CLOCK_MONOTONIC ns around tick+hash only, RAM-buffered,
+  written post-run — zero I/O in the frame loop; judged host-side by
+  `port/sim/device/percentiles.js` (nearest-rank p50/p99, strict
+  grammar), asserted p99_ns < 16670000 per golden. MEASURED (2026-07-16,
+  docs/research/device-perf.md): p50 4.27-5.81 ms, p99 7.95-10.68 ms —
+  worst p99 leaves ~6 ms for render+present+audio. Rig plumbing now
+  lives in `port/sim/device/riglib.sh` (extracted VERBATIM post-arc-GO;
+  check-device-g01.sh sources it): nonce-dsh, pullv, made(), shared
+  stamp-cached arm build (RIG_SCRIPTS = every rig script's bytes are
+  stamp input — one stamp, no ping-pong), rehash-adjacent-to-push +
+  push provenance, shared no-reclaim device lock, no-commit guard.
+  CORPUS pins/sweeps stay check-device-g01.sh-owned. Gotcha classes:
+  a perturbed FROZEN-copy tooth trips the frozen file's name/integrity
+  seal BEFORE the frame comparator — perturb the RUN JSON side to prove
+  per-frame judgment (both proven, `.loop/m3-task2-tooth-judge.log`);
+  check scripts must never write tracked files (the measured table is
+  script output; the writer appends it to device-perf.md).
 - **Upstream clone + build (proven twice — determinism spike + prototype):**
   ```
   git clone https://github.com/schmooblidon/meleelight "$MELEELIGHT_CLONE"
