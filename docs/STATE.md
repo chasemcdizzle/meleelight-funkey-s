@@ -71,15 +71,17 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   T-wrap probe); 3/4 run cap; logs `.loop/m3-task1r42-*`. PROCESS
   honesty note on record: writer dead-parked on a background monitor
   (failure mode #1), driver-nudged, resumed foreground.
-- **In flight**: review-arc round 5 (expected CLOSURE — round 4's only
-  class is fixed with teeth) → GO launches the M3 task 2 writer (all-8
-  device conformance + sim-only p99, `check-device-conform.sh` — must
-  inherit adbsh.sh nonce-dsh + pullv/stamp/shared-lock/push-provenance
-  plumbing verbatim AND the iter-42 rm-before-produce + made() pattern
-  for every host-side artifact between producer and judge; sweep +
-  corpus pins referenced, not re-derived).
-- **Latest AGENT-LOG entry**: iter 42 (2026-07-16, round-4 freshness
-  sweep); latest log id: .loop/m3-task1r42-donecheck.log.
+- **Tier-A device-rig arc CLOSED**: round 5 VERDICT: GO, NO findings
+  (.loop/review-42-1.log; arc summary in the driver AGENT-LOG entry).
+  The rig plumbing (nonce-dsh, pullv + non-empty assert, stamp + push
+  provenance, shared device-keyed lock, rm-before-produce + made()) is
+  the inheritance package for every M3 device script.
+- **In flight**: M3 task 2 writer — all-8 device conformance + sim-only
+  p99 (`check-device-conform.sh`, inherits the rig plumbing verbatim;
+  sweep + corpus pins referenced, not re-derived; its new script gets
+  its own Tier-A arc on landing).
+- **Latest AGENT-LOG entry**: driver 2026-07-16 arc-closure (after
+  iter 42); latest log id: .loop/review-42-1.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
