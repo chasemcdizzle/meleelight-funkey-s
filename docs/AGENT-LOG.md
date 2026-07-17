@@ -4815,3 +4815,158 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   pin. That rule now covers both device rigs' manifest paths; any
   future list handed from node to shell crosses as a single validated
   line, consumed quoted.
+
+## iter 48 — 2026-07-16 — M3 task 3 HARDENING ROUND 2 PRE-REGISTRATION: allowlist floor + reuse input-closure binding (review-46 round-2 Mediums)
+
+- PRE-REGISTRATION (frozen before first edit; PROCESS §2. Task: close
+  the task-3 renderer arc's TWO round-2 Mediums per the driver triage
+  `.loop/review-46-triage.md` / `.loop/review-46-1.log`).
+  - **Surface**: `port/gfx/` ONLY (capture-canvas.js, check-render.sh,
+    expected-render.json, NEW capture-closure.js) + docs/STATE.md +
+    this log. port/sim/device/* untouched (concurrent read-only
+    closure review); oracle/ untouched.
+  - **Fix 1 (Medium — ALLOWLIST EMPTY-SUBSTRING, capture-canvas.js:93)**:
+    load-time validation (BEFORE browser launch) rejects any
+    consoleErrorAllowlist entry whose textIncludes — or urlIncludes,
+    when present — is not a string with TRIMMED length >= 8
+    (whitespace-only == empty; an over-broad pattern is a config error,
+    die loud). The existing pinned patterns "/sfx/" (5) and "/music/"
+    (7) fail the floor honestly, so they are lengthened to the MEASURED
+    served-URL forms "/dist/sfx/" (10) and "/dist/music/" (12): all
+    368/368 allowlisted lines in the iter-46 measurement capture
+    (.loop/m3-task3r46-capture-measure.log) are
+    `http://localhost:<port>/dist/sfx/*` or `/dist/music/*`; the
+    favicon/localforage entries never fired there (precautionary,
+    CLAUDE.md expected-noise) and are already >= 8. Tooth: probe
+    expected-render.json (cp backup / cmp-verified restore) carrying
+    `{"textIncludes": ""}` → capture-canvas.js dies loud at validation
+    BEFORE any browser launch; a second probe with an 8-space
+    whitespace-only pattern must die identically (trim rule).
+  - **Fix 2 (Medium — REUSE INPUT-CLOSURE BINDING,
+    capture-canvas.js:281 / check-render.sh:143)**: NEW
+    `port/gfx/capture-closure.js` is the ONE mechanical enumeration of
+    every static file the capture path loads/reads; capture-canvas.js
+    resolves its page-init-script / config / trace load paths FROM that
+    map (a new input cannot be loaded without joining the closure), the
+    sidecar `capture.digests.json` records sha256 of EVERY member, and
+    the MLFK_GFX_REUSE_CANVAS path re-derives the map and REFUSES loud
+    on: missing sidecar, sidecar predating the closure format, closure
+    member-set drift in EITHER direction, any per-member hash mismatch,
+    or GFXDATA drift. Enumerated closure (9 members): capture-closure.js
+    itself, capture-canvas.js, port/fdlibm/fdlibm.js,
+    oracle/harness/init.js, oracle/harness/pagelib.js,
+    port/gfx/gfx-pagelib.js, port/gfx/expected-render.json (the
+    allowlist + pin source the round-2 finding named),
+    oracle/goldens/manifest.json, oracle/goldens/<golden>.trace.json.
+    Exclusions (each covered elsewhere, documented in the module):
+    served upstream dist (servedDistSha256 pin, asserted in reuse mode
+    too), the cached run JSON (STREAM MATCH-judged every run incl.
+    reuse), node/playwright/Chrome (environment, name+version in run
+    meta; drift surfaces as STREAM MATCH/IoU failure), GFXDATA (an
+    OUTPUT, bound separately in the sidecar as before). CLASS: bind the
+    input CLOSURE, not a hand-picked subset — the read-side twin of
+    iter-42's mechanical write-site enumeration. Tooth: post-capture
+    whitespace-only append to expected-render.json →
+    MLFK_GFX_REUSE_CANVAS=1 run refused loudly naming
+    port/gfx/expected-render.json; cmp-verified byte restoration after.
+  - **Run cap**: <= 2 check-render.sh invocations — (A) the cold
+    done-check with a fresh browser capture → RENDER OK
+    (.loop/m3-task3r48-donecheck.log); (B) the reuse-mode tooth run
+    (dies at the refusal, consumes NO browser capture). All other teeth
+    are direct capture-canvas.js probes that die pre-browser. Long runs
+    follow PROCESS §7#1's exact chunked-polling incantation (nohup +
+    rc-marker wrapper + bounded foreground until-loops; never end the
+    turn while a run is live).
+  - **Refutation shapes**: (1) if the cold capture dies on an UNLISTED
+    console.error after the pattern lengthening, the "/dist/ prefix is
+    universal" reading is refuted — ONE bounded evidence round: read
+    the unlisted line from the log, correct the pattern to the measured
+    form, re-run (still within cap; the died run consumed no full
+    capture... if it did, report honestly); then STOP. (2) if the reuse
+    tooth does NOT refuse on the whitespace perturbation, fix 2 is
+    refuted as implemented — STOP and report, never ship. (3) if the
+    validation tooth reaches browser launch, fix 1 is refuted — STOP.
+  - **Pass**: cold RENDER OK exit 0 + both teeth fired-and-restored
+    (perturb → observe → restore, cmp-verified) + DONE entry with the
+    closure enumeration + STATE.md update + ONE atomic commit, clean
+    tree. check-sim.sh not rerun (no sim-linked TU touched).
+
+## iter 48 — 2026-07-16 — M3 task 3 HARDENING ROUND 2 DONE: allowlist floor + reuse input-closure binding (review-46 round 2 closed)
+
+- Both round-2 Mediums from `.loop/review-46-triage.md` closed; surface
+  was port/gfx/ only (capture-canvas.js, check-render.sh,
+  expected-render.json, NEW capture-closure.js); port/sim/device/* and
+  oracle/ untouched.
+- **Fix 1 (Medium — allowlist empty-substring floor)**:
+  capture-canvas.js rejects AT LOAD (before any browser launch) any
+  consoleErrorAllowlist entry whose textIncludes — or urlIncludes, when
+  present — is not a string with trimmed length >= 8 (whitespace-only
+  == empty; an over-broad matcher is a config error, die loud). The
+  pinned sfx/music url patterns were lengthened to the MEASURED
+  served-URL forms "/dist/sfx/" and "/dist/music/" (evidence: all
+  368/368 allowlisted lines in .loop/m3-task3r46-capture-measure.log
+  carry them — zero match-set change; favicon "/favicon.ico" (12) and
+  "localforage" (11) already satisfy the floor). Tooth
+  (.loop/m3-task3r48-tooth-allowlist.log): probe A textIncludes:"" and
+  probe B whitespace-only urlIncludes (8 spaces) both → "entry
+  REJECTED" + exit 1 BEFORE browser launch; expected-render.json
+  cp-restored, cmp-verified byte-identical.
+- **Fix 2 (Medium — reuse INPUT-CLOSURE binding)**: NEW
+  `port/gfx/capture-closure.js` is the single mechanical enumeration of
+  every static repo file the capture path loads/reads;
+  capture-canvas.js now resolves its page-init-script / config / trace
+  load paths FROM that map (a new input cannot be loaded without
+  joining the closure; manifest.json is the documented bootstrap
+  exception — it parameterizes the map yet is still a member and
+  sidecar-bound). The sidecar capture.digests.json records sha256 of
+  EVERY member; check-render.sh's MLFK_GFX_REUSE_CANVAS path re-derives
+  the map and REFUSES loudly on: missing sidecar, pre-closure-format
+  sidecar (old two-file format now refuses → recapture), member-set
+  drift in EITHER direction, any per-member digest mismatch, or GFXDATA
+  drift. **Enumerated closure (9 members)**:
+  port/gfx/capture-closure.js (self), port/gfx/capture-canvas.js,
+  port/fdlibm/fdlibm.js, oracle/harness/init.js,
+  oracle/harness/pagelib.js, port/gfx/gfx-pagelib.js,
+  port/gfx/expected-render.json (the allowlist/pin source the reviewer
+  named), oracle/goldens/manifest.json,
+  oracle/goldens/g01-fox-marth-battlefield.trace.json. Exclusions,
+  each covered elsewhere (documented in the module header): served
+  upstream dist (servedDistSha256 pin, asserted in reuse mode too),
+  cached run JSON (STREAM MATCH-judged every run incl. reuse),
+  node/playwright/Chrome (environment; name+version in run meta; drift
+  surfaces as STREAM MATCH/IoU failure), GFXDATA (an OUTPUT, bound
+  separately in the sidecar). Tooth
+  (.loop/m3-task3r48-tooth-reuse.log): post-capture whitespace-only
+  append to expected-render.json → MLFK_GFX_REUSE_CANVAS=1 run
+  "reuse REFUSED: digest mismatch on port/gfx/expected-render.json",
+  rc=1, NO browser capture consumed; restore cmp-verified; standalone
+  positive control (not a check-render invocation) confirms the
+  restored closure matches the sidecar on all 9 members + gfxdata (no
+  false-refusal latent).
+- **Run ledger (cap <= 2 check-render invocations)**: (A) cold
+  done-check `bash port/gfx/check-render.sh` → corpus pin OK,
+  served-dist digest matches, capture STREAM MATCH 3600/3600, x2 C
+  renders byte-identical, render-on STREAM MATCH 3600/3600, IOU MIN
+  0.9149 >= 0.91 over 16 frames, **RENDER OK exit 0**
+  (.loop/m3-task3r48-donecheck.log — one fresh browser capture, the
+  only one); (B) the reuse-mode tooth run (died at the refusal, zero
+  captures). 2/2 used; fix-1 teeth were direct capture-canvas.js
+  probes dying pre-browser. Refutation shape 1 (unlisted console.error
+  after the pattern lengthening) did NOT fire — the /dist/ forms
+  matched exactly as measured. check-sim.sh not rerun: no sim-linked
+  TU touched (JS/JSON/script surface only).
+- **ZOOM OUT**: fix 2 is the read-side twin of iter-42's write-site
+  enumeration class — "bind the input CLOSURE, not a hand-picked
+  subset". The general rule now covers both directions: freshness
+  proofs must enumerate every WRITE site (iter 42), and cache/reuse
+  identity proofs must enumerate every READ the producer performs
+  (iter 48), both maintained as ONE mechanical list the code itself
+  consumes, so the enumeration cannot silently diverge from the
+  behavior it pins. Fix 1 joins the iter-46 "reference material the
+  judge trusts must carry an identity/integrity pin" class with a
+  corollary: a MATCHER is reference material too — an unconstrained
+  pattern is an integrity hole exactly like an unpinned byte, so
+  matchers get validity floors (measured-then-frozen, like
+  thresholds). Instrument: the floor lives at load time in the one
+  consumer of the allowlist, so every future entry is checked before
+  it can ever match.

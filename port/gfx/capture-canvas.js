@@ -54,7 +54,15 @@ if (!g) {
   console.error(`--golden must be one of: ${manifest.goldens.map((x) => x.id).join(", ")}`);
   process.exit(1);
 }
-const TRACE = path.join(REPO, "oracle", "goldens", g.trace);
+// Capture-INPUT CLOSURE (review-46 fix 2): every static repo file this
+// capture loads/reads, enumerated ONCE in capture-closure.js. Load paths
+// below resolve FROM this map (a new input cannot be loaded without
+// joining the closure) and the reuse sidecar binds sha256 of every
+// member. manifest.json above is the documented bootstrap exception
+// (it parameterizes the map); it is still a member and sidecar-bound.
+const { closureFiles } = require(path.join(__dirname, "capture-closure.js"));
+const CLOSURE = closureFiles(g.trace);
+const TRACE = CLOSURE["oracle/goldens/" + g.trace];
 const OUT_DIR = arg("out-dir", "");
 const OUT_RUN = arg("out-run", "");
 const GFXDATA = arg("gfxdata", "");
@@ -88,13 +96,29 @@ const CHUNK = 120;
 // expected-render.json; ANY page console.error outside it kills the
 // capture immediately.
 const EXPECTED_RENDER = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "expected-render.json"), "utf8"));
+  fs.readFileSync(CLOSURE["port/gfx/expected-render.json"], "utf8"));
 const CONSOLE_ALLOW = EXPECTED_RENDER.consoleErrorAllowlist;
-if (!Array.isArray(CONSOLE_ALLOW) || CONSOLE_ALLOW.length === 0 ||
-    !CONSOLE_ALLOW.every((a) => a && typeof a.textIncludes === "string" &&
-      (a.urlIncludes === undefined || typeof a.urlIncludes === "string"))) {
+if (!Array.isArray(CONSOLE_ALLOW) || CONSOLE_ALLOW.length === 0) {
   console.error("capture-canvas: consoleErrorAllowlist missing/malformed in expected-render.json");
   process.exit(1);
+}
+// Match-pattern floor (review-46 fix 1): an empty / whitespace-only /
+// too-short substring is an over-broad matcher (textIncludes:"" would
+// allowlist EVERY console error; urlIncludes:"" removes URL scoping) —
+// a config error, die loud at load, BEFORE any browser launch. Floor:
+// trimmed length >= 8 for textIncludes AND (when present) urlIncludes.
+// The pinned url patterns are the MEASURED served-URL forms
+// ("/dist/sfx/", "/dist/music/" — .loop/m3-task3r46-capture-measure.log).
+const MIN_PATTERN_LEN = 8;
+const badPattern = (v) => typeof v !== "string" || v.trim().length < MIN_PATTERN_LEN;
+for (const a of CONSOLE_ALLOW) {
+  if (!a || badPattern(a.textIncludes) ||
+      (a.urlIncludes !== undefined && badPattern(a.urlIncludes))) {
+    console.error("capture-canvas: consoleErrorAllowlist entry REJECTED " +
+      `(textIncludes and any urlIncludes must be strings of trimmed length >= ${MIN_PATTERN_LEN}; ` +
+      "an over-broad pattern is a config error): " + JSON.stringify(a));
+    process.exit(1);
+  }
 }
 
 const MIME = {
@@ -207,10 +231,11 @@ async function main() {
       seedRandom: true, seed: g.seed, virtualClock: true, fdlibm: true,
       captureMath: false }) + ";",
   });
-  await page.addInitScript({ path: path.join(REPO, "port", "fdlibm", "fdlibm.js") });
-  await page.addInitScript({ path: path.join(HARNESS, "init.js") });
-  await page.addInitScript({ path: path.join(HARNESS, "pagelib.js") });
-  await page.addInitScript({ path: path.join(__dirname, "gfx-pagelib.js") });
+  // (paths resolved FROM the capture-input closure map — see fix-2 note)
+  await page.addInitScript({ path: CLOSURE["port/fdlibm/fdlibm.js"] });
+  await page.addInitScript({ path: CLOSURE["oracle/harness/init.js"] });
+  await page.addInitScript({ path: CLOSURE["oracle/harness/pagelib.js"] });
+  await page.addInitScript({ path: CLOSURE["port/gfx/gfx-pagelib.js"] });
 
   await page.goto(`http://localhost:${port}/dist/meleelight.html`);
   await page.waitForFunction(
@@ -273,14 +298,19 @@ async function main() {
     process.exit(1);
   }
 
-  // Reuse-hatch digest binding (review-44 fix 3): record, alongside the
-  // cached masks, the sha256 of the driver bytes that produced this
-  // capture + the GFXDATA it wrote. check-render.sh's
-  // MLFK_GFX_REUSE_CANVAS path refuses (loud) if any differs from the
-  // then-current bytes.
+  // Reuse-hatch INPUT-CLOSURE binding (review-44 fix 3, widened by
+  // review-46 fix 2): record, alongside the cached masks, sha256 of
+  // EVERY capture-input-closure member (capture-closure.js — drivers,
+  // page init scripts, expected-render.json as the allowlist/pin
+  // source, manifest, trace) + the GFXDATA this capture wrote.
+  // check-render.sh's MLFK_GFX_REUSE_CANVAS path re-derives the closure
+  // and refuses (loud) on any member-set or digest drift.
+  const closureSha = {};
+  for (const k of Object.keys(CLOSURE)) {
+    closureSha[k] = sha256Hex(fs.readFileSync(CLOSURE[k]));
+  }
   fs.writeFileSync(path.join(OUT_DIR, "capture.digests.json"), JSON.stringify({
-    captureCanvasJs: sha256Hex(fs.readFileSync(__filename)),
-    gfxPagelibJs: sha256Hex(fs.readFileSync(path.join(__dirname, "gfx-pagelib.js"))),
+    closure: closureSha,
     gfxdata: sha256Hex(fs.readFileSync(path.resolve(GFXDATA))),
   }, null, 2) + "\n");
 

@@ -39,7 +39,14 @@
     "expected-upstream-noise note (favicon.ico 404; webpack localforage",
     "warning) plus the capture's OWN deliberate sfx/music route aborts",
     "(capture-canvas.js context.route abort — audio is out of render",
-    "scope). Matching: text substring + optional location-url substring."
+    "scope). Matching: text substring + optional location-url substring.",
+    "Pattern floor (review-46 round-2 fix 1, iter 48): capture-canvas.js",
+    "REJECTS at load any textIncludes/urlIncludes whose trimmed length",
+    "is < 8 (empty/whitespace/too-short = over-broad matcher = config",
+    "error). The sfx/music url patterns are the MEASURED served-URL",
+    "forms /dist/sfx/ and /dist/music/ (all 368 allowlisted lines in the",
+    "iter-46 measurement capture carry them; lengthened from /sfx/ and",
+    "/music/ to satisfy the floor with zero match-set change)."
   ],
   "golden": "g01",
   "sampledFrames": [30, 100, 170, 450, 900, 971, 1234, 1237, 1297, 1350, 1800, 2250, 2552, 2700, 3150, 3599],
@@ -48,9 +55,9 @@
   "consoleErrorAllowlist": [
     { "textIncludes": "Failed to load resource", "urlIncludes": "/favicon.ico",
       "why": "expected upstream noise (CLAUDE.md): favicon 404" },
-    { "textIncludes": "Failed to load resource", "urlIncludes": "/sfx/",
+    { "textIncludes": "Failed to load resource", "urlIncludes": "/dist/sfx/",
       "why": "our own deliberate route abort: audio out of render scope" },
-    { "textIncludes": "Failed to load resource", "urlIncludes": "/music/",
+    { "textIncludes": "Failed to load resource", "urlIncludes": "/dist/music/",
       "why": "our own deliberate route abort: audio out of render scope" },
     { "textIncludes": "localforage",
       "why": "expected upstream noise (CLAUDE.md): webpack localforage warning" }

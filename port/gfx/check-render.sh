@@ -135,11 +135,18 @@ echo "build OK: $BUILD/gfx_replay (raster TU -O3, all else -O2; -ffp-contract=of
 # --- 3. browser reference capture (STREAM-MATCH guarded) --------------------------
 NEED_CAPTURE=1
 if [ "${MLFK_GFX_REUSE_CANVAS:-0}" = "1" ]; then
-  # Reuse hatch is DIGEST-BOUND (review-44 fix 3): the cached capture
-  # carries sha256 of the driver bytes that produced it + the GFXDATA it
-  # wrote (capture.digests.json, written by capture-canvas.js). Reuse
-  # REFUSES loudly on any mismatch/missing piece — never a silent
-  # fallback to a fresh capture, so a stale-cache mistake always surfaces.
+  # Reuse hatch is INPUT-CLOSURE-BOUND (review-44 fix 3, widened by
+  # review-46 fix 2): the cached capture carries sha256 of EVERY
+  # capture-input-closure member (port/gfx/capture-closure.js — the ONE
+  # enumeration: drivers, page init scripts, expected-render.json as
+  # the allowlist/pin source, manifest, trace) + the GFXDATA it wrote
+  # (capture.digests.json, written by capture-canvas.js). Reuse REFUSES
+  # loudly on a missing sidecar, a pre-closure-format sidecar, closure
+  # member-set drift in EITHER direction, any per-member digest
+  # mismatch, or GFXDATA drift — never a silent fallback to a fresh
+  # capture, so a stale-cache / stale-policy mistake always surfaces.
+  # (The served dist + the cached run JSON are covered below by the
+  # servedDistSha256 pin and verify-stream.js, reuse mode included.)
   node -e '
 const fs = require("fs"), crypto = require("crypto");
 const h = (fp) => crypto.createHash("sha256").update(fs.readFileSync(fp)).digest("hex");
@@ -149,16 +156,28 @@ if (!fs.existsSync(side)) {
   process.exit(1);
 }
 const d = JSON.parse(fs.readFileSync(side, "utf8"));
-const cur = {
-  captureCanvasJs: h("port/gfx/capture-canvas.js"),
-  gfxPagelibJs: h("port/gfx/gfx-pagelib.js"),
-  gfxdata: h("'"$BUILD"'/gfxdata.txt"),
-};
-for (const k of Object.keys(cur)) {
-  if (d[k] !== cur[k]) {
+if (!d.closure || typeof d.closure !== "object" || Array.isArray(d.closure)) {
+  console.error("check-render: reuse REFUSED: sidecar has no closure map (cached capture predates the input-closure binding — recapture)");
+  process.exit(1);
+}
+const { closureFiles } = require("./port/gfx/capture-closure.js");
+const files = closureFiles("'"$G_TRACE"'");
+const want = Object.keys(files).sort();
+const got = Object.keys(d.closure).sort();
+if (want.join("\n") !== got.join("\n")) {
+  console.error("check-render: reuse REFUSED: closure member-set drift (cached: [" +
+    got.join(", ") + "] vs current: [" + want.join(", ") + "])");
+  process.exit(1);
+}
+for (const k of want) {
+  if (d.closure[k] !== h(files[k])) {
     console.error("check-render: reuse REFUSED: digest mismatch on " + k + " (cached capture is stale vs current bytes)");
     process.exit(1);
   }
+}
+if (d.gfxdata !== h("'"$BUILD"'/gfxdata.txt")) {
+  console.error("check-render: reuse REFUSED: digest mismatch on gfxdata (cached capture is stale vs current bytes)");
+  process.exit(1);
 }
 '
   if [ ! -s "$BUILD/g01.render-run.json" ]; then
