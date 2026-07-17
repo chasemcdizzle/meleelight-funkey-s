@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-16, post-iter-48 writer)
+## Live right now (updated: 2026-07-16, post-iter-49 writer)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -179,13 +179,27 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   (.loop/m3-task3r48-donecheck.log), IOU MIN 0.9149 ≥ 0.91, both
   STREAM MATCH 3600/3600. Class: bind the input CLOSURE — read-side
   twin of iter-42's write-site enumeration.
+- **Iter 49 (M3 task 3 review-hardening ROUND 3) DONE**: the round-3
+  single finding (.loop/review-48-1.log — closure hashes computed only
+  AFTER replay; an editor save mid-capture binds NEW bytes to masks
+  from OLD bytes) closed: capture-canvas.js snapshots sha256 of all 9
+  closure members BEFORE any member is consumed (CLOSURE_SNAP), and at
+  sidecar-write time re-hashes + verifies each equals its snapshot —
+  drift → loud death naming the member, NO sidecar; the sidecar records
+  the snapshot (consumed-bytes) hashes. Dispositioned-class variant
+  taken under PROCESS §3's trivial-whole-class exception. Tooth fired
+  (.loop/m3-task3r49-tooth-midrun.log: mid-capture whitespace append
+  to expected-render.json → "closure member changed MID-CAPTURE", rc 1,
+  sidecar absent; restore cmp-verified). Cold done-check RENDER OK
+  exit 0 (.loop/m3-task3r49-donecheck.log), IOU MIN 0.9149 ≥ 0.91,
+  both STREAM MATCH 3600/3600. Task-3 Tier-A arc → CAPPED-CLOSED by
+  the driver.
 - **In flight**: task-2 Tier-A arc round 3 = closure pending (review
-  of the iter-47 fix) + task-3 Tier-A arc round 3 = closure pending
-  (review of the iter-48 fixes; concurrent read-only review of
+  of the iter-47 fix; concurrent read-only review of
   port/sim/device/* + sim_main.c), then task 4 (platform seam + SDL1.2
   device backend + live device render).
-- **Latest AGENT-LOG entry**: iter 48 (M3 task 3 hardening round 2);
-  latest log id: .loop/m3-task3r48-donecheck.log.
+- **Latest AGENT-LOG entry**: iter 49 (M3 task 3 hardening round 3);
+  latest log id: .loop/m3-task3r49-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull

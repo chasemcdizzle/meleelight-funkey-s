@@ -62,6 +62,21 @@ if (!g) {
 // (it parameterizes the map); it is still a member and sidecar-bound.
 const { closureFiles } = require(path.join(__dirname, "capture-closure.js"));
 const CLOSURE = closureFiles(g.trace);
+// Pre-consumption closure SNAPSHOT (review-48 round-3 fix, iter 49):
+// sha256 every member NOW, before ANY member is consumed through the
+// map (expected-render.json parse below, the trace read, the page init
+// scripts), so the sidecar binds the exact bytes this capture consumed
+// — never whatever is on disk after the multi-second replay (an editor
+// save mid-capture would otherwise bind NEW bytes to masks produced
+// from OLD bytes, letting a later reuse pass falsely). Re-verified at
+// sidecar-write time; any drift → loud death, NO sidecar written.
+// (manifest.json + the two driver files are consumed milliseconds
+// earlier at process boot — the same bootstrap window as the
+// documented manifest exception; they are snapshot here all the same.)
+const CLOSURE_SNAP = {};
+for (const k of Object.keys(CLOSURE)) {
+  CLOSURE_SNAP[k] = sha256Hex(fs.readFileSync(CLOSURE[k]));
+}
 const TRACE = CLOSURE["oracle/goldens/" + g.trace];
 const OUT_DIR = arg("out-dir", "");
 const OUT_RUN = arg("out-run", "");
@@ -299,18 +314,29 @@ async function main() {
   }
 
   // Reuse-hatch INPUT-CLOSURE binding (review-44 fix 3, widened by
-  // review-46 fix 2): record, alongside the cached masks, sha256 of
-  // EVERY capture-input-closure member (capture-closure.js — drivers,
-  // page init scripts, expected-render.json as the allowlist/pin
-  // source, manifest, trace) + the GFXDATA this capture wrote.
-  // check-render.sh's MLFK_GFX_REUSE_CANVAS path re-derives the closure
-  // and refuses (loud) on any member-set or digest drift.
-  const closureSha = {};
+  // review-46 fix 2; snapshot-verified per review-48 round 3, iter 49):
+  // record, alongside the cached masks, the PRE-CONSUMPTION sha256 of
+  // EVERY capture-input-closure member (CLOSURE_SNAP — drivers, page
+  // init scripts, expected-render.json as the allowlist/pin source,
+  // manifest, trace) + the GFXDATA this capture wrote. Before writing,
+  // RE-hash every member and verify it still equals its snapshot: a
+  // member changed mid-capture (a normal editor save is enough) means
+  // the bytes on disk are no longer the bytes this capture consumed —
+  // binding them would let a later reuse pass against masks produced
+  // from OTHER bytes. Loud death, NO sidecar. check-render.sh's
+  // MLFK_GFX_REUSE_CANVAS path re-derives the closure and refuses
+  // (loud) on any member-set or digest drift.
   for (const k of Object.keys(CLOSURE)) {
-    closureSha[k] = sha256Hex(fs.readFileSync(CLOSURE[k]));
+    const now = sha256Hex(fs.readFileSync(CLOSURE[k]));
+    if (now !== CLOSURE_SNAP[k]) {
+      console.error("capture-canvas: closure member changed MID-CAPTURE: " + k +
+        ` (snapshot ${CLOSURE_SNAP[k]} != current ${now}); ` +
+        "the capture consumed bytes that are no longer on disk — sidecar NOT written");
+      process.exit(1);
+    }
   }
   fs.writeFileSync(path.join(OUT_DIR, "capture.digests.json"), JSON.stringify({
-    closure: closureSha,
+    closure: CLOSURE_SNAP,
     gfxdata: sha256Hex(fs.readFileSync(path.resolve(GFXDATA))),
   }, null, 2) + "\n");
 

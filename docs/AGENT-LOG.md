@@ -4970,3 +4970,113 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   thresholds). Instrument: the floor lives at load time in the one
   consumer of the allowlist, so every future entry is checked before
   it can ever match.
+
+## iter 49 — 2026-07-16 — M3 task 3 HARDENING ROUND 3 PRE-REGISTRATION: pre-consumption closure snapshot (review-48 round-3 single finding)
+
+- PRE-REGISTRATION (frozen before first edit; PROCESS §2. Task: close
+  the task-3 renderer arc's single round-3 finding,
+  `.loop/review-48-1.log` — capture-canvas.js:308: closure-member
+  hashes are computed only AFTER the replay completes, so an editor
+  save mid-capture can change a member after consumption but before
+  hashing; the sidecar would then bind NEW bytes to masks produced
+  from OLD bytes, and a later reuse would pass falsely).
+  - **Class note**: this is a dispositioned-class VARIANT taken under
+    PROCESS §3's trivial-whole-class exception (the accident actor is
+    a normal editor save, not an adversary; the fix is ≤ trivial and
+    closes the whole hash-after-use class for this sidecar). The arc
+    is then CAPPED-CLOSED by the driver.
+  - **Surface**: `port/gfx/capture-canvas.js` ONLY (+ this log +
+    docs/STATE.md). capture-closure.js unchanged (the map is correct;
+    the TIMING of hashing is the bug). check-render.sh unchanged (its
+    reuse path re-derives from current bytes — correct either way).
+    oracle/ untouched.
+  - **Fix**: immediately after `CLOSURE = closureFiles(g.trace)` —
+    BEFORE any member is consumed through the map (expected-render.json
+    parse, trace read, page init scripts) — snapshot
+    `CLOSURE_SNAP[k] = sha256(bytes)` for every member. At
+    sidecar-write time, RE-hash every member and VERIFY it equals its
+    snapshot: any drift → loud death naming the member, NO sidecar
+    written. The sidecar records the SNAPSHOT hashes (the bytes the
+    capture consumed). Documented residual bootstrap window: the
+    manifest and the two driver files are consumed milliseconds before
+    the snapshot at process boot (same class as the existing
+    manifest.json bootstrap exception; they are snapshot all the same).
+  - **Tooth (probe capture run, direct capture-canvas.js — NOT a
+    check-render invocation)**: launch a probe capture into
+    /tmp scratch dirs with a background watcher that waits for the
+    probe gfxdata.txt to appear (written post-setup — provably AFTER
+    the snapshot, BEFORE the frame loop finishes and the sidecar is
+    written) then appends one whitespace byte to
+    port/gfx/expected-render.json. Expected: the run dies LOUD at
+    sidecar-write time naming port/gfx/expected-render.json, exit
+    nonzero, capture.digests.json ABSENT from the probe out-dir.
+    Restore expected-render.json via git checkout, cmp-verified vs
+    HEAD. Log: .loop/m3-task3r49-tooth-midrun.log.
+  - **Run cap**: <= 2 check-render.sh invocations; plan uses ONE — the
+    cold done-check `bash port/gfx/check-render.sh` → RENDER OK exit 0
+    (.loop/m3-task3r49-donecheck.log). The tooth is a direct
+    capture-canvas.js probe. Long runs follow PROCESS §7#1's chunked
+    polling (nohup + rc-marker wrapper + bounded foreground
+    until-loops; never end the turn while a run is live).
+  - **Refutation shapes**: (1) if the tooth run completes CLEAN (the
+    perturbation landed too late or the verify never ran), the fix is
+    refuted as implemented — investigate timing once (watcher trigger
+    is gfxdata.txt, window is the ~multi-second frame loop +
+    sidecar-write), re-probe; if it still cannot fire, STOP and report.
+    (2) if the tooth dies but capture.digests.json EXISTS in the probe
+    out-dir, the "no sidecar written" claim is refuted — STOP.
+    (3) if the cold done-check fails, report honestly (one bounded
+    evidence round only if the failure is plainly unrelated noise).
+  - **Pass**: cold RENDER OK exit 0 + tooth fired-and-restored
+    (perturb → observe → restore, cmp-verified) + DONE entry +
+    STATE.md update + ONE atomic commit
+    "M3 task 3 hardening: pre-consumption closure snapshot (iter 49)",
+    clean tree. check-sim.sh not rerun (no sim-linked TU touched).
+
+## iter 49 — 2026-07-16 — M3 task 3 HARDENING ROUND 3 DONE: pre-consumption closure snapshot (review-48 round-3 finding closed)
+
+- **Fix (capture-canvas.js only, as pre-registered)**: CLOSURE_SNAP —
+  sha256 of every closure member taken immediately after the map is
+  built, BEFORE any member is consumed through it; at sidecar-write
+  time every member is RE-hashed and verified equal to its snapshot
+  (any drift → loud death naming the member + both hashes, NO sidecar
+  written); the sidecar now records the SNAPSHOT hashes — the exact
+  bytes the capture consumed — never post-run disk state. Residual
+  boot window (manifest + the two driver files consumed milliseconds
+  before the snapshot) documented at the snapshot site, same class as
+  the existing manifest bootstrap exception. capture-closure.js and
+  check-render.sh untouched (the map and the reuse-side re-derivation
+  were correct; hashing TIMING was the bug).
+- **Tooth (.loop/m3-task3r49-tooth-midrun.log)**: probe capture (direct
+  capture-canvas.js into /tmp scratch, NOT a check-render invocation)
+  with a watcher that appended one whitespace byte to
+  port/gfx/expected-render.json the moment the probe's gfxdata.txt
+  appeared (provably post-snapshot, pre-sidecar) → capture died LOUD:
+  "closure member changed MID-CAPTURE: port/gfx/expected-render.json
+  (snapshot 7e6059ca… != current 1cb5bdba…)", TOOTH_RC=1,
+  capture.digests.json ABSENT from the probe out-dir; restore
+  cmp-verified byte-identical to HEAD. Perturb → observe → restore.
+- **Run ledger (cap <= 2 check-render invocations)**: ONE used — the
+  cold done-check `bash port/gfx/check-render.sh` → served-dist digest
+  matches, capture STREAM MATCH 3600/3600, x2 C renders byte-identical,
+  render-on STREAM MATCH 3600/3600, IOU MIN 0.9149 >= 0.91 over 16
+  frames, **RENDER OK exit 0** (.loop/m3-task3r49-donecheck.log; fresh
+  sidecar binds all 9 members). The tooth was a direct capture-canvas
+  probe. check-sim.sh not rerun: no sim-linked TU touched.
+- **Arc status**: this closes the review-48 round-3 single finding — a
+  dispositioned-class VARIANT (accident actor = a normal editor save
+  mid-capture, not an adversary) taken under PROCESS §3's
+  trivial-whole-class exception: the snapshot-then-verify pattern
+  closes the whole hash-after-use class for this sidecar. Finding (1)
+  of round 2 was already judged closed in the same review. The task-3
+  Tier-A arc is now CAPPED-CLOSED by the driver.
+- **ZOOM OUT**: the class is "identity evidence hashed at a different
+  time than the bytes were USED" — the temporal cousin of iter-42's
+  "content pins prove CONTENT, never FRESHNESS" and iter-48's
+  input-closure enumeration. General rule now covers WHAT (enumerate
+  the closure), and WHEN (hash at consumption time, verify before
+  binding). Any future producer that writes an identity sidecar must
+  snapshot inputs pre-use and verify pre-write — grep-scan candidates:
+  the device rig stamps already hash-then-immediately-build inside one
+  stamp check (no gap of this shape); no other sidecar producers exist
+  today.
