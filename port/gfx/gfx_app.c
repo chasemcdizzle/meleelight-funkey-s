@@ -12,6 +12,24 @@
 //           [--cpu --difficulty N --ai-bridge f]
 //           [--pace 0|1] [--budget-ns N]
 //           [--shot-frame N --shot-ppm f.ppm --shot-pgm f.pgm]
+//           [--live --record-trace t.json [--ready-file f]]
+//           [--tapjump-off-p1]
+//
+// LIVE MODE (M3 task 5): --live replaces the trace with the S1 input
+// layer (s1_input.h — PLAN §6 chord table over PlatformInput) at the
+// pollInputs seam: slot 0 = S1(polled keys), slot 1 = a neutral human
+// row, slots 2/3 absent. EVERY frame's injected rows are RAM-recorded
+// and written post-run as --record-trace in the golden trace JSON
+// format (array of [row0,row1,null,null]; numbers via ml_sb_num =
+// String(x), so JSON.parse reproduces the EXACT doubles the live sim
+// consumed) — the session replays as an ordinary trace. --ready-file
+// is written right before the frame loop (the host launches the uinput
+// injector only after it exists). Requires --pace 1 (a live session is
+// wall-clock by definition); --cpu is rejected. Quit/menu requests are
+// recorded-and-ignored (fixed frame count — same rationale as trace
+// replay). --tapjump-off-p1 sets gameSettings tapJumpOffp1=1 after
+// setup (the S1 contract, fix_plan §M3 "Input"); every replay of a
+// recorded session must pass the same flag.
 //
 // LIVE LOOP (fix_plan §M3 task 4):
 //   - wall-clock schedule: deadline(f) = t0 + (f+1)*budget (absolute —
@@ -49,8 +67,10 @@
 #include "../sim/sim/sim.h"
 #include "../sim/ml_events.h"
 #include "../sim/ml_js.h"
+#include "../sim/ml_ser.h"
 #include "gfx.h"
 #include "platform.h"
+#include "s1_input.h"
 
 #define ML_BOOT_DRAWS 465 // the qjs boot pin (oracle/qjs/replay.sh)
 
@@ -230,6 +250,64 @@ static void write_shot_pgm(const uint8_t *ink, const char *path) {
   if (fclose(f) != 0) sim_fatal("shot: pgm close failed");
 }
 
+// --- live-session input recording (M3 task 5) ------------------------------------------
+// One 22-key Input object in the golden trace JSON shape (gen-trace.js
+// neutral() key order). Numbers go through ml_sb_num (ECMAScript
+// String(x) — shortest round-trip, task 15), so JSON.parse returns the
+// exact bit patterns the live sim consumed.
+
+static void rec_bool(MlSb *sb, const char *key, bool v, bool comma) {
+  ml_sb_putc(sb, '"');
+  ml_sb_puts(sb, key);
+  ml_sb_puts(sb, v ? "\":true" : "\":false");
+  if (comma) ml_sb_putc(sb, ',');
+}
+
+static void rec_num(MlSb *sb, const char *key, double v, bool comma) {
+  ml_sb_putc(sb, '"');
+  ml_sb_puts(sb, key);
+  ml_sb_puts(sb, "\":");
+  ml_sb_num(sb, v);
+  if (comma) ml_sb_putc(sb, ',');
+}
+
+static void rec_input(MlSb *sb, const MlInput *in) {
+  ml_sb_putc(sb, '{');
+  rec_bool(sb, "a", in->a, true);
+  rec_bool(sb, "b", in->b, true);
+  rec_bool(sb, "x", in->x, true);
+  rec_bool(sb, "y", in->y, true);
+  rec_bool(sb, "z", in->z, true);
+  rec_bool(sb, "r", in->r, true);
+  rec_bool(sb, "l", in->l, true);
+  rec_bool(sb, "s", in->s, true);
+  rec_bool(sb, "du", in->du, true);
+  rec_bool(sb, "dr", in->dr, true);
+  rec_bool(sb, "dd", in->dd, true);
+  rec_bool(sb, "dl", in->dl, true);
+  rec_num(sb, "lsX", in->lsX, true);
+  rec_num(sb, "lsY", in->lsY, true);
+  rec_num(sb, "csX", in->csX, true);
+  rec_num(sb, "csY", in->csY, true);
+  rec_num(sb, "lA", in->lA, true);
+  rec_num(sb, "rA", in->rA, true);
+  rec_num(sb, "rawX", in->rawX, true);
+  rec_num(sb, "rawY", in->rawY, true);
+  rec_num(sb, "rawcsX", in->rawcsX, true);
+  rec_num(sb, "rawcsY", in->rawcsY, false);
+  ml_sb_putc(sb, '}');
+}
+
+static void rec_frame(MlSb *sb, bool first, const MlInput *p0,
+                      const MlInput *p1) {
+  if (!first) ml_sb_puts(sb, ",\n");
+  ml_sb_putc(sb, '[');
+  rec_input(sb, p0);
+  ml_sb_putc(sb, ',');
+  rec_input(sb, p1);
+  ml_sb_puts(sb, ",null,null]");
+}
+
 // --- main -----------------------------------------------------------------------------
 
 static Gfx g_gfx; // big (framebuffer + anim tables); static, not stack
@@ -240,11 +318,14 @@ int main(int argc, char **argv) {
   const char *tracePath = 0, *simdataPath = 0, *bridgePath = 0;
   const char *gfxdataPath = 0, *animDir = 0, *outPath = 0, *timingPath = 0;
   const char *shotPpm = 0, *shotPgm = 0;
+  const char *recordPath = 0, *readyPath = 0;
   long seed = -1, p1 = -1, p2 = -1, stage = -1, frames = -1, difficulty = 3;
   long shotFrame = -1;
   long pace = 1;
   uint64_t budgetNs = 16666667ull; // 60 fps frame budget (default)
   bool cpu = false;
+  bool live = false;
+  bool tapJumpOffP1 = false;
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i];
     const bool hasV = i + 1 < argc;
@@ -267,12 +348,20 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--pace") == 0 && hasV) pace = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--budget-ns") == 0 && hasV) budgetNs = strtoull(argv[++i], 0, 10);
     else if (strcmp(a, "--cpu") == 0) cpu = true;
+    else if (strcmp(a, "--live") == 0) live = true;
+    else if (strcmp(a, "--record-trace") == 0 && hasV) recordPath = argv[++i];
+    else if (strcmp(a, "--ready-file") == 0 && hasV) readyPath = argv[++i];
+    else if (strcmp(a, "--tapjump-off-p1") == 0) tapJumpOffP1 = true;
     else {
       fprintf(stderr, "gfx_app: bad argument %s\n", a);
       return 1;
     }
   }
-  if (!tracePath || !simdataPath || !gfxdataPath || !animDir || !outPath ||
+  // --live: S1 keys replace the trace; recording is mandatory; the
+  // session is wall-clock by definition (--pace 1); no CPU slot.
+  if (!((tracePath != 0) ^ live) || (live && (!recordPath || pace != 1 ||
+      cpu)) || (!live && (recordPath || readyPath)) ||
+      !simdataPath || !gfxdataPath || !animDir || !outPath ||
       !timingPath || seed < 0 || p1 < 0 || p2 < 0 || stage < 0 ||
       frames <= 0 || (cpu && !bridgePath) || (pace != 0 && pace != 1) ||
       budgetNs == 0 ||
@@ -283,7 +372,9 @@ int main(int argc, char **argv) {
             "--anim-dir D --seed N --p1 N --p2 N --stage N --frames N "
             "--out stream.txt --timing timing.txt "
             "[--cpu --difficulty N --ai-bridge f] [--pace 0|1] "
-            "[--budget-ns N] [--shot-frame N --shot-ppm f --shot-pgm f]\n");
+            "[--budget-ns N] [--shot-frame N --shot-ppm f --shot-pgm f] "
+            "[--live --record-trace t.json [--ready-file f]] "
+            "[--tapjump-off-p1]\n");
     return 1;
   }
   // RAM-buffer overflow guards (sim_main.c --timing precedent, iter 45):
@@ -293,7 +384,7 @@ int main(int argc, char **argv) {
   sim_boot_page(&G);
   sim_data_load(simdataPath);
   sim_data_register();
-  load_trace(tracePath);
+  if (!live) load_trace(tracePath);
 
   gfx_data_load(&g_gfx.data, gfxdataPath);
   gfx_load_anim(&g_gfx, animDir, (int)p1);
@@ -321,6 +412,12 @@ int main(int argc, char **argv) {
 
   sim_setup_match(&G, (int)p1, (int)p2, cpu ? 1 : 0, (int)difficulty,
                   (int)stage);
+  // S1 contract (fix_plan §M3 "Input"): tapJumpOffp1 = true — the
+  // number 1 is the settings-domain value (action_state_shortcuts.h:
+  // tap-jump arms fire only while the value == 0). Applied AFTER
+  // setup, exactly like the prototype's gameSettings write; replays of
+  // a recorded live session must pass the same flag.
+  if (tapJumpOffP1) G.sim.tapJumpOff[0] = 1;
   G.rngStateAtFrame1 = G.rng.a;
 
   gfx_init(&g_gfx, (int)stage, backgroundType);
@@ -339,17 +436,48 @@ int main(int argc, char **argv) {
   long skips = 0;
   bool shotTaken = false;
 
+  // Live-session recording (RAM; flushed post-run — no frame-loop I/O).
+  MlSb rec;
+  ml_sb_init(&rec);
+  const MlInput neutralRow = nullInput();
+  if (live) ml_sb_puts(&rec, "[\n");
+
+  // Ready marker: written AFTER every load + platform_init, BEFORE the
+  // frame loop — the host launches the uinput injector when it appears.
+  if (readyPath) {
+    FILE *rf = fopen(readyPath, "w");
+    if (!rf) sim_fatal("cannot open --ready-file for writing");
+    if (fputs("READY\n", rf) == EOF) sim_fatal("--ready-file write failed");
+    if (fclose(rf) != 0) sim_fatal("--ready-file close failed");
+  }
+
   PlatformInput pin;
+  MlInput liveRow;
   char hex[65];
   const uint64_t tStart = now_ns();
   for (long f = 0; f < frames; f++) {
-    platform_poll(&pin); // event pump; input unconsumed until M3 task 5
+    platform_poll(&pin); // event pump (live mode consumes it below)
     const uint64_t deadline = tStart + (uint64_t)(f + 1) * budgetNs;
 
-    const long idx = f < g_trace_len - 1 ? f : g_trace_len - 1;
-    const TraceRow *row = &g_trace[idx];
     const MlInput *rows[4];
-    for (int i = 0; i < 4; i++) rows[i] = row->present[i] ? &row->in[i] : 0;
+    if (live) {
+      // The pollInputs seam: slot 0 = the S1 chord table over the
+      // polled keys, slot 1 = a neutral human row, slots 2/3 absent.
+      // Recorded for EVERY frame (starting window included — the
+      // replay feeds the same rows; the sim ignores them there just
+      // like it did live). Quit/menu: recorded-and-ignored.
+      liveRow = s1_input_row(&pin);
+      rows[0] = &liveRow;
+      rows[1] = &neutralRow;
+      rows[2] = 0;
+      rows[3] = 0;
+      rec_frame(&rec, f == 0, &liveRow, &neutralRow);
+    } else {
+      const long idx = f < g_trace_len - 1 ? f : g_trace_len - 1;
+      const TraceRow *row = &g_trace[idx];
+      for (int i = 0; i < 4; i++)
+        rows[i] = row->present[i] ? &row->in[i] : 0;
+    }
     G.frame = f + 1;
 
     const uint64_t t0 = now_ns();
@@ -433,6 +561,17 @@ int main(int argc, char **argv) {
     write_shot_ppm(g_shot_fb, shotPpm);
     write_shot_pgm(g_shot_ink, shotPgm);
   }
+
+  if (live) {
+    ml_sb_puts(&rec, "\n]\n");
+    FILE *rf = fopen(recordPath, "w");
+    if (!rf) sim_fatal("cannot open --record-trace for writing");
+    if (fwrite(rec.buf, 1, rec.len, rf) != rec.len) {
+      sim_fatal("--record-trace write failed");
+    }
+    if (fclose(rf) != 0) sim_fatal("--record-trace close/flush failed");
+  }
+  ml_sb_free(&rec);
 
   // post-run summary (stderr; informational — the host judge decides)
   fprintf(stderr,

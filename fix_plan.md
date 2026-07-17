@@ -1151,19 +1151,38 @@ skips), stream nibble → MISMATCH frame 1800, blank shot → judge death,
 pullv freshness → stale dst gone. Perf table:
 docs/research/device-perf.md; ~5.9 ms p99 headroom for task-6 audio.)
 
-5. S1 input layer at the poll seam — SDL keysym poll (letter keysyms
-   u/d/l/r/a/b/x/y/s/k/n, q=MENU→quit; SDL_GetKeyState, desktop keys
-   OR'd in so one table serves SDL2 host + SDL1.2 device) → S1 chord
-   table (PLAN §6 values verbatim, data-driven) → Melee-unit Input rows
-   at the pollInputs seam; per-frame input RECORDING to tmpfs (trace
-   format). Build the uinput injector (`port/tools/fk_input.c`, static,
-   pushed to device) and drive a scripted live session through the real
-   SDL event path on device; pull the recorded input trace; replay it
-   through the host headless sim TWICE and the device sim binary once —
-   three-way byte-identical checksum streams; chord-table unit sweep
-   asserts all 15 PLAN §6 chord→coordinate rows exactly (1/80 quantized).
-   — done-check: `bash port/gfx/check-device-input.sh` → prints
-   `S1 INPUT OK`, exit 0.
+(task 5 — S1 input layer at the poll seam + uinput live session — DONE
+iter 51: `bash port/gfx/check-device-input.sh` → S1 INPUT OK, exit 0
+(.loop/m3-task5-donecheck.log). `port/gfx/s1_input.h` (HEADER-ONLY on
+purpose — task-4's reviewed TU lists unchanged): data-driven 11-row S1
+chord table (PLAN §6 values verbatim; first-match-wins mirrors the
+prototype resolver's branch order), SOCD neutral, Y-C-layer forces the
+left stick neutral, digital shield r=true rA=1.0, deaden/meleeRound
+parity with the prototype funkeyPoll (raw* = pre-deaden quantized);
+emits complete 22-field FINAL Melee-unit rows at ml_poll_inputs'
+verbatim-injection seam — tasRescale never called. s1_sweep.c asserts
+the 15 pinned PLAN §6 checks bit-exactly + 2^11 exhaustive combo dump
+byte-stable ×2 + every coordinate on the 1/80 grid. gfx_app gained
+--live/--record-trace/--ready-file/--tapjump-off-p1 (recording = golden
+trace JSON via ml_sb_num String(x) — bit-exact round-trip proven);
+sim_main gained --tapjump-off-p1 (default unchanged; flag proven live
+by an up-flick differential). port/tools/fk_input.c = own-uinput-device
+injector (ssb64 pattern) playing the committed
+port/gfx/s1-session.script (1080-frame session, every chord row
+scripted, chords held 15-18 frames — the settling strategy; START
+excluded: pause is main.js plane). Live session on the FunKey through
+the REAL SDL keysym path: ready-file handshake, detached app + rc-file,
+coverage judge 24/24 signatures, FOUR-way byte-identical streams (host
+×2 + device replay + the LIVE stream itself), non-vacuity leg (live !=
+all-neutral stream). FOUND + class-fixed: musl-1.2 64-bit time_t makes
+libc's struct input_event 24 B vs the old kernel's 16 B — short write,
+errno 0; fk_input emits the KERNEL's 32-bit ABI struct explicitly (the
+iter-38 "trust no device-libc" class extended to kernel-struct
+TIMESTAMP ABIs). Instrument exposure: the resolver's quantizer absorbs
+table perturbations within ±1/160 of the correct grid point — the
+sweep's detectable class is >= half a grid step. riglib.sh additions
+per its own contract: RIG_SCRIPTS += check-device-input.sh, ARMBINS +=
+fk_input, srchash roots += port/tools.)
 
 6. audio-on — SDL1.2 audio 44100/S16LSB/2ch/512 + the audio-spike
    8-voice SFX mixer consuming the sim's per-frame sound-event queue

@@ -180,6 +180,7 @@ int main(int argc, char **argv) {
   const char *timingPath = 0; // per-frame sim-only ns (written post-run)
   long seed = -1, p1 = -1, p2 = -1, stage = -1, frames = -1, difficulty = 3;
   bool cpu = false;
+  bool tapJumpOffP1 = false; // M3 task 5: replays of S1 live sessions
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i];
     const bool hasV = i + 1 < argc;
@@ -194,6 +195,7 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--frames") == 0 && hasV) frames = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--difficulty") == 0 && hasV) difficulty = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--cpu") == 0) cpu = true;
+    else if (strcmp(a, "--tapjump-off-p1") == 0) tapJumpOffP1 = true;
     else if (strcmp(a, "--dump-frames") == 0 && hasV) dumpFrames = argv[++i];
     else {
       fprintf(stderr, "sim_host: bad argument %s\n", a);
@@ -205,7 +207,7 @@ int main(int argc, char **argv) {
     fprintf(stderr,
             "usage: sim_host --trace t.txt --simdata s.txt --seed N --p1 N "
             "--p2 N --stage N --frames N [--cpu --difficulty N "
-            "--ai-bridge f] [--timing f]\n");
+            "--ai-bridge f] [--timing f] [--tapjump-off-p1]\n");
     return 1;
   }
 
@@ -233,6 +235,11 @@ int main(int argc, char **argv) {
 
   sim_setup_match(&G, (int)p1, (int)p2, cpu ? 1 : 0, (int)difficulty,
                   (int)stage);
+  // M3 task 5 (S1 contract): tapJumpOffp1 = 1 for replaying recorded
+  // S1 live sessions — the live app (gfx_app --live --tapjump-off-p1)
+  // ran with this setting, so its trace replays under the same one.
+  // Default (flag absent) unchanged: golden replays are unaffected.
+  if (tapJumpOffP1) G.sim.tapJumpOff[0] = 1;
   G.rngStateAtFrame1 = G.rng.a;
 
   uint64_t *tbuf = 0; // --timing: RAM buffer, flushed after the loop

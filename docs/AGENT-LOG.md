@@ -5285,3 +5285,252 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   ARMBINS provenance finding) — per-consumer enumeration is the fix,
   same shape as the task-2 matrix pin lesson (derive from YOUR pinned
   set, not the shared collection).
+
+## iter 51 — 2026-07-16 — M3 task 5: S1 input layer at the poll seam + uinput live session
+
+### PRE-REGISTRATION (frozen before any run/edit; PROCESS §2)
+
+- **Task**: fix_plan §M3 task 5 — S1 "One-Mod + C-layer" chord table
+  (PLAN §6 verbatim, data-driven) consuming PlatformInput at the
+  pollInputs seam; per-frame input recording (golden trace JSON format)
+  to tmpfs; uinput injector `port/tools/fk_input.c`; a scripted live
+  session on the FunKey through the REAL SDL keysym path; three-way
+  replay determinism of the recorded trace. done-check:
+  `bash port/gfx/check-device-input.sh` → `S1 INPUT OK`, exit 0.
+- **The 15 chord→coordinate rows (pinned enumeration)**: PLAN §6's S1
+  table ("all 15 chord checks pass headless") expanded to the exact
+  check set the unit sweep asserts, every value 1/80-quantized,
+  bit-exact double equality:
+   1. d-pad cardinal horizontal → lsX ±1.0 (both signs)
+   2. d-pad cardinal up → lsY +1.0
+   3. d-pad cardinal down → lsY −1.0
+   4. d-pad diagonal → (±0.7000, ±0.7000) (incl. R+up-diagonal, which
+      falls through to plain diagonal — prototype semantics)
+   5. L + horizontal → lsX ±0.6625 (walk/f-tilt; L+R+cardinal emits the
+      same plain-Mod value — PLAN §6 quirk registry)
+   6. L + vertical → lsY ±0.5375 (u/d-tilt)
+   7. L + diagonal → (±0.7375, ±0.3125) (~23°)
+   8. L + R + down-diagonal → (±0.6375, −0.3750) (~30° wavedash; the
+      prototype applies the modX shieldDiagonal family to up-diagonals
+      too — carried verbatim, asserted as a sub-check)
+   9. R + down-diagonal → (±0.7000, −0.6875) (shield drop)
+  10. R + straight down → (0, −1.0) (spotdodge)
+  11. Y-layer + horizontal → csX ±1.0, LEFT STICK NEUTRAL
+  12. Y-layer + vertical → csY ±1.0, left stick neutral
+  13. Y-layer + diagonal → (±0.7, ±0.7) on cs, left stick neutral
+  14. SOCD: opposite cardinals resolve the axis to NEUTRAL
+  15. digital shield: R held → r=true, rA=1.0 (l=false, lA=0 always)
+  Sweep harness additionally: exhaustive 2^11 button-combo dump (d-pad
+  4 + Y/L/R + a/b/x/start), byte-stable ×2, every emitted coordinate
+  asserted ON the 1/80 grid (meleeRound(v) bit-== v), buttons a/b/x/s
+  mapped, y/z/l/du/dl/dr/dd never set.
+- **Seam placement**: the resolver emits a complete 22-field FINAL
+  Melee-unit Input row (deaden applied to ls/cs, raw* = pre-deaden
+  quantized values — the prototype funkeyPoll shape) which the live app
+  feeds to sim_game_tick exactly where trace rows enter (ml_poll_inputs
+  injects VERBATIM — the harness-patched pollInputs form the frozen
+  streams were recorded under). tasRescale is bypassed BY CONSTRUCTION
+  (never called). tapJumpOffp1=true → NEW additive flag
+  `--tapjump-off-p1` on sim_main.c + gfx_app.c (sets
+  G.sim.tapJumpOff[0]=1 post-setup; default unchanged — check-sim.sh
+  passes without it, regression run to prove). S2/S3 are config swaps
+  upstream; only S1 ships (the device has one mapping) — S2/S3 rows
+  are NOT translated (registered non-goal, PLAN §6 locks S1).
+- **Live-session design**: gfx_device gains `--live --record-trace F
+  --ready-file F` (mutually exclusive with --trace; requires --pace 1;
+  --cpu rejected): slot 0 = S1(PlatformInput) per frame, slot 1 =
+  neutral human rows, slots 2/3 absent; EVERY frame's rows RAM-recorded
+  (golden trace JSON: [row0,row1,null,null] per frame, 22 keys in
+  gen-trace.js order, numbers via ml_sb_num = String(x) — shortest
+  round-trip, so JSON.parse→writeDoubleBE→C parse reproduces the EXACT
+  bits the live sim consumed; -0 cannot occur: int d-pad signs ×
+  positive magnitudes, and ml_sb_num would emit a parseable "-0"
+  anyway); trace JSON + stream + timing written post-run (no frame-loop
+  I/O). Session params pinned: seed 1337, p1=2 fox, p2=0 marth,
+  stage=0 battlefield, 900 frames (15 s paced; ~810 live frames after
+  the 90-frame starting window). Quit/menu recorded-and-ignored (fixed
+  frame count, same rationale as task 4).
+- **Input script (committed port/gfx/s1-session.script, deterministic)**:
+  sequential tokens `d <key>` / `u <key>` / `s <ms>` (letter keysyms:
+  u/d/l/r d-pad, k=L, n=R, y=C-layer, a/b/x face). Phases exercise
+  every chord row at least once incl. BOTH SOCD pairs, the Y-C-layer
+  (cardinals both axes + diagonal, with the left stick provably
+  neutral), shield alone, shield drop (both directions), spotdodge,
+  L+R wavedash diagonal (both signs), L-walk/tilts, plain up (tap-jump
+  -off surface), dash both signs, plain diagonal, R+up-diagonal,
+  jump/attack/special presses woven in for real gameplay. START is
+  EXCLUDED from the live script (the pause machine is main.js browser
+  plane, outside the sim's captured domain; start→s is proven by the
+  unit sweep only — honest-coverage note). ~11 s of injection inside
+  the 15 s session; initial `s 2500` clears the starting window.
+- **Settling strategy (frame-boundary race class, pre-registered)**:
+  the app samples SDL_GetKeyState once per frame at the frame top;
+  injection lands asynchronously. Every chord is held 250-300 ms
+  (15-18 frames @60fps) — ≥10× the one-frame sampling jitter, so ±1-2
+  frame boundary blur can never erase a chord from the record. Pass
+  criteria bind to VALUES OBSERVED IN THE RECORDED TRACE, never to
+  frame indices. And BY CONSTRUCTION the replay input is the recorded
+  trace itself (what the app actually consumed), so injection jitter
+  CANNOT cause replay divergence — it can only shift which frames
+  carry which chord. Injector settles the uinput device 300 ms after
+  UI_DEV_CREATE before the first event; defensive release-all of the
+  12 letters at script end (idempotent in SDL key state).
+- **Run matrix + caps**: host s1_sweep ×2 per invocation; host replays
+  cap 8; device LIVE sessions cap 3 (expect 1); docker arm rebuilds
+  SERIAL cap 3; full check-device-input.sh invocations cap 4;
+  regressions: check-sim.sh ×1 (sim_main.c flag), check-device-render.sh
+  ×1 (riglib.sh roster/roots edit — see below). Early-stop: first full
+  green pass.
+- **Pass criteria (frozen)**:
+  1. UNIT SWEEP: all 15 pinned checks bit-exact, 2048-combo dump
+     byte-stable ×2, every coordinate on the 1/80 grid.
+  2. LIVE SESSION: app exits rc 0 (apprc file), ready-marker handshake
+     used (injector starts only after the app's ready file), recorded
+     trace parses under trace-to-txt.js's STRICT contract, coverage
+     judge finds EVERY pinned chord signature in the slot-0 rows
+     (values, both signs where scripted) + r/rA=1 + a/b/x presses +
+     invariants (y/z/l/d-pad bools never true, lA==0, rA∈{0,1} tied
+     to r).
+  3. THREE-WAY REPLAY DETERMINISM: recorded trace → host sim ×2 +
+     device sim ×1 — three streams byte-identical (cmp), AND all three
+     == the live session's own stream (four-way; the live stream is
+     the recording-fidelity witness). Self-consistency only — this is
+     a NEW trace, no frozen golden.
+  4. NON-VACUITY: the live stream DIFFERS from an all-neutral
+     900-frame trace's stream (proves the sim consumed the input; the
+     complement of the four-way check, which alone would pass if input
+     were ignored everywhere).
+- **Refutation shapes**: (a) host-a ≠ host-b → sim nondeterminism =
+  severe REAL finding, STOP after localizing first differing frame;
+  (b) hosts == but device ≠ → armv7 divergence class (iter-38 ledger;
+  never epsilon, never retry blind); (c) replays == each other but ≠
+  live stream → recording infidelity (JSON round-trip or live-model
+  mismatch) — localize first differing frame, diff that frame's
+  recorded row against expectation, one bounded evidence round then
+  STOP; (d) coverage shortfall → injection/SDL-path defect — pull app
+  log + injector rc, ONE retry session with longer holds, then STOP
+  and report (frame-boundary races are the expected class; a dropped
+  EVENT (down/up lost) shows as a missing/short chord signature);
+  (e) ready-marker timeout or /dev/uinput absent → loud BLOCKER
+  (device envelope), no silent fallback.
+- **Teeth (pre-registered)**: T1 chord-table perturbation — edit a COPY
+  path: 0.6625→0.6626 in s1_input.h (restore cmp-verified) → sweep
+  FAILS (both the row check and the 1/80-grid check); T2 recorded-trace
+  perturbation — one value changed in a COPY of the pulled trace JSON →
+  replay leg re-run → cmp MISMATCH vs the live stream (localized frame
+  reported); T3 coverage judge — a COPY of the pulled trace with every
+  r:true row neutralized → judge FAILS naming the missing signatures
+  (this is the injector-dropped-event detector, proven without burning
+  a device session). Standing in-check teeth: made()/pullv freshness,
+  apprc rc parse, strict trace contract, non-vacuity leg.
+- **riglib.sh edit (required by the task; noted per the brief)**: the
+  Tier-A-reviewed riglib contract ITSELF mandates the edits — (1)
+  RIG_SCRIPTS "ANY new device check script MUST add itself here" →
+  += port/gfx/check-device-input.sh; (2) ARMBINS/heredoc gain fk_input
+  (static armv7, the injector must ride the SAME stamp-cached reviewed
+  build — a private docker build would be copy-paste plumbing, the
+  anti-class); (3) rig_srchash find roots gain port/tools (fk_input.c
+  must be stamp INPUT or a stale injector could masquerade as current
+  — PROCESS §4). All additive; check-device-render.sh is NOT edited
+  (s1_input.h is header-only precisely so gfx_app's TU lists stay
+  unchanged); regression run to prove the shared build still greens.
+
+### RESULTS (iter 51)
+
+- **DONE-CHECK (cold, final tree)**: `bash port/gfx/check-device-input.sh`
+  → `S1 INPUT OK (session 1080 frames live on device; host x2 + device
+  replays and the live stream all byte-identical; 15 chord rows
+  unit-swept; coverage judged)`, exit 0 (.loop/m3-task5-donecheck.log;
+  stamp HIT 46a83dd8…, cached binaries sha-verified; first passing run
+  .loop/m3-task5-devinput-2.log — 2 device sessions total, cap 3
+  respected).
+- **All pre-registered pass criteria met**:
+  1. UNIT SWEEP: 15/15 pinned PLAN §6 chord checks bit-exact (plus the
+     registered sub-checks: R+up-diagonal fallthrough, L+R+cardinal
+     plain-Mod quirk, one-axis SOCD), 2048-combo dump byte-stable ×2,
+     all coordinates on the 1/80 grid, table = 11 data rows.
+  2. LIVE SESSION: ready-file handshake → fk_input played 165 commands
+     through its own uinput device → app rc 0 (apprc file), device wall
+     18-20 s for the 1080-frame paced session; recorded trace passed
+     trace-to-txt.js's strict 22-key contract; coverage 24/24
+     signatures ≥ 5 frames (measured holds 14-46 frames — the
+     250-300 ms settling strategy held; slot-1 neutral 1080/1080).
+  3. FOUR-way byte-identical: host replay ×2, device sim replay, AND
+     the live session's own stream — all cmp-equal (76,669 bytes each).
+  4. NON-VACUITY: live stream != the all-neutral 1080-frame stream.
+- **FINDING 1 (REAL, class-fixed; the run-1 injector failure)**: the
+  SDK's musl 1.2 has 64-bit time_t, making libc's `struct input_event`
+  24 bytes; the FunKey's old 32-bit kernel expects the 16-byte layout —
+  the kernel consumed 16 bytes (one garbled event) and returned a SHORT
+  write with errno 0 ("No error information", measured
+  .loop/m3-task5-devinput-1.log). Fix: fk_input.c emits the KERNEL's
+  32-bit ABI struct (u32 sec/usec + type/code/value) explicitly,
+  documented at the struct. ZOOM OUT: this is the iter-38
+  "trust no device-libc symbol" class EXTENDED to kernel-struct
+  timestamp ABIs — any struct with time fields crossing a syscall
+  boundary on this device must use the kernel's layout, never the
+  libc's (musl-1.2 time64 vs old-kernel). Registered as the standing
+  rule's second face; grep for `struct input_event`/`timeval` on any
+  future device-facing TU.
+- **FINDING 2 (instrument exposure, PROCESS §8; tooth T1 round 1)**: a
+  chord-table perturbation of 0.6625 → 0.6626 did NOT fire the sweep —
+  the resolver's meleeRound quantizer absorbs any table value within
+  ±1/160 of the correct grid point (it IS the prototype's q()-on-product
+  semantics, kept verbatim). The sweep's detectable class is >= half a
+  1/80 grid step; round 2 (0.6625 → 0.6750, one full step) fired on all
+  3 row-05 checks + S1 SWEEP FAIL (.loop/m3-task5-tooth-chordtable.log).
+- **FINDING 3 (rule-12 razor-thin class, another measured instance;
+  tooth T2 round 1)**: a single-frame recorded-trace nibble lsX
+  1 → 0.9875 replayed to an IDENTICAL stream — both values sit above
+  every threshold the dash machine reads, so the sim is provably
+  indifferent; checksum equality cannot (by definition) see
+  behaviorally-equivalent value changes. Revised tooth: DELETE the
+  first attack press (frames 321-336) → stream diverges at exactly
+  frame 321 (.loop/m3-task5-tooth-t2t3.log). Class note: teeth against
+  bit-exact stream judges must perturb something the ENGINE
+  distinguishes, not just the bytes.
+- **Teeth (all fired, logs)**: T1 chord-table full-grid-step perturb →
+  sweep FAIL + restore cmp-verified (.loop/m3-task5-tooth-chordtable.log);
+  T2 attack-press deletion on a trace COPY → cmp MISMATCH at frame 321
+  (.loop/m3-task5-tooth-t2t3.log); T3 shield rows neutralized on a COPY
+  → judge names all 7 missing shield-family signatures, exit 2 (same
+  log — the dropped-injector-event detector, proven without a device
+  session). Positive control also proven pre-device: the tapjump flag
+  differential (synthetic up-flick trace: flag present vs absent
+  streams diverge at frame 121) — the flag is LIVE, not decorative.
+- **Regressions green**: `bash port/sim/check-sim.sh` → SIM CONFORMS,
+  all 8 goldens (.loop/m3-task5-checksim.log — sim_main.c's new flag
+  changes nothing by default); `bash port/gfx/check-device-render.sh` →
+  DEVICE RENDER OK (full p99 10.522 ms, skips 0/3600;
+  .loop/m3-task5-devrender-regress.log — the riglib roster/roots
+  additions and gfx_app live-mode changes leave task 4 green).
+- **riglib.sh edit note (required, per brief)**: RIG_SCRIPTS +=
+  check-device-input.sh (riglib's own MUST-add contract), ARMBINS +=
+  fk_input + its build line in the heredoc (the injector rides the
+  reviewed stamp-cached build — a private docker build would be
+  copy-paste plumbing), srchash find roots += port/tools (fk_input.c
+  must be stamp INPUT; PROCESS §4). All additive; both other rig
+  consumers re-proven (render regression above; conform/g01 share the
+  same stamp machinery).
+- **Honest coverage / exposure**: START→s and MENU are proven by the
+  unit sweep only — the live script never presses them (pause is
+  main.js browser plane, outside the sim's captured domain; quit is
+  app-level and ignored during fixed-frame sessions). SOCD is
+  sweep-proven and script-exercised, but a recorded SOCD frame is
+  byte-identical to a neutral frame (du/dl/dr/dd are always false in
+  S1 rows) — live SOCD coverage is unobservable in the trace BY
+  DESIGN. The SDL2 host backend's S1 path compiles and shares the one
+  table but is not run (no GUI in a check — task-4 precedent). Replay
+  determinism is SELF-consistency of a NEW trace (pre-registered):
+  no frozen golden judges this session. Injection timing jitter is
+  NOT bounded by the check (only coverage is) — the recorded trace is
+  the replay input by construction, so jitter shifts which frames
+  carry which chord but can never cause replay divergence.
+- **ZOOM OUT**: two standing classes each gained a measured instance
+  (device-ABI trust: kernel-struct time fields; rule-12 razor-thin
+  teeth), and one new instrument-exposure figure was recorded (the
+  quantizer's ±1/160 absorption radius). The S1 layer itself is a
+  CLASS design: one data-driven table serves SDL1.2/SDL2 via the
+  platform seam, S2/S3 remain config swaps upstream (registered
+  non-goal — PLAN §6 locks S1 for the device; revisit only on Chase's
+  ratification verdict at the M3 human gate).

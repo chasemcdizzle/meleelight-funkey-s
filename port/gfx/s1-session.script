@@ -1,0 +1,237 @@
+# port/gfx/s1-session.script — deterministic S1 live-session input script
+# (M3 task 5; played by port/tools/fk_input.c on the FunKey-S).
+#
+# Letter keysyms (CLAUDE.md "Device access" / platform_sdl1.c):
+#   u/d/l/r = d-pad   a/b/x/y = face (y = S1 C-layer)   k = L (Mod)
+#   n = R (shield)    s START is EXCLUDED on purpose (pause is main.js
+#   browser plane, outside the sim's captured domain; start->s mapping
+#   is proven by the s1_sweep unit harness).
+#
+# Session: 900 frames @ 60 fps = 15.0 s, seed 1337 fox vs marth on
+# battlefield. The injector is launched only AFTER the app's ready
+# marker exists; the opening sleep clears the 90-frame `starting`
+# window. Every chord is held 250-300 ms (15-18 frames) — >= 10x the
+# one-frame sampling jitter (pre-registered settling strategy): the
+# recorded trace is judged on VALUES, never frame indices.
+#
+# Coverage plan (the judge asserts every signature below appears):
+# dash +-1.0 both signs, plain up/down, plain diagonal, R+up-diagonal,
+# L-walk both signs, L-u/d-tilt, L-diagonal, L+R wavedash diag both
+# signs, shield (r/rA=1), shield drop both signs, spotdodge, SOCD both
+# pairs, C-layer cardinals (x and y axes, both signs on x) + diagonal,
+# a/b/x button presses.
+
+# clear boot margin + the starting window
+s 2500
+
+# --- dash right (cardinal +1.0) ---
+d r
+s 300
+u r
+s 60
+
+# --- dash left, then f-smash left (cardinal -1.0 + A) ---
+d l
+s 250
+d a
+s 250
+u a
+u l
+s 60
+
+# --- L-walk right (0.6625) ---
+d k
+d r
+s 300
+u r
+u k
+s 60
+
+# --- L-walk left (-0.6625) ---
+d k
+d l
+s 250
+u l
+u k
+s 60
+
+# --- L u-tilt (0, 0.5375) with A ---
+d k
+d u
+s 200
+d a
+s 200
+u a
+u u
+u k
+s 60
+
+# --- L d-tilt (0, -0.5375) ---
+d k
+d d
+s 250
+u d
+u k
+s 60
+
+# --- plain up (0, 1.0) — tapJumpOffp1 surface: no tap jump ---
+d u
+s 300
+u u
+s 60
+
+# --- plain diagonal up-right (0.7, 0.7) ---
+d u
+d r
+s 300
+u u
+u r
+s 60
+
+# --- jump then C-layer down (aerial c-stick) ---
+d x
+s 120
+u x
+d y
+d d
+s 300
+u d
+u y
+s 60
+
+# --- L-diagonal up-right (0.7375, 0.3125) ---
+d k
+d u
+d r
+s 300
+u u
+u r
+u k
+s 60
+
+# --- shield alone (r=true rA=1.0) ---
+d n
+s 300
+
+# --- shield drop right (0.7, -0.6875) [R still held] ---
+d d
+d r
+s 300
+u d
+u r
+
+# --- spotdodge (0, -1.0) [R still held] ---
+d d
+s 300
+u d
+u n
+s 60
+
+# --- jump, then L+R+down-left wavedash chord (-0.6375, -0.375) ---
+d x
+s 120
+u x
+d k
+d n
+d d
+d l
+s 300
+u d
+u l
+u n
+u k
+s 60
+
+# --- SOCD: left+right -> neutral ---
+d l
+d r
+s 300
+u l
+u r
+s 60
+
+# --- SOCD: up+down -> neutral ---
+d u
+d d
+s 300
+u u
+u d
+s 60
+
+# --- C-layer cardinals: right (csX 1.0), up (csY 1.0) ---
+d y
+d r
+s 250
+u r
+d u
+s 250
+u u
+u y
+s 60
+
+# --- C-layer diagonal down-left (-0.7, -0.7) ---
+d y
+d d
+d l
+s 250
+u d
+u l
+u y
+s 60
+
+# --- neutral special (B) ---
+d b
+s 250
+u b
+s 60
+
+# --- side special right (B + right) ---
+d r
+d b
+s 250
+u b
+u r
+s 60
+
+# --- second pass: dash left / shield drop left / C-layer left ---
+d l
+s 250
+u l
+s 60
+
+d n
+d d
+d l
+s 250
+u d
+u l
+u n
+s 60
+
+d y
+d l
+s 250
+u l
+u y
+s 60
+
+# --- R+up-diagonal (plain diagonal under shield, (0.7, 0.7)) ---
+d n
+d u
+d r
+s 250
+u u
+u r
+u n
+s 60
+
+# --- L+R+down-right wavedash chord (0.6375, -0.375) ---
+d k
+d n
+d d
+d r
+s 250
+u d
+u r
+u n
+u k

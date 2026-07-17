@@ -23,14 +23,16 @@
 # SAME stamp (one shared build, no ping-pong between scripts).
 RIG_SCRIPTS="port/sim/device/adbsh.sh port/sim/device/riglib.sh \
 port/sim/device/check-device-g01.sh port/sim/device/check-device-conform.sh \
-port/gfx/check-device-render.sh"
+port/gfx/check-device-render.sh port/gfx/check-device-input.sh"
 
 # The armv7 binaries the shared build produces (one docker run).
 # gfx_device (M3 task 4) is the SDL1.2 render app: DYNAMICALLY linked
 # against the sysroot's libSDL-1.2 (LGPL — dynamic only, CLAUDE.md
 # licensing rule; rig_arm_build asserts it), raster TU at -O3 (the ONE
 # -O3 TU), everything else -O2; -ffp-contract=off on every TU.
-ARMBINS="sim_device csweep_arm fmt_diff_arm mathsweep_arm gfx_device"
+# fk_input (M3 task 5) is the static uinput button injector
+# (port/tools/fk_input.c — the ssb64 pattern; no SDL, no sim).
+ARMBINS="sim_device csweep_arm fmt_diff_arm mathsweep_arm gfx_device fk_input"
 
 # rig_lock_acquire — exclusive rig lock (iter 41, review rounds 1-3
 # recurring — the class is closed by REMOVING the cleverness): ONE
@@ -156,7 +158,7 @@ rig_srchash() {
   local listf brokenf n
   listf="$DEVB/.srclist.$$"
   brokenf="$DEVB/.srcbroken.$$"
-  find -L port/sim port/gfx port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
+  find -L port/sim port/gfx port/tools port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
     -type l -print0 > "$brokenf" || {
     echo "DEVICE FAIL: srchash: broken-link scan failed" >&2
     rm -f "$brokenf"
@@ -169,7 +171,7 @@ rig_srchash() {
     return 1
   fi
   rm -f "$brokenf"
-  find -L port/sim port/gfx port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
+  find -L port/sim port/gfx port/tools port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
     -type f \( -name '*.c' -o -name '*.h' \) -print0 \
     > "$listf" || {
     echo "DEVICE FAIL: srchash: find failed" >&2
@@ -311,6 +313,10 @@ rig_arm_build() {
         -o "$DEVB/fmt_diff_arm" \
         "$CAL/fmt_diff.c" "$CAL/canon.c" port/sim/ml_ser.c port/sim/ml_fmt.c \
         oracle/qjs/sha256.c -lm
+      # fk_input (M3 task 5): static uinput button injector — no SDL,
+      # no sim, no libm; kernel headers from the SDK sysroot.
+      $CC -O2 -ffp-contract=off -Wall -Wextra -Werror -static \
+        port/tools/fk_input.c -o "$DEVB/fk_input"
       # gfx_device (M3 task 4): the SDL1.2 live-render app. DYNAMIC link
       # (SDL 1.2 is LGPL — dynamic only; asserted after the build), -no-pie
       # for a deterministic file(1) signature + addr2line-able crashes.

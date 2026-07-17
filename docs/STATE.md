@@ -219,11 +219,33 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   RENDER OK (IoU min unchanged 0.9149 with fdlibm-routed trig),
   check-device-g01 DEVICE CONFORMS g01. Perf: ~5.9 ms p99 headroom left
   for task-6 audio (docs/research/device-perf.md iter-50 table).
-- **In flight**: nothing — task-4 check script (check-device-render.sh,
-  gfx_app.c, platform TUs, judges) awaits its Tier-A arc; then task 5
-  (S1 input at the platform_poll seam).
-- **Latest AGENT-LOG entry**: iter 50 (M3 task 4);
-  latest log id: .loop/m3-task4-donecheck.log.
+- **Iter 51 (M3 task 5) DONE**: `bash port/gfx/check-device-input.sh` →
+  S1 INPUT OK, exit 0 (.loop/m3-task5-donecheck.log) — the S1 input
+  layer is live at the pollInputs seam. port/gfx/s1_input.h =
+  data-driven PLAN §6 chord table (header-only; task-4 TU lists
+  untouched); s1_sweep asserts the 15 pinned chord checks bit-exact +
+  2048-combo dump ×2 + 1/80-grid closure. gfx_app --live records the
+  golden-trace JSON via ml_sb_num String(x) (round-trip bit-exact,
+  proven host-side before the device leg); --tapjump-off-p1 on gfx_app
+  + sim_main (S1 contract; default paths unchanged, flag proven live).
+  port/tools/fk_input (own uinput device, ssb64 pattern) played the
+  committed 1080-frame s1-session.script through the REAL SDL keysym
+  path on the FunKey: coverage 24/24 signatures (chords held 15-18
+  frames as designed), FOUR-way byte-identical checksum streams (host
+  ×2 + device replay + the live stream), non-vacuity leg green. CLASS
+  FINDING (fixed + logged): musl-1.2 64-bit time_t vs the old kernel's
+  16-byte input_event ABI — short write errno 0; fk_input emits the
+  kernel's 32-bit layout explicitly (iter-38 class extended to
+  kernel-struct timestamp ABIs). Instrument exposure: the resolver
+  quantizer absorbs sub-half-grid-step table perturbations (tooth
+  round 1 measured it; round 2 fired at a full step). riglib.sh grew
+  per its own contract (RIG_SCRIPTS/ARMBINS/srchash roots).
+- **In flight**: nothing — task-4 arc (Codex, concurrent) + the new
+  task-5 surface (check-device-input.sh, s1_input.h, s1_sweep.c,
+  fk_input.c, judge-s1-coverage.js, gfx_app/sim_main/riglib edits)
+  await Tier-A review; then task 6 (audio-on).
+- **Latest AGENT-LOG entry**: iter 51 (M3 task 5);
+  latest log id: .loop/m3-task5-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
@@ -235,13 +257,14 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## Next
 
-1. Driver: ground-truth iter 50 (cold
-   `bash port/gfx/check-device-render.sh`) + open the task-4 Tier-A arc
-   (check-device-render.sh, gfx_app.c, platform_{headless,sdl1,sdl2}.c,
-   platform.h, judge-render-timing.js, judge-shot.js, the riglib.sh +
-   check-device-g01.sh + check-render.sh + mathsweep.c edits) → launch
-   task-5 writer (S1 input layer at the platform_poll seam) on GO.
-2. Ladder: fix_plan §M3 tasks 5-7 → M3 gate (`verify_m3.sh`) →
+1. Driver: ground-truth iter 51 (cold
+   `bash port/gfx/check-device-input.sh`) + fold the task-5 surface
+   (check-device-input.sh, s1_input.h, s1_sweep.c, fk_input.c,
+   judge-s1-coverage.js, s1-session.script, the gfx_app.c/sim_main.c
+   flags, the riglib.sh roster/roots additions) into the running
+   task-4/rig Tier-A review arc → launch task-6 writer (audio-on) on
+   GO.
+2. Ladder: fix_plan §M3 tasks 6-7 → M3 gate (`verify_m3.sh`) →
    LOOP STOP: m3-device + push-notify Chase for S1 ratification →
    close #18 → M4 REPLAN (PLAN §4/M4) → Chase acceptance →
    LOOP STOP: m4-complete.
