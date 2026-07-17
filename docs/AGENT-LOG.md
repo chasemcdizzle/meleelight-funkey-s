@@ -5080,3 +5080,29 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   the device rig stamps already hash-then-immediately-build inside one
   stamp check (no gap of this shape); no other sidecar producers exist
   today.
+
+## driver — 2026-07-16 — task-2 + task-3 Tier-A arcs CLOSED (after iter 49)
+
+- Task-2 (device-conform rig) arc: CLOSED at VERDICT: GO, round 3
+  (.loop/review-47-1.log) — findings across rounds: matrix pin,
+  timing-buffer overflow guard, perf-history presence, node-validated
+  manifest pin; all fixed with teeth (iters 45/47).
+- Task-3 (renderer rig) arc: CAPPED-CLOSED at round 3
+  (.loop/review-48-1.log) — rounds 1-2 findings all fixed with teeth
+  (iters 46/48: corpus + served-dist pins, reuse input-closure binding,
+  console fail-closed, allowlist floors; pAx==0 investigated →
+  already-faithful, documented, no guard). Round 3's single finding was
+  a DISPOSITIONED-class variant (TOCTOU/concurrent-editor, on record
+  since iter 40) whose fix was trivial — taken under PROCESS §3's
+  trivial-whole-class exception (iter 49: pre-consumption closure
+  snapshot). NAMED recurring objection class at cap: TOCTOU re-raises
+  in new framings. Driver cold-verified every hardening iteration
+  (conform 8/8 ×3, render ×4).
+- Zoom-out: both arcs' yield concentrated in the same two classes —
+  identity/freshness of judge-trusted reference material, and fail-open
+  plumbing edges. The rig lessons are now embodied in riglib.sh +
+  capture-closure.js as inheritance packages; future device/render
+  scripts START from them, which should shrink arc length (task-2's arc:
+  3 rounds vs task-1's 5).
+- next: task 4 (platform seam + SDL1.2 device backend + live device
+  render — the first pixels on the FunKey's screen).

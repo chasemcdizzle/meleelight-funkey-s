@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-16, post-iter-49 writer)
+## Live right now (updated: 2026-07-16, post-arc-closure driver turn)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -194,10 +194,13 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   exit 0 (.loop/m3-task3r49-donecheck.log), IOU MIN 0.9149 ≥ 0.91,
   both STREAM MATCH 3600/3600. Task-3 Tier-A arc → CAPPED-CLOSED by
   the driver.
-- **In flight**: task-2 Tier-A arc round 3 = closure pending (review
-  of the iter-47 fix; concurrent read-only review of
-  port/sim/device/* + sim_main.c), then task 4 (platform seam + SDL1.2
-  device backend + live device render).
+- **Task-2 AND task-3 Tier-A arcs CLOSED** (driver, post-iter-49):
+  task-2 GO at round 3; task-3 CAPPED-CLOSED at round 3 (named class:
+  TOCTOU re-raises; trivial fix taken iter 49). Rig inheritance packages:
+  riglib.sh + capture-closure.js.
+- **In flight**: task-4 writer iter 50 (platform seam + SDL1.2 device
+  backend + live device render, `check-device-render.sh` → DEVICE
+  RENDER OK; its check script gets a Tier-A arc on landing).
 - **Latest AGENT-LOG entry**: iter 49 (M3 task 3 hardening round 3);
   latest log id: .loop/m3-task3r49-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
