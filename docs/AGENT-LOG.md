@@ -5551,3 +5551,402 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   byte-identical streams reproduced; .loop/driver-cold-task5-donecheck.log),
   pushed. Task-5 Tier-A arc opens next; iter 52 (task-4 hardening +
   parser audit) dispatches now.
+
+## iter 52 — 2026-07-17 — M3 task 4 HARDENING + rig-wide whitelist-grammar parser audit
+
+### PRE-REGISTRATION (frozen before any run/edit; PROCESS §2)
+
+- **Task (two halves, one commit)**: (A) close ALL 8 triaged task-4
+  round-1 findings (.loop/review-50-triage.md, incl. its amendment;
+  full review .loop/review-50-1.log); (B) the rig-wide
+  whitelist-grammar decision-parser audit (PROCESS §3 rule, applied
+  retroactively): enumerate EVERY decision-bearing parse site in the
+  device rig, classify each (already-conformant / permissive), convert
+  the permissive ones to anchored full-line grammars measured from the
+  REAL corpus, and validate zero false rejections over that corpus.
+  done-check: cold `bash port/gfx/check-device-render.sh` →
+  `DEVICE RENDER OK`, exit 0.
+- **Half-A design (frozen)**:
+  H1 stranded-frontend class → THREE mechanisms: (a) device-side
+  DEADMAN installed at park time (generated script, pushed +
+  sha-verified; detached setsid process polling a cancel file every
+  2 s inside a `MLFK_DEADMAN_S` window, default 300 s ≈ 4x the ~70 s
+  healthy park window; on window expiry with no cancel AND a matching
+  install NONCE in /tmp/mlfk/deadman.nonce → rm -f
+  /mnt/disable_frontend + pkill gfx_device + a `deadman.fired` marker;
+  actions idempotent; the nonce disarms any stale deadman surviving
+  into a later run's park window); (b) the success path cancels
+  (touch deadman.cancel) and VERIFIES the deadman exited (pid file
+  gone ≤ 10 s) and that it did NOT fire (deadman.fired absent) — the
+  deadman provably never fires on a healthy run; (c) host cleanup
+  dsh calls ride a transport-retry wrapper (rig_dsh_retry: on dsh rc
+  70/71 → adb kill-server / start-server / reconnect, ≤ 3 attempts,
+  WARN-visible) so a recovered transport still restores the frontend;
+  the launch itself moves to the task-5 setsid + rc-file lifecycle
+  (detached, `RC=$?` file, bounded host poll — the CLAUDE.md detached
+  recipe).
+  H2 park-ack race → PARKED=1 set BEFORE the park dsh; restore stays
+  idempotent (rm -f).
+  H3 skip gate → the GATE run asserts skips == 0 AND
+  rendered == frames from the strict timing-judge grammar; the valve
+  code stays for real-time resilience but a gate pass may not consume
+  it.
+  H4 screenshot bit-compare → device PPM AND PGM (ink plane) both
+  cmp'd GATING against the host headless shot (measured achievable:
+  iter-50/51 runs bit-identical); a future legitimate cross-platform
+  divergence is a reviewed pin change (comment at the site).
+  M1 pkill rc captured on every site (park + cleanup), visible WARN /
+  loud death per site, no bare `|| true` on pkill.
+  M2 platform_present returns int (0 = presented); SDL1 propagates
+  SDL_Flip/lock rc, SDL2 propagates UpdateTexture/Clear/Copy rc,
+  headless returns 0 (plus the env-gated MLFK_HEADLESS_PRESENT_FAIL=1
+  negative-testing seam, default unchanged); gfx_app counts failures
+  and reports them in the (new) strict stderr summary line; the check
+  asserts 0 failed presents on the valve leg, the host leg, and the
+  device leg.
+  M3 device wall-clock asserted in [58,66] s — parsed from the app's
+  post-run summary line (in-app CLOCK_MONOTONIC wall, device-recorded
+  / host-judged like all timing evidence; measured corpus:
+  `wall 60000 ms` on the iter-50 paced device run) under the strict
+  full-line grammar which also pins `pace=1 budget=16666667 ns` — a
+  silently-disabled pacing run cannot parse.
+  M4 frameskip-tooth grammar → subsumed by half B: the valve leg's
+  permissive awk count + substring grep are replaced by
+  judge-render-timing.js over exactly 120 rows (strict grammar) with
+  skips == 119 AND rendered == 1 asserted (deterministic: 1000 ns
+  budget always overruns, only the forced shot frame renders), plus
+  the strict summary-line parse.
+- **Half-B method (frozen)**: enumerate parse sites across adbsh.sh,
+  riglib.sh, percentiles.js, judge-render-timing.js, judge-shot.js,
+  iou.js, judge-s1-coverage.js, wrap-run.js/trace-to-txt.js (as the
+  check scripts' stream/trace parsers; verify-stream.js is ORACLE —
+  untouchable, out of audit scope by charter), check-device-g01.sh,
+  check-device-conform.sh, check-device-render.sh,
+  check-device-input.sh, check-render.sh. For each: classify; convert
+  permissive ones with grammars measured from the REAL corpus (cited
+  per site: .loop/m3-task4*/m3-task5* logs, port/gfx/build/*,
+  port/sim/calib/build/device/* incl. arm-build.stamp,
+  docs/research/device-perf.md, live device measurements for busybox
+  sha256sum / adb devices output). Conversions planned: (1) NEW
+  riglib rig_dev_sha256 — device-side sha256sum output parsed by
+  full-line reconstruction (`<64hex>  <path>` exactly, at most one
+  trailing empty line = the measured dsh marker artifact), replacing
+  every `| awk 'NF{print $1; exit}'` site (riglib pullv +
+  devsha-selftest + push-provenance; check-device-render.sh + the 3
+  check-device-input.sh data-sha sites); (2) stamp `bin` records
+  parsed whole-line with exactly-one-match + reconstruction
+  (rig_stamp_rehash / rig_push_provenance die loud; rig_stamp_ok
+  tightened but keeps its fail-direction = rebuild); (3) the
+  check-device-render.sh valve/summary sites (M4 above); (4)
+  check-device-conform.sh perf-history row regex gains its missing
+  end anchor; (5) check-device-input.sh apprc → exact whole-file
+  compare, sweep-OK → full-line grep -x of the measured literal;
+  (6) check-render.sh golden params → the reviewed strict no-eval
+  gparams parser (closing the class rig-wide), render-only timing
+  line → anchored full-line regex with exactly-one-match; (7)
+  adbsh.sh require_device → anchored full-line device-state match
+  (grammar measured from live `adb devices`). NOT converted (with
+  reasons, recorded per site in the results entry): file(1)/soname
+  presence asserts (full-line pins would false-reject across file(1)
+  versions; fail direction closed), JSON reads through
+  JSON.parse/node (already whitelist-by-construction; remaining
+  field-level validation per site recorded).
+- **Teeth (all logged)**: half A — T1 deadman FIRE: device probe with
+  MLFK_DEADMAN_S=20, decoy gfx_device process, host adb server killed
+  mid-window (simulated transport death) → on reconnect the frontend
+  marker is GONE, the decoy is dead, deadman.fired present; T2
+  deadman CANCEL: cancel path → pid file gone ≤ 10 s, marker STILL
+  present, deadman.fired absent (also re-proven on every healthy
+  done-check run by the in-check asserts); T3 transport-retry: with
+  the adb server killed, rig_dsh_retry recovers the transport and the
+  restore succeeds; T4 skip-gate: doctored COPY of a pulled timing
+  file (one row flipped to skipped) → judge parses, gate assert
+  fires; T5 shot-gating: single-byte-perturbed COPY of the device PPM
+  → gating cmp fails; T6 present-fail: MLFK_HEADLESS_PRESENT_FAIL=1
+  valve-length run → summary reports 120 failed presents → the strict
+  parse + zero-assert fires; T7 wall-clock: doctored summary-line
+  copies (wall 21000 ms → range assert fires; pace=0 → grammar match
+  count != 1 → corruption death). Half B — per converted parser: one
+  resembles-but-invalid line injected into a corpus COPY → loud death
+  (duplicate stamp bin row; 63-hex sha; multi-line sha256sum output;
+  truncated 100-row valve file; perf row with trailing junk;
+  `RC=0junk` apprc; `S1 SWEEP OK` + trailing text; doctored manifest
+  copy with an uppercase name; render-only line with a mangled
+  field), AND one genuine-corpus full pass per parser → zero false
+  rejections (arm-build.stamp all 6 bins; existing valve-tim.txt;
+  device-perf.md all 8 golden rows; existing s1.apprc /
+  s1-sweep-a.txt; the committed manifest; existing
+  g01.gfx-rtiming-a.txt; live device sha256sum + adb devices).
+- **Run matrix + caps**: check-device-render.sh ≤ 3 invocations (the
+  paced gate run is the expensive leg; target: ONE green cold
+  done-check); ONE device hygiene/measurement probe session (T1-T3 +
+  busybox sha256sum & pkill rc grammar measurement — no paced run);
+  regressions (mandated by the brief, one each): check-device-g01.sh,
+  check-device-conform.sh, check-device-input.sh (their parse sites /
+  shared riglib changed; expect ONE arm rebuild from the stamp),
+  host check-render.sh (its parse sites changed) + host check-sim.sh
+  (platform_present signature touches gfx_app/backends). Early stop:
+  first green pass per script. Output → .loop/m3-task4r52-*.log;
+  long runs via the §7#1 nohup + bounded-foreground-poll pattern.
+- **Pass criteria**: cold DEVICE RENDER OK exit 0 with the new gates
+  live (skips 0/3600, 0 failed presents, wall in [58,66] s, PPM+PGM
+  bit-equality) + all teeth fired with the pre-registered outcomes +
+  all regressions green + zero false rejections on every genuine
+  corpus.
+- **Refutation shapes**: device shot PPM/PGM NOT bit-identical on the
+  gate run → H4's "measured achievable" premise is REFUTED — record
+  the diff, do NOT weaken to structural-only silently; one bounded
+  evidence round (re-run once to test flakiness vs determinism), then
+  STOP and report to the driver (the pin decision is a review-arc
+  call). Wall-clock outside [58,66] s on a healthy run → the window
+  premise is wrong — record the measured value, one re-run, then
+  STOP (never widen the pin unilaterally). A converted parser
+  rejecting GENUINE corpus → the measured grammar was wrong — fix the
+  grammar to match the corpus (never relax to permissive), re-validate
+  the whole corpus. busybox pkill/sha256sum grammar differing from the
+  plan → adjust the helper to the MEASURED grammar before any
+  conversion ships. Deadman firing during a healthy done-check →
+  design defect (window or cancel path) — STOP, report, do not ship
+  the deadman.
+
+### RESULTS (iter 52)
+
+- **DONE-CHECK (cold, final tree)**: `bash port/gfx/check-device-render.sh`
+  → `DEVICE RENDER OK (full p99 11.123 ms, render-only p99 3.133 ms,
+  sim p99 7.695 ms, present p99 1.415 ms, skips 0/3600)`, exit 0
+  (.loop/m3-task4r52-donecheck.log) with EVERY new gate live: skip gate
+  0/3600 + rendered==3600, 0 failed presents, device wall 60000 ms in
+  [58000,66000] (host-observed 62 s corroborates), device shot PPM+PGM
+  BIT-IDENTICAL to the host render (now GATING), deadman armed →
+  cancelled → verified exited WITHOUT firing. 2 done-check invocations
+  used of the 3-cap (the first FAILED — the M2 gate caught a real
+  finding, below).
+- **All 8 triaged findings closed (per-finding)**:
+  H1 — deadman (generated, nonce-scoped, cancel-file polled 2 s, window
+  300 s ≈ 4x healthy, `deadman.fired` evidence marker, idempotent
+  actions; stale-deadman class closed by the nonce: a later run's DTMP
+  wipe disarms it) + detached setsid/rc-file launch (task-5 lifecycle;
+  exact whole-file `RC=0` grammar) + rig_dsh_retry transport recovery
+  on every cleanup dsh (kill-server/start-server/reconnect, ≤3, WARN-
+  visible) + trap ordering that leaves the deadman ARMED when the
+  restore itself failed (the backstop is never cancelled before the
+  frontend is provably restored).
+  H2 — PARKED=1 set pessimistically BEFORE the park dsh; park split
+  into `touch` (must succeed) + rc-captured `pkill gmenu2x`.
+  H3 — gate asserts skips==0 AND rendered==frames from the strict
+  judge; valve code untouched (resilience stays).
+  H4 — PPM and PGM (ink plane) cmp'd GATING vs the host headless shot;
+  reviewed-pin-change comment at both sites; measured bit-identical
+  again this run.
+  M1 — every pkill rc captured and case-split (0 = killed-something
+  WARN at cleanup, 1 = no-match healthy, else WARN/FAIL per context;
+  busybox no-match rc==1 MEASURED, probe log).
+  M2 — platform_present returns int on all three backends (SDL_Flip /
+  lock rc; SDL2 UpdateTexture/Clear/Copy rcs; headless 0 + the
+  MLFK_HEADLESS_PRESENT_FAIL negative-testing seam); gfx_app counts
+  failures; summary line reports them; gate asserts 0 on host, valve
+  AND device legs. **REAL FINDING (first gate run failed)**: the FunKey
+  kernel fb rejects FBIOPAN_DISPLAY — the device's patched libSDL-1.2
+  returns -1 from EVERY SDL_Flip with exactly
+  `ioctl(FBIOPAN_DISPLAY) failed` while the present demonstrably runs
+  (present p99 1.4-1.5 ms — the rotation blit — identical to iter-50's
+  known-good run; gmenu2x rides the same driver). Evidence probe
+  .loop/m3-task4r52-probe-sdlflip.log (bounded evidence round per the
+  pre-registered refutation shape). Fix = the whitelist-grammar posture
+  applied to a C API: platform_sdl1.c accepts rc 0 OR exactly the
+  pinned measured-benign signature (kBenignFlipErr, strcmp-exact); ANY
+  other flip failure counts. Residual exposure recorded: SDL 1.2's
+  error string is sticky, so a hypothetical failure mode that sets NO
+  error could hide behind a stale benign string; physical-panel truth
+  stays with the M3 human gate (render is non-checksummed by design).
+  M3 — wall-clock window [58000,66000] ms asserted from the summary
+  line (device-recorded, host-judged; measured 60000 ms); the grammar
+  pins pace=1/budget so an unpaced run cannot parse (tooth T7c).
+  M4 — valve leg now judged by judge-render-timing.js over EXACTLY 120
+  rows with skips==119/rendered==1 exact (deterministic at 1000 ns) +
+  the strict summary parse; permissive awk + substring grep gone.
+  (Review-50's untriaged LOW — gfx_app getline without ferror — is NOT
+  addressed here; it stays open for the arc's round 2 disposition.)
+- **PARSER AUDIT — full enumeration (the deliverable). Sites, verdicts,
+  corpus citations.** CONVERTED = permissive → anchored empirical
+  full-line grammar, fail closed; CONF = already conformant, recorded.
+  1. adbsh.sh dsh RC-marker — CONF (verified vs the rule, per brief):
+     nonce-anchored prefix, remainder validated all-digits + 0-255,
+     missing/malformed → FATAL 71; last-exact-token-wins is sound (only
+     the genuine marker carries the nonce and prints last; an sh -x
+     echo of the command text is non-digit and earlier).
+  2. adbsh.sh require_device — CONVERTED: `^<serial>\tdevice$` full
+     line (was `[[:space:]]*device` prefix — accepted `deviceX`,
+     decorated forms). Corpus: live `adb devices` od dump (probe log);
+     teeth Q1 (3 resembling forms rejected) + Q2 (live zero-false-rej).
+  3. riglib pullv device digest — CONVERTED via NEW `rig_dev_sha256`:
+     whole-output reconstruction `<64hex>  <path>` exactly, at most ONE
+     trailing empty line (the measured dsh leading-newline artifact),
+     multi-line/wrong-path/short/odd digest → loud death (was
+     first-nonempty-line first-field awk scrape). Corpus: busybox
+     sha256sum od-measured on device (probe log M2), every pull of
+     every rig script re-exercised green; teeth D1-D3.
+  4. riglib rig_devsha_selftest — CONVERTED: exact whole-output
+     `<empty-sha>  -` compare (probe tooth M3).
+  5. riglib rig_push_provenance device digests — CONVERTED: per-file
+     rig_dev_sha256 (was batched-output awk field pick).
+  6. riglib rig_stamp_rehash stamp record — CONVERTED via NEW
+     `rig_stamp_bin_sha`: exactly-one `bin <name> <64hex>` record,
+     whole-line reconstruction (was `awk {print $3}` — accepted
+     duplicates/extra fields/any-shape sha). Corpus: the real
+     arm-build.stamp, all 6 ARMBINS (tooth S1 — parses identical to
+     the old extraction, zero false rejections); teeth S2/S3.
+  7. riglib rig_push_provenance stamp record — CONVERTED (same helper).
+  8. riglib rig_stamp_ok srchash line — TIGHTENED: line 1 must be
+     exactly `srchash=<64hex>`; fail direction stays REBUILD (safe).
+  9. riglib rig_stamp_ok bin records — TIGHTENED to the same whole-line
+     grammar; any anomaly → rebuild (fail-safe by contract, documented).
+  10. riglib rig_srchash count pipeline — CONF (iters 40/41: pipefail +
+      explicit status + non-numeric guard + ≥450 floor).
+  11. riglib rig_arm_build `file(1)` "ELF 32-bit LSB executable, ARM"
+      grep — NOT CONVERTED (recorded): presence assert over a trusted
+      host tool whose full line varies across file(1) versions — a
+      full-line pin trades a hypothetical accept-risk for a REAL
+      false-rejection risk (the rule's zero-false-rejection clause);
+      fail direction is closed (no match → death).
+  12. riglib "dynamically linked" + libSDL soname greps — NOT CONVERTED
+      (same class; the soname grep runs over binary bytes — no line
+      grammar exists to pin).
+  13. riglib rig_no_commit_guard — CONF (non-empty output → death; no
+      value extraction). 14. rig_lock stat age — informational only.
+      15. made() — existence assert, no parse.
+  16. percentiles.js — CONF (exact line count, `^[0-9]+$` rows,
+      trailing-newline + safe-integer checks; strict key=value out).
+  17. judge-render-timing.js — CONF (anchored 4-column row regex, exact
+      count, skip/render coherence rules, all-skipped rejection) — now
+      ALSO the valve leg's judge.
+  18. judge-shot.js — CONF (byte-exact PNM headers + sizes, 0/255 PGM).
+  19. iou.js — CONF (corpus pin, threshold shape, exact PGM/mask sizes,
+      degenerate-union death; argv required-arg checks).
+  20. judge-s1-coverage.js — CONF (exact frame count, [r0,r1,null,null]
+      shape, exactly-22-key typed rows, invariants, coverage floors).
+      Not edited (concurrent-review avoid list).
+  21. wrap-run.js — CONF (anchored F/RNG line regexes, contiguity 1..N,
+      single RNG, SIM OK terminal, unknown line → death).
+  22. trace-to-txt.js — CONF (exactly-4-slot frames, exactly-22-key
+      typed rows, no extra keys; exit 3 on any violation).
+  23. check-device-g01.sh gparams — CONF (the reviewed no-eval class).
+  24. g01 corpus wc-l vs frozen literal — CONF (string equality against
+      a pinned literal; garbage mismatches → death).
+  25. g01 mathsweep trailers `grep -qx "n <pin>"` ×2 — CONF (full-line
+      -x vs frozen literal).
+  26. check-device-conform.sh golden_params + matrix-pin node
+      validation + percentiles no-eval parse — CONF (iters 45/47).
+  27. conform.sh perf-history row regex — CONVERTED: end anchor `\|$`
+      added (a trailing-junk row counted before). Corpus:
+      docs/research/device-perf.md od-measured; teeth P1 (16/16 rows of
+      the target 5-column shape match — the doc's OTHER table, iter-50's
+      6-column bucket rows, is a different shape no decision parser
+      consumes) + P2 (junk-suffixed row rejected).
+  28. check-device-render.sh gparams — CONF. Host-side `shasum | cut`
+      digest extractions (GFXDATA pin etc.) — CONF as a CLASS: trusted
+      host tool, value feeds an exact-equality decision against a
+      frozen 64-hex literal (any corruption = mismatch = death).
+  29. render.sh valve skip-count awk — CONVERTED (→ judge, exact
+      119/1; teeth V1/V2: genuine valve artifact passes, 100-row
+      truncation dies loudly).
+  30. render.sh valve-log substring grep — CONVERTED (→
+      parse_app_summary).
+  31. NEW parse_app_summary (host/valve/device legs) — strict from
+      birth: full anchored line, frames/pace/budget PINNED into the
+      pattern, exactly-one-match, BASH_REMATCH extraction. Corpus:
+      fresh iter-52 app logs; the iter-50 OLD-grammar log is
+      resembles-but-fails and is REJECTED (tooth T7a) — the producer
+      (gfx_app.c summary fprintf) carries a paired-change comment.
+  32. render.sh timing-judge output parse — CONF (no-eval case parser;
+      factored into parse_timing_judge, judge invoked exactly once).
+  33. render.sh device data-file shas — CONVERTED (rig_dev_sha256).
+  34. render.sh render.apprc — NEW, strict: whole file == `RC=0`.
+  35. check-device-input.sh apprc `grep -qx` — CONVERTED to exact
+      whole-file compare; tooth A3 is the DISCRIMINATING case: a
+      two-line `RC=0\nRC=1` file was ACCEPTED by the old parser and is
+      rejected by the new one (in-scope grammar conversion, noted).
+  36. input.sh sweep-OK prefix grep — CONVERTED: `grep -qx` of the full
+      measured literal (teeth W1/W2) (in-scope conversion, noted).
+  37. input.sh 3 device-sha awk scrapes — CONVERTED (rig_dev_sha256;
+      in-scope conversions, noted).
+  38. input.sh `grep -c '^F '` frames_seen — NOT decision-bearing
+      (banner text only; replay identity is cmp-judged) — left as-is.
+  39. check-render.sh golden params (8 bare `node -p` scrapes,
+      undefined-on-missing-field leak) — CONVERTED to the reviewed
+      strict gparams parser (teeth G1-G3).
+  40. check-render.sh FRAMES_LIST/GOLDEN + servedDistSha256 reads —
+      CONF (values validated by the corpus-pin node block / explicit
+      undefined check + exact compare vs frozen pins).
+  41. check-render.sh render-only timing line — CONVERTED: anchored
+      full-line regex, n=<frames> pinned, exactly-one-match (teeth
+      R1/R2).
+  42. gfx_app.c trace/simdata C parsers — CONF (strict tokenizers,
+      sim_fatal on malformation; Tier-B reviewed iter 50; the getline/
+      ferror Low stays open for round 2).
+  AUDIT BOUNDARY (recorded): oracle/harness/* (verify-stream.js et al.)
+  is ORACLE — untouchable (HARD RULE 3), out of scope by charter.
+  port/sim/check-sim.sh + the M2 calib check scripts and pipeline/
+  checks are host M2/M1 surfaces outside the device rig charter —
+  registered as the standing audit seed for their next arcs (task-6
+  underrun parsing and task-7 verify_m3.sh briefs already carry the
+  rule). COUNTS: 42 sites enumerated · 24 already-conformant · 13
+  converted (incl. 2 new-built-strict) · 2 tightened (fail-safe
+  direction kept) · 2 not-converted with recorded reasons · 1
+  non-decision.
+- **Teeth — all fired as pre-registered**: 32 host teeth
+  (.loop/m3-task4r52-teeth-host.log: T4a/b skip gate, T5 shot gating,
+  T6a-c present-fail seam + control, T7a-d summary grammar/wall/pace,
+  V1/V2 valve, S1-S3 stamp, D1-D3 dev-sha, P1/P2 perf rows, A1-A3
+  apprc, W1/W2 sweep line, R1/R2 render-only, G1-G3 gparams, Q1/Q2
+  require_device) + 7 device-probe teeth
+  (.loop/m3-task4r52-probe-deadman.log: M1 pkill rc, M2/M3 live sha
+  grammar, T1 deadman FIRES under real transport death — host adb
+  killed mid-window → marker gone + decoy gfx_device killed +
+  fired-marker present on reconnect; T2 cancel-on-success — exits ≤12 s,
+  no fire, marker untouched; T3 rig_dsh_retry restores through a killed
+  transport; H1 gmenu2x untouched). One tooth-harness fix on record:
+  P1's first form asserted ALL `| g0N |` rows match — 4 legitimate
+  iter-50 six-column bucket rows failed it; that was the TOOTH
+  over-claiming, not a parser false-rejection (the conform.sh check
+  targets the 5-column shape and matched 16/16). Genuine-corpus
+  validation: zero false rejections on every converted parser.
+- **Runs vs caps**: check-device-render ×2 (cap 3; first run = the M2
+  finding, second green) · deadman probe session ×1 · sdlflip evidence
+  probe ×1 (the refutation-shape bounded evidence round) · regressions
+  ×1 each — ALL GREEN: check-render.sh RENDER OK (IoU MIN 0.9149,
+  GFXDATA tripwire, fresh capture; .loop/m3-task4r52-reg-render.log),
+  check-sim.sh SIM CONFORMS 8/8 (.loop/m3-task4r52-reg-checksim.log),
+  check-device-g01.sh DEVICE CONFORMS g01 (stamp HIT after the one
+  rebuild; .loop/m3-task4r52-reg-g01.log), check-device-conform.sh
+  DEVICE CONFORMS 8/8 + SIM P99 OK (.loop/m3-task4r52-reg-conform.log),
+  check-device-input.sh S1 INPUT OK (.loop/m3-task4r52-reg-input.log).
+  Two arm rebuilds total (stamp inputs changed twice: rig scripts, then
+  platform_sdl1.c) — docker serial throughout.
+- **Honest coverage / exposure**: the wall-clock window judges the
+  app's own CLOCK_MONOTONIC wall report (device-recorded, host-judged —
+  the same trust class as every timing row; the host-observed 62 s is
+  printed alongside as corroboration). The benign-flip whitelist means
+  a real pan-class failure on THIS driver is indistinguishable from the
+  baseline by rc alone — bounded by the bit-identical own-fb screenshot
+  gate and ultimately by the M3 human gate on the physical panel. The
+  deadman fire path is probe-proven with a 16 s window; the shipped
+  300 s window's arithmetic is the same loop. rig_dsh_retry's
+  recovered-transport branch was exercised with a killed adb server
+  (T3); a physically detached device stays unrecoverable by design —
+  that is exactly the deadman's case (T1).
+- **ZOOM OUT**: (1) The whitelist-grammar rule generalized beyond text
+  this iteration: the SDL_Flip finding is the SAME class in a C API's
+  return channel — "success" had to be defined as exact-match against
+  a measured baseline, not rc==0 optimism nor blanket acceptance. Rule
+  restated for M3/M4 device work: any NEW device API consumed for a
+  decision gets its healthy signature MEASURED and pinned before the
+  decision ships (the iter-38 "trust no device-libc symbol" family,
+  third face: libc math → kernel struct ABI → driver rc semantics).
+  (2) The audit's classifying pass showed the permissive-parse class
+  concentrated in exactly two shapes — "first-plausible-line scrapes"
+  of device output and "prefix/substring presence checks" of producer
+  lines; both are now closed rig-wide by TWO shared helpers + full-line
+  greps, and the two new judges (parse_app_summary, rig_dev_sha256)
+  were born strict. The remaining M2-era host surfaces are registered
+  seeds, not silent leftovers.

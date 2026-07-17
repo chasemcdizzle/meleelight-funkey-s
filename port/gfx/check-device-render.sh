@@ -21,23 +21,36 @@
 #      proven live before the device is trusted with them.
 #   4. DEVICE LIVE RENDER: g01 replayed ON the FunKey-S through the
 #      SDL1.2 backend (real SetVideoMode surface, SDL_Flip presents,
-#      paced 60 fps, frameskip armed), frontend parked ONLY around the
-#      run and ALWAYS restored (trap); the app RAM-buffers everything
-#      and writes to tmpfs post-run (no I/O in the frame loop, no SD
-#      writes during play).
+#      paced 60 fps, frameskip armed), launched DETACHED via the setsid
+#      + rc-file lifecycle (this adbd drops exit codes; review-50 H1);
+#      frontend parked ONLY around the run and ALWAYS restored — by the
+#      trap (transport-retry wrapped) AND, if the transport dies for
+#      good, by the nonce-scoped on-device DEADMAN armed before the
+#      park (cancel-on-success verified every run); the app RAM-buffers
+#      everything and writes to tmpfs post-run (no I/O in the frame
+#      loop, no SD writes during play).
 #   5. DEVICE JUDGMENT (all host-side; the device never self-reports):
 #      stream -> UNCHANGED verify-stream.js vs the frozen golden (the
 #      renderer + SDL present must not perturb the sim ON DEVICE);
 #      timing -> judge-render-timing.js (strict grammar), asserting
 #        full-frame p99 (sim+render+present work time) <  16,670,000 ns
 #        render-only p99 (rendered frames)             <= 8,000,000 ns
+#        skips == 0 AND rendered == 3600 (review-50 H3: the frameskip
+#        valve stays for real-time resilience, but a GATE pass may not
+#        consume it)
 #      over the FULL 3600-frame match (integer compares, no float);
+#      summary -> the app's post-run summary line under the pinned
+#      whitelist grammar: 0 failed presents (review-50 M2; SDL_Flip rc
+#      propagated through platform_present) and device wall-clock in
+#      [58,66] s (review-50 M3 — the pinned pace=1/budget in the same
+#      line means silently-disabled pacing cannot even parse);
 #      screenshot -> the app's OWN framebuffer (never the kernel fb —
 #      240x720 triple-page, CLAUDE.md gotcha), pulled + judged by
 #      judge-shot.js (letterbox structure, colour count, ink coverage)
-#      and cmp'd against the host headless shot (bit-equality is
-#      REPORTED as evidence, not required — cross-compiler float
-#      identity is not a pinned claim).
+#      and cmp'd BIT-EXACT against the host headless shot, PPM and PGM
+#      both GATING (review-50 H4; measured achievable iters 50-51 — a
+#      future legitimate cross-platform divergence is a REVIEWED pin
+#      change at those cmp sites, never a silent allowance).
 #
 # GFXDATA staging (pre-registered, AGENT-LOG iter 50): the committed
 # port/gfx/gfxdata-frozen.txt (deterministic EXECUTED page data from the
@@ -80,6 +93,13 @@ SHOT_FRAME=900              # pinned screenshot frame (mid-match, both players
                             # browser-vs-C reference for the same frame)
 GFXDATA_FROZEN=$GFX/gfxdata-frozen.txt
 GFXDATA_SHA256=5499a3dd5fc374d6ed988faf0bef6fa2e189eb314e892bdd83c7534dc0865c94
+WALL_MIN_MS=58000 # review-50 M3: paced 3600-frame run wall window —
+WALL_MAX_MS=66000 # measured 60000 ms (iter 50); pacing can't silently die
+DEADMAN_S="${MLFK_DEADMAN_S:-300}" # frontend-park deadman window (~4x the
+                    # healthy park span; MLFK_DEADMAN_S = negative-testing
+                    # override ONLY, default unchanged)
+APPRC_TRIES=90      # x2 s host poll for the detached run's rc file
+                    # (paced run is ~60 s; generous, bounded)
 
 source port/sim/device/adbsh.sh # (also defines $DEV — it keys the lock)
 source port/sim/device/riglib.sh
@@ -87,18 +107,41 @@ source port/sim/device/riglib.sh
 rig_lock_acquire
 
 # Cleanup (installed AFTER lock acquisition, riglib contract): kill our
-# app, RESTORE the frontend if we parked it, then the shared rig cleanup
-# (device scratch + lock). Best-effort by design, WARN-visible.
+# app, RESTORE the frontend if we parked it, cancel the deadman ONLY
+# once the frontend is provably restored (it is the backstop), then the
+# shared rig cleanup. Best-effort by design, WARN-visible; every device
+# command rides rig_dsh_retry (review-50 H1: one attempt through the
+# transport that just died stranded the parked frontend).
 PARKED=0
+DEADMAN_ARMED=0
 task4_cleanup() {
+  local prc restore_ok
   # pkill by process NAME — a `pkill -f <path>` pattern matches the adb
   # shell's OWN command line and kills it before the dsh RC marker can
-  # print (measured this iter: rc 71 on every cleanup).
-  dsh "pkill gfx_device; true" >/dev/null 2>&1 \
-    || echo "WARN: could not pkill gfx_device on the device" >&2
+  # print (measured iter 50: rc 71 on every cleanup). rc CAPTURED
+  # (review-50 M1): 0 = a stray app was killed (WARN), 1 = nothing
+  # matched (the healthy path), anything else = visible WARN.
+  prc=0
+  rig_dsh_retry "pkill gfx_device" || prc=$?
+  case "$prc" in
+    0) echo "WARN: gfx_device was still running at cleanup — killed" >&2 ;;
+    1) : ;; # no process matched — the healthy path
+    *) echo "WARN: could not pkill gfx_device on the device (rc $prc)" >&2 ;;
+  esac
+  restore_ok=1
   if [ "$PARKED" = 1 ]; then
-    dsh "rm -f /mnt/disable_frontend" >/dev/null 2>&1 \
-      || echo "WARN: could not restore the frontend — remove /mnt/disable_frontend by hand" >&2
+    rig_dsh_retry "rm -f /mnt/disable_frontend" || {
+      restore_ok=0
+      echo "WARN: could not restore the frontend — the armed deadman will remove /mnt/disable_frontend on-device within ${DEADMAN_S}s of the park (or remove it by hand)" >&2
+    }
+  fi
+  if [ "$DEADMAN_ARMED" = 1 ]; then
+    if [ "$restore_ok" = 1 ]; then
+      rig_dsh_retry "touch $DTMP/deadman.cancel" \
+        || echo "WARN: could not cancel the park deadman — it will fire once (idempotent actions) within ${DEADMAN_S}s" >&2
+    else
+      echo "WARN: frontend restore failed — leaving the deadman ARMED as the backstop" >&2
+    fi
   fi
   rig_cleanup
 }
@@ -106,6 +149,81 @@ trap task4_cleanup EXIT
 
 require_device
 rig_devsha_selftest
+
+# parse_timing_judge <timing-file> <frames> — judge-render-timing.js
+# (strict row grammar: exactly <frames> lines, 4 anchored columns) with
+# its key=value output consumed by the reviewed no-eval strict parser
+# (unexpected key = loud death). Sets: full_p99_ns full_p99_ms
+# render_p99_ns render_p99_ms sim_p99_ms present_p99_ms skips rendered.
+parse_timing_judge() {
+  local tf="$1" fr="$2" jout jk jv
+  unset full_p99_ns full_p99_ms render_p99_ns render_p99_ms sim_p99_ms \
+    present_p99_ms skips rendered
+  jout="$(node "$GFX/judge-render-timing.js" "$tf" "$fr")" || {
+    echo "DEVICE FAIL: timing judgment failed for $tf" >&2
+    exit 1
+  }
+  while IFS='=' read -r jk jv; do
+    case "$jk" in
+      full_p99_ns|render_p99_ns|skips|rendered)
+        if ! [[ "$jv" =~ ^[0-9]+$ ]]; then
+          echo "DEVICE FAIL: timing judge $jk not a decimal integer ('$jv')" >&2
+          exit 1
+        fi
+        printf -v "$jk" '%s' "$jv"
+        ;;
+      full_p99_ms|render_p99_ms|sim_p99_ms|present_p99_ms)
+        if ! [[ "$jv" =~ ^[0-9]+\.[0-9]{3}$ ]]; then
+          echo "DEVICE FAIL: timing judge $jk malformed ('$jv')" >&2
+          exit 1
+        fi
+        printf -v "$jk" '%s' "$jv"
+        ;;
+      full_p50_ns|full_p50_ms|full_max_ns|full_max_ms|sim_p50_ns|sim_p50_ms|sim_p99_ns|render_p50_ns|render_p50_ms|render_max_ns|render_max_ms|present_p50_ns|present_p50_ms|present_p99_ns)
+        : # reported by the judge; not asserted here
+        ;;
+      *)
+        echo "DEVICE FAIL: unexpected timing judge line '$jk=$jv'" >&2
+        exit 1
+        ;;
+    esac
+  done <<< "$jout"
+  : "$full_p99_ns" "$full_p99_ms" "$render_p99_ns" "$render_p99_ms" \
+    "$sim_p99_ms" "$present_p99_ms" "$skips" "$rendered"
+  timing_judge_out="$jout" # for display; the judge ran exactly once
+}
+
+# parse_app_summary <log> <frames> <pace> <budget-ns> — gfx_app's
+# post-run summary line under the PROCESS §3 whitelist grammar
+# (producer: the single fprintf in gfx_app.c, grammar comment there —
+# measured corpus: iter-50/51 app logs + this iteration's fresh runs):
+#   gfx_app: <frames> frames, <skips> render skips, <fails> failed
+#   presents, wall <ms> ms, pace=<pace> budget=<budget> ns
+# EXACTLY ONE log line may match the full anchored pattern (the
+# skipped-frames list line also starts with 'gfx_app: ' and must not);
+# frames/pace/budget are PINNED into the pattern, so a run with the
+# wrong length or silently-disabled pacing cannot even parse. Sets:
+# app_skips app_present_fails app_wall_ms.
+parse_app_summary() {
+  local log="$1" fr="$2" pace="$3" budget="$4" re cnt line
+  unset app_skips app_present_fails app_wall_ms
+  re="^gfx_app: ${fr} frames, [0-9]+ render skips, [0-9]+ failed presents, wall [0-9]+ ms, pace=${pace} budget=${budget} ns\$"
+  cnt="$(grep -Ec "$re" "$log")" || true
+  if [ "$cnt" != 1 ]; then
+    echo "DEVICE FAIL: app log $log has $cnt lines matching the pinned summary grammar (want exactly 1: frames=$fr pace=$pace budget=$budget ns)" >&2
+    exit 1
+  fi
+  line="$(grep -E "$re" "$log")"
+  if [[ "$line" =~ ^gfx_app:\ ${fr}\ frames,\ ([0-9]+)\ render\ skips,\ ([0-9]+)\ failed\ presents,\ wall\ ([0-9]+)\ ms,\ pace=${pace}\ budget=${budget}\ ns$ ]]; then
+    app_skips="${BASH_REMATCH[1]}"
+    app_present_fails="${BASH_REMATCH[2]}"
+    app_wall_ms="${BASH_REMATCH[3]}"
+  else
+    echo "DEVICE FAIL: summary line failed re-extraction ('$line')" >&2
+    exit 1
+  fi
+  : "$app_skips" "$app_present_fails" "$app_wall_ms"
+}
 
 echo "== [1/7] host data plane (g01 params + M1 tables + SIMDATA1 + trace + GFXDATA pin) =="
 # g01 match params — the reviewed no-eval strict parser (check-device-g01.sh
@@ -300,6 +418,14 @@ node oracle/harness/verify-stream.js "$BUILD/g01.app-run.json" "$FROZEN"
 echo "   host headless stream verified (seam app does not perturb the sim)"
 node "$GFX/judge-shot.js" "$BUILD/g01.app-shot-a.ppm" "$BUILD/g01.app-shot-a.pgm"
 echo "   host shot passes the structural judge"
+# host-leg summary (strict grammar): pace 0 renders every frame and the
+# headless backend must report zero failed presents (review-50 M2).
+parse_app_summary "$BUILD/g01.app-log-a.txt" "$frames" 0 "$BUDGET_NS"
+if [ "$app_skips" -ne 0 ] || [ "$app_present_fails" -ne 0 ]; then
+  echo "DEVICE FAIL: host headless leg reports skips=$app_skips presentFails=$app_present_fails (want 0/0)" >&2
+  exit 1
+fi
+echo "   host summary OK (0 skips, 0 failed presents)"
 
 echo "== [4/7] frameskip valve (standing tooth: 1000 ns budget => skips, flagged) =="
 rm -f "$BUILD/valve-out.txt" "$BUILD/valve-tim.txt" \
@@ -314,16 +440,25 @@ rm -f "$BUILD/valve-out.txt" "$BUILD/valve-tim.txt" \
   --shot-pgm "$BUILD/valve-shot.pgm" \
   2> "$BUILD/valve-log.txt"
 made "$BUILD/valve-out.txt" "$BUILD/valve-tim.txt"
-valve_skips="$(awk '$4=="1" {n++} END {print n+0}' "$BUILD/valve-tim.txt")"
-if ! [[ "$valve_skips" =~ ^[0-9]+$ ]] || [ "$valve_skips" -lt 100 ]; then
-  echo "DEVICE FAIL: frameskip valve tooth — expected >=100 flagged skips in 120 frames at a 1000 ns budget, got '$valve_skips'" >&2
+# review-50 M4 (whitelist grammar): the old permissive awk flag-count +
+# substring grep accepted a truncated timing file. Now the SAME strict
+# judge as the gate run parses the valve artifact (exactly 120 anchored
+# rows, complete stream) and the flagged count is asserted EXACTLY:
+# a 1000 ns budget always overruns, so every frame skips EXCEPT the
+# forced shot-frame render — 119/1, deterministic.
+parse_timing_judge "$BUILD/valve-tim.txt" 120
+if [ "$skips" -ne 119 ] || [ "$rendered" -ne 1 ]; then
+  echo "DEVICE FAIL: frameskip valve tooth — expected exactly 119 flagged skips + 1 rendered (the forced shot frame) in 120 frames at a 1000 ns budget, got skips=$skips rendered=$rendered" >&2
   exit 1
 fi
-grep -q "render skips" "$BUILD/valve-log.txt" || {
-  echo "DEVICE FAIL: frameskip valve tooth — skip summary missing from the app log" >&2
+# the app's own summary line must agree (strict full-line grammar; also
+# proves the skip logging + zero failed presents on the valve leg)
+parse_app_summary "$BUILD/valve-log.txt" 120 1 1000
+if [ "$app_skips" -ne 119 ] || [ "$app_present_fails" -ne 0 ]; then
+  echo "DEVICE FAIL: valve summary line disagrees (skips=$app_skips presentFails=$app_present_fails; want 119/0)" >&2
   exit 1
-}
-echo "   valve tooth OK ($valve_skips/120 renders skipped, flagged in the timing artifact; sim ran every frame)"
+fi
+echo "   valve tooth OK (119/120 renders skipped — timing artifact and app summary agree; sim ran every frame; 0 failed presents)"
 
 echo "== [5/7] armv7 build (shared rig stamp) + push + provenance =="
 rig_arm_build
@@ -335,12 +470,13 @@ adb -s "$DEV" push "$DEVB/gfx_device" "$DEVB/simdata.txt" \
 rig_push_provenance "$DTMP" gfx_device
 dsh "chmod +x $DTMP/gfx_device"
 # sha-verify every pushed DATA file device-side against the host bytes
-# (the binary is covered by push provenance above)
+# (the binary is covered by push provenance above). Digests come through
+# the strict full-line rig_dev_sha256 parser (iter 52, PROCESS §3).
 for hf in "$DEVB/simdata.txt" "$DEVB/g01.trace.txt" "$GFXDATA_FROZEN" \
           "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2"; do
   bn="$(basename "$hf")"
   hsum="$(shasum -a 256 "$hf" | cut -d' ' -f1)"
-  dsum="$(dsh "sha256sum $DTMP/$bn" | awk 'NF{print $1; exit}')"
+  dsum="$(rig_dev_sha256 "$DTMP/$bn")" || exit 1
   if [ "$dsum" != "$hsum" ]; then
     echo "DEVICE FAIL: pushed $bn device sha ($dsum) != host sha ($hsum)" >&2
     exit 1
@@ -348,25 +484,134 @@ for hf in "$DEVB/simdata.txt" "$DEVB/g01.trace.txt" "$GFXDATA_FROZEN" \
 done
 echo "   pushed data sha-verified on device (simdata, trace, gfxdata, 2 anim bins)"
 
-echo "== [6/7] device: LIVE paced g01 render (frontend parked around the run) =="
-dsh "touch /mnt/disable_frontend && { pkill gmenu2x; true; }"
-PARKED=1
-t0=$(date +%s)
-# Foreground on purpose (M3 convention: device runs are slow, generous
-# host-side timeouts, foreground). Login shell: /etc/profile sets
-# SDL_NOMOUSE=1 — without it SDL_Init dies "Unable to open mouse".
-dsh "sh -lc 'cd $DTMP && ./gfx_device \
+echo "== [6/7] device: LIVE paced g01 render (deadman-guarded park; detached launch) =="
+# DEADMAN (review-50 H1): a device-side backstop generated + pushed +
+# armed BEFORE the park, so a transport death at ANY later point still
+# un-strands the frontend on-device. It polls a cancel file every 2 s
+# inside a $DEADMAN_S window; on expiry it acts ONLY if the nonce file
+# still carries THIS install's nonce (a later run wiping $DTMP disarms
+# any stale deadman) and no cancel exists — actions (rm -f marker,
+# pkill gfx_device) are idempotent by design. The healthy path cancels
+# and VERIFIES the deadman exited without firing (hygiene tooling must
+# never fire during a healthy run — proven every run, not argued).
+DM_NONCE="$RANDOM$RANDOM$$"
+rm -f "$BUILD/deadman.sh"
+cat > "$BUILD/deadman.sh" << EOF
+#!/bin/sh
+# generated by check-device-render.sh — frontend-park DEADMAN (iter 52)
+echo \$\$ > $DTMP/deadman.pid
+i=0
+while [ \$i -lt $DEADMAN_S ]; do
+  sleep 2
+  if [ -f $DTMP/deadman.cancel ]; then rm -f $DTMP/deadman.pid; exit 0; fi
+  i=\$((i+2))
+done
+if [ "\$(cat $DTMP/deadman.nonce 2>/dev/null)" = "$DM_NONCE" ] && [ ! -f $DTMP/deadman.cancel ]; then
+  echo fired > $DTMP/deadman.fired
+  rm -f /mnt/disable_frontend
+  pkill gfx_device
+fi
+rm -f $DTMP/deadman.pid
+exit 0
+EOF
+made "$BUILD/deadman.sh"
+# LAUNCHER (review-50 H1): detached setsid + rc-file lifecycle (the
+# CLAUDE.md detached recipe; task-5 precedent — this adbd drops exit
+# codes, the rc file is the only truthful exit evidence). Login shell
+# at invocation time (/etc/profile sets SDL_NOMOUSE=1).
+rm -f "$BUILD/render-launch.sh"
+cat > "$BUILD/render-launch.sh" << EOF
+#!/bin/sh
+# generated by check-device-render.sh — paced live-render launcher
+cd $DTMP || exit 9
+rm -f render.apprc
+setsid sh -c './gfx_device \
   --trace $DTMP/g01.trace.txt --simdata $DTMP/simdata.txt \
   --gfxdata $DTMP/gfxdata-frozen.txt --anim-dir $DTMP \
   --seed $seed --p1 $p1 --p2 $p2 --stage $stage --frames $frames \
   --pace 1 --budget-ns $BUDGET_NS \
   --out $DTMP/g01.dev-out.txt --timing $DTMP/g01.dev-tim.txt \
   --shot-frame $SHOT_FRAME --shot-ppm $DTMP/g01.dev-shot.ppm \
-  --shot-pgm $DTMP/g01.dev-shot.pgm 2> $DTMP/g01.dev-log.txt'"
+  --shot-pgm $DTMP/g01.dev-shot.pgm 2> $DTMP/g01.dev-log.txt; \
+  echo "RC=\$?" > $DTMP/render.apprc' \
+  </dev/null >/dev/null 2>&1 &
+sleep 2
+EOF
+made "$BUILD/render-launch.sh"
+adb -s "$DEV" push "$BUILD/deadman.sh" "$BUILD/render-launch.sh" "$DTMP/" >/dev/null
+for hf in "$BUILD/deadman.sh" "$BUILD/render-launch.sh"; do
+  bn="$(basename "$hf")"
+  hsum="$(shasum -a 256 "$hf" | cut -d' ' -f1)"
+  dsum="$(rig_dev_sha256 "$DTMP/$bn")" || exit 1
+  if [ "$dsum" != "$hsum" ]; then
+    echo "DEVICE FAIL: pushed $bn device sha ($dsum) != host sha ($hsum)" >&2
+    exit 1
+  fi
+done
+dsh "chmod +x $DTMP/deadman.sh $DTMP/render-launch.sh"
+
+# arm the deadman BEFORE parking
+dsh "printf '%s' '$DM_NONCE' > $DTMP/deadman.nonce; rm -f $DTMP/deadman.cancel $DTMP/deadman.fired"
+dsh "setsid sh $DTMP/deadman.sh </dev/null >/dev/null 2>&1 & sleep 1"
+if ! dsh "test -f $DTMP/deadman.pid" >/dev/null 2>&1; then
+  echo "DEVICE FAIL: park deadman did not start (no pid file)" >&2
+  exit 1
+fi
+DEADMAN_ARMED=1
+echo "   deadman armed (window ${DEADMAN_S}s, nonce-scoped, cancel-on-success verified below)"
+
+# PARK. PARKED=1 is set PESSIMISTICALLY BEFORE the park command
+# (review-50 H2): if the transport dies after the device executed the
+# touch but before the ack, the trap still restores (rm -f idempotent).
+PARKED=1
+dsh "touch /mnt/disable_frontend"
+prc=0
+dsh "pkill gmenu2x" >/dev/null 2>&1 || prc=$?
+case "$prc" in # rc captured (review-50 M1): busybox pkill 1 = no match
+  0) : ;;
+  1) echo "WARN: gmenu2x was not running at park time" >&2 ;;
+  *) echo "DEVICE FAIL: pkill gmenu2x failed (rc $prc)" >&2; exit 1 ;;
+esac
+
+t0=$(date +%s)
+dsh "sh -lc $DTMP/render-launch.sh"
+# bounded host-side poll for the detached run's rc file (§7#1 shape)
+apprc_seen=0
+for _ in $(seq 1 "$APPRC_TRIES"); do
+  if dsh "test -f $DTMP/render.apprc" >/dev/null 2>&1; then apprc_seen=1; break; fi
+  sleep 2
+done
 t1=$(date +%s)
+if [ "$apprc_seen" != 1 ]; then
+  dsh "cat $DTMP/g01.dev-log.txt" >&2 || true
+  echo "DEVICE FAIL: live render never finished (rc file absent after $((APPRC_TRIES * 2))s)" >&2
+  exit 1
+fi
+pullv "$DTMP/render.apprc" "$DEVB/render.apprc"
+if [ "$(cat "$DEVB/render.apprc")" != "RC=0" ]; then # exact whole-file grammar
+  dsh "cat $DTMP/g01.dev-log.txt" >&2 || true
+  echo "DEVICE FAIL: live render app exited nonzero ($(cat "$DEVB/render.apprc"))" >&2
+  exit 1
+fi
 dsh "rm -f /mnt/disable_frontend"
 PARKED=0
-echo "   live run done (device wall $((t1 - t0)) s; frontend restored)"
+# cancel the deadman and PROVE it exited without firing
+dsh "touch $DTMP/deadman.cancel"
+dmgone=0
+for _ in $(seq 1 6); do
+  if dsh "test ! -f $DTMP/deadman.pid" >/dev/null 2>&1; then dmgone=1; break; fi
+  sleep 2
+done
+if [ "$dmgone" != 1 ]; then
+  echo "DEVICE FAIL: park deadman did not exit within 12s of cancellation" >&2
+  exit 1
+fi
+if ! dsh "test ! -f $DTMP/deadman.fired" >/dev/null 2>&1; then
+  echo "DEVICE FAIL: park deadman FIRED during a healthy run (window/cancel defect — do not trust this run's park hygiene)" >&2
+  exit 1
+fi
+DEADMAN_ARMED=0
+echo "   live run done (host-observed $((t1 - t0)) s; app rc 0; frontend restored; deadman cancelled without firing)"
 pullv "$DTMP/g01.dev-out.txt" "$DEVB/g01.dev-out.txt"
 pullv "$DTMP/g01.dev-tim.txt" "$DEVB/g01.dev-tim.txt"
 pullv "$DTMP/g01.dev-shot.ppm" "$DEVB/g01.dev-shot.ppm"
@@ -380,40 +625,8 @@ made "$DEVB/g01.dev-run.json"
 node oracle/harness/verify-stream.js "$DEVB/g01.dev-run.json" "$FROZEN"
 echo "   device stream verified (render+present did not perturb the sim on device)"
 
-unset full_p99_ns full_p99_ms render_p99_ns render_p99_ms sim_p99_ms \
-  present_p99_ms skips rendered
-jout="$(node "$GFX/judge-render-timing.js" "$DEVB/g01.dev-tim.txt" "$frames")" || {
-  echo "DEVICE FAIL: timing judgment failed" >&2
-  exit 1
-}
-while IFS='=' read -r jk jv; do
-  case "$jk" in
-    full_p99_ns|render_p99_ns|skips|rendered)
-      if ! [[ "$jv" =~ ^[0-9]+$ ]]; then
-        echo "DEVICE FAIL: timing judge $jk not a decimal integer ('$jv')" >&2
-        exit 1
-      fi
-      printf -v "$jk" '%s' "$jv"
-      ;;
-    full_p99_ms|render_p99_ms|sim_p99_ms|present_p99_ms)
-      if ! [[ "$jv" =~ ^[0-9]+\.[0-9]{3}$ ]]; then
-        echo "DEVICE FAIL: timing judge $jk malformed ('$jv')" >&2
-        exit 1
-      fi
-      printf -v "$jk" '%s' "$jv"
-      ;;
-    full_p50_ns|full_p50_ms|full_max_ns|full_max_ms|sim_p50_ns|sim_p50_ms|sim_p99_ns|render_p50_ns|render_p50_ms|render_max_ns|render_max_ms|present_p50_ns|present_p50_ms|present_p99_ns)
-      : # reported by the judge; not asserted here
-      ;;
-    *)
-      echo "DEVICE FAIL: unexpected timing judge line '$jk=$jv'" >&2
-      exit 1
-      ;;
-  esac
-done <<< "$jout"
-: "$full_p99_ns" "$full_p99_ms" "$render_p99_ns" "$render_p99_ms" \
-  "$sim_p99_ms" "$present_p99_ms" "$skips" "$rendered"
-printf '%s\n' "$jout" | sed 's/^/   judge: /'
+parse_timing_judge "$DEVB/g01.dev-tim.txt" "$frames"
+printf '%s\n' "$timing_judge_out" | sed 's/^/   judge: /'
 if [ "$full_p99_ns" -ge "$P99_FULL_LIMIT_NS" ]; then
   echo "RENDER P99 FAIL: full-frame p99 ${full_p99_ms} ms (${full_p99_ns} ns) >= limit ${P99_FULL_LIMIT_NS} ns" >&2
   exit 1
@@ -422,14 +635,47 @@ if [ "$render_p99_ns" -gt "$P99_RENDER_LIMIT_NS" ]; then
   echo "RENDER P99 FAIL: render-only p99 ${render_p99_ms} ms (${render_p99_ns} ns) > limit ${P99_RENDER_LIMIT_NS} ns" >&2
   exit 1
 fi
+# review-50 H3 (skip gate): the valve exists for real-time resilience,
+# but a GATE pass may not consume it — every frame must have rendered.
+if [ "$skips" -ne 0 ] || [ "$rendered" -ne "$frames" ]; then
+  echo "DEVICE FAIL: gate run rendered $rendered/$frames with $skips skips — a GATE pass may not consume the frameskip valve" >&2
+  exit 1
+fi
+# review-50 M2 + M3: the app summary under the pinned whitelist grammar
+# (frames/pace/budget pinned into the pattern). Assert 0 failed
+# presents, summary/timing skip agreement, and the wall-clock window.
+parse_app_summary "$DEVB/g01.dev-log.txt" "$frames" 1 "$BUDGET_NS"
+if [ "$app_present_fails" -ne 0 ]; then
+  echo "DEVICE FAIL: $app_present_fails failed presents on the device run (SDL_Flip/lock failures — nothing may silently miss the screen)" >&2
+  exit 1
+fi
+if [ "$app_skips" -ne "$skips" ]; then
+  echo "DEVICE FAIL: summary skips ($app_skips) != timing-artifact skips ($skips) — corrupt evidence" >&2
+  exit 1
+fi
+if [ "$app_wall_ms" -lt "$WALL_MIN_MS" ] || [ "$app_wall_ms" -gt "$WALL_MAX_MS" ]; then
+  echo "DEVICE FAIL: device wall clock ${app_wall_ms} ms outside [${WALL_MIN_MS},${WALL_MAX_MS}] ms — pacing is not running at 60 fps" >&2
+  exit 1
+fi
+echo "   device summary OK (0 failed presents; wall ${app_wall_ms} ms in [${WALL_MIN_MS},${WALL_MAX_MS}])"
 
 node "$GFX/judge-shot.js" "$DEVB/g01.dev-shot.ppm" "$DEVB/g01.dev-shot.pgm"
 echo "   device shot passes the structural judge"
-if cmp -s "$DEVB/g01.dev-shot.ppm" "$BUILD/g01.app-shot-a.ppm"; then
-  echo "   device shot == host headless shot BIT-IDENTICAL (evidence bonus, not a pinned claim)"
-else
-  echo "   device shot differs from host shot at the byte level (allowed: cross-compiler float identity is not pinned; structure judged above)"
-fi
+# review-50 H4: the bit-compare is GATING, PPM and PGM (ink plane) both
+# (measured achievable: iter-50/51 device shots were bit-identical to
+# the host render — the render plane is cross-platform deterministic by
+# the iter-50 fdlibm/integer-helper class fix). A future LEGITIMATE
+# cross-platform divergence is a REVIEWED pin change at these two cmp
+# sites (e.g. a committed reference-shot pin), never a silent allowance.
+cmp "$DEVB/g01.dev-shot.ppm" "$BUILD/g01.app-shot-a.ppm" || {
+  echo "DEVICE FAIL: device shot PPM != host headless shot (bit-compare is GATING — reviewed pin change required for a legitimate divergence)" >&2
+  exit 1
+}
+cmp "$DEVB/g01.dev-shot.pgm" "$BUILD/g01.app-shot-a.pgm" || {
+  echo "DEVICE FAIL: device shot PGM (ink plane) != host headless shot (bit-compare is GATING)" >&2
+  exit 1
+}
+echo "   device shot == host headless shot BIT-IDENTICAL (PPM + PGM, gating)"
 
 rig_no_commit_guard "$BUILD" "$DEVB" "$TABLES"
 

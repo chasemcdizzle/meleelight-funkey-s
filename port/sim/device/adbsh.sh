@@ -12,9 +12,13 @@
 DEV="${FUNKEY_ADB_ID:-12c00003237f5528}"
 
 # require_device — hard-fail unless $DEV is attached and in `device` state.
+# Iter 52 (whitelist grammar, PROCESS §3): measured `adb devices` grammar
+# is `<serial><TAB>device` for a healthy device — anchored FULL-line
+# match (the old `[[:space:]]*device` prefix match would also accept a
+# decorated or state-suffixed line that merely resembles attached).
 require_device() {
-  adb devices | grep -q "^${DEV}[[:space:]]*device" || {
-    echo "FATAL: FunKey-S ${DEV} not on ADB (adb devices)" >&2
+  adb devices | grep -q "^${DEV}$(printf '\t')device\$" || {
+    echo "FATAL: FunKey-S ${DEV} not on ADB in 'device' state (adb devices)" >&2
     return 1
   }
 }

@@ -72,16 +72,96 @@ rig_cleanup() {
     || echo "WARN: could not release rig lock $LOCK — remove manually: rm -rf '$LOCK'" >&2
 }
 
+# rig_dsh_retry <cmd> — best-effort dsh with TRANSPORT recovery (iter 52,
+# review-50 H1: cleanup was attempted once through the same ADB transport
+# that had just failed — a mid-run transport death stranded the parked
+# frontend). On dsh rc 70/71 (transport / no-marker — both transport
+# classes), reset the adb transport (kill-server / start-server /
+# reconnect) and retry, <= 3 attempts, every step WARN-visible. Any
+# OTHER rc is the device command's own and is returned as-is. For
+# cleanup paths only — main-path commands stay plain dsh (fail loud).
+rig_dsh_retry() {
+  local tries=0 rc
+  while :; do
+    rc=0
+    dsh "$1" >/dev/null 2>&1 || rc=$?
+    if [ "$rc" != 70 ] && [ "$rc" != 71 ]; then return "$rc"; fi
+    tries=$((tries + 1))
+    if [ "$tries" -ge 3 ]; then
+      echo "WARN: rig_dsh_retry: transport still dead after $tries attempts (rc $rc) for: $1" >&2
+      return "$rc"
+    fi
+    echo "WARN: rig_dsh_retry: adb transport failure (rc $rc) — resetting the transport and retrying ($tries/2)" >&2
+    adb kill-server >/dev/null 2>&1 || true
+    sleep 3
+    adb start-server >/dev/null 2>&1 || true
+    adb -s "$DEV" reconnect >/dev/null 2>&1 || true
+    sleep 3
+  done
+}
+
+# rig_dev_sha256 <device-path> — device-side sha256, WHITELIST-GRAMMAR
+# parsed (iter 52, PROCESS §3 rule; replaces every permissive
+# `| awk 'NF{print $1; exit}'` first-nonempty-line scrape). Measured
+# producer grammar (busybox sha256sum on this device): EXACTLY
+#   <64-lowercase-hex><SP><SP><path>
+# on one line. dsh's guaranteed-leading-newline RC marker leaves exactly
+# ONE trailing empty line when the command's stdout ends in \n (the
+# transport artifact — measured, adbsh.sh iter 39 H1); strip exactly
+# that, then require the WHOLE remaining output to reconstruct as
+# `<sum>  <path>` — anything that merely resembles it (warning lines,
+# multi-line output, wrong filename, short/odd digest) is corruption →
+# loud death. Echoes the digest on success.
+rig_dev_sha256() {
+  local p out sum rest
+  p="$1"
+  out="$(dsh "sha256sum $p")" || {
+    echo "DEVICE FAIL: device-side sha256sum $p failed" >&2
+    return 1
+  }
+  out="${out%$'\n'}" # the single measured dsh trailing-newline artifact
+  case "$out" in
+    *$'\n'*)
+      echo "DEVICE FAIL: device sha256sum $p emitted multiple lines (corrupt output):" >&2
+      printf '%s\n' "$out" >&2
+      return 1
+      ;;
+  esac
+  sum="${out%%  *}"
+  rest="${out#*  }"
+  if [ "${#sum}" -ne 64 ]; then
+    echo "DEVICE FAIL: device sha256sum $p digest not 64 chars ('$sum')" >&2
+    return 1
+  fi
+  case "$sum" in
+    *[!0-9a-f]*)
+      echo "DEVICE FAIL: device sha256sum $p digest not lowercase hex ('$sum')" >&2
+      return 1
+      ;;
+  esac
+  if [ "$rest" != "$p" ] || [ "$out" != "$sum  $p" ]; then
+    echo "DEVICE FAIL: device sha256sum $p output is not exactly '<sha>  $p' (got '$out')" >&2
+    return 1
+  fi
+  printf '%s\n' "$sum"
+}
+
 # rig_devsha_selftest — device-side hash tool self-test (iter 39, review
 # M2): every pull is digest-verified via busybox sha256sum on the device
 # — prove the tool exists and is correct (empty-input vector) before
-# trusting it.
+# trusting it. Iter 52: EXACT whole-output compare (whitelist grammar —
+# busybox prints `<sha>  -` for stdin; the dsh trailing-newline artifact
+# stripped like rig_dev_sha256).
 rig_devsha_selftest() {
-  local EMPTY_SHA devsha
+  local EMPTY_SHA out
   EMPTY_SHA=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-  devsha="$(dsh "printf '' | sha256sum" | awk 'NF{print $1; exit}')"
-  if [ "$devsha" != "$EMPTY_SHA" ]; then
-    echo "DEVICE FAIL: device sha256sum missing/broken (got '$devsha')" >&2
+  out="$(dsh "printf '' | sha256sum")" || {
+    echo "DEVICE FAIL: device sha256sum self-test command failed" >&2
+    exit 1
+  }
+  out="${out%$'\n'}"
+  if [ "$out" != "$EMPTY_SHA  -" ]; then
+    echo "DEVICE FAIL: device sha256sum missing/broken (want '$EMPTY_SHA  -', got '$out')" >&2
     exit 1
   fi
 }
@@ -95,17 +175,9 @@ pullv() {
   local dsum hsum
   rm -f "$2"
   adb -s "$DEV" pull "$1" "$2" >/dev/null
-  dsum="$(dsh "sha256sum $1" | awk 'NF{print $1; exit}')"
-  if [ -z "$dsum" ] || [ "${#dsum}" -ne 64 ]; then
-    echo "DEVICE FAIL: no device-side sha256 for $1 (got '$dsum')" >&2
-    return 1
-  fi
-  case "$dsum" in
-    *[!0-9a-f]*)
-      echo "DEVICE FAIL: bad device-side sha256 for $1 ('$dsum')" >&2
-      return 1
-      ;;
-  esac
+  # iter 52 (whitelist grammar): the device digest comes through the
+  # strict full-line rig_dev_sha256 parser, never a first-field scrape.
+  dsum="$(rig_dev_sha256 "$1")" || return 1
   hsum="$(shasum -a 256 "$2" | cut -d' ' -f1)"
   if [ "$dsum" != "$hsum" ]; then
     echo "DEVICE FAIL: pulled $2 != device $1 (device $dsum, host $hsum)" >&2
@@ -212,17 +284,60 @@ rig_srchash() {
   rm -f "$listf"
 }
 
+# rig_stamp_bin_sha <bin> — the stamp's recorded sha256 for one binary,
+# WHITELIST-GRAMMAR parsed (iter 52, PROCESS §3 rule). Producer grammar
+# (rig_arm_build writes it below): exactly one line
+#   bin<SP><name><SP><64-lowercase-hex>
+# per binary. The old `awk '{print $3}'` field pick accepted duplicate
+# records, extra fields, and any-shaped third field; now: EXACTLY ONE
+# matching record, whole-line reconstruction, 64-lowercase-hex digest —
+# anything else is a corrupt stamp → loud death (used by the push-side
+# decisions; the cache-HIT path keeps its fail-direction = rebuild).
+rig_stamp_bin_sha() {
+  local f lines n rec
+  f="$1"
+  lines="$(awk -v f="$f" '$1=="bin" && $2==f' "$STAMP")"
+  n="$(printf '%s' "$lines" | grep -c '' )" || true
+  if [ "$n" -ne 1 ]; then
+    echo "DEVICE FAIL: stamp has $n 'bin $f' records (want exactly 1) — corrupt stamp" >&2
+    exit 1
+  fi
+  rec="${lines##* }"
+  if [ "$lines" != "bin $f $rec" ] || [ "${#rec}" -ne 64 ]; then
+    echo "DEVICE FAIL: stamp record for $f malformed ('$lines')" >&2
+    exit 1
+  fi
+  case "$rec" in
+    *[!0-9a-f]*)
+      echo "DEVICE FAIL: stamp sha256 for $f not lowercase hex ('$rec')" >&2
+      exit 1
+      ;;
+  esac
+  printf '%s\n' "$rec"
+}
+
 # rig_stamp_ok — cache-HIT re-verify: the stamp's srchash line must match
 # $want AND every recorded binary must still hash to its stamped sha256
-# (a stamped-but-tampered binary is never judged).
+# (a stamped-but-tampered binary is never judged). Iter 52: line 1 must
+# be EXACTLY `srchash=<64-lowercase-hex>` and each bin record must parse
+# under the strict grammar — any anomaly returns 1 (the SAFE direction
+# here is rebuild, never a loud stop: a corrupt stamp is a stale cache).
 rig_stamp_ok() {
   [ -f "$STAMP" ] || return 1
-  [ "$(sed -n '1s/^srchash=//p' "$STAMP")" = "$want" ] || return 1
-  local f rec cur
+  local line1 f lines n rec cur
+  line1="$(sed -n '1p' "$STAMP")"
+  [ "$line1" = "srchash=$want" ] || return 1
+  case "${line1#srchash=}" in *[!0-9a-f]*) return 1 ;; esac
+  [ "${#line1}" -eq 72 ] || return 1 # 'srchash=' + 64 hex
   for f in $ARMBINS; do
     [ -f "$DEVB/$f" ] || return 1
-    rec="$(awk -v f="$f" '$1=="bin" && $2==f {print $3}' "$STAMP")"
-    [ -n "$rec" ] || return 1
+    lines="$(awk -v f="$f" '$1=="bin" && $2==f' "$STAMP")"
+    n="$(printf '%s' "$lines" | grep -c '')" || true
+    [ "$n" -eq 1 ] || return 1
+    rec="${lines##* }"
+    [ "$lines" = "bin $f $rec" ] || return 1
+    [ "${#rec}" -eq 64 ] || return 1
+    case "$rec" in *[!0-9a-f]*) return 1 ;; esac
     cur="$(shasum -a 256 "$DEVB/$f" | cut -d' ' -f1)"
     if [ "$cur" != "$rec" ]; then
       echo "   cached $f sha256 != stamp record — forcing rebuild" >&2
@@ -427,11 +542,8 @@ rig_arm_build() {
 rig_stamp_rehash() {
   local f rec cur
   for f in "$@"; do
-    rec="$(awk -v f="$f" '$1=="bin" && $2==f {print $3}' "$STAMP")"
-    if [ -z "$rec" ]; then
-      echo "DEVICE FAIL: no stamp sha256 record for $f — refusing to push" >&2
-      exit 1
-    fi
+    # iter 52 (whitelist grammar): strict exactly-one-record stamp parse
+    rec="$(rig_stamp_bin_sha "$f")"
     cur="$(shasum -a 256 "$DEVB/$f" | cut -d' ' -f1)"
     if [ "$cur" != "$rec" ]; then
       echo "DEVICE FAIL: $f changed between stamp verification and push ($cur != $rec)" >&2
@@ -449,29 +561,16 @@ rig_stamp_rehash() {
 # bytes the device executes are now bound to the stamp that was
 # sha-verified against the sources.
 rig_push_provenance() {
-  local ddir devsums f rec dsum
+  local ddir f rec dsum
   ddir="$1"; shift
-  devsums="$(dsh "cd $ddir && sha256sum $*")" || {
-    echo "DEVICE FAIL: device-side sha256 of pushed binaries failed" >&2
-    exit 1
-  }
   for f in "$@"; do
-    rec="$(awk -v f="$f" '$1=="bin" && $2==f {print $3}' "$STAMP")"
-    if [ -z "$rec" ]; then
-      echo "DEVICE FAIL: no stamp sha256 record for $f — cannot verify device copy" >&2
-      exit 1
-    fi
-    dsum="$(printf '%s\n' "$devsums" | awk -v f="$f" '$2==f {print $1; exit}')"
-    if [ -z "$dsum" ] || [ "${#dsum}" -ne 64 ]; then
-      echo "DEVICE FAIL: no device-side sha256 for pushed $f (got '$dsum')" >&2
-      exit 1
-    fi
-    case "$dsum" in
-      *[!0-9a-f]*)
-        echo "DEVICE FAIL: bad device-side sha256 for pushed $f ('$dsum')" >&2
-        exit 1
-        ;;
-    esac
+    # iter 52 (whitelist grammar): both sides of the compare now come
+    # through strict full-line parsers — the stamp record via
+    # rig_stamp_bin_sha (exactly one record, reconstruction-checked)
+    # and the device digest via rig_dev_sha256 (one dsh per file
+    # replaces the old batched output scraped by first-field awk).
+    rec="$(rig_stamp_bin_sha "$f")"
+    dsum="$(rig_dev_sha256 "$ddir/$f")" || exit 1
     if [ "$dsum" != "$rec" ]; then
       echo "DEVICE FAIL: device-side $f sha256 != stamp record (device $dsum, stamp $rec) — refusing to run it" >&2
       exit 1

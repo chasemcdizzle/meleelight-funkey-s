@@ -414,7 +414,11 @@ if [ ! -f "$PERFDOC" ]; then
   exit 1
 fi
 for id in $PINNED_GOLDEN_SET; do
-  if ! grep -Eq "^\| $id \| [0-9]+ \| [0-9]+(\.[0-9]+)? \| [0-9]+(\.[0-9]+)? \| [0-9]+ \|" "$PERFDOC"; then
+  # iter 52 (whitelist grammar): end anchor added — measured row grammar
+  # is `| gNN | <int> | <num> | <num> | <int> |` with NOTHING after the
+  # final pipe (od-verified against docs/research/device-perf.md); a row
+  # with trailing junk resembles-but-fails and no longer counts.
+  if ! grep -Eq "^\| $id \| [0-9]+ \| [0-9]+(\.[0-9]+)? \| [0-9]+(\.[0-9]+)? \| [0-9]+ \|$" "$PERFDOC"; then
     echo "DEVICE FAIL: $PERFDOC has no measured table row for $id — append the printed rows artifact ($DEVB/device-perf-rows.md) to the doc (writer duty; the check only asserts presence)" >&2
     exit 1
   fi

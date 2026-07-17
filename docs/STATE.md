@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-16, post-arc-closure driver turn)
+## Live right now (updated: 2026-07-17, iter-52 writer completion)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -240,12 +240,35 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   quantizer absorbs sub-half-grid-step table perturbations (tooth
   round 1 measured it; round 2 fired at a full step). riglib.sh grew
   per its own contract (RIG_SCRIPTS/ARMBINS/srchash roots).
-- **In flight**: iter-52 writer (task-4 arc fixes + the rig-wide
-  whitelist-grammar parser audit per amended .loop/review-50-triage.md);
-  task-5 Tier-A arc (codex) concurrent. Then: task-4 r2 + task-5 arcs to
-  GO → task 6 (audio-on) → task 7 (OPK + verify_m3.sh gate).
-- **Latest AGENT-LOG entry**: iter 51 (M3 task 5);
-  latest log id: .loop/m3-task5-donecheck.log.
+- **Iter 52 (M3 task 4 hardening + rig-wide whitelist-grammar parser
+  audit) DONE**: all 8 triaged review-50 findings closed (deadman-
+  guarded park with nonce disarm + cancel-on-success proven every run;
+  detached setsid/rc-file launch; pessimistic PARKED; skip gate
+  0/3600; PPM+PGM bit-compare GATING; pkill rcs captured;
+  platform_present success channel; wall window [58,66] s; strict
+  valve grammar) — cold done-check DEVICE RENDER OK exit 0
+  (.loop/m3-task4r52-donecheck.log). REAL FINDING (the new M2 gate's
+  first run caught it): the FunKey kernel rejects FBIOPAN_DISPLAY, so
+  the patched libSDL's SDL_Flip returns -1 with
+  `ioctl(FBIOPAN_DISPLAY) failed` on EVERY frame while presents run —
+  platform_sdl1 pins that exact measured-benign signature (whitelist
+  posture on a C API; probe .loop/m3-task4r52-probe-sdlflip.log).
+  PARSER AUDIT: 42 sites enumerated / 24 conformant / 13 converted
+  (NEW shared rig_dev_sha256 + rig_stamp_bin_sha + parse_app_summary;
+  require_device full-line; conform perf-row end anchor; check-render
+  strict gparams + render-only grammar; input.sh apprc/sweep/sha
+  conversions) / 2 tightened / 2 not-converted with reasons — full
+  list + corpus citations in AGENT-LOG iter 52. 39 teeth fired
+  (32 host + 7 device-probe incl. deadman FIRE under real transport
+  death). Regressions ALL green: check-render RENDER OK, check-sim
+  SIM CONFORMS, device g01 + conform 8/8 + input S1 INPUT OK.
+- **In flight**: task-5 Tier-A arc (codex) concurrent; task-4 arc
+  ROUND 2 pending (closure review of iter 52; review-50's untriaged
+  Low — gfx_app getline/ferror — open for its disposition). Then:
+  task-4 r2 + task-5 arcs to GO → task 6 (audio-on) → task 7 (OPK +
+  verify_m3.sh gate).
+- **Latest AGENT-LOG entry**: iter 52 (M3 task 4 hardening + parser
+  audit); latest log id: .loop/m3-task4r52-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull

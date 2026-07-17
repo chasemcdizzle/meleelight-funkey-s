@@ -47,11 +47,15 @@ int platform_init(const char *title) {
   return 0;
 }
 
-void platform_present(const uint16_t *fb565) {
-  SDL_UpdateTexture(g_tex, 0, fb565, RAST_W * 2);
-  SDL_RenderClear(g_ren);
-  SDL_RenderCopy(g_ren, g_tex, 0, 0);
+int platform_present(const uint16_t *fb565) {
+  // rc propagated (iter 52, review-50 M2): a failed texture update /
+  // copy is a FAILED present (RenderPresent itself returns void).
+  int rc = 0;
+  if (SDL_UpdateTexture(g_tex, 0, fb565, RAST_W * 2) != 0) rc = 1;
+  if (SDL_RenderClear(g_ren) != 0) rc = 1;
+  if (SDL_RenderCopy(g_ren, g_tex, 0, 0) != 0) rc = 1;
   SDL_RenderPresent(g_ren);
+  return rc;
 }
 
 void platform_poll(PlatformInput *in) {

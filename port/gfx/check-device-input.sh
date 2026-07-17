@@ -171,8 +171,11 @@ for side in a b; do
   made "$BUILD/s1-sweep-$side.txt"
 done
 cmp "$BUILD/s1-sweep-a.txt" "$BUILD/s1-sweep-b.txt"
-grep -q "^S1 SWEEP OK" "$BUILD/s1-sweep-a.txt" || {
-  echo "DEVICE FAIL: S1 sweep did not print its OK line" >&2
+# iter 52 parser audit (whitelist grammar): full-line match of the
+# measured s1_sweep.c OK literal (prefix-match accepted a resembling
+# line; the producer emits exactly this line or S1 SWEEP FAIL).
+grep -qx "S1 SWEEP OK (15 pinned chord checks, 2048 combos, all coordinates on the 1/80 grid)" "$BUILD/s1-sweep-a.txt" || {
+  echo "DEVICE FAIL: S1 sweep did not print its exact OK line" >&2
   exit 1
 }
 grep -v "^C " "$BUILD/s1-sweep-a.txt" | sed 's/^/   /'
@@ -186,11 +189,13 @@ adb -s "$DEV" push "$DEVB/gfx_device" "$DEVB/fk_input" "$DEVB/sim_device" \
   "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2" "$DTMP/" >/dev/null
 rig_push_provenance "$DTMP" gfx_device fk_input sim_device
 dsh "chmod +x $DTMP/gfx_device $DTMP/fk_input $DTMP/sim_device"
+# iter 52 parser audit: device digests via the strict full-line
+# rig_dev_sha256 parser (was a first-nonempty-line awk scrape)
 for hf in "$DEVB/simdata.txt" "$GFXDATA_FROZEN" "$S1_SCRIPT" \
           "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2"; do
   bn="$(basename "$hf")"
   hsum="$(shasum -a 256 "$hf" | cut -d' ' -f1)"
-  dsum="$(dsh "sha256sum $DTMP/$bn" | awk 'NF{print $1; exit}')"
+  dsum="$(rig_dev_sha256 "$DTMP/$bn")" || exit 1
   if [ "$dsum" != "$hsum" ]; then
     echo "DEVICE FAIL: pushed $bn device sha ($dsum) != host sha ($hsum)" >&2
     exit 1
@@ -224,7 +229,8 @@ EOF
 made "$BUILD/s1-launch.sh"
 adb -s "$DEV" push "$BUILD/s1-launch.sh" "$DTMP/" >/dev/null
 lsum="$(shasum -a 256 "$BUILD/s1-launch.sh" | cut -d' ' -f1)"
-dsum="$(dsh "sha256sum $DTMP/s1-launch.sh" | awk 'NF{print $1; exit}')"
+# iter 52 parser audit: strict full-line device digest parse
+dsum="$(rig_dev_sha256 "$DTMP/s1-launch.sh")" || exit 1
 if [ "$dsum" != "$lsum" ]; then
   echo "DEVICE FAIL: pushed launcher sha mismatch (device $dsum, host $lsum)" >&2
   exit 1
@@ -266,7 +272,9 @@ if [ "$done_f" != 1 ]; then
   exit 1
 fi
 pullv "$DTMP/s1.apprc" "$DEVB/s1.apprc"
-grep -qx "RC=0" "$DEVB/s1.apprc" || {
+# iter 52 parser audit: EXACT whole-file compare (grep -qx passed if ANY
+# line matched — a multi-line/appended rc file resembles-but-fails now)
+[ "$(cat "$DEVB/s1.apprc")" = "RC=0" ] || {
   pullv "$DTMP/s1.app-log.txt" "$DEVB/s1.app-log.txt" || true
   cat "$DEVB/s1.app-log.txt" >&2 || true
   echo "DEVICE FAIL: live app exited nonzero ($(cat "$DEVB/s1.apprc"))" >&2
@@ -326,7 +334,8 @@ echo "   non-vacuity OK (live stream != all-neutral stream)"
 # device replay of the SAME recorded trace
 adb -s "$DEV" push "$DEVB/s1.trace.txt" "$DTMP/" >/dev/null
 tsum="$(shasum -a 256 "$DEVB/s1.trace.txt" | cut -d' ' -f1)"
-dsum="$(dsh "sha256sum $DTMP/s1.trace.txt" | awk 'NF{print $1; exit}')"
+# iter 52 parser audit: strict full-line device digest parse
+dsum="$(rig_dev_sha256 "$DTMP/s1.trace.txt")" || exit 1
 if [ "$dsum" != "$tsum" ]; then
   echo "DEVICE FAIL: pushed replay trace sha mismatch (device $dsum, host $tsum)" >&2
   exit 1

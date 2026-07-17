@@ -39,8 +39,12 @@ typedef struct {
 // nonzero = loud failure (the caller must bail, never limp on).
 int platform_init(const char *title);
 
-// Present one RAST_W x RAST_H RGB565 frame.
-void platform_present(const uint16_t *fb565);
+// Present one RAST_W x RAST_H RGB565 frame. Returns 0 iff the frame
+// verifiably reached the backend (SDL_Flip / render-copy rc propagated);
+// nonzero = the present FAILED (iter 52, review-50 M2: the app counts
+// failures and the check gates on 0 — a silently no-op flip must never
+// pass while nothing reaches the screen).
+int platform_present(const uint16_t *fb565);
 
 // Pump events + read current input state into *in (all-false when the
 // backend has no input source).

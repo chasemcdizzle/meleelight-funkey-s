@@ -69,17 +69,68 @@ for (const v of f) {
 '
 echo "corpus pin OK (16 unique sampled frames)"
 
-# frozen params (strict JSON reads; node -p, no eval of untrusted text)
+# frozen params. FRAMES_LIST/GOLDEN come from expected-render.json whose
+# corpus pin was validated above (node JSON reads, exact compare below).
 FRAMES_LIST=$(node -p "require('./$EXP').sampledFrames.join(',')")
 GOLDEN=$(node -p "require('./$EXP').golden")
 [ "$GOLDEN" = "g01" ] || { echo "check-render: expected golden g01, got $GOLDEN" >&2; exit 1; }
-G_NAME=$(node -p "require('./oracle/goldens/manifest.json').goldens.find(g=>g.id==='g01').name")
-G_TRACE=$(node -p "require('./oracle/goldens/manifest.json').goldens.find(g=>g.id==='g01').trace")
-G_SEED=$(node -p "String(require('./oracle/goldens/manifest.json').goldens.find(g=>g.id==='g01').seed)")
-G_P1=$(node -p "String(require('./oracle/goldens/manifest.json').goldens.find(g=>g.id==='g01').p1)")
-G_P2=$(node -p "String(require('./oracle/goldens/manifest.json').goldens.find(g=>g.id==='g01').p2)")
-G_STAGE=$(node -p "String(require('./oracle/goldens/manifest.json').goldens.find(g=>g.id==='g01').stage)")
-G_FRAMES=$(node -p "String(require('./oracle/goldens/manifest.json').goldens.find(g=>g.id==='g01').frames)")
+# g01 match params — iter 52 parser audit: the reviewed no-eval STRICT
+# line parser (check-device-g01.sh gparams class: iter 39 M4 / iter 40
+# round 2) replaces eight bare `node -p` scrapes whose missing-field
+# failure mode was the string "undefined" leaking into command args.
+unset name seed p1 p2 stage frames trace
+gparams="$(node -e "
+  const m=require('./oracle/goldens/manifest.json');
+  const g=m.goldens.find(x=>x.id==='g01');
+  if(!g) throw new Error('g01 missing from manifest');
+  console.log('name='+g.name);
+  console.log('seed='+g.seed);
+  console.log('p1='+g.p1); console.log('p2='+g.p2);
+  console.log('stage='+g.stage);
+  console.log('frames='+g.frames);
+  console.log('trace='+g.trace);
+")" || { echo "check-render: g01 manifest param extraction failed" >&2; exit 1; }
+if [ -z "$gparams" ]; then
+  echo "check-render: g01 manifest param extraction returned nothing" >&2
+  exit 1
+fi
+while IFS='=' read -r gk gv; do
+  case "$gk" in
+    name)
+      if ! [[ "$gv" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+        echo "check-render: manifest g01.name fails validation ('$gv')" >&2
+        exit 1
+      fi
+      name=$gv
+      ;;
+    trace)
+      if ! [[ "$gv" =~ ^[a-z0-9][a-z0-9-]*\.trace\.json$ ]]; then
+        echo "check-render: manifest g01.trace fails validation ('$gv')" >&2
+        exit 1
+      fi
+      trace=$gv
+      ;;
+    seed|p1|p2|stage|frames)
+      if ! [[ "$gv" =~ ^[0-9]+$ ]]; then
+        echo "check-render: manifest g01.$gk not a decimal integer ('$gv')" >&2
+        exit 1
+      fi
+      printf -v "$gk" '%s' "$gv"
+      ;;
+    *)
+      echo "check-render: unexpected manifest extraction line '$gk=$gv'" >&2
+      exit 1
+      ;;
+  esac
+done <<< "$gparams"
+: "$name" "$seed" "$p1" "$p2" "$stage" "$frames" "$trace"
+G_NAME=$name
+G_TRACE=$trace
+G_SEED=$seed
+G_P1=$p1
+G_P2=$p2
+G_STAGE=$stage
+G_FRAMES=$frames
 FROZEN=oracle/goldens/$G_NAME.sha256.json
 made "$FROZEN" "oracle/goldens/$G_TRACE"
 
@@ -261,8 +312,18 @@ for f in "${SAMPLED[@]}"; do
   cmp "$BUILD/render-a/$tag.pgm" "$BUILD/render-b/$tag.pgm"
 done
 echo "x2 C renders byte-identical (stream + all PPM/PGM)"
-grep '^render-only ns:' "$BUILD/g01.gfx-rtiming-a.txt" || {
-  echo "check-render: render timing line missing" >&2; exit 1; }
+# iter 52 parser audit (whitelist grammar): measured producer line
+# (gfx_replay.c) is exactly
+#   render-only ns: avg=<int> p50=<int> p99=<int> max=<int> (n=<frames>, host)
+# — anchored full-line match with EXACTLY one occurrence (the old prefix
+# grep accepted a truncated/mangled tail).
+rt_re="^render-only ns: avg=[0-9]+ p50=[0-9]+ p99=[0-9]+ max=[0-9]+ \(n=${G_FRAMES}, host\)\$"
+rt_cnt="$(grep -Ec "$rt_re" "$BUILD/g01.gfx-rtiming-a.txt")" || true
+if [ "$rt_cnt" != 1 ]; then
+  echo "check-render: expected exactly 1 render-timing line matching the pinned grammar, got $rt_cnt" >&2
+  exit 1
+fi
+grep -E "$rt_re" "$BUILD/g01.gfx-rtiming-a.txt"
 
 # --- 5. C stream still conforms with the renderer linked + active ------------------
 rm -f "$BUILD/g01.gfx-run.json"

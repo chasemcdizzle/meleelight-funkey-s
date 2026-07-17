@@ -77,9 +77,22 @@ int platform_init(const char *title) {
   return 0;
 }
 
-void platform_present(const uint16_t *fb565) {
+// MEASURED DEVICE BASELINE (iter 52 evidence probe,
+// .loop/m3-task4r52-probe-sdlflip.log): the FunKey kernel fb driver
+// rejects FBIOPAN_DISPLAY, so the device's patched libSDL-1.2 returns
+// -1 from EVERY SDL_Flip with exactly this error string — while the
+// present demonstrably runs (the flip's rotation blit costs ~1.0-1.5 ms
+// per frame, identical to the iter-50 known-good run; gmenu2x rides the
+// same driver). Whitelist-grammar posture (PROCESS §3, applied to a C
+// API): accept rc 0 OR exactly this pinned benign signature; ANY other
+// flip failure is a REAL failed present the app counts and the check
+// gates on. Physical-panel truth stays with the M3 human gate (render
+// is non-checksummed by design). Changing this pin is a reviewed change.
+static const char kBenignFlipErr[] = "ioctl(FBIOPAN_DISPLAY) failed";
+
+int platform_present(const uint16_t *fb565) {
   if (SDL_MUSTLOCK(g_screen)) {
-    if (SDL_LockSurface(g_screen) != 0) return; // transient: skip this present
+    if (SDL_LockSurface(g_screen) != 0) return 1; // failed present (counted by the app)
   }
   const int pitch = g_screen->pitch;
   uint8_t *dst = (uint8_t *)g_screen->pixels;
@@ -88,7 +101,11 @@ void platform_present(const uint16_t *fb565) {
            (size_t)RAST_W * 2);
   }
   if (SDL_MUSTLOCK(g_screen)) SDL_UnlockSurface(g_screen);
-  SDL_Flip(g_screen);
+  // SDL_Flip rc propagated (iter 52, review-50 M2): a failing flip is
+  // COUNTED unless it matches the pinned measured-benign signature.
+  if (SDL_Flip(g_screen) == 0) return 0;
+  const char *err = SDL_GetError();
+  return (err && strcmp(err, kBenignFlipErr) == 0) ? 0 : 1;
 }
 
 void platform_poll(PlatformInput *in) {

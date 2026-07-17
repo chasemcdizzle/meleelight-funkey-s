@@ -434,6 +434,7 @@ int main(int argc, char **argv) {
   if (!tim || !stream) sim_fatal("oom (RAM buffers)");
   size_t streamLen = 0;
   long skips = 0;
+  long presentFails = 0; // platform_present nonzero rc count (review-50 M2)
   bool shotTaken = false;
 
   // Live-session recording (RAM; flushed post-run — no frame-loop I/O).
@@ -494,7 +495,7 @@ int main(int argc, char **argv) {
     if (!skip) {
       gfx_render_frame(&g_gfx, &G);
       t2 = now_ns();
-      platform_present(g_gfx.rz.fb);
+      if (platform_present(g_gfx.rz.fb) != 0) presentFails++;
       t3 = now_ns();
       if (isShot) {
         memcpy(g_shot_fb, g_gfx.rz.fb, sizeof g_shot_fb);
@@ -573,11 +574,18 @@ int main(int argc, char **argv) {
   }
   ml_sb_free(&rec);
 
-  // post-run summary (stderr; informational — the host judge decides)
+  // post-run summary (stderr). GRAMMAR IS LOAD-BEARING (iter 52,
+  // review-50 M2/M3 + the PROCESS §3 whitelist-grammar rule): the check
+  // scripts parse this line with an anchored full-line pattern —
+  //   ^gfx_app: <frames> frames, <skips> render skips, <fails> failed
+  //    presents, wall <ms> ms, pace=<pace> budget=<ns> ns$
+  // and gate on failed presents == 0 and the device wall-clock window.
+  // Any change here is a paired change with those parsers.
   fprintf(stderr,
-          "gfx_app: %ld frames, %ld render skips, wall %" PRIu64
-          " ms, pace=%ld budget=%" PRIu64 " ns\n",
-          frames, skips, (tEnd - tStart) / 1000000ull, pace, budgetNs);
+          "gfx_app: %ld frames, %ld render skips, %ld failed presents, "
+          "wall %" PRIu64 " ms, pace=%ld budget=%" PRIu64 " ns\n",
+          frames, skips, presentFails,
+          (tEnd - tStart) / 1000000ull, pace, budgetNs);
   if (skips > 0) {
     fprintf(stderr, "gfx_app: skipped frames:");
     int listed = 0;
