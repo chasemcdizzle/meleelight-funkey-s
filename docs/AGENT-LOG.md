@@ -3629,3 +3629,169 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   clean, done-check re-run COLD → DEVICE CONFORMS g01 exit 0
   (.loop/driver-cold-task1r40-donecheck.log, cache-HIT path). Round-3
   review arc opens next (diff-scoped, pointed at the §3 review bar).
+
+
+## iter 41 — 2026-07-16 — M3 task 1 REVIEW-HARDENING ROUND 3: shared no-reclaim lock, corpus identity pins, push provenance
+
+- PRE-REGISTRATION (frozen before first edit; method per PROCESS §2).
+  Scope: the driver's triage of `.loop/review-40-1.log` (Tier-A round 3,
+  VERDICT: NO-GO) — 5 surgical fixes + 1 written re-disposition. No
+  other restructuring. Per item — fix, tooth:
+  - **1 (LOCK — close the class by REMOVING the cleverness; rounds 1-3
+    recurring)**: replace the checkout-local `$DEVB/.rig.lock` +
+    dead-PID reclamation with ONE mkdir-atomic lock at a SHARED host
+    path keyed by the device id — `${TMPDIR:-/tmp}/mlfk-rig-<DEV>.lock`
+    (the DEVICE is the shared resource; every checkout/worktree
+    contends on the same lock) — and NO reclamation logic at all: an
+    existing lock is a loud death printing its path, its age, and
+    "remove manually with rm -rf if no rig is running". No pid files,
+    no liveness probes, no auto-delete. Trap releases the lock on all
+    exits (best-effort, visible WARN on failure); the trap is installed
+    only AFTER acquisition, so a losing contender can never release the
+    winner's lock. Tooth T1: pre-made lock dir → loud death with
+    path/age/manual-rm text, dir untouched; manual rm; normal serial
+    reruns unaffected (proven by every subsequent run acquiring after
+    the prior run's trap release — including after tooth-run deaths).
+  - **2 (CORPUS IDENTITY)**: the sweep corpus is deterministic
+    (measured this iter: gen-inputs.js ×2 → byte-identical,
+    sha256 b164802a98932c2c8780febfe2c857d5771d12a327d3465291221861da6b3d05,
+    257,287 lines). Freeze that sha256 as a literal CORPUS_SHA256 next
+    to CORPUS_LINES and assert the freshly generated corpus hash
+    matches BEFORE any use; keep the count pin. NOTE (measured): the
+    fdlibm sweep [4] and the mathsweep [5] consume this ONE generated
+    file (`$DEVB/fdlibm-inputs.txt`) — the two requested literals
+    collapse to a single pin covering both sweeps' corpora; the format
+    corpus already carries its own frozen pin (expected-format.json via
+    check-format-pins.js). Tooth T2: gen step temp-perturbed to
+    duplicate one line over another (count PRESERVED at 257,287) →
+    dies at the sha pin, pre-docker, pre-device; restore.
+  - **3 (PUSH PROVENANCE)**: immediately after the adb push, compute
+    the device-side sha256 (via the nonce dsh) of EVERY pushed binary
+    ($ARMBINS) and compare each against the stamp's recorded hash;
+    any mismatch = hard fail BEFORE chmod/run. This binds the bytes
+    the device actually received to the stamp — the only observable
+    edge of the TOCTOU class (see disposition below). Tooth T3 (probe
+    run): temp-insert a device-side sabotage right after the push
+    (dsh appends one byte to $DTMP/mathsweep_arm) → digest death names
+    the binary, nothing device-side runs; restore. (Script bytes are
+    stamp input → this probe forces one docker rebuild.)
+  - **4 (srchash symlinked-DIR coverage)**: run find with -L (descends
+    directory symlinks; hashes through file links). Under -L, -type l
+    matches ONLY broken links — so the predicate splits: hash
+    `-type f` (regular files + resolvable file links, name-filtered
+    *.c/*.h), and a SEPARATE `-type l` scan over the same roots FAILS
+    LOUDLY on any broken link (never a silent skip). Tooth T4: temp
+    dangling symlink `port/sim/tooth_r41_dangling.c` → loud death
+    naming the broken link at step [3], pre-docker; remove.
+  - **5 (count-pipeline status)**: the `tr | wc | tr` count inside $()
+    gets an explicit status check (pipefail is set in srchash; the
+    assignment's exit status is verified with a loud death) plus an
+    empty/non-numeric guard (the old bare `[ -lt ]` on a garbage value
+    errors and reads as "condition false"). Tooth T5 (unit — not a
+    full invocation): srchash extracted from the script's OWN bytes
+    (sed line range, zero transcription) into a sandbox with a
+    PATH-shimmed `tr`: (a) tr exits 1 → "file-count pipeline failed";
+    (b) tr emits non-numeric garbage rc 0 → "non-numeric source-file
+    count". Positive control: unshimmed extracted function returns a
+    64-hex hash.
+  - Run cap: ≤ 5 full check-device-g01.sh invocations — planned
+    exactly 5: T1 (lock, dies pre-everything), T2 (corpus sha, dies
+    pre-docker), T4 (symlink, dies pre-docker), T3 (sabotage probe,
+    one docker rebuild + push, dies at the digest check), final cold
+    done-check (second docker rebuild — final script bytes differ from
+    the probe's). T5 is a unit tooth (no invocation, no device, no
+    docker). Pass criteria: cold `bash port/sim/device/
+    check-device-g01.sh` → DEVICE CONFORMS g01, exit 0, AND every
+    tooth fires as specified. Refutation shapes: a tooth that does not
+    fire = defective guard → fix, re-run THAT tooth once (overage
+    reported explicitly); a done-check failure not explained by an
+    intended guard → STOP and report, never weaken. Docker SERIAL;
+    FOREGROUND polling; logs → .loop/m3-task1r41-*.
+- RESULTS (all teeth fired as pre-registered; run count 5/5 — T1, T2,
+  T4, T3-probe, cold done-check; T5 unit; none wasted, none over cap;
+  logs `.loop/m3-task1r41-*`):
+  - **1 fixed + T1 proven**: lock is now
+    `${TMPDIR:-/tmp}/mlfk-rig-${DEV}.lock` — shared across every
+    checkout/worktree on the host, keyed by the device id, mkdir-atomic,
+    ZERO reclamation code (no pid file, no kill -0, no auto-delete);
+    trap-release after acquisition only, visible WARN if release fails.
+    Tooth: pre-made lock dir → `DEVICE FAIL: rig lock … already exists
+    (age: 0 s) … remove it manually: rm -rf '…'`, exit 1, dir untouched
+    (.loop/m3-task1r41-tooth-lock.log). Serial reruns unaffected: every
+    subsequent run acquired cleanly, including after the T2/T4 tooth
+    runs died mid-run (trap released; verified no lock residue).
+  - **2 fixed + T2 proven**: CORPUS_SHA256=
+    b164802a98932c2c8780febfe2c857d5771d12a327d3465291221861da6b3d05
+    frozen next to CORPUS_LINES=257287 (measured ×2 byte-identical this
+    iter); freshly generated corpus must hash to the literal BEFORE any
+    use; count pin kept. The fdlibm sweep [4] and mathsweep [5] consume
+    this ONE file — single literal covers both (recorded in the script
+    comment; fmt corpus keeps its own expected-format.json pin). Tooth:
+    gen step temp-perturbed to [line1]+[lines 1..N-1] (count PRESERVED,
+    printed `257287 sweep inputs`) → `DEVICE FAIL: generated corpus
+    sha256 8cd24988… != frozen pin b164802a…`, exit 1, pre-docker,
+    pre-device (.loop/m3-task1r41-tooth-corpussha.log).
+  - **3 fixed + T3 proven**: post-push, device-side sha256 of all 4
+    pushed binaries (one nonce-dsh `cd $DTMP && sha256sum $ARMBINS`)
+    compared per-binary against the stamp records with 64-hex
+    validation — mismatch dies BEFORE chmod/run. Tooth (probe run,
+    docker rebuild as expected): temp-inserted `dsh "printf X >>
+    $DTMP/mathsweep_arm"` right after the push → `DEVICE FAIL:
+    device-side mathsweep_arm sha256 != stamp record (device 3e8bffaa…,
+    stamp b3e5e632…) — refusing to run it`, exit 1, nothing executed
+    on the device (.loop/m3-task1r41-tooth-pushprov.log). Positive path
+    live on the cold run: `push provenance: all 4 device-side binaries
+    match the stamp`.
+  - **4 fixed + T4 proven**: srchash find runs with -L (symlinked dirs
+    descended, file links hashed through); predicate split per -L
+    semantics — a SEPARATE `-type l` scan (broken links only under -L)
+    dies loudly listing every broken link, then `-type f` builds the
+    NUL-framed hash list. Tooth: dangling
+    `port/sim/tooth_r41_dangling.c` → `DEVICE FAIL: srchash: broken
+    symlink(s) in the source tree: port/sim/tooth_r41_dangling.c`,
+    exit 1, pre-docker (.loop/m3-task1r41-tooth-symlink.log); removed
+    after.
+  - **5 fixed + T5 proven (unit)**: count pipeline `n=$(tr|wc|tr)` gets
+    an explicit `|| die` (pipefail is set in srchash and $() inherits
+    it) + empty/non-numeric case death before any `[ -lt ]`. Tooth:
+    srchash EXTRACTED from the script's own bytes (sed range, zero
+    transcription) into an env -i sandbox: PATH-shimmed `tr` exiting 1
+    → `file-count pipeline failed` rc 1; garbage-emitting `tr` →
+    `non-numeric source-file count ('xyz')` rc 1; unshimmed positive
+    control → rc 0, 64-hex hash
+    (.loop/m3-task1r41-tooth-countpipe.log).
+- done-check: cold `bash port/sim/device/check-device-g01.sh` →
+  **DEVICE CONFORMS g01**, exit 0, through the full REBUILD path (script
+  bytes are stamp input; both expected rebuilds happened — probe + final)
+  — .loop/m3-task1r41-donecheck.log: STREAM MATCH 3600/3600 frames
+  exact, rngCalls=134, rngCallsOutsideStep=1, specVersion=1; device sim
+  wall 21 s; corpus sha pin + push provenance live; lock acquired and
+  released; device scratch verified gone.
+- **RE-DISPOSITION (per driver triage; do NOT implement):** round 3's
+  "srchash captured once / editor save mid-run / concurrent build
+  replacing binaries pre-push" findings are the
+  TOCTOU-with-concurrent-mutator class ALREADY dispositioned in the
+  iter-40 entry ("DISPOSITIONS IN WRITING" (a)) — the serial
+  single-writer loop excludes a concurrent mutator by construction, and
+  the PROCESS.md §3 review bar backs the disposition. Round 3 re-raised
+  the same class in accident framing (an "ordinary editor save" IS a
+  concurrent mutator of the single-writer tree). No new fix is owed to
+  the class itself; fix 3 (push provenance) additionally binds the
+  DEVICE-side bytes to the stamp, which is the only OBSERVABLE edge of
+  that class — whatever mutates host-side mid-run, the bytes the device
+  executes now provably match the stamp that was sha-verified against
+  the sources. Pointer: AGENT-LOG iter 40, disposition (a).
+- ZOOM OUT (rule 8): three rounds of lock findings shared one systematic
+  cause — every clever arm (dead-PID reclamation, per-checkout paths,
+  pid liveness) was itself a new race surface. The class fix was
+  SUBTRACTION: one shared mkdir + one loud death + one manual recovery
+  path; there is nothing left to review. Same shape as the corpus pin:
+  cardinality checks, grammar checks, and host==device comparison all
+  derived their expectation from the artifact under test — the frozen
+  content hash is the first pin INDEPENDENT of the generator, and it
+  subsumes the count (kept only as a friendlier first diagnostic).
+  Class rule for task 2+: a rig resource shared across checkouts locks
+  at a host-global path keyed by the RESOURCE id; deterministic
+  generated inputs get measured-then-frozen content-hash literals, not
+  size pins; device-received bytes are verified against the stamp, not
+  the host copy.

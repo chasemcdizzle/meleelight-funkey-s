@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-16, post-iter-40 writer)
+## Live right now (updated: 2026-07-16, post-iter-41 writer)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -42,14 +42,27 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   (anti-laundering); STATE recovery pointer (monotonic log ids);
   reviewed-pin FREEZE MANIFEST for gate evidence — verify_m3.sh must
   hard-refuse unreviewed evidence producers (task-7 requirement).
-- **In flight**: Tier-A Codex review ROUND 3 over the round-2-hardened
-  rig (diff-scoped, pointed at PROCESS.md §3's review bar); M3 task 2
-  writer launches on GO (all-8 device conformance + sim-only p99,
-  `check-device-conform.sh` — must inherit adbsh.sh nonce-dsh +
-  pullv/stamp/lock/rehash-before-push plumbing verbatim; sweep pin
-  referenced, not re-derived).
-- **Latest AGENT-LOG entry**: driver 2026-07-16 post-iter-40
-  (reservations amendments); latest iter entry: 40.
+- **Iter 41 (M3 task 1 review-hardening ROUND 3) DONE**: round-3 triage
+  (`.loop/review-40-1.log`, NO-GO) — 5 surgical fixes with teeth proven:
+  shared no-reclaim rig lock at `${TMPDIR:-/tmp}/mlfk-rig-<dev>.lock`
+  (mkdir-atomic, keyed by DEVICE id, zero reclamation code — existing
+  lock = loud death + manual rm); corpus IDENTITY pin CORPUS_SHA256=
+  b164802a…b3d05 frozen next to CORPUS_LINES (one file feeds BOTH
+  sweeps); post-push device-side digest of all 4 binaries vs stamp
+  ("push provenance") before anything runs; srchash find -L (symlinked
+  dirs descended, broken links = loud death); count-pipeline explicit
+  status + non-numeric guard. TOCTOU-with-concurrent-mutator re-raise
+  RE-dispositioned pointing at the iter-40 record (fix 3 covers its
+  only observable edge). Cold done-check DEVICE CONFORMS g01 exit 0,
+  rebuild path; logs `.loop/m3-task1r41-*`.
+- **In flight**: Tier-A Codex review ROUND 4 over the round-3-hardened
+  rig (diff-scoped, pointed at PROCESS.md §3's review bar) pending; M3
+  task 2 writer launches on GO (all-8 device conformance + sim-only
+  p99, `check-device-conform.sh` — must inherit adbsh.sh nonce-dsh +
+  pullv/stamp/shared-lock/push-provenance plumbing verbatim; sweep +
+  corpus pins referenced, not re-derived).
+- **Latest AGENT-LOG entry**: iter 41 (2026-07-16, round-3 hardening);
+  latest log id: .loop/m3-task1r41-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
