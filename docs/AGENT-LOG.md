@@ -8478,3 +8478,152 @@ folded into the M4 ladder below. Issue #18 closed by the driver.
   replay_util compile clean against the new headers (proven in-session).
   check-sim.sh (which links EVERY cluster TU) passing 8/8 inside the
   done-check is the integration proof.
+
+## iter 65 — 2026-07-17 — M4 task 2 PRE-REGISTRATION: renderer vfx + overlay/banner/background + IoU re-freeze (frozen before any build edit; PROCESS §2)
+
+- PRE-REGISTRATION (task: fix_plan §M4 task 2. Surface: port/gfx/ +
+  minimal port/sim/ml_events.{h,c} glue (justified below). port/sim/calib/*
+  NEVER edited (concurrent Codex review); oracle/ + frozen goldens
+  untouchable).
+  - **Template survey (MEASURED, pre-implementation)**: the vfx[name]
+    templates (src/main/vfx/vfxData/*.js, 45 modules + the vfx.js
+    wallBounce/ceilingBounce aliasing) are CODE LITERALS but pure data
+    construction — authored path arrays (impactLand 3-frame point lists,
+    falconpunch/firefox* bezier frames, phantasm Int16Array in
+    drawArrayPathCompress format, normalhit path1/2/3, sing path,
+    blastzoneExplosion multi-path) + frames/colour scalars; plus the
+    swordSwings table (src/main/swordSwings.js, 39 lines of point pairs)
+    read by dVfx.swing. VERDICT: executed-data dump (hard rule 5 spirit —
+    never retype paths): NEW artifact VFXDATA1 dumped from the LIVE page
+    (post-alias vfx object + swordSwings walked with String(x) numbers),
+    committed as port/gfx/vfxdata-frozen.txt with the gfxdata-frozen cmp
+    tripwire (fresh capture must byte-match; re-freeze = reviewed change).
+    GFXDATA1 format is NOT touched (no device-script churn this task).
+  - **HUD text plane**: upstream draws percent/timer/banner via canvas
+    Arial text (fonts measured: 900 53px percents ×0.8 x-scale; 900
+    40px + 900 25px match timer — versusMode==0 in the harness domain, so
+    the timer branch DRAWS (measured startGame: versusMode stays 0, stocks
+    default 4); italic 900 200px "Ready" / 900 400px "Go!" / italic 700
+    70px countdown (start.js)). C has no font engine → EXECUTED GLYPH
+    ATLAS: per-glyph fill+stroke alpha masks + advances, and the static
+    "Ready"/"Go!" composite sprites, rasterized by the browser at capture
+    time, downscaled to device scale (k=0.2), committed as
+    port/gfx/vfxglyphs-frozen.txt. Byte-stability arm (measured in
+    session): if two fresh glyph dumps are byte-identical → adopt the
+    gfxdata regenerate+cmp tripwire; else → C consumes the COMMITTED
+    frozen atlas only, per-run drift is judged by the IoU itself
+    (documented in the artifact header; decided by the ×2 measurement,
+    recorded in the DONE entry).
+  - **Sampled-frame vfx coverage (MEASURED from the frozen iter-64
+    captures, no new runs — g01 union over moves-shared/fox/marth +
+    article + physics + hitdet + asshort jsonls)**: live g01 vfx =
+    blastzoneExplosion {1237,3512} · circleDust 15 (75,85,1128,…) ·
+    clank {2939,3207} · doubleJumpRings {2275} · hitCurve/hitFlair/
+    hitSparks 9 (2806…3289) · impactLand 10 (75,…) · laser 27 (172…1472) ·
+    normalhit 16 (183…3172) · swing 414 (424…3485) · tech {2955} + boot
+    entrance/start (frames 1-60 / 1-120). **firefoxcharge/firefoxlaunch/
+    shine/shineloop have ZERO live frames in g01 — AND in every other
+    golden** (g02/g03/g05/g07/g08 surveyed; g03's live firefoxtail 35 is
+    falcon's up-special, not fox's). Chase's playtest saw firefox+shine
+    missing, so corpus extension INSIDE any golden cannot cover them →
+    **SYNTHETIC INJECTION**: a frozen injection table in
+    expected-render.json (frame 150 — measured vfx-quiet: entrance ≤60,
+    start ≤120, laser ≥172, swing ≥424) spawns the SAME configs on BOTH
+    sides at the same point in the frame (after tick spawns, before
+    renderVfx; browser side inside the native-RNG render window — none of
+    the injected names draw seeded RNG at spawn; STREAM MATCH still
+    gates): firefoxcharge, firefoxtail, shine, dashDust, groundBounce +
+    firefoxlaunch/shineloop (the latter two are PLAYER-STATE-GATED
+    upstream — actionState UPSPECIALLAUNCH / player.shineLoop — so both
+    sides draw NOTHING on a non-upspecial frame: injected as no-crash
+    structural coverage, honestly stated as visually UNVERIFIED; visual
+    authority = task-3 device rung + Chase's M4 playthrough).
+  - **Corpus (reviewed pin change, 16 → 24 g01 frames)**: keep the frozen
+    16, add 76 (impactLand+circleDust live — circleDust circle values are
+    SEEDED upstream and recovered bit-exactly via the dust pass-through
+    below: a real differential), 150 (injection frame), 184 (normalhit t2
+    + laser muzzle t3), 426 (marth swing trail), 1238 (blastzoneExplosion
+    t2), 2277 (doubleJumpRings t3), 2807 (hitSparks/hitFlair t2), 2956
+    (tech t2). sampledFrameCount 16→24 in all three twin pins
+    (expected-render.json / check-render.sh / iou.js) — sanctioned by the
+    task brief, documented here.
+  - **ml_events glue (STRICTLY REQUIRED, justification)**: upstream
+    circleDust circles[0..3] are functions of the 4 SEEDED draws
+    (drawVfx.js:15-18) × activeStage.scale; the draws are already burned
+    inside ml_drawVfx_cfg but the VALUES are discarded — without them the
+    renderer cannot reproduce the browser's (seeded, deterministic) dust
+    positions. Change: MlVfx gains has_dust/dust[4] (raw u01 draw values,
+    filled by ml_drawVfx_cfg for circleDust only, sink invoked AFTER the
+    draws with the same draw order); cb_vfx canon UNTOUCHED (dust is not
+    part of the upstream config — replay comparisons unchanged); queues
+    unchanged. Regression: check-vfx-seam.sh re-run (required by the
+    constraint since ml_events is touched) + check-sim.sh.
+  - **IoU methodology deltas (frozen BEFORE judgment)**: browser mask
+    widens fg1|fg2 → fg1|fg2|**UI** (renderOverlay draws on UI; vfx +
+    banner on fg2); reduced sequence extends to clearScreen → drawStage →
+    renderPlayer× → renderArticles → **renderVfx() → renderOverlay(true)**
+    every frame (timer/module-state parity; still NO drawBackground — bg
+    planes are not in the mask on either side; the C compositor draws
+    background art into the FB with the NEW rast ink-suppression flag so
+    device pixels get art without polluting the ink plane). Injection as
+    above. 5x5 any-ink downscale, letterbox band, pairing: unchanged.
+    Non-perturbation guards unchanged (native-RNG swap around the whole
+    render call incl. render-plane drawVfx re-spawns (burning/firehit/
+    laser sparks/shine stars) + outOfCameraTimer snapshot; render-plane
+    Howl plays (dVfx.start ready/go) shift only the howler id counter,
+    which is NOT on the checksum surface — every capture still
+    STREAM-MATCH gated). C render-plane randomness = a render-LOCAL
+    mulberry32 (fixed seed) — never ml_random, never the seeded chain;
+    ×2 C byte-stability holds by construction.
+  - **Known browser-only residuals (documented, absorbed by the measured
+    threshold)**: percentShake (native-RNG + wall-clock setTimeout decay —
+    C draws unshaken), screenShake fg1 translate transients (same class,
+    already present in the M3 corpus), canvas AA/text boundary dilation
+    (the M3 boundary class, now with text glyphs), render-plane RNG
+    divergence (star scatter, firefoxtail jitter, electrichit lightning —
+    same shapes, different samples).
+  - **Threshold procedure**: OLD pin 0.91 RETIRES with the exposure it
+    measured (vfx/overlay-blind reduced sequence — that exposure closes
+    this task). NEW seed = **0.85** BEFORE the first vfx-inclusive pass
+    (rationale: text glyphs + boundary-heavy vfx add browser-side
+    dilation classes the C 0.2-px plane cannot dilate into). After the
+    first honest run: if min(IoU) > seed → freeze at floor(min*100)/100,
+    never loosened after. Refutation shapes: (a) any frame < seed →
+    classify render bug vs mask-methodology via overlay diffs
+    (browserOnly/cOnly counts), ONE bounded round, then STOP with honest
+    per-frame numbers (never freeze to paper over an unexplained drop);
+    (b) capture STREAM MISMATCH → a render-side sim write escaped the
+    guard model — widen snapshot/restore, rerun (counts against the
+    capture cap); (c) C STREAM MISMATCH with renderer+sink linked → the
+    sink/renderer perturbs the sim — real bug, fix before IoU work.
+  - **Run caps**: ≤3 fresh browser captures + ≤10 C render iterations
+    against a cached capture (MLFK_GFX_REUSE_CANVAS); overrun → STOP,
+    honest FAIL report.
+  - **Teeth (perturb → observe → restore, logged)**: T1 vfx draw-fn
+    perturbation (impactLand general() scale ×1.5) → IoU drop on the
+    affected frames (76/1238), restore proven by re-judge; T2 template
+    nibble in vfxdata-frozen.txt → cmp-tripwire death (or, under the
+    frozen-consume glyph arm, IoU drop) ; T3 C overlay drop → IoU drop on
+    HUD-bearing frames; T4 C-side injection drop (browser still injects)
+    → IoU drop on f150; T5 C banner drop → IoU drop on f30 (Ready) +
+    f100 (Go!). Standing: ×2 byte-stability, both STREAM MATCHes, closure
+    binding, corpus pins.
+  - **Regression**: bash port/sim/check-sim.sh → SIM CONFORMS (ml_events
+    touched; logged) + bash port/sim/calib/check-vfx-seam.sh →
+    VFX SEAM MATCH (ml_events touched — required). Done-check: cold
+    `bash port/gfx/check-render.sh` → RENDER OK, exit 0.
+
+## driver — 2026-07-17 — LOOP STOP: usage-credits exhausted mid-iter-65
+
+- The iter-65 writer (M4 task 2: renderer vfx + overlay) died on "Usage
+  credits are required for this model" immediately after freezing its
+  pre-registration (its AGENT-LOG pre-reg entry + ~2-file ml_events glue
+  edit are the only tree changes — dirty tree LEFT AS-IS for the resume
+  writer to review per the ccebc9b precedent; nothing verified).
+- State at stop: M4 task 1 DONE + driver-cold-verified (c637eb0,
+  pushed). QUEUED: vfx-rig hardening (.loop/review-64-triage.md, 4
+  Mediums). IN FLIGHT AT DEATH: task 2 (restart per its fix_plan spec +
+  the iter-64 task-2 notes; the dead writer's pre-registration is in
+  this file above).
+- Loop STOPPED per the standing rule. Resume: /loop with the M4
+  continuation after credits are restored (/login or usage top-up).
