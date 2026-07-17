@@ -3,7 +3,32 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-17, S1 RATIFIED — M3 COMPLETE)
+## Live right now (updated: 2026-07-17, iter 63 — PHASE M4, REPLAN done)
+
+- **Phase: M4 — Full-game parity (REPLAN complete, iter 63)**: fix_plan
+  `Current phase: M4`; §M4 concretized as a conventions block + 14
+  dependency-ordered tasks with runnable done-checks; M4 EXIT GATE
+  concretized into CLAUDE.md §Commands (`bash
+  port/sim/device/verify_m4.sh` — full-game trace suite on device at
+  60 fps with audio+music + menu flows + OPK-into-FOH, verify_m3.sh
+  freeze-manifest/authoritative discipline inherited; on mechanical
+  pass the DRIVER emits `LOOP STOP: m4-complete — awaiting Chase
+  acceptance playthrough`). Ladder: (1) vfx seam widening
+  sim+captures; (2) renderer vfx + overlay/banner/bg + IoU re-freeze;
+  (3) stage legibility at device scale; (4) ai.js C port
+  (capture-replay verified); (5) live CPU integration (bridge retired
+  from live path, d1/d9 coverage); (6) mixer fidelity + play-ids +
+  stop-path; (7) music streaming from SD; (8) skip-burst attribution
+  instrument; (9) FOH core + flows host; (10) FOH device; (11) target
+  test data+sim; (12) target test FOH+device; (13) SD persistence;
+  (14) verify_m4.sh assembly. Key PROVISIONAL calls (AGENT-LOG iter
+  63): target-plane = a SEPARATE parallel stream (CHECKSUM.md stays
+  v1, no re-freeze); M4 goldens at port/goldens-m4/ (oracle/ is
+  M0-only); menus verified by structural flow scripts + the
+  checksummed match-launch bridge (no browser IoU); outOfCameraTimer
+  stays render-excluded everywhere; scope exclusions (target builder,
+  replay UI, multiplayer, credits). Measured: fd_tan already
+  vendored+swept — "adds tan" was pre-satisfied at M0.
 
 - **Iter 62 (M3 hardening — gate relay prefix, true-respawn poll,
   probe-order attribution) DONE**: all three .loop/review-60-triage.md
@@ -542,9 +567,10 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   M4 seeds registered (mixer fidelity + music, stop-path coverage,
   skip-burst instrument). Regressions green: DEVICE RENDER OK (11.065
   ms full p99) + SIM CONFORMS (.loop/m3-task6-reg-{render,sim}.log).
-- **Latest AGENT-LOG entry**: iter 62 (M3 hardening DONE — gate relay
-  prefix, true-respawn poll, probe-order attribution); latest log id:
-  .loop/m3-task7r62-audio-donecheck.log.
+- **Latest AGENT-LOG entry**: iter 63 (M4 REPLAN — phase entry, 14-task
+  ladder + verify_m4.sh exit-gate concretization); latest log id:
+  .loop/m3-task7r62-audio-donecheck.log (no new .loop logs — REPLAN ran
+  no commands beyond orientation greps).
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
@@ -556,25 +582,18 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## Next
 
-1. Driver: audio arc round-3 SCOPED CONFIRM (iter-61 + iter-62 bytes:
-   platform_audio_sdl.h, check-device-audio.sh probe-order +
-   timing-judge reads, judge-render-timing.js terminator) + gate arc
-   round-3 SCOPED CONFIRM (iter-60 + iter-62 bytes: verify_m3.sh
-   relay, riglib true-respawn, check-device-opk.sh sites,
-   check-device-render.sh timing reads). On BOTH closures: flip ALL
-   manifest statuses to reviewed-go (cites = the closure logs) +
-   update MANIFEST_SHA256 in verify_m3.sh, same commit as the
-   phase-advance.
-2. Driver: cold AUTHORITATIVE `bash port/sim/device/verify_m3.sh` →
-   `M3 GATE OK`, exit 0 (expect one arm-stamp rebuild — RIG_SCRIPTS
-   bytes changed iters 60/62; a default run BEFORE the status flip
-   correctly REFUSES naming the 11 unresolved producers — that is the
-   designed outcome, not a defect) → emit the human-gate sentinel
-   `LOOP STOP: m3-device — needed: Chase S1 ratification playtest`
-   (LOOP §F-advance.3/§H — the GATE itself does NOT print it) +
-   push-notify Chase → close #18 on ratification.
-3. Ladder after Chase's S1 ratification: M4 REPLAN (PLAN §4/M4) →
-   Chase acceptance → LOOP STOP: m4-complete.
+1. Writer: M4 task 1 — vfx seam widening, sim + capture side
+   (fix_plan §M4; done-check `bash port/sim/calib/check-vfx-seam.sh`
+   → `VFX SEAM MATCH`, exit 0). Pre-registration required (PROCESS §2);
+   mechanical arg-threading across ~174 sites pre-registers a likely
+   >400-line diff.
+2. Then the ladder in order (fix_plan §M4 tasks 2-14), Tier-A arcs on
+   every non-checksummed shipping surface, Tier B ≥1 round on sim TUs.
+3. Phase end: driver cold AUTHORITATIVE `bash
+   port/sim/device/verify_m4.sh` → `M4 GATE OK` → sentinel
+   `LOOP STOP: m4-complete — awaiting Chase acceptance playthrough`.
+
+[superseded by iter 63 — M3 driver sequencing retained in AGENT-LOG]
 
 ## Rulings (standing owner directives)
 

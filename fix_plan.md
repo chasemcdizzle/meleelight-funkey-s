@@ -1,6 +1,6 @@
 # fix_plan — the loop's priority queue
 
-Current phase: M3
+Current phase: M4
 
 Rules: items live under their phase heading; an actionable item needs an
 exact runnable `done-check:` (see `docs/LOOP.md` §C). Items below are
@@ -986,6 +986,17 @@ exit 0 — this is the M2 exit gate command (§Commands).)
 
 ## M3 — On-device at 60 fps
 
+(M3 PASSED its exit gate `bash port/sim/device/verify_m3.sh` → M3 GATE
+OK, exit 0, AUTHORITATIVE (all 23 freeze-manifest producers reviewed-go,
+anchor verified), driver-run cold as CHECKER at the phase-advance —
+MILESTONE PASS: M3 logged in docs/AGENT-LOG.md 2026-07-17. The §H human
+gate is CLEARED: Chase's hands-on S1 ratification playtest PASSED
+2026-07-17 — the S1 chord table is RATIFIED AS-IS ("controls work
+perfectly", "sound is perfect"); the two visual amendments observed
+(stage-surface legibility at device scale, invisible vfx) are folded
+into §M4 as tasks 3 and 1-2. Issue #18 closed. Play install persists at
+/mnt/mlfk-data + /mnt/Applications/meleelight.opk.)
+
 (concretized by REPLAN, iter 37, 2026-07-16. The FunKey-S is ON ADB
 (id `12c00003237f5528`) — the iter-36 `m3-device` LOOP STOP is cleared.
 M2 passed its exit gate (SIM CONFORMS, driver-verified cold; issue #17
@@ -1242,11 +1253,238 @@ duty). — done-check:
 
 ## M4 — Full-game parity
 
-(seed items — REPLAN concretizes on phase entry: thin C front-of-house
-menus, audio mixer per PLAN §7, ai.js port (+tan to fdlibm surface),
-target test, SD persistence, full-game trace suite, Chase acceptance;
-**vfx render seam widening** (registered iter 44): extend the sim's vfx
-events from name-only to the full drawVfx config (pos/face/extras) across
-the ~174 verified move-TU call sites + port renderVfx/dVfx draw fns +
-HUD (renderOverlay) + Ready-GO banner + background art — the renderer
-core excludes all of these on BOTH sides of its IoU check today)
+(concretized by REPLAN, iter 63, 2026-07-17. M3 is COMPLETE (gate + S1
+ratification — see the §M3 annotation). CONVENTIONS fixed here:
+
+- **Layout**: front-of-house (menus/CSS/stage-select/options) at
+  `port/foh/` — REWRITTEN, not transliterated (anatomy §8: upstream
+  menus are jQuery+DOM+canvas hybrids positioned in absolute 1200×750
+  px): a C screen/state machine over the EXISTING platform seam +
+  renderer, faithful FLOWS (screen graph, selections, options
+  semantics, CPU-difficulty slider) and canvas LOOK at 240×240, never
+  a DOM port. AI at `port/sim/ai.c` structure-parallel to
+  src/main/ai.js (sim plane, checksummed). Target-test sim plane at
+  `port/sim/target/`; target-stage data arrives via a NEW pipeline
+  stage (executed-JS, extractor-bundle class — the M1 gate's pinned
+  contract is EXTENDED measured-then-frozen, never weakened).
+  Mixer/music stay at `port/gfx/` (snd_mixer.h precedent). M4-NEW
+  golden artifacts (target-test traces, extra CPU traces) live at
+  `port/goldens-m4/` with their own manifest.json — HARD RULE 3
+  stands: only M0 tasks write `oracle/`; the M4 recorder REUSES
+  oracle/harness bytes VERBATIM by path (run-capture.js served-bytes
+  class) and every stream is judged by the UNCHANGED
+  oracle/harness/verify-stream.js; oracle/goldens/* stay byte-frozen.
+- **Checksummed vs NOT (the verification split)**: CHECKSUMMED
+  bit-exact vs frozen streams — match traces (the 8 oracle goldens +
+  the M4 CPU-difficulty traces) and target-test traces. Target-test
+  conformance = the UNCHANGED spec-v1 surface via the unchanged
+  verify-stream.js PLUS a SEPARATE per-frame TARGET-PLANE stream
+  (targets/box state under the canon serialization rules, own SHA-256
+  stream, own frozen file + verifier — PLAN §3's "additional stream"
+  precedent, sound-event class). PROVISIONAL (auto-adopted):
+  CHECKSUM.md stays at v1 and every frozen golden stays byte-untouched
+  — the alternative (spec v2 + re-freeze) requires the PROCESS
+  evidence-package machinery and buys nothing. NOT checksummed —
+  menus/FOH, rasterization, audio DSP output.
+- **Menu verification approach (pinned; PROVISIONAL, auto-adopted)**:
+  committed FLOW SCRIPTS (deterministic per-frame input sequences)
+  driven BOTH host-headless and on-device through the real input
+  path; judges assert (a) the emitted screen-transition trace == a
+  frozen structural expectation (whitelist-grammar parse), (b) the
+  flow's resulting match parameterization == its pinned expectation
+  bit-exactly, (c) the LAUNCHED match's checksum-stream prefix == the
+  corresponding frozen golden (the flow→sim bridge IS checksummed
+  even though the menu is not), (d) per-screen screenshots pass
+  structural judges (judge-shot class, measured-then-frozen criteria;
+  host renders byte-stable ×2). NO browser-side IoU for menus — a DOM
+  hybrid offers nothing faithful to diff a rewritten screen against;
+  visual-look authority = Chase's acceptance playthrough. Every FOH
+  surface is Tier A (PROCESS §3).
+- **outOfCameraTimer / render-on domain (PROVISIONAL, auto-adopted —
+  resolves the iter-36 registered surface)**: the frozen oracle domain
+  ran __harnessNoRender, so outOfCameraTimer ≡ 0 throughout; the C
+  render plane keeps ZERO sim writes (const GameState* — proven M3)
+  and M4 does NOT add upstream's render-side ++ (renderPlayer miniView
+  arm). Live play, replays, goldens, and menu-launched matches stay
+  ONE domain — the M3 live-session three-way stream identity depends
+  on it. Documented deviation from a render-on browser; revisit only
+  via a CHECKSUM.md version bump + the PROCESS evidence package.
+- **Audio (PLAN §7 verbatim)**: device config 44100/S16LSB/2ch/512
+  unchanged; SFX pre-decoded RAM (SNDPACK1); music = the M1 audio
+  stage's 22050 stereo S16 PCM STREAMED from SD (88.2 KB/s, 2×64 KB
+  double-buffer); sprite Start/Loop windows + effective volumes from
+  SND1 sounds.json. FIDELITY check = OFFLINE DETERMINISTIC RENDER
+  differential: the mixer is integer-only, so a golden's sound-event
+  schedule renders to byte-frozen PCM on the host (×2 stable) and the
+  DEVICE's offline render of the same schedule must cmp byte-exact;
+  audible authority = Chase (no golden audio-output stream exists —
+  iter-57's honest-coverage basis). All PCM/SNDPACK blobs are
+  Nintendo-derived: build output + device scratch/SD only, NEVER
+  committed.
+- **AI (measured this REPLAN)**: `tan` is ALREADY vendored + swept —
+  port/fdlibm carries fd_tan since M0 task 3 (fdlibm-crosscheck +
+  mathsweep cover it), so PLAN §4/M4's "adds tan" is pre-satisfied;
+  ai.c routes every Math.* through fdlibm like all sim TUs. AI draws
+  come from the SAME seeded stream; AI inputs flow through the SAME
+  aiInputBank/pollInputs seam incl. the bank-row alias + post-runAI
+  slot re-copy semantics (M2 task-16 record). The AIBRIDGE1 path is
+  RETIRED from the LIVE path once C-AI reproduces g07/g08 — but
+  `port/sim/check-sim.sh` (the M2 EXIT GATE) is NEVER edited: its
+  bridge-fed form stays the frozen M2 contract; M4 adds live-AI
+  checks alongside, never in place of it.
+- **Device + process inheritance**: riglib.sh, adbsh RC-echo, hygiene
+  dirs (/tmp/mlfk + /mnt/mlfk-scratch, trap-removed), stamp-cached arm
+  builds, push provenance, host-side judgment — inherited VERBATIM
+  from §M3's conventions. PROCESS.md binds every task:
+  pre-registration with refutation shapes; whitelist-grammar for every
+  new decision-bearing parser; Tier-A arcs for every non-checksummed
+  shipping surface (FOH, mixer/music streamer, legibility, gate
+  assembly; the target-plane verifier is Tier A+ — judge path); Tier B
+  ≥1 structural round for sim TUs (ai.c, target logic, vfx
+  arg-threading). verify_m4.sh carries
+  `port/sim/device/m4-freeze-manifest.txt` under the exact verify_m3.sh
+  discipline: per-producer sha256+status, MANIFEST_SHA256 same-commit
+  anchor, authoritative-mode hard-refusal while any producer is
+  arc-pending, DEV mode exit 3, relay-prefix output contract.
+- **Scope exclusions (PROVISIONAL, auto-adopted; Chase can
+  override)**: target BUILDER (stage editor + share codes), replay
+  save/load UI, multiplayer/online, credits screen, frame-by-frame
+  debug UI — all outside PLAN §1's solo-parity bar (menus → VS vs CPU
+  → target test). Registered here, never silently dropped.)
+
+Tasks (dependency order; each < ~400-line diff where possible — tasks
+1, 4 and 9 are mechanical/translation-heavy and pre-register likely
+overruns):
+
+- task 1 — **vfx seam widening, sim + capture side** (iter-44
+  registered deferral; USER-VALIDATED by the S1 playtest: firefox
+  flames + shine invisible). ml_events vfx events widen from name-only
+  to the full drawVfx config (pos/face/extras) across the ~174 call
+  sites / 112 move TUs + physics/article sites; the capture specs stop
+  projecting vfx posts away and the affected captures re-record
+  (STREAM-MATCH guarded as always); every affected cluster replay
+  0-divergence; SIM CONFORMS unchanged.
+  done-check: `bash port/sim/calib/check-vfx-seam.sh` → prints
+  `VFX SEAM MATCH`, exit 0 (composes re-recorded capture byte-stability
+  ×2, affected cluster replays, and `bash port/sim/check-sim.sh`).
+- task 2 — **renderer vfx + overlay/banner/background + IoU
+  re-freeze**: port renderVfx/dVfx draw fns (circleDust's 4 seeded
+  draws already chain), HUD renderOverlay, Ready-GO banner, background
+  art into port/gfx; the browser IoU reference includes vfx on BOTH
+  sides (capture-canvas.js reduced sequence extended, STREAM-MATCH
+  guarded); IoU threshold RE-MEASURED-then-frozen as a NEW pin (the
+  old pin retires WITH the exposure it measured; the new one is never
+  loosened); render-on C replay still STREAM MATCHes g01.
+  done-check: `bash port/gfx/check-render.sh` → prints `RENDER OK`,
+  exit 0 (vfx-inclusive pins).
+- task 3 — **stage-surface legibility at device scale** (NEW seed from
+  Chase's playtest: upstream-faithful ~1px strokes are illegible on
+  the 1.54" panel). Deliberate DOCUMENTED device-scale adaptation: a
+  minimum on-screen stroke width for stage surfaces/platforms,
+  value measured on the panel then frozen (expected-render.json
+  class); rasterization is not checksummed and the IoU masks are
+  fg-plane only — sim untouched. Device screenshot judge asserts the
+  legibility pin; this task is also the device rung for tasks 1-2
+  (vfx live on screen).
+  done-check: `bash port/gfx/check-device-render.sh` → prints
+  `DEVICE RENDER OK`, exit 0 (with the legibility + vfx pins).
+- task 4 — **ai.js structure-parallel C port, capture-replay
+  verified**: port/sim/ai.c (+ helpers) translated from src/main/ai.js
+  (1,575 lines) over the MlAiVal tagged-value model; verified by
+  strict replay of the M2 ai-spec captures over g07/g08 — every runAI
+  record bit-exact (post bank row, bk bookkeeping, seeded draws, zero
+  wsViol) — plus a fresh re-record proving the rig unchanged.
+  done-check: `bash port/sim/calib/check-ai-replay.sh` → prints
+  `AI MATCH`, exit 0.
+- task 5 — **live CPU integration, bridge retired from the live
+  path**: sim_main/gfx_app grow a live-AI mode (C runAI at the
+  update(i) site; bank-row alias + post-runAI slot re-copy semantics
+  preserved); g07/g08 replay with LIVE AI (no AIBRIDGE1) → UNCHANGED
+  verify-stream.js STREAM MATCH vs the frozen streams. PROVISIONAL
+  coverage extension: two NEW CPU traces at difficulty 1 and 9,
+  recorded browser ×2-identity into port/goldens-m4/ + frozen, then
+  live-replayed (rule-16 class: new goldens widen value domains —
+  re-survey). check-sim.sh untouched.
+  done-check: `bash port/sim/check-ai-live.sh` → prints
+  `AI LIVE CONFORMS`, exit 0.
+- task 6 — **mixer fidelity + real play-ids + stop-path coverage**
+  (iter-57 seeds): real per-play ids through the mixer (mv_howl_play_id
+  backed by voice ids; .stop routing for furaloop/shieldbreakercharge),
+  looped-SFX sprite windows per SND1; the OFFLINE deterministic render
+  differential (host ×2 byte-frozen + device offline render cmp
+  byte-exact); stop-path LIVE witness — a committed scenario measured
+  to fire .stop through the full path (g01 fires zero .stop events:
+  the registered coverage hole closes here, not by assertion).
+  done-check: `bash port/gfx/check-mixer-fidelity.sh` → prints
+  `MIXER FIDELITY OK`, exit 0.
+- task 7 — **music streaming from SD**: the M1 music PCM packed to
+  device SD; 2×64 KB double-buffer streamer TU feeding the mixer's
+  music voice (Start/Loop sprite windows from sounds.json); device g01
+  full match with render + SFX + MUSIC live: p99 < 16.67 ms,
+  underruns == 0, buffer-starve counter == 0, skips == 0.
+  done-check: `bash port/gfx/check-device-music.sh` → prints
+  `DEVICE MUSIC OK`, exit 0.
+- task 8 — **skip-burst attribution instrument** (iters 54/57/62
+  registered class: transient single-frame sim spikes, burst form
+  measured; kernel/adbd-vs-sim-internal attribution OPEN). Diagnostic
+  instrument (Tier B): over-budget frames get an attribution record
+  (per-phase ns breakdown, retrospective ring, /proc snapshots
+  host-pulled); PRE-REGISTERED run matrix (cold/warm × audio/music)
+  with hard cap + refutation shapes; ATTRIBUTION VERDICT recorded in
+  the AGENT-LOG entry. Gate posture unchanged — skips==0 is never
+  weakened, no wider retry budgets.
+  done-check: `bash port/gfx/check-skip-attrib.sh` → prints
+  `SKIP ATTRIB RECORDED`, exit 0 (asserts the verdict needle in the
+  AGENT-LOG entry, M2CAL-report precedent).
+- task 9 — **FOH core + menu flows, host**: port/foh/ screen machine —
+  start screen → main menu → CSS (5 chars, human/CPU + difficulty
+  slider) → stage select → match launch; options screens for the
+  gameSettings the sim consumes; faithful flow graph per upstream
+  gameMode dispatch (rewritten). Committed flow scripts + frozen
+  structural transition traces + the match-launch bridge assertions
+  (conventions block (a)-(c)); host screenshots byte-stable ×2.
+  done-check: `bash port/foh/check-foh-flows.sh` → prints
+  `FOH FLOWS OK`, exit 0.
+- task 10 — **FOH on device**: menus rendered at 240×240 through the
+  platform seam, navigated by fk_input scripts on the FunKey;
+  per-screen screenshots structurally judged; a full flow boots a live
+  match (stream prefix vs frozen g01); OPK launcher enters the FOH
+  (not the direct-match path).
+  done-check: `bash port/foh/check-device-foh.sh` → prints
+  `DEVICE FOH OK`, exit 0.
+- task 11 — **target test, data + sim plane (host)**: NEW pipeline
+  stage `targets` (executed-JS extraction of the 10 authored
+  target-test stages — box/target/polygonMap machinery that M1 pinned
+  empty for VS stages; expected.json extended measured-then-frozen);
+  structure-parallel target-play sim logic at port/sim/target/ (incl.
+  the currently-TRAPPED stage-damage hq rows + target-mode tick);
+  NEW target goldens browser-recorded ×2-identity into
+  port/goldens-m4/ (harness bytes verbatim, oracle/ untouched), frozen
+  spec-v1 stream + the separate target-plane stream; C sim replays
+  them bit-exact host-side.
+  done-check: `bash port/sim/target/check-target-sim.sh` → prints
+  `TARGET SIM CONFORMS`, exit 0.
+- task 12 — **target test, FOH + device**: target-test select flow +
+  timer/records HUD in the FOH; every target golden replayed ON DEVICE
+  with render + audio live, streams host-judged (both verifiers), p99
+  < 16.67 ms.
+  done-check: `bash port/sim/target/check-device-target.sh` → prints
+  `DEVICE TARGET CONFORMS`, exit 0.
+- task 13 — **persistence to SD**: settings + target-test
+  records/medals at /mnt/mlfk-data through ONE read/write chokepoint
+  (atomic write-rename; corrupt/missing file = loud reset-to-defaults,
+  never silent zeroes — the qjs getCookie lesson inverted for OUR
+  surface); survives power-cycle (two-session device check over ADB).
+  done-check: `bash port/foh/check-device-persist.sh` → prints
+  `PERSIST OK`, exit 0.
+- task 14 — **full-game trace suite + M4 exit-gate assembly**:
+  `port/sim/device/verify_m4.sh` per the §Commands concretization —
+  freeze-manifest discipline first, then [1] full-game conformance on
+  device at 60 fps with audio+music (8 match goldens with g07/g08 on
+  LIVE C-AI + all port/goldens-m4/ traces), [2] menu flows on device,
+  [3] OPK frontend launch into the FOH. NOTE for the phase-advance
+  iteration: a gate pass is followed by the human-gate sentinel
+  `LOOP STOP: m4-complete — awaiting Chase acceptance playthrough`
+  (LOOP §F-advance.3/§H) — the GATE does not print it (driver duty).
+  done-check: `bash port/sim/device/verify_m4.sh` → prints
+  `M4 GATE OK`, exit 0.

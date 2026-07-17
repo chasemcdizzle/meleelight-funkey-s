@@ -790,6 +790,40 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   per-frame judgment (both proven, `.loop/m3-task2-tooth-judge.log`);
   check scripts must never write tracked files (the measured table is
   script output; the writer appends it to device-perf.md).
+- **M4 EXIT GATE (concretized by REPLAN, iter 63):**
+  `bash port/sim/device/verify_m4.sh` — implements PLAN §4/M4's EXIT
+  verbatim, ALL evidence pulled from the device and judged ON THE HOST
+  under the verify_m3.sh discipline inherited whole:
+  `port/sim/device/m4-freeze-manifest.txt` reviewed-pin check + its
+  in-script MANIFEST_SHA256 anchor verified FIRST; AUTHORITATIVE-mode
+  hard-refusal while any evidence producer is arc-pending/arc-in-flight;
+  any dev/fake override forces `M4 GATE (DEV — NON-AUTHORITATIVE)` +
+  exit 3 (sentinel structurally locked out); relayed sub-content
+  `  | `-prefixed so `M4 GATE OK` is the only possible unprefixed
+  anchored occurrence. Legs: [1] FULL-GAME TRACE CONFORMANCE ON DEVICE
+  AT 60 FPS WITH AUDIO — every match golden in
+  `oracle/goldens/manifest.json` (g07/g08 driven by the LIVE C ai.c, no
+  AIBRIDGE1) plus every M4 golden in `port/goldens-m4/manifest.json`
+  (target-test + CPU-difficulty traces) replayed ON the FunKey-S with
+  live render + audio callback + music streaming, each stream judged by
+  the UNCHANGED `oracle/harness/verify-stream.js` against its frozen
+  `*.sha256.json` (target traces additionally by the frozen
+  target-plane verifier) — exact per-frame equality, FULL length,
+  rngCalls/specVersion pins, and per run: p99 frame < 16.67 ms,
+  underruns == 0, music buffer-starves == 0, skips == 0; [2] MENU
+  FLOWS — every committed `port/foh/flows/` script driven on device
+  through the real input path: frozen structural transition trace +
+  screenshot judges green + the launched match's stream prefix == its
+  frozen golden; [3] OPK — packaged with the SDK container's mksquashfs
+  4.4 ONLY, launched via the FRONTEND into the FOH, boot marker +
+  in-app screenshot pulled. Prints `M4 GATE OK`, exit 0; any mismatch,
+  shortfall, or missing evidence → nonzero. HUMAN GATE: a mechanical
+  pass is followed by the sentinel
+  `LOOP STOP: m4-complete — awaiting Chase acceptance playthrough`
+  (LOOP §F-advance.3/§H — driver duty, the gate never prints it);
+  Chase's acceptance playthrough closes the build phase. (Script
+  assembled by fix_plan §M4 task 14; per-task `done-check:`s never
+  substitute for this gate.)
 - **Upstream clone + build (proven twice — determinism spike + prototype):**
   ```
   git clone https://github.com/schmooblidon/meleelight "$MELEELIGHT_CLONE"

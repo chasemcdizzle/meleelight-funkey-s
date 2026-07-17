@@ -8152,3 +8152,67 @@ M4. On ratification: driver closes #18, M4 REPLAN per PLAN §4/M4.
   above + the M4 seeds registered across M3: mixer fidelity + music,
   skip-burst attribution instrument, ai.js port + tan, target test,
   SD persistence, thin C menus, Chase acceptance playthrough).
+
+## iter 63 — 2026-07-17 — M4 REPLAN: phase entry, task ladder + exit-gate concretization
+
+M3 is COMPLETE: MILESTONE PASS: M3 (verify_m3.sh → M3 GATE OK, exit 0,
+AUTHORITATIVE, driver-run cold as CHECKER) + the §H human gate CLEARED —
+Chase's S1 ratification playtest PASSED 2026-07-17, S1 mapping ratified
+AS-IS; the two visual amendments (stage legibility, invisible vfx) are
+folded into the M4 ladder below. Issue #18 closed by the driver.
+
+- Type: REPLAN (LOOP §C-b) — fix_plan `Current phase:` flipped M3 → M4;
+  the §M4 seed section rewritten as a conventions block + 14
+  dependency-ordered tasks, each with an exact runnable done-check; §M3
+  annotated phase-complete (gate + ratification); the §Gates M4
+  *(REPLAN)* cell concretized into CLAUDE.md §Commands ("M4 EXIT GATE":
+  `bash port/sim/device/verify_m4.sh` — full-game trace suite on device
+  at 60 fps with audio+music, menu flows, OPK-into-FOH, all host-judged
+  under the verify_m3.sh freeze-manifest/authoritative-mode discipline;
+  human-gate sentinel `LOOP STOP: m4-complete — awaiting Chase
+  acceptance playthrough` is DRIVER duty after a mechanical pass).
+- Ladder: (1) vfx seam widening sim+captures (iter-44 deferral,
+  user-validated); (2) renderer vfx + overlay/banner/background + IoU
+  re-freeze; (3) stage-surface legibility at device scale (playtest
+  seed; device rung for 1-2); (4) ai.js structure-parallel C port
+  verified by ai-spec capture replay; (5) live CPU integration — bridge
+  retired from the live path, g07/g08 live STREAM MATCH + d1/d9
+  coverage traces; (6) mixer fidelity + real play-ids + stop-path live
+  coverage (iter-57 seeds); (7) music streaming from SD (2×64 KB
+  double-buffer, device perf with full audio); (8) skip-burst
+  attribution instrument (iters 54/57/62 registered class); (9) FOH
+  core + menu flows host-side; (10) FOH on device; (11) target test
+  data + sim plane (new pipeline stage `targets`, new goldens); (12)
+  target test FOH + device; (13) persistence to SD; (14) full-game
+  trace suite + verify_m4.sh gate assembly.
+- Judgment calls tagged PROVISIONAL (auto-adopted) in fix_plan §M4:
+  (a) target-test conformance = unchanged spec-v1 stream via the
+  unchanged verify-stream.js PLUS a SEPARATE target-plane stream (own
+  frozen sha + verifier, Tier A+) — CHECKSUM.md stays v1, zero golden
+  re-freeze (the spec-v2 alternative needs the PROCESS evidence-package
+  machinery and buys nothing); (b) M4-new goldens live at
+  port/goldens-m4/, NOT oracle/ (HARD RULE 3: only M0 writes oracle/ —
+  the recorder reuses harness bytes verbatim by path, served-bytes
+  class); (c) menu verification = committed flow scripts judged
+  structurally (transition trace + pinned match parameterization +
+  launched-match stream prefix vs frozen golden + screenshot judges;
+  no browser IoU for DOM-hybrid menus; visual authority = Chase's
+  acceptance); (d) outOfCameraTimer stays render-excluded EVERYWHERE
+  (iter-36 registered surface resolved: one deterministic domain for
+  goldens/replays/live/menus; documented deviation from a render-on
+  browser; revisit only via spec bump + evidence package); (e) scope
+  exclusions: target builder, replay UI, multiplayer, credits,
+  frame-by-frame debug — outside the solo-parity bar; (f) mixer
+  fidelity via the OFFLINE deterministic render differential
+  (integer-only mixer → byte-frozen host PCM, device cmp; audible
+  authority = Chase); (g) AIBRIDGE1 retired from the live path while
+  check-sim.sh (the M2 gate) keeps its bridge-fed form untouched
+  forever; (h) d1/d9 CPU coverage traces recorded browser ×2-identity.
+- Measured this REPLAN: `tan` is ALREADY vendored + swept
+  (port/fdlibm/fdlibm.h fd_tan, M0 task 3's crosscheck + the mathsweep
+  instrument cover it) — PLAN §4/M4's "adds tan to the fdlibm surface"
+  was pre-satisfied at M0; ml_events.h confirmed name-only on the vfx
+  plane (ml_vfx(const char*) — the task-1 surface); the M1 audio stage
+  already emits the music PCM (22050 stereo S16) task 7 streams.
+- No implementation this commit (REPLAN contract). next: task 1 (vfx
+  seam widening — VFX SEAM MATCH).
