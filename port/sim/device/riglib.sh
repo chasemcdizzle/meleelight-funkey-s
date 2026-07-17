@@ -23,7 +23,8 @@
 # SAME stamp (one shared build, no ping-pong between scripts).
 RIG_SCRIPTS="port/sim/device/adbsh.sh port/sim/device/riglib.sh \
 port/sim/device/check-device-g01.sh port/sim/device/check-device-conform.sh \
-port/gfx/check-device-render.sh port/gfx/check-device-input.sh"
+port/gfx/check-device-render.sh port/gfx/check-device-input.sh \
+port/gfx/check-device-audio.sh"
 
 # The armv7 binaries the shared build produces (one docker run).
 # gfx_device (M3 task 4) is the SDL1.2 render app: DYNAMICALLY linked

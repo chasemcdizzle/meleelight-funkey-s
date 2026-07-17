@@ -1184,13 +1184,31 @@ sweep's detectable class is >= half a grid step. riglib.sh additions
 per its own contract: RIG_SCRIPTS += check-device-input.sh, ARMBINS +=
 fk_input, srchash roots += port/tools.)
 
-6. audio-on — SDL1.2 audio 44100/S16LSB/2ch/512 + the audio-spike
-   8-voice SFX mixer consuming the sim's per-frame sound-event queue
-   (SND1 name→blob map; blobs pushed to device scratch, never committed);
-   underrun counter instrumented; full g01 replay on device with render +
-   audio: p99 full frame < 16.67 ms, underruns == 0. — done-check:
-   `bash port/gfx/check-device-audio.sh` → prints `DEVICE AUDIO OK`
-   (includes measured p99 + underruns=0), exit 0.
+(task 6 — audio-on — DONE iter 57:
+`bash port/gfx/check-device-audio.sh` → DEVICE AUDIO OK (full p99
+12.614 ms, underruns=0, attempts=2; cbs=5166 starts=274 stops=0 skips
+0/3600), exit 0 (.loop/m3-task6-donecheck.log). SDL1.2 audio live on
+device at the spike config (44100/S16LSB/2ch/512, obtained==requested
+asserted) + the spike-math 8-voice mixer (16.16 resample, Q8 gain,
+int32 accumulate+clamp; steal-oldest-by-start-seq — the "spike
+default" claim was REFUTED: audiotest.c has NO allocation policy) fed
+through the ONE ml_snd_sink chokepoint at ml_sound_play/stop enqueue
+(sim_tick queue resets untouched; SIM CONFORMS + all audio-on streams
+verify — the mixer only READS). SNDPACK1 from the REUSED pipeline
+audio stage (pack-snd.js; x2 byte-identical, count=180 pinned, sha
+frozen f695...ccb4; Nintendo-derived: build-output + device scratch
+only). Underruns = the spike late200 proxy, ASSERTED == 0 (badlen ABI
+tripwire == 0; cbs window [4900,5900] frozen, measured 5166; device
+starts/stops == host truth 274/0). Retry policy: <= 2 attempts,
+skips/underruns legs only — cold attempt 1 hit a NEW burst form of
+the transient class (skips=8), attempt 2 clean; p99/stream/audio-
+structural legs pass every attempt. Teeth: standing T1 pack-truncation
+death / T2 dropped-blob (land) death at first play / T3 underrun
+perturbation → judge rc 2 / T4 grammar corruption x2 → rc 1; device
+T5 64-sample starvation probe → 17 underruns counted + rejected.
+Honest coverage: audible fidelity unverified by construction (M4
+seeds: mixer fidelity + music; stop-path live coverage — g01 fires
+zero .stop events; skip-burst attribution instrument).)
 
 7. OPK + frontend launch + M3 exit-gate assembly — launcher script (tmpfs
    log + copy-back trap, SD data-dir env chain), `.desktop` with trailing

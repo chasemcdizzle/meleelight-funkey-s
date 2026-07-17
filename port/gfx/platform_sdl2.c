@@ -13,6 +13,10 @@
 #include "platform.h"
 #include "raster.h"
 
+// Audio seam (M3 task 6): SDL2's legacy SDL_OpenAudio API matches
+// SDL 1.2's — one shared implementation header serves both backends.
+#include "platform_audio_sdl.h"
+
 static SDL_Window *g_win;
 static SDL_Renderer *g_ren;
 static SDL_Texture *g_tex;

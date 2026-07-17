@@ -15,6 +15,19 @@
 //           [--live --record-trace t.json --record-keys k.txt
 //            [--ready-file f]]
 //           [--tapjump-off-p1]
+//           [--sndpack pack.bin [--audio-samples N]]
+//
+// AUDIO (M3 task 6): --sndpack loads a SNDPACK1 SFX pack (snd_mixer.h)
+// and starts the platform audio seam (44100/S16LSB/2ch, buffer
+// --audio-samples, default 512 — the measured spike config; other
+// values are the negative-testing / PLAN §7 fallback seam). The sim's
+// sound events reach the mixer through the ml_snd_sink chokepoint
+// (ml_events.h) — the mixer only READS the event plane (no RNG, no sim
+// writes; the checksum stream must be unchanged, which the checks
+// prove with verify-stream). On the headless backend the pack loads
+// and events are bookkept deterministically but no callback thread
+// runs (accept-and-idle; granted spec reports 0/0/0). Post-run the app
+// prints a SECOND summary line (grammar load-bearing, see below).
 //
 // LIVE MODE (M3 task 5): --live replaces the trace with the S1 input
 // layer (s1_input.h — PLAN §6 chord table over PlatformInput) at the
@@ -83,6 +96,7 @@
 #include "gfx.h"
 #include "platform.h"
 #include "s1_input.h"
+#include "snd_mixer.h" // header-only (s1_input.h precedent) — M3 task 6
 
 #define ML_BOOT_DRAWS 465 // the qjs boot pin (oracle/qjs/replay.sh)
 
@@ -326,13 +340,28 @@ static Gfx g_gfx; // big (framebuffer + anim tables); static, not stack
 static uint16_t g_shot_fb[RAST_W * RAST_H];
 static uint8_t g_shot_ink[RAST_W * RAST_H];
 
+// --- audio wiring (M3 task 6) ---------------------------------------------------
+static SndMixer g_mix;
+
+// The ml_snd_sink chokepoint target: runs on the sim (main) thread at
+// sound-event enqueue time; the lock brackets the mixer-state mutation
+// against the audio callback (headless: no-op lock, no callback).
+static void app_snd_sink(const char *name) {
+  platform_audio_lock();
+  snd_event(&g_mix, name);
+  platform_audio_unlock();
+}
+
 int main(int argc, char **argv) {
   const char *tracePath = 0, *simdataPath = 0, *bridgePath = 0;
   const char *gfxdataPath = 0, *animDir = 0, *outPath = 0, *timingPath = 0;
   const char *shotPpm = 0, *shotPgm = 0;
   const char *recordPath = 0, *readyPath = 0, *keysPath = 0;
+  const char *sndpackPath = 0;
   long seed = -1, p1 = -1, p2 = -1, stage = -1, frames = -1, difficulty = 3;
   long shotFrame = -1;
+  long audioSamples = 512; // spike verdict default; flag = testing seam
+  bool audioSamplesGiven = false;
   long pace = 1;
   uint64_t budgetNs = 16666667ull; // 60 fps frame budget (default)
   bool cpu = false;
@@ -365,6 +394,11 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--record-keys") == 0 && hasV) keysPath = argv[++i];
     else if (strcmp(a, "--ready-file") == 0 && hasV) readyPath = argv[++i];
     else if (strcmp(a, "--tapjump-off-p1") == 0) tapJumpOffP1 = true;
+    else if (strcmp(a, "--sndpack") == 0 && hasV) sndpackPath = argv[++i];
+    else if (strcmp(a, "--audio-samples") == 0 && hasV) {
+      audioSamples = strtol(argv[++i], 0, 10);
+      audioSamplesGiven = true;
+    }
     else {
       fprintf(stderr, "gfx_app: bad argument %s\n", a);
       return 1;
@@ -380,7 +414,9 @@ int main(int argc, char **argv) {
       frames <= 0 || (cpu && !bridgePath) || (pace != 0 && pace != 1) ||
       budgetNs == 0 ||
       (shotFrame > 0) != (shotPpm && shotPgm) ||
-      (shotFrame > 0 && shotFrame > frames)) {
+      (shotFrame > 0 && shotFrame > frames) ||
+      (audioSamplesGiven && !sndpackPath) ||
+      audioSamples <= 0 || audioSamples > 65535) {
     fprintf(stderr,
             "usage: gfx_app --trace t.txt --simdata s.txt --gfxdata g.txt "
             "--anim-dir D --seed N --p1 N --p2 N --stage N --frames N "
@@ -388,7 +424,8 @@ int main(int argc, char **argv) {
             "[--cpu --difficulty N --ai-bridge f] [--pace 0|1] "
             "[--budget-ns N] [--shot-frame N --shot-ppm f --shot-pgm f] "
             "[--live --record-trace t.json --record-keys k.txt "
-            "[--ready-file f]] [--tapjump-off-p1]\n");
+            "[--ready-file f]] [--tapjump-off-p1] "
+            "[--sndpack pack.bin [--audio-samples N]]\n");
     return 1;
   }
   // RAM-buffer overflow guards (sim_main.c --timing precedent, iter 45):
@@ -438,6 +475,17 @@ int main(int argc, char **argv) {
 
   if (platform_init("meleelight") != 0) {
     sim_fatal("platform_init failed (display unavailable)");
+  }
+
+  // Audio (M3 task 6): pack load dies loud on ANY structural defect;
+  // start dies loud on any renegotiation/open failure — audio never
+  // silently runs degraded or not at all while claiming otherwise.
+  if (sndpackPath) {
+    snd_pack_load(&g_mix, sndpackPath);
+    if (platform_audio_start(snd_mix_fill, &g_mix, (int)audioSamples) != 0) {
+      sim_fatal("platform_audio_start failed");
+    }
+    ml_snd_sink = app_snd_sink; // the sound-event chokepoint tap
   }
 
   // RAM buffers (post-run flush; NO file I/O in the frame loop)
@@ -569,6 +617,17 @@ int main(int argc, char **argv) {
     streamLen += (size_t)w;
   }
 
+  // Audio teardown BEFORE platform_quit (SDL_Quit would tear the audio
+  // subsystem down under us); stats are read after the callback thread
+  // is joined by platform_audio_stop.
+  PlatformAudioStats astats;
+  memset(&astats, 0, sizeof astats);
+  if (sndpackPath) {
+    ml_snd_sink = 0;
+    platform_audio_stop();
+    platform_audio_stats(&astats);
+  }
+
   platform_quit();
 
   // --- post-run flushes (the ONLY file writes) ---------------------------------
@@ -629,6 +688,26 @@ int main(int argc, char **argv) {
           "wall %" PRIu64 " ms, pace=%ld budget=%" PRIu64 " ns\n",
           frames, skips, presentFails,
           (tEnd - tStart) / 1000000ull, pace, budgetNs);
+  // Audio summary (printed iff --sndpack). GRAMMAR IS LOAD-BEARING
+  // (PROCESS §3 whitelist-grammar rule): port/gfx/judge-audio-summary.js
+  // matches this line with an anchored full-line pattern —
+  //   ^gfx_app audio: <cbs> callbacks, <underruns> underruns,
+  //    <badlen> badlen, <starts> voice starts, <stops> voice stops,
+  //    <steals> steals, rate=<r> samples=<s> channels=<c>$
+  // — and gates on underruns/badlen/cbs-window/starts/stops. rate/
+  // samples/channels are the GRANTED spec (0/0/0 on headless — never a
+  // faked device spec). Any change here is a paired change with that
+  // judge.
+  if (sndpackPath) {
+    fprintf(stderr,
+            "gfx_app audio: %" PRIu64 " callbacks, %" PRIu64 " underruns, "
+            "%" PRIu64 " badlen, %" PRIu64 " voice starts, %" PRIu64
+            " voice stops, %" PRIu64 " steals, rate=%d samples=%d "
+            "channels=%d\n",
+            astats.cbs, astats.underruns, astats.badlen, g_mix.starts,
+            g_mix.stops, g_mix.steals, astats.rate, astats.samples,
+            astats.channels);
+  }
   if (skips > 0) {
     fprintf(stderr, "gfx_app: skipped frames:");
     int listed = 0;

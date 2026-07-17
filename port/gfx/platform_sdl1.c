@@ -27,6 +27,10 @@
 #include "platform.h"
 #include "raster.h"
 
+// Audio seam (M3 task 6): the SDL implementation is shared with the
+// SDL2 backend — see the header for the config/underrun/ABI notes.
+#include "platform_audio_sdl.h"
+
 static SDL_Surface *g_screen;
 
 int platform_init(const char *title) {

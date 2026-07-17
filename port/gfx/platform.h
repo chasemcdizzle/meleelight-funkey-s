@@ -52,4 +52,57 @@ void platform_poll(PlatformInput *in);
 
 void platform_quit(void);
 
+// --- audio (M3 task 6) --------------------------------------------------------
+//
+// The measured spike config (docs/research/audio-spike.md verdict /
+// PLAN §7): 44100 Hz, AUDIO_S16LSB, 2 channels — rate and channel count
+// are FIXED by design; only the buffer size is a parameter (512 is the
+// smallest clean buffer under load; 1024 is the sanctioned fallback;
+// smaller values exist for the underrun-tooth negative test only).
+//
+// fill(ud, out, frames) renders `frames` interleaved stereo S16 sample
+// frames. It runs on the BACKEND's audio callback thread (SDL) — the
+// main thread must bracket every mixer-state mutation with
+// platform_audio_lock()/platform_audio_unlock().
+//
+// Backends:
+//   SDL1 (device) / SDL2 (host dev): SDL_OpenAudio with the exact spec;
+//     any renegotiation (obtained != requested) is a LOUD start failure,
+//     never a silent resample. Stats count callbacks, underruns (the
+//     spike's late200 proxy: inter-callback gap > 2x the nominal period,
+//     CLOCK_MONOTONIC measured inside the callback — the measured
+//     audible-dropout class) and badlen (callback len != the granted
+//     byte size — the ABI tripwire; SDL_AudioSpec verified against the
+//     SDK sysroot SDL_audio.h this build compiles against: int freq,
+//     Uint16 format, Uint8 channels+silence, Uint16 samples+padding,
+//     Uint32 size, callback fnptr, void* userdata — no time_t fields;
+//     the audio spike already exercised this exact struct against the
+//     device libSDL, spike logs 01-10).
+//   headless: ACCEPT-AND-IDLE — start succeeds, no callback thread ever
+//     runs, lock/unlock are no-ops, stats report zeros and a granted
+//     spec of 0/0/0 (never a faked 44100/512/2). This keeps the app's
+//     main-thread event-scheduling path (the mixer's voice bookkeeping)
+//     running deterministically on host truth legs; the check pins the
+//     granted-spec fields per leg, so a headless run can never
+//     masquerade as a device audio run.
+typedef void (*PlatformAudioFill)(void *ud, int16_t *stereoOut, int frames);
+
+typedef struct {
+  uint64_t cbs;       // callbacks fired
+  uint64_t underruns; // late200: gap > 2x nominal callback period
+  uint64_t badlen;    // callback len != granted spec size (ABI tripwire)
+  int rate;           // granted spec (0 on headless)
+  int samples;
+  int channels;
+} PlatformAudioStats;
+
+// Open + start the audio device (samples = requested buffer size in
+// sample frames). Returns 0 on success; nonzero = loud failure (caller
+// bails — audio must never silently run degraded).
+int platform_audio_start(PlatformAudioFill fill, void *ud, int samples);
+void platform_audio_stop(void);
+void platform_audio_lock(void);
+void platform_audio_unlock(void);
+void platform_audio_stats(PlatformAudioStats *out);
+
 #endif // GFX_PLATFORM_H

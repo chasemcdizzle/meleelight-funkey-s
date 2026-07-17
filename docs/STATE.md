@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-17, iter-56 writer completion)
+## Live right now (updated: 2026-07-17, iter-57 writer completion)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -353,10 +353,34 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   concurrency, dispositioned Low with reviewer concurrence in
   .loop/review-55-1.log; review-50's untriaged Low — gfx_app
   getline/ferror — left for the driver's cap record). task-5 arc
-  CLOSED at GO (round 2). Then: task 6 (audio-on) → task 7 (OPK +
+  CLOSED at GO (round 2). Then: task-6 review arc → task 7 (OPK +
   verify_m3.sh gate).
-- **Latest AGENT-LOG entry**: iter 56 (M3 task 4 hardening round 4,
-  arc cap); latest log id: .loop/m3-task4r56-donecheck.log.
+- **Iter 57 (M3 task 6) DONE**: `bash port/gfx/check-device-audio.sh`
+  → DEVICE AUDIO OK (full p99 12.614 ms, underruns=0, attempts=2;
+  cbs=5166 starts=274 stops=0 skips=0/3600), exit 0
+  (.loop/m3-task6-donecheck.log) — AUDIO IS LIVE ON THE FUNKEY: g01
+  full match with render + the 44100/S16LSB/2ch/512 callback + the
+  8-voice SFX mixer (spike math verbatim; steal-oldest-by-start-seq —
+  spike-default claim refuted, audiotest has NO allocation), fed via
+  the ONE ml_snd_sink chokepoint (sim_tick untouched; SIM CONFORMS +
+  every audio-on stream verifies — the mixer only reads). SNDPACK1
+  from the REUSED pipeline audio stage, count=180 + sha frozen; pushed
+  to /mnt/mlfk-scratch with provenance (never committed). Audio-on
+  p99 cost vs task-4 baseline ≈ +1.1 ms (sim 8.481 / render 3.422 /
+  present 1.849). NEW transient measurement: cold attempt 1 skips=8
+  (BURST form of the registered class) — retry policy absorbed it,
+  attempt 2 clean; bursts recurring → the iter-56 M4 attribution
+  instrument, never a wider retry budget. Teeth: standing T1-T4
+  (pack truncation, dropped-blob death at play, underrun-perturbation
+  gate fail, grammar deaths) + device T5 (64-sample starvation → 17
+  underruns counted + rejected; .loop/m3-task6-tooth-t5.log).
+  Honest coverage: audible FIDELITY unverified by construction (M3 =
+  structural liveness only); stop-path has zero live g01 coverage;
+  M4 seeds registered (mixer fidelity + music, stop-path coverage,
+  skip-burst instrument). Regressions green: DEVICE RENDER OK (11.065
+  ms full p99) + SIM CONFORMS (.loop/m3-task6-reg-{render,sim}.log).
+- **Latest AGENT-LOG entry**: iter 57 (M3 task 6 DONE); latest log
+  id: .loop/m3-task6-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
@@ -368,14 +392,15 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## Next
 
-1. Driver: ground-truth iter 51 (cold
-   `bash port/gfx/check-device-input.sh`) + fold the task-5 surface
-   (check-device-input.sh, s1_input.h, s1_sweep.c, fk_input.c,
-   judge-s1-coverage.js, s1-session.script, the gfx_app.c/sim_main.c
-   flags, the riglib.sh roster/roots additions) into the running
-   task-4/rig Tier-A review arc → launch task-6 writer (audio-on) on
-   GO.
-2. Ladder: fix_plan §M3 tasks 6-7 → M3 gate (`verify_m3.sh`) →
+1. Driver: ground-truth iter 57 (cold
+   `bash port/gfx/check-device-audio.sh`) → Tier-A review arc for the
+   task-6 surface (check-device-audio.sh, judge-audio-summary.js,
+   pack-snd.js, snd_mixer.h, platform_audio_sdl.h, the platform.h
+   audio seam + backend impls, gfx_app.c audio wiring, ml_events sink
+   — note ml_events.c is a sim TU: Tier B minimum, but the new
+   surface's check scripts are Tier A) → launch task-7 writer (OPK +
+   verify_m3.sh gate assembly) on GO.
+2. Ladder: fix_plan §M3 task 7 → M3 gate (`verify_m3.sh`) →
    LOOP STOP: m3-device + push-notify Chase for S1 ratification →
    close #18 → M4 REPLAN (PLAN §4/M4) → Chase acceptance →
    LOOP STOP: m4-complete.

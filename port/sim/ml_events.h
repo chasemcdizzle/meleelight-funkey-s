@@ -46,6 +46,18 @@ typedef struct {
 
 extern MlEvents ml_events;
 
+// SOUND SINK (M3 task 6): OPTIONAL tap on the sound-event plane. The
+// integrated sim resets the ml_events queues at every tick stage
+// (sim_tick.c), so a per-frame consumer cannot read the queue after the
+// tick — instead this ONE chokepoint forwards each sound event to a
+// registered sink AT ENQUEUE TIME (ml_sound_play / ml_sound_stop; stop
+// events arrive with their ".stop"-suffixed token). Default NULL =
+// behavior byte-identical to the pre-task-6 sim (every replay rig and
+// sim binary leaves it unset). The sink must be READ-ONLY with respect
+// to sim state: it may not draw RNG, may not touch players/stage, and
+// runs on the sim thread (the gfx_app mixer locks its own audio state).
+extern void (*ml_snd_sink)(const char *name);
+
 // The active gameplay PRNG ml_random() draws from. The sim owns one
 // seeded stream (set once at match setup); the replay driver additionally
 // swaps in the sweep generator for frame-0 randomShout records

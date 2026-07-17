@@ -28,3 +28,27 @@ int platform_present(const uint16_t *fb565) {
 void platform_poll(PlatformInput *in) { memset(in, 0, sizeof *in); }
 
 void platform_quit(void) {}
+
+// --- audio (M3 task 6): ACCEPT-AND-IDLE ---------------------------------------
+// No callback thread ever runs headless: start succeeds so the app's
+// main-thread event-scheduling path (mixer voice bookkeeping) runs
+// deterministically on host truth legs, but no audio is rendered and
+// the granted spec reports 0/0/0 — the check pins those fields per leg,
+// so a headless run can never masquerade as a device audio run.
+static int g_pa_headless_open;
+
+int platform_audio_start(PlatformAudioFill fill, void *ud, int samples) {
+  (void)fill;
+  (void)ud;
+  if (samples <= 0 || samples > 65535) return 1;
+  g_pa_headless_open = 1;
+  return 0;
+}
+
+void platform_audio_stop(void) { g_pa_headless_open = 0; }
+void platform_audio_lock(void) {}
+void platform_audio_unlock(void) {}
+
+void platform_audio_stats(PlatformAudioStats *out) {
+  memset(out, 0, sizeof *out); // zeros: cbs/underruns/badlen, spec 0/0/0
+}

@@ -6,6 +6,7 @@
 
 MlEvents ml_events;
 MlRng *ml_active_rng = 0;
+void (*ml_snd_sink)(const char *name) = 0; // M3 task 6 (header note)
 
 void ml_ev_reset(void) {
   ml_events.snd_count = 0;
@@ -22,11 +23,13 @@ void ml_vfx(const char *name) {
 void ml_sound_play(const char *name) {
   if (ml_events.snd_count >= ML_EV_CAP) ml_events_fail("sound queue overflow");
   ml_events.snd[ml_events.snd_count++] = name;
+  if (ml_snd_sink) ml_snd_sink(name);
 }
 
 void ml_sound_stop(const char *nameDotStop) {
   if (ml_events.snd_count >= ML_EV_CAP) ml_events_fail("sound queue overflow");
   ml_events.snd[ml_events.snd_count++] = nameDotStop;
+  if (ml_snd_sink) ml_snd_sink(nameDotStop);
 }
 
 void ml_dispatch_note(const char *phase, const char *move) {

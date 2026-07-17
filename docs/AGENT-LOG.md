@@ -6777,3 +6777,224 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
 - Arc-length trend final: task-1: 5 rounds, task-2: 3, task-3: 3(cap),
   task-4: 4(cap), task-5: 2.
 - next: task 6 (audio-on), task 7 (OPK + gate assembly).
+
+## iter 57 — 2026-07-17 — M3 task 6 PRE-REGISTRATION: audio-on (SDL1.2 audio + SFX mixer, frozen before any run/edit; PROCESS §2)
+
+- **Task**: fix_plan §M3 task 6 — SDL1.2 audio on device at the measured
+  spike config (44100 Hz / AUDIO_S16LSB / 2ch / 512 samples), the
+  audio-spike 8-voice SFX mixer (22050-mono sources, 16.16 fixed-point
+  resample, Q8 per-voice gain from SND1 effective volume, int32
+  accumulate + clamp) consuming the sim's ml_events sound queue via a
+  SND1 name→blob pack; underrun counter; full g01 replay on device with
+  render + audio LIVE. done-check:
+  `bash port/gfx/check-device-audio.sh` → `DEVICE AUDIO OK` exit 0.
+- **Voice-allocation policy provenance (verified from the evidence
+  BEFORE implementation)**: the brief's "steal-oldest is the spike
+  default — verify" is REFUTED as stated: the spike mixer
+  (spikes/device-audio/audiotest.c setup_mixer/fill_mix) has NO
+  allocation policy at all — 8 STATIC looping voices, pre-allocated,
+  never started/stopped. What the spike DOES pin (and this task
+  mirrors verbatim): voice count 8, 22050 mono sources, 16.16
+  phase-accumulator resample, Q8 gain `(s*gain)>>8`, int32
+  accumulate + clamp to S16, stereo out with mono voices on both
+  channels. Allocation is therefore OURS to define: adopted
+  **steal-oldest-by-start-sequence** (all 8 busy → the voice with the
+  lowest start seq is retired and reused), documented at the policy
+  site in port/gfx/snd_mixer.h. Registered M4 seed: mixer FIDELITY
+  (audible-plane correctness vs a captured reference, music streaming,
+  sprite windows, ducking, real howler ids) — M3 verifies structural
+  liveness only, BY CONSTRUCTION (no golden audio-output stream
+  exists; the checksum surface never covered audio output).
+- **Design (frozen)**: ml_events.c gains ONE chokepoint — an optional
+  `ml_snd_sink` fn pointer (default NULL = behavior identical; called
+  at ml_sound_play/ml_sound_stop enqueue time), so gfx_app taps the
+  event plane without touching sim_tick.c's per-stage queue resets.
+  platform.h grows an audio seam (start/stop/lock/unlock/stats) —
+  SDL1/SDL2 share one implementation header (SDL_OpenAudio legacy API
+  exists in both), headless = accept-and-idle (no callback thread;
+  event scheduling still runs deterministically → host truth for
+  starts/stops counts; granted spec reported as 0/0/0, never faked).
+  Pack format SNDPACK1 (port/gfx/pack-snd.js from the pipeline audio
+  stage's sounds.json + audio/sfx/*.pcm; sorted unique names, gainQ8 =
+  round(volume*256) from the SND1 effective-volume bits, loop flag;
+  ".stop"-suffixed queue tokens deactivate all voices of the base
+  name). Underruns = the spike's late200 proxy (inter-callback gap >
+  2x nominal 11.61 ms period, CLOCK_MONOTONIC in-callback — the
+  measured audible-dropout class); queue exhaustion is structurally
+  impossible in this design (no ring: mixer state is mutated under
+  SDL_LockAudio from the main thread), documented. badlen counts
+  callback len != granted size (the ABI tripwire). ABI note (iter-51
+  rule applied): SDL_AudioSpec verified against the SDK sysroot
+  SDL_audio.h this build compiles against (int/Uint16/Uint8x2/Uint16x2/
+  Uint32/fnptr/void* — no time_t fields); the spike binary already
+  exercised this exact struct against the device libSDL successfully
+  (obtained fields echoed correctly, logs 01-10) — that is the
+  measured ground truth, restated at the struct-use site.
+- **Run matrix + caps**: pipeline audio stage runs cap 3 (fresh
+  gen + pack x2 determinism); host gfx_app_headless replays cap 8
+  (x2 truth + standing teeth + tooth-drop probes); docker arm builds
+  SERIAL cap 3; device GATE-SHAPED paced runs cap 3 total (1 measure
+  probe to freeze the cbs window + the cold done-check's <= 2
+  attempts); short device teeth probes cap 2 (tiny-buffer underrun
+  tooth + spare). Regressions: check-device-render cap 2, host
+  check-sim cap 2. Early-stop: first full green cold pass.
+- **Pass criteria (frozen)**: (1) STREAM — device render+audio-on g01
+  stream passes the UNCHANGED verify-stream.js vs frozen g01, full
+  3600 + rng pins, EVERY attempt; (2) PERF — full-frame p99 (sim+
+  render+present work time; audio callback cost included by
+  construction: same app, audio thread live) < 16,670,000 ns EVERY
+  attempt, render-only p99 <= 8,000,000 ns kept from task 4; (3)
+  AUDIO — underruns == 0 and badlen == 0 and callback count within a
+  measured-then-frozen window (proves the callback thread ran the
+  whole match at granted cadence) and device voice starts/stops ==
+  host-truth starts/stops (the event plane is deterministic; a
+  mismatch while the stream matches = sink wiring defect, HARD fail);
+  (4) HYGIENE — skips == 0, rendered == 3600, 0 failed presents, wall
+  in [58,66] s. RETRY POLICY (the measured transient-spike class, 2/6
+  runs, one ~19 ms sim frame): <= 2 attempts total, retry ONLY when
+  the sole failures are skips>0 and/or underruns>0; stream/p99/audio-
+  structural legs must pass every attempt; each attempt logged +
+  counted, attempts printed in the OK line.
+- **Refutation shapes**: underruns > 0 on both attempts → measure
+  WHERE, one bounded round then STOP+report: callback starvation
+  (gap magnitude vs the 23 ms 2-period queue; coincidence with long
+  sim frames) vs mixer cost (not in-app instrumented — fall back to
+  the spike's audiotest mix mode on device) vs SD contention
+  (deprioritized: pack is RAM-resident after load, no music in M3, SD
+  idle during play — spike log 09/10 measured SD reads clean anyway).
+  p99 over budget with audio → honest report vs the PLAN §7 measured
+  expectation (mix = 1.25% of budget; iter-50 headroom ~5.9 ms) with
+  the sim/render/present split attributing the inflation. Device
+  starts/stops != host → REAL finding, ledger, never retried blind.
+  Pack sha drift vs the frozen pin → pipeline/ffmpeg drift → STOP
+  (reviewed re-freeze path, never silent).
+- **Teeth (all logged)**: T1 standing in-check: truncated pack copy →
+  loader loud death; T2 standing in-check: pack built with
+  --drop-name <name that g01 fires> → headless replay dies loud at
+  the first play of that name (the "dropped SND1 blob" structural
+  tooth); T3 underrun-counter perturbation: planted device-log copy
+  with underruns=3 → judge-audio-summary exit 2 / gate leg fails;
+  T4 grammar corruption: malformed + duplicate audio-summary lines →
+  judge parse death exit 1; T5 device probe: --audio-samples 64 +
+  starvation budget (short run) → underruns fire > 0 and the leg
+  rejects (if the tiny buffer happens to survive clean, record
+  honestly — T3 already proves the gate leg's teeth; T5 then only
+  demonstrates the counter's device liveness direction).
+- **Honest-coverage (frozen now, restated in the DONE entry)**: audio
+  CORRECTNESS (waveform fidelity, resample quality, gain accuracy,
+  loop points, stop semantics beyond deactivation) is NOT verified in
+  M3 — only structural liveness (events consumed, callback cadence,
+  zero underruns, deterministic event counts). Sound-name coverage:
+  pack load asserts all 180 SND1 names present; runtime lookup is
+  exercised only for names g01 actually fires. Music: M4 by plan.
+
+## iter 57 — 2026-07-17 — M3 task 6 DONE: audio-on — DEVICE AUDIO OK (SDL1.2 audio + 8-voice SFX mixer live on the FunKey)
+
+- **Done-check (cold)**: `bash port/gfx/check-device-audio.sh` →
+  `DEVICE AUDIO OK (full p99 12.614 ms, underruns=0, attempts=2;
+  cbs=5166 starts=274 stops=0 skips=0/3600)`, exit 0
+  (.loop/m3-task6-donecheck.log). Measure run (first paced run, run 1
+  of the 3-cap): same shape, attempts=1, full p99 12.466 ms
+  (.loop/m3-task6-measure.log). Run budget honest count: 3/3
+  gate-shaped paced device runs (1 measure + cold's 2 attempts), 2/2
+  short device probes (T5 x2 — the second only to record the log; a
+  tee on the first would have saved it), 1 docker rebuild (serial).
+- **Measured (device, g01 full match, render + audio LIVE)**: full
+  p99 12.614 ms (< 16.67 gate; measure run 12.466) — audio-on cost vs
+  task-4's 11.400 ms baseline ≈ +1.1 ms of p99, consistent with the
+  spike's "mix is a rounding error, contention is the cost" expectation
+  (PLAN §7 1.25%-of-budget mix + scheduler preemption); split: sim p99
+  8.481 ms / render p99 3.422 ms / present p99 1.849 ms. underruns=0
+  and badlen=0 both runs; cbs=5166 vs 5168 nominal (60 s x 44100/512)
+  — the callback thread ran the WHOLE match at granted cadence; window
+  frozen [4900,5900] with the measured value on record (5166 twice).
+  Event plane: device starts=274 stops=0 == host truth (x2 headless
+  agree) — the deterministic cross-check held. steals=0 on device
+  (natural voice endings keep concurrency <= 8; headless steals 266 by
+  design — voices never advance without a callback thread, documented).
+- **Transient-class NEW MEASUREMENT**: cold attempt 1 hit skips=8
+  (underruns=0, stream+p99+audio all green) — a BURST form of the
+  registered transient-spike class (previously 1-2 single-frame
+  skips, 2/6 runs). The pre-registered retry policy absorbed it
+  (attempt 2: 0 skips); logged + counted, never hidden. If bursts
+  recur, attribution belongs to the iter-56-registered M4 instrument
+  candidate (kernel/adbd contention vs sim-internal) — do NOT widen
+  the retry budget instead.
+- **Voice policy (as pre-registered)**: spike-default claim REFUTED —
+  audiotest.c has NO allocation (8 static loops); adopted
+  steal-oldest-by-start-sequence, documented at the policy site in
+  snd_mixer.h. Spike math carried verbatim (16.16 resample step
+  0x8000, Q8 gain (s*gain)>>8, int32 accumulate+clamp, mono->both
+  channels).
+- **Shipped surface**: ml_events.{h,c} — ONE sink chokepoint
+  (`ml_snd_sink`, default NULL, fired at enqueue in
+  ml_sound_play/ml_sound_stop; sim_tick's per-stage queue resets
+  untouched); platform.h audio seam (start/stop/lock/unlock/stats) —
+  platform_audio_sdl.h shared by SDL1/SDL2 TUs (legacy SDL_OpenAudio
+  API identical; obtained-spec-equals-request asserted, else loud
+  fail), headless = accept-and-idle reporting granted 0/0/0 (never a
+  faked device spec — the judge pins granted-spec per leg);
+  snd_mixer.h header-only (s1_input.h precedent — reviewed TU lists
+  unchanged); pack-snd.js (SNDPACK1 from the M1 pipeline audio
+  stage's sounds.json + blobs — stage REUSED, x2 byte-identical,
+  count=180 pinned, sha256 frozen f695...ccb4); gfx_app.c --sndpack/
+  --audio-samples + the second summary line (own anchored grammar —
+  "gfx_app audio: ..." cannot collide with the task-4 line's parser);
+  judge-audio-summary.js (anchored grammar, granted-spec pinned into
+  the pattern, assertions in-judge: rc 2 + fail_<leg> on violation,
+  rc 1 on any grammar corruption); check-device-audio.sh (task-4
+  deadman/park/normalization apparatus verbatim, per-attempt
+  launchers, retry policy in-script); riglib RIG_SCRIPTS += the new
+  script (stamp 88a3a6e7...9dc2).
+- **Underrun counter semantics (documented at the counter)**: late200
+  proxy — inter-callback gap > 2x the 11.61 ms nominal period,
+  CLOCK_MONOTONIC in-callback (the spike's measured audible-dropout
+  class). Queue exhaustion is structurally impossible in this design:
+  no main->callback ring exists; mixer state is mutated under
+  SDL_LockAudio. badlen = callback len != granted size (the ABI
+  tripwire). ABI note (iter-51 rule): SDL_AudioSpec verified against
+  the SDK sysroot SDL_audio.h (no time-bearing fields); the spike
+  already exercised the struct in-process on this device.
+- **Teeth (all fired, logged)**: STANDING in-check every run
+  (.loop/m3-task6-{measure,donecheck}.log step 5): T1 truncated pack →
+  loader death ("truncated or corrupt pack"); T2 pack --drop-name land
+  (g01's first fired sound, frame 75 — measured) → loud death at first
+  play; T3 underrun-count perturbation of the real log → judge rc 2 +
+  fail_underruns=1; T4 malformed ("stealz") AND duplicated audio lines
+  → judge rc 1 grammar deaths. DEVICE probe T5
+  (.loop/m3-task6-tooth-t5.log): 64-sample buffer + starvation budget
+  (600 frames, pace-1/1000 ns) → 17 underruns counted, judge rejects
+  (fail_underruns=1, rc 2) — the counter is live on-device in the
+  failing direction, and the samples=64 grammar pin parsed the probe's
+  own spec (a wrong-spec run cannot pose as the gate run).
+- **Regressions green**: `check-device-render.sh` → DEVICE RENDER OK
+  (full p99 11.065 ms, skips 0/3600; stamp HIT via the rebuilt shared
+  stamp; .loop/m3-task6-reg-render.log) — the no-audio path is
+  untouched; host `check-sim.sh` → SIM CONFORMS all 8 goldens
+  (.loop/m3-task6-reg-sim.log) — the ml_snd_sink addition does not
+  perturb the sim (also proven directly: both audio-on device streams
+  + x2 host audio-on streams verify against frozen g01).
+- **Honest coverage (what audio correctness is NOT verified)**:
+  audible-plane FIDELITY is unverified BY CONSTRUCTION in M3 — no
+  golden audio-output stream exists; resample quality, gain accuracy,
+  loop points, mixing artifacts, and steal audibility are all
+  unchecked (only structural liveness: events consumed
+  deterministically, callback cadence, zero underruns/badlen).
+  Runtime name lookups exercised only for the sounds g01 fires
+  (starts=274 across an unknown name subset; pack load asserts all
+  180 names structurally). The ".stop" path has ZERO live g01
+  coverage (stops=0 — furaloop/shieldbreakercharge never fire there);
+  its code is exercised only by construction, not runtime. M4 SEEDS
+  REGISTERED: (1) mixer fidelity vs a captured reference + music
+  streaming + ducking + real howler ids (FORMATS.md §5.4's consumer);
+  (2) stop-path live coverage (a golden or scripted session that
+  fires furaloop); (3) the skip-burst attribution instrument (above).
+- **Zoom-out (HARD RULE 8)**: the sound plane got its integration the
+  same way every cross-cutting plane here has — ONE chokepoint at the
+  producer (ml_snd_sink at enqueue) instead of N consumer-side patches
+  (per-reset drains in sim_tick would have been 5 edits in oracle-
+  adjacent code); and the audio evidence path reused the CLASS
+  solutions verbatim (whitelist-grammar judge with pinned granted
+  spec, per-leg assert-in-judge, task-4 park/deadman apparatus,
+  rm-before-produce/made, push provenance + frozen content pin).
+  No new one-offs.
