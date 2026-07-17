@@ -104,3 +104,10 @@ emit("present_p50", P.p50);
 emit("present_p99", P.p99);
 console.log("skips=" + String(skips));
 console.log("rendered=" + String(render.length));
+// judge_complete integrity terminator (iter 62 — the iter-61
+// audio-judge pattern, class completion): emitted ONLY after every
+// verdict line above, so truncated/partial judge output can never end
+// with it; the shell consumers assert it on the output FILE's BYTES
+// (must END with exactly 'judge_complete=1\n' — trailing blank lines
+// violate the grammar as written).
+console.log("judge_complete=1");

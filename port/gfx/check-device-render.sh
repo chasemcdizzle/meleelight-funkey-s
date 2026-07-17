@@ -325,14 +325,34 @@ rig_devsha_selftest
 # reads as FALSE (a silent failure-branch evasion). Sets: full_p99_ns
 # full_p99_ms render_p99_ns render_p99_ms sim_p99_ms present_p99_ms
 # skips rendered.
+# FILE-BYTE READ (iter 62 — trailing-blank class completion, the
+# iter-61 audio-judge pattern): the judge's stdout is captured to a
+# FILE and timing_judge_bytes_assert requires the file to END with
+# EXACTLY the 17 bytes 'judge_complete=1\n' (reference bytes GENERATED
+# by printf + cmp, never hand-transcribed) BEFORE the (newline-
+# stripping) $(cat) hands content to the parser — trailing blank
+# lines, truncation, and a missing final newline all violate the
+# grammar as written.
+timing_judge_bytes_assert() {
+  local jf="$1"
+  if ! tail -c 17 "$jf" | cmp -s - <(printf 'judge_complete=1\n'); then
+    echo "DEVICE FAIL: timing judge output file $jf does not END with the exact bytes 'judge_complete=1<newline>' (trailing blank lines / missing final newline / truncation) — corrupt judge output" >&2
+    exit 1
+  fi
+}
 parse_timing_judge() {
-  local tf="$1" fr="$2" jout jk jv dup
+  local tf="$1" fr="$2" jout jk jv dup jf
   unset full_p99_ns full_p99_ms render_p99_ns render_p99_ms sim_p99_ms \
     present_p99_ms skips rendered
-  jout="$(node "$GFX/judge-render-timing.js" "$tf" "$fr")" || {
+  jf="$BUILD/timjudge-out.txt"
+  rm -f "$jf"
+  node "$GFX/judge-render-timing.js" "$tf" "$fr" > "$jf" || {
     echo "DEVICE FAIL: timing judgment failed for $tf" >&2
     exit 1
   }
+  made "$jf"
+  timing_judge_bytes_assert "$jf"
+  jout="$(cat "$jf")"
   dup="$(printf '%s\n' "$jout" | awk -F= '{print $1}' | sort | uniq -d)"
   if [ -n "$dup" ]; then
     echo "DEVICE FAIL: timing judge output carries duplicate key(s) — corrupt evidence: $dup" >&2
@@ -356,6 +376,14 @@ parse_timing_judge() {
         ;;
       full_p50_ns|full_p50_ms|full_max_ns|full_max_ms|sim_p50_ns|sim_p50_ms|sim_p99_ns|render_p50_ns|render_p50_ms|render_max_ns|render_max_ms|present_p50_ns|present_p50_ms|present_p99_ns)
         : # reported by the judge; not asserted here
+        ;;
+      judge_complete)
+        # the integrity terminator (iter 62): position already proven
+        # by the file-byte assert; the value must still be exactly 1
+        if [ "$jv" != 1 ]; then
+          echo "DEVICE FAIL: timing judge judge_complete carries unexpected value ('$jv')" >&2
+          exit 1
+        fi
         ;;
       *)
         echo "DEVICE FAIL: unexpected timing judge line '$jk=$jv'" >&2

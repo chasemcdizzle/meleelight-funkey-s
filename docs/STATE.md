@@ -3,7 +3,49 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-17, iter-61 writer completion)
+## Live right now (updated: 2026-07-17, iter-62 writer completion)
+
+- **Iter 62 (M3 hardening — gate relay prefix, true-respawn poll,
+  probe-order attribution) DONE**: all three .loop/review-60-triage.md
+  + attribution items landed. (H2-residual) verify_m3.sh relay_lines
+  chokepoint — every relayed sub-content line (tail'd leg logs,
+  canned-rc bytes, status lists) prints `  | `-prefixed; the genuine
+  `M3 GATE OK` echo is the ONLY possible unprefixed line-anchored
+  occurrence (contract documented at definition + emission site).
+  (L1-residual) riglib rig_proc_respawn_poll TRUE-RESPAWN form
+  (+ rig_proc_pid): pre-kill pid captured at all 3 opk sites; verified
+  respawn = old pid GONE (/proc RC-checked) AND live single pid != old.
+  (class completion) judge-render-timing.js emits judge_complete=1;
+  parse_timing_judge in render+audio checks reads judge stdout from
+  FILE BYTES with the 17-byte terminator assert (iter-61 pattern;
+  corpus 5/5 zero false rejections). (attribution) T5 probe moved
+  AFTER the paced attempts; gate counters saved before the probe.
+  **ATTRIBUTION VERDICT: probe after-effect — class-fixed by
+  ordering.** Cold run attempt1 skips=1 / attempt2 skips=0 → `DEVICE
+  AUDIO OK (full p99 12.393 ms, underruns=0, attempts=2; cbs=5166
+  starts=274 stops=0 skips=0/3600)`, exit 0
+  (.loop/m3-task7r62-audio-donecheck.log; 1/3 paced cap; T5 through
+  the reordered path: 19 underruns counted + rejected). The
+  probe-before elevated signature (3/4 attempts; driver cold both
+  attempts 3,1) did NOT recur; residual single-skip transient = the
+  pre-probe registered class (M4 instrument seed stands); thermal
+  confound honestly recorded; skips==0 gate unweakened, cooldown arm
+  not triggered. Gate mechanics 5/5 green incl. NEW relay teeth
+  (.loop/m3-task7r62-gate-mechanics.log — status refusal now names 11
+  producers: the two edited reviewed-go surfaces
+  check-device-render.sh + judge-render-timing.js truthfully flipped
+  to arc-pending); respawn tooth 8/8
+  (.loop/m3-task7r62-tooth-respawn.log); timing-blank tooth both
+  shipped variants (.loop/m3-task6r62-tooth-timingblank.log).
+  Manifest: 6 producers re-pinned + MANIFEST_SHA256 → 578bfbd5… same
+  commit; `SELF-CHECK 23/23 + ANCHOR GREEN`
+  (.loop/m3-task7r62-manifest-selfcheck.log). **BOTH ARCS ROUND-3
+  SCOPED CONFIRM PENDING (driver)**: audio round-3 confirm surface now
+  incl. iter-62 probe-order + timing-judge bytes; gate-arc round-3
+  confirm surface = iter-62 relay/respawn/timing bytes. Sequencing
+  unchanged: both closures → driver flips ALL statuses to reviewed-go
+  in the phase-advance commit → cold authoritative verify_m3.sh →
+  sentinel + Chase S1 ratification.
 
 - **Iter 61 (M3 task 6 hardening ROUND 2 — audio round-2 triage
   closure) DONE**: both .loop/review-59-triage.md items landed. (M)
@@ -494,9 +536,9 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   M4 seeds registered (mixer fidelity + music, stop-path coverage,
   skip-burst instrument). Regressions green: DEVICE RENDER OK (11.065
   ms full p99) + SIM CONFORMS (.loop/m3-task6-reg-{render,sim}.log).
-- **Latest AGENT-LOG entry**: iter 60 (M3 task 7 hardening DONE —
-  gate status enforcement, sentinel lockout, manifest anchor); latest
-  log id: .loop/m3-task7r60-manifest-selfcheck.log.
+- **Latest AGENT-LOG entry**: iter 62 (M3 hardening DONE — gate relay
+  prefix, true-respawn poll, probe-order attribution); latest log id:
+  .loop/m3-task7r62-audio-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
@@ -508,15 +550,19 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## Next
 
-1. Driver: audio arc round-2 closure review (iter-59 bytes) + gate arc
-   round-2 closure review (iter-60 bytes). On BOTH closures: flip ALL
+1. Driver: audio arc round-3 SCOPED CONFIRM (iter-61 + iter-62 bytes:
+   platform_audio_sdl.h, check-device-audio.sh probe-order +
+   timing-judge reads, judge-render-timing.js terminator) + gate arc
+   round-3 SCOPED CONFIRM (iter-60 + iter-62 bytes: verify_m3.sh
+   relay, riglib true-respawn, check-device-opk.sh sites,
+   check-device-render.sh timing reads). On BOTH closures: flip ALL
    manifest statuses to reviewed-go (cites = the closure logs) +
    update MANIFEST_SHA256 in verify_m3.sh, same commit as the
    phase-advance.
 2. Driver: cold AUTHORITATIVE `bash port/sim/device/verify_m3.sh` →
    `M3 GATE OK`, exit 0 (expect one arm-stamp rebuild — RIG_SCRIPTS
-   bytes changed iter 60; a default run BEFORE the status flip
-   correctly REFUSES naming the 9 unresolved producers — that is the
+   bytes changed iters 60/62; a default run BEFORE the status flip
+   correctly REFUSES naming the 11 unresolved producers — that is the
    designed outcome, not a defect) → emit the human-gate sentinel
    `LOOP STOP: m3-device — needed: Chase S1 ratification playtest`
    (LOOP §F-advance.3/§H — the GATE itself does NOT print it) +

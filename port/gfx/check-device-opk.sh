@@ -82,9 +82,11 @@
 #      respawn-cycled with the restoration VERIFIED (iter 60, review-58
 #      L1: pkill rcs captured + busybox no-match case-split, then a
 #      bounded rig_proc_respawn_poll must SEE gmenu2x running before
-#      the verdict prints; the EXIT trap performs the same verified
-#      cycle — WARN-loud — only when step 8 did not already verify,
-#      never re-killing a verified frontend); device writes only /tmp/mlfk +
+#      the verdict prints; iter 62, review-60 L1-residual: the poll is
+#      the TRUE-RESPAWN form — pre-kill pid captured, its exit required,
+#      then a live successor pid != old; the EXIT trap performs the same
+#      verified cycle — WARN-loud — only when step 8 did not already
+#      verify, never re-killing a verified frontend); device writes only /tmp/mlfk +
 #      /mnt/mlfk-scratch (+ the OPK file itself, removed); own
 #      processes killed on exit; the frontend is NEVER parked by this
 #      check (it IS the surface under test).
@@ -152,7 +154,7 @@ rig_lock_acquire
 FRONTEND_VERIFIED=0
 
 opk_cleanup() {
-  local prc pn cpid
+  local prc pn cpid old_cpid
   # own processes: per-process pkill with the rc CAPTURED and busybox
   # case-split (0 = killed, 1 = no match — nothing of ours running;
   # anything else is a real failure, loud) — never masked with `; true`
@@ -173,13 +175,16 @@ opk_cleanup() {
   # already VERIFIED the respawn; otherwise cycle + verify here, WARN
   # loud on failure (a trap must never mask the run's real exit code).
   if [ "$FRONTEND_VERIFIED" != 1 ]; then
+    # TRUE-RESPAWN (iter 62, review-60 L1-residual): capture the
+    # pre-kill pid so the poll can require its exit + a successor.
+    old_cpid="$(rig_proc_pid gmenu2x)" || old_cpid=""
     prc=0
     rig_dsh_retry "pkill gmenu2x" || prc=$?
     case "$prc" in
       0|1) : ;;
       *) echo "WARN: cleanup pkill gmenu2x failed (rc $prc)" >&2 ;;
     esac
-    if cpid="$(rig_proc_respawn_poll gmenu2x "$RESPAWN_TRIES")"; then
+    if cpid="$(rig_proc_respawn_poll gmenu2x "$RESPAWN_TRIES" "$old_cpid")"; then
       echo "   cleanup: gmenu2x respawned (pid $cpid) — frontend RUNNING" >&2
     else
       echo "WARN: cleanup could NOT verify a gmenu2x respawn within ${RESPAWN_TRIES}s — the frontend may be DOWN; check the device" >&2
@@ -561,6 +566,10 @@ if ! dsh "test ! -f /mnt/disable_frontend" >/dev/null 2>&1; then
   exit 1
 fi
 dsh "rm -rf $DTMP/opk" # a stale evidence dir must never satisfy a poll
+# TRUE-RESPAWN (iter 62, review-60 L1-residual): capture the pre-kill
+# pid; the poll then requires its EXIT plus a live successor != it — a
+# lingering old gmenu2x under a slow SIGTERM can never fake a respawn.
+old_gpid="$(rig_proc_pid gmenu2x)" || old_gpid=""
 prc=0
 dsh "pkill gmenu2x" >/dev/null 2>&1 || prc=$?
 case "$prc" in
@@ -568,9 +577,10 @@ case "$prc" in
   1) echo "WARN: gmenu2x was not running before the cycle (supervisor should respawn it)" >&2 ;;
   *) echo "DEVICE FAIL: pkill gmenu2x failed (rc $prc)" >&2; exit 1 ;;
 esac
-# §7#1 bounded foreground poll (shared riglib body, iter 60)
-gpid="$(rig_proc_respawn_poll gmenu2x "$RESPAWN_TRIES")" || {
-  echo "DEVICE FAIL: gmenu2x did not respawn within ${RESPAWN_TRIES}s of pkill (frontend supervisor defect?)" >&2
+# §7#1 bounded foreground poll (shared riglib body, iter 60; iter-62
+# true-respawn form)
+gpid="$(rig_proc_respawn_poll gmenu2x "$RESPAWN_TRIES" "$old_gpid")" || {
+  echo "DEVICE FAIL: gmenu2x did not TRUE-respawn within ${RESPAWN_TRIES}s of pkill (old pid must exit AND a successor must appear — frontend supervisor defect / lingering old process?)" >&2
   exit 1
 }
 echo "   gmenu2x respawned (pid $gpid) — menu at the deterministic start state"
@@ -711,6 +721,9 @@ dsh "test ! -f $DEVAPPS/$OPK_NAME"
 # the supervisor should have had it running; any other nonzero = loud
 # fail), then the bounded respawn poll must SEE gmenu2x running BEFORE
 # the verdict can print — OPK LAUNCH OK never coexists with a dead menu.
+# TRUE-RESPAWN (iter 62, review-60 L1-residual): the pre-kill pid is
+# captured and the poll requires its exit + a live successor != it.
+old_fpid="$(rig_proc_pid gmenu2x)" || old_fpid=""
 prc=0
 dsh "pkill gmenu2x" >/dev/null 2>&1 || prc=$?
 case "$prc" in
@@ -718,8 +731,8 @@ case "$prc" in
   1) echo "WARN: gmenu2x was not running at the final cycle (supervisor gap?) — poll below must still verify a respawn" >&2 ;;
   *) echo "DEVICE FAIL: final pkill gmenu2x failed (rc $prc)" >&2; exit 1 ;;
 esac
-fpid="$(rig_proc_respawn_poll gmenu2x "$RESPAWN_TRIES")" || {
-  echo "DEVICE FAIL: gmenu2x did not respawn within ${RESPAWN_TRIES}s after the final cycle — the frontend is DOWN; refusing to print the verdict" >&2
+fpid="$(rig_proc_respawn_poll gmenu2x "$RESPAWN_TRIES" "$old_fpid")" || {
+  echo "DEVICE FAIL: gmenu2x did not TRUE-respawn within ${RESPAWN_TRIES}s after the final cycle (old pid must exit AND a successor must appear) — the frontend is DOWN; refusing to print the verdict" >&2
   exit 1
 }
 FRONTEND_VERIFIED=1

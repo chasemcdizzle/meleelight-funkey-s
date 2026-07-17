@@ -119,26 +119,63 @@ rig_dsh_retry() {
   done
 }
 
-# rig_proc_respawn_poll <procname> <tries> — bounded FOREGROUND poll
-# (PROCESS §7#1) for a device process to be RUNNING, via RC-checked
+# rig_proc_pid <procname> — RC-checked nonce-dsh `pidof` under the
+# measured single-pid grammar (busybox pidof, single-instance gmenu2x:
+# one line, one bounded decimal pid). Echoes the pid; returns 1 when
+# the process is not running or the answer is not exactly one bounded
+# pid. Added iter 62 (review-60 L1-residual) as the PRE-KILL capture
+# companion of rig_proc_respawn_poll's true-respawn form.
+rig_proc_pid() {
+  local ppid
+  ppid="$(dsh "pidof $1" 2>/dev/null)" || return 1
+  ppid="${ppid%$'\n'}"
+  [[ "$ppid" =~ ^[0-9]{1,7}$ ]] || return 1
+  printf '%s\n' "$ppid"
+}
+
+# rig_proc_respawn_poll <procname> <tries> [oldpid] — bounded FOREGROUND
+# poll (PROCESS §7#1) for a device process to be RUNNING, via RC-checked
 # nonce-dsh `pidof`. Added iter 60 (review-58 L1: frontend restoration
 # must be VERIFIED, never assumed from a masked pkill rc) — the
 # measured check-device-opk.sh step-6 respawn-poll pattern factored as
 # a CLASS so launch-precondition and restoration sites share ONE body.
+# TRUE-RESPAWN form (iter 62, review-60 L1-residual): when the caller
+# supplies the PRE-KILL pid (captured via rig_proc_pid BEFORE its
+# pkill), a verified respawn requires BOTH (a) the old pid to have
+# DISAPPEARED (/proc/<oldpid> gone, RC-checked — a lingering old
+# process under a slow SIGTERM can never satisfy the poll) AND (b) a
+# live single-pid pidof answer with pid != oldpid (the old pid's mere
+# disappearance without a successor never verifies, and a pid echo of
+# the old process is never accepted). Without [oldpid] (process was not
+# running pre-kill) any verified single live pid is a respawn.
 # Measured producer grammar (busybox pidof, single-instance gmenu2x):
 # one line, one bounded decimal pid; anything else (multi-pid, empty,
 # junk) is NOT a verified respawn and the poll keeps waiting. Echoes
-# the pid on success; returns 1 when the process never verifies within
-# <tries> x 1 s — the CALLER decides loud-fail vs loud-warn.
+# the NEW pid on success; returns 1 when the process never verifies
+# within <tries> x 1 s — the CALLER decides loud-fail vs loud-warn.
 rig_proc_respawn_poll() {
-  local pname tries ppid
+  local pname tries oldpid ppid orc
   pname="$1"
   tries="$2"
+  oldpid="${3:-}"
+  if [ -n "$oldpid" ] && ! [[ "$oldpid" =~ ^[0-9]{1,7}$ ]]; then
+    echo "DEVICE FAIL: rig_proc_respawn_poll oldpid not a bounded decimal pid ('$oldpid')" >&2
+    return 1
+  fi
   for _ in $(seq 1 "$tries"); do
     sleep 1
+    if [ -n "$oldpid" ]; then
+      orc=0
+      dsh "test ! -d /proc/$oldpid" >/dev/null 2>&1 || orc=$?
+      # old pid still alive (or the probe failed): NOT a respawn yet
+      [ "$orc" = 0 ] || continue
+    fi
     ppid="$(dsh "pidof $pname" 2>/dev/null)" || continue
     ppid="${ppid%$'\n'}"
     if [[ "$ppid" =~ ^[0-9]{1,7}$ ]]; then
+      if [ -n "$oldpid" ] && [ "$ppid" = "$oldpid" ]; then
+        continue # pid echo of the old process — never a verified respawn
+      fi
       printf '%s\n' "$ppid"
       return 0
     fi

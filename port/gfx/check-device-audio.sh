@@ -36,7 +36,12 @@
 #      judge/pack output with a trailing blank line -> FILE-BYTE grammar
 #      death (producer outputs are read from file bytes, never from
 #      newline-stripping $() alone). PLUS the standing DEVICE probe
-#      T5 (review-57 M1), step 7 below.
+#      T5 (review-57 M1), step 7 below — run AFTER the paced gate
+#      attempts since iter 62 (probe-order attribution: the
+#      CPU-saturating probe is an instrument that perturbs a
+#      SUBSEQUENT paced measurement; ordering it after removes the
+#      perturbation while keeping the accounting proof ahead of any
+#      verdict).
 #   4. DEVICE LIVE RENDER+AUDIO: g01 replayed ON the FunKey-S through
 #      the SDL1.2 backend with the audio callback LIVE (44100/S16LSB/
 #      2ch/512 — the measured spike config; 8-voice SFX mixer fed by the
@@ -139,14 +144,21 @@ ATTEMPTS_MAX=2              # retry policy (header) — pre-registered
 # probe runs INSIDE every check invocation and MUST count >0 underruns
 # AND be rejected by the judge — proving the gap accounting live in
 # the FAILING direction per run (T3 only proves the judge; T5 proves
-# the device-side instrumentation).
+# the device-side instrumentation). ORDER (iter 62, probe-order
+# attribution — instrument-perturbs-measurement class): the probe runs
+# AFTER the paced gate attempts, in the same parked window, BEFORE
+# restore/verdict. Measured incidence that forced the move: pre-probe
+# era ~2 spike-runs/6; probe-before-paced era 3/4 attempts spiked and
+# the driver cold run spiked on BOTH attempts (skips=3,1). The probe's
+# accounting requirement is UNCHANGED (a clean probe is a check
+# failure) — only its position moved.
 T5_SAMPLES=64
 T5_FRAMES=600
 T5_BUDGET_NS=1000
 T5_TRIES=20         # x2 s host poll for the probe's detached rc file
-DEADMAN_S="${MLFK_DEADMAN_S:-420}" # park deadman window: covers the T5
-                    # probe (~10 s) + both paced attempts (~2x62 s) +
-                    # pulls/judgment between
+DEADMAN_S="${MLFK_DEADMAN_S:-420}" # park deadman window: covers both
+                    # paced attempts (~2x62 s) + the post-attempt T5
+                    # probe (~10 s) + pulls/judgment between
                     # (MLFK_DEADMAN_S = negative-testing override ONLY)
 APPRC_TRIES=90      # x2 s host poll per attempt for the detached rc file
 GFXDATA_FROZEN=$GFX/gfxdata-frozen.txt
@@ -281,15 +293,30 @@ rig_devsha_selftest
 
 # parse_timing_judge <timing-file> <frames> — VERBATIM task-4 parser
 # (check-device-render.sh provenance: iters 43/52/54 — strict judge
-# grammar, duplicate-key death, digit bounds before bash arithmetic).
+# grammar, duplicate-key death, digit bounds before bash arithmetic;
+# iter 62: FILE-BYTE read + judge_complete terminator, the iter-61
+# audio-judge pattern applied to the timing judge — trailing-blank
+# class completion).
+timing_judge_bytes_assert() {
+  local jf="$1"
+  if ! tail -c 17 "$jf" | cmp -s - <(printf 'judge_complete=1\n'); then
+    echo "DEVICE FAIL: timing judge output file $jf does not END with the exact bytes 'judge_complete=1<newline>' (trailing blank lines / missing final newline / truncation) — corrupt judge output" >&2
+    exit 1
+  fi
+}
 parse_timing_judge() {
-  local tf="$1" fr="$2" jout jk jv dup
+  local tf="$1" fr="$2" jout jk jv dup jf
   unset full_p99_ns full_p99_ms render_p99_ns render_p99_ms sim_p99_ms \
     present_p99_ms skips rendered
-  jout="$(node "$GFX/judge-render-timing.js" "$tf" "$fr")" || {
+  jf="$BUILD/timjudge-out.txt"
+  rm -f "$jf"
+  node "$GFX/judge-render-timing.js" "$tf" "$fr" > "$jf" || {
     echo "DEVICE FAIL: timing judgment failed for $tf" >&2
     exit 1
   }
+  made "$jf"
+  timing_judge_bytes_assert "$jf"
+  jout="$(cat "$jf")"
   dup="$(printf '%s\n' "$jout" | awk -F= '{print $1}' | sort | uniq -d)"
   if [ -n "$dup" ]; then
     echo "DEVICE FAIL: timing judge output carries duplicate key(s) — corrupt evidence: $dup" >&2
@@ -313,6 +340,14 @@ parse_timing_judge() {
         ;;
       full_p50_ns|full_p50_ms|full_max_ns|full_max_ms|sim_p50_ns|sim_p50_ms|sim_p99_ns|render_p50_ns|render_p50_ms|render_max_ns|render_max_ms|present_p50_ns|present_p50_ms|present_p99_ns)
         : # reported by the judge; not asserted here
+        ;;
+      judge_complete)
+        # the integrity terminator (iter 62): position already proven
+        # by the file-byte assert; the value must still be exactly 1
+        if [ "$jv" != 1 ]; then
+          echo "DEVICE FAIL: timing judge judge_complete carries unexpected value ('$jv')" >&2
+          exit 1
+        fi
         ;;
       *)
         echo "DEVICE FAIL: unexpected timing judge line '$jk=$jv'" >&2
@@ -942,7 +977,7 @@ if [ "$dsum" != "$SNDPACK_SHA256" ]; then
 fi
 echo "   pushed data sha-verified on device (simdata, trace, gfxdata, 2 anim bins, sndpack -> $DSD)"
 
-echo "== [7/8] device: T5 starvation probe + LIVE paced g01 render+audio (deadman-guarded park; <= $ATTEMPTS_MAX attempts) =="
+echo "== [7/8] device: LIVE paced g01 render+audio (deadman-guarded park; <= $ATTEMPTS_MAX attempts) + post-attempt T5 starvation probe =="
 # Deadman + launcher: task-4 apparatus VERBATIM (provenance comments in
 # check-device-render.sh, iters 50-55). The launcher takes the attempt
 # number as \$1 so retries never overwrite attempt-1 evidence.
@@ -1056,43 +1091,6 @@ case "$prc" in
   1) echo "WARN: gmenu2x was not running at park time" >&2 ;;
   *) echo "DEVICE FAIL: pkill gmenu2x failed (rc $prc)" >&2; exit 1 ;;
 esac
-
-# -- T5 STANDING STARVATION PROBE (iter 59, review-57 M1) --------------------
-# Runs INSIDE every check invocation, in the parked window, BEFORE the
-# gate attempts: the 64-sample buffer under a CPU-saturating replay
-# MUST count >0 underruns and be REJECTED by the judge — proving the
-# device-side gap accounting live in the failing direction per run
-# (T3 proves only the judge; this proves the instrumentation). The
-# samples=64 grammar pin also proves a wrong-spec run cannot pose as
-# the gate run. A CLEAN probe is a check FAILURE (pre-registered,
-# AGENT-LOG iter 59 — never loosened to "record honestly").
-echo "   -- T5 standing starvation probe (samples=$T5_SAMPLES frames=$T5_FRAMES budget=${T5_BUDGET_NS}ns) --"
-dsh "sh -lc $DTMP/t5-launch.sh"
-t5_seen=0
-for _ in $(seq 1 "$T5_TRIES"); do # §7#1 bounded foreground poll
-  if dsh "test -f $DTMP/t5.apprc" >/dev/null 2>&1; then t5_seen=1; break; fi
-  sleep 2
-done
-if [ "$t5_seen" != 1 ]; then
-  dsh "cat $DTMP/t5-log.txt" >&2 || true
-  echo "DEVICE FAIL: T5 probe never finished (rc file absent after $((T5_TRIES * 2))s)" >&2
-  exit 1
-fi
-pullv "$DTMP/t5.apprc" "$DEVB/t5.apprc"
-if [ "$(cat "$DEVB/t5.apprc")" != "RC=0" ]; then
-  dsh "cat $DTMP/t5-log.txt" >&2 || true
-  echo "DEVICE FAIL: T5 probe app exited nonzero ($(cat "$DEVB/t5.apprc"))" >&2
-  exit 1
-fi
-pullv "$DTMP/t5-log.txt" "$DEVB/t5-log.txt"
-parse_audio_judge "$DEVB/t5-log.txt" \
-  "$AUDIO_RATE" "$T5_SAMPLES" "$AUDIO_CHANNELS" --max-underruns 0
-if [ "$au_rc" -ne 2 ] || [ "$au_underruns" -le 0 ] \
-  || [ "$au_fails" != "underruns" ]; then
-  echo "DEVICE FAIL: T5 standing probe did NOT starve (rc=$au_rc underruns=$au_underruns fails='$au_fails') — the gap accounting is not provably live; refutation path per AGENT-LOG iter 59 (one bounded re-measure, then STOP+report)" >&2
-  exit 1
-fi
-echo "   T5 probe OK: underruns=$au_underruns counted and rejected (cbs=$au_cbs starts=$au_starts) — gap accounting LIVE"
 
 attempt=0
 attempt_pass=0
@@ -1216,6 +1214,59 @@ while [ "$attempt" -lt "$ATTEMPTS_MAX" ]; do
   fi
 done
 
+# GATE-attempt counters SAVED before the probe (iter 62): the T5 probe
+# below reuses parse_audio_judge and would overwrite the au_* variables
+# — the verdict line must report the GATE run's counters, never the
+# probe's.
+gate_underruns="${au_underruns:-}"
+gate_cbs="${au_cbs:-}"
+gate_starts="${au_starts:-}"
+gate_stops="${au_stops:-}"
+
+# -- T5 STANDING STARVATION PROBE (iter 59, review-57 M1; moved AFTER
+# the paced attempts iter 62 — probe-order attribution) -----------------------
+# Runs INSIDE every check invocation that completes its paced attempts,
+# in the same parked window, BEFORE restore/verdict: the 64-sample
+# buffer under a CPU-saturating replay MUST count >0 underruns and be
+# REJECTED by the judge — proving the device-side gap accounting live
+# in the failing direction per run (T3 proves only the judge; this
+# proves the instrumentation). The samples=64 grammar pin also proves a
+# wrong-spec run cannot pose as the gate run. A CLEAN probe is a check
+# FAILURE (pre-registered, AGENT-LOG iter 59 — never loosened to
+# "record honestly"). Running AFTER the attempts removes the probe's
+# after-effect from the paced measurement (iter-62 attribution) while
+# the accounting proof still lands before any verdict prints; a
+# hard-leg failure exits before the probe, which is sound — the probe's
+# epistemic role is validating underruns=0 on runs that reach a
+# verdict.
+echo "   -- T5 standing starvation probe (samples=$T5_SAMPLES frames=$T5_FRAMES budget=${T5_BUDGET_NS}ns; post-attempt) --"
+dsh "sh -lc $DTMP/t5-launch.sh"
+t5_seen=0
+for _ in $(seq 1 "$T5_TRIES"); do # §7#1 bounded foreground poll
+  if dsh "test -f $DTMP/t5.apprc" >/dev/null 2>&1; then t5_seen=1; break; fi
+  sleep 2
+done
+if [ "$t5_seen" != 1 ]; then
+  dsh "cat $DTMP/t5-log.txt" >&2 || true
+  echo "DEVICE FAIL: T5 probe never finished (rc file absent after $((T5_TRIES * 2))s)" >&2
+  exit 1
+fi
+pullv "$DTMP/t5.apprc" "$DEVB/t5.apprc"
+if [ "$(cat "$DEVB/t5.apprc")" != "RC=0" ]; then
+  dsh "cat $DTMP/t5-log.txt" >&2 || true
+  echo "DEVICE FAIL: T5 probe app exited nonzero ($(cat "$DEVB/t5.apprc"))" >&2
+  exit 1
+fi
+pullv "$DTMP/t5-log.txt" "$DEVB/t5-log.txt"
+parse_audio_judge "$DEVB/t5-log.txt" \
+  "$AUDIO_RATE" "$T5_SAMPLES" "$AUDIO_CHANNELS" --max-underruns 0
+if [ "$au_rc" -ne 2 ] || [ "$au_underruns" -le 0 ] \
+  || [ "$au_fails" != "underruns" ]; then
+  echo "DEVICE FAIL: T5 standing probe did NOT starve (rc=$au_rc underruns=$au_underruns fails='$au_fails') — the gap accounting is not provably live; refutation path per AGENT-LOG iter 59 (one bounded re-measure, then STOP+report)" >&2
+  exit 1
+fi
+echo "   T5 probe OK: underruns=$au_underruns counted and rejected (cbs=$au_cbs starts=$au_starts) — gap accounting LIVE"
+
 # restore + disarm (task-4 sequencing VERBATIM: marker VERIFIED gone
 # before either disarm channel)
 dsh "rm -f /mnt/disable_frontend"
@@ -1251,4 +1302,6 @@ rig_no_commit_guard "$BUILD" "$DEVB" "$TABLES" "$AUDIO_OUT"
 # the loop, cbs in the frozen window, starts/stops == host truth,
 # skips == 0. (steals is deliberately NOT here — it is device-timing-
 # dependent, unasserted, and reported only in the per-attempt detail.)
-echo "DEVICE AUDIO OK (full p99 ${full_p99_ms} ms, underruns=${au_underruns}, attempts=${attempt}; cbs=${au_cbs} starts=${au_starts} stops=${au_stops} skips=${skips}/${frames})"
+# gate_* are the GATE attempt's counters, saved BEFORE the post-attempt
+# T5 probe reused the au_* variables (iter 62).
+echo "DEVICE AUDIO OK (full p99 ${full_p99_ms} ms, underruns=${gate_underruns}, attempts=${attempt}; cbs=${gate_cbs} starts=${gate_starts} stops=${gate_stops} skips=${skips}/${frames})"

@@ -102,7 +102,7 @@ mkdir -p "$VDIR"
 # line (a full-byte self-row plus this anchor would be a two-unknown
 # hash fixed point with no solution); the excluded line is protected
 # by the anchor equality itself — a wrong literal IS a refusal.
-MANIFEST_SHA256=7e148d8c3a900a162f3d80631c7ee24979d559298f05b184ad1bf54989097b07
+MANIFEST_SHA256=578bfbd5d8385a1585f8349c7cbcbe3e1282611e7c0b0a229882fe6a08daa07b
 
 # AUTHORITATIVE — computed ONCE, then readonly (iter 60, review-58 H2:
 # the sentinel lockout). Any dev/canned-evidence signal zeroes it; the
@@ -124,6 +124,18 @@ readonly AUTHORITATIVE AUTH_REASONS
 # runs NO device command itself (the legs own the lock, serially).
 source port/sim/device/adbsh.sh
 source port/sim/device/riglib.sh
+
+# LOG-SENTINEL RELAY CONTRACT (iter 62, review-60 H2-residual): every
+# line this gate RELAYS from sub-content — tail'd leg logs, canned-rc
+# bytes, manifest-derived status lists — passes through relay_lines,
+# which prints it with the visible '  | ' prefix. No relayed byte
+# sequence can therefore ever occupy column 0 of the gate's combined
+# output, so a line-anchored scan for the sentinel can never match
+# relayed content: the genuine `M3 GATE OK` echo at the bottom of this
+# script is the ONLY possible unprefixed line-anchored occurrence. Any
+# NEW relay site MUST route through relay_lines (this contract is the
+# review-60 H2 closure; an unprefixed relay reopens it).
+relay_lines() { sed 's/^/  | /'; }
 
 # The pinned producer set: the manifest must list EXACTLY these paths
 # (a truncated manifest can never silently narrow gate coverage).
@@ -269,10 +281,10 @@ echo "== [0b] review-closure status enforcement (refusal before any leg) =="
 if [ "$n_unresolved" != 0 ]; then
   if [ "${MLFK_M3_DEV:-0}" = 1 ]; then
     echo "WARN: MLFK_M3_DEV=1 — status enforcement BYPASSED for $n_unresolved producer(s) (engineering run; outcome will be NON-AUTHORITATIVE + nonzero):" >&2
-    printf '%s' "$UNRESOLVED" >&2
+    printf '%s' "$UNRESOLVED" | relay_lines >&2
   else
     echo "M3 GATE REFUSED: $n_unresolved producer(s) lack review closure — status not in {reviewed-go, oracle-frozen, grandfathered-m2}:" >&2
-    printf '%s' "$UNRESOLVED" >&2
+    printf '%s' "$UNRESOLVED" | relay_lines >&2
     echo "  Review closure (PROCESS §3 arc -> §4 reviewed pin) is required BEFORE any leg" >&2
     echo "  runs in AUTHORITATIVE mode. Close the arcs and flip the manifest statuses" >&2
     echo "  (driver duty at phase-advance), or run engineering-only with MLFK_M3_DEV=1" >&2
@@ -296,14 +308,19 @@ run_leg() { # <name> <script> — runs (or replays) a leg, dies on rc != 0
     }
     rc="$(cat "$MLFK_M3_FAKE_LEG_DIR/leg-$name.rc" 2>/dev/null)" || rc=missing
     if ! [[ "$rc" =~ ^[0-9]{1,3}$ ]]; then
-      echo "M3 GATE FAIL: canned leg rc for '$name' malformed ('$rc')" >&2
+      # relayed sub-content: the rc bytes may be arbitrary/multi-line —
+      # print them ONLY through the '  | ' relay (log-sentinel contract)
+      echo "M3 GATE FAIL: canned leg rc for '$name' malformed (bytes relayed below):" >&2
+      printf '%s\n' "$rc" | relay_lines >&2
       exit 1
     fi
   else
     bash "$script" > "$legf" 2>&1 || rc=$?
   fi
   if [ "$rc" != 0 ]; then
-    tail -30 "$legf" >&2
+    # relayed sub-content: leg-log bytes go out ONLY through the
+    # '  | ' relay (log-sentinel contract above)
+    tail -30 "$legf" | relay_lines >&2
     echo "M3 GATE FAIL: leg '$name' exited $rc (full log: $legf)" >&2
     exit 1
   fi
@@ -389,6 +406,11 @@ echo "  [4] live input:  $LEG4"
 # SENTINEL LOCKOUT (iter 60, review-58 H2): the sentinel exists ONLY in
 # the AUTHORITATIVE=1 branch — a dev/canned run is structurally
 # incapable of printing it and always exits nonzero.
+# LOG-SENTINEL CONTRACT (iter 62, review-60 H2-residual — emission
+# site): every relayed sub-content line in this script's output carries
+# the '  | ' prefix (relay_lines, defined at the top), so THIS echo is
+# the only line-anchored `M3 GATE OK` the gate can ever emit — a
+# line-anchored scan of the combined output is sound.
 if [ "$AUTHORITATIVE" = 1 ]; then
   echo "M3 GATE OK"
   exit 0
