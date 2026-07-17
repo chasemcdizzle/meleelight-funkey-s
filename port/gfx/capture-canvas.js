@@ -1,0 +1,234 @@
+#!/usr/bin/env node
+// port/gfx/capture-canvas.js — browser render-reference capture (M3 task 3).
+//
+// Replays a golden through the browser oracle harness
+// (oracle/harness/{init,pagelib}.js VERBATIM — oracle/ is never modified;
+// the run-capture.js served-bytes __wpCache hook reaches the render
+// modules) with the reduced gameMode-3 render sequence executed after
+// EVERY step, and dumps per-frame fg1|fg2 ink masks (+ composite PNGs)
+// for the sampled frames. Also dumps the GFXDATA1 render data plane
+// (palettes/pPal/flashOnLCancel/reverseModel) EXECUTED out of the page.
+//
+// The emitted run JSON is verify-stream.js-compatible; the capture is
+// only trustworthy if that run passes STREAM MATCH against the frozen
+// golden (non-perturbation guard) — check-render.sh enforces it.
+//
+// Usage:
+//   node capture-canvas.js --golden g01 --frames-list 30,100,...
+//     --out-dir build/canvas --out-run build/g01.render-run.json
+//     --gfxdata build/gfxdata.txt [--dist <clone-root>]
+//
+// Canvas dumps are NON-FROZEN reference material (browser canvas
+// rasterization is not bit-deterministic): regenerated per check run,
+// never committed, judged only through the structural IoU.
+"use strict";
+
+const fs = require("fs");
+const http = require("http");
+const path = require("path");
+
+const REPO = path.resolve(__dirname, "..", "..");
+const HARNESS = path.join(REPO, "oracle", "harness");
+const { chromium } = require(path.join(HARNESS, "node_modules", "playwright"));
+
+function arg(name, dflt) {
+  const i = process.argv.indexOf("--" + name);
+  if (i === -1) return dflt;
+  const v = process.argv[i + 1];
+  return v === undefined || v.startsWith("--") ? true : v;
+}
+
+const GOLDEN_ID = arg("golden", "");
+const DIST_ROOT = path.resolve(arg("dist",
+  process.env.MELEELIGHT_CLONE ||
+  path.join(process.env.HOME, ".cache", "meleelight-funkey-s", "upstream")));
+const manifest = JSON.parse(fs.readFileSync(
+  path.join(REPO, "oracle", "goldens", "manifest.json"), "utf8"));
+const g = manifest.goldens.find((x) => x.id === GOLDEN_ID);
+if (!g) {
+  console.error(`--golden must be one of: ${manifest.goldens.map((x) => x.id).join(", ")}`);
+  process.exit(1);
+}
+const TRACE = path.join(REPO, "oracle", "goldens", g.trace);
+const OUT_DIR = arg("out-dir", "");
+const OUT_RUN = arg("out-run", "");
+const GFXDATA = arg("gfxdata", "");
+const FRAMES_LIST = String(arg("frames-list", ""));
+if (!OUT_DIR || OUT_DIR === true || !OUT_RUN || OUT_RUN === true ||
+    !GFXDATA || GFXDATA === true || !FRAMES_LIST) {
+  console.error("capture-canvas: --out-dir, --out-run, --gfxdata, --frames-list are required");
+  process.exit(1);
+}
+const sampled = {};
+for (const s of FRAMES_LIST.split(",")) {
+  const v = parseInt(s, 10);
+  if (!Number.isInteger(v) || v < 1 || v > g.frames || String(v) !== s.trim()) {
+    console.error(`capture-canvas: bad sampled frame '${s}'`);
+    process.exit(1);
+  }
+  sampled[v] = true;
+}
+const CHUNK = 120;
+
+const MIME = {
+  ".html": "text/html", ".js": "text/javascript", ".css": "text/css",
+  ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg",
+  ".svg": "image/svg+xml", ".wav": "audio/wav", ".mp3": "audio/mpeg",
+};
+
+// Serve the dist untouched EXCEPT dist/js/main.js, whose served bytes get
+// the run-capture.js webpack-bootstrap hook (window.__wpCache). Disk is
+// never written.
+const BOOT_LINE = "var installedModules = {};";
+const BOOT_HOOK = BOOT_LINE + " window.__wpCache = installedModules;";
+
+function serve(root) {
+  return new Promise((resolve) => {
+    const srv = http.createServer((req, res) => {
+      const urlPath = decodeURIComponent(req.url.split("?")[0]);
+      const fp = path.join(root, path.normalize(urlPath));
+      if (!fp.startsWith(root) || !fs.existsSync(fp) || fs.statSync(fp).isDirectory()) {
+        res.writeHead(404); res.end("nope"); return;
+      }
+      if (urlPath.endsWith("/dist/js/main.js")) {
+        const src = fs.readFileSync(fp, "utf8");
+        const i = src.indexOf(BOOT_LINE);
+        if (i === -1 || src.indexOf(BOOT_LINE, i + 1) !== -1) {
+          res.writeHead(500);
+          res.end("capture: webpack bootstrap line not found exactly once in main.js");
+          return;
+        }
+        const hooked = src.slice(0, i) + BOOT_HOOK + src.slice(i + BOOT_LINE.length);
+        res.writeHead(200, { "Content-Type": "text/javascript" });
+        res.end(hooked);
+        return;
+      }
+      res.writeHead(200, { "Content-Type": MIME[path.extname(fp)] || "application/octet-stream" });
+      fs.createReadStream(fp).pipe(res);
+    });
+    srv.listen(0, "127.0.0.1", () => resolve(srv));
+  });
+}
+
+async function main() {
+  if (!fs.existsSync(path.join(DIST_ROOT, "dist", "meleelight.html"))) {
+    console.error("--dist must point at a built meleelight clone (run oracle/build-upstream.sh)");
+    process.exit(1);
+  }
+  const trace = JSON.parse(fs.readFileSync(TRACE, "utf8"));
+  const srv = await serve(DIST_ROOT);
+  const port = srv.address().port;
+
+  let browser;
+  try {
+    browser = await chromium.launch({ channel: "chrome", headless: true });
+  } catch (e) {
+    browser = await chromium.launch({ headless: true });
+  }
+  const context = await browser.newContext();
+  await context.route(/\/(sfx|music)\//, (r) => r.abort());
+  const page = await context.newPage();
+  page.on("pageerror", (e) => { console.error("[pageerror]", e.message); process.exitCode = 1; });
+  page.on("console", (m) => {
+    if (m.type() === "error" && !m.text().includes("Failed to load resource")) {
+      console.error("[console.error]", m.text());
+    }
+  });
+
+  // Identical init pipeline to oracle/harness/run.js golden recording:
+  // seeded RNG, virtual clock, fdlibm shim ON. __harnessNoRender stays
+  // TRUE — the rAF renderTick draws nothing; OUR explicit sequence is
+  // the only renderer, so frame pairing is exact.
+  await page.addInitScript({
+    content: "window.__harnessConfig = " + JSON.stringify({
+      seedRandom: true, seed: g.seed, virtualClock: true, fdlibm: true,
+      captureMath: false }) + ";",
+  });
+  await page.addInitScript({ path: path.join(REPO, "port", "fdlibm", "fdlibm.js") });
+  await page.addInitScript({ path: path.join(HARNESS, "init.js") });
+  await page.addInitScript({ path: path.join(HARNESS, "pagelib.js") });
+  await page.addInitScript({ path: path.join(__dirname, "gfx-pagelib.js") });
+
+  await page.goto(`http://localhost:${port}/dist/meleelight.html`);
+  await page.waitForFunction(
+    "window.__harness && window.__nextInputBuffers", null, { timeout: 120000 });
+
+  await page.evaluate(() => window.__gfxFindModules());
+
+  await page.evaluate(({ trace, p1, p2, stage, cpu, difficulty }) => {
+    window.__trace = trace;
+    window.__resetMathCalls();
+    window.__harness.setupMatch({
+      players: [
+        { type: 0, character: p1 },
+        cpu ? { type: 1, character: p2, difficulty: difficulty }
+            : { type: 0, character: p2 },
+        null, null,
+      ],
+      stage: stage,
+    });
+  }, { trace, p1: g.p1, p2: g.p2, stage: g.stage, cpu: g.cpu, difficulty: g.difficulty || 5 });
+
+  // GFXDATA1 (post-setup: actionStates registries are live)
+  const gfxdata = await page.evaluate(() => window.__gfxDumpData());
+  fs.mkdirSync(path.dirname(path.resolve(GFXDATA)), { recursive: true });
+  fs.writeFileSync(GFXDATA, gfxdata);
+
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+
+  const frames = [];
+  let masksWritten = 0;
+  const t0 = Date.now();
+  for (let done = 0; done < g.frames; done += CHUNK) {
+    const n = Math.min(CHUNK, g.frames - done);
+    const chunk = await page.evaluate(
+      (o) => window.__gfxRunChunk(o.n, o.sampled), { n, sampled });
+    frames.push(...chunk);
+    const captured = await page.evaluate(() => window.__gfxDrainCaptured());
+    for (const f of Object.keys(captured)) {
+      const m = Buffer.from(captured[f].mask, "base64");
+      if (m.length !== 1200 * 750) {
+        console.error(`capture-canvas: frame ${f} mask is ${m.length} bytes (want 900000)`);
+        process.exit(1);
+      }
+      fs.writeFileSync(path.join(OUT_DIR, `f${String(f).padStart(4, "0")}.mask.bin`), m);
+      const png = captured[f].png;
+      const pfx = "data:image/png;base64,";
+      if (!png.startsWith(pfx)) {
+        console.error("capture-canvas: composite PNG dataURL malformed");
+        process.exit(1);
+      }
+      fs.writeFileSync(path.join(OUT_DIR, `f${String(f).padStart(4, "0")}.png`),
+        Buffer.from(png.slice(pfx.length), "base64"));
+      masksWritten++;
+    }
+  }
+  const wall = Date.now() - t0;
+  const wanted = Object.keys(sampled).length;
+  if (masksWritten !== wanted) {
+    console.error(`capture-canvas: wrote ${masksWritten} masks, wanted ${wanted}`);
+    process.exit(1);
+  }
+
+  const coverage = await page.evaluate(() => window.__coverage());
+  fs.writeFileSync(OUT_RUN, JSON.stringify({
+    meta: {
+      dist: DIST_ROOT, trace: TRACE, frames: g.frames, seed: g.seed,
+      p1: g.p1, p2: g.p2, stage: g.stage,
+      seedRandom: true, fdlibm: true, cpu: g.cpu,
+      difficulty: g.cpu ? g.difficulty : null, wallMs: wall,
+      browser: browser.browserType().name(), version: browser.version(),
+      gfxCapture: { sampled: Object.keys(sampled).map(Number).sort((a, b) => a - b) },
+    },
+    coverage,
+    frames,
+  }));
+
+  console.log(`${g.id}: ${g.frames} frames rendered+stepped in ${wall}ms; ` +
+    `${masksWritten} sampled masks -> ${OUT_DIR}`);
+
+  await browser.close();
+  srv.close();
+}
+
+main().catch((e) => { console.error(e); process.exit(1); });

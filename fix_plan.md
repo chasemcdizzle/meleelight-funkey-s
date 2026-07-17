@@ -1084,21 +1084,42 @@ threshold probe → SIM P99 FAIL after STREAM MATCH. Regressions green:
 check-sim.sh SIM CONFORMS + check-device-g01.sh DEVICE CONFORMS g01
 through the refactored lib.)
 
-3. renderer core, host-side first — `port/gfx/`: C ANIM1 consumption
-   (pipeline/FORMATS.md §2 decoder), adaptive cubic flattening, the AA
-   scanline rasterizer (rastbench.c's measured variant restructured as a
-   real module), camera/zoom logic ported verbatim sim-side, stage +
-   players + articles + vfx into ONE 240×240 RGB565 buffer; headless
-   backend dumps frames (PPM/PNG). Visual check (HONEST-structural): for
-   ≥12 sampled frames spread across the g01 replay, silhouette overlap
-   (IoU) between the C render and the browser oracle's canvas capture
-   (harness run WITHOUT __harnessNoRender, canvas dumped per sampled
-   frame, downscaled to 240×240) ≥ a threshold measured-then-frozen in
-   `port/gfx/expected-render.json` BEFORE first pass (seed 0.90; never
-   loosened after freezing), plus ×2 byte-stable C renders, plus the g01
-   checksum stream STILL verifying during the render-on replay (renderer
-   must not perturb the sim). — done-check:
-   `bash port/gfx/check-render.sh` → prints `RENDER OK`, exit 0.
+(task 3 — renderer core, host-side — DONE iter 44:
+`bash port/gfx/check-render.sh` → RENDER OK, exit 0
+(.loop/m3-task3-donecheck.log). `port/gfx/`: anim1.{h,c} implements
+FORMATS.md §2 against the SPEC (bounds-checked, LE byte-assembled,
+absent-frame sentinel); raster.{h,c} = THE rastbench measured variant as
+a module (adaptive cubic flatten tol 0.25px, nonzero-winding active-edge
+scanline fill, 4x vertical subsample AA + fractional span ends, 565
+blend, zero frame-loop allocations) + an explicit per-pixel INK plane
+(silhouette truth — low-alpha fills are 565-invisible); the ONLY -O3 TU.
+gfx_render.c: camera = STAB1 `pos*scale+offset` VERBATIM in doubles
+(upstream has NO dynamic zoom — measured) + retarget k=0.2/dy=45
+letterbox; stage + renderPlayer (facing flips, colour branch, miniView
+bubble, ENTRANCE squash, shield, REBIRTH halo, fg2-lineWidth persistence;
+debug overlays trap) + LASER articles (chromaticAberration x3), all
+structure-parallel to render.js/stagerender.js/article.js; palettes/
+pPal/flashOnLCancel/reverseModel come from the EXECUTED GFXDATA1 dump
+(capture-canvas.js), never hand-typed. gfx_replay.c = sim_main's loop
+(cited copy; sim_main untouched) + render EVERY frame; stdout judged by
+the UNCHANGED verify-stream.js (renderer takes const GameState* and the
+render-on stream STREAM MATCHes — non-perturbation proven, not argued).
+Browser reference: capture-canvas.js + gfx-pagelib.js on the
+run-capture.js served-bytes class (oracle/ untouched), reduced render
+sequence per step with Math.random native-swap + outOfCameraTimer
+snapshot/restore, STREAM-MATCH-guarded; masks = fg1|fg2 alpha>0,
+non-frozen, regenerated per run. IoU frozen 0.91 (seeded 0.90; measured
+min 0.9149 f1237 / max 0.9302 over 16 frames; residual = browser-side
+1px-line downscale boundary dilation, C-only cells ZERO). Teeth: dy
+45→47 → all frames FAIL 0.74; PPM pid-XOR → cmp fails; renderer
+sim-write 1e-9 → STREAM MISMATCH frame 2 (run-side; +1.0 variant dies
+loudly at the DEADDOWN final-death trap). VFX EXCLUDED both sides —
+REGISTERED deferral: the ml_events vfx seam carries names only (pos/face
+projected away across 174 verified call sites); seam widening = M4 seed.
+Gotcha classes: node -p JSON NUMBERS emit ANSI colour (String() them —
+task-17 gotcha, new surface); render instrumentation must guard RNG
+stream + render-written sim fields, sufficiency PROVEN by the capture's
+STREAM MATCH; silhouette checks need an explicit ink plane.)
 
 4. platform seam + SDL1.2 device backend + live device render — the
    CLAUDE.md three-backend seam (`platform_init/present/poll/quit` +
@@ -1154,4 +1175,9 @@ through the refactored lib.)
 
 (seed items — REPLAN concretizes on phase entry: thin C front-of-house
 menus, audio mixer per PLAN §7, ai.js port (+tan to fdlibm surface),
-target test, SD persistence, full-game trace suite, Chase acceptance)
+target test, SD persistence, full-game trace suite, Chase acceptance;
+**vfx render seam widening** (registered iter 44): extend the sim's vfx
+events from name-only to the full drawVfx config (pos/face/extras) across
+the ~174 verified move-TU call sites + port renderVfx/dVfx draw fns +
+HUD (renderOverlay) + Ready-GO banner + background art — the renderer
+core excludes all of these on BOTH sides of its IoU check today)

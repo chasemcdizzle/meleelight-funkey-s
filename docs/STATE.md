@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-16, post-iter-43 writer)
+## Live right now (updated: 2026-07-16, post-iter-44 writer)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -93,11 +93,29 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   first — run side proves the judge), 1 ms threshold probe (SIM P99
   FAIL after STREAM MATCH). Regressions green: check-sim.sh SIM
   CONFORMS + check-device-g01.sh DEVICE CONFORMS g01 via the lib.
-- **In flight**: nothing — task-2 Tier-A review arc (conform script +
-  riglib + percentiles.js, non-checksummed surfaces) opens on landing
-  (driver-owned), then task 3 (renderer core, host-side).
-- **Latest AGENT-LOG entry**: iter 43 (M3 task 2); latest log id:
-  .loop/m3-task2-donecheck.log.
+- **Iter 44 (M3 task 3) DONE**: `bash port/gfx/check-render.sh` →
+  RENDER OK, exit 0 (.loop/m3-task3-donecheck.log). Renderer core
+  host-side in NEW `port/gfx/`: ANIM1 C reader (FORMATS.md §2), the
+  rastbench measured raster as a module (-O3 only on that TU; explicit
+  ink plane), structure-parallel stage/players/articles compositor to
+  ONE 240x240 RGB565 buffer, camera = STAB1 pos*scale+offset verbatim
+  (upstream has NO dynamic zoom — measured) + k=0.2/dy=45 letterbox,
+  GFXDATA1 executed colour/flag dump. Silhouette IoU vs the browser
+  canvas (capture-canvas.js, run-capture served-bytes class, STREAM-
+  MATCH-guarded, oracle/ untouched): measured 0.9149-0.9302 over 16
+  sampled frames, threshold frozen 0.91 (seed 0.90; never loosened);
+  x2 byte-stable renders; render-on C replay STREAM MATCHes g01.
+  Teeth: dy-perturb → all-frames FAIL; PPM instability → cmp fail;
+  1e-9 sim-write → MISMATCH frame 2. Host render ~45 µs/frame avg.
+  VFX excluded BOTH sides — registered deferral (ml_events seam is
+  name-only; M4 seed "vfx render seam widening"). Regression green:
+  check-sim.sh SIM CONFORMS 8/8.
+- **In flight**: nothing — task-2 Tier-A arc (driver-owned) + task-3
+  Tier-A arc (check-render.sh + capture-canvas.js + gfx-pagelib.js +
+  iou.js + renderer, non-checksummed surfaces) open on landing, then
+  task 4 (platform seam + SDL1.2 device backend + live device render).
+- **Latest AGENT-LOG entry**: iter 44 (M3 task 3); latest log id:
+  .loop/m3-task3-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
@@ -109,11 +127,12 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## Next
 
-1. Driver: ground-truth iter 43 (cold done-check re-run) + open the
-   task-2 Tier-A arc (check-device-conform.sh, riglib.sh,
-   percentiles.js) → launch task-3 writer (renderer core, host-side)
-   on GO.
-2. Ladder: fix_plan §M3 tasks 3-7 → M3 gate (`verify_m3.sh`) →
+1. Driver: ground-truth iter 44 (cold `bash port/gfx/check-render.sh`)
+   + open the task-3 Tier-A arc (check-render.sh, capture-canvas.js,
+   gfx-pagelib.js, iou.js, port/gfx renderer TUs) alongside/after the
+   task-2 arc → launch task-4 writer (platform seam + SDL1.2 device
+   backend + live device render) on GO.
+2. Ladder: fix_plan §M3 tasks 4-7 → M3 gate (`verify_m3.sh`) →
    LOOP STOP: m3-device + push-notify Chase for S1 ratification →
    close #18 → M4 REPLAN (PLAN §4/M4) → Chase acceptance →
    LOOP STOP: m4-complete.

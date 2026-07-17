@@ -4186,3 +4186,238 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   check script is a Tier-A surface; the g01 replay must still verify
   during render-on runs (renderer must not perturb the sim); rule-8
   reminder — the oracle canvas capture runs WITHOUT __harnessNoRender.
+
+## iter 44 — 2026-07-16 — M3 task 3 PRE-REGISTRATION: renderer core host-side (port/gfx/)
+
+- PRE-REGISTRATION (frozen before first build edit; PROCESS §2. Task:
+  fix_plan §M3 task 3 — C renderer core: ANIM1 consumption, adaptive
+  cubic flatten + AA scanline raster (the rastbench measured variant),
+  camera verbatim, stage+players+articles composited into ONE 240x240
+  RGB565 buffer, headless PPM dump; HONEST-structural silhouette IoU vs
+  the browser oracle's canvas render on >=12 sampled g01 frames).
+  - **Surface**: NEW `port/gfx/` only. oracle/ UNTOUCHED (no run.js flag
+    needed after all: the canvas capture is a NEW driver
+    `port/gfx/capture-canvas.js` built on the run-capture.js class —
+    harness init.js/pagelib.js VERBATIM, __wpCache served-bytes boot
+    hook, STREAM-MATCH-guarded run JSON — so existing harness
+    invocations are byte-identical trivially). port/sim/device/* and
+    port/sim/sim/sim_main.c untouched (concurrent review); NO other
+    port/sim TU is modified either — the renderer links against the
+    existing sim as a separate `port/gfx/gfx_replay.c` main (sim_main's
+    loop mirrored, cited) and reads GameState via const pointer.
+  - **Camera (verbatim finding, measured)**: upstream has NO dynamic
+    camera/zoom (grep zoom/Zoom over src/ = zero hits): the transform is
+    the static per-stage `pos*scale + offset` (STAB1 scale/offset; y
+    negated) into the 1200x750 logical canvas. PLAN §5's "camera/zoom
+    logic ports verbatim" therefore = this static stage transform, in
+    doubles, sim-side constants; the zoom-2 rastbench bound was a perf
+    envelope, not a mapping. Retarget to 240x240: uniform k=0.2
+    (=240/1200, aspect-preserving) + vertical letterbox dy=45
+    (=(240-750*0.2)/2). The 240x150 letterbox band is the active image;
+    iou.js asserts ZERO C ink outside it.
+  - **IoU methodology (mask definition, pairing, downscale)**: browser
+    reference = per-frame EXPLICIT render (clearScreen + drawStage +
+    renderPlayer x active + renderArticles — the gameMode-3 renderTick
+    sequence MINUS drawBackground/renderVfx/renderOverlay) executed
+    in-page between steps with (a) Math.random swapped to the stashed
+    native RNG during the render call (render-plane draws must not
+    consume the seeded stream) and (b) phys.outOfCameraTimer
+    snapshot/restored around it (renderPlayer writes it; it FEEDS BACK
+    into sim percent at >=60 — measured physics.js:660); render runs
+    EVERY frame (vfx-timer/module-state parity with a live browser),
+    canvas pixels pulled only on sampled frames. Non-perturbation is
+    PROVEN per run: the capture emits a verify-stream-compatible run
+    JSON judged against the frozen g01 stream (STREAM MATCH required
+    before any mask is trusted). Browser mask = alpha>0 on fg1 OR fg2
+    (ink), full-res 1200x750, downscaled 5x5 box to 240x150 with rule
+    "cell inked iff ANY of its 25 source pixels is inked". C mask = the
+    rasterizer's explicit per-pixel INK plane (coverage>0), dumped as
+    PGM next to the PPM (the PPM alone cannot define ink: a 10%-alpha
+    fill over black is byte-invisible in 565). IoU per sampled frame =
+    |A&B|/|A|B| over the letterbox band. Pairing: both sides render
+    post-tick state of the SAME frame number (sim state frozen between
+    explicit steps).
+  - **Excluded from BOTH sides (stated, not hidden)**: vfx — the C sim's
+    vfx seam carries NAMES ONLY (ml_events.h: upstream drawVfx configs'
+    pos/face were projected away at M2 translation; 174 call sites).
+    Faithful vfx rendering needs a seam widening across the verified
+    move clusters = its own task; REGISTERED as follow-up (fix_plan M4
+    seed / task-4 note), NOT silently stubbed — the browser reference
+    simply does not call renderVfx, so the check is honestly blind to
+    vfx on both sides. Ready/GO banner (a "start" vfx exception) and
+    HUD (renderOverlay) and background art (drawBackground/bg1/bg2
+    canvases): out of scope this task (M4 front-of-house), excluded
+    from capture + C alike. Randall (ystory bg2 image) likewise.
+  - **Sampled frames (>=12, deterministic selection procedure)**: from
+    the C replay's state log — (1) f=30 ENTRANCE pose, (2) f=100
+    post-GO neutral, (3) first frame with a live LASER article, (4)
+    first DAMAGE*/CAPTUREDAMAGE frame, (5) first DEAD* frame, (6) first
+    REBIRTH/REBIRTHWAIT frame, (7) first shielding frame, (8) first
+    frame where the miniView predicate fires (skip if none), plus
+    even-spread fill 450/900/1350/1800/2250/2700/3150/3599 (dedup;
+    final count >=12). The RESOLVED explicit list is frozen in
+    port/gfx/expected-render.json BEFORE the first pass judgment.
+  - **Threshold freeze**: expected-render.json seeded with threshold
+    0.90 BEFORE the first pass; after the first honest measured run, if
+    min(IoU) > 0.90 the threshold is RAISED to floor(min*100)/100 (a
+    2-decimal floor absorbs canvas nondeterminism jitter, browser
+    canvas raster is not bit-stable) and frozen; NEVER loosened after.
+    Canvas dumps are non-frozen reference material regenerated per
+    check run (cached under port/gfx/build/ rm-before-produce;
+    MLFK_GFX_REUSE_CANVAS=1 dev-only reuse hatch, default fresh).
+  - **Run caps**: <=4 full browser capture runs + <=10 C render
+    iterations against a cached capture for divergence hunting; if any
+    frame IoU still < 0.90 at cap -> STOP, honest FAIL report with
+    per-frame numbers + overlay diffs (never loosen).
+  - **Refutation shapes**: (a) IoU below threshold on some frame ->
+    classify render bug (C-side geometry/facing/frame-index) vs
+    mask-methodology bug (downscale rule asymmetry, hairline-stroke
+    boundary cells) via overlay diff images — ONE bounded evidence
+    round then report; a methodology finding amends the PRE-frozen rule
+    only BEFORE the threshold freeze, never after. (b) capture run
+    stream MISMATCH -> the explicit-render write-set model is wrong
+    (missed a render-side sim write) — widen snapshot/restore, rerun;
+    outOfCameraTimer is the only KNOWN feedback field (measured). (c)
+    C stream mismatch with renderer linked -> renderer perturbs sim
+    (writes through const or global state) — real bug, fix before any
+    IoU work.
+  - **Teeth (perturb -> observe -> restore, logged)**: T1 vertex
+    transform constant (letterbox dy 45->47) -> IoU drops below
+    threshold on player+stage frames; T2 corrupt one byte of one
+    render-b PPM -> x2 byte-stability cmp fails; T3 temporary renderer
+    write into G (player[0].phys.pos.x += 1 per frame) ->
+    verify-stream MISMATCH on the RUN-side JSON (iter-43 lesson: prove
+    the judge on the run side, frozen files untouched); T4 corrupt one
+    byte of a cached browser mask -> IoU judge output changes/fails
+    (proves the browser side of the comparison is live).
+  - **check-render.sh is Tier-A**: rig lessons applied natively —
+    set -euo pipefail, rm-before-produce + exists-non-empty made()
+    assert on EVERY produced artifact (tables, simdata, gfxdata,
+    binaries, canvas masks, PPM/PGM sets, run JSONs, IoU report),
+    explicit rc checks, no eval of untrusted text, judgment on the
+    host by cmp/verify-stream/deterministic iou.js only, exact frozen
+    thresholds. Driver opens the Tier-A review arc post-landing.
+  - **Regression**: bash port/sim/check-sim.sh must still print SIM
+    CONFORMS (no sim TU touched; run + logged anyway).
+
+## iter 44 — 2026-07-16 — M3 task 3 DONE: renderer core host-side — RENDER OK
+
+- **Done-check (cold)**: `bash port/gfx/check-render.sh` → `RENDER OK`,
+  exit 0 (.loop/m3-task3-donecheck.log). Full fresh pipeline: ANIM1/
+  CTAB1/STAB1 regen → SIMDATA1 → build (raster TU -O3, all else -O2,
+  every TU -ffp-contract=off -Wall -Wextra -Werror) → browser capture
+  (STREAM MATCH guard) → x2 C renders byte-identical (stream + all
+  PPM/PGM) → render-on C stream STREAM MATCH vs the frozen g01 →
+  IoU all 16 frames PASS. Regression:
+  `bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens
+  (.loop/m3-task3-regression-checksim.log) — no sim TU was touched.
+- **Measured IoU (frozen)**: min 0.9149 (f1237) · max 0.9302 (f0100);
+  per-frame: f0030 .9188, f0100 .9302, f0170 .9269, f0450 .9227,
+  f0900 .9232, f0971 .9281, f1234 .9209, f1237 .9149, f1297 .9250,
+  f1350 .9242, f1800 .9262, f2250 .9245, f2552 .9243, f2700 .9245,
+  f3150 .9250, f3599 .9269. Threshold seeded 0.90 pre-pass, frozen at
+  floor(min*100)/100 = **0.91** per the pre-registered procedure
+  (port/gfx/expected-render.json; never loosened). Residual
+  characterized on f0900: browserOnly=242 cells, **cOnly=0** — the
+  mismatch is browser-side boundary dilation (1-canvas-px stage lines
+  straddling 5x5 downscale cell boundaries ink two cell rows; the C
+  0.2-px hairline inks one) + silhouette perimeter AA noise; the C
+  render never inks where the browser did not.
+- **What landed** (`port/gfx/`): anim1.{h,c} (ANIM1 reader implemented
+  against FORMATS.md §2 — LE byte-assembled reads, every offset
+  bounds-checked, directory sort asserted, absent-frame sentinel);
+  raster.{h,c} (THE rastbench measured variant as a module: adaptive
+  cubic flatten tol 0.25px, nonzero-winding scanline fill via
+  ymin-sorted edge table + active-edge list, 4x vertical subsample AA
+  with fractional span ends, blend565, zero frame-loop allocations,
+  loud cap overflows; + explicit per-pixel INK plane — a 10%-alpha fill
+  over black is 565-invisible, so the PPM alone cannot define
+  silhouette); gfx.{h,c=gfx_render.c} (camera: STAB1 pos*scale+offset
+  VERBATIM in doubles + retarget k=0.2/dy=45 letterbox — upstream has
+  NO dynamic zoom, measured; stage lines/polygon fill from STAB1;
+  renderPlayer structure-parallel: framesData clamp, facing flips incl.
+  reverseModel/TILTTURN/RUNTURN/AERIALTURN-substring/marth-BAIR/
+  fox-falco-THROWBACK, full colour branch incl. shocked/burning
+  blendColours + colourOverlay parse, charge jiggle, miniView bubble
+  geometry verbatim (WITHOUT the upstream outOfCameraTimer write — C
+  renderer takes const GameState*), ENTRANCE squash, shield disc,
+  REBIRTH halo, fg2 lineWidth persistence state machine; debug-overlay
+  flags TRAP loudly if ever true; articles: LASER quad via
+  chromaticAberration x3 offset passes, ILLUSION noDraw);
+  gfx_replay.c (sim_main.c's loop duplicated with citation — sim_main
+  itself untouched/under review — + render EVERY frame + sampled
+  PPM/PGM dumps + wrap-run-compatible stdout); capture-canvas.js +
+  gfx-pagelib.js (browser reference: harness init/pagelib VERBATIM,
+  __wpCache served-bytes hook, reduced render sequence after EVERY
+  step with Math.random native-swap + outOfCameraTimer
+  snapshot/restore, fg1|fg2 alpha>0 masks + composite PNGs on sampled
+  frames, GFXDATA1 executed dump of palettes/pPal/flashOnLCancel/
+  reverseModel); iou.js (5x5 any-ink downscale, letterbox band
+  enforcement — any C ink outside rows [45,195) is a hard fail);
+  expected-render.json (frozen); check-render.sh (Tier-A hygiene:
+  rm-before-produce + made() on every artifact, host-side judgment
+  only, no eval).
+- **oracle/ untouched**: no run.js flag was needed — the capture is a
+  new port/gfx driver on the run-capture.js served-bytes class;
+  existing harness invocations are byte-identical trivially.
+  oracle/goldens + verify-stream.js untouched (judge of record).
+- **Teeth (perturb → observe → restore; logs .loop/m3-task3-tooth*.log)**:
+  T1 retarget dy 45→47 → ALL 16 frames FAIL (min 0.7410), rc 1.
+  T2 per-process XOR on the first PPM pixel → x2 byte-stability cmp
+  fails ("differ: char 17"), rc 1. T3 renderer writes
+  player[0].phys.pos.x += 1.0/frame → the drifted match hits the
+  DEADDOWN finishGame out-of-domain trap (SIM FATAL frame 809, rc 3 —
+  loud); T3b the same write at 1e-9 → run completes and verify-stream
+  reports STREAM MISMATCH at frame 2 of 3600 (RUN-side JSON perturbed,
+  frozen files untouched — the iter-43 lesson), rc 2. T4 blanked a
+  200x60 block of the cached f0900 browser mask → IoU 0.8066 FAIL on
+  exactly that frame; restored → PASS. All perturbations reverted;
+  final done-check ran cold from rm -rf build.
+- **Render wall-clock (host, informational)**: avg 45 µs, p50 41 µs,
+  p99 ~102-126 µs, max ≤ 535 µs per frame (Apple arm64; device budget
+  is PLAN §5's measured 2.54 ms avg / 3.21 ms p99 for the same
+  algorithm — task 4 measures the real device number).
+- **EXPOSURE (PROCESS §8 — what the silhouette check CANNOT see)**:
+  colours and palette correctness (human eyeball on the PPM/PNG pairs
+  only); interior detail and z-order (union mask); translucency levels
+  (any-ink mask treats alpha 0.1 == 1.0); sub-cell geometry (< 5
+  canvas px / < 1 device px); line-width fidelity (the boundary-
+  dilation class above); single-anim-frame pose drift — sensitivity
+  floor is roughly the frozen slack (0.9149 vs 0.91 ≈ 15-30 cells of a
+  ~3100-cell union), so errors smaller than ~1% of union (a 1-frame
+  pose lag, a missing tiny article) can hide under the threshold;
+  stage dominance: the stage body+lines are ~2/3 of the union, players
+  ~1/3 — a fully wrong character costs ~10-20% IoU (well above slack),
+  a subtly wrong one may not. EXCLUDED BOTH SIDES (not blind spots —
+  absent by construction, stated): vfx (see deferral below), HUD/
+  percent/stocks (renderOverlay), Ready-GO banner, background art
+  (bg1/bg2 incl. ystory Randall), music/audio planes. Only g01/
+  battlefield is IoU-checked; other stages render through the same
+  generic STAB1 code paths but are visually UNVERIFIED until the
+  device/full-game rungs.
+- **REGISTERED DEFERRAL (HARD RULE 2 — explicit, not buried)**: vfx
+  rendering. The C sim's vfx seam (ml_events.h) carries NAMES ONLY —
+  upstream drawVfx configs' pos/face/colour were projected away at M2
+  translation across 174 call sites in 112 verified move TUs. Faithful
+  vfx rendering therefore needs a seam widening + re-verification of
+  the move clusters' captures = its own task; queued as an M4 seed
+  (fix_plan §M4). The browser reference deliberately does not call
+  renderVfx, so BOTH sides of the IoU exclude vfx honestly.
+- **Laser colour note**: upstream stores laser stroke/fill on the
+  SHARED articles.LASER object at init (last init wins globally). No
+  golden fields fox AND falco together, so per-laser owner-char colour
+  (fox default-true arm / falco isFox:false arm) is exact over the
+  whole corpus; the shared-object quirk is unreachable and documented
+  in gfx_render.c rather than modeled.
+- **Gotcha classes (zoom-out, HARD RULE 8)**: (1) node -p of a JSON
+  NUMBER emits ANSI colour codes (bit the check script's manifest
+  reads; String() every numeric node -p — the CLAUDE.md task-17 gotcha
+  re-measured on a new surface; class fix = String() wrappers). (2)
+  render-plane instrumentation must guard BOTH the RNG stream (render
+  code draws Math.random — swap to the stashed native RNG for the
+  render call) and render-written sim fields (renderPlayer writes
+  phys.outOfCameraTimer which physics feeds back into percent);
+  the guard's sufficiency is not argued but PROVEN per run by the
+  capture's verify-stream STREAM MATCH. (3) an ink/silhouette check
+  needs an explicit ink plane — low-alpha fills vanish in RGB565
+  quantization, so "pixel != background" is NOT "ink was drawn".
