@@ -240,10 +240,10 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   quantizer absorbs sub-half-grid-step table perturbations (tooth
   round 1 measured it; round 2 fired at a full step). riglib.sh grew
   per its own contract (RIG_SCRIPTS/ARMBINS/srchash roots).
-- **In flight**: nothing — task-4 arc (Codex, concurrent) + the new
-  task-5 surface (check-device-input.sh, s1_input.h, s1_sweep.c,
-  fk_input.c, judge-s1-coverage.js, gfx_app/sim_main/riglib edits)
-  await Tier-A review; then task 6 (audio-on).
+- **In flight**: iter-52 writer (task-4 arc fixes + the rig-wide
+  whitelist-grammar parser audit per amended .loop/review-50-triage.md);
+  task-5 Tier-A arc (codex) concurrent. Then: task-4 r2 + task-5 arcs to
+  GO → task 6 (audio-on) → task 7 (OPK + verify_m3.sh gate).
 - **Latest AGENT-LOG entry**: iter 51 (M3 task 5);
   latest log id: .loop/m3-task5-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
@@ -280,6 +280,9 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   docs/PROCESS.md (tiered Codex review arcs, pre-registration, STATE.md,
   artifact identity pins, ground-truth ritual); the four explicit
   non-adoptions + reopen conditions live in PROCESS.md's final section.
+- 2026-07-16 — Whitelist-grammar rule (brawlback provenance): decision-
+  bearing parsers = anchored empirical grammars, fail closed, corpus-
+  validated; binding form PROCESS.md §3.
 - Standing: never push to upstream/schmooblidon; origin only; no
   distribution of anything; writers never post to GitHub (driver owns
   tracker writes).

@@ -89,6 +89,26 @@ beats a disposition. Reviewers should be pointed at this bar so rounds
 converge on the accident/corruption classes instead of re-raising
 adversary-with-write-access scenarios.
 
+**The whitelist-grammar rule (owner ruling 2026-07-16, from brawlback-lab
+— paid for there with ~14 review rounds).** Any tool whose OUTPUT is a
+decision (verdict script, pass/fail checker, scorer, comparator) and whose
+INPUT is parsed text (logs, headers, config, build/serial output) must not
+use permissive parsing ("right prefix → scan for key=value → take what you
+find"). Permissive parsers have an infinite hole class — truncated writes,
+duplicate keys, coincidental token matches — and an adversarial reviewer
+finds a new one every round, forever (the tell: non-monotone finding
+counts, always the same input-trust category; this repo's own instances:
+RC-marker rounds 1-2, manifest-eval rounds 1-3, timing-grammar task-4 r1).
+The fix is by construction: (1) measure the producer's exact grammar
+EMPIRICALLY from the full corpus of real files/logs, never docs or memory;
+(2) parse only through anchored, full-line patterns matching that grammar
+exactly; (3) binary outcome — exact match → parse; resembles-but-doesn't-
+match → corruption → fail closed (drop the leniency, loud counter), no
+partial parses, no silent skips; (4) validate the strict parser against
+the entire real corpus before shipping — zero false rejections on genuine
+data. Apply up front to anything decision-bearing; retroactively the
+moment an arc raises the same input-trust objection twice.
+
 ## 4. Artifact identity pins (narrow form)
 
 - Every device check script sha256-verifies the ON-DEVICE binary against

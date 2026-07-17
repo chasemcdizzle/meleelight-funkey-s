@@ -5534,3 +5534,20 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   platform seam, S2/S3 remain config swaps upstream (registered
   non-goal — PLAN §6 locks S1 for the device; revisit only on Chase's
   ratification verdict at the M3 human gate).
+
+## driver — 2026-07-17 — whitelist-grammar ruling + iter-51 verification
+
+- OWNER RULING (Chase, relayed 2026-07-16 late, from the brawlback-lab
+  loop): the whitelist-grammar rule — decision-bearing parsers use
+  anchored full-line grammars measured empirically from the real corpus,
+  binary outcome, fail closed on resemblance, zero-false-rejection
+  validation before shipping; retroactive on the second same-category
+  input-trust objection. Recorded in PROCESS.md §3; this repo's arcs had
+  already tripped the retroactive trigger (RC marker, manifest eval,
+  timing grammar) — iter 52 is upgraded to a bounded rig-wide
+  decision-parser audit (.loop/review-50-triage.md amended).
+- Iter-51 driver verification per PROCESS §5: 31c94e4 verified, tree
+  clean, done-check re-run COLD → S1 INPUT OK exit 0 (four-way
+  byte-identical streams reproduced; .loop/driver-cold-task5-donecheck.log),
+  pushed. Task-5 Tier-A arc opens next; iter 52 (task-4 hardening +
+  parser audit) dispatches now.
