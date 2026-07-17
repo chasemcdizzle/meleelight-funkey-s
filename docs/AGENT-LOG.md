@@ -8127,3 +8127,28 @@ Per LOOP §F-advance.3/§H and PLAN §4/M3's HUMAN ESCALATION: the FunKey-S
 is ready — OPK installable via the packaged path, S1 mapping live
 (PLAN §6 table verbatim). Chase ratifies or amends the S1 mapping before
 M4. On ratification: driver closes #18, M4 REPLAN per PLAN §4/M4.
+
+## driver — 2026-07-17 — S1 RATIFICATION: PASSED (Chase playtest) — M3 human gate cleared
+
+- Chase's hands-on playtest verdict (the PLAN §4/M3 HUMAN ESCALATION):
+  "works! and sound is perfect! controls work perfectly" — the S1
+  mapping is RATIFIED AS-IS (no amendments to the chord table).
+  Sound: perfect. Perf: no complaints.
+- Visual amendments observed (both diagnosed, both M4 scope):
+  (a) Battlefield side platforms barely visible — surfaces ARE rendered
+  (stroke path, IoU-counted) but upstream-faithful ~1px strokes are
+  illegible on the 1.54" 240x240 panel. NEW M4 seed: stage-surface
+  legibility at device scale (deliberate, documented device-scale
+  adaptation; rasterization is not checksummed).
+  (b) Firefox flames + shine invisible — the REGISTERED iter-44 vfx
+  exposure (ml_events carries names only); the existing M4 seed "vfx
+  render seam widening" is now user-validated as required.
+- Install note (process): the human-gate play provisioning
+  (/mnt/mlfk-data + persistent OPK) was performed by the driver AFTER
+  the loop stop — future gate-stop checklists should provision the
+  play install BEFORE notifying the human (recorded as a lesson).
+- M3 is COMPLETE: gate passed + human ratification. Driver closes #18;
+  next iteration is the M4 REPLAN (PLAN §4/M4 + the two visual seeds
+  above + the M4 seeds registered across M3: mixer fidelity + music,
+  skip-burst attribution instrument, ai.js port + tan, target test,
+  SD persistence, thin C menus, Chase acceptance playthrough).

@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-17, M3 MILESTONE PASS)
+## Live right now (updated: 2026-07-17, S1 RATIFIED — M3 COMPLETE)
 
 - **Iter 62 (M3 hardening — gate relay prefix, true-respawn poll,
   probe-order attribution) DONE**: all three .loop/review-60-triage.md
@@ -166,9 +166,11 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   authoritative verify_m3.sh printed M3 GATE OK exit 0 (driver-cold, all
   23 producers reviewed-go). LOOP STOPPED at the §H human gate:
   **LOOP STOP: m3-device — needed: Chase S1 ratification playtest**.
-  On ratification: close #18 → M4 REPLAN (PLAN §4/M4: thin C menus,
-  full mixer + music, ai.js port, target test, SD persistence, Chase
-  acceptance playthrough).
+  RATIFIED 2026-07-17 (Chase playtest: controls perfect, sound perfect;
+  visual amendments → M4 seeds: stage-surface legibility at device
+  scale + vfx render seam). #18 closing; next: M4 REPLAN (PLAN §4/M4).
+  Play install lives at /mnt/mlfk-data + /mnt/Applications/meleelight.opk
+  (persistent, survives rig cleanup).
 - **Iter 38 (M3 task 1) DONE**: commit af06bb7 — `DEVICE CONFORMS g01`
   (armv7 static sim, 3600/3600 STREAM MATCH on the FunKey, 21 s wall ≈
   5.8 ms/frame sim-only avg). Class finding: SDK static musl libm is
