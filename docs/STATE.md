@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-17, iter-52 writer completion)
+## Live right now (updated: 2026-07-17, iter-53 writer completion)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -262,13 +262,35 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   (32 host + 7 device-probe incl. deadman FIRE under real transport
   death). Regressions ALL green: check-render RENDER OK, check-sim
   SIM CONFORMS, device g01 + conform 8/8 + input S1 INPUT OK.
-- **In flight**: task-5 Tier-A arc (codex) concurrent; task-4 arc
-  ROUND 2 pending (closure review of iter 52; review-50's untriaged
-  Low — gfx_app getline/ferror — open for its disposition). Then:
-  task-4 r2 + task-5 arcs to GO → task 6 (audio-on) → task 7 (OPK +
-  verify_m3.sh gate).
-- **Latest AGENT-LOG entry**: iter 52 (M3 task 4 hardening + parser
-  audit); latest log id: .loop/m3-task4r52-donecheck.log.
+- **Iter 53 (M3 task 5 hardening) DONE**: all 8 triaged review-51
+  round-1 findings closed — cold done-check `S1 INPUT OK` exit 0,
+  FIRST run (.loop/m3-task5r53-donecheck.log). H1 strict full-stream
+  validator on all 5 streams (F 1..1080 contiguous + RNG + SIM OK,
+  gate-fatal); M1 fk_input anchored full-line script grammar + ferror
+  (the `d l s 250` joined line dies rc 2 pre-injection, device-probed);
+  M2 raw-line whitelist grammar before JSON.parse in the coverage
+  judge (duplicate-key class dead; discriminating pair vs the old
+  judge proven); M3 sweep exactly-one-verdict-line + byte-exact apprc
+  cmp; M4 SOCD LIVE WITNESS — gfx_device --live records a raw-keysym
+  bitmask sidecar (mandatory --record-keys), judge asserts pairing
+  fidelity + universal SOCD invariants + 2 new signatures: the real
+  session carried 18/18 SOCD H/V frames through the actual uinput→SDL
+  path (iter-51's registered exposure closed); M5 standing tapjump
+  behavioral oracle (host differential, measured-then-frozen
+  divergence at frame 121); M6 pessimistic PARKED + rig_dsh_retry
+  cleanup; L1 clayer-diag requires ls neutral. 11 host teeth + 4
+  device-probe teeth fired (.loop/m3-task5r53-teeth-{host,fkinput}.log);
+  zero false rejections on every genuine corpus. Regressions recorded:
+  check-sim/check-device-render NOT run (no sim TU; riglib untouched)
+  — gfx_app --trace guarded by host smoke (F1 == the g01 anchor;
+  .loop/m3-task5r53-smoke-host.log).
+- **In flight**: task-4 arc ROUND 2 pending (closure review of iter 52;
+  review-50's untriaged Low — gfx_app getline/ferror — open for its
+  disposition); task-5 arc ROUND 2 pending (closure review of this
+  iteration). Then: both arcs to GO → task 6 (audio-on) → task 7
+  (OPK + verify_m3.sh gate).
+- **Latest AGENT-LOG entry**: iter 53 (M3 task 5 hardening); latest
+  log id: .loop/m3-task5r53-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull

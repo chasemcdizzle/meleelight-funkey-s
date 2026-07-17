@@ -12,12 +12,21 @@
 //
 //   fk_input <script>
 //
-// Script grammar (one command per line; '#' comments and blank lines
-// ignored; ANY other token is a LOUD parse error, exit 2 — a corrupted
-// script must never half-play):
-//   d <letter>   key down  (letter a-z)
-//   u <letter>   key up
-//   s <ms>       sleep milliseconds (CLOCK_MONOTONIC)
+// Script grammar — ANCHORED FULL-LINE WHITELIST (PROCESS §3, iter 53;
+// review-51 M1: the old `sscanf(" %c %63s")` ignored trailing tokens,
+// so an accidentally joined line like `d l s 250` half-played as
+// `d l`). Measured from the committed s1-session.script corpus (no CR,
+// trailing newline, single spaces, full-line comments only). Every
+// line must be EXACTLY one of:
+//   ""             empty
+//   "#..."         comment ('#' at column 0; NO inline comments)
+//   "d <a-z>"      key down  (length 3: op, ONE space, one letter)
+//   "u <a-z>"      key up
+//   "s <digits>"   sleep ms  (1-5 digits, value 0..60000)
+// Anything that merely resembles a command — trailing junk, extra
+// spaces, a CR byte, a final line without its newline (truncated
+// write) — is corruption: LOUD parse error, exit 2, BEFORE any
+// injection. A corrupted script must never half-play.
 //
 // The whole script is parsed and validated BEFORE the uinput device is
 // created (a syntax error injects nothing). After UI_DEV_CREATE the
@@ -109,42 +118,61 @@ int main(int argc, char **argv) {
   int lineno = 0;
   while (fgets(line, sizeof line, sf)) {
     lineno++;
-    if (strchr(line, '\n') == NULL && !feof(sf)) {
-      fprintf(stderr, "fk_input: script line %d too long\n", lineno);
+    size_t len = strlen(line);
+    if (len == 0 || line[len - 1] != '\n') {
+      // no newline: either the line overflows the buffer or the file's
+      // final line lost its newline (truncated write) — both corruption
+      fprintf(stderr,
+              "fk_input: script line %d %s — corrupt script\n", lineno,
+              feof(sf) ? "missing its trailing newline" : "too long");
       return 2;
     }
-    // strip comments + whitespace-only lines
-    char *hash = strchr(line, '#');
-    if (hash) *hash = 0;
-    char op = 0;
-    char arg[64];
-    const int n = sscanf(line, " %c %63s", &op, arg);
-    if (n <= 0) continue; // blank
-    if (n != 2) {
-      fprintf(stderr, "fk_input: script line %d malformed\n", lineno);
+    line[--len] = 0;
+    // anchored full-line whitelist grammar (header comment; measured
+    // from the committed script corpus — zero false rejections proven)
+    if (len == 0) continue; // empty line
+    if (memchr(line, '\r', len)) { // CRLF/CR corruption (comments too)
+      fprintf(stderr, "fk_input: script line %d carries a CR byte\n",
+              lineno);
       return 2;
     }
+    if (line[0] == '#') continue; // full-line comment (column 0 only)
     Cmd c;
     memset(&c, 0, sizeof c);
-    c.op = op;
-    if (op == 'd' || op == 'u') {
-      if (strlen(arg) != 1 || arg[0] < 'a' || arg[0] > 'z') {
-        fprintf(stderr, "fk_input: script line %d: bad key '%s'\n", lineno,
-                arg);
+    c.op = line[0];
+    if (line[0] == 'd' || line[0] == 'u') {
+      // EXACTLY "d <a-z>" / "u <a-z>": length 3, one space, one letter
+      if (len != 3 || line[1] != ' ' || line[2] < 'a' || line[2] > 'z') {
+        fprintf(stderr, "fk_input: script line %d malformed ('%s')\n",
+                lineno, line);
         return 2;
       }
-      c.key = kLetterKey[arg[0] - 'a'];
-    } else if (op == 's') {
-      char *end = NULL;
-      c.ms = strtol(arg, &end, 10);
-      if (!end || *end != 0 || c.ms < 0 || c.ms > 60000) {
-        fprintf(stderr, "fk_input: script line %d: bad sleep '%s'\n",
-                lineno, arg);
+      c.key = kLetterKey[line[2] - 'a'];
+    } else if (line[0] == 's') {
+      // EXACTLY "s <1-5 digits>", value 0..60000
+      if (len < 3 || len > 7 || line[1] != ' ') {
+        fprintf(stderr, "fk_input: script line %d malformed ('%s')\n",
+                lineno, line);
         return 2;
       }
+      long v = 0;
+      for (size_t i = 2; i < len; i++) {
+        if (line[i] < '0' || line[i] > '9') {
+          fprintf(stderr, "fk_input: script line %d: bad sleep ('%s')\n",
+                  lineno, line);
+          return 2;
+        }
+        v = v * 10 + (line[i] - '0');
+      }
+      if (v > 60000) {
+        fprintf(stderr, "fk_input: script line %d: sleep %ld > 60000 ms\n",
+                lineno, v);
+        return 2;
+      }
+      c.ms = v;
     } else {
-      fprintf(stderr, "fk_input: script line %d: unknown op '%c'\n",
-              lineno, op);
+      fprintf(stderr, "fk_input: script line %d: unknown op ('%s')\n",
+              lineno, line);
       return 2;
     }
     if (ncmd == cap) {
@@ -153,6 +181,12 @@ int main(int argc, char **argv) {
       if (!cmds) die("fk_input: oom");
     }
     cmds[ncmd++] = c;
+  }
+  if (ferror(sf)) {
+    // review-51 M1: a mid-file read error must never let a valid PREFIX
+    // play as the whole script
+    fprintf(stderr, "fk_input: read error on the script — refusing to play a prefix\n");
+    return 2;
   }
   fclose(sf);
   if (ncmd == 0) {

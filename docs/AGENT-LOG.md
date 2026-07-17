@@ -5950,3 +5950,224 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   greps, and the two new judges (parse_app_summary, rig_dev_sha256)
   were born strict. The remaining M2-era host surfaces are registered
   seeds, not silent leftovers.
+
+## iter 53 — 2026-07-17 — M3 task 5 HARDENING: review-51 round-1 findings (stream completeness, injector grammar, SOCD witness, tapJump oracle)
+
+### PRE-REGISTRATION (frozen before any run/edit; PROCESS §2)
+
+- **Task**: close ALL 8 triaged task-5 round-1 findings
+  (.loop/review-51-triage.md; full review .loop/review-51-1.log).
+  Surface: port/gfx/{check-device-input.sh,judge-s1-coverage.js},
+  port/tools/fk_input.c, port/gfx/gfx_app.c (raw-key sidecar).
+  s1_input.h NOT needed (L1 is judge-side). riglib.sh NOT edited
+  (rig_dsh_retry already exists and is reused as-is; the deadman
+  machinery is check-device-render.sh-local, not riglib — recorded).
+  check-device-render.sh + platform_sdl1.c untouched (concurrent
+  closure review). done-check: cold `bash port/gfx/check-device-input.sh`
+  → `S1 INPUT OK`, exit 0.
+- **Fix designs (frozen)**:
+  H1 stream completeness — a strict stream validator (node, generated
+  into $BUILD from the check script's own bytes) asserts EVERY stream is
+  EXACTLY: lines 1..N `F <i> <64-lowercase-hex>` contiguous from 1,
+  then `RNG <uint> <uint>`, then `SIM OK`, trailing newline, nothing
+  else (grammar measured from the real corpus: s1.live-out.txt
+  F 1..1080 + `RNG 22 1` + `SIM OK`, 1082 lines; producers gfx_app.c
+  fprintf + sim_main.c printf). Applied gate-fatally to all FIVE
+  streams (live-out, rep-a, rep-b, rep-dev, rep-neutral) with
+  N == SESSION_FRAMES.
+  M1 fk_input.c parser — anchored full-line whitelist grammar
+  (PROCESS §3; corpus = the committed s1-session.script, measured: 0
+  violations of `^(#.*|[du] [a-z]|s [0-9]{1,5})?$`, no CR, trailing
+  newline): a line is EXACTLY empty | `#...` (col 0) | `d <a-z>` |
+  `u <a-z>` (len 3, single space) | `s <1-5 digits>` (value <= 60000).
+  Trailing junk, inline comments, CR, double spaces, a final line
+  without newline = loud rc-2 death BEFORE the uinput device is
+  created; ferror checked after the read loop.
+  M2 duplicate-JSON-key class — judge-s1-coverage.js validates the RAW
+  trace bytes BEFORE JSON.parse against the recorder's full anchored
+  line grammar (line 0 `[`, lines 1..N one frame each =
+  `[{22 keys in the fixed rec_input order}x2,null,null]` + comma except
+  last, final line `]`; numbers = the String(x) grammar
+  `-?(0|[1-9]\d*)(\.\d+)?(e[+-]\d+)?`) — duplicate keys, reordered
+  keys, whitespace, any resemblance = death by construction.
+  M3 remaining permissive parses — sweep verdict: exactly ONE line
+  matching `^S1 SWEEP` allowed and it must equal the frozen OK literal
+  (resembles-but-not = corruption); apprc: byte-exact
+  `printf 'RC=0\n' | cmp` (the old `$(cat)` compare stripped trailing
+  newlines — `RC=0\n\n\n` passed; corpus: apprc is exactly the 5 bytes
+  `RC=0\n`); frames_seen banner grep → subsumed by H1's validator.
+  Host `shasum | cut` sites stay (audit item 28 CONF class).
+  M4 SOCD live witness — gfx_device --live records a per-frame
+  raw-keysym sidecar (mandatory --record-keys; RAM uint16 bitmask per
+  frame — bit0..bit12 = up,down,left,right,a,b,x,y,start,l,r,menu,quit
+  — written post-run as one `%04x` line per frame, tmpfs). The judge
+  (new 3rd arg) asserts: exact line count == frames, each line
+  `^[0-9a-f]{4}$`; pairing fidelity a/b/x/start bits == the trace
+  bools (same-pin same-frame by construction); UNIVERSAL S1 SOCD
+  invariants raw L+R held => lsX==0 AND csX==0 (violation = death;
+  SDL last-key-wins would emit ±1 there), same for U+D vertical; plus
+  two NEW coverage signatures socd-horizontal / socd-vertical >= 5
+  frames each (the script holds each pair 300 ms ≈ 18 frames).
+  M5 tapJumpOff behavioral oracle — host differential in the check: a
+  synthetic 200-frame trace (neutral; up lsY=1/rawY=1 rows 120..135 =
+  frames 121-136) replayed through sim_host_s1 WITH vs WITHOUT
+  --tapjump-off-p1 MUST produce streams whose FIRST divergence is
+  exactly the up frame (pin measured host-side before freezing;
+  iter-51's tooth measured frame 121) — proves the flag is consumed
+  and reaches the tap-jump arm.
+  M6 park pessimism — PARKED=1 set BEFORE the park dsh; task5_cleanup's
+  pkill + frontend-restore ride riglib's rig_dsh_retry (transport
+  recovery, reused verbatim — iter-52 H1c class).
+  L1 — clayer-diag signature additionally requires lsX===0 && lsY===0.
+- **Run matrix + caps**: device sessions <= 3 TOTAL (1 = the cold
+  done-check's live session; 2 = ONE batched fk_input parse-teeth probe
+  — malformed scripts die at parse BEFORE uinput creation, so no
+  injection risk; 3 = reserve). check-device-input.sh invocations <= 3
+  (target ONE green cold run; the script/TU edits force exactly one arm
+  rebuild via the shared stamp — docker serial). Host builds/replays
+  uncapped-cheap (s1_sweep, sim_host_s1, gfx_app_headless smoke).
+  Regressions: check-sim.sh NOT run (no port/sim TU changed — gfx_app.c
+  is app-side, fk_input is a tool; recorded); check-device-render.sh
+  NOT run (riglib untouched, per brief) — but gfx_app.c IS shared with
+  it, so a host smoke proves --trace mode still works after the arg-
+  validation edit (gfx_app_headless, short trace replay + a --live
+  smoke with sidecar on the headless backend).
+- **Pass criteria**: cold S1 INPUT OK exit 0 with all new gates live
+  (5 streams grammar-validated at 1080, SOCD witnesses >= 5 frames both
+  axes, tapjump differential divergence at the pinned frame, sidecar
+  pulled + judged); all teeth fire with pre-registered outcomes; zero
+  false rejections on genuine corpus (committed script through the new
+  fk_input grammar = the live session itself; iter-52 s1.trace.json
+  through the new line grammar host-side; iter-52 streams through the
+  validator).
+- **Teeth (pre-registered; perturb → observe → restore, all on COPIES)**:
+  T-H1a truncated stream copy (300 F lines removed) → validator death;
+  T-H1b 63-hex hash line → death. T-M1 device probe: joined line
+  `d l s 250` (the review's exact case) + inline-comment line +
+  double-space line → each rc 2 + malformed message, nothing injected.
+  T-M2 duplicate-key frame line (lsX twice) in a trace copy → raw-
+  grammar death (old judge ACCEPTED — discriminating). T-M3a apprc
+  `RC=0\n\n\n` → new cmp rejects (old $(cat) accepted — discriminating);
+  T-M3b sweep copy with a second `S1 SWEEP OK ... junk` line → count!=1
+  death (old grep -qx accepted — discriminating). T-M4a sidecar copy
+  truncated → exact-count death; T-M4b SOCD frames' left bit cleared →
+  socd-horizontal coverage FAIL; T-M4c left+right bits injected on a
+  dash frame (lsX=1) → SOCD-violation death (the inverted-witness
+  probe); T-M4d a-bit set where trace a=false → pairing death. T-M5
+  divergence checker fed two IDENTICAL streams → loud IDENTICAL death.
+  T-L1 trace copy with all clayer-diag frames' lsX/rawX forced 0.6625 →
+  clayer-diag signature FAIL (old judge PASSED — discriminating).
+- **Refutation shapes**: tapjump differential diverging at a frame
+  other than the pin → measure once host-side, verify the trace
+  construction (rows 120..135) matches iter-51's tooth, re-pin ONLY if
+  the construction differs — never widen to "any divergence"; a
+  converted parser rejecting genuine corpus → the measured grammar was
+  wrong, fix to match the corpus (never relax), re-validate; SOCD
+  witness absent on the real session (< 5 frames both-held) → the
+  settling-strategy premise failed for SOCD — one bounded evidence
+  round (pull app log + sidecar, inspect the intervals), then STOP;
+  fk_input grammar rejecting the committed script → same
+  measured-grammar-wrong shape, fix before any device run.
+
+### RESULTS (iter 53)
+
+- **DONE-CHECK (cold, final tree, FIRST run green)**:
+  `bash port/gfx/check-device-input.sh` → `S1 INPUT OK (session 1080
+  frames live on device, all 5 streams grammar-complete; host x2 +
+  device replays and the live stream all byte-identical; 15 chord rows
+  unit-swept; coverage + SOCD witness judged; tapjump oracle diverged
+  at frame 121)`, exit 0 (.loop/m3-task5r53-donecheck.log; one expected
+  arm rebuild — fk_input.c/gfx_app.c/script bytes are stamp input;
+  device wall 18 s; 1/3 done-check invocations, 2/3 device sessions
+  incl. the probe).
+- **All 8 triaged findings closed (per-finding)**:
+  H1 — strict full-stream validator (generated from the check's own
+  bytes; grammar measured from the real corpus) gate-fatally asserts
+  contiguous `F 1..1080` + `RNG <uint> <uint>` + `SIM OK` + trailing
+  newline on ALL FIVE streams (live, host x2, device, neutral control)
+  and both 200-frame tapjump streams; zero false rejections over the
+  five real iter-52 streams.
+  M1 — fk_input.c parses via the anchored full-line whitelist grammar
+  (empty | `#...` | `d <a-z>` | `u <a-z>` | `s <1-5 digits>`<=60000;
+  single spaces, no inline comments, CR = corruption, final line must
+  keep its newline) with ferror checked post-loop; the review's exact
+  `d l s 250` joined line now dies rc 2 BEFORE the uinput device exists
+  (device-probed, .loop/m3-task5r53-teeth-fkinput.log); genuine-corpus
+  control: the committed 165-command script played in full on the
+  green run.
+  M2 — judge-s1-coverage.js validates RAW trace bytes BEFORE JSON.parse
+  against the recorder's anchored full-line grammar (fixed rec_input
+  key order x2 rows, String(x) number grammar, comma discipline,
+  `[`/`]` framing) — duplicate keys die by construction; discriminating
+  pair proven: doctored dup-lsX line → NEW rc 3, OLD (git HEAD) judge
+  rc 0; zero false rejections over the real 1080-frame trace.
+  M3 — sweep verdict now exactly-ONE `^S1 SWEEP` line AND the frozen
+  literal (a second resembling line = corruption; old grep -qx
+  accepted it); apprc now BYTE-exact `cmp` vs `RC=0\n` (old `$(cat)`
+  stripped trailing newlines — `RC=0\n\n\n` passed, now rejected);
+  frames_seen banner grep subsumed by H1's validator. Host
+  `shasum | cut` sites stay (audit item 28 CONF class).
+  M4 — gfx_device --live now REQUIRES --record-keys: a per-frame raw
+  PlatformInput bitmask (13 bits, `%04x` lines, RAM-buffered, tmpfs
+  post-run; bit layout paired gfx_app.c ↔ judge). The judge asserts
+  exact count + line grammar, a/b/x/start pairing fidelity vs the
+  trace bools (same-pin same-frame), UNIVERSAL SOCD invariants (raw
+  L+R held ⇒ lsX==0 AND csX==0, U+D ⇒ y-axis neutral — violation =
+  death), and two new coverage signatures ≥5 frames. LIVE RESULT: the
+  real session carried 18/18 SOCD H/V witness frames through the
+  actual uinput→SDL path (the scripted 300 ms holds, exactly as
+  designed) — SOCD is now live-proven, not sweep-only (closing the
+  iter-51 honest-coverage exposure).
+  M5 — standing tapjump behavioral oracle in the check (step 8):
+  synthetic 200-frame up-flick trace (up rows 120..135), host replay
+  with vs without --tapjump-off-p1 must FIRST diverge at frame 121
+  exactly (MEASURED host-side then frozen; matches iter-51's tooth);
+  identical streams or divergence elsewhere = loud death.
+  M6 — PARKED=1 set pessimistically BEFORE the park dsh; task5_cleanup
+  pkill + frontend restore ride riglib's rig_dsh_retry verbatim
+  (transport recovery; riglib itself untouched — the deadman machinery
+  is check-device-render.sh-local, recorded for the arc).
+  L1 — clayer-diag signature now also requires lsX===0 && lsY===0;
+  discriminating pair proven (stale-ls copy: NEW FAIL / OLD rc 0).
+- **Teeth — all fired as pre-registered** (host
+  .loop/m3-task5r53-teeth-host.log; device probe
+  .loop/m3-task5r53-teeth-fkinput.log): T-H1a truncation → count death;
+  T-H1b 63-hex → line death; T-M2 dup-key discriminating pair; T-M3a
+  apprc trailing-newlines discriminating pair; T-M3b second-sweep-line
+  discriminating pair; T-M4a sidecar truncation death; T-M4b SOCD bits
+  cleared → both socd signatures FAIL; T-M4c inverted witness (L+R
+  bits on a dash frame) → SOCD VIOLATION death; T-M4d a-bit mismatch →
+  pairing death; T-L1 discriminating pair; T-M5 identical streams →
+  IDENTICAL death + positive control at 121. Baseline zero-false-
+  rejection: NEW judge passes the REAL iter-52 trace + synthesized
+  sidecar 26/26.
+- **Regressions (recorded, .loop/m3-task5r53-smoke-host.log)**:
+  check-sim.sh NOT run — no port/sim TU changed; check-device-render.sh
+  NOT run — riglib.sh untouched (brief rule); its shared gfx_app.c
+  surface guarded by a host headless smoke: --trace mode rc 0 with
+  F1 == the frozen g01 anchor (9f4c6df7…), summary-line grammar
+  untouched, new arg-validation arms reject --live-without-keys and
+  keys-in-trace-mode.
+- **Honest coverage / exposure**: the SOCD witness proves the
+  uinput→SDL→S1 path on the d-pad axes; the sidecar is device-recorded
+  (host-judged like all evidence — trust class unchanged); pairing
+  fidelity covers a/b/x/start only (the d-pad bits have no independent
+  trace twin BY DESIGN — that is what the witness measures). The
+  tapjump oracle is host-side (the device replays the same sim TUs
+  bit-identically per the four-way check). fk_input's ferror arm is
+  code-reviewed, not tooth-fired (no way to force a read error on a
+  4 KB tmpfs file without a harness). START/MENU remain sweep-only
+  (unchanged registered exposure).
+- **ZOOM OUT**: the whitelist-grammar rule closed this surface's
+  remaining permissive parses via the SAME two shapes iter 52 named
+  (first-plausible-line scrapes, prefix/substring presence) plus a
+  THIRD shape now named for the registry: **content-blind success
+  banners** — frames_seen was printed but never asserted (H1), and the
+  apprc/sweep parses trusted resemblance. Standing rule restated: any
+  check-final banner value must be an ASSERTED value, never a display
+  of whatever was found. The M4 witness is an instance of a general
+  class worth naming for M4-phase work: when a live path's effect is
+  INVISIBLE in the recorded artifact by design (SOCD frames ≡ neutral
+  frames), add a RAW-side sidecar and judge the pair — recording
+  fidelity and path liveness are separate claims needing separate
+  witnesses.

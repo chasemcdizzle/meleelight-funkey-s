@@ -12,7 +12,8 @@
 //           [--cpu --difficulty N --ai-bridge f]
 //           [--pace 0|1] [--budget-ns N]
 //           [--shot-frame N --shot-ppm f.ppm --shot-pgm f.pgm]
-//           [--live --record-trace t.json [--ready-file f]]
+//           [--live --record-trace t.json --record-keys k.txt
+//            [--ready-file f]]
 //           [--tapjump-off-p1]
 //
 // LIVE MODE (M3 task 5): --live replaces the trace with the S1 input
@@ -22,10 +23,21 @@
 // and written post-run as --record-trace in the golden trace JSON
 // format (array of [row0,row1,null,null]; numbers via ml_sb_num =
 // String(x), so JSON.parse reproduces the EXACT doubles the live sim
-// consumed) — the session replays as an ordinary trace. --ready-file
-// is written right before the frame loop (the host launches the uinput
-// injector only after it exists). Requires --pace 1 (a live session is
-// wall-clock by definition); --cpu is rejected. Quit/menu requests are
+// consumed) — the session replays as an ordinary trace. --record-keys
+// (MANDATORY in live mode; iter 53, review-51 M4) additionally records
+// the RAW PlatformInput key state as one bitmask per frame (RAM
+// uint16, written post-run as one lowercase %04x line per frame) — the
+// SOCD live witness: the coverage judge pairs frame f's raw keys with
+// frame f's recorded row (same pin, same loop iteration — pairing is
+// exact by construction) and asserts opposed d-pad cardinals resolved
+// to a neutral axis through the REAL uinput->SDL path. BIT LAYOUT IS
+// LOAD-BEARING (paired with judge-s1-coverage.js):
+//   bit0 up, bit1 down, bit2 left, bit3 right, bit4 a, bit5 b,
+//   bit6 x, bit7 y, bit8 start, bit9 l, bit10 r, bit11 menu, bit12 quit
+// --ready-file is written right before the frame loop (the host
+// launches the uinput injector only after it exists). Requires
+// --pace 1 (a live session is wall-clock by definition); --cpu is
+// rejected. Quit/menu requests are
 // recorded-and-ignored (fixed frame count — same rationale as trace
 // replay). --tapjump-off-p1 sets gameSettings tapJumpOffp1=1 after
 // setup (the S1 contract, fix_plan §M3 "Input"); every replay of a
@@ -318,7 +330,7 @@ int main(int argc, char **argv) {
   const char *tracePath = 0, *simdataPath = 0, *bridgePath = 0;
   const char *gfxdataPath = 0, *animDir = 0, *outPath = 0, *timingPath = 0;
   const char *shotPpm = 0, *shotPgm = 0;
-  const char *recordPath = 0, *readyPath = 0;
+  const char *recordPath = 0, *readyPath = 0, *keysPath = 0;
   long seed = -1, p1 = -1, p2 = -1, stage = -1, frames = -1, difficulty = 3;
   long shotFrame = -1;
   long pace = 1;
@@ -350,6 +362,7 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--cpu") == 0) cpu = true;
     else if (strcmp(a, "--live") == 0) live = true;
     else if (strcmp(a, "--record-trace") == 0 && hasV) recordPath = argv[++i];
+    else if (strcmp(a, "--record-keys") == 0 && hasV) keysPath = argv[++i];
     else if (strcmp(a, "--ready-file") == 0 && hasV) readyPath = argv[++i];
     else if (strcmp(a, "--tapjump-off-p1") == 0) tapJumpOffP1 = true;
     else {
@@ -357,10 +370,11 @@ int main(int argc, char **argv) {
       return 1;
     }
   }
-  // --live: S1 keys replace the trace; recording is mandatory; the
+  // --live: S1 keys replace the trace; recording is mandatory (trace
+  // AND the raw-key sidecar — the SOCD witness, review-51 M4); the
   // session is wall-clock by definition (--pace 1); no CPU slot.
-  if (!((tracePath != 0) ^ live) || (live && (!recordPath || pace != 1 ||
-      cpu)) || (!live && (recordPath || readyPath)) ||
+  if (!((tracePath != 0) ^ live) || (live && (!recordPath || !keysPath ||
+      pace != 1 || cpu)) || (!live && (recordPath || readyPath || keysPath)) ||
       !simdataPath || !gfxdataPath || !animDir || !outPath ||
       !timingPath || seed < 0 || p1 < 0 || p2 < 0 || stage < 0 ||
       frames <= 0 || (cpu && !bridgePath) || (pace != 0 && pace != 1) ||
@@ -373,8 +387,8 @@ int main(int argc, char **argv) {
             "--out stream.txt --timing timing.txt "
             "[--cpu --difficulty N --ai-bridge f] [--pace 0|1] "
             "[--budget-ns N] [--shot-frame N --shot-ppm f --shot-pgm f] "
-            "[--live --record-trace t.json [--ready-file f]] "
-            "[--tapjump-off-p1]\n");
+            "[--live --record-trace t.json --record-keys k.txt "
+            "[--ready-file f]] [--tapjump-off-p1]\n");
     return 1;
   }
   // RAM-buffer overflow guards (sim_main.c --timing precedent, iter 45):
@@ -442,6 +456,13 @@ int main(int argc, char **argv) {
   ml_sb_init(&rec);
   const MlInput neutralRow = nullInput();
   if (live) ml_sb_puts(&rec, "[\n");
+  // Raw-key sidecar (RAM; the SOCD live witness — header bit layout,
+  // paired with judge-s1-coverage.js).
+  uint16_t *rawKeys = 0;
+  if (live) {
+    rawKeys = malloc((size_t)frames * sizeof *rawKeys);
+    if (!rawKeys) sim_fatal("oom (raw-key sidecar buffer)");
+  }
 
   // Ready marker: written AFTER every load + platform_init, BEFORE the
   // frame loop — the host launches the uinput injector when it appears.
@@ -473,6 +494,17 @@ int main(int argc, char **argv) {
       rows[2] = 0;
       rows[3] = 0;
       rec_frame(&rec, f == 0, &liveRow, &neutralRow);
+      // Raw-key sidecar: the SAME pin the S1 row above was resolved
+      // from — sidecar[f] and trace frame f pair exactly by
+      // construction. Bit layout: header comment (paired with the
+      // coverage judge).
+      rawKeys[f] = (uint16_t)((pin.up ? 1u : 0u) | (pin.down ? 2u : 0u) |
+                              (pin.left ? 4u : 0u) | (pin.right ? 8u : 0u) |
+                              (pin.a ? 16u : 0u) | (pin.b ? 32u : 0u) |
+                              (pin.x ? 64u : 0u) | (pin.y ? 128u : 0u) |
+                              (pin.start ? 256u : 0u) | (pin.l ? 512u : 0u) |
+                              (pin.r ? 1024u : 0u) | (pin.menu ? 2048u : 0u) |
+                              (pin.quit ? 4096u : 0u));
     } else {
       const long idx = f < g_trace_len - 1 ? f : g_trace_len - 1;
       const TraceRow *row = &g_trace[idx];
@@ -571,7 +603,18 @@ int main(int argc, char **argv) {
       sim_fatal("--record-trace write failed");
     }
     if (fclose(rf) != 0) sim_fatal("--record-trace close/flush failed");
+    // Raw-key sidecar: exactly `frames` lines, each EXACTLY 4 lowercase
+    // hex digits — the judge's whitelist grammar (paired change).
+    FILE *kf = fopen(keysPath, "w");
+    if (!kf) sim_fatal("cannot open --record-keys for writing");
+    for (long f = 0; f < frames; f++) {
+      if (fprintf(kf, "%04x\n", (unsigned)rawKeys[f]) < 0) {
+        sim_fatal("--record-keys write failed");
+      }
+    }
+    if (fclose(kf) != 0) sim_fatal("--record-keys close/flush failed");
   }
+  free(rawKeys);
   ml_sb_free(&rec);
 
   // post-run summary (stderr). GRAMMAR IS LOAD-BEARING (iter 52,
