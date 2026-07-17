@@ -46,6 +46,29 @@ made() {
 EXP=$GFX/expected-render.json
 made "$EXP"
 
+# corpus pin (review-44 fix 1): the frozen 16-frame corpus, exactly —
+# unique positive integers, count == sampledFrameCount == 16. Asserted
+# BEFORE any build/capture work; changing the corpus is a reviewed repo
+# change to expected-render.json + this pin + iou.js's twin pin.
+node -e '
+const e = require("./'"$EXP"'");
+const f = e.sampledFrames;
+if (!Array.isArray(f) || !Number.isInteger(e.sampledFrameCount) ||
+    e.sampledFrameCount !== 16 || f.length !== e.sampledFrameCount) {
+  console.error("check-render: corpus pin violated (want exactly 16 pinned frames: sampledFrames + sampledFrameCount)");
+  process.exit(1);
+}
+const seen = new Set();
+for (const v of f) {
+  if (!Number.isInteger(v) || v < 1 || seen.has(v)) {
+    console.error("check-render: corpus pin violated (bad/duplicate frame " + v + ")");
+    process.exit(1);
+  }
+  seen.add(v);
+}
+'
+echo "corpus pin OK (16 unique sampled frames)"
+
 # frozen params (strict JSON reads; node -p, no eval of untrusted text)
 FRAMES_LIST=$(node -p "require('./$EXP').sampledFrames.join(',')")
 GOLDEN=$(node -p "require('./$EXP').golden")
@@ -111,9 +134,39 @@ echo "build OK: $BUILD/gfx_replay (raster TU -O3, all else -O2; -ffp-contract=of
 
 # --- 3. browser reference capture (STREAM-MATCH guarded) --------------------------
 NEED_CAPTURE=1
-if [ "${MLFK_GFX_REUSE_CANVAS:-0}" = "1" ] && [ -s "$BUILD/g01.render-run.json" ]; then
+if [ "${MLFK_GFX_REUSE_CANVAS:-0}" = "1" ]; then
+  # Reuse hatch is DIGEST-BOUND (review-44 fix 3): the cached capture
+  # carries sha256 of the driver bytes that produced it + the GFXDATA it
+  # wrote (capture.digests.json, written by capture-canvas.js). Reuse
+  # REFUSES loudly on any mismatch/missing piece — never a silent
+  # fallback to a fresh capture, so a stale-cache mistake always surfaces.
+  node -e '
+const fs = require("fs"), crypto = require("crypto");
+const h = (fp) => crypto.createHash("sha256").update(fs.readFileSync(fp)).digest("hex");
+const side = "'"$CANVAS"'/capture.digests.json";
+if (!fs.existsSync(side)) {
+  console.error("check-render: reuse REFUSED: " + side + " missing (no digest-bound capture cached)");
+  process.exit(1);
+}
+const d = JSON.parse(fs.readFileSync(side, "utf8"));
+const cur = {
+  captureCanvasJs: h("port/gfx/capture-canvas.js"),
+  gfxPagelibJs: h("port/gfx/gfx-pagelib.js"),
+  gfxdata: h("'"$BUILD"'/gfxdata.txt"),
+};
+for (const k of Object.keys(cur)) {
+  if (d[k] !== cur[k]) {
+    console.error("check-render: reuse REFUSED: digest mismatch on " + k + " (cached capture is stale vs current bytes)");
+    process.exit(1);
+  }
+}
+'
+  if [ ! -s "$BUILD/g01.render-run.json" ]; then
+    echo "check-render: reuse REFUSED: cached run JSON missing/empty" >&2
+    exit 1
+  fi
   NEED_CAPTURE=0
-  echo "capture: reusing cached canvas dumps (MLFK_GFX_REUSE_CANVAS=1; dev hatch)"
+  echo "capture: reusing cached canvas dumps (MLFK_GFX_REUSE_CANVAS=1; digest-bound dev hatch)"
 fi
 if [ "$NEED_CAPTURE" = "1" ]; then
   rm -rf "$CANVAS"
@@ -122,12 +175,28 @@ if [ "$NEED_CAPTURE" = "1" ]; then
     --out-dir "$CANVAS" --out-run "$BUILD/g01.render-run.json" \
     --gfxdata "$BUILD/gfxdata.txt"
 fi
-made "$BUILD/g01.render-run.json" "$BUILD/gfxdata.txt"
+made "$BUILD/g01.render-run.json" "$BUILD/gfxdata.txt" "$CANVAS/capture.digests.json"
 IFS=',' read -r -a SAMPLED <<< "$FRAMES_LIST"
 for f in "${SAMPLED[@]}"; do
   tag=$(printf 'f%04d' "$f")
   made "$CANVAS/$tag.mask.bin" "$CANVAS/$tag.png"
 done
+
+# oracle build digest pin (review-44 fix 2, asserted BEFORE any judging):
+# the bytes the capture actually SERVED must be the pinned built bundle
+# (upstream 27af171 + the committed oracle/build-upstream.sh recipe make
+# the digest stable). If the clone is legitimately rebuilt and this
+# digest changes, updating servedDistSha256 in expected-render.json is a
+# REVIEWED repo change, never a runtime accommodation.
+SERVED_DIGEST=$(node -p "require('./$BUILD/g01.render-run.json').meta.gfxCapture.served.digest")
+PINNED_DIGEST=$(node -p "require('./$EXP').servedDistSha256")
+if [ -z "$SERVED_DIGEST" ] || [ "$SERVED_DIGEST" = "undefined" ] || \
+   [ "$SERVED_DIGEST" != "$PINNED_DIGEST" ]; then
+  echo "check-render: served-dist digest mismatch: capture '$SERVED_DIGEST' != pinned '$PINNED_DIGEST'" >&2
+  exit 1
+fi
+echo "served-dist digest matches the frozen pin"
+
 node oracle/harness/verify-stream.js "$BUILD/g01.render-run.json" "$FROZEN"
 echo "capture stream verified (render instrumentation did not perturb the sim)"
 

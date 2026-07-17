@@ -456,6 +456,20 @@ static void render_player(Gfx *g, const GameState *st, int i) {
     double mvX = 0, mvY = 0;
     if (temX > 1220 || temX < -20 || temY > 880 || temY < -30) {
       const double pAx = temX - 600, pAy = temY - 375;
+      // pAx == 0 divide (review-44 item 5, faithfulness-verified against
+      // upstream render.js:173): upstream computes s = pA.y/pA.x with NO
+      // zero guard, so JS yields +-Infinity there and we must too. On our
+      // IEEE-754 targets (host clang/gcc, armv7 VFP; -ffp-contract=off
+      // only — no fast-math, and no FP trap is ever enabled anywhere in
+      // the port: no feenableexcept/fesetenv) x/0.0 is Annex-F-defined as
+      // +-Inf, matching JS bit-for-bit. NaN is impossible here: pAx == 0
+      // means temX == 600, which satisfies neither horizontal arm of the
+      // outer guard, so temY > 880 or temY < -30 must hold and
+      // |pAy| >= 405. The Inf then propagates exactly like upstream:
+      // s*600 = +-Inf fails the first branch; 375/s = +-0 passes the
+      // second; pAy > 0 takes the clamp arm (no division), pAy < 0 takes
+      // -375/s + offx = -+0 + offx = offx. No guard is added — a guard
+      // would change drawn output vs upstream (hard rule 5).
       const double s = pAy / pAx;
       if (-375 <= s * 600 && s * 600 <= 375) {
         miniView = 1;

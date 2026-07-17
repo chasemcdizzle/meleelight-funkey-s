@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-16, post-iter-45 writer)
+## Live right now (updated: 2026-07-16, post-iter-46 writer)
 
 - **Phase: M3** (issue #18) — on-device. M0/M1/M2-CAL/M2 all PASSED
   (`bash port/sim/check-sim.sh` → SIM CONFORMS, all 8 goldens bit-exact;
@@ -125,13 +125,33 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   PROCESS honesty: writer dead-parked on background watchers again
   (nudged 3x) + one verify-then-destroy-in-one-call incident that
   sabotaged its own live run — class lessons in the AGENT-LOG entry.
+- **Iter 46 (M3 task 3 review-hardening) DONE**: task-3 arc round-1
+  findings (.loop/review-44-1.log NO-GO, triage
+  .loop/review-44-triage.md) closed — (1) CORPUS PIN: sampledFrameCount
+  16 frozen; check-render.sh + iou.js twin pins (16 unique frames,
+  asserted pre-build), capture-canvas.js rejects duplicate frames;
+  (2) ORACLE BUILD DIGEST: served-bytes sha256 (43 files incl. hooked
+  main.js as served) recorded in run-JSON meta, pinned as
+  servedDistSha256 (measured-then-frozen; reproduced exactly by the
+  done-check's independent capture), asserted before judging;
+  (3) REUSE BINDING: capture.digests.json sidecar (driver bytes +
+  GFXDATA) written at capture time, MLFK_GFX_REUSE_CANVAS refuses loud
+  on any mismatch; (4) CONSOLE FAIL-CLOSED: frozen consoleErrorAllowlist
+  (favicon 404, localforage, our own sfx/music route aborts), anything
+  else kills the capture; (5) miniView pAx==0 VERDICT: upstream
+  render.js:173 divides unguarded → ±Inf (NaN unreachable), C already
+  mirrors it bit-exactly under IEEE no-trap (grep-verified) — comment
+  documenting the assumption at the division site, NO guard (hard rule
+  5). All 4 teeth fired (.loop/m3-task3r46-tooth-*.log); cold
+  done-check RENDER OK exit 0 (.loop/m3-task3r46-donecheck.log),
+  IOU MIN 0.9149 ≥ 0.91, both STREAM MATCH 3600/3600.
 - **In flight**: task-2 Tier-A arc round 2 PENDING (closure review of
-  the iter-45 fixes) + task-3 Tier-A arc (check-render.sh +
-  capture-canvas.js + gfx-pagelib.js + iou.js + renderer,
-  non-checksummed surfaces) open, then task 4 (platform seam + SDL1.2
+  the iter-45 fixes) + task-3 Tier-A arc round 2 PENDING (closure
+  review of the iter-46 fixes; concurrent read-only review of
+  port/sim/device/* + sim_main.c), then task 4 (platform seam + SDL1.2
   device backend + live device render).
-- **Latest AGENT-LOG entry**: iter 45 (M3 task 2 hardening); latest log
-  id: .loop/m3-task2r45-donecheck.log.
+- **Latest AGENT-LOG entry**: iter 46 (M3 task 3 hardening); latest log
+  id: .loop/m3-task3r46-donecheck.log.
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull

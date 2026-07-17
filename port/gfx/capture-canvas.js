@@ -23,9 +23,14 @@
 // never committed, judged only through the structural IoU.
 "use strict";
 
+const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
+
+function sha256Hex(buf) {
+  return crypto.createHash("sha256").update(buf).digest("hex");
+}
 
 const REPO = path.resolve(__dirname, "..", "..");
 const HARNESS = path.join(REPO, "oracle", "harness");
@@ -59,16 +64,38 @@ if (!OUT_DIR || OUT_DIR === true || !OUT_RUN || OUT_RUN === true ||
   console.error("capture-canvas: --out-dir, --out-run, --gfxdata, --frames-list are required");
   process.exit(1);
 }
+// Corpus pin (review-44 fix 1): duplicates are REJECTED — every sampled
+// frame must appear exactly once, so masksWritten == list length is an
+// exact-coverage assertion, never a dedup illusion.
 const sampled = {};
+const sampledList = [];
 for (const s of FRAMES_LIST.split(",")) {
   const v = parseInt(s, 10);
   if (!Number.isInteger(v) || v < 1 || v > g.frames || String(v) !== s.trim()) {
     console.error(`capture-canvas: bad sampled frame '${s}'`);
     process.exit(1);
   }
+  if (sampled[v]) {
+    console.error(`capture-canvas: duplicate sampled frame ${v} (corpus pin: each frame exactly once)`);
+    process.exit(1);
+  }
   sampled[v] = true;
+  sampledList.push(v);
 }
 const CHUNK = 120;
+
+// Console fail-closed allowlist (review-44 fix 4): frozen in
+// expected-render.json; ANY page console.error outside it kills the
+// capture immediately.
+const EXPECTED_RENDER = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "expected-render.json"), "utf8"));
+const CONSOLE_ALLOW = EXPECTED_RENDER.consoleErrorAllowlist;
+if (!Array.isArray(CONSOLE_ALLOW) || CONSOLE_ALLOW.length === 0 ||
+    !CONSOLE_ALLOW.every((a) => a && typeof a.textIncludes === "string" &&
+      (a.urlIncludes === undefined || typeof a.urlIncludes === "string"))) {
+  console.error("capture-canvas: consoleErrorAllowlist missing/malformed in expected-render.json");
+  process.exit(1);
+}
 
 const MIME = {
   ".html": "text/html", ".js": "text/javascript", ".css": "text/css",
@@ -79,8 +106,24 @@ const MIME = {
 // Serve the dist untouched EXCEPT dist/js/main.js, whose served bytes get
 // the run-capture.js webpack-bootstrap hook (window.__wpCache). Disk is
 // never written.
+//
+// Oracle build digest (review-44 fix 2): serve() records the sha256 of
+// the EXACT bytes sent for every 200 response (the hooked main.js is
+// hashed AS SERVED — the hook is committed code, so the digest stays
+// deterministic). The run JSON meta carries a digest over the sorted
+// (path, hash) list; check-render.sh asserts it against the frozen
+// servedDistSha256 pin in expected-render.json BEFORE judging.
 const BOOT_LINE = "var installedModules = {};";
 const BOOT_HOOK = BOOT_LINE + " window.__wpCache = installedModules;";
+
+const servedSha = {}; // urlPath -> sha256 hex of the exact bytes sent
+
+function servedDigest() {
+  const files = Object.keys(servedSha).sort();
+  const h = crypto.createHash("sha256");
+  for (const k of files) h.update(k + "\n" + servedSha[k] + "\n");
+  return { digest: h.digest("hex"), files: files };
+}
 
 function serve(root) {
   return new Promise((resolve) => {
@@ -98,13 +141,17 @@ function serve(root) {
           res.end("capture: webpack bootstrap line not found exactly once in main.js");
           return;
         }
-        const hooked = src.slice(0, i) + BOOT_HOOK + src.slice(i + BOOT_LINE.length);
+        const hooked = Buffer.from(
+          src.slice(0, i) + BOOT_HOOK + src.slice(i + BOOT_LINE.length), "utf8");
+        servedSha[urlPath] = sha256Hex(hooked);
         res.writeHead(200, { "Content-Type": "text/javascript" });
         res.end(hooked);
         return;
       }
+      const body = fs.readFileSync(fp);
+      servedSha[urlPath] = sha256Hex(body);
       res.writeHead(200, { "Content-Type": MIME[path.extname(fp)] || "application/octet-stream" });
-      fs.createReadStream(fp).pipe(res);
+      res.end(body);
     });
     srv.listen(0, "127.0.0.1", () => resolve(srv));
   });
@@ -129,10 +176,26 @@ async function main() {
   await context.route(/\/(sfx|music)\//, (r) => r.abort());
   const page = await context.newPage();
   page.on("pageerror", (e) => { console.error("[pageerror]", e.message); process.exitCode = 1; });
+  // Fail-closed console policy (review-44 fix 4): a caught render error or
+  // missing render asset surfaces as console.error while masks stay
+  // structurally valid — so ONLY the frozen allowlist (CLAUDE.md's
+  // expected upstream noise + our own deliberate sfx/music route aborts)
+  // may pass; anything else kills the capture immediately. The old
+  // blanket "Failed to load resource" suppression is gone.
   page.on("console", (m) => {
-    if (m.type() === "error" && !m.text().includes("Failed to load resource")) {
-      console.error("[console.error]", m.text());
+    if (m.type() !== "error") return;
+    const text = m.text();
+    const loc = m.location();
+    const url = (loc && loc.url) || "";
+    for (const a of CONSOLE_ALLOW) {
+      if (text.includes(a.textIncludes) &&
+          (a.urlIncludes === undefined || url.includes(a.urlIncludes))) {
+        console.error("[console.error allowlisted]", text, url);
+        return;
+      }
     }
+    console.error("[console.error UNLISTED -> fail-closed]", text, url);
+    process.exit(1);
   });
 
   // Identical init pipeline to oracle/harness/run.js golden recording:
@@ -204,11 +267,22 @@ async function main() {
     }
   }
   const wall = Date.now() - t0;
-  const wanted = Object.keys(sampled).length;
+  const wanted = sampledList.length;
   if (masksWritten !== wanted) {
     console.error(`capture-canvas: wrote ${masksWritten} masks, wanted ${wanted}`);
     process.exit(1);
   }
+
+  // Reuse-hatch digest binding (review-44 fix 3): record, alongside the
+  // cached masks, the sha256 of the driver bytes that produced this
+  // capture + the GFXDATA it wrote. check-render.sh's
+  // MLFK_GFX_REUSE_CANVAS path refuses (loud) if any differs from the
+  // then-current bytes.
+  fs.writeFileSync(path.join(OUT_DIR, "capture.digests.json"), JSON.stringify({
+    captureCanvasJs: sha256Hex(fs.readFileSync(__filename)),
+    gfxPagelibJs: sha256Hex(fs.readFileSync(path.join(__dirname, "gfx-pagelib.js"))),
+    gfxdata: sha256Hex(fs.readFileSync(path.resolve(GFXDATA))),
+  }, null, 2) + "\n");
 
   const coverage = await page.evaluate(() => window.__coverage());
   fs.writeFileSync(OUT_RUN, JSON.stringify({
@@ -218,7 +292,10 @@ async function main() {
       seedRandom: true, fdlibm: true, cpu: g.cpu,
       difficulty: g.cpu ? g.difficulty : null, wallMs: wall,
       browser: browser.browserType().name(), version: browser.version(),
-      gfxCapture: { sampled: Object.keys(sampled).map(Number).sort((a, b) => a - b) },
+      gfxCapture: {
+        sampled: sampledList.slice().sort((a, b) => a - b),
+        served: servedDigest(),
+      },
     },
     coverage,
     frames,

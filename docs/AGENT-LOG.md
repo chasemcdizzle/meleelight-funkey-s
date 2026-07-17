@@ -4546,3 +4546,174 @@ is CLEARED: the FunKey-S is attached and healthy on ADB
   from a repo-controlled file, not a CLI flag); the presence assertion
   closes the "check emits an artifact somebody must remember to use"
   class by making the forgotten duty fail the NEXT run loudly.
+
+## iter 46 — 2026-07-16 — M3 task 3 HARDENING PRE-REGISTRATION: review-44 round-1 findings (corpus + oracle-build pins, reuse binding, console fail-closed, miniView pAx==0)
+
+- PRE-REGISTRATION (frozen before first edit; PROCESS §2. Task: close
+  the task-3 renderer arc's round-1 findings per the driver triage
+  `.loop/review-44-triage.md` / `.loop/review-44-1.log`).
+  - **Surface**: `port/gfx/` ONLY (check-render.sh, capture-canvas.js,
+    gfx-pagelib.js if needed, iou.js, expected-render.json,
+    gfx_render.c). port/sim/device/* and port/sim/sim/sim_main.c
+    untouched (concurrent read-only closure review); oracle/ untouched.
+  - **Fix 1 (High — CORPUS PIN)**: expected-render.json gains
+    `sampledFrameCount: 16`; check-render.sh asserts up-front (before
+    any build) that sampledFrames is an array of EXACTLY 16 unique
+    positive integers matching the count field; iou.js asserts the same
+    pin (replacing the >=12 floor) and keeps per-frame exact-size mask/
+    PGM loads (missing/empty = loud death); capture-canvas.js REJECTS
+    duplicate frames in --frames-list and asserts masks written ==
+    list length. Evaluated set == pinned set because both consumers
+    iterate the pinned list, now provably unique. Tooth: duplicate
+    frame injected (perturbed expected-render.json copy-in-place,
+    git-restored) → check-render dies at the pin in seconds; plus
+    direct capture-canvas.js dup-list probe → loud death pre-browser.
+  - **Fix 2 (Medium — ORACLE BUILD DIGEST)**: capture-canvas.js's serve()
+    records sha256 of the EXACT bytes it sends per URL path (incl. the
+    hooked main.js as served); the run JSON meta gains
+    gfxCapture.servedDigest = sha256 over the sorted (path, hash) list
+    + the served file list. expected-render.json pins it as
+    `servedDistSha256` (measured from a fresh capture, then frozen —
+    upstream pin 27af171 + the committed build recipe make it stable; a
+    legitimate clone rebuild that changes it requires a reviewed pin
+    update in this file). check-render.sh asserts run-JSON digest ==
+    pin right after the capture, BEFORE any judging. Tooth: perturb the
+    digest in the cached run JSON metadata (reuse mode) → loud death at
+    the assert.
+  - **Fix 3 (Medium — REUSE HATCH DIGEST BINDING)**: capture-canvas.js
+    writes `<out-dir>/capture.digests.json` at capture time (sha256 of
+    capture-canvas.js bytes, gfx-pagelib.js bytes, and the GFXDATA file
+    it wrote). MLFK_GFX_REUSE_CANVAS=1 now REFUSES loudly (exit 1,
+    never silent fallback-to-capture) if the sidecar is missing or ANY
+    digest differs from the current bytes. Tooth: perturb
+    gfx-pagelib.js bytes post-capture (append comment; git-restored) →
+    reuse refused loudly.
+  - **Fix 4 (Medium — CONSOLE.ERROR FAIL-CLOSED)**: the capture fails
+    (print + exit 1, fail-fast) on ANY page console.error EXCEPT a
+    frozen allowlist in expected-render.json
+    (`consoleErrorAllowlist`: substring-on-text + optional
+    substring-on-location-url entries) — seeded from CLAUDE.md's
+    expected-noise note (favicon.ico 404; webpack localforage warning)
+    plus the capture's OWN deliberate sfx/music route aborts; the final
+    list is MEASURED via a boot-audit before freezing (audit run logs
+    every console message; allowlist = observed noise only, each entry
+    justified in the JSON comment). The old blanket "Failed to load
+    resource" suppression is deleted. Tooth: probe COPY of the driver
+    (port/gfx/ tooth file, deleted after) injecting a page-context
+    console.error → capture dies loud seconds after page load.
+  - **Item 5 (Medium — MINIVIEW pAx==0, FAITHFULNESS-SENSITIVE,
+    investigate-mirror-document)**: read upstream render.js:170-208
+    verbatim; verdict recorded in the DONE entry. Expected shape (to be
+    confirmed against the source): pAx==0 requires temX==600, which
+    fails both horizontal outer-guard arms, so the branch is only
+    reachable with |pAy| large ⇒ s = ±Infinity (never NaN); JS then
+    takes the 375/s == ±0 arm. C mirrors this bit-exactly under IEEE-754
+    with traps disabled (our compile: -O2 -ffp-contract=off, no
+    fast-math, no feenableexcept anywhere — grep-verified). Fix = a
+    documenting comment at the division site; NO guard that could
+    change drawn output vs upstream (hard rule 5).
+  - **Run cap**: ≤ 3 FULL check-render invocations needing browser
+    captures — (A) measurement capture (direct capture-canvas.js run:
+    measures servedDistSha256 + validates the allowlist over a full
+    3600-frame replay), (B) cold clean done-check
+    `bash port/gfx/check-render.sh` → RENDER OK
+    (.loop/m3-task3r46-donecheck.log), (C) one spare for an allowlist
+    or digest surprise. Teeth use early-death invocations (die before
+    or at the capture stage), component-level probes, and reuse-mode
+    runs — none consumes a fresh browser capture.
+  - **Pass**: cold RENDER OK exit 0 + all teeth fired-and-restored
+    (perturb → observe → restore; git tree clean) + the item-5
+    investigation verdict on record. check-sim.sh NOT rerun (no
+    sim-linked TU touched; gfx_render.c is renderer-only and links only
+    into gfx_replay).
+
+## iter 46 — 2026-07-16 — M3 task 3 HARDENING DONE: corpus + oracle-build pins, reuse binding, console fail-closed (review-44 round 1 closed)
+
+- All four FIX items from `.loop/review-44-triage.md` closed + the
+  item-5 investigation recorded; surface was port/gfx/ only
+  (check-render.sh, capture-canvas.js, iou.js, expected-render.json,
+  gfx_render.c; gfx-pagelib.js byte-identical — only perturbed/restored
+  as a tooth).
+- **Fix 1 (High — corpus pin)**: expected-render.json pins
+  `sampledFrameCount: 16`; check-render.sh asserts BEFORE any build that
+  sampledFrames is exactly 16 unique positive integers; iou.js carries
+  the twin pin (replacing the >=12 floor) + an explicit non-empty mask
+  check per pinned frame; capture-canvas.js REJECTS duplicate frames in
+  --frames-list (dedup-illusion closed: masksWritten == list length is
+  now exact coverage). Teeth (all fired,
+  .loop/m3-task3r46-tooth-corpus.log): dup frame in expected-render.json
+  → check-render dies at the pin in seconds AND iou.js dies at its twin;
+  `--frames-list 30,30` → capture dies pre-browser.
+- **Fix 2 (Medium — oracle build digest)**: capture-canvas.js's server
+  hashes the EXACT bytes it sends per URL (incl. the __wpCache-hooked
+  main.js as served; 43 files this build) and the run JSON meta carries
+  `gfxCapture.served` = {digest over sorted (path,hash) list, file
+  list}. Pin `servedDistSha256` = 6df9dcad…f705b measured from a fresh
+  capture then frozen; check-render.sh asserts run digest == pin AFTER
+  the capture, BEFORE any judging. The cold done-check's second
+  independent capture reproduced the digest exactly (determinism
+  proven). A legitimate clone rebuild that changes it = reviewed pin
+  update (said in both the JSON comment and the script comment). Tooth
+  (.loop/m3-task3r46-tooth-digest.log): flipped first digest nibble in
+  the cached run JSON → loud death at the assert.
+- **Fix 3 (Medium — reuse hatch digest binding)**: capture-canvas.js
+  writes `<canvas>/capture.digests.json` at capture time (sha256 of its
+  own bytes, gfx-pagelib.js bytes, and the GFXDATA it wrote; sidecar now
+  made()-asserted after every fresh capture). MLFK_GFX_REUSE_CANVAS=1
+  now REFUSES loudly (exit 1, never silent fallback-to-capture) on a
+  missing sidecar or ANY digest differing from current bytes. Tooth
+  (.loop/m3-task3r46-tooth-reuse.log): byte-perturbed gfx-pagelib.js
+  post-capture → "reuse REFUSED: digest mismatch on gfxPagelibJs".
+- **Fix 4 (Medium — console.error fail-closed)**: the blanket
+  "Failed to load resource" suppression is gone; ANY page console.error
+  outside the frozen `consoleErrorAllowlist` in expected-render.json
+  kills the capture immediately (print + exit 1). Allowlist: favicon.ico
+  404 + webpack localforage warning (CLAUDE.md's expected-noise note,
+  per the triage) + our OWN deliberate sfx/music route aborts (audio out
+  of render scope — the measurement run observed 360 sfx + 8 music abort
+  errors and NOTHING else; each entry carries a "why"). Matching is
+  text-substring + optional location-url substring, so a missing render
+  ASSET 404 (e.g. randall PNG) no longer hides under the resource-error
+  umbrella. Tooth (.loop/m3-task3r46-tooth-console.log): probe COPY of
+  the driver injecting console.error in page context → died loud
+  seconds after goto; probe deleted.
+- **Item 5 (Medium — miniView pAx==0) VERDICT: already-faithful; comment
+  added, NO code change.** Upstream render.js:173 computes
+  `s = (pA.y-pB.y)/(pA.x-pB.x)` with no zero guard. At pAx==0
+  (temX==600) the outer guard's horizontal arms both fail, so the branch
+  is reachable ONLY with temY>880 or temY<-30 ⇒ |pAy|>=405 ⇒ s is
+  ±Infinity, NEVER NaN. JS then: s*600=±Inf fails branch 1;
+  375/s=±0 passes branch 2; pAy>0 → clamp arm (no division; yields
+  (600,700)); pAy<0 → -375/s+offset[0] = ∓0+offset[0] = offset[0].
+  C x/0.0 under IEEE-754 (Annex F; host clang/gcc + armv7 VFP, and NO
+  FP trap is enabled anywhere in the port — no
+  feenableexcept/fesetenv, grep-verified; flags -O2 -ffp-contract=off,
+  no fast-math) produces the identical ±Inf and the identical
+  propagation, bit-for-bit. The reviewer's "FP traps or a non-IEC C
+  environment" concern is dispositioned by documenting the assumption
+  at the division site (gfx_render.c). A guard would CHANGE drawn
+  output vs upstream (hard rule 5) — none added. Tooth impossible
+  (render-only path, no golden reaches it; the configuration needs
+  temX==600.0 exactly while vertically off-camera) — documented per the
+  triage's investigate-mirror-document instruction.
+- **Run ledger (cap ≤3 full-capture runs)**: (A) measurement capture
+  (direct capture-canvas.js, .loop/m3-task3r46-capture-measure.log —
+  measured the digest + validated the allowlist over the full 3600-frame
+  replay, exit 0); (B) cold done-check
+  `bash port/gfx/check-render.sh` → corpus pin OK, served-dist digest
+  matches, capture STREAM MATCH 3600/3600, x2 C renders byte-identical,
+  render-on STREAM MATCH, IOU MIN 0.9149 ≥ 0.91, **RENDER OK exit 0**
+  (.loop/m3-task3r46-donecheck.log). 2/3 used. Reuse-mode tooth runs
+  and early-death pin runs consumed no captures. check-sim.sh not
+  rerun: no sim-linked TU touched (gfx_render.c comment-only, links
+  only into gfx_replay).
+- **ZOOM OUT**: the four fixes are one CLASS — "reference material the
+  judge trusts must carry an identity/integrity pin" (corpus list,
+  oracle bytes, cached capture provenance, page error channel), i.e. the
+  iter-41 "artifact identity pins" class extended from device rigs to
+  the browser-reference rig; the fix pattern (record digest at produce
+  time, assert at consume time, fail closed) is now uniform across both
+  rigs. Instrument > one-off: the served-bytes digest also retroactively
+  pins what iter-44's IoU actually measured against. Item 5 joins the
+  rule-13 family (expression-shape faithfulness: division-by-zero
+  semantics are part of the expression, not an error to guard).

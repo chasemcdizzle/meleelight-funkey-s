@@ -37,9 +37,24 @@ if (!CANVAS || !RENDER || !EXPECTED || CANVAS === true || RENDER === true || EXP
 }
 
 const exp = JSON.parse(fs.readFileSync(EXPECTED, "utf8"));
-if (!Array.isArray(exp.sampledFrames) || exp.sampledFrames.length < 12) {
-  console.error("iou: expected-render.json sampledFrames must list >= 12 frames");
+// Corpus pin (review-44 fix 1): the frozen 16-frame corpus, exactly —
+// count pinned both here and in expected-render.json (sampledFrameCount),
+// every frame a unique positive integer. Changing the corpus is a
+// reviewed repo change to BOTH files, never a runtime degradation.
+if (!Array.isArray(exp.sampledFrames) || !Number.isInteger(exp.sampledFrameCount) ||
+    exp.sampledFrameCount !== 16 || exp.sampledFrames.length !== exp.sampledFrameCount) {
+  console.error("iou: corpus pin violated — expected-render.json must pin exactly 16 sampled frames (sampledFrames + sampledFrameCount)");
   process.exit(1);
+}
+{
+  const seen = new Set();
+  for (const v of exp.sampledFrames) {
+    if (!Number.isInteger(v) || v < 1 || seen.has(v)) {
+      console.error(`iou: corpus pin violated — bad or duplicate sampled frame ${v}`);
+      process.exit(1);
+    }
+    seen.add(v);
+  }
 }
 if (typeof exp.iouThreshold !== "number" || exp.iouThreshold <= 0 || exp.iouThreshold > 1) {
   console.error("iou: expected-render.json iouThreshold malformed");
@@ -66,6 +81,10 @@ for (const f of exp.sampledFrames) {
   const tag = String(f).padStart(4, "0");
   const maskFp = path.join(CANVAS, `f${tag}.mask.bin`);
   const pgmFp = path.join(RENDER, `f${tag}.pgm`);
+  if (!fs.existsSync(maskFp) || fs.statSync(maskFp).size === 0) {
+    console.error(`iou: ${maskFp}: missing or empty mask (corpus pin: every pinned frame needs a non-empty mask)`);
+    process.exit(1);
+  }
   const src = fs.readFileSync(maskFp);
   if (src.length !== SRC_W * SRC_H) {
     console.error(`iou: ${maskFp}: ${src.length} bytes (want ${SRC_W * SRC_H})`);
