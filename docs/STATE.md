@@ -3,7 +3,47 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 75 — M4 task 4 DONE: ai.js C port, AI MATCH)
+## Live right now (updated: 2026-07-19, iter 76 — device-rig arc round-1 findings CLOSED; rig arc round 2 = closure pending)
+
+- **Iter 76 (M4 hardening — iters-73/74 device-rig arc round-1
+  closure) DONE** (full entry: AGENT-LOG iter 76 pre-registration +
+  canonical-needle section + result): ALL triage items closed
+  (.loop/review-73-triage.md; review .loop/review-73-1.log r1 NO-GO).
+  Highlights: **H** — the on-device deadman now backstops the daemon
+  quiesce too (nonce-scoped qd markers, comm-scan-guarded hard-coded
+  restore arms, marker cleared only on live rescan) and the quiesce
+  window narrowed to exactly the paced run; TOOTH fired with real
+  transport-death evidence (host SIGKILL + adb kill-server mid-paced
+  -run → deadman restored BOTH frontend AND low_bat_check,
+  .loop/m4-rig76-probe-h.log). NEW riglib `rig_qd_normalize` step-0
+  chokepoint (stale markers restored before any disarm/wipe);
+  rig_daemon_restore idempotent + exact-cardinality (device-probed
+  6/6 incl. n=2 refusals); skip-attrib degraded-mode lockout
+  (readonly SKA_AUTHORITATIVE, DEV banner + exit 3, OK sentinel
+  structurally unreachable); full-line verdict-needle grammar +
+  resemblance counter (canonical line appended to AGENT-LOG); NEW
+  validate-ev.js (full EV whitelist grammar, 108-line corpus 0 false
+  rejections, skip/event reconciliation, sampler arms require kernel
+  windows on EVERY event — win=none fails closed); correlator
+  validates ALL sampler payloads + full-line /proc/stat + vmstat
+  dup/required-key grammars; rc files judged by exact bytes RC=0\n;
+  skip-attrib runs the exact task-3 workload (sha twin-pins + full
+  argv + judged shot); render check gained the RENDER_OK fail-closed
+  exit guard. Cold checks GREEN: `DEVICE RENDER OK ... skips 0/3600`
+  (.loop/m4-rig76-donecheck.log) + `SKIP ATTRIB OK (arm=sampler,
+  skips=1/3600, events=42, stream MATCH)`
+  (.loop/m4-rig76-donecheck2.log); 18/18 host teeth
+  (.loop/m4-rig76-teeth.log); manifest re-pins (riglib +
+  check-device-render, arc-pending cite iter76) + anchor + 23/23
+  self-check (.loop/m4-rig76-manifest-selfcheck.log). Device left
+  clean (lbc ==1, no marker, scratch wiped, gmenu2x live). Paced
+  runs: 2 cold + 1 partial H-probe; one arm rebuild (stamp).
+  **Driver next: rig arc ROUND 2 (closure re-review of the iter-76
+  surfaces); task-4's ai.c arc still pending separately.** Low
+  disposition on record: fdlibm lround boundary sweep registered for
+  the next fdlibm-touching iteration.
+
+## [superseded by iter 76] (updated: 2026-07-19, iter 75 — M4 task 4 DONE: ai.js C port, AI MATCH)
 
 - **Iter 75 (M4 task 4 — ai.js structure-parallel C port) DONE** (full
   entry: AGENT-LOG iter 75 pre-registration + result): cold done-check

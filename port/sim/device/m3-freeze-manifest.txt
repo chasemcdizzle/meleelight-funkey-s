@@ -40,11 +40,11 @@
 # circular fixed point; the excluded line is protected by the anchor
 # equality itself.
 7b031055e2329269e4e207012202cd772a75b604bd37ab3df8de9db325e4a254 port/sim/device/adbsh.sh reviewed-go .loop/review-42-1.log
-86073a7eb5c3674597cbb569c12fe0371d92ac588a3244ce7a42a739acad78e5 port/sim/device/riglib.sh arc-pending iter74-AGENT-LOG-m4-task8
+779d8703069c14057288b3ca21d9d58d715d330722d3ecafc6e9e3d6123c70d7 port/sim/device/riglib.sh arc-pending iter76-AGENT-LOG-rig-round1-closure
 d52f42f6eb9156c7c3a7116fcc3a6f4c3b4c6c223d06b476ede8665eebafeff8 port/sim/device/check-device-g01.sh reviewed-go .loop/review-42-1.log
 f4bff53ba987316d83d127b0a92d281263f66a19d1aca49dcd18969af63352de port/sim/device/check-device-conform.sh reviewed-go .loop/review-47-1.log
 4034ad81601de4e25b85658095ebfd38de2cc813fad594164afb563d6deb81ad port/sim/device/percentiles.js reviewed-go .loop/review-47-1.log
-1b26c4aee547a10c47617771b5f1e29ea21d6725c8037f1eeba9df0141249df6 port/gfx/check-device-render.sh arc-pending iter74-AGENT-LOG-m4-task8
+8e9b4c904a04b9d3ec67f062c2b3e8f497143f6440595b6e95c30cbaa334d95d port/gfx/check-device-render.sh arc-pending iter76-AGENT-LOG-rig-round1-closure
 e034539d69e1f55338e87f89c8c6573410c40a5bcd8dbc91066751f60c9c9fd4 port/gfx/judge-render-timing.js reviewed-go task4-capped-AGENT-LOG+iter62-class-completion-per-.loop/review-61-1.log-pattern
 de32dffbe43423bee43f67516007d4039abbd80237a626aec81e54fd7dc4ca68 port/gfx/judge-shot.js arc-pending iter73-AGENT-LOG-m4-task3
 5526c99be30e558960c11ac6c22c27ed735b4f8b478d190203875c3272831dbe port/gfx/check-device-input.sh reviewed-go .loop/review-53-1.log

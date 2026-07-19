@@ -10732,3 +10732,272 @@ capture-first + strict-marshal + sweep pattern needed ZERO new rules
 this task — the two widenings were existing classes (rule 7 loop, qjs
 cookie-zeroing); the one new instrument (the --cover arm table) is the
 honest-coverage generalization of rule 11's "sweep-or-document".
+
+## iter 76 — 2026-07-19 — PRE-REGISTRATION: device-rig arc (iters 73+74) round-1 closure — quiesce backstop + skip-attrib grammars (frozen before any run/edit; PROCESS §2)
+
+- **Task (driver triage .loop/review-73-triage.md, BINDING; full review
+  .loop/review-73-1.log, VERDICT: NO-GO r1)**: close ALL round-1
+  findings on the iters-73/74 rig surfaces. Surface:
+  port/sim/device/{riglib.sh,check-skip-attrib.sh,skip-attrib/},
+  port/gfx/check-device-render.sh. NOT touched: port/sim/ai.* and
+  port/sim/calib/*ai* (task-4's surface, its arc pending), the render
+  gate limits (skips==0 etc. unweakened), fdlibm.c (outside surface —
+  the review's Low on lround domain is DISPOSITIONED in writing below).
+- **Fixes (frozen)**:
+  - **H (quiesce backstop + window narrowing; closes the scope Medium
+    too)**: the device-side deadman gains a DAEMON-RESTORE arm — a
+    nonce-scoped quiesce marker (`$DTMP/qd.<name>.<nonce>`, written
+    pessimistically BEFORE the kill) tells the deadman which daemons
+    this run stopped; on firing it comm-scan-guards (start only when
+    ZERO instances — the A4' tripled-daemon class) and runs the
+    hard-coded allowlisted init START. The deadman is transport-death-
+    proof by construction (device-side, detached, cancel-file). Window
+    narrowed: daemons stopped AFTER sync + deadman-arm + park complete,
+    restored (hard-gated, marker removed) BEFORE the post-run chores
+    (unpark/cancel/pulls). Trap: deadman cancel now requires BOTH
+    frontend-restore verified AND daemon-restore verified.
+  - **M1 (restore cardinality)**: rig_daemon_stop already REFUSES any
+    pre-stop inventory != 1, so ==1 is the only cardinality the rig
+    ever owes (FunKey-OS reality: each init script starts exactly one
+    instance at boot; measured recon iter 74). rig_daemon_restore
+    becomes idempotent + exact: scan first — 1 running = success
+    without touching START; 0 = one START then bounded poll for
+    EXACTLY 1; >1 anywhere = loud refusal (never "restored").
+  - **M2 (degraded-mode lockout)**: SKA_AUTHORITATIVE computed ONCE,
+    readonly (the verify_m3.sh pattern): 1 iff ARM==sampler AND
+    MLFK_SKATTRIB_MATRIX unset/0. Non-authoritative: DEV banner at arm
+    selection AND at exit, final line `SKIP ATTRIB (DEV —
+    NON-AUTHORITATIVE...)` + exit 3; `SKIP ATTRIB OK` exists ONLY
+    inside the =1 branch (structurally unreachable degraded).
+  - **M3 (verdict grammar)**: the AGENT-LOG needle becomes a FULL-LINE
+    anchored grammar `^SKIP ATTRIB VERDICT: \((a|b|c)\)( — .+)?$`,
+    EXACTLY ONE match required, plus a resemblance counter (any other
+    line-anchored `^SKIP ATTRIB VERDICT` = corruption). The canonical
+    standalone line is appended in this iteration's RESULT entry.
+  - **M4 (EV whitelist parse)** + **M8 (win=none reconciliation)**: NEW
+    `port/sim/device/skip-attrib/validate-ev.js` — every `^EV` line
+    must match the FULL measured field grammar (all fields, exact
+    order, bounded numerics; corpus = the committed A1-A5 harvest +
+    the live correlate-out.txt, 37 EV lines re-validated with zero
+    false rejections before shipping); frames strictly increasing
+    (duplicates = corruption); EV total == events key; skipped=1 EV
+    count == the timing-derived skips key; sampler arm: EVERY event
+    must carry a kernel window (win=none = evidence incomplete = fail
+    closed → the check reruns; this is the "re-sample" arm of M8 —
+    the verdict is never downgraded silently); nosampler arm: no win
+    fields at all.
+  - **M5 (sampler payloads + /proc/stat grammar)**: correlate-skips.js
+    validates ALL sampler payloads unconditionally (not only
+    event-bracketed); parseStat goes full-line whitelist (cpu 10-field
+    pin, cpu0 mirror, intr/btime/softirq full-line, unknown line =
+    death, duplicate singleton = death — measured corpus: kernel
+    4.14.14-funkey pre/post + sampler payloads); parseVmstat gains
+    duplicate death + required-key presence (the 6 judged keys).
+  - **M6 (rc-file byte grammar)**: both apprc sites (render:
+    render.apprc, skip-attrib: attrib.apprc) judged by exact FILE
+    BYTES `RC=0\n` via cmp against printf-generated reference (the
+    iter-61/62 pattern) — `RC=0` vs `RC=0\n\n` vs truncation all die.
+  - **M7 (workload fidelity)**: check-skip-attrib.sh pins
+    GFXDATA/VFXDATA/VFXGLYPHS sha256 to the task-3 pins (values
+    asserted against the artifacts AND twin-pin-grepped against
+    check-device-render.sh's literal lines — drift dies loudly), and
+    the attrib launcher carries the FULL task-3 gfx_device argv
+    including --shot-frame 900 --shot-ppm/--shot-pgm (per-token
+    in-script grep assert on the generated launcher); the shot is
+    pulled + judged by judge-shot.js.
+  - **EXTRA (review Standards-H1, not in the triage list but Medium+
+    on my surface — the iter-74 bash-3.2 exit-guard class applied to
+    check-device-render.sh)**: RENDER_OK fail-closed exit guard — the
+    only legal rc-0 exit is through the DEVICE RENDER OK line; any
+    other rc-0 arrival at the trap is forced to exit 70.
+  - **DISPOSITION (review Spec-Low, lround domain)**: NOT fixed this
+    iteration — port/fdlibm/fdlibm.c is outside the briefed surface;
+    the only in-tree lround call sites are gfx_overlay.c glyph/sprite
+    anchors whose operands are screen-space doubles (|x| < 2^15) by
+    construction, and mathsweep's lr column carries the shared
+    in-range guard. Registered for the next fdlibm-touching iteration:
+    extend the sweep with 32-bit boundary + NaN containment vectors.
+- **Run caps (frozen)**: 2 paced device runs — the two cold
+  done-checks (render, then skip-attrib). Probes (not paced runs):
+  (P1) H-tooth transport-death simulation — check-device-render.sh
+  with MLFK_DEADMAN_S=120, SIGKILL the host script ~20 s into the
+  paced run + adb kill-server (host+transport death, trap unreachable,
+  rig_dsh_retry moot); after the deadman window reconnect and verify
+  BOTH /mnt/disable_frontend gone AND low_bat_check running (comm-scan
+  ==1) AND gfx_device dead AND deadman.fired present; manual lock
+  removal after (documented loud-death behavior). (P2) M1 cardinality
+  probe — non-paced dsh: duplicate low_bat_check started by hand,
+  rig_daemon_stop AND rig_daemon_restore must both REFUSE at n=2,
+  duplicate killed, count==1 re-verified; idempotent-restore arm:
+  restore with 1 running returns success without a second START.
+  (P3) M2 stale-env probe — MLFK_SKATTRIB_MATRIX=1 + bogus
+  FUNKEY_ADB_ID: DEV banner printed, exit nonzero, anchored
+  `^SKIP ATTRIB OK` grep count 0 (deviceless; the completed-degraded
+  END path is additionally locked by the readonly branch structure +
+  the SKA_OK exit guard — honest exposure: no full degraded paced run
+  is spent on it, run-cap discipline). Host-only teeth on COPIES of
+  the pulled artifacts: T-M3 needle-free copy (count 0 dies) +
+  garbled-resemblance copy (counter trips); T-M4 truncated EV /
+  duplicated EV / win=none-on-skip injections into correlate-out
+  copies → validate-ev.js loud death each; T-M5 in-payload sampler
+  corruption (byte flip inside a length-valid FILE block) →
+  correlator loud death; T-M6 `RC=0\n\n` and `RC=0` (no newline)
+  byte-compare rejections; T-M7 pin-drift copy (twin-pin grep 0).
+  Early stop: both cold checks green. ONE docker arm rebuild expected
+  (RIG_SCRIPTS bytes are stamp inputs), serial.
+- **Pass criteria (frozen)**: cold `bash port/gfx/check-device-render.sh`
+  → `DEVICE RENDER OK` exit 0 (.loop/m4-rig76-donecheck.log); cold
+  `bash port/sim/device/check-skip-attrib.sh` → `SKIP ATTRIB OK`
+  exit 0 (.loop/m4-rig76-donecheck2.log); all teeth/probes logged
+  (.loop/m4-rig76-teeth.log + per-probe logs); corpus re-validation of
+  every new grammar against the REAL artifact set with zero false
+  rejections BEFORE any device run; manifest re-pins (riglib.sh +
+  check-device-render.sh, arc-pending cite iter76) + verify_m3.sh
+  anchor same commit + 23/23 self-check
+  (.loop/m4-rig76-manifest-selfcheck.log). Device left clean (daemons
+  ==1, frontend live, no markers).
+- **Refutation shapes**: a new grammar false-rejecting genuine corpus
+  → the grammar is wrong, not the data — re-measure the producer,
+  do NOT loosen to permissive scanning; H probe leaving the daemon
+  down after the deadman window → the backstop design is refuted →
+  restore the device by hand (init START), record, STOP and report
+  (one bounded evidence round); cold-check regression not attributable
+  to these edits → STOP and report, never iterate blind on the device.
+
+## iter 76 — 2026-07-19 — canonical SKIP ATTRIB verdict line (the M3 full-line grammar anchor; the full RESULT entry follows after the runs)
+
+The hardened needle grammar (check-skip-attrib.sh, this iteration)
+requires EXACTLY ONE standalone full-line verdict in this file — the
+line below is it, restating the iter-74 attribution in canonical form.
+Any future verdict change REPLACES the convention consciously (the
+exactly-one count fails loudly otherwise); prose references must never
+start a line with the needle prefix.
+
+SKIP ATTRIB VERDICT: (a) — low_bat_check 2 s poll comb (attributed iter 74; canonical full-line form per the iter-76 grammar)
+
+## iter 76 — 2026-07-19 — M4 hardening RESULT: quiesce backstop + skip-attrib grammars — round-1 arc findings ALL closed, both cold checks green
+
+- **Both cold done-checks GREEN**: `bash port/gfx/check-device-render.sh`
+  → `DEVICE RENDER OK (full p99 12.874 ms, render-only p99 5.512 ms,
+  sim p99 7.314 ms, present p99 1.400/1.342 ms, skips 0/3600)` exit 0,
+  shot BIT-IDENTICAL (.loop/m4-rig76-donecheck.log);
+  `bash port/sim/device/check-skip-attrib.sh` → `SKIP ATTRIB OK
+  (arm=sampler, skips=1/3600, events=42, stream MATCH)` exit 0
+  (.loop/m4-rig76-donecheck2.log — default arm observes the class
+  with the daemon live BY DESIGN; skips reported, never asserted).
+  Paced-run accounting: exactly the 2 pre-registered cold runs + the
+  H-probe partial run (killed ~20 s in, deliberately incomplete).
+  ONE docker arm rebuild (RIG_SCRIPTS stamp), serial, as registered.
+- **H (quiesce backstop + window narrowing) — TOOTH FIRED WITH FULL
+  TRANSPORT-DEATH EVIDENCE** (.loop/m4-rig76-probe-h.log): render
+  check launched with MLFK_DEADMAN_S=120; at ~20 s into the paced run
+  (low_bat_check pid 2586 quiesced) the HOST SCRIPT was SIGKILLed AND
+  the host adb server killed — trap unreachable, rig_dsh_retry moot.
+  On reconnect after the deadman window: /mnt/disable_frontend GONE +
+  gmenu2x respawned, low_bat_check RUNNING comm-scan ==1 (new pid
+  24938 — restored by the deadman's new qd_restore arm), gfx_device
+  dead (nonce-scoped kill), deadman.fired present, quiesce marker
+  cleared (rescan-verified). Design: nonce-scoped marker
+  `$DTMP/qd.<name>.<nonce>` written PESSIMISTICALLY before the kill;
+  deadman restore arm is comm-scan-guarded (start only at zero
+  instances — the A4' stacking class) + hard-coded allowlisted init
+  paths (no eval surface) + marker cleared only after a live rescan.
+  Window narrowed in BOTH scripts: stop AFTER sync+deadman-arm+park,
+  restore hard-gated as the FIRST post-run step (closes the scope
+  Medium); trap cancels the deadman only when BOTH frontend AND
+  daemon restores verified. NEW cross-run chokepoint
+  `rig_qd_normalize` (riglib): stale quiesce markers are restored
+  through the idempotent exact-cardinality channel BEFORE any stale
+  deadman is cancel-disarmed or $DTMP wiped — without it, the next
+  run's own step-0 would destroy the daemon's last restore backstop
+  (hole found during design, closed as part of the class).
+- **M1 (restore cardinality) — PROBED ON DEVICE 6/6**
+  (.loop/m4-rig76-probe-m1.log): rig_daemon_restore now idempotent +
+  exact-count (1 running → success, NO second START, same pid; 0 →
+  one START + poll for EXACTLY 1; >1 → loud refusal). Controlled
+  duplicate probe: at n=2 BOTH rig_daemon_stop and rig_daemon_restore
+  refused loudly, no third instance ever started; duplicate killed,
+  inventory verified back to exactly the original pid. ==1 is the
+  pinned cardinality with FunKey-OS justification (each init script
+  starts exactly one instance at boot; rig_daemon_stop refuses any
+  other pre-stop inventory, so ==1 is the only count the rig owes).
+- **M2 (degraded-mode lockout) — PROBED** (.loop/m4-rig76-probe-m2.log):
+  SKA_AUTHORITATIVE computed once + readonly (the verify_m3.sh
+  pattern); `SKIP ATTRIB OK` exists ONLY inside the =1 branch; every
+  degraded combination (non-default arm, any MLFK_SKATTRIB_MATRIX)
+  prints the DEV banner at arm selection AND exits via
+  `SKIP ATTRIB (DEV — NON-AUTHORITATIVE...)` + exit 3. Stale-env
+  probe: MLFK_SKATTRIB_MATRIX=1 → banner line 1, exit nonzero,
+  anchored `^SKIP ATTRIB OK` count 0. HONEST EXPOSURE: the probe
+  aborts at require_device (bogus device id) — no full degraded paced
+  run was spent (run-cap discipline); the completed-degraded END path
+  is locked by the readonly branch structure + the SKA_OK fail-closed
+  exit guard, not by a run-through.
+- **M3 (verdict grammar) — teeth T8a/b/c** (.loop/m4-rig76-teeth.log):
+  full-line anchored needle `^SKIP ATTRIB VERDICT: \((a|b|c)\)( — .+)?$`
+  EXACTLY ONE + resemblance counter (`^SKIP ATTRIB VERDICT` prefix
+  lines failing the grammar = corruption). Canonical standalone line
+  appended above (the only line-anchored occurrence in this file —
+  measured); needle-free copy → 0 (dies), garbled resemblance → trips,
+  second verdict line → exactly-one violated.
+- **M4+M8 (EV whitelist + win=none reconciliation) — NEW
+  `port/sim/device/skip-attrib/validate-ev.js`** (consumer-side —
+  validating inside the producer would be self-referential): every
+  ^EV line must match the FULL measured grammar (all fields, exact
+  order, bounded numerics; win group = all 8 cpu keys + measured irq
+  label alphabet), frames strictly increasing, EV total == events
+  key, skipped=1 count == the timing-derived skips key, and sampler
+  arms require EVERY event to carry a bracketing kernel window —
+  win=none = evidence incomplete = FAIL CLOSED (rerun IS the
+  re-sample; an unwitnessed skip can never count as attributed).
+  CORPUS VALIDATED before any device run: 108 unique historical EV
+  lines (A1-A5 harvest + live correlate-out) — 0 false rejections;
+  the modified correlator's output on the real artifact set is
+  BYTE-IDENTICAL to the frozen prior output. Teeth T1/T2/T3/T4/T4b.
+- **M5 (sampler payloads + kernel grammars) — correlate-skips.js**:
+  ALL sampler payloads validated unconditionally (zero-event runs no
+  longer skip validation); parseStat is now a full-line whitelist
+  (cpu 10-field pin + single cpu0 mirror + intr/btime/softirq
+  full-line + unknown-line death + duplicate-singleton death;
+  measured corpus: kernel 4.14.14-funkey); parseVmstat gains
+  duplicate death + 6 required judged keys. Teeth T5/T6a/T6b/T6c.
+- **M6 (rc-file byte grammar)** at both sites: render.apprc +
+  attrib.apprc judged by exact FILE BYTES `RC=0\n` via cmp against a
+  printf-generated reference. Teeth T7a-d ('RC=0' no-newline,
+  trailing blank, RC=1 all rejected; exact bytes accepted).
+- **M7 (workload fidelity)**: check-skip-attrib.sh pins the three
+  frozen render artifacts to the task-3 shas (asserted against the
+  bytes AND twin-pin-grepped against check-device-render.sh's literal
+  lines — T9 drift tooth) and the launcher carries the FULL task-3
+  argv incl. --shot-frame 900 + shot outputs (per-token in-script
+  grep on the generated launcher); the shot is pulled + judged by
+  judge-shot.js (passed on the cold run).
+- **EXTRA (review Standards-H1, Medium+ on surface)**: RENDER_OK
+  fail-closed exit guard in check-device-render.sh (the iter-74
+  bash-3.2 class) — rc-0 without the verdict line forces exit 70.
+- **DISPOSITION (review Spec-Low, lround domain)**: not fixed here
+  (fdlibm.c outside surface; in-tree lround call sites are
+  screen-space-bounded gfx_overlay anchors; mathsweep lr already
+  range-guarded). Registered: next fdlibm-touching iteration extends
+  the sweep with 32-bit boundary + NaN containment vectors.
+- **Freeze manifest**: riglib.sh + check-device-render.sh re-pinned
+  (arc-pending, cite iter76) + verify_m3.sh MANIFEST_SHA256 anchor
+  same commit; SELF-CHECK 23/23 + ANCHOR GREEN
+  (.loop/m4-rig76-manifest-selfcheck.log).
+- **Device left clean** (verified post-runs): low_bat_check ==1,
+  no frontend marker, /tmp/mlfk wiped, gmenu2x live.
+- **Known cosmetic (registered, not fixed — RIG_SCRIPTS edits force
+  arm rebuilds, so zero-value churn is deferred to the next
+  riglib-touching iteration)**: rig_daemon_stop's echoed pid picks up
+  a leading dsh newline artifact in the two "quiesced" display lines
+  (display-only; every gating comparison uses the clean variable).
+- **ZOOM OUT**: (1) a backstop that restores only PART of the state
+  it guards is a CLASS hazard — the deadman now owns the full parked
+  set (frontend + daemons) via one marker convention, and any future
+  quiesce target joins by adding a marker + a hard-coded allowlisted
+  arm; (2) "window narrowing" and "backstop coverage" interact: the
+  stop moved INSIDE the deadman-armed span, which is what made the
+  backstop airtight — hygiene windows should always nest inside their
+  watchdog's span; (3) the strictest reconciliation is producer chain
+  vs consumer chain (timing skips == EV skips == app summary skips)
+  — every decision-bearing count now has two independent witnesses.

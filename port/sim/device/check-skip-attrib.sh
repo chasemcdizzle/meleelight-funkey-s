@@ -33,13 +33,24 @@
 #   MLFK_SKATTRIB_ARM      = nosampler | sampler (default) | quiesce
 #     nosampler — attrib rows only (the sampler-perturbation control)
 #     quiesce   — sampler + stop allowlisted daemons around the run
-#                 (trap-restored + pidof-verified; device hygiene)
+#                 (trap+deadman-restored, comm-scan exact-cardinality
+#                 verified; device hygiene)
 #   MLFK_SKATTRIB_STOP     = daemon list for the quiesce arm; allowlist
 #     ONLY low_bat_check / system_stats / fkgpiod (their start-stop
 #     init scripts are the designed stop/restart channels)
 #   MLFK_SKATTRIB_MATRIX=1 — evidence-gathering mode: the AGENT-LOG
 #     needle assert is skipped (the matrix runs BEFORE the verdict can
 #     exist). The done-check never sets it.
+#
+# DEGRADED-MODE LOCKOUT (iter 76, review-73 M — the verify_m3.sh
+# AUTHORITATIVE pattern): SKA_AUTHORITATIVE is computed ONCE up front
+# and made readonly — 1 iff ARM is the default 'sampler' AND
+# MLFK_SKATTRIB_MATRIX is unset/0. Every other combination (a matrix
+# arm, a stale exported env var) prints a DEV banner at arm selection
+# AND at exit, and the run finishes with
+#   SKIP ATTRIB (DEV — NON-AUTHORITATIVE ...)  + exit 3.
+# The gating `SKIP ATTRIB OK` line exists ONLY inside the
+# SKA_AUTHORITATIVE=1 branch — structurally unreachable degraded.
 #
 # This is a Tier-B DIAGNOSTIC instrument (PROCESS §3): it changes no
 # gate and no gate limit; its own judgment (stream verify) rides the
@@ -83,7 +94,26 @@ APPRC_TRIES=90
 GFXDATA_FROZEN=$GFX/gfxdata-frozen.txt
 VFXDATA_FROZEN=$GFX/vfxdata-frozen.txt
 VFXGLYPHS_FROZEN=$GFX/vfxglyphs-frozen.txt
-NEEDLE='SKIP ATTRIB VERDICT: \((a|b|c)\)' # AGENT-LOG verdict needle (§4)
+# M7 (iter 76, review-73 M — WORKLOAD FIDELITY): the attribution run
+# must be the EXACT task-3 gate workload, so its evidence attributes
+# the gated configuration and nothing else. The three frozen-artifact
+# sha256 pins and the shot frame are TWIN-PINNED against
+# check-device-render.sh (anchored greps below — drift between the two
+# scripts dies loudly; the values themselves are the committed frozen
+# files' shas, iter-72 rule).
+GFXDATA_SHA256=5499a3dd5fc374d6ed988faf0bef6fa2e189eb314e892bdd83c7534dc0865c94
+VFXDATA_SHA256=545015a3d7e3bc138059fcb9711040758e729a7d21aac650b009ed7fdb5bd662
+VFXGLYPHS_SHA256=8926cab4d648579d099053994bf309943b5a6bc3c5abf733af9ac6b71f3cbbeb
+SHOT_FRAME=900
+# M3 (iter 76, review-73 M — verdict grammar): FULL-LINE anchored
+# needle, EXACTLY ONE match required in docs/AGENT-LOG.md, plus a
+# resemblance counter — any OTHER line-anchored 'SKIP ATTRIB VERDICT'
+# (quoted template text, truncation, negation) is corruption. The
+# canonical standalone line lives in the AGENT-LOG iter-76 entry;
+# future verdicts REPLACE the convention consciously (exactly-one is
+# the grammar).
+NEEDLE_FULL='^SKIP ATTRIB VERDICT: \((a|b|c)\)( — .+)?$'
+NEEDLE_RESEMBLE='^SKIP ATTRIB VERDICT'
 
 # --- arm selection -----------------------------------------------------------
 ARM="${MLFK_SKATTRIB_ARM:-sampler}"
@@ -91,6 +121,24 @@ case "$ARM" in
   nosampler|sampler|quiesce) : ;;
   *) echo "SKIP ATTRIB FAIL: MLFK_SKATTRIB_ARM '$ARM' not in {nosampler,sampler,quiesce}" >&2; exit 1 ;;
 esac
+# DEGRADED-MODE LOCKOUT (iter 76, review-73 M): computed ONCE, readonly
+# (the verify_m3.sh pattern). The `SKIP ATTRIB OK` sentinel exists only
+# inside the =1 branch at the bottom.
+SKA_AUTHORITATIVE=1
+SKA_AUTH_REASONS=""
+if [ "$ARM" != sampler ]; then
+  SKA_AUTHORITATIVE=0
+  SKA_AUTH_REASONS="$SKA_AUTH_REASONS arm=$ARM(non-default);"
+fi
+if [ "${MLFK_SKATTRIB_MATRIX:-0}" != 0 ]; then
+  SKA_AUTHORITATIVE=0
+  SKA_AUTH_REASONS="$SKA_AUTH_REASONS matrix-mode(MLFK_SKATTRIB_MATRIX=${MLFK_SKATTRIB_MATRIX:-});"
+fi
+readonly SKA_AUTHORITATIVE SKA_AUTH_REASONS
+if [ "$SKA_AUTHORITATIVE" != 1 ]; then
+  echo "SKIP ATTRIB (DEV — NON-AUTHORITATIVE):${SKA_AUTH_REASONS} evidence-gathering run — the gating verdict is withheld and the exit will be nonzero" >&2
+fi
+
 STOP_LIST=""
 if [ "$ARM" = quiesce ]; then
   STOP_LIST="${MLFK_SKATTRIB_STOP:-low_bat_check system_stats}"
@@ -134,10 +182,11 @@ RIG_PRESERVE_DTMP=1
 PARKED=0
 DEADMAN_ARMED=0
 DAEMONS_STOPPED="" # quiesce arm: daemons this run stopped (trap restores)
+DM_NONCE=""        # set at deadman generation; empty-safe for pre-arm traps
 
 ska_cleanup() {
   local rc=$?
-  local prc restore_verified d isc
+  local prc restore_verified daemons_ok d isc
   prc=0
   rig_dsh_retry "pkill gfx_device" || prc=$?
   case "$prc" in
@@ -153,15 +202,22 @@ ska_cleanup() {
     *) echo "WARN: could not pkill sk_sampler on the device (rc $prc)" >&2 ;;
   esac
   # QUIESCE RESTORE (device hygiene): every daemon this run stopped is
-  # restarted through the init-script START channel and its liveness
-  # VERIFIED by comm-scan — a restart that cannot be verified is a
-  # LOUD warn naming the exact manual recovery command (never silent).
+  # restarted through the init-script START channel (idempotent,
+  # exact-cardinality — riglib iter 76) and VERIFIED by comm-scan; on
+  # a verified restore the nonce-scoped quiesce marker is removed so
+  # the deadman's daemon-restore arm stands down. An unverifiable
+  # restore leaves the marker AND the deadman armed (iter 76,
+  # review-73 H) — LOUD warn naming the manual recovery command.
+  daemons_ok=1
   for d in $DAEMONS_STOPPED; do
-    isc="$(init_script "$d")" || continue
+    isc="$(init_script "$d")" || { daemons_ok=0; continue; }
     if rig_daemon_restore "$d" "$isc"; then
-      echo "   quiesce restore: $d verified running again (comm-scan)" >&2
+      rig_dsh_retry "rm -f $DTMP/qd.$d.${DM_NONCE:-none}" \
+        || echo "WARN: could not remove the quiesce marker for $d (harmless: the deadman restore arm is comm-scan-guarded)" >&2
+      echo "   quiesce restore: $d verified running again (comm-scan, exactly 1)" >&2
     else
-      echo "WARN: $d did NOT verify as running after restart — run '$isc start' on the device manually" >&2
+      daemons_ok=0
+      echo "WARN: $d did NOT verify as running after restart — the armed deadman will comm-scan-restore it on-device, or run '$isc start' on the device manually" >&2
     fi
   done
   restore_verified=0
@@ -176,15 +232,17 @@ ska_cleanup() {
   else
     restore_verified=1
   fi
+  # iter 76 (review-73 H): the deadman backstops BOTH the frontend park
+  # AND the quiesce-arm daemon stops — cancel only when BOTH verified.
   if [ "$DEADMAN_ARMED" = 1 ]; then
-    if [ "$restore_verified" = 1 ]; then
+    if [ "$restore_verified" = 1 ] && [ "$daemons_ok" = 1 ]; then
       rig_dsh_retry "touch $DTMP/deadman.cancel" \
         || echo "WARN: could not cancel the park deadman — it will fire once (idempotent actions) within ${DEADMAN_S}s" >&2
     else
-      echo "WARN: frontend restore unverified — leaving the deadman ARMED as the backstop (its purpose)" >&2
+      echo "WARN: frontend restore or daemon restore unverified — leaving the deadman ARMED as the backstop (its purpose)" >&2
     fi
   fi
-  if [ "$restore_verified" != 1 ]; then
+  if [ "$restore_verified" != 1 ] || [ "$daemons_ok" != 1 ]; then
     RIG_PRESERVE_DTMP=1
   fi
   rig_cleanup
@@ -206,6 +264,10 @@ require_device
 echo "== [0/6] stale-state startup normalization (cross-run chokepoint) =="
 # check-device-render.sh's step-0 chokepoint, adapted verbatim (iters
 # 54-56 arc rationale documented there).
+# iter 76 (review-73 H, cross-run face): stale QUIESCE markers are
+# normalized FIRST — restoring a possibly-down daemon must precede the
+# stale-deadman cancel and the $DTMP wipe below.
+rig_qd_normalize
 stale_marker=0
 stale_deadman=0
 nrc=0
@@ -343,6 +405,44 @@ anim_file() {
 ANIM_P1="$(anim_file "$p1")"
 ANIM_P2="$(anim_file "$p2")"
 made "$GFXDATA_FROZEN" "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN"
+# M7 (iter 76, review-73 M — workload fidelity): (a) the frozen render
+# artifacts this run pushes must hash to the task-3 gate pins — dirty
+# assets can never produce "attribution evidence" for a different
+# workload; (b) the pins themselves are TWIN-PINNED against
+# check-device-render.sh's literal lines, so the two scripts cannot
+# drift apart silently.
+for pin_line in "GFXDATA_SHA256=$GFXDATA_SHA256" \
+                "VFXDATA_SHA256=$VFXDATA_SHA256" \
+                "VFXGLYPHS_SHA256=$VFXGLYPHS_SHA256"; do
+  if ! grep -q "^${pin_line}\$" "$GFX/check-device-render.sh"; then
+    echo "SKIP ATTRIB FAIL: twin pin '$pin_line' not found as a literal line in $GFX/check-device-render.sh (pin drift — reviewed change required at BOTH sites)" >&2
+    exit 1
+  fi
+done
+if ! grep -Eq "^SHOT_FRAME=${SHOT_FRAME}( |\$)" "$GFX/check-device-render.sh"; then
+  echo "SKIP ATTRIB FAIL: twin pin SHOT_FRAME=${SHOT_FRAME} not found in $GFX/check-device-render.sh (pin drift)" >&2
+  exit 1
+fi
+asum="$(rig_host_sha256 "$GFXDATA_FROZEN")" || exit 1
+if [ "$asum" != "$GFXDATA_SHA256" ]; then
+  echo "SKIP ATTRIB FAIL: $GFXDATA_FROZEN sha256 $asum != pinned $GFXDATA_SHA256" >&2
+  exit 1
+fi
+asum="$(rig_host_sha256 "$VFXDATA_FROZEN")" || exit 1
+if [ "$asum" != "$VFXDATA_SHA256" ]; then
+  echo "SKIP ATTRIB FAIL: $VFXDATA_FROZEN sha256 $asum != pinned $VFXDATA_SHA256" >&2
+  exit 1
+fi
+asum="$(rig_host_sha256 "$VFXGLYPHS_FROZEN")" || exit 1
+if [ "$asum" != "$VFXGLYPHS_SHA256" ]; then
+  echo "SKIP ATTRIB FAIL: $VFXGLYPHS_FROZEN sha256 $asum != pinned $VFXGLYPHS_SHA256" >&2
+  exit 1
+fi
+if [ "$SHOT_FRAME" -gt "$frames" ]; then
+  echo "SKIP ATTRIB FAIL: SHOT_FRAME $SHOT_FRAME > frames $frames" >&2
+  exit 1
+fi
+echo "   task-3 workload pins OK (gfxdata/vfxdata/vfxglyphs shas + shot frame, twin-pinned)"
 
 bash pipeline/extractor/build-extractor.sh
 rm -f "$TABLES/ml_tables.c" "$TABLES/ml_tables.h" \
@@ -416,18 +516,12 @@ snapshot() {
     "$d/dmesg.txt" "$d/pidstat.txt"
 }
 
-echo "== [3/6] pre-run kernel snapshot + arm '$ARM' setup =="
+echo "== [3/6] pre-run kernel snapshot =="
 snapshot pre
-if [ "$ARM" = quiesce ]; then
-  for d in $STOP_LIST; do
-    # COMM-SCAN stop (riglib rig_daemon_stop: the init scripts' -K arm
-    # is a measured no-op for shell daemons — see init_script comment):
-    # exactly-one instance expected, killed by pid, VERIFIED gone.
-    DAEMONS_STOPPED="$DAEMONS_STOPPED $d" # pessimistic: trap owns restore from here
-    qpid="$(rig_daemon_stop "$d")" || exit 1
-    echo "   quiesce: $d (pid $qpid) stopped (comm-scan-verified gone; trap restores)"
-  done
-fi
+# (iter 76, review-73 H: the quiesce-arm daemon stops moved INTO step 4
+# — after sync + deadman-arm + park, immediately before the launch — so
+# the quiesce window is exactly the paced run and the on-device deadman
+# backstops the whole stopped interval.)
 
 echo "== [4/6] device: LIVE paced g01 render + attribution capture =="
 DM_NONCE="$RANDOM$RANDOM$$"
@@ -435,8 +529,29 @@ rm -f "$SKAB/deadman.sh"
 cat > "$SKAB/deadman.sh" << EOF
 #!/bin/sh
 # generated by check-skip-attrib.sh — frontend-park DEADMAN (the
-# check-device-render.sh iter-52/54/55 form, adapted)
+# check-device-render.sh iter-52/54/55 form, adapted; iter 76 adds the
+# quiesce-restore arms — review-73 H: the deadman backstops the daemon
+# stops too, transport-dead or not)
 echo \$\$ > $DTMP/deadman.pid
+# qd_restore <comm> <init-script>: if THIS run's nonce-scoped quiesce
+# marker for <comm> is present, the run stopped it and died before a
+# verified restore. COMM-SCAN GUARDED start (zero instances only — the
+# measured A4' stacking class); the marker is cleared ONLY after a
+# rescan sees the daemon live (a failed start leaves it for the next
+# run's rig_qd_normalize). Hard-coded allowlisted call sites, no eval.
+qd_restore() {
+  [ -f "$DTMP/qd.\$1.$DM_NONCE" ] || return 0
+  n=0
+  for c in /proc/[0-9]*/comm; do
+    if [ "x\$(cat "\$c" 2>/dev/null)" = "x\$1" ]; then n=\$((n+1)); fi
+  done
+  if [ "\$n" = 0 ]; then "\$2" start; fi
+  n2=0
+  for c in /proc/[0-9]*/comm; do
+    if [ "x\$(cat "\$c" 2>/dev/null)" = "x\$1" ]; then n2=\$((n2+1)); fi
+  done
+  if [ "\$n2" != 0 ]; then rm -f "$DTMP/qd.\$1.$DM_NONCE"; fi
+}
 i=0
 while [ \$i -lt $DEADMAN_S ]; do
   sleep 2
@@ -451,6 +566,9 @@ if [ "\$(cat $DTMP/deadman.nonce 2>/dev/null)" = "$DM_NONCE" ] && [ ! -f $DTMP/d
     ''|*[!0-9]*) : ;;
     *) if grep -q gfx_device "/proc/\$gp/cmdline" 2>/dev/null; then kill "\$gp"; fi ;;
   esac
+  qd_restore low_bat_check /etc/init.d/S12low-bat-check
+  qd_restore system_stats /etc/init.d/S13system-stats
+  qd_restore fkgpiod /etc/init.d/S11gpio
 fi
 rm -f $DTMP/deadman.pid
 exit 0
@@ -467,7 +585,10 @@ fi
 cat > "$SKAB/attrib-launch.sh" << EOF
 #!/bin/sh
 # generated by check-skip-attrib.sh — paced attribution-run launcher
-# (check-device-render.sh detached setsid + rc-file lifecycle)
+# (check-device-render.sh detached setsid + rc-file lifecycle).
+# iter 76 (review-73 M — workload fidelity): the gfx_device argv is the
+# FULL task-3 gate argv (shot frame + shot outputs included) plus
+# --attrib; evidence is gathered under the exact gated workload.
 cd $DTMP || exit 9
 $SAMPLER_LINES
 rm -f attrib.apprc gfx.pid.$DM_NONCE
@@ -478,6 +599,8 @@ setsid sh -c './gfx_device \
   --seed $seed --p1 $p1 --p2 $p2 --stage $stage --frames $frames \
   --pace 1 --budget-ns $BUDGET_NS \
   --out $DTMP/g01.att-out.txt --timing $DTMP/g01.att-tim.txt \
+  --shot-frame $SHOT_FRAME --shot-ppm $DTMP/g01.att-shot.ppm \
+  --shot-pgm $DTMP/g01.att-shot.pgm \
   --attrib $DTMP/g01.att-attrib.txt 2> $DTMP/g01.att-log.txt & \
   echo \$! > $DTMP/gfx.pid.$DM_NONCE; \
   wait \$!; \
@@ -486,6 +609,23 @@ setsid sh -c './gfx_device \
 sleep 2
 EOF
 made "$SKAB/attrib-launch.sh"
+# M7 in-script argv assert: every task-3-workload token must be present
+# in the generated launcher (each token sits on one heredoc line above;
+# a refactor that drops one dies HERE, not as silently different
+# evidence).
+for tok in "--legible" \
+           "--shot-frame $SHOT_FRAME --shot-ppm $DTMP/g01.att-shot.ppm" \
+           "--shot-pgm $DTMP/g01.att-shot.pgm" \
+           "--pace 1 --budget-ns $BUDGET_NS" \
+           "--gfxdata $DTMP/gfxdata-frozen.txt --vfxdata $DTMP/vfxdata-frozen.txt" \
+           "--glyphs $DTMP/vfxglyphs-frozen.txt" \
+           "--attrib $DTMP/g01.att-attrib.txt"; do
+  if ! grep -qF -- "$tok" "$SKAB/attrib-launch.sh"; then
+    echo "SKIP ATTRIB FAIL: generated launcher is missing the task-3 workload token '$tok'" >&2
+    exit 1
+  fi
+done
+echo "   launcher carries the full task-3 argv (shot frame included) + --attrib"
 adb -s "$DEV" push "$SKAB/deadman.sh" "$SKAB/attrib-launch.sh" "$DTMP/" >/dev/null
 for hf in "$SKAB/deadman.sh" "$SKAB/attrib-launch.sh"; do
   bn="$(basename "$hf")"
@@ -518,6 +658,23 @@ case "$prc" in
   *) echo "SKIP ATTRIB FAIL: pkill gmenu2x failed (rc $prc)" >&2; exit 1 ;;
 esac
 
+# QUIESCE-ARM daemon stops (iter 76 ordering, review-73 H: AFTER sync +
+# deadman-arm + park — the window is exactly the paced run and the
+# armed deadman backstops the whole stopped interval). The nonce-scoped
+# marker is written PESSIMISTICALLY before each kill: a transport death
+# mid-stop still gets a deadman-side comm-scan-guarded restore.
+if [ "$ARM" = quiesce ]; then
+  for d in $STOP_LIST; do
+    # COMM-SCAN stop (riglib rig_daemon_stop: the init scripts' -K arm
+    # is a measured no-op for shell daemons — see init_script comment):
+    # exactly-one instance expected, killed by pid, VERIFIED gone.
+    dsh "printf '' > $DTMP/qd.$d.$DM_NONCE" # marker BEFORE the kill
+    DAEMONS_STOPPED="$DAEMONS_STOPPED $d" # pessimistic: trap owns restore from here
+    qpid="$(rig_daemon_stop "$d")" || exit 1
+    echo "   quiesce: $d (pid $qpid) stopped (comm-scan-verified gone; trap + deadman restore)"
+  done
+fi
+
 t0=$(date +%s)
 dsh "sh -lc $DTMP/attrib-launch.sh"
 # QUIET WINDOW (iter-73 mitigation, kept): no probes for the first 50 s
@@ -534,10 +691,31 @@ if [ "$apprc_seen" != 1 ]; then
   exit 1
 fi
 pullv "$DTMP/attrib.apprc" "$SKAB/attrib.apprc"
-if [ "$(cat "$SKAB/attrib.apprc")" != "RC=0" ]; then
+# iter 76 (review-73 M — rc-file BYTE grammar, the iter-61/62 pattern):
+# judge the FILE BYTES against a printf-generated reference — 'RC=0',
+# 'RC=0\n\n', and truncation are all corruption, never a pass.
+if ! cmp -s "$SKAB/attrib.apprc" <(printf 'RC=0\n'); then
   dsh "cat $DTMP/g01.att-log.txt" >&2 || true
-  echo "SKIP ATTRIB FAIL: attribution run app exited nonzero ($(cat "$SKAB/attrib.apprc"))" >&2
+  echo "SKIP ATTRIB FAIL: attribution rc file is not EXACTLY the bytes 'RC=0<newline>' (got: '$(cat "$SKAB/attrib.apprc")') — app failed or the completion record is corrupt" >&2
   exit 1
+fi
+# QUIESCE-ARM restore (iter 76 ordering: FIRST post-run step, BEFORE
+# every other chore — the quiesce window is exactly the paced run).
+# Hard-gated exact-cardinality restore; marker cleared RC-verified so
+# the deadman's restore arm stands down.
+if [ "$ARM" = quiesce ]; then
+  for d in $DAEMONS_STOPPED; do
+    isc="$(init_script "$d")"
+    if rig_daemon_restore "$d" "$isc"; then
+      dsh "rm -f $DTMP/qd.$d.$DM_NONCE"
+      dsh "test ! -f $DTMP/qd.$d.$DM_NONCE"
+      echo "   quiesce restore: $d running again (comm-scan-verified, exactly 1; marker cleared)"
+    else
+      echo "SKIP ATTRIB FAIL: $d did not verify as running after restart — run '$isc start' on the device manually" >&2
+      exit 1
+    fi
+  done
+  DAEMONS_STOPPED="" # restored + verified; trap has nothing left to own
 fi
 # stop the sampler through its designed channel and VERIFY exit
 if [ "$ARM" != nosampler ]; then
@@ -573,24 +751,18 @@ fi
 DEADMAN_ARMED=0
 echo "   run done (host-observed $((t1 - t0)) s; app rc 0; frontend restored; deadman cancelled without firing)"
 
-echo "== [5/6] post-run snapshot + quiesce restore + pulls =="
+echo "== [5/6] post-run snapshot + pulls =="
+# (quiesce restore happened FIRST, immediately after the rc check —
+# iter 76 window narrowing; the old post-snapshot restore site is gone.)
 snapshot post
-if [ "$ARM" = quiesce ]; then
-  for d in $DAEMONS_STOPPED; do
-    isc="$(init_script "$d")"
-    if rig_daemon_restore "$d" "$isc"; then
-      echo "   quiesce restore: $d running again (comm-scan-verified)"
-    else
-      echo "SKIP ATTRIB FAIL: $d did not verify as running after restart — run '$isc start' on the device manually" >&2
-      exit 1
-    fi
-  done
-  DAEMONS_STOPPED="" # restored + verified; trap has nothing left to own
-fi
 pullv "$DTMP/g01.att-out.txt" "$SKAB/g01.att-out.txt"
 pullv "$DTMP/g01.att-tim.txt" "$SKAB/g01.att-tim.txt"
 pullv "$DTMP/g01.att-attrib.txt" "$SKAB/g01.att-attrib.txt"
 pullv "$DTMP/g01.att-log.txt" "$SKAB/g01.att-log.txt"
+# M7: the task-3 shot outputs must exist and pass the structural judge
+# (the run really rendered the gated workload's forced shot frame).
+pullv "$DTMP/g01.att-shot.ppm" "$SKAB/g01.att-shot.ppm"
+pullv "$DTMP/g01.att-shot.pgm" "$SKAB/g01.att-shot.pgm"
 if [ "$ARM" != nosampler ]; then
   pullv "$DTMP/sampler.txt" "$SKAB/sampler.txt"
 fi
@@ -601,6 +773,8 @@ node "$SIM/wrap-run.js" g01 "$SKAB/g01.att-out.txt" "$SKAB/g01.att-run.json"
 made "$SKAB/g01.att-run.json"
 node oracle/harness/verify-stream.js "$SKAB/g01.att-run.json" "$FROZEN"
 echo "   device stream verified (the instrument did not perturb the sim)"
+node "$GFX/judge-shot.js" "$SKAB/g01.att-shot.ppm" "$SKAB/g01.att-shot.pgm"
+echo "   attribution-run shot passes the structural judge (task-3 workload rendered its shot frame)"
 
 # app summary under the pinned whitelist grammar (check-device-render.sh
 # parser, duplicated minimally: frames/pace/budget pinned into the
@@ -666,29 +840,55 @@ if [ "$skips" != "$app_skips" ]; then
   echo "SKIP ATTRIB FAIL: correlator skips ($skips) != app summary skips ($app_skips) — corrupt evidence" >&2
   exit 1
 fi
-# the correlated evidence itself: every skip must appear as an EV record
-ev_cnt="$(grep -Ec '^EV\|frame=[0-9]{1,7}\|' "$CORR")" || true
-if [ "$ev_cnt" != "$events" ]; then
-  echo "SKIP ATTRIB FAIL: correlator EV record count ($ev_cnt) != events key ($events)" >&2
+# the correlated evidence itself (iter 76, review-73 M — EV whitelist
+# parse + win=none reconciliation): EVERY EV line is validated against
+# the FULL measured field grammar (all fields, exact order, bounded
+# numerics), frames strictly increasing (duplicates = corruption), EV
+# total == the events key, skipped=1 EV count == the timing-derived
+# skips key, and — sampler arms — EVERY event must carry a bracketing
+# kernel window (win=none = the sampler failed to cover the phenomenon
+# = evidence incomplete = fail closed; rerunning IS the re-sample).
+EV_ARM=sampler
+[ "$ARM" = nosampler ] && EV_ARM=nosampler
+node "$SKA/validate-ev.js" --corr "$CORR" --frames "$frames" \
+  --arm "$EV_ARM" --skips "$skips" --events "$events" || {
+  echo "SKIP ATTRIB FAIL: EV record validation failed (grammar/order/count/window reconciliation)" >&2
   exit 1
-fi
+}
 sed -n 's/^/   corr: /p' "$CORR" | grep -E '^   corr: (frames|budget_ns|skips|over_budget|late_start|events|nivcsw_total|nvcsw_total|minflt_total|majflt_total|mono_raw_drift_ns|sampler_samples)' || true
 grep -E '^EV\|' "$CORR" | sed 's/^/   corr: /' || true
 
-# AGENT-LOG verdict needle (M2CAL-report precedent). Matrix mode
+# AGENT-LOG verdict needle (M2CAL-report precedent; iter 76 FULL-LINE
+# grammar + resemblance counter — review-73 M). Matrix mode
 # (evidence-gathering, BEFORE the verdict exists) skips this assert.
-if [ "${MLFK_SKATTRIB_MATRIX:-0}" != 1 ]; then
-  ncnt="$(grep -Ec "$NEEDLE" docs/AGENT-LOG.md)" || true
-  if [ "$ncnt" -lt 1 ]; then
-    echo "SKIP ATTRIB FAIL: docs/AGENT-LOG.md carries no 'SKIP ATTRIB VERDICT: (a|b|c)' needle — the attribution verdict must be recorded with its data" >&2
+if [ "${MLFK_SKATTRIB_MATRIX:-0}" = 0 ]; then
+  ncnt="$(grep -Ec "$NEEDLE_FULL" docs/AGENT-LOG.md)" || true
+  rcnt="$(grep -Ec "$NEEDLE_RESEMBLE" docs/AGENT-LOG.md)" || true
+  case "$ncnt$rcnt" in
+    *[!0-9]*) echo "SKIP ATTRIB FAIL: needle grep counts non-numeric ('$ncnt'/'$rcnt')" >&2; exit 1 ;;
+  esac
+  if [ "$ncnt" != 1 ]; then
+    echo "SKIP ATTRIB FAIL: docs/AGENT-LOG.md carries $ncnt full-line 'SKIP ATTRIB VERDICT: (a|b|c)' needle lines (want exactly 1 — the canonical standalone verdict line)" >&2
     exit 1
   fi
-  echo "   AGENT-LOG verdict needle present ($ncnt)"
+  if [ "$rcnt" != "$ncnt" ]; then
+    echo "SKIP ATTRIB FAIL: $((rcnt - ncnt)) AGENT-LOG line(s) START like the verdict needle but fail the full-line grammar — corruption (quoted/truncated/negated text can never ride)" >&2
+    exit 1
+  fi
+  echo "   AGENT-LOG verdict needle present (exactly 1 full-line match, 0 resemblances)"
 else
   echo "   matrix mode: needle assert skipped (evidence-gathering run)"
 fi
 
 rig_no_commit_guard "$DEVB" "$TABLES"
 
-SKA_OK=1 # the exit-guard release: ONLY this line may precede a 0 exit
-echo "SKIP ATTRIB OK (arm=$ARM, skips=${skips}/${frames}, events=${events}, stream MATCH)"
+# FINAL VERDICT (iter 76, review-73 M — degraded-mode lockout): the
+# gating sentinel exists ONLY inside the authoritative branch; every
+# degraded combination lands in the DEV banner + exit 3.
+if [ "$SKA_AUTHORITATIVE" = 1 ]; then
+  SKA_OK=1 # the exit-guard release: ONLY this line may precede a 0 exit
+  echo "SKIP ATTRIB OK (arm=$ARM, skips=${skips}/${frames}, events=${events}, stream MATCH)"
+else
+  echo "SKIP ATTRIB (DEV — NON-AUTHORITATIVE):${SKA_AUTH_REASONS} arm=$ARM skips=${skips}/${frames} events=${events} stream MATCH — evidence recorded, gate verdict withheld"
+  exit 3
+fi

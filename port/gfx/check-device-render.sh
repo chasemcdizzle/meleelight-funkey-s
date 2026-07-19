@@ -165,6 +165,10 @@ RIG_PRESERVE_DTMP=1
 PARKED=0
 DEADMAN_ARMED=0
 LBC_STOPPED=0 # M4 task 8 mitigation state: low_bat_check quiesced (trap restores)
+DM_NONCE=""   # set at deadman generation; empty-safe for pre-arm trap paths
+RENDER_OK=0   # fail-closed exit guard (iter 76, review-73 H: bash-3.2
+              # expansion-error + EXIT-trap exits 0 — the ONLY legal
+              # rc-0 exit is through the DEVICE RENDER OK line)
 
 # Cleanup (installed AFTER lock acquisition, riglib contract): kill our
 # app, RESTORE the frontend if we parked it, cancel the deadman ONLY
@@ -187,18 +191,28 @@ LBC_STOPPED=0 # M4 task 8 mitigation state: low_bat_check quiesced (trap restore
 # and the lock-time pessimism above covers every failure BEFORE that
 # chokepoint has run (iter 56, review-55 H).
 task4_cleanup() {
-  local prc restore_verified
+  local rc=$?
+  local prc restore_verified lbc_ok
   # M4 task 8 mitigation restore (device hygiene): if this run quiesced
   # low_bat_check and died before its verified restore, restart it via
   # the init-script START channel + comm-scan verify (riglib; the -K
   # stop arm is a measured no-op for shell daemons, so restore is
-  # start-only). Unverifiable restore = loud WARN naming the manual
-  # recovery command, never silent.
+  # start-only, idempotent + exact-cardinality — iter 76). On a
+  # verified restore the nonce-scoped quiesce marker is removed so the
+  # deadman's daemon-restore arm stands down; an UNVERIFIED restore
+  # leaves the marker AND the deadman armed (iter 76, review-73 H:
+  # the deadman is the transport-death backstop for the daemon too) —
+  # loud WARN naming the manual recovery command, never silent.
+  lbc_ok=1
   if [ "$LBC_STOPPED" = 1 ]; then
+    lbc_ok=0
     if rig_daemon_restore low_bat_check /etc/init.d/S12low-bat-check; then
-      echo "   mitigation restore: low_bat_check verified running again (comm-scan)" >&2
+      lbc_ok=1
+      rig_dsh_retry "rm -f $DTMP/qd.low_bat_check.${DM_NONCE:-none}" \
+        || echo "WARN: could not remove the quiesce marker (harmless: the deadman's restore arm is comm-scan-guarded and idempotent)" >&2
+      echo "   mitigation restore: low_bat_check verified running again (comm-scan, exactly 1)" >&2
     else
-      echo "WARN: low_bat_check did NOT verify as running after restart — run '/etc/init.d/S12low-bat-check start' on the device manually" >&2
+      echo "WARN: low_bat_check did NOT verify as running after restart — the armed deadman will comm-scan-restore it on-device within ${DEADMAN_S}s, or run '/etc/init.d/S12low-bat-check start' on the device manually" >&2
     fi
   fi
   # pkill by process NAME — a `pkill -f <path>` pattern matches the adb
@@ -226,23 +240,35 @@ task4_cleanup() {
   else
     restore_verified=1 # never parked — nothing to restore, disarm is safe
   fi
+  # iter 76 (review-73 H): the deadman backstops BOTH the frontend park
+  # AND the daemon quiesce — it may be cancelled only when BOTH
+  # restorations are verified; either unverified leaves it armed.
   if [ "$DEADMAN_ARMED" = 1 ]; then
-    if [ "$restore_verified" = 1 ]; then
+    if [ "$restore_verified" = 1 ] && [ "$lbc_ok" = 1 ]; then
       rig_dsh_retry "touch $DTMP/deadman.cancel" \
         || echo "WARN: could not cancel the park deadman — it will fire once (idempotent actions) within ${DEADMAN_S}s" >&2
     else
-      echo "WARN: frontend restore unverified — leaving the deadman ARMED as the backstop (its purpose)" >&2
+      echo "WARN: frontend restore or daemon restore unverified — leaving the deadman ARMED as the backstop (its purpose)" >&2
     fi
   fi
-  if [ "$restore_verified" != 1 ]; then
-    # this run's own restore is unverified: the nonce must survive so
-    # the deadman stays armed (iter 54)
+  if [ "$restore_verified" != 1 ] || [ "$lbc_ok" != 1 ]; then
+    # this run's own restore is unverified: the nonce (and the quiesce
+    # marker) must survive so the deadman stays armed (iters 54/76)
     RIG_PRESERVE_DTMP=1
   fi
   # rig_cleanup honors the GLOBAL RIG_PRESERVE_DTMP — still 1 whenever
   # step-0 normalization has not yet POSITIVELY owned inherited state
   # (iter 56: a pre-normalization death must never wipe a foreign nonce)
   rig_cleanup
+  # FAIL-CLOSED exit guard (iter 76, review-73 H — the measured iter-74
+  # bash-3.2 class): a word-expansion error (set -u) aborts the script
+  # but, with an EXIT trap installed, the shell exits 0. The ONLY legal
+  # rc-0 exit is the one that printed the verdict line (RENDER_OK=1 set
+  # immediately before it); any other rc-0 arrival here is forced loud.
+  if [ "$rc" = 0 ] && [ "${RENDER_OK:-0}" != 1 ]; then
+    echo "DEVICE FAIL: script exited rc 0 without reaching the DEVICE RENDER OK line (bash expansion-error class) — forcing nonzero" >&2
+    exit 70
+  fi
 }
 trap task4_cleanup EXIT
 
@@ -279,6 +305,11 @@ echo "== [0/7] stale-state startup normalization (cross-run chokepoint) =="
 # verifiably restored (the iter-54 rule applied across runs). ONLY the
 # completed normalization clears it, below. Transport failures during
 # the probes are LOUD deaths, never "no stale state".
+# iter 76 (review-73 H, cross-run face): stale QUIESCE markers are
+# normalized FIRST — restoring a possibly-down daemon must precede the
+# stale-deadman cancel and the $DTMP wipe below, or this chokepoint
+# would itself destroy the daemon's last restore backstop.
+rig_qd_normalize
 stale_marker=0
 stale_deadman=0
 nrc=0
@@ -859,6 +890,27 @@ if [ "\$(cat $DTMP/deadman.nonce 2>/dev/null)" = "$DM_NONCE" ] && [ ! -f $DTMP/d
     ''|*[!0-9]*) : ;;
     *) if grep -q gfx_device "/proc/\$gp/cmdline" 2>/dev/null; then kill "\$gp"; fi ;;
   esac
+  # iter 76 (review-73 H — quiesce backstop): if THIS run's nonce-scoped
+  # quiesce marker is present, the run stopped low_bat_check and died
+  # before a verified restore — restore it HERE, transport-dead or not.
+  # COMM-SCAN GUARDED: start ONLY when zero instances are running (the
+  # measured A4' class: busybox start-stop-daemon cannot see script
+  # daemons, so an unguarded START would stack a duplicate) — idempotent
+  # by construction. Hard-coded allowlisted init path, no eval surface.
+  # The marker is cleared ONLY after a rescan sees the daemon live —
+  # a failed start leaves it for the next run's rig_qd_normalize.
+  if [ -f $DTMP/qd.low_bat_check.$DM_NONCE ]; then
+    n=0
+    for c in /proc/[0-9]*/comm; do
+      if [ "x\$(cat "\$c" 2>/dev/null)" = "xlow_bat_check" ]; then n=\$((n+1)); fi
+    done
+    if [ "\$n" = 0 ]; then /etc/init.d/S12low-bat-check start; fi
+    n2=0
+    for c in /proc/[0-9]*/comm; do
+      if [ "x\$(cat "\$c" 2>/dev/null)" = "xlow_bat_check" ]; then n2=\$((n2+1)); fi
+    done
+    if [ "\$n2" != 0 ]; then rm -f $DTMP/qd.low_bat_check.$DM_NONCE; fi
+  fi
 fi
 rm -f $DTMP/deadman.pid
 exit 0
@@ -905,28 +957,6 @@ for hf in "$BUILD/deadman.sh" "$BUILD/render-launch.sh"; do
 done
 dsh "chmod +x $DTMP/deadman.sh $DTMP/render-launch.sh"
 
-# SKIP-STALL MITIGATION (M4 task 8, ATTRIBUTED — AGENT-LOG iter 74):
-# the registered external stall class (isolated ~7-15 ms preemptions,
-# 1-3 skips per 3600 paced frames, the "~frames 1100-1500 zone") is
-# low_bat_check — a 2-second shell poll loop whose every wake forks
-# ~8 busybox children and reads the AXP20x battery over blocking i2c
-# sysfs; its wakes land every ~123 frames (2.05 s) and preempt the
-# paced app on the single-core V3s. Matrix-measured (iter 74):
-# live arms 2-3 skips / 33-34 events per run with a 123-frame event
-# comb; TWO consecutive quiesce arms 0 skips, comb gone. Mitigation:
-# quiesce low_bat_check for the paced window ONLY — comm-scan
-# kill-by-pid (exactly-one-instance refusal), restore via the
-# init-script START channel + comm-scan verify in BOTH the success
-# path (hard-gated below) and the cleanup trap. USB power is present
-# during any ADB run, so the low-battery-shutdown protection this
-# daemon provides is moot inside the window; the OPK play path is
-# untouched. skips==0 stays the unweakened gate — this removes
-# measured external interference, exactly like the pre-run sync and
-# the host quiet window (strictly-less-interference class).
-LBC_STOPPED=1 # pessimistic BEFORE the kill (the review-50 H2 class)
-lbc_pid="$(rig_daemon_stop low_bat_check)"
-echo "   mitigation: low_bat_check (pid $lbc_pid) quiesced for the paced window (trap restores)"
-
 # PRE-RUN SYNC (M4 task 3 — transient-skip class attribution, measured
 # across 5 paced attempts): the ~10 MB of pushes above go to SD through
 # the page cache; the kernel's dirty-expiry writeback (~30 s) then
@@ -961,6 +991,36 @@ case "$prc" in # rc captured (review-50 M1): busybox pkill 1 = no match
   *) echo "DEVICE FAIL: pkill gmenu2x failed (rc $prc)" >&2; exit 1 ;;
 esac
 
+# SKIP-STALL MITIGATION (M4 task 8, ATTRIBUTED — AGENT-LOG iter 74):
+# the registered external stall class (isolated ~7-15 ms preemptions,
+# 1-3 skips per 3600 paced frames, the "~frames 1100-1500 zone") is
+# low_bat_check — a 2-second shell poll loop whose every wake forks
+# ~8 busybox children and reads the AXP20x battery over blocking i2c
+# sysfs; its wakes land every ~123 frames (2.05 s) and preempt the
+# paced app on the single-core V3s. Matrix-measured (iter 74):
+# live arms 2-3 skips / 33-34 events per run with a 123-frame event
+# comb; TWO consecutive quiesce arms 0 skips, comb gone. Mitigation:
+# quiesce low_bat_check for EXACTLY the paced run (iter 76, review-73
+# H+M: stopped only AFTER sync + deadman-arm + park are complete —
+# battery protection stays live through every pre-run chore — and
+# restored, hard-gated, BEFORE any post-run chore). Comm-scan
+# kill-by-pid (exactly-one-instance refusal), restore via the
+# init-script START channel + exact-cardinality comm-scan verify in
+# BOTH the success path AND the cleanup trap, AND (iter 76) the
+# on-device deadman's daemon-restore arm — the nonce-scoped quiesce
+# marker written PESSIMISTICALLY before the kill makes the restore
+# transport-death-proof (host/adb death after the SIGTERM can no
+# longer strand the daemon). USB power is present during any ADB run,
+# so the low-battery-shutdown protection this daemon provides is moot
+# inside the window; the OPK play path is untouched. skips==0 stays
+# the unweakened gate — this removes measured external interference,
+# exactly like the pre-run sync and the host quiet window
+# (strictly-less-interference class).
+dsh "printf '' > $DTMP/qd.low_bat_check.$DM_NONCE" # marker BEFORE the kill
+LBC_STOPPED=1 # pessimistic BEFORE the kill (the review-50 H2 class)
+lbc_pid="$(rig_daemon_stop low_bat_check)"
+echo "   mitigation: low_bat_check (pid $lbc_pid) quiesced for the paced run (trap + deadman restore)"
+
 t0=$(date +%s)
 dsh "sh -lc $DTMP/render-launch.sh"
 # bounded host-side poll for the detached run's rc file (§7#1 shape).
@@ -986,9 +1046,31 @@ if [ "$apprc_seen" != 1 ]; then
   exit 1
 fi
 pullv "$DTMP/render.apprc" "$DEVB/render.apprc"
-if [ "$(cat "$DEVB/render.apprc")" != "RC=0" ]; then # exact whole-file grammar
+# iter 76 (review-73 M — rc-file BYTE grammar, the iter-61/62 pattern):
+# the producer writes exactly `RC=0<newline>` (launcher echo); command
+# substitution strips trailing newlines, making 'RC=0', 'RC=0\n', and
+# trailing blank lines indistinguishable — a partially/doubly written
+# completion record must die. Judge the FILE BYTES against a
+# printf-generated reference, never $(cat).
+if ! cmp -s "$DEVB/render.apprc" <(printf 'RC=0\n'); then
   dsh "cat $DTMP/g01.dev-log.txt" >&2 || true
-  echo "DEVICE FAIL: live render app exited nonzero ($(cat "$DEVB/render.apprc"))" >&2
+  echo "DEVICE FAIL: live render rc file is not EXACTLY the bytes 'RC=0<newline>' (got: '$(cat "$DEVB/render.apprc")') — app failed or the completion record is corrupt" >&2
+  exit 1
+fi
+# M4 task 8 mitigation restore (iter 76 ordering: FIRST post-run step,
+# BEFORE every other chore — the quiesce window is exactly the paced
+# run. HARD-GATED: an unrestored daemon must never ride a passing
+# gate; the trap + deadman only cover deaths). Exact-cardinality
+# comm-scan verify (riglib, iter 76), then the nonce-scoped quiesce
+# marker is removed RC-verified so the deadman's restore arm stands
+# down.
+if rig_daemon_restore low_bat_check /etc/init.d/S12low-bat-check; then
+  dsh "rm -f $DTMP/qd.low_bat_check.$DM_NONCE"
+  dsh "test ! -f $DTMP/qd.low_bat_check.$DM_NONCE"
+  LBC_STOPPED=0
+  echo "   mitigation restore: low_bat_check running again (comm-scan-verified, exactly 1; quiesce marker cleared)"
+else
+  echo "DEVICE FAIL: low_bat_check did not verify as running after restart — run '/etc/init.d/S12low-bat-check start' on the device manually" >&2
   exit 1
 fi
 # iter 55: the deadman's scoped-kill arm depends on the launcher's
@@ -1020,16 +1102,7 @@ if ! dsh "test ! -f $DTMP/deadman.fired" >/dev/null 2>&1; then
   exit 1
 fi
 DEADMAN_ARMED=0
-# M4 task 8 mitigation restore (main path, HARD-GATED — an unrestored
-# daemon must never ride a passing gate; the trap only covers deaths):
-if rig_daemon_restore low_bat_check /etc/init.d/S12low-bat-check; then
-  LBC_STOPPED=0
-  echo "   mitigation restore: low_bat_check running again (comm-scan-verified)"
-else
-  echo "DEVICE FAIL: low_bat_check did not verify as running after restart — run '/etc/init.d/S12low-bat-check start' on the device manually" >&2
-  exit 1
-fi
-echo "   live run done (host-observed $((t1 - t0)) s; app rc 0; frontend restored; deadman cancelled without firing)"
+echo "   live run done (host-observed $((t1 - t0)) s; app rc 0; daemon restored; frontend restored; deadman cancelled without firing)"
 pullv "$DTMP/g01.dev-out.txt" "$DEVB/g01.dev-out.txt"
 pullv "$DTMP/g01.dev-tim.txt" "$DEVB/g01.dev-tim.txt"
 pullv "$DTMP/g01.dev-shot.ppm" "$DEVB/g01.dev-shot.ppm"
@@ -1101,4 +1174,5 @@ echo "   device shot == host headless shot BIT-IDENTICAL (PPM + PGM, gating)"
 
 rig_no_commit_guard "$BUILD" "$DEVB" "$TABLES"
 
+RENDER_OK=1 # the exit-guard release: ONLY this line may precede a 0 exit
 echo "DEVICE RENDER OK (full p99 ${full_p99_ms} ms, render-only p99 ${render_p99_ms} ms, sim p99 ${sim_p99_ms} ms, present p99 ${present_p99_ms} ms, skips ${skips}/${frames})"

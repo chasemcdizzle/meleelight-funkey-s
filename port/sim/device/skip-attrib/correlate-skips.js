@@ -184,6 +184,17 @@ if (opt.sampler) {
   for (let i = 1; i < samples.length; i++) {
     if (samples[i].t <= samples[i - 1].t) die("sampler stamps not strictly increasing at block " + i);
   }
+  // iter 76 (review-73 M): validate EVERY payload UNCONDITIONALLY —
+  // previously raw payloads were parsed only when an event happened to
+  // be bracketed, so a zero-event (or sparse-event) run could carry
+  // malformed length-valid payloads all the way to the terminator.
+  // Every /proc snapshot the sampler recorded must satisfy the same
+  // strict kernel-format grammars the window lookups use.
+  for (let i = 0; i < samples.length; i++) {
+    parseStat(samples[i].files.stat, "sampler[" + i + "]");
+    parseInterrupts(samples[i].files.interrupts, "sampler[" + i + "]");
+    parseSoftirqs(samples[i].files.softirqs, "sampler[" + i + "]");
+  }
 }
 
 // --- kernel-format parsers -------------------------------------------------
@@ -203,20 +214,38 @@ function parseInterrupts(text, what) {
 }
 
 function parseStat(text, what) {
+  // FULL-LINE whitelist grammar (iter 76, review-73 M — the old intr
+  // rule was a PREFIX match and cpuN/btime/softirq were prefix-skipped;
+  // duplicates silently overwrote). Measured producer corpus: kernel
+  // 4.14.14-funkey single-core /proc/stat (pre/post snapshots + every
+  // sk_sampler payload): 'cpu' aggregate = 'cpu' + TWO spaces + exactly
+  // 10 single-spaced counters; exactly one 'cpu0' mirror (10 counters);
+  // 'intr' = total + per-source list; 'softirq' = total + exactly 10
+  // class counters; singletons ctxt/btime/processes/procs_running/
+  // procs_blocked. Anything else — including any other cpuN (this is a
+  // pinned single-core device) or a duplicate of any class — is
+  // corruption -> loud death.
   const out = { cpu: null, ctxt: null, processes: null, procs_running: null, procs_blocked: null, intr: null };
+  const seen = new Set();
+  const once = (k) => {
+    if (seen.has(k)) die(what + ": duplicate stat line class '" + k + "' (concatenated/corrupt snapshot)");
+    seen.add(k);
+  };
   for (const line of text.split("\n")) {
     if (line.length === 0) continue;
     let m;
-    if ((m = /^cpu +([0-9 ]+)$/.exec(line))) {
-      const f = m[1].trim().split(/ +/).map((x) => parseInt(x, 10));
-      if (f.length < 8) die(what + ": stat cpu line too short");
+    if ((m = /^cpu {2}([0-9]+(?: [0-9]+){9})$/.exec(line))) {
+      once("cpu");
+      const f = m[1].split(" ").map((x) => parseInt(x, 10));
       out.cpu = { user: f[0], nice: f[1], system: f[2], idle: f[3], iowait: f[4], irq: f[5], softirq: f[6], steal: f[7] };
-    } else if ((m = /^ctxt ([0-9]+)$/.exec(line))) out.ctxt = parseInt(m[1], 10);
-    else if ((m = /^processes ([0-9]+)$/.exec(line))) out.processes = parseInt(m[1], 10);
-    else if ((m = /^procs_running ([0-9]+)$/.exec(line))) out.procs_running = parseInt(m[1], 10);
-    else if ((m = /^procs_blocked ([0-9]+)$/.exec(line))) out.procs_blocked = parseInt(m[1], 10);
-    else if ((m = /^intr ([0-9]+)/.exec(line))) out.intr = parseInt(m[1], 10);
-    else if (/^(cpu[0-9]+ |btime |softirq |page |swap )/.test(line)) continue;
+    } else if (/^cpu0 [0-9]+(?: [0-9]+){9}$/.test(line)) once("cpu0");
+    else if ((m = /^ctxt ([0-9]+)$/.exec(line))) { once("ctxt"); out.ctxt = parseInt(m[1], 10); }
+    else if (/^btime [0-9]+$/.test(line)) once("btime");
+    else if ((m = /^processes ([0-9]+)$/.exec(line))) { once("processes"); out.processes = parseInt(m[1], 10); }
+    else if ((m = /^procs_running ([0-9]+)$/.exec(line))) { once("procs_running"); out.procs_running = parseInt(m[1], 10); }
+    else if ((m = /^procs_blocked ([0-9]+)$/.exec(line))) { once("procs_blocked"); out.procs_blocked = parseInt(m[1], 10); }
+    else if ((m = /^intr ([0-9]+)((?: [0-9]+)+)$/.exec(line))) { once("intr"); out.intr = parseInt(m[1], 10); }
+    else if (/^softirq [0-9]+(?: [0-9]+){10}$/.test(line)) once("softirq");
     else die(what + ": stat line unrecognized: " + JSON.stringify(line));
   }
   for (const k of ["cpu", "ctxt", "processes", "intr"]) {
@@ -270,9 +299,18 @@ function parseVmstat(text, what) {
     if (line.length === 0) continue;
     const m = /^([a-z_0-9]+) ([0-9]+)$/.exec(line);
     if (!m) die(what + ": vmstat line malformed: " + JSON.stringify(line));
+    // iter 76 (review-73 M): duplicates previously overwrote silently —
+    // a concatenated snapshot could shadow real deltas.
+    if (map.has(m[1])) die(what + ": duplicate vmstat key " + m[1] + " (concatenated/corrupt snapshot)");
     map.set(m[1], parseInt(m[2], 10));
   }
   if (map.size < 10) die(what + ": vmstat implausibly small");
+  // iter 76: the keys the judgment reports on must be PRESENT (a
+  // truncated snapshot that drops pswpin can no longer read as
+  // "no swap activity").
+  for (const k of ["pgpgin", "pgpgout", "pswpin", "pswpout", "pgfault", "pgmajfault"]) {
+    if (!map.has(k)) die(what + ": vmstat missing required key " + k + " (truncated snapshot)");
+  }
   return map;
 }
 

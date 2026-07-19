@@ -253,23 +253,92 @@ rig_daemon_stop() {
   printf '%s\n' "$pid"
 }
 
-# rig_daemon_restore <name> <init-script> — restart a quiesced daemon
-# through its init-script START channel (start-stop-daemon -S execs
-# fine; only the -K stop arm is broken for scripts) and VERIFY
-# liveness by comm-scan (bounded poll). Returns nonzero when the
-# daemon never verifies — the caller decides loud-fail (main path) vs
-# loud-warn naming the manual recovery command (trap path).
+# rig_daemon_restore <name> <init-script> — restore a quiesced daemon
+# to the recorded boot cardinality: EXACTLY ONE instance (iter 76,
+# review-73 M — rig_daemon_stop REFUSES any pre-stop inventory != 1,
+# so ==1 is the only cardinality this rig ever owes; FunKey-OS
+# reality: each init script starts exactly one instance at boot,
+# measured recon iter 74). IDEMPOTENT + EXACT-COUNT:
+#   1 already running -> success WITHOUT touching the START channel
+#     (re-entry safe: the trap may run after a verified main-path
+#     restore; busybox start-stop-daemon cannot see script daemons,
+#     so every extra START would be a NEW instance — the A4'
+#     tripled-daemon class);
+#   0 running -> ONE init START (start-stop-daemon -S execs fine;
+#     only the -K stop arm is broken for scripts), then a bounded
+#     comm-scan poll for EXACTLY 1;
+#   >1 at any point -> LOUD refusal, never "restored".
+# Returns nonzero when the daemon never verifies at exactly one — the
+# caller decides loud-fail (main path) vs loud-warn naming the manual
+# recovery command (trap path).
 rig_daemon_restore() {
-  local d isc pids
+  local d isc pids n
   d="$1"
   isc="$2"
+  pids="$(rig_comm_pids "$d")" || return 1
+  n="$(printf '%s' "$pids" | grep -c '')" || true
+  if [ "$n" = 1 ]; then return 0; fi # already at boot cardinality — idempotent
+  if [ "$n" != 0 ]; then
+    echo "DEVICE FAIL: $d has $n instances before restore ('$pids') — want 0 or 1; refusing to start more" >&2
+    return 1
+  fi
   dsh "$isc start" >/dev/null || return 1
   for _ in $(seq 1 8); do
     sleep 1
     pids="$(rig_comm_pids "$d")" || continue
-    if [ -n "$pids" ]; then return 0; fi
+    n="$(printf '%s' "$pids" | grep -c '')" || true
+    if [ "$n" = 1 ]; then return 0; fi
+    if [ "$n" != 0 ]; then
+      echo "DEVICE FAIL: $d has $n instances after the restore START ('$pids') — want exactly 1" >&2
+      return 1
+    fi
   done
   return 1
+}
+
+# rig_qd_normalize — stale QUIESCE-marker normalization (iter 76,
+# review-73 H, cross-run face): a run that quiesced a daemon writes a
+# nonce-scoped marker $DTMP/qd.<name>.<nonce> BEFORE the kill; the
+# marker is cleared only on a VERIFIED restore (main path, trap, or
+# the on-device deadman's restore arm). A surviving marker therefore
+# means "a prior run may have left this daemon down". This chokepoint
+# runs in EVERY device check's step-0 BEFORE the stale deadman is
+# cancel-disarmed and BEFORE $DTMP is wiped — disarming/wiping first
+# would destroy the last restore backstop while the daemon is down.
+# Restores ride rig_daemon_restore (idempotent, exact-cardinality), so
+# a marker whose daemon is actually fine costs nothing. Allowlist is
+# CLOSED (the three FunKey shell daemons with designed START channels);
+# an unrestorable daemon is a loud death naming the manual command —
+# the stale deadman then STAYS armed (the caller's errexit path
+# preserves $DTMP), which is the correct failure direction.
+rig_qd_normalize() {
+  local d isc nrc
+  for d in low_bat_check system_stats fkgpiod; do
+    case "$d" in
+      low_bat_check) isc=/etc/init.d/S12low-bat-check ;;
+      system_stats)  isc=/etc/init.d/S13system-stats ;;
+      fkgpiod)       isc=/etc/init.d/S11gpio ;;
+    esac
+    nrc=0
+    dsh "ls $DTMP/qd.$d.* >/dev/null 2>&1" >/dev/null || nrc=$?
+    case "$nrc" in
+      0)
+        echo "WARN: stale quiesce marker for $d on the device — a prior run may have left the daemon down; restoring BEFORE any disarm/wipe" >&2
+        if rig_daemon_restore "$d" "$isc"; then
+          dsh "rm -f $DTMP/qd.$d.*" >/dev/null || true
+          echo "   stale-quiesced $d verified running (comm-scan, exactly 1); marker cleared" >&2
+        else
+          echo "DEVICE FAIL: stale-quiesced $d could not be restored to exactly one instance — run '$isc start' on the device manually and inspect" >&2
+          return 1
+        fi
+        ;;
+      1|2) : ;; # no marker (ls found nothing) — the healthy path
+      *)
+        echo "DEVICE FAIL: could not probe for stale quiesce markers of $d (rc $nrc)" >&2
+        return 1
+        ;;
+    esac
+  done
 }
 
 # rig_dev_sha256 <device-path> — device-side sha256, WHITELIST-GRAMMAR
