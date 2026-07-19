@@ -134,6 +134,11 @@ VFXGLYPHS_SHA256=8926cab4d648579d099053994bf309943b5a6bc3c5abf733af9ac6b71f3cbbe
 LEGIBLE_MIN_DEV_PX=2.0
 WALL_MIN_MS=58000 # review-50 M3: paced 3600-frame run wall window —
 WALL_MAX_MS=66000 # measured 60000 ms (iter 50); pacing can't silently die
+# Quiesce-bracket slacks (iter 78, review-76 M1 — the exact-window
+# STANDING TOOTH, every gate run): device-clock stamp deltas judged by
+# riglib rig_quiesce_bracket_assert after the low_bat_check restore.
+QW_PRE_SLACK_S=10   # stop-complete -> app-start (the launch dsh only)
+QW_POST_SLACK_S=10  # app-end -> restore-start (exit-poll latency only)
 DEADMAN_S="${MLFK_DEADMAN_S:-300}" # frontend-park deadman window (~4x the
                     # healthy park span; MLFK_DEADMAN_S = negative-testing
                     # override ONLY, default unchanged)
@@ -927,9 +932,12 @@ cat > "$BUILD/render-launch.sh" << EOF
 # iter 55 (review-54 H): gfx_device is backgrounded and its pid recorded
 # under the NONCE-NAMED file the deadman's scoped kill arm reads —
 # `wait \$!` preserves the app's exit code for render.apprc.
+# iter 78 (review-76 M1): app.start.ts / app.end.ts device-clock stamps
+# feed the quiesce-bracket assert; end.ts is written BEFORE the rc file
+# so rc-detection implies the stamp exists.
 cd $DTMP || exit 9
-rm -f render.apprc gfx.pid.$DM_NONCE
-setsid sh -c './gfx_device \
+rm -f render.apprc gfx.pid.$DM_NONCE app.start.ts app.end.ts
+setsid sh -c 'date +%s > $DTMP/app.start.ts; ./gfx_device \
   --trace $DTMP/g01.trace.txt --simdata $DTMP/simdata.txt \
   --gfxdata $DTMP/gfxdata-frozen.txt --vfxdata $DTMP/vfxdata-frozen.txt \
   --glyphs $DTMP/vfxglyphs-frozen.txt --legible --anim-dir $DTMP \
@@ -939,8 +947,9 @@ setsid sh -c './gfx_device \
   --shot-frame $SHOT_FRAME --shot-ppm $DTMP/g01.dev-shot.ppm \
   --shot-pgm $DTMP/g01.dev-shot.pgm 2> $DTMP/g01.dev-log.txt & \
   echo \$! > $DTMP/gfx.pid.$DM_NONCE; \
-  wait \$!; \
-  echo "RC=\$?" > $DTMP/render.apprc' \
+  wait \$!; arc=\$?; \
+  date +%s > $DTMP/app.end.ts; \
+  echo "RC=\$arc" > $DTMP/render.apprc' \
   </dev/null >/dev/null 2>&1 &
 sleep 2
 EOF
@@ -1019,6 +1028,10 @@ esac
 dsh "printf '' > $DTMP/qd.low_bat_check.$DM_NONCE" # marker BEFORE the kill
 LBC_STOPPED=1 # pessimistic BEFORE the kill (the review-50 H2 class)
 lbc_pid="$(rig_daemon_stop low_bat_check)"
+# iter 78 (review-76 M1): device-clock stamp the instant the stop
+# completes — the launch dsh is the ONLY thing between this stamp and
+# app.start.ts (the bracket assert below proves it every gate run).
+dsh "date +%s > $DTMP/qstop.ts"
 echo "   mitigation: low_bat_check (pid $lbc_pid) quiesced for the paced run (trap + deadman restore)"
 
 t0=$(date +%s)
@@ -1045,6 +1058,36 @@ if [ "$apprc_seen" != 1 ]; then
   echo "DEVICE FAIL: live render never finished (rc file absent after $((APPRC_TRIES * 2))s)" >&2
   exit 1
 fi
+# M4 task 8 mitigation restore (iter 78 ordering, review-76 M1: the
+# FIRST device action after app-exit DETECTION — even the rc pull and
+# its byte check are chores that must wait; a hung ADB pull can no
+# longer extend the battery-protection outage past the app lifetime.
+# HARD-GATED: an unrestored daemon must never ride a passing gate; the
+# trap + deadman only cover deaths). Exact-cardinality comm-scan verify
+# (riglib, iter 76), then the nonce-scoped quiesce marker is removed
+# RC-verified so the deadman's restore arm stands down.
+dsh "date +%s > $DTMP/qrestore.ts"
+if rig_daemon_restore low_bat_check /etc/init.d/S12low-bat-check; then
+  dsh "rm -f $DTMP/qd.low_bat_check.$DM_NONCE"
+  dsh "test ! -f $DTMP/qd.low_bat_check.$DM_NONCE"
+  LBC_STOPPED=0
+  echo "   mitigation restore: low_bat_check running again (comm-scan-verified, exactly 1; quiesce marker cleared)"
+else
+  echo "DEVICE FAIL: low_bat_check did not verify as running after restart — run '/etc/init.d/S12low-bat-check start' on the device manually" >&2
+  exit 1
+fi
+# Quiesce-bracket STANDING TOOTH (iter 78, review-76 M1): device-clock
+# stamps prove the stop/restore bracket contained only the app
+# lifetime — qstop.ts (stop complete) -> app.start.ts / app.end.ts
+# (launcher, inside the setsid body) -> qrestore.ts (restore
+# initiation). Any chore re-inserted into the window blows a slack.
+qstop_ts="$(rig_dev_ts "$DTMP/qstop.ts")" || exit 1
+appstart_ts="$(rig_dev_ts "$DTMP/app.start.ts")" || exit 1
+append_ts="$(rig_dev_ts "$DTMP/app.end.ts")" || exit 1
+qrestore_ts="$(rig_dev_ts "$DTMP/qrestore.ts")" || exit 1
+rig_quiesce_bracket_assert "render low_bat_check" \
+  "$qstop_ts" "$appstart_ts" "$append_ts" "$qrestore_ts" \
+  "$QW_PRE_SLACK_S" "$QW_POST_SLACK_S" || exit 1
 pullv "$DTMP/render.apprc" "$DEVB/render.apprc"
 # iter 76 (review-73 M — rc-file BYTE grammar, the iter-61/62 pattern):
 # the producer writes exactly `RC=0<newline>` (launcher echo); command
@@ -1055,22 +1098,6 @@ pullv "$DTMP/render.apprc" "$DEVB/render.apprc"
 if ! cmp -s "$DEVB/render.apprc" <(printf 'RC=0\n'); then
   dsh "cat $DTMP/g01.dev-log.txt" >&2 || true
   echo "DEVICE FAIL: live render rc file is not EXACTLY the bytes 'RC=0<newline>' (got: '$(cat "$DEVB/render.apprc")') — app failed or the completion record is corrupt" >&2
-  exit 1
-fi
-# M4 task 8 mitigation restore (iter 76 ordering: FIRST post-run step,
-# BEFORE every other chore — the quiesce window is exactly the paced
-# run. HARD-GATED: an unrestored daemon must never ride a passing
-# gate; the trap + deadman only cover deaths). Exact-cardinality
-# comm-scan verify (riglib, iter 76), then the nonce-scoped quiesce
-# marker is removed RC-verified so the deadman's restore arm stands
-# down.
-if rig_daemon_restore low_bat_check /etc/init.d/S12low-bat-check; then
-  dsh "rm -f $DTMP/qd.low_bat_check.$DM_NONCE"
-  dsh "test ! -f $DTMP/qd.low_bat_check.$DM_NONCE"
-  LBC_STOPPED=0
-  echo "   mitigation restore: low_bat_check running again (comm-scan-verified, exactly 1; quiesce marker cleared)"
-else
-  echo "DEVICE FAIL: low_bat_check did not verify as running after restart — run '/etc/init.d/S12low-bat-check start' on the device manually" >&2
   exit 1
 fi
 # iter 55: the deadman's scoped-kill arm depends on the launcher's

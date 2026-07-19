@@ -10871,9 +10871,12 @@ requires EXACTLY ONE standalone full-line verdict in this file — the
 line below is it, restating the iter-74 attribution in canonical form.
 Any future verdict change REPLACES the convention consciously (the
 exactly-one count fails loudly otherwise); prose references must never
-start a line with the needle prefix.
+start a line with the needle prefix. (Iter 78, review-76 M3: the
+grammar is now SUFFIX-FREE — the verdict line is exactly the needle,
+and the detail lives on the separate non-gating line below it.)
 
-SKIP ATTRIB VERDICT: (a) — low_bat_check 2 s poll comb (attributed iter 74; canonical full-line form per the iter-76 grammar)
+SKIP ATTRIB VERDICT: (a)
+Verdict detail (non-gating): low_bat_check 2 s poll comb — attributed iter 74; suffix-free canonical form per the iter-78 grammar (review-76 M3: detail moved off the verdict line).
 
 ## iter 76 — 2026-07-19 — M4 hardening RESULT: quiesce backstop + skip-attrib grammars — round-1 arc findings ALL closed, both cold checks green
 
@@ -11202,3 +11205,185 @@ the sibling was decision-bearing (RNG routing) and invisible to the
 0-divergence stream. The T77-5d mis-injected probe re-teaches iter-72's
 lesson: a tooth that dies for the WRONG reason is a broken tooth —
 always assert the death CLASS, not just the exit code.
+
+## iter 78 — 2026-07-19 — PRE-REGISTRATION: device-rig arc round-2 residuals — exact quiesce window + grammar exactness (frozen before any run/edit; PROCESS §2)
+
+- **Task (driver triage .loop/review-76-triage.md, BINDING; full review
+  .loop/review-76-1.log)**: close the 4 QUEUED round-2 Mediums on the
+  device-rig surfaces. Surface:
+  port/sim/device/{check-skip-attrib.sh,skip-attrib/correlate-skips.js},
+  port/gfx/check-device-render.sh, port/sim/device/riglib.sh (window
+  helpers). NOT touched: port/sim/calib/* and port/sim/ai.* (ai-rig
+  closure runs concurrently), gate limits (skips==0 etc. unweakened).
+- **Fixes (frozen)**:
+  - **M1 (EXACT quiesce window)**: in BOTH scripts the daemon stop is
+    the LAST pre-launch device action and the restore is the FIRST
+    device action after app-exit DETECTION — ahead of the rc pull, rc
+    byte check, sampler stop, artifact pulls, hashes, and cmp (review:
+    a hung ADB chore extended the battery-protection outage past the
+    app). STANDING TOOTH (runs every render gate run + every quiesce-
+    arm skip-attrib run): device-clock stamps qstop.ts (written the
+    instant the stop completes), app.start.ts / app.end.ts (written by
+    the launcher inside the setsid body, end BEFORE the rc file so
+    detection implies presence), qrestore.ts (written at restore
+    initiation); NEW riglib `rig_quiesce_bracket_assert` requires
+    qstop <= astart, astart-qstop <= QW_PRE_SLACK_S=10 (launch dsh
+    only), astart <= aend <= qrestore, qrestore-aend <=
+    QW_POST_SLACK_S=10 (exit-poll latency only — any pull/hash/cmp
+    re-inserted into the window blows the bound). Stamps are DEVICE
+    clock only (measured: this RTC is not wall-synced, epoch ~1.9e7 —
+    deltas only, never host-time compares). NEW riglib `rig_dev_ts`
+    (RC-checked read, bounded-decimal whitelist).
+  - **M2 (/proc/stat required-set)**: correlate-skips.js parseStat
+    requires ALL NINE fixed-table line classes (cpu, cpu0, ctxt, btime,
+    processes, procs_running, procs_blocked, intr, softirq) via the
+    seen-set — a clipped snapshot missing any of them is corruption
+    (previously only cpu/ctxt/processes/intr were required).
+  - **M3 (suffix-free verdict grammar)**: NEEDLE_FULL becomes
+    `^SKIP ATTRIB VERDICT: \((a|b|c)\)$` — the open ` — .+` suffix is
+    dropped (review: `... (a) — superseded; do not use` rode as a full
+    match). Detail moves to a separate non-gating line that must NOT
+    start with the needle prefix; the canonical AGENT-LOG line is
+    rewritten in this iteration to the suffix-free form + a detail
+    line (the exactly-one + resemblance-counter machinery unchanged).
+  - **M4 (twin-pin + argv exactness)**: NEW riglib
+    `rig_pin_assert_once <file> <var> <value>` — EXACTLY ONE `^VAR=`
+    assignment line per pinned var (GFXDATA_SHA256, VFXDATA_SHA256,
+    VFXGLYPHS_SHA256, SHOT_FRAME) in BOTH check-device-render.sh and
+    check-skip-attrib.sh's own bytes, and that single line must pin the
+    value (presence-only grep let a stale pin line coexist with a
+    later last-wins assignment). NEW riglib `rig_argv_assert_once`:
+    the gfx_device argv region is sed-extracted from the generated
+    launcher (setsid block through the rc write — excludes
+    sk_sampler's own --out) and EVERY gfx_device option (20) must
+    occur exactly once — duplicate later options are last-wins
+    overrides and now die.
+- **Run cap (frozen): <= 2 paced device runs** — the two cold
+  done-checks (render first: one docker arm rebuild expected, RIG_SCRIPTS
+  bytes are stamp inputs, serial; then skip-attrib on the stamp HIT).
+  The window moves in both scripts, so both runs are required. Non-paced
+  recon only: `date +%s` availability probe (done: works, epoch
+  unsynced) + post-run device-clean verification.
+- **Teeth (all host-only, run BEFORE the device runs;
+  .loop/m4-rig78-teeth.log)**: T1a-f bracket assert (REAL riglib body
+  sourced standalone): healthy pass, post-slack blown, stop-after-start,
+  pre-slack blown, restore-before-end, malformed stamp → death each;
+  T2a-d pin exactness (REAL body): real files pass ×both, probe COPY of
+  check-device-render.sh with a duplicate SHOT_FRAME assignment → death
+  (the triaged tooth), wrong-value single line → death; T3a-b argv
+  (REAL body): iter-76 real launcher region all-once pass (no false
+  rejection), probe copy with a duplicate later --shot-frame → death;
+  T4a-c needle grammar (patterns sed-extracted from the SHIPPED script
+  bytes, iter-76 T-M3 precedent): real AGENT-LOG 1/1 pass, ` —
+  superseded; do not use` suffixed canonical line → death (the triaged
+  tooth), added suffixed second line → resemblance death; T5a-f stat
+  required-set (REAL correlator on COPIES of the iter-76 pulled
+  artifacts): procs_blocked/cpu0/btime/softirq/procs_running each
+  deleted → death naming the class, unmodified set → attrib_complete=1
+  (doubles as the pre-run corpus validation, zero false rejections).
+- **Pass criteria (frozen)**: cold `bash port/gfx/check-device-render.sh`
+  → `DEVICE RENDER OK` exit 0 (.loop/m4-rig78-donecheck.log) with the
+  bracket-assert line present; cold `bash
+  port/sim/device/check-skip-attrib.sh` → `SKIP ATTRIB OK` exit 0
+  (.loop/m4-rig78-donecheck2.log); all teeth logged; manifest re-pins
+  (riglib.sh + check-device-render.sh, arc-pending cite iter78) +
+  verify_m3.sh anchor SAME commit + self-check
+  (.loop/m4-rig78-manifest-selfcheck.log) — pins finalized BEFORE the
+  runs so the single rebuild covers the final bytes; device left clean.
+- **Refutation shapes**: bracket assert failing on a healthy cold run
+  with deltas just over slack → the slack model is wrong (measure the
+  real latencies from the logged deltas, ONE bounded re-pin round, then
+  STOP and report — never widen blind); a new exactness grammar
+  false-rejecting the genuine corpus → re-measure the producer, never
+  loosen to permissive scanning; cold-check regression not attributable
+  to these edits → STOP and report, never iterate blind on the device.
+
+## iter 78 — 2026-07-19 — M4 hardening RESULT: exact quiesce window + grammar residuals — round-2 arc findings ALL closed, both cold checks green
+
+- **Both cold done-checks GREEN, first attempt each**: `bash
+  port/gfx/check-device-render.sh` → `DEVICE RENDER OK (full p99
+  12.888 ms, render-only p99 5.453 ms, sim p99 7.441 ms, present p99
+  1.353 ms, skips 0/3600)` exit 0 (.loop/m4-rig78-donecheck.log; the
+  expected one docker arm rebuild — RIG_SCRIPTS bytes are stamp
+  inputs); `bash port/sim/device/check-skip-attrib.sh` → `SKIP ATTRIB
+  OK (arm=sampler, skips=1/3600, events=50, stream MATCH)` exit 0
+  (.loop/m4-rig78-donecheck2.log, stamp HIT). Run cap held: exactly 2
+  paced device runs.
+- **M1 (exact quiesce window) CLOSED**: in BOTH scripts the daemon
+  restore is now the FIRST device action after app-exit detection —
+  ahead of the rc pull, rc byte check, sampler stop, and every other
+  pull/hash/cmp chore (the old post-rc-check restore sites are gone);
+  the stop was already the last pre-launch action and now stamps
+  qstop.ts the instant it completes. STANDING TOOTH live: riglib
+  `rig_quiesce_bracket_assert` over the four device-clock stamps
+  (qstop.ts / app.start.ts / app.end.ts — launcher-written inside the
+  setsid body, end BEFORE the rc file — / qrestore.ts), slacks
+  QW_PRE_SLACK_S=10 / QW_POST_SLACK_S=10. Fired on the cold render
+  gate: `quiesce bracket OK [render low_bat_check]: stop->start 0 s,
+  app 60 s, end->restore 2 s` — measured healthy deltas sit far
+  inside the slacks; any chore re-inserted into the window blows the
+  post bound. skip-attrib carries the same machinery on its quiesce
+  arm (default sampler arm stops no daemons — bracket is arm-gated,
+  as pre-registered). NEW riglib `rig_dev_ts` (RC-checked bounded
+  read; device RTC measured NOT wall-synced — deltas only).
+- **M2 (/proc/stat required-set) CLOSED**: parseStat now requires ALL
+  NINE fixed-table line classes via the seen-set (cpu, cpu0, ctxt,
+  btime, processes, procs_running, procs_blocked, intr, softirq) — a
+  clipped snapshot is corruption. Teeth: each of
+  procs_blocked/cpu0/btime/softirq/procs_running deleted from a COPY
+  of the iter-76 pulled pre-snapshot → REAL correlator death naming
+  the class; unmodified corpus → attrib_complete=1 (zero false
+  rejections, validated BEFORE the device runs). Fresh iter-78
+  snapshots passed on the cold run.
+- **M3 (suffix-free verdict grammar) CLOSED**: NEEDLE_FULL is now
+  `^SKIP ATTRIB VERDICT: \((a|b|c)\)$` — the open ` — .+` suffix is
+  gone; detail lives on a separate non-gating line. The canonical
+  AGENT-LOG line was rewritten to the suffix-free form + a
+  `Verdict detail (non-gating):` line (iter-76 entry, the designed
+  replacement channel). Teeth (patterns sed-EXTRACTED from the
+  shipped script bytes): the review's exact probe
+  `SKIP ATTRIB VERDICT: (a) — superseded; do not use` → death (0
+  full-line matches); an ADDED suffixed second line → resemblance
+  death; real AGENT-LOG → exactly 1/1. Cold run: needle assert green.
+- **M4 (twin-pin + argv exactness) CLOSED**: NEW riglib
+  `rig_pin_assert_once` — EXACTLY ONE `^VAR=` assignment line per
+  pinned var (GFXDATA_SHA256/VFXDATA_SHA256/VFXGLYPHS_SHA256/
+  SHOT_FRAME), carrying the pinned value, asserted in
+  check-device-render.sh AND in check-skip-attrib.sh's OWN bytes
+  (presence-only greps replaced). NEW riglib `rig_argv_assert_once`
+  over the sed-extracted gfx_device argv region of the generated
+  launcher (setsid block through the rc write — excludes sk_sampler's
+  own --out): all 20 gfx_device options exactly once. Teeth: the
+  triaged duplicate-SHOT_FRAME probe copy → death (count 2);
+  wrong-value single line → death; duplicate later --shot-frame in a
+  region copy → death; real files + the iter-76 real launcher region
+  → zero false rejections.
+- **Teeth 21/21** (.loop/m4-rig78-teeth.log; all host-only, run
+  BEFORE the device runs; every negative tooth asserts its death
+  CLASS — the iter-77 lesson held).
+- **Freeze manifest**: riglib.sh + check-device-render.sh re-pinned
+  (arc-pending, cite iter78) + verify_m3.sh MANIFEST_SHA256 anchor
+  same commit; SELF-CHECK 23/23 + ANCHOR GREEN
+  (.loop/m4-rig78-manifest-selfcheck.log) — pins finalized BEFORE the
+  runs so the single rebuild covered the final bytes.
+- **Device left clean** (verified post-runs): low_bat_check ==1, no
+  frontend marker, /tmp/mlfk wiped, gmenu2x live.
+- **Honest coverage notes**: (1) the skip-attrib bracket assert has
+  zero live coverage on the DEFAULT sampler arm by construction (no
+  daemons stopped there) — it runs on every quiesce-arm
+  evidence-gathering run and its body is the SAME riglib function the
+  render gate fires every run; (2) the render cold run recorded the
+  registered transient class at 1 skip on the skip-attrib run
+  (attribution instrument, reported-never-asserted — the skips==0
+  GATE run itself was clean at 0/3600).
+- **ZOOM OUT**: (1) "window narrowing" converges only when the window
+  edges are MEASURED, not argued — the bracket stamps turn an
+  ordering convention into a per-run mechanical assertion (the same
+  move as rngCalls pins: convert invariants-by-inspection into
+  invariants-by-count); (2) presence asserts over config files are a
+  CLASS hazard wherever last-wins parsing exists (shell vars, argv) —
+  the fix is always exactly-one-occurrence counting, now available as
+  riglib primitives for every future rig script; (3) required-set
+  completion: a whitelist grammar that recognizes N line classes but
+  requires only K<N of them silently accepts truncation — when the
+  producer's table is FIXED, require it whole.

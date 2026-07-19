@@ -248,8 +248,15 @@ function parseStat(text, what) {
     else if (/^softirq [0-9]+(?: [0-9]+){10}$/.test(line)) once("softirq");
     else die(what + ": stat line unrecognized: " + JSON.stringify(line));
   }
-  for (const k of ["cpu", "ctxt", "processes", "intr"]) {
-    if (out[k] === null) die(what + ": stat missing " + k);
+  // iter 78 (review-76 M2 — REQUIRED-SET completion): the fixed table
+  // is ALL NINE line classes on this pinned single-core kernel
+  // (4.14.14-funkey, measured corpus) — a clipped snapshot missing ANY
+  // of them (cpu0/btime/softirq/procs_running/procs_blocked included)
+  // is corruption, never a pass. The old required set (cpu/ctxt/
+  // processes/intr) let a truncated snapshot ride.
+  for (const k of ["cpu", "cpu0", "ctxt", "btime", "processes",
+                   "procs_running", "procs_blocked", "intr", "softirq"]) {
+    if (!seen.has(k)) die(what + ": stat missing required line class '" + k + "' (clipped snapshot)");
   }
   return out;
 }

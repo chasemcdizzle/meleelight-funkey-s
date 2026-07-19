@@ -3,7 +3,42 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 77 — ai-rig arc round-1 findings CLOSED; ai-rig round 2 = closure pending)
+## Live right now (updated: 2026-07-19, iter 78 — device-rig arc round-2 residuals CLOSED; device-rig round 3 = closure-or-cap)
+
+- **Iter 78 (M4 hardening — device-rig arc round-2 residuals, 4
+  Mediums) DONE** (full entry: AGENT-LOG iter 78 pre-registration +
+  result; driver triage .loop/review-76-triage.md): M1 the quiesce
+  window is now EXACT in both scripts — daemon stop is the last
+  pre-launch action, restore is the FIRST device action after
+  app-exit detection (ahead of rc pull/hash/cmp chores), with a
+  STANDING device-clock bracket tooth (riglib
+  rig_quiesce_bracket_assert over qstop/app.start/app.end/qrestore
+  stamps, 10 s slacks; fired live on the cold render gate:
+  stop->start 0 s, app 60 s, end->restore 2 s); M2 parseStat
+  requires ALL NINE /proc/stat fixed-table line classes (clipped
+  snapshot = corruption); M3 the verdict needle is suffix-free
+  (`^SKIP ATTRIB VERDICT: \((a|b|c)\)$`, detail on a separate
+  non-gating line; canonical AGENT-LOG line rewritten through the
+  designed replacement channel); M4 twin-pin + argv EXACTNESS (new
+  riglib rig_pin_assert_once / rig_argv_assert_once: exactly-one
+  assignment per pinned var in BOTH scripts' bytes, all 20 gfx_device
+  options exactly once in the extracted launcher region). Cold checks
+  GREEN first attempt: `DEVICE RENDER OK ... skips 0/3600`
+  (.loop/m4-rig78-donecheck.log, the expected one arm rebuild) +
+  `SKIP ATTRIB OK (arm=sampler, skips=1/3600, events=50, stream
+  MATCH)` (.loop/m4-rig78-donecheck2.log, stamp HIT). Teeth 21/21
+  with asserted death classes (.loop/m4-rig78-teeth.log) incl. the
+  reviewer's exact ' — superseded' and duplicate-SHOT_FRAME probes;
+  manifest re-pins (riglib + check-device-render, cite iter78) +
+  anchor same commit, self-check 23/23 + ANCHOR GREEN
+  (.loop/m4-rig78-manifest-selfcheck.log). Run cap held (2 paced
+  runs); device left clean (lbc ==1, no marker, scratch wiped,
+  gmenu2x live).
+  **Driver next: device-rig arc ROUND 3 = closure-or-cap
+  (grammar-variant re-raises → cap naming the class, per the triage
+  ruling); ai-rig round 2 runs concurrently (iter 77).**
+
+## [superseded by iter 78] (updated: 2026-07-19, iter 77 — ai-rig arc round-1 findings CLOSED; ai-rig round 2 = closure pending)
 
 - **Iter 77 (M4 hardening — task-4 ai-rig arc round-1 closure) DONE**
   (full entry: AGENT-LOG iter 77 pre-registration + result): ALL

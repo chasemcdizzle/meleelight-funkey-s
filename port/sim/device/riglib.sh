@@ -341,6 +341,125 @@ rig_qd_normalize() {
   done
 }
 
+# rig_dev_ts <device-path> — read a device-written `date +%s` stamp
+# (iter 78, review-76 M1 — the exact-quiesce-window bracket): RC-checked
+# dsh cat, the single measured dsh trailing-newline artifact stripped,
+# bounded-decimal whitelist. NOTE (measured iter 78): this device's RTC
+# is NOT wall-synced (epoch ~1.9e7) — stamps are only ever compared to
+# OTHER device stamps (deltas), never to host time.
+rig_dev_ts() {
+  local out
+  out="$(dsh "cat $1")" || {
+    echo "DEVICE FAIL: could not read device timestamp $1" >&2
+    return 1
+  }
+  out="${out%$'\n'}"
+  if ! [[ "$out" =~ ^[0-9]{1,12}$ ]]; then
+    echo "DEVICE FAIL: device timestamp $1 not a bounded decimal ('$out')" >&2
+    return 1
+  fi
+  printf '%s\n' "$out"
+}
+
+# rig_quiesce_bracket_assert <label> <qstop> <astart> <aend> <qrestore>
+#   <pre-slack-s> <post-slack-s>
+# (iter 78, review-76 M1 — the EXACT-quiesce-window STANDING TOOTH):
+# all four stamps are device-clock epoch seconds (rig_dev_ts); asserts
+# the daemon-down window brackets ONLY the app lifetime:
+#   qstop <= astart                (the stop completed before app start)
+#   astart - qstop <= pre-slack    (nothing sits between the stop and
+#                                   the launch but the launch dsh itself)
+#   astart <= aend                 (sane lifetime ordering)
+#   aend <= qrestore               (restore initiated after app exit)
+#   qrestore - aend <= post-slack  (the restore is the FIRST post-exit
+#                                   step: only exit-poll latency fits;
+#                                   any pull/hash/cmp chore re-inserted
+#                                   into the window blows this bound)
+# Pure host logic (no dsh) so teeth invoke the REAL body standalone.
+rig_quiesce_bracket_assert() {
+  local label qstop astart aend qrestore pre post v
+  label="$1"; qstop="$2"; astart="$3"; aend="$4"; qrestore="$5"
+  pre="$6"; post="$7"
+  for v in "$qstop" "$astart" "$aend" "$qrestore" "$pre" "$post"; do
+    if ! [[ "$v" =~ ^[0-9]{1,12}$ ]]; then
+      echo "DEVICE FAIL: quiesce bracket [$label]: timestamp/slack not a bounded decimal ('$v')" >&2
+      return 1
+    fi
+  done
+  if [ "$qstop" -gt "$astart" ]; then
+    echo "DEVICE FAIL: quiesce bracket [$label]: daemon stop ($qstop) completed AFTER app start ($astart) — the stop is not immediately before the launch" >&2
+    return 1
+  fi
+  if [ $((astart - qstop)) -gt "$pre" ]; then
+    echo "DEVICE FAIL: quiesce bracket [$label]: $((astart - qstop)) s between daemon stop and app start (> ${pre} s slack) — non-launch work ran inside the quiesce window" >&2
+    return 1
+  fi
+  if [ "$astart" -gt "$aend" ]; then
+    echo "DEVICE FAIL: quiesce bracket [$label]: app start ($astart) after app end ($aend) — corrupt stamps" >&2
+    return 1
+  fi
+  if [ "$aend" -gt "$qrestore" ]; then
+    echo "DEVICE FAIL: quiesce bracket [$label]: restore stamp ($qrestore) precedes app exit ($aend) — a restore initiated mid-run is corrupt evidence" >&2
+    return 1
+  fi
+  if [ $((qrestore - aend)) -gt "$post" ]; then
+    echo "DEVICE FAIL: quiesce bracket [$label]: $((qrestore - aend)) s between app exit and restore start (> ${post} s slack) — post-run chores ran before the daemon restore" >&2
+    return 1
+  fi
+  echo "   quiesce bracket OK [$label]: stop->start $((astart - qstop)) s, app $((aend - astart)) s, end->restore $((qrestore - aend)) s"
+}
+
+# rig_pin_assert_once <file> <var> <value> — twin-pin EXACTNESS (iter
+# 78, review-76 M4: a presence-only `grep -q '^VAR=VALUE$'` passed a
+# file where an OLD pin line remained while a LATER assignment won
+# last-wins): EXACTLY ONE `^<var>=` assignment line may exist in
+# <file>, and that single line must pin <value> (value terminated by
+# end-of-line or whitespace, so a trailing comment is legal but a
+# value prefix is not). Pure host logic — teeth invoke the REAL body.
+rig_pin_assert_once() {
+  local f var val cnt line
+  f="$1"; var="$2"; val="$3"
+  cnt="$(grep -Ec "^${var}=" "$f")" || true
+  case "$cnt" in
+    ''|*[!0-9]*)
+      echo "DEVICE FAIL: pin-assignment count for $var in $f non-numeric ('$cnt')" >&2
+      return 1
+      ;;
+  esac
+  if [ "$cnt" != 1 ]; then
+    echo "DEVICE FAIL: $f carries $cnt '^${var}=' assignment lines (want exactly 1) — a duplicate assignment can win last-wins while a stale pin line satisfies a presence grep" >&2
+    return 1
+  fi
+  line="$(grep -E "^${var}=" "$f")"
+  if ! [[ "$line" =~ ^${var}=${val}([[:space:]].*)?$ ]]; then
+    echo "DEVICE FAIL: the single ${var}= line in $f does not pin ${val} ('$line') — twin-pin drift, reviewed change required at BOTH sites" >&2
+    return 1
+  fi
+}
+
+# rig_argv_assert_once <region-file> <opt> — duplicate-option lockout
+# (iter 78, review-76 M4: a duplicate LATER option in a generated
+# launcher is a last-wins override that satisfies every presence
+# assert): the option must occur EXACTLY ONCE in the caller-extracted
+# gfx_device argv region (word-bounded: line start or whitespace
+# before, whitespace or line end after — `--frames` never matches
+# `--shot-frame`). Pure host logic — teeth invoke the REAL body.
+rig_argv_assert_once() {
+  local f o cnt
+  f="$1"; o="$2"
+  cnt="$(grep -oE "(^|[[:space:]])${o}([[:space:]]|\$)" "$f" | grep -c '')" || true
+  case "$cnt" in
+    ''|*[!0-9]*)
+      echo "DEVICE FAIL: argv occurrence count for $o non-numeric ('$cnt')" >&2
+      return 1
+      ;;
+  esac
+  if [ "$cnt" != 1 ]; then
+    echo "DEVICE FAIL: option $o occurs $cnt times in the gfx_device argv region $f (want exactly 1) — a duplicate later option is a last-wins override" >&2
+    return 1
+  fi
+}
+
 # rig_dev_sha256 <device-path> — device-side sha256, WHITELIST-GRAMMAR
 # parsed (iter 52, PROCESS §3 rule; replaces every permissive
 # `| awk 'NF{print $1; exit}'` first-nonempty-line scrape). Measured

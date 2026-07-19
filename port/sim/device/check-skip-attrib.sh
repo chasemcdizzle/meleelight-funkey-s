@@ -105,14 +105,24 @@ GFXDATA_SHA256=5499a3dd5fc374d6ed988faf0bef6fa2e189eb314e892bdd83c7534dc0865c94
 VFXDATA_SHA256=545015a3d7e3bc138059fcb9711040758e729a7d21aac650b009ed7fdb5bd662
 VFXGLYPHS_SHA256=8926cab4d648579d099053994bf309943b5a6bc3c5abf733af9ac6b71f3cbbeb
 SHOT_FRAME=900
-# M3 (iter 76, review-73 M — verdict grammar): FULL-LINE anchored
-# needle, EXACTLY ONE match required in docs/AGENT-LOG.md, plus a
-# resemblance counter — any OTHER line-anchored 'SKIP ATTRIB VERDICT'
-# (quoted template text, truncation, negation) is corruption. The
-# canonical standalone line lives in the AGENT-LOG iter-76 entry;
-# future verdicts REPLACE the convention consciously (exactly-one is
-# the grammar).
-NEEDLE_FULL='^SKIP ATTRIB VERDICT: \((a|b|c)\)( — .+)?$'
+# Quiesce-bracket slacks (iter 78, review-76 M1 — the exact-window
+# STANDING TOOTH; quiesce arm only in this script): device-clock stamp
+# deltas, judged by riglib rig_quiesce_bracket_assert.
+QW_PRE_SLACK_S=10   # stop-complete -> app-start (the launch dsh only)
+QW_POST_SLACK_S=10  # app-end -> restore-start (exit-poll latency only)
+# M3 (iter 78, review-76 M — SUFFIX-FREE verdict grammar; supersedes
+# iter 76's form whose open ' — .+' suffix let
+# 'SKIP ATTRIB VERDICT: (a) — superseded; do not use' ride as a full
+# match): the verdict line is EXACTLY 'SKIP ATTRIB VERDICT: (a|b|c)'
+# — detail lives on a SEPARATE non-gating line that must NOT start
+# with the needle prefix. FULL-LINE anchored needle, EXACTLY ONE match
+# required in docs/AGENT-LOG.md, plus a resemblance counter — any
+# OTHER line-anchored 'SKIP ATTRIB VERDICT' (quoted template text,
+# truncation, negation, suffixed variant) is corruption. The canonical
+# standalone line lives in the AGENT-LOG iter-76 entry (rewritten
+# suffix-free iter 78); future verdicts REPLACE the convention
+# consciously (exactly-one is the grammar).
+NEEDLE_FULL='^SKIP ATTRIB VERDICT: \((a|b|c)\)$'
 NEEDLE_RESEMBLE='^SKIP ATTRIB VERDICT'
 
 # --- arm selection -----------------------------------------------------------
@@ -410,19 +420,18 @@ made "$GFXDATA_FROZEN" "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN"
 # assets can never produce "attribution evidence" for a different
 # workload; (b) the pins themselves are TWIN-PINNED against
 # check-device-render.sh's literal lines, so the two scripts cannot
-# drift apart silently.
-for pin_line in "GFXDATA_SHA256=$GFXDATA_SHA256" \
-                "VFXDATA_SHA256=$VFXDATA_SHA256" \
-                "VFXGLYPHS_SHA256=$VFXGLYPHS_SHA256"; do
-  if ! grep -q "^${pin_line}\$" "$GFX/check-device-render.sh"; then
-    echo "SKIP ATTRIB FAIL: twin pin '$pin_line' not found as a literal line in $GFX/check-device-render.sh (pin drift — reviewed change required at BOTH sites)" >&2
-    exit 1
-  fi
+# drift apart silently. EXACTNESS (iter 78, review-76 M4): the old
+# presence-only greps passed a file where a stale pin line coexisted
+# with a later last-wins assignment — rig_pin_assert_once now requires
+# EXACTLY ONE assignment line per pinned var, carrying the pinned
+# value, in check-device-render.sh AND in THIS script's own bytes.
+SELF_SH=port/sim/device/check-skip-attrib.sh
+for pf in "$GFX/check-device-render.sh" "$SELF_SH"; do
+  rig_pin_assert_once "$pf" GFXDATA_SHA256 "$GFXDATA_SHA256" || exit 1
+  rig_pin_assert_once "$pf" VFXDATA_SHA256 "$VFXDATA_SHA256" || exit 1
+  rig_pin_assert_once "$pf" VFXGLYPHS_SHA256 "$VFXGLYPHS_SHA256" || exit 1
+  rig_pin_assert_once "$pf" SHOT_FRAME "$SHOT_FRAME" || exit 1
 done
-if ! grep -Eq "^SHOT_FRAME=${SHOT_FRAME}( |\$)" "$GFX/check-device-render.sh"; then
-  echo "SKIP ATTRIB FAIL: twin pin SHOT_FRAME=${SHOT_FRAME} not found in $GFX/check-device-render.sh (pin drift)" >&2
-  exit 1
-fi
 asum="$(rig_host_sha256 "$GFXDATA_FROZEN")" || exit 1
 if [ "$asum" != "$GFXDATA_SHA256" ]; then
   echo "SKIP ATTRIB FAIL: $GFXDATA_FROZEN sha256 $asum != pinned $GFXDATA_SHA256" >&2
@@ -589,10 +598,13 @@ cat > "$SKAB/attrib-launch.sh" << EOF
 # iter 76 (review-73 M — workload fidelity): the gfx_device argv is the
 # FULL task-3 gate argv (shot frame + shot outputs included) plus
 # --attrib; evidence is gathered under the exact gated workload.
+# iter 78 (review-76 M1): app.start.ts / app.end.ts device-clock stamps
+# feed the quiesce-bracket assert; end.ts is written BEFORE the rc file
+# so rc-detection implies the stamp exists.
 cd $DTMP || exit 9
 $SAMPLER_LINES
-rm -f attrib.apprc gfx.pid.$DM_NONCE
-setsid sh -c './gfx_device \
+rm -f attrib.apprc gfx.pid.$DM_NONCE app.start.ts app.end.ts
+setsid sh -c 'date +%s > $DTMP/app.start.ts; ./gfx_device \
   --trace $DTMP/g01.trace.txt --simdata $DTMP/simdata.txt \
   --gfxdata $DTMP/gfxdata-frozen.txt --vfxdata $DTMP/vfxdata-frozen.txt \
   --glyphs $DTMP/vfxglyphs-frozen.txt --legible --anim-dir $DTMP \
@@ -603,8 +615,9 @@ setsid sh -c './gfx_device \
   --shot-pgm $DTMP/g01.att-shot.pgm \
   --attrib $DTMP/g01.att-attrib.txt 2> $DTMP/g01.att-log.txt & \
   echo \$! > $DTMP/gfx.pid.$DM_NONCE; \
-  wait \$!; \
-  echo "RC=\$?" > $DTMP/attrib.apprc' \
+  wait \$!; arc=\$?; \
+  date +%s > $DTMP/app.end.ts; \
+  echo "RC=\$arc" > $DTMP/attrib.apprc' \
   </dev/null >/dev/null 2>&1 &
 sleep 2
 EOF
@@ -625,7 +638,27 @@ for tok in "--legible" \
     exit 1
   fi
 done
-echo "   launcher carries the full task-3 argv (shot frame included) + --attrib"
+# M4 (iter 78, review-76 M — duplicate-later-option lockout): the
+# presence asserts above cannot see a DUPLICATE later option (a
+# last-wins override that leaves every asserted token in place).
+# Extract the gfx_device argv region from the generated launcher (the
+# setsid block through the rc write — excludes sk_sampler's own --out)
+# and require EXACTLY ONE occurrence of every gfx_device option.
+GFXARGV="$SKAB/attrib-launch.gfxargv.txt"
+rm -f "$GFXARGV"
+sed -n '/setsid sh -c /,/attrib\.apprc/p' "$SKAB/attrib-launch.sh" > "$GFXARGV"
+made "$GFXARGV"
+if ! grep -q "gfx_device" "$GFXARGV"; then
+  echo "SKIP ATTRIB FAIL: extracted argv region carries no gfx_device invocation — launcher shape drifted" >&2
+  exit 1
+fi
+for aopt in --trace --simdata --gfxdata --vfxdata --glyphs --legible \
+            --anim-dir --seed --p1 --p2 --stage --frames --pace \
+            --budget-ns --out --timing --shot-frame --shot-ppm \
+            --shot-pgm --attrib; do
+  rig_argv_assert_once "$GFXARGV" "$aopt" || exit 1
+done
+echo "   launcher carries the full task-3 argv (shot frame included) + --attrib; every gfx_device option occurs exactly once"
 adb -s "$DEV" push "$SKAB/deadman.sh" "$SKAB/attrib-launch.sh" "$DTMP/" >/dev/null
 for hf in "$SKAB/deadman.sh" "$SKAB/attrib-launch.sh"; do
   bn="$(basename "$hf")"
@@ -673,6 +706,10 @@ if [ "$ARM" = quiesce ]; then
     qpid="$(rig_daemon_stop "$d")" || exit 1
     echo "   quiesce: $d (pid $qpid) stopped (comm-scan-verified gone; trap + deadman restore)"
   done
+  # iter 78 (review-76 M1): device-clock stamp the instant the LAST stop
+  # completes — the launch dsh is the ONLY thing between this stamp and
+  # app.start.ts (the bracket assert proves it every quiesce run).
+  dsh "date +%s > $DTMP/qstop.ts"
 fi
 
 t0=$(date +%s)
@@ -690,20 +727,16 @@ if [ "$apprc_seen" != 1 ]; then
   echo "SKIP ATTRIB FAIL: attribution run never finished (rc file absent after $((APPRC_TRIES * 2))s)" >&2
   exit 1
 fi
-pullv "$DTMP/attrib.apprc" "$SKAB/attrib.apprc"
-# iter 76 (review-73 M — rc-file BYTE grammar, the iter-61/62 pattern):
-# judge the FILE BYTES against a printf-generated reference — 'RC=0',
-# 'RC=0\n\n', and truncation are all corruption, never a pass.
-if ! cmp -s "$SKAB/attrib.apprc" <(printf 'RC=0\n'); then
-  dsh "cat $DTMP/g01.att-log.txt" >&2 || true
-  echo "SKIP ATTRIB FAIL: attribution rc file is not EXACTLY the bytes 'RC=0<newline>' (got: '$(cat "$SKAB/attrib.apprc")') — app failed or the completion record is corrupt" >&2
-  exit 1
-fi
-# QUIESCE-ARM restore (iter 76 ordering: FIRST post-run step, BEFORE
-# every other chore — the quiesce window is exactly the paced run).
+# QUIESCE-ARM restore (iter 78 ordering, review-76 M1: the FIRST device
+# action after app-exit DETECTION — ahead of the rc pull, the rc byte
+# check, the sampler stop, and every other chore; a hung ADB chore can
+# no longer extend the daemon-down window past the app lifetime).
 # Hard-gated exact-cardinality restore; marker cleared RC-verified so
-# the deadman's restore arm stands down.
+# the deadman's restore arm stands down. The bracket assert below is
+# the review-76 M1 STANDING TOOTH: device-clock stamps prove the
+# stop/restore bracket contains only the app lifetime.
 if [ "$ARM" = quiesce ]; then
+  dsh "date +%s > $DTMP/qrestore.ts"
   for d in $DAEMONS_STOPPED; do
     isc="$(init_script "$d")"
     if rig_daemon_restore "$d" "$isc"; then
@@ -716,6 +749,22 @@ if [ "$ARM" = quiesce ]; then
     fi
   done
   DAEMONS_STOPPED="" # restored + verified; trap has nothing left to own
+  qstop_ts="$(rig_dev_ts "$DTMP/qstop.ts")" || exit 1
+  appstart_ts="$(rig_dev_ts "$DTMP/app.start.ts")" || exit 1
+  append_ts="$(rig_dev_ts "$DTMP/app.end.ts")" || exit 1
+  qrestore_ts="$(rig_dev_ts "$DTMP/qrestore.ts")" || exit 1
+  rig_quiesce_bracket_assert "skip-attrib quiesce arm" \
+    "$qstop_ts" "$appstart_ts" "$append_ts" "$qrestore_ts" \
+    "$QW_PRE_SLACK_S" "$QW_POST_SLACK_S" || exit 1
+fi
+pullv "$DTMP/attrib.apprc" "$SKAB/attrib.apprc"
+# iter 76 (review-73 M — rc-file BYTE grammar, the iter-61/62 pattern):
+# judge the FILE BYTES against a printf-generated reference — 'RC=0',
+# 'RC=0\n\n', and truncation are all corruption, never a pass.
+if ! cmp -s "$SKAB/attrib.apprc" <(printf 'RC=0\n'); then
+  dsh "cat $DTMP/g01.att-log.txt" >&2 || true
+  echo "SKIP ATTRIB FAIL: attribution rc file is not EXACTLY the bytes 'RC=0<newline>' (got: '$(cat "$SKAB/attrib.apprc")') — app failed or the completion record is corrupt" >&2
+  exit 1
 fi
 # stop the sampler through its designed channel and VERIFY exit
 if [ "$ARM" != nosampler ]; then
@@ -752,8 +801,9 @@ DEADMAN_ARMED=0
 echo "   run done (host-observed $((t1 - t0)) s; app rc 0; frontend restored; deadman cancelled without firing)"
 
 echo "== [5/6] post-run snapshot + pulls =="
-# (quiesce restore happened FIRST, immediately after the rc check —
-# iter 76 window narrowing; the old post-snapshot restore site is gone.)
+# (quiesce restore happened FIRST, immediately after app-exit DETECTION
+# — iter 78 exact-window ordering, bracket-asserted above; the old
+# post-rc-check restore site is gone.)
 snapshot post
 pullv "$DTMP/g01.att-out.txt" "$SKAB/g01.att-out.txt"
 pullv "$DTMP/g01.att-tim.txt" "$SKAB/g01.att-tim.txt"
