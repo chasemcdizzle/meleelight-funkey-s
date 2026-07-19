@@ -76,6 +76,64 @@ for (const v of f) {
 '
 echo "corpus pin OK (24 unique sampled frames)"
 
+# injection-set pin (review-65 M1, iter 67): the RUNTIME inject table must
+# equal the frozen reviewed injectPin — exact ordered name list,
+# uniqueness, count, frame identity, and inject.frame ∈ sampledFrames.
+# Asserted BEFORE any build/capture work (and re-asserted at the INJECT1
+# emitter below — the C-side feed). capture-canvas.js (browser side) and
+# iou.js (the judge) carry their own independent copies of this assert:
+# a dropped/renamed effect dies loudly on every side, never a silent
+# both-sides omission. Changing the injection set is a reviewed repo
+# change to inject + injectPin together.
+node -e '
+const e = require("./'"$EXP"'");
+const pin = e.injectPin, inj = e.inject;
+if (!pin || !Array.isArray(pin.names) || !Array.isArray(pin.inkNames) ||
+    !Number.isInteger(pin.frame) || !Number.isInteger(pin.count)) {
+  console.error("check-render: injectPin missing/malformed in expected-render.json");
+  process.exit(1);
+}
+if (!inj || !Number.isInteger(inj.frame) || !Array.isArray(inj.configs)) {
+  console.error("check-render: inject table missing/malformed in expected-render.json");
+  process.exit(1);
+}
+const names = inj.configs.map(c => c && c.name);
+if (names.some(n => typeof n !== "string" || n.length === 0)) {
+  console.error("check-render: inject pin violated (config without a name)");
+  process.exit(1);
+}
+if (new Set(names).size !== names.length) {
+  console.error("check-render: inject pin violated (duplicate config name)");
+  process.exit(1);
+}
+if (pin.count !== pin.names.length || names.length !== pin.count ||
+    names.join(" ") !== pin.names.join(" ")) {
+  console.error("check-render: inject pin violated — runtime configs [" +
+    names.join(", ") + "] != pinned reviewed set [" + pin.names.join(", ") + "]");
+  process.exit(1);
+}
+if (inj.frame !== pin.frame) {
+  console.error("check-render: inject pin violated (inject.frame " + inj.frame +
+    " != pinned " + pin.frame + ")");
+  process.exit(1);
+}
+if (!e.sampledFrames.includes(inj.frame)) {
+  console.error("check-render: inject pin violated (inject.frame " + inj.frame +
+    " not in sampledFrames — the injection would never be judged)");
+  process.exit(1);
+}
+if (pin.inkNames.length === 0 || new Set(pin.inkNames).size !== pin.inkNames.length ||
+    !pin.inkNames.every(n => pin.names.includes(n))) {
+  console.error("check-render: inject pin violated (inkNames must be a nonempty unique subset of names)");
+  process.exit(1);
+}
+if (pin.names.some(n => !/^[A-Za-z][A-Za-z0-9]*$/.test(n))) {
+  console.error("check-render: inject pin violated (names must match the identifier grammar — they double as artifact path tokens)");
+  process.exit(1);
+}
+'
+echo "inject pin OK (7-name reviewed set, frame in corpus)"
+
 # frozen params. FRAMES_LIST/GOLDEN come from expected-render.json whose
 # corpus pin was validated above (node JSON reads, exact compare below).
 FRAMES_LIST=$(node -p "require('./$EXP').sampledFrames.join(',')")
@@ -328,18 +386,26 @@ made "$BUILD/g01.trace.txt"
 # INJECT1 (M4 task 2): the frozen expected-render.json inject table,
 # re-emitted for the C side via String(x) (shortest round-trip — strtod
 # recovers the exact doubles; the capture injected the same configs
-# page-side).
-rm -f "$BUILD/inject.txt"
+# page-side). The injection-set pin is RE-asserted here (review-65 M1):
+# this block is the C side's feed, so the pin check sits directly on the
+# bytes the replay driver consumes.
+rm -f "$BUILD/inject.txt" "$BUILD"/inject-loo-*.txt
 node -e '
 const e = require("./'"$EXP"'");
-const inj = e.inject;
+const inj = e.inject, pin = e.injectPin;
 if (!inj || !Number.isInteger(inj.frame) || inj.frame < 1 ||
     !Array.isArray(inj.configs) || inj.configs.length === 0) {
   console.error("check-render: inject table missing/malformed in expected-render.json");
   process.exit(1);
 }
-const lines = ["INJECT1", "AT " + inj.frame];
-for (const c of inj.configs) {
+if (!pin || !Array.isArray(pin.names) ||
+    inj.configs.map(c => c && c.name).join(" ") !== pin.names.join(" ") ||
+    inj.configs.length !== pin.count || inj.frame !== pin.frame ||
+    !e.sampledFrames.includes(inj.frame)) {
+  console.error("check-render: INJECT1 emitter — inject table does not match the reviewed injectPin");
+  process.exit(1);
+}
+const vline = (c) => {
   if (typeof c.name !== "string" || !c.pos ||
       typeof c.pos.x !== "number" || typeof c.pos.y !== "number") {
     console.error("check-render: bad inject config " + JSON.stringify(c));
@@ -347,10 +413,27 @@ for (const c of inj.configs) {
   }
   const face = ("face" in c) ? String(c.face) : "-";
   const f = ("f" in c) ? String(c.f) : "-";
-  lines.push("V " + c.name + " " + c.pos.x + " " + c.pos.y + " " + face + " " + f);
+  return "V " + c.name + " " + c.pos.x + " " + c.pos.y + " " + face + " " + f;
+};
+const emit = (fp, configs) => {
+  const lines = ["INJECT1", "AT " + inj.frame];
+  for (const c of configs) lines.push(vline(c));
+  lines.push("END");
+  require("fs").writeFileSync(fp, lines.join("\n") + "\n");
+};
+emit("'"$BUILD"'/inject.txt", inj.configs);
+// leave-one-out tables (review-65 M2, iter 67): for every inkNames
+// effect, the SAME table minus exactly that config — the per-effect
+// attribution baselines (iou.js diffs the full render against each).
+// Names double as file-path tokens: enforce the identifier grammar.
+for (const nm of pin.inkNames) {
+  if (!/^[A-Za-z][A-Za-z0-9]*$/.test(nm)) {
+    console.error("check-render: inkNames entry fails identifier grammar: " + JSON.stringify(nm));
+    process.exit(1);
+  }
+  emit("'"$BUILD"'/inject-loo-" + nm + ".txt",
+       inj.configs.filter(c => c.name !== nm));
 }
-lines.push("END");
-require("fs").writeFileSync("'"$BUILD"'/inject.txt", lines.join("\n") + "\n");
 '
 made "$BUILD/inject.txt"
 
@@ -381,6 +464,77 @@ for f in "${SAMPLED[@]}"; do
   cmp "$BUILD/render-a/$tag.pgm" "$BUILD/render-b/$tag.pgm"
 done
 echo "x2 C renders byte-identical (stream + all PPM/PGM)"
+
+# NO-INJECT baseline render (review-65 M2, iter 67): a third replay,
+# identical to run-a but WITHOUT --inject, rendering ONLY the injection
+# frame. Two consumers: (1) its full stdout stream must be byte-identical
+# to run-a's — mechanical proof the injection is render-plane-only and
+# never perturbs the sim; (2) iou.js diffs its injection-frame ink plane
+# against run-a's to prove EACH injected effect contributes ink
+# (per-effect differential tripwires — a stubbed draw arm cannot hide
+# inside the aggregate IoU).
+# String() — the registered node -p ANSI-colour class (CLAUDE.md M2
+# task-17 gotcha: bare numbers get colorized inspect output).
+INJ_FRAME=$(node -p "String(require('./$EXP').injectPin.frame)")
+if ! [[ "$INJ_FRAME" =~ ^[0-9]+$ ]]; then
+  echo "check-render: injectPin.frame extraction failed ('$INJ_FRAME')" >&2
+  exit 1
+fi
+rm -rf "$BUILD/render-noinject"
+rm -f "$BUILD/g01.gfx-out-noinject.txt"
+mkdir -p "$BUILD/render-noinject"
+"$BUILD/gfx_replay" \
+  --trace "$BUILD/g01.trace.txt" --simdata "$BUILD/simdata.txt" \
+  --gfxdata "$BUILD/gfxdata.txt" --vfxdata "$BUILD/vfxdata.txt" \
+  --glyphs "$BUILD/vfxglyphs.txt" \
+  --anim-dir "$TABLES" \
+  --seed "$G_SEED" --p1 "$G_P1" --p2 "$G_P2" --stage "$G_STAGE" \
+  --frames "$G_FRAMES" \
+  --render-frames "$INJ_FRAME" --render-out "$BUILD/render-noinject" \
+  > "$BUILD/g01.gfx-out-noinject.txt" \
+  2> /dev/null
+INJ_TAG=$(printf 'f%04d' "$INJ_FRAME")
+made "$BUILD/g01.gfx-out-noinject.txt" "$BUILD/render-noinject/$INJ_TAG.pgm"
+cmp "$BUILD/g01.gfx-out-noinject.txt" "$BUILD/g01.gfx-out-a.txt"
+echo "no-inject baseline stream == run-a stream (injection is render-plane-only)"
+
+# LEAVE-ONE-OUT baselines (review-65 M2, iter 67): one render per
+# inkNames effect with exactly that config dropped from INJECT1 — the
+# per-effect attribution baselines. diff(full run-a, leave-out-X) at the
+# injection frame is caused only by X (queue spawn order bounds the
+# render-RNG ripple; iou.js documents the argument), so a stubbed X draw
+# arm makes the diff empty by construction — that is the tripwire the
+# aggregate IoU cannot provide. Each stream is cmp'd against run-a's
+# (every modified injection is render-plane-only too).
+INK_NAMES=$(node -e '
+const pin = require("./'"$EXP"'").injectPin;
+for (const nm of pin.inkNames) {
+  if (!/^[A-Za-z][A-Za-z0-9]*$/.test(nm)) { console.error("bad inkNames token"); process.exit(1); }
+}
+console.log(pin.inkNames.join(" "))')
+if [ -z "$INK_NAMES" ]; then
+  echo "check-render: inkNames extraction failed" >&2
+  exit 1
+fi
+for nm in $INK_NAMES; do
+  made "$BUILD/inject-loo-$nm.txt"
+  rm -rf "$BUILD/render-loo-$nm"
+  rm -f "$BUILD/g01.gfx-out-loo-$nm.txt"
+  mkdir -p "$BUILD/render-loo-$nm"
+  "$BUILD/gfx_replay" \
+    --trace "$BUILD/g01.trace.txt" --simdata "$BUILD/simdata.txt" \
+    --gfxdata "$BUILD/gfxdata.txt" --vfxdata "$BUILD/vfxdata.txt" \
+    --glyphs "$BUILD/vfxglyphs.txt" --inject "$BUILD/inject-loo-$nm.txt" \
+    --anim-dir "$TABLES" \
+    --seed "$G_SEED" --p1 "$G_P1" --p2 "$G_P2" --stage "$G_STAGE" \
+    --frames "$G_FRAMES" \
+    --render-frames "$INJ_FRAME" --render-out "$BUILD/render-loo-$nm" \
+    > "$BUILD/g01.gfx-out-loo-$nm.txt" \
+    2> /dev/null
+  made "$BUILD/g01.gfx-out-loo-$nm.txt" "$BUILD/render-loo-$nm/$INJ_TAG.pgm"
+  cmp "$BUILD/g01.gfx-out-loo-$nm.txt" "$BUILD/g01.gfx-out-a.txt"
+done
+echo "leave-one-out baselines rendered (streams all == run-a: render-plane-only)"
 # iter 52 parser audit (whitelist grammar): measured producer line
 # (gfx_replay.c) is exactly
 #   render-only ns: avg=<int> p50=<int> p99=<int> max=<int> (n=<frames>, host)
@@ -401,9 +555,18 @@ made "$BUILD/g01.gfx-run.json"
 node oracle/harness/verify-stream.js "$BUILD/g01.gfx-run.json" "$FROZEN"
 echo "C render-on replay stream verified (renderer does not perturb the sim)"
 
-# --- 6. silhouette IoU vs the frozen threshold --------------------------------------
+# --- 6. silhouette IoU vs the frozen threshold + per-effect ink assertions ---------
+# iou.js additionally consumes (iter 67): the no-inject baseline render
+# (per-effect differential), the COMMITTED frozen VFXDATA1 (template
+# bounds for region derivation) and the executed stages.json (stage
+# transform — never hand-retyped engine values).
+made "$TABLES/stages.json"
 rm -f "$BUILD/iou-report.json"
 node "$GFX/iou.js" --canvas "$CANVAS" --render "$BUILD/render-a" \
+  --render-noinject "$BUILD/render-noinject" \
+  --render-loo "$BUILD/render-loo" \
+  --vfxdata "$GFX/vfxdata-frozen.txt" \
+  --stages "$TABLES/stages.json" --stage "$G_STAGE" \
   --expected "$EXP" --report "$BUILD/iou-report.json"
 made "$BUILD/iou-report.json"
 

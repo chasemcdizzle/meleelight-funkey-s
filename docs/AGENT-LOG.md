@@ -8883,3 +8883,184 @@ folded into the M4 ladder below. Issue #18 closed by the driver.
   the host lock come from here). Any FUTURE composing check (host or
   device) starts from these classes; a bare rc+`grep -qx` composition
   is the anti-pattern this arc priced.
+
+## iter 67 — 2026-07-18 — PRE-REGISTRATION: task-2 renderer-rig round-1 Mediums — injection-set pin + per-effect ink assertions (frozen before any run/edit; PROCESS §2)
+
+- **Task (driver triage .loop/review-65-triage.md, BINDING; full review
+  .loop/review-65-1.log)**: close the task-2 arc's two round-1 Mediums.
+  Surface: port/gfx/{check-render.sh, capture-canvas.js, iou.js,
+  expected-render.json} (+ gfx-pagelib.js only if the browser side needs
+  the pin — expected NOT needed: the pin asserts live in the node driver
+  pre-browser). port/sim/calib/check-vfx-seam.sh NEVER touched
+  (concurrent closure review). The 0.88 IoU pin, the 24-frame corpus,
+  and the inject table CONTENT are FROZEN — these fixes add assertions
+  only.
+- **M1 design (injection-set pin)**: expected-render.json gains
+  `injectPin` = { frame: 150, count: 7, names: [the 7 reviewed names,
+  in inject.configs order], inkNames: [the 5 live-drawing names —
+  firefoxcharge/firefoxtail/shine/dashDust/groundBounce; the gated
+  firefoxlaunch/shineloop stay no-crash structural coverage] }.
+  THREE independent consumers assert runtime-injection == pin, fail
+  closed: (a) check-render.sh, EARLY (pre-build) + again at the INJECT1
+  emitter (the C-side feed): configs names exact ORDERED equality vs
+  pin.names, uniqueness, count == pin.count == names.length,
+  inject.frame === pin.frame, inject.frame ∈ sampledFrames, inkNames ⊆
+  names (nonempty); (b) capture-canvas.js (browser side), PRE-browser
+  (after arg/corpus parse, before any server/page work) — same asserts
+  against its own reads; (c) iou.js (the judge) — same asserts, and it
+  needs inject.frame ∈ sampledFrames to locate the masks. A dropped /
+  renamed / duplicated config = loud pin death on all three.
+- **M2 design (per-effect ink assertions)**: check-render.sh runs a
+  THIRD C replay identical to run-a but WITHOUT --inject, rendering
+  ONLY the injection frame (render-noinject/f0150.pgm), and cmp's its
+  full stdout stream against run-a's (mechanical proof injection is
+  render-plane-only — sim stream byte-identical). iou.js gains
+  --render-noinject/--vfxdata/--stages/--stage and, at inject.frame,
+  asserts per inkNames effect: (i) browser mask ink > 0 in the effect's
+  region; (ii) C with-inject ink > 0 in the region; (iii) C DIFFERENTIAL
+  ink (with-inject XOR no-inject) > 0 in the region — (iii) is the
+  sharp per-effect tripwire (background-immune by construction); plus
+  the region-soundness guard: EVERY differential pixel in the whole
+  frame must fall inside the union of the derived regions (an effect
+  drawing outside its derived bounds = loud death; also proves the
+  gated pair draws nothing). Per-effect background ink in the no-inject
+  baseline is REPORTED per run (honest weakening indicator for (i)/(ii)
+  where stage/player ink shares the region; (iii) is unaffected).
+- **Region derivation (documented here + in iou.js; frozen BEFORE the
+  cold run)**: center = config pos through the EXECUTED stage transform
+  (scale/offset read from the pipeline stages.json artifact — bits
+  fields, no hand-retyped engine values; canvas x = px*S+OX, y =
+  -py*S+OY, the ubiquitous newPos map). Extents per arm, from the
+  frozen VFXDATA1 template bounds x the upstream dVfx code literals
+  (code literals cited per arm, NOT data-plane values): dashDust =
+  path[frame 0] bounds x 0.2*(S/4.5) (general.js, t=1), x symmetric
+  (face flip), y true range; groundBounce = rotation-safe circle,
+  maxAbs(path[frame 0]) x 0.2*(S/4.5) (rotated pi/2 - facing);
+  firefoxcharge = bounds over path[3] and path[7] (facing 3, second
+  frame (3+4)%10) x 0.35*(S/4.5) x / 0.5*(S/4.5) y; firefoxtail =
+  center (px, py+4) mapped, radius 6S (tail centers within +-2S, arc
+  radius 4S — fireFox.js); shine = radius 7S (hexagon circumradius 6S
+  at t=1; star spawns radial <= 5.5S*0.935 + star extent 1.1S + grav —
+  shine.js/stars.js). Margins: +-3 canvas px / +-1 device px, clipped
+  to the mask/band. Template bounds come from parsing the COMMITTED
+  vfxdata-frozen.txt (nested-array walk; bezier control points bound
+  their curves — convex hull).
+- **Method / caps**: dev-validate the region machinery AGAINST THE
+  EXISTING cached artifacts first (build/canvas f0150 mask + render-a +
+  a no-inject f150 render from the current committed binary) — C-only
+  probe renders, <= 10, no captures burned. THEN teeth, THEN the cold
+  done-check. RUN CAP: <= 2 fresh-capture check-render.sh runs (the
+  cold done-check is run 1; one spare for a genuine mid-run failure).
+  Pass = cold `bash port/gfx/check-render.sh` -> RENDER OK exit 0
+  (.loop/m4-task2r67-donecheck.log) + both teeth fired + zero false
+  rejections on genuine data.
+- **Teeth (perturb -> observe -> restore, restores cmp-verified;
+  .loop/m4-task2r67-teeth.log)**: T-M1 drop the "groundBounce" config
+  from inject.configs in a PROBE edit of expected-render.json (runtime
+  list; the pin keeps the name) -> (a) check-render.sh dies at the
+  EARLY pin (pre-build, seconds) naming the mismatch; (b)
+  capture-canvas.js dies PRE-browser on the same probe. T-M2 stub the
+  C V_DASHDUST draw arm in a probe gfx_vfx.c, FULL relink of a probe
+  gfx_replay (the iter-65 stale-.o lesson), render f150 with-inject ->
+  iou.js run shows f0150 aggregate IoU STILL >= 0.88 (PASS printed)
+  AND dies on dashDust's differential-ink assertion = the finding's
+  exact scenario demonstrated.
+- **Refutation shapes**: (a) region-soundness guard trips on genuine
+  data (an arm draws outside the derived bounds) -> measure the
+  violating pixels, widen THAT arm's documented derivation constant
+  once, re-validate against cached artifacts; a second trip -> STOP,
+  honest FAIL report. (b) browser-side per-effect ink assert
+  false-rejects on the fresh cold capture (AA/render-RNG variance
+  escaping the margins) -> ONE bounded margin-widening round
+  (documented), then STOP. (c) T-M2 tooth fails to fire -> the
+  differential judge is broken — do NOT ship; diagnose before any
+  further run.
+- **Regression**: `bash port/sim/check-sim.sh` NOT run, justified: no
+  sim TU, no ml_events, no port/sim byte changes — the only C-adjacent
+  edit surface is check-render.sh's invocation list and iou.js
+  (host-side judge); the T-M2 probe edit to gfx_vfx.c is reverted
+  cmp-verified and gfx_vfx.c is a RENDER TU outside the sim link
+  anyway. check-vfx-seam.sh untouched per the brief constraint.
+
+## iter 67 — 2026-07-18 — M4 task 2 hardening DONE: injection-set pin + per-effect ink assertions (task-2 round-1 Mediums closed)
+
+- DONE-CHECK: cold `bash port/gfx/check-render.sh` -> `RENDER OK`,
+  DONECHECK_RC=0 (.loop/m4-task2r67-donecheck.log; fresh capture, both
+  STREAM MATCH 3600/3600, IOU MIN 0.9049 >= 0.88, all 5 INJ assertions
+  green on the fresh browser mask, INJ REGIONS SOUND). Capture budget:
+  2/2 fresh-capture runs — run 1 (.loop/m4-task2r67-donecheck-run1.log)
+  died at the NEW INJ_FRAME extraction on the REGISTERED node -p
+  ANSI-colour class (CLAUDE.md M2 task-17 gotcha: bare numbers get
+  colorized inspect output; capture + x2 renders were green) —
+  class-consistent String() fix, run 2 clean end-to-end.
+- **M1 (injection-set pin) landed**: expected-render.json `injectPin`
+  = frame 150 / count 7 / the ordered reviewed names / inkNames (the 5
+  live-drawing effects; gated firefoxlaunch+shineloop stay
+  structural-only) + identifier-grammar rule (names double as artifact
+  path tokens). THREE independent consumers assert runtime inject ==
+  pin, fail closed: check-render.sh EARLY (pre-build) + at the INJECT1
+  emitter (the C-side feed), capture-canvas.js PRE-browser, iou.js (the
+  judge; also inject.frame in sampledFrames).
+- **M2 (per-effect ink assertions) landed**: check-render.sh renders a
+  no-inject baseline + FIVE leave-one-out baselines (each INJECT1 drops
+  exactly one inkNames config; injection frame only), every baseline's
+  full stdout stream cmp'd byte-identical to run-a (mechanical
+  render-plane-only proof, 6x). iou.js, AFTER the frame loop (so the
+  injection frame's aggregate line is on record), asserts per effect:
+  browser-mask ink > 0 in the derived region, C ink > 0, and
+  LEAVE-ONE-OUT differential ink > 0 (full vs drop-X — attributing by
+  construction; a stubbed X arm makes the diff empty). Region-soundness
+  guard: every full-vs-noinject differential pixel in the whole frame
+  must fall inside the union of derived regions (an effect drawing
+  outside its documented bounds, or the gated pair drawing anything,
+  dies). bg (baseline ink sharing the region) reported per effect as
+  the honesty indicator for the presence checks.
+- **Region derivation (documented in iou.js injectRegions())**: center
+  = config pos through the EXECUTED stage transform (stages.json
+  bit-pattern scale + offset — no hand-retyped engine values; canvas
+  x = px*S+OX, y = -py*S+OY). Extents = frozen VFXDATA1 template
+  bounds (nested-array walk of committed vfxdata-frozen.txt; bezier
+  control points bound curves) x upstream dVfx CODE-LITERAL scales:
+  dashDust path[0] x 0.2*(S/4.5); groundBounce rotation-safe circle
+  maxAbs(path[0]) x 0.2*(S/4.5); firefoxcharge paths[3]+[7] x
+  0.35/0.5*(S/4.5); firefoxtail radius 6S about (x, y+4) (jitter +-2S
+  + arc 4S); shine radius 7S (hexagon 6S, star radial <= 5.5S + 1.1S
+  extent). Margins +-3 canvas px / +-1 device px; the soundness guard
+  re-validates the bounds mechanically every run.
+- **TEETH (.loop/m4-task2r67-teeth.log; restores cmp-verified)**:
+  T-M1 groundBounce config dropped in a probe expected-render.json ->
+  (a) check-render.sh EARLY pin death naming the missing name
+  (pre-build, seconds; re-fired post NUL fix) AND (b) capture-canvas.js
+  pre-browser pin death — both sides, as triaged. T-M2 stubbed
+  V_DASHDUST draw arm in a probe TU (full relink, the iter-65 stale-.o
+  lesson): **round 1 REFUTED the single-baseline design** — diff=123
+  despite the stub (shine's region overlaps dashDust's; another
+  effect's ink flips pixels in the stubbed effect's box) -> reworked to
+  leave-one-out within the pre-registered refutation budget; RERUN:
+  f0150 aggregate IoU 0.9122 PASS printed, then
+  `INJ dashDust browser=4315 c=210 diff=0 FAIL`, rc 1 — the finding's
+  exact scenario (aggregate passes, per-effect tripwire dies; c=210
+  also proves presence-only checks would NOT have caught it).
+- **Honest exposure (PROCESS §8)**: (1) firefoxtail's leave-one-out
+  margin is 4 pixels (deterministic — its circles mostly overlap
+  firefoxcharge ink; a legitimate future overlap growth to 0 would
+  surface as a loud failure forcing review, never a silent pass). (2)
+  browser-side per-effect checks are presence-only (region nonzero) —
+  per-effect browser attribution would cost 5 more captures; bg counts
+  quantify the weakening (85/87/768 for shine/dashDust/groundBounce; 0
+  for the firefox pair). C-side attribution is differential and sharp.
+  (3) The gated pair's no-draw contract is proven C-side by the
+  soundness guard only.
+- **Regression**: check-sim.sh NOT run — justified: zero port/sim
+  bytes changed (git diff surface = check-render.sh, capture-canvas.js,
+  iou.js, expected-render.json, docs); gfx_vfx.c probe was a /tmp COPY,
+  the tracked file untouched. check-vfx-seam.sh untouched per brief.
+- **ZOOM OUT**: (a) class lesson made explicit by the refuted round —
+  an attribution assertion needs a baseline differing ONLY in the
+  asserted cause; region-scoped diffs against a shared baseline are
+  presence checks wearing attribution clothes (the overlap failure was
+  measured, not hypothesized — teeth exist to refute designs). The
+  leave-one-out pattern + queue-order RNG-ripple argument is the
+  registered template for any future per-cause render assertion.
+  (b) The node -p ANSI class fired again on a NUMBER extraction — the
+  String() rule from M2 task 17 held; instance recorded at the site.

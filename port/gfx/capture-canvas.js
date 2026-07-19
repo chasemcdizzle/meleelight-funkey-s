@@ -139,6 +139,53 @@ for (const a of CONSOLE_ALLOW) {
   }
 }
 
+// Injection-set pin, BROWSER SIDE (review-65 M1, iter 67): asserted here
+// PRE-browser (no server/page work yet), independently of
+// check-render.sh's copy — the runtime inject table this capture will
+// spawn must equal the frozen reviewed injectPin: exact ordered name
+// list, uniqueness, count, frame identity, and the injection frame must
+// be one of the frames this capture actually samples (else the injected
+// coverage would never be judged). A dropped/renamed effect is a loud
+// pin death on THIS side even if the other side's copy is broken.
+{
+  const pin = EXPECTED_RENDER.injectPin;
+  const inj = EXPECTED_RENDER.inject;
+  if (!pin || !Array.isArray(pin.names) || !Array.isArray(pin.inkNames) ||
+      !Number.isInteger(pin.frame) || !Number.isInteger(pin.count)) {
+    console.error("capture-canvas: injectPin missing/malformed in expected-render.json");
+    process.exit(1);
+  }
+  if (!inj || !Number.isInteger(inj.frame) || !Array.isArray(inj.configs)) {
+    console.error("capture-canvas: inject table missing/malformed in expected-render.json");
+    process.exit(1);
+  }
+  const names = inj.configs.map((c) => c && c.name);
+  if (names.some((n) => typeof n !== "string" || n.length === 0) ||
+      new Set(names).size !== names.length) {
+    console.error("capture-canvas: inject pin violated (missing/duplicate config name)");
+    process.exit(1);
+  }
+  if (pin.count !== pin.names.length || names.length !== pin.count ||
+      names.join(" ") !== pin.names.join(" ")) {
+    console.error("capture-canvas: inject pin violated — runtime configs [" +
+      names.join(", ") + "] != pinned reviewed set [" + pin.names.join(", ") + "]");
+    process.exit(1);
+  }
+  if (inj.frame !== pin.frame) {
+    console.error(`capture-canvas: inject pin violated (inject.frame ${inj.frame} != pinned ${pin.frame})`);
+    process.exit(1);
+  }
+  if (!sampledList.includes(inj.frame)) {
+    console.error(`capture-canvas: inject pin violated (inject.frame ${inj.frame} not in the sampled frame list — the injection would never be captured)`);
+    process.exit(1);
+  }
+  if (pin.inkNames.length === 0 || new Set(pin.inkNames).size !== pin.inkNames.length ||
+      !pin.inkNames.every((n) => pin.names.includes(n))) {
+    console.error("capture-canvas: inject pin violated (inkNames must be a nonempty unique subset of names)");
+    process.exit(1);
+  }
+}
+
 const MIME = {
   ".html": "text/html", ".js": "text/javascript", ".css": "text/css",
   ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg",

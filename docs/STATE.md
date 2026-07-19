@@ -3,7 +3,33 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-18, iter 66 — vfx-rig round-1 closure DONE)
+## Live right now (updated: 2026-07-18, iter 67 — task-2 rig round-1 Mediums closed)
+
+- **Iter 67 (M4 task 2 hardening — injection-set pin + per-effect ink
+  assertions) DONE**: both review-65 Mediums (.loop/review-65-triage.md)
+  closed on port/gfx/{check-render.sh, capture-canvas.js, iou.js,
+  expected-render.json}. M1: frozen `injectPin` (ordered 7-name reviewed
+  set + inkNames 5 + frame 150) asserted independently by
+  check-render.sh (early + INJECT1 emitter), capture-canvas.js
+  (pre-browser) and iou.js — a dropped/renamed effect dies on every
+  side. M2: no-inject + five LEAVE-ONE-OUT C baselines (all streams
+  cmp'd == run-a: injection is render-plane-only), per-effect
+  browser-ink + C-ink + leave-one-out differential-ink assertions at
+  f150 + a region-soundness guard (all differential ink inside the
+  derived-region union); regions derived from the executed stages.json
+  transform + frozen VFXDATA1 bounds x dVfx code-literal scales
+  (documented in iou.js injectRegions()). Teeth: T-M1 both sides fired;
+  T-M2 round 1 REFUTED the shared-baseline design (region overlap —
+  diff=123 despite the stub), reworked to leave-one-out, rerun fired
+  exactly the finding's scenario (f0150 aggregate 0.9122 PASS + INJ
+  dashDust diff=0 death). Cold done-check RENDER OK exit 0, fresh
+  capture, IOU MIN 0.9049 (.loop/m4-task2r67-donecheck.log; capture cap
+  2/2 — run 1 died on the registered node -p ANSI-colour class,
+  String() fix). check-sim.sh skipped, justified: zero port/sim bytes.
+  **Task-2 arc ROUND 2 PENDING (driver): rerun the reviewer with the
+  COMPLETE commit diff** (the round-1 High was a truncated artifact —
+  include gfx-pagelib.js + the C TUs for the Tier-B union/bounds note
+  + this commit's fix bytes).
 
 - **Iter 66 (M4 hardening — check-vfx-seam aggregator classes) DONE**:
   all 4 review-64 Mediums (.loop/review-64-triage.md) closed on
@@ -639,10 +665,10 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   M4 seeds registered (mixer fidelity + music, stop-path coverage,
   skip-burst instrument). Regressions green: DEVICE RENDER OK (11.065
   ms full p99) + SIM CONFORMS (.loop/m3-task6-reg-{render,sim}.log).
-- **Latest AGENT-LOG entry**: iter 64 (M4 task 1 DONE — vfx seam
-  widening; pre-registration + DONE entries); latest log id:
-  .loop/m4-task1-donecheck.log (also m4-task1-{survey,survey-shapes,
-  teeth,tail3}.log).
+- **Latest AGENT-LOG entry**: iter 67 (M4 task 2 hardening DONE —
+  injection-set pin + per-effect ink assertions; pre-registration +
+  DONE entries); latest log id: .loop/m4-task2r67-donecheck.log (also
+  m4-task2r67-{donecheck-run1,teeth}.log).
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull
