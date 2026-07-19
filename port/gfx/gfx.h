@@ -2,15 +2,16 @@
 // articles composited into ONE 240x240 RGB565 buffer from live sim state.
 //
 // Structure-parallel translation of the browser's per-frame gameMode-3
-// render sequence (src/main/main.js renderTick "playing" branch):
-//   clearScreen -> drawStage -> renderPlayer(i in active slots) ->
-//   renderArticles
-// MINUS drawBackground / renderVfx / renderOverlay (out of scope this
-// task — vfx placement data does not exist at the C seam (ml_events
-// carries names only; registered follow-up), HUD/banner/backgrounds are
-// M4 front-of-house). The browser reference capture
-// (port/gfx/capture-canvas.js) executes exactly the same reduced
-// sequence, so the silhouette IoU pairing is honest on both sides.
+// render sequence (src/main/main.js renderTick "playing" branch), FULL
+// as of M4 task 2:
+//   clearScreen -> drawBackground (ink-suppressed; not in the IoU mask
+//   on either side) -> drawStage -> renderPlayer(i in active slots) ->
+//   renderArticles -> renderVfx() -> renderOverlay(true)
+// The vfx/overlay/banner planes live in gfx_vfx.c / gfx_overlay.c /
+// gfx_bg.c (see gfx_vfx.h). The browser reference capture
+// (port/gfx/capture-canvas.js) executes the same sequence minus
+// drawBackground and masks fg1|fg2|UI, so the silhouette IoU pairing is
+// honest on both sides.
 //
 // CAMERA (verbatim, measured): upstream has NO dynamic camera/zoom —
 // the world->canvas transform is the static per-stage

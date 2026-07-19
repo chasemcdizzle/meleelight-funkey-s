@@ -74,6 +74,21 @@ static inline uint16_t blend565(uint16_t dst, uint16_t col, unsigned a) {
   return (uint16_t)(rr | rg);
 }
 
+static int g_ink_on = 1; // M4 task 2 (raster.h note): bg art suppresses ink
+
+void rast_ink_enable(int on) { g_ink_on = on ? 1 : 0; }
+
+void rast_blend_px(Raster *rz, int x, int y, RastCol col, unsigned a256) {
+  if (x < 0 || x >= RAST_W || y < rz->clipY0 || y >= rz->clipY1) return;
+  unsigned a = (a256 * col.a256) >> 8;
+  if (!a) return;
+  if (a > 256) a = 256;
+  const uint16_t c565 = pack565(col.r, col.g, col.b);
+  const size_t idx = (size_t)y * RAST_W + (size_t)x;
+  rz->fb[idx] = (a >= 256) ? c565 : blend565(rz->fb[idx], c565, a);
+  if (g_ink_on) rz->ink[idx] = 1;
+}
+
 void rast_clear(Raster *rz, uint8_t r, uint8_t g, uint8_t b,
                 int clipY0, int clipY1) {
   const uint16_t c = pack565(r, g, b);
@@ -222,7 +237,7 @@ void rast_fill(Raster *rz, RastCol col) {
       const unsigned a = (cv * col.a256) >> 8; // coverage x colour alpha
       if (!a) continue;
       row[x] = (a >= 256) ? c565 : blend565(row[x], c565, a);
-      inkrow[x] = 1;
+      if (g_ink_on) inkrow[x] = 1;
     }
   }
   rast_path_reset();

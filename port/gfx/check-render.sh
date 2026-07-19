@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# port/gfx/check-render.sh — M3 task 3 done-check (fix_plan §M3 task 3):
-# the C renderer core, host-side. Prints RENDER OK, exit 0 iff ALL of:
-#   1. fresh M1 data plane (ANIM1 + CTAB1 + STAB1) + SIMDATA1 + GFXDATA1;
+# port/gfx/check-render.sh — M3 task 3 done-check, EXTENDED by M4 task 2
+# (fix_plan §M4 task 2: renderer vfx + overlay/banner/background + IoU
+# re-freeze). Prints RENDER OK, exit 0 iff ALL of:
+#   1. fresh M1 data plane (ANIM1 + CTAB1 + STAB1) + SIMDATA1 + GFXDATA1
+#      + VFXDATA1 (executed vfx templates) + VFXGLYPHS1 (browser-
+#      rasterized text atlas), the latter three cmp'd against their
+#      committed frozen artifacts;
 #   2. gfx_replay builds (every TU -ffp-contract=off -Wall -Wextra
 #      -Werror; -O2 everywhere, -O3 ONLY on the hot raster TU);
-#   3. the browser render-reference capture replays g01 with the reduced
-#      render sequence after EVERY step and its checksum stream passes
-#      the UNCHANGED verify-stream.js vs the frozen golden
+#   3. the browser render-reference capture replays g01 with the FULL
+#      render sequence (clearScreen/drawStage/renderPlayer/renderArticles
+#      /renderVfx/renderOverlay(true); fg1|fg2|UI mask) + the frozen
+#      synthetic-injection table after EVERY step, and its checksum
+#      stream passes the UNCHANGED verify-stream.js vs the frozen golden
 #      (non-perturbation guard for the capture instrumentation);
 #   4. TWO fresh C render-on replays produce byte-identical stdout
 #      streams AND byte-identical PPM+PGM sets (x2 byte-stable renders);
@@ -46,16 +52,17 @@ made() {
 EXP=$GFX/expected-render.json
 made "$EXP"
 
-# corpus pin (review-44 fix 1): the frozen 16-frame corpus, exactly —
-# unique positive integers, count == sampledFrameCount == 16. Asserted
-# BEFORE any build/capture work; changing the corpus is a reviewed repo
-# change to expected-render.json + this pin + iou.js's twin pin.
+# corpus pin (review-44 fix 1; EXTENDED 16 -> 24 by M4 task 2's reviewed
+# corpus change): the frozen 24-frame corpus, exactly — unique positive
+# integers, count == sampledFrameCount == 24. Asserted BEFORE any
+# build/capture work; changing the corpus is a reviewed repo change to
+# expected-render.json + this pin + iou.js's twin pin.
 node -e '
 const e = require("./'"$EXP"'");
 const f = e.sampledFrames;
 if (!Array.isArray(f) || !Number.isInteger(e.sampledFrameCount) ||
-    e.sampledFrameCount !== 16 || f.length !== e.sampledFrameCount) {
-  console.error("check-render: corpus pin violated (want exactly 16 pinned frames: sampledFrames + sampledFrameCount)");
+    e.sampledFrameCount !== 24 || f.length !== e.sampledFrameCount) {
+  console.error("check-render: corpus pin violated (want exactly 24 pinned frames: sampledFrames + sampledFrameCount)");
   process.exit(1);
 }
 const seen = new Set();
@@ -67,7 +74,7 @@ for (const v of f) {
   seen.add(v);
 }
 '
-echo "corpus pin OK (16 unique sampled frames)"
+echo "corpus pin OK (24 unique sampled frames)"
 
 # frozen params. FRAMES_LIST/GOLDEN come from expected-render.json whose
 # corpus pin was validated above (node JSON reads, exact compare below).
@@ -149,13 +156,19 @@ made "$BUILD/simdata.txt"
 CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror
   -I"$TABLES" -Iport/ryu -Iport/sim -Ioracle/qjs)
 rm -f "$BUILD/raster.o" "$BUILD/anim1.o" "$BUILD/gfx_render.o" \
+      "$BUILD/gfx_vfx.o" "$BUILD/gfx_overlay.o" "$BUILD/gfx_bg.o" \
       "$BUILD/gfx_replay.o" "$BUILD/gfx_replay"
 cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$BUILD/raster.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/anim1.c" -o "$BUILD/anim1.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/gfx_render.c" -o "$BUILD/gfx_render.o"
+cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/gfx_vfx.c" -o "$BUILD/gfx_vfx.o"
+cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/gfx_overlay.c" -o "$BUILD/gfx_overlay.o"
+cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/gfx_bg.c" -o "$BUILD/gfx_bg.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/gfx_replay.c" -o "$BUILD/gfx_replay.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/gfx_replay" \
-  "$BUILD/raster.o" "$BUILD/anim1.o" "$BUILD/gfx_render.o" "$BUILD/gfx_replay.o" \
+  "$BUILD/raster.o" "$BUILD/anim1.o" "$BUILD/gfx_render.o" \
+  "$BUILD/gfx_vfx.o" "$BUILD/gfx_overlay.o" "$BUILD/gfx_bg.o" \
+  "$BUILD/gfx_replay.o" \
   port/sim/sim/sim_boot.c port/sim/sim/sim_tick.c port/sim/sim/sim_ser.c \
   port/sim/sim/sim_data.c \
   port/sim/calib/canon.c port/sim/calib/player_canon.c \
@@ -226,9 +239,13 @@ for (const k of want) {
     process.exit(1);
   }
 }
-if (d.gfxdata !== h("'"$BUILD"'/gfxdata.txt")) {
-  console.error("check-render: reuse REFUSED: digest mismatch on gfxdata (cached capture is stale vs current bytes)");
-  process.exit(1);
+for (const [key, fp] of [["gfxdata", "'"$BUILD"'/gfxdata.txt"],
+                         ["vfxdata", "'"$BUILD"'/vfxdata.txt"],
+                         ["glyphs", "'"$BUILD"'/vfxglyphs.txt"]]) {
+  if (d[key] !== h(fp)) {
+    console.error("check-render: reuse REFUSED: digest mismatch on " + key + " (cached capture is stale vs current bytes)");
+    process.exit(1);
+  }
 }
 '
   if [ ! -s "$BUILD/g01.render-run.json" ]; then
@@ -240,12 +257,15 @@ if (d.gfxdata !== h("'"$BUILD"'/gfxdata.txt")) {
 fi
 if [ "$NEED_CAPTURE" = "1" ]; then
   rm -rf "$CANVAS"
-  rm -f "$BUILD/g01.render-run.json" "$BUILD/gfxdata.txt"
+  rm -f "$BUILD/g01.render-run.json" "$BUILD/gfxdata.txt" \
+        "$BUILD/vfxdata.txt" "$BUILD/vfxglyphs.txt"
   node "$GFX/capture-canvas.js" --golden g01 --frames-list "$FRAMES_LIST" \
     --out-dir "$CANVAS" --out-run "$BUILD/g01.render-run.json" \
-    --gfxdata "$BUILD/gfxdata.txt"
+    --gfxdata "$BUILD/gfxdata.txt" --vfxdata "$BUILD/vfxdata.txt" \
+    --glyphs "$BUILD/vfxglyphs.txt"
 fi
-made "$BUILD/g01.render-run.json" "$BUILD/gfxdata.txt" "$CANVAS/capture.digests.json"
+made "$BUILD/g01.render-run.json" "$BUILD/gfxdata.txt" \
+     "$BUILD/vfxdata.txt" "$BUILD/vfxglyphs.txt" "$CANVAS/capture.digests.json"
 
 # GFXDATA freeze tripwire (M3 task 4, iter 50): the committed
 # port/gfx/gfxdata-frozen.txt is the browser-free device-path copy of
@@ -258,6 +278,24 @@ cmp "$BUILD/gfxdata.txt" "$GFX/gfxdata-frozen.txt" || {
   exit 1
 }
 echo "captured GFXDATA matches the committed frozen artifact"
+# VFXDATA freeze tripwire (M4 task 2, same class): the committed
+# port/gfx/vfxdata-frozen.txt is the executed vfx template plane; every
+# fresh capture must byte-match it.
+cmp "$BUILD/vfxdata.txt" "$GFX/vfxdata-frozen.txt" || {
+  echo "check-render: captured VFXDATA differs from the committed port/gfx/vfxdata-frozen.txt (re-freeze is a reviewed change)" >&2
+  exit 1
+}
+echo "captured VFXDATA matches the committed frozen artifact"
+# VFXGLYPHS freeze tripwire (M4 task 2): glyph dumps measured x2
+# byte-identical in-session (iter 65; the browser rasterizes Arial
+# deterministically within a pinned browser build), so the gfxdata
+# regenerate+cmp class applies. A legitimate browser/font change becomes
+# a REVIEWED re-freeze, never silent drift.
+cmp "$BUILD/vfxglyphs.txt" "$GFX/vfxglyphs-frozen.txt" || {
+  echo "check-render: captured VFXGLYPHS differs from the committed port/gfx/vfxglyphs-frozen.txt (re-freeze is a reviewed change)" >&2
+  exit 1
+}
+echo "captured VFXGLYPHS matches the committed frozen artifact"
 IFS=',' read -r -a SAMPLED <<< "$FRAMES_LIST"
 for f in "${SAMPLED[@]}"; do
   tag=$(printf 'f%04d' "$f")
@@ -287,13 +325,44 @@ rm -f "$BUILD/g01.trace.txt"
 node port/sim/sim/trace-to-txt.js "oracle/goldens/$G_TRACE" "$BUILD/g01.trace.txt"
 made "$BUILD/g01.trace.txt"
 
+# INJECT1 (M4 task 2): the frozen expected-render.json inject table,
+# re-emitted for the C side via String(x) (shortest round-trip — strtod
+# recovers the exact doubles; the capture injected the same configs
+# page-side).
+rm -f "$BUILD/inject.txt"
+node -e '
+const e = require("./'"$EXP"'");
+const inj = e.inject;
+if (!inj || !Number.isInteger(inj.frame) || inj.frame < 1 ||
+    !Array.isArray(inj.configs) || inj.configs.length === 0) {
+  console.error("check-render: inject table missing/malformed in expected-render.json");
+  process.exit(1);
+}
+const lines = ["INJECT1", "AT " + inj.frame];
+for (const c of inj.configs) {
+  if (typeof c.name !== "string" || !c.pos ||
+      typeof c.pos.x !== "number" || typeof c.pos.y !== "number") {
+    console.error("check-render: bad inject config " + JSON.stringify(c));
+    process.exit(1);
+  }
+  const face = ("face" in c) ? String(c.face) : "-";
+  const f = ("f" in c) ? String(c.f) : "-";
+  lines.push("V " + c.name + " " + c.pos.x + " " + c.pos.y + " " + face + " " + f);
+}
+lines.push("END");
+require("fs").writeFileSync("'"$BUILD"'/inject.txt", lines.join("\n") + "\n");
+'
+made "$BUILD/inject.txt"
+
 for side in a b; do
   rm -rf "$BUILD/render-$side"
   rm -f "$BUILD/g01.gfx-out-$side.txt"
   mkdir -p "$BUILD/render-$side"
   "$BUILD/gfx_replay" \
     --trace "$BUILD/g01.trace.txt" --simdata "$BUILD/simdata.txt" \
-    --gfxdata "$BUILD/gfxdata.txt" --anim-dir "$TABLES" \
+    --gfxdata "$BUILD/gfxdata.txt" --vfxdata "$BUILD/vfxdata.txt" \
+    --glyphs "$BUILD/vfxglyphs.txt" --inject "$BUILD/inject.txt" \
+    --anim-dir "$TABLES" \
     --seed "$G_SEED" --p1 "$G_P1" --p2 "$G_P2" --stage "$G_STAGE" \
     --frames "$G_FRAMES" \
     --render-frames "$FRAMES_LIST" --render-out "$BUILD/render-$side" \

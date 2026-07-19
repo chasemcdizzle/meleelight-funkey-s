@@ -43,6 +43,18 @@ typedef struct { uint8_t r, g, b; uint16_t a256; } RastCol;
 void rast_clear(Raster *rz, uint8_t r, uint8_t g, uint8_t b,
                 int clipY0, int clipY1);
 
+// INK SUPPRESSION (M4 task 2): the background art plane (upstream bg1/bg2
+// layers) is NOT part of the silhouette mask on either side (the browser
+// reference masks fg1|fg2|UI only), but the device framebuffer still wants
+// the art. While disabled (0), fills/blits composite into the 565 fb but
+// never set the ink plane. Default enabled (1); gfx_render_frame brackets
+// the background pass only.
+void rast_ink_enable(int on);
+
+// Single-pixel source-over blend (a256 0..256) honouring the clip band and
+// the ink-enable flag; used by the glyph/sprite blitter (gfx_overlay.c).
+void rast_blend_px(Raster *rz, int x, int y, RastCol col, unsigned a256);
+
 // --- path building (screen space, floats) --------------------------------
 // Paths accumulate into a static edge table; rast_fill consumes it.
 void rast_path_reset(void);

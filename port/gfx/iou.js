@@ -37,13 +37,15 @@ if (!CANVAS || !RENDER || !EXPECTED || CANVAS === true || RENDER === true || EXP
 }
 
 const exp = JSON.parse(fs.readFileSync(EXPECTED, "utf8"));
-// Corpus pin (review-44 fix 1): the frozen 16-frame corpus, exactly —
-// count pinned both here and in expected-render.json (sampledFrameCount),
-// every frame a unique positive integer. Changing the corpus is a
-// reviewed repo change to BOTH files, never a runtime degradation.
+// Corpus pin (review-44 fix 1; EXTENDED 16 -> 24 by M4 task 2's reviewed
+// corpus change — vfx/overlay-bearing frames + the injection frame): the
+// frozen 24-frame corpus, exactly — count pinned both here and in
+// expected-render.json (sampledFrameCount), every frame a unique positive
+// integer. Changing the corpus is a reviewed repo change to BOTH files,
+// never a runtime degradation.
 if (!Array.isArray(exp.sampledFrames) || !Number.isInteger(exp.sampledFrameCount) ||
-    exp.sampledFrameCount !== 16 || exp.sampledFrames.length !== exp.sampledFrameCount) {
-  console.error("iou: corpus pin violated — expected-render.json must pin exactly 16 sampled frames (sampledFrames + sampledFrameCount)");
+    exp.sampledFrameCount !== 24 || exp.sampledFrames.length !== exp.sampledFrameCount) {
+  console.error("iou: corpus pin violated — expected-render.json must pin exactly 24 sampled frames (sampledFrames + sampledFrameCount)");
   process.exit(1);
 }
 {

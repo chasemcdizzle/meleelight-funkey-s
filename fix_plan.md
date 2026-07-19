@@ -1397,6 +1397,22 @@ overruns):
   loosened); render-on C replay still STREAM MATCHes g01.
   done-check: `bash port/gfx/check-render.sh` → prints `RENDER OK`,
   exit 0 (vfx-inclusive pins).
+  **DONE (iter 65, 2026-07-18) — committed form**: cold done-check
+  `RENDER OK` exit 0 (.loop/m4-task2-donecheck.log; min IoU 0.9032 over
+  the 24-frame corpus). port/gfx gained gfx_vfx.{h,c} (all 45 dVfx arms,
+  canvas-2d emulation with load-bearing NaN no-ops, render-LOCAL RNG,
+  ml_vfx_sink installed BEFORE sim_setup_match), gfx_overlay.c (HUD +
+  VFXGLYPHS1 atlas; lost-stock burst derived from stock decrements),
+  gfx_bg.c (ink-suppressed background via new rast_ink_enable; live hsla
+  boxFill). Executed frozen artifacts vfxdata-frozen.txt +
+  vfxglyphs-frozen.txt (x2 byte-stable, cmp-tripwired). Corpus 16→24 +
+  synthetic f150 injection (firefox*/shine* zero-live in EVERY golden —
+  measured); old 0.91 pin retired with its exposure; NEW pin 0.88 after
+  the pre-registered refutation-shape-(a) round (percentShake variance →
+  capture render guard zeroes it, guard-class fix; full trail in
+  AGENT-LOG iter 65 + .loop/m4-task2-teeth.log). SIM CONFORMS 8/8 +
+  VFX SEAM MATCH re-verified (dust pass-through glue adopted). Task-3
+  handoff: device scripts must thread --vfxdata/--glyphs into gfx_app.
 - task 3 — **stage-surface legibility at device scale** (NEW seed from
   Chase's playtest: upstream-faithful ~1px strokes are illegible on
   the 1.54" panel). Deliberate DOCUMENTED device-scale adaptation: a

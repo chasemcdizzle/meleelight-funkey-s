@@ -35,6 +35,7 @@
 #include "../sim/ml_events.h"
 #include "../sim/ml_js.h"
 #include "gfx.h"
+#include "gfx_vfx.h"
 
 #define ML_BOOT_DRAWS 465 // the qjs boot pin (oracle/qjs/replay.sh)
 
@@ -212,6 +213,7 @@ static Gfx g_gfx; // big (framebuffer + anim tables); static, not stack
 int main(int argc, char **argv) {
   const char *tracePath = 0, *simdataPath = 0, *bridgePath = 0;
   const char *gfxdataPath = 0, *animDir = 0, *renderOut = 0;
+  const char *vfxdataPath = 0, *glyphsPath = 0, *injectPath = 0;
   long seed = -1, p1 = -1, p2 = -1, stage = -1, frames = -1, difficulty = 3;
   bool cpu = false;
   for (int i = 1; i < argc; i++) {
@@ -220,6 +222,9 @@ int main(int argc, char **argv) {
     if (strcmp(a, "--trace") == 0 && hasV) tracePath = argv[++i];
     else if (strcmp(a, "--simdata") == 0 && hasV) simdataPath = argv[++i];
     else if (strcmp(a, "--gfxdata") == 0 && hasV) gfxdataPath = argv[++i];
+    else if (strcmp(a, "--vfxdata") == 0 && hasV) vfxdataPath = argv[++i];
+    else if (strcmp(a, "--glyphs") == 0 && hasV) glyphsPath = argv[++i];
+    else if (strcmp(a, "--inject") == 0 && hasV) injectPath = argv[++i];
     else if (strcmp(a, "--anim-dir") == 0 && hasV) animDir = argv[++i];
     else if (strcmp(a, "--render-out") == 0 && hasV) renderOut = argv[++i];
     else if (strcmp(a, "--render-frames") == 0 && hasV) parse_render_frames(argv[++i]);
@@ -236,13 +241,15 @@ int main(int argc, char **argv) {
       return 1;
     }
   }
-  if (!tracePath || !simdataPath || !gfxdataPath || !animDir || seed < 0 ||
+  if (!tracePath || !simdataPath || !gfxdataPath || !animDir ||
+      !vfxdataPath || !glyphsPath || seed < 0 ||
       p1 < 0 || p2 < 0 || stage < 0 || frames <= 0 || (cpu && !bridgePath) ||
       (g_ndump > 0 && !renderOut)) {
     fprintf(stderr,
             "usage: gfx_replay --trace t.txt --simdata s.txt --gfxdata g.txt "
+            "--vfxdata v.txt --glyphs gl.txt "
             "--anim-dir D --seed N --p1 N --p2 N --stage N --frames N "
-            "[--cpu --difficulty N --ai-bridge f] "
+            "[--cpu --difficulty N --ai-bridge f] [--inject i.txt] "
             "[--render-frames a,b --render-out D]\n");
     return 1;
   }
@@ -255,6 +262,9 @@ int main(int argc, char **argv) {
   gfx_data_load(&g_gfx.data, gfxdataPath);
   gfx_load_anim(&g_gfx, animDir, (int)p1);
   gfx_load_anim(&g_gfx, animDir, (int)p2);
+  gfx_vfx_load(vfxdataPath);
+  gfx_glyphs_load(glyphsPath);
+  if (injectPath) gfx_vfx_inject_load(injectPath);
 
   ml_active_rng = &G.rng;
   ml_rng_seed(&G.rng, (uint32_t)seed);
@@ -276,11 +286,15 @@ int main(int argc, char **argv) {
   MlRng peek = G.rng;
   const int backgroundType = (int)js_round(ml_rng_next(&peek));
 
+  // vfx sink BEFORE sim_setup_match: the boot entrance/start events fire
+  // inside it (main.js initializePlayers / startGame drawVfx sites), and
+  // upstream's vfxQueue carries them into frame 1's render.
+  gfx_init(&g_gfx, (int)stage, backgroundType);
+  gfx_vfx_install(&g_gfx);
+
   sim_setup_match(&G, (int)p1, (int)p2, cpu ? 1 : 0, (int)difficulty,
                   (int)stage);
   G.rngStateAtFrame1 = G.rng.a;
-
-  gfx_init(&g_gfx, (int)stage, backgroundType);
 
   uint64_t *rns = malloc((size_t)frames * sizeof *rns);
   if (!rns) sim_fatal("oom (render timing buffer)");
@@ -295,6 +309,8 @@ int main(int argc, char **argv) {
     sim_game_tick(&G, rows);
     sim_frame_hash(&G, hex);
 
+    gfx_vfx_inject_fire(f + 1); // synthetic coverage (post-tick, pre-render;
+                                // the browser capture injects at the same point)
     const uint64_t t0 = now_ns();
     gfx_render_frame(&g_gfx, &G); // every frame (perturbation exposure + timing)
     rns[f] = now_ns() - t0;

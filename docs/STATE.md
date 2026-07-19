@@ -3,7 +3,33 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-17, iter 64 — M4 task 1 DONE)
+## Live right now (updated: 2026-07-18, iter 65 — M4 task 2 DONE)
+
+- **Iter 65 (M4 task 2 — renderer vfx + overlay/banner/background + IoU
+  re-freeze) DONE** (respawn writer after the credit-death; dead
+  writer's pre-reg adopted with 2 recorded amendments, its ml_events
+  dust-glue diff reviewed + adopted verbatim): cold
+  `bash port/gfx/check-render.sh` → `RENDER OK`, exit 0
+  (.loop/m4-task2-donecheck.log). Full render sequence both sides
+  (renderVfx + renderOverlay(true); mask fg1|fg2|UI): all 45 dVfx draw
+  arms in gfx_vfx.c (canvas-2d emulation, NaN no-ops load-bearing,
+  render-LOCAL RNG), HUD overlay + browser-rasterized VFXGLYPHS1 glyph
+  atlas, ink-suppressed background art, executed VFXDATA1 template
+  plane — both artifacts ×2 byte-stable, committed + cmp-tripwired.
+  Corpus 16→24 + synthetic f150 injection (firefox*/shine* measured
+  zero-live in EVERY golden). Old 0.91 pin retired with its exposure;
+  NEW pin **0.88** frozen after the pre-registered refutation-(a)
+  round: percentShake capture-to-capture variance (f1297 0.8835)
+  closed by a render-guard-class fix (capture zeroes shake under
+  snapshot/restore), threshold = floor over both honest minima; final
+  cold run min 0.9032. Teeth T1/T1b/T2a/T2b/T3/T4/T5 logged
+  (.loop/m4-task2-teeth.log) incl. the honest T1 sub-threshold
+  sensitivity note. Regressions: SIM CONFORMS 8/8 + VFX SEAM MATCH.
+  Task-3 handoff: check-device-render.sh/check-device-opk.sh must
+  thread --vfxdata/--glyphs into gfx_app (it now requires them);
+  ready/go banner sounds await the task-6 mixer.
+
+## [superseded by iter 65] (updated: 2026-07-17, iter 64 — M4 task 1 DONE)
 
 - **Iter 64 (M4 task 1 — vfx seam widening, sim + capture side) DONE**:
   cold `bash port/sim/calib/check-vfx-seam.sh` → `VFX SEAM MATCH`,

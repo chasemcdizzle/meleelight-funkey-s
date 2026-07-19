@@ -94,6 +94,7 @@
 #include "../sim/ml_js.h"
 #include "../sim/ml_ser.h"
 #include "gfx.h"
+#include "gfx_vfx.h"
 #include "platform.h"
 #include "s1_input.h"
 #include "snd_mixer.h" // header-only (s1_input.h precedent) — M3 task 6
@@ -355,6 +356,7 @@ static void app_snd_sink(const char *name) {
 int main(int argc, char **argv) {
   const char *tracePath = 0, *simdataPath = 0, *bridgePath = 0;
   const char *gfxdataPath = 0, *animDir = 0, *outPath = 0, *timingPath = 0;
+  const char *vfxdataPath = 0, *glyphsPath = 0;
   const char *shotPpm = 0, *shotPgm = 0;
   const char *recordPath = 0, *readyPath = 0, *keysPath = 0;
   const char *sndpackPath = 0;
@@ -373,6 +375,8 @@ int main(int argc, char **argv) {
     if (strcmp(a, "--trace") == 0 && hasV) tracePath = argv[++i];
     else if (strcmp(a, "--simdata") == 0 && hasV) simdataPath = argv[++i];
     else if (strcmp(a, "--gfxdata") == 0 && hasV) gfxdataPath = argv[++i];
+    else if (strcmp(a, "--vfxdata") == 0 && hasV) vfxdataPath = argv[++i];
+    else if (strcmp(a, "--glyphs") == 0 && hasV) glyphsPath = argv[++i];
     else if (strcmp(a, "--anim-dir") == 0 && hasV) animDir = argv[++i];
     else if (strcmp(a, "--out") == 0 && hasV) outPath = argv[++i];
     else if (strcmp(a, "--timing") == 0 && hasV) timingPath = argv[++i];
@@ -409,7 +413,8 @@ int main(int argc, char **argv) {
   // session is wall-clock by definition (--pace 1); no CPU slot.
   if (!((tracePath != 0) ^ live) || (live && (!recordPath || !keysPath ||
       pace != 1 || cpu)) || (!live && (recordPath || readyPath || keysPath)) ||
-      !simdataPath || !gfxdataPath || !animDir || !outPath ||
+      !simdataPath || !gfxdataPath || !vfxdataPath || !glyphsPath ||
+      !animDir || !outPath ||
       !timingPath || seed < 0 || p1 < 0 || p2 < 0 || stage < 0 ||
       frames <= 0 || (cpu && !bridgePath) || (pace != 0 && pace != 1) ||
       budgetNs == 0 ||
@@ -419,6 +424,7 @@ int main(int argc, char **argv) {
       audioSamples <= 0 || audioSamples > 65535) {
     fprintf(stderr,
             "usage: gfx_app --trace t.txt --simdata s.txt --gfxdata g.txt "
+            "--vfxdata v.txt --glyphs gl.txt "
             "--anim-dir D --seed N --p1 N --p2 N --stage N --frames N "
             "--out stream.txt --timing timing.txt "
             "[--cpu --difficulty N --ai-bridge f] [--pace 0|1] "
@@ -440,6 +446,8 @@ int main(int argc, char **argv) {
   gfx_data_load(&g_gfx.data, gfxdataPath);
   gfx_load_anim(&g_gfx, animDir, (int)p1);
   gfx_load_anim(&g_gfx, animDir, (int)p2);
+  gfx_vfx_load(vfxdataPath);
+  gfx_glyphs_load(glyphsPath);
 
   ml_active_rng = &G.rng;
   ml_rng_seed(&G.rng, (uint32_t)seed);
@@ -461,6 +469,11 @@ int main(int argc, char **argv) {
   MlRng peek = G.rng;
   const int backgroundType = (int)js_round(ml_rng_next(&peek));
 
+  // vfx sink BEFORE sim_setup_match (gfx_replay.c note: the boot
+  // entrance/start events fire inside it).
+  gfx_init(&g_gfx, (int)stage, backgroundType);
+  gfx_vfx_install(&g_gfx);
+
   sim_setup_match(&G, (int)p1, (int)p2, cpu ? 1 : 0, (int)difficulty,
                   (int)stage);
   // S1 contract (fix_plan §M3 "Input"): tapJumpOffp1 = true — the
@@ -470,8 +483,6 @@ int main(int argc, char **argv) {
   // a recorded live session must pass the same flag.
   if (tapJumpOffP1) G.sim.tapJumpOff[0] = 1;
   G.rngStateAtFrame1 = G.rng.a;
-
-  gfx_init(&g_gfx, (int)stage, backgroundType);
 
   if (platform_init("meleelight") != 0) {
     sim_fatal("platform_init failed (display unavailable)");

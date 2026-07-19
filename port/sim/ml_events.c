@@ -23,14 +23,22 @@ void ml_ev_reset(void) {
 // (drawVfx.js:15-18; values render-only, draws are chain state).
 void ml_drawVfx_cfg(const MlVfx *cfg) {
   if (ml_events.vfx_count >= ML_EV_CAP) ml_events_fail("vfx queue overflow");
-  ml_events.vfx[ml_events.vfx_count++] = *cfg;
-  if (ml_vfx_sink) ml_vfx_sink(cfg);
+  ml_events.vfx[ml_events.vfx_count++] = *cfg; // queue snapshot: config only
+  // circleDust's 4 seeded draws burn EXACTLY as before (chain state,
+  // drawVfx.js:15-18); M4 task 2: the raw values are passed through to
+  // the sink (header note — upstream derives instance.circles from these
+  // draws, the renderer needs them to match the browser bit-exactly).
+  // The sink call moved after the draws; sinks are NULL in every replay
+  // rig, so the capture-comparison surface is byte-identical.
+  MlVfx forSink = *cfg;
   if (strcmp(cfg->name, "circleDust") == 0) {
-    (void)ml_random();
-    (void)ml_random();
-    (void)ml_random();
-    (void)ml_random();
+    forSink.has_dust = 1;
+    forSink.dust[0] = ml_random();
+    forSink.dust[1] = ml_random();
+    forSink.dust[2] = ml_random();
+    forSink.dust[3] = ml_random();
   }
+  if (ml_vfx_sink) ml_vfx_sink(&forSink);
 }
 
 void ml_drawVfx_p(const char *name, double x, double y) {

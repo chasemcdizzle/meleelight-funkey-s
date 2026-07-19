@@ -8627,3 +8627,120 @@ folded into the M4 ladder below. Issue #18 closed by the driver.
   this file above).
 - Loop STOPPED per the standing rule. Resume: /loop with the M4
   continuation after credits are restored (/login or usage top-up).
+
+## iter 65 — 2026-07-18 — M4 task 2 DONE: renderer vfx + overlay/banner/background + IoU re-freeze — RENDER OK
+
+- RESPAWN NOTE (honest): the original iter-65 writer died on usage-credit
+  exhaustion immediately after freezing the pre-registration above; this
+  session is the resume writer. PRE-REG ADOPTION: adopted the frozen
+  entry in full with two amendments recorded inline below: (1) the
+  glyph-dump byte-stability arm RESOLVED to the regenerate+cmp tripwire
+  (measured x2 byte-identical fresh dumps); (2) the threshold freeze took
+  the pre-registered refutation-shape-(a) bounded methodology round
+  (percentShake — see below), landing at 0.88, not the single-run 0.89.
+  The dead writer's UNVERIFIED ~24-line ml_events.{c,h} "dust
+  pass-through" diff was REVIEWED line-by-line against drawVfx.js:15-18 +
+  the task-1 emitters (all emitters memset their MlVfx, so has_dust=0
+  everywhere else; the queue snapshot is taken BEFORE dust is filled so
+  cb_vfx canon and every capture comparison surface are byte-unchanged;
+  the sink call moved after the draws — sinks are NULL in every replay
+  rig) and ADOPTED VERBATIM. check-vfx-seam.sh re-run green (below)
+  because ml_events.c changed.
+- DONE-CHECK: cold `bash port/gfx/check-render.sh` -> `RENDER OK`,
+  exit 0 (.loop/m4-task2-donecheck.log). All 24 sampled frames pass:
+  min IoU 0.9032 (f1234), max 0.9846 (f0100); x2 C renders
+  byte-identical; capture + C render-on streams both STREAM MATCH the
+  frozen g01 (renderer/instrumentation perturb nothing).
+- WHAT LANDED (port/gfx/):
+  - gfx_vfx.{h,c}: the vfx render plane — C vfxQueue (renderVfx.js
+    semantics incl. same-pass iteration of render spawns + the splice
+    compaction), drawVfx spawn (facing=f-or--1 incl. the stars
+    facing-overwrite quirk carried verbatim), all 45 dVfx draw arms
+    (hitCurve = upstream's own empty TODO), canvas-2d emulation (matrix
+    stack, path buffer, arc/bezier, non-finite-coordinate no-ops — the
+    load-bearing NaN semantics: burning/firehit fireburst pos.y is
+    upstream-undefined and must never draw), render-plane spawns
+    (stars/lines/fireburst/burncircle/laserSpark), render-LOCAL
+    mulberry32 (never the seeded chain), fg2LineWidth persistence for
+    the three no-save writers (shieldup/fireburst/hitFlair). Live-state
+    reads (swing/falconpunch/firefoxlaunch/shineloop/singGen) off
+    `const GameState *`.
+  - gfx_overlay.c: renderOverlay(true) — timer MM:SS + centiseconds
+    (versusMode==0 domain), percents (unshaken; exclusion documented),
+    stock icons, lost-stock burst DERIVED from per-slot stock decrements
+    (physics.js:979 stays a sim no-op); VFXGLYPHS1 atlas loader +
+    glyph/sprite blitters.
+  - gfx_bg.c: drawBackgroundInit gradient + drawStars (starfield +
+    animated mountains + the live hsla boxFill the stage polygon pass
+    now consumes) / drawTunnel — drawn INK-SUPPRESSED (new
+    rast_ink_enable; bg planes are outside the IoU mask on both sides).
+  - gfx_render.c: full renderTick sequence (bg -> stage -> players ->
+    articles -> vfx -> overlay); gfx_replay.c/gfx_app.c: vfx sink
+    installed BEFORE sim_setup_match (boot entrance/start events fire
+    inside it), --vfxdata/--glyphs/--inject args.
+  - Executed artifacts (hard rule 5 — never retyped): VFXDATA1
+    (post-alias vfx templates + swordSwings; committed
+    vfxdata-frozen.txt, cmp tripwire) and VFXGLYPHS1 (browser-rasterized
+    Arial fill+stroke masks 5x5 area-averaged to device scale +
+    Ready/Go! composite sprites; committed vfxglyphs-frozen.txt, cmp
+    tripwire — x2 fresh dumps measured byte-identical).
+  - Capture side: gfx-pagelib.js sequence extended to renderVfx() +
+    renderOverlay(true), mask widened fg1|fg2|UI, synthetic injection at
+    f150 (both sides, expected-render.json "inject": firefoxcharge/
+    firefoxtail/shine/dashDust/groundBounce + gated firefoxlaunch/
+    shineloop as no-crash structural coverage — ZERO live frames for
+    them in ANY golden, measured iter-64), percentShake render guard
+    (below); capture-canvas.js dumps + sidecar keys; INJECT1 emitted by
+    check-render.sh for the C side.
+  - Corpus 16 -> 24 (reviewed pin change in all three twin pins:
+    expected-render.json / check-render.sh / iou.js): +76, 150, 184,
+    426, 1238, 2277, 2807, 2956.
+- THRESHOLD (measured-then-frozen, full trail): old 0.91 pin RETIRED
+  with its vfx/overlay-blind exposure. Seed 0.85 frozen pre-judgment.
+  Honest run 1: min 0.8970 (f3599) -> provisional 0.89. The first cold
+  run's FRESH capture REFUTED it: f1297 (REBIRTH) 0.8835 — root cause
+  percentShake (wall-clock setTimeout decay; CHECKSUM.md §7 exclusion)
+  varying capture-to-capture while C draws unshaken. ONE bounded
+  methodology round (pre-registered refutation shape (a)): __gfxRender
+  now zeroes percentShake under snapshot/restore (the native-RNG-swap /
+  outOfCameraTimer guard class), threshold FROZEN at 0.88 = floor over
+  both honest minima BEFORE the first passing done-check; never
+  loosened from here. Post-round cold run: min 0.9032, f1297 0.9236.
+  Capture-budget overrun (5 fresh vs the pre-registered <=3) is exactly
+  the refutation round + its forced cold rerun — documented in
+  .loop/m4-task2-teeth.log, not silently absorbed.
+- TEETH (.loop/m4-task2-teeth.log; perturb -> observe -> restore, all
+  restores proven by clean re-judge): T1 single-name draw-scale x1.5 =
+  observable but SUB-threshold (honest note: small ink share) -> class
+  tooth T1b whole-vfx-pass drop = 7 frames FAIL (0.34-0.89); T3 overlay
+  drop = 19 frames FAIL; T4 C-injection drop = ONLY f150 FAIL (0.8210);
+  T5 banner drop = f30/f76/f100 FAIL; T2a/T2b frozen-artifact nibbles =
+  cmp tripwire death pre-judgment. Session lesson re-learned: a stale .o
+  from a prior tooth poisons the next judgment — relink every perturbed
+  TU before judging (first T4 run discarded for exactly this).
+- REGRESSION: `bash port/sim/check-sim.sh` -> SIM CONFORMS 8/8
+  (.loop/m4-task2-checksim.log); `bash port/sim/calib/check-vfx-seam.sh`
+  -> VFX SEAM MATCH (.loop/m4-task2-vfxseam.log; required — the adopted
+  glue edits ml_events.c).
+- EXPOSURES / task-3 notes (PROCESS §8): (1) check-device-render.sh /
+  check-device-opk.sh still invoke gfx_app WITHOUT --vfxdata/--glyphs —
+  gfx_app now requires them, so the device rung MUST thread the new
+  artifacts (task 3's surface; device is off-ADB this task). (2) Banner
+  ready/go SOUNDS are tracked by the same flags upstream uses but play
+  nothing until the task-6 mixer wiring. (3) Colour fidelity of
+  gradients ("screen" composites, fire/pillar gradients) is
+  representative-solid — ink-identical, colour-approximate; visual
+  authority stays Chase's playthrough. (4) firefoxlaunch/shineloop
+  injected coverage is structurally-gated no-draw on both sides
+  (honest: visually UNVERIFIED until a live UPSPECIALLAUNCH/shine
+  session or the M4 goldens exercise them). (5) T1's finding stands as
+  a measured sensitivity bound: single-name shape drift below ~2% of
+  frame ink can pass the IoU — the per-name tripwires are the frozen
+  data artifacts, not the IoU.
+- ZOOM OUT: two class fixes this iteration — (a) the VFXDATA parser's
+  child-pointer interleaving bug was fixed at the PARSER level
+  (collect-then-commit), not by flattening any one template; (b) the
+  percentShake variance was closed for the whole timing-dependent-
+  exclusion CLASS by extending the render guard set, not by nudging the
+  one failing frame's threshold. Instrument added: g_dbgDraw context on
+  every template-shape violation.

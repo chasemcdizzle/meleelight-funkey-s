@@ -29,6 +29,7 @@
 //   - stroke joins are butt-capped segment quads (canvas miters are
 //     sub-pixel at the 0.2 retarget).
 #include "gfx.h"
+#include "gfx_vfx.h" // M4 task 2: background/vfx/overlay passes + boxFill
 
 #include <math.h>
 #include <stdio.h>
@@ -257,11 +258,11 @@ static void draw_stage_fg2(Gfx *g) {
     }
   }
   // box: pinned empty on VS stages (STAB1). polygon: the stage body,
-  // filled with boxFill (drawBackgroundInit: type 1 -> rgba(94,173,255,
-  // 0.3), else the module default rgba(0,0,0,0.1); drawBackground's
-  // per-frame boxFill mutation is skipped with it).
-  const RastCol boxFill = g->backgroundType == 1
-    ? col_rgba(94, 173, 255, 0.3) : col_rgba(0, 0, 0, 0.1);
+  // filled with the LIVE boxFill (stagerender.js module state:
+  // drawBackgroundInit baseline; drawStars' per-frame hsla mutation now
+  // runs in the C background pass — M4 task 2). Ink-identical to the
+  // static fill (alpha > 0 either way); colour is the live-play look.
+  const RastCol boxFill = gfx_bg_box_fill();
   for (int j = 0; j < st->polygonCount; j++) {
     const int nv = st->polygonVertCounts[j];
     const ml_stage_vec2b_t *p = st->polygons[j];
@@ -613,15 +614,21 @@ static void render_articles(Gfx *g, const GameState *st) {
 // --- frame -------------------------------------------------------------------------
 
 void gfx_render_frame(Gfx *g, const GameState *st) {
-  // background: NOT part of the ink mask (browser reference = fg1+fg2
-  // alpha only); colour chosen for the human PPM.
-  rast_clear(&g->rz, 12, 9, 33, (int)GFX_DY, (int)(GFX_DY + 750.0 * GFX_K));
+  // full gameMode-3 sequence (main.js renderTick "playing" branch):
+  // clearScreen -> drawBackground -> drawStage -> renderPlayer x4 ->
+  // renderArticles -> renderVfx -> renderOverlay(true). The background
+  // pass is ink-suppressed (bg planes are not in the IoU mask on either
+  // side — gfx_bg.c note); everything after it inks normally.
+  rast_clear(&g->rz, 0, 0, 0, (int)GFX_DY, (int)(GFX_DY + 750.0 * GFX_K));
+  gfx_render_background(g);
   draw_stage_init_layer(g); // fg1 composite (static)
   draw_stage_fg2(g);        // drawStage per-frame fg2 bits
   for (int i = 0; i < 4; i++) {
     if (st->sim.playerPresent[i]) render_player(g, st, i);
   }
   render_articles(g, st);
+  gfx_render_vfx(g, st);
+  gfx_render_overlay(g, st);
 }
 
 // --- dumps -------------------------------------------------------------------------

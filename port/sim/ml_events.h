@@ -62,6 +62,16 @@ typedef struct {
   int has_color;        // color1+color2 present together (laser sites)
   double c1r, c1g, c1b; // color1 {r,g,b}
   double c2r, c2g, c2b; // color2 {r,g,b}
+  // NOT part of the upstream config (never serialized by cb_vfx; the
+  // capture/replay comparison surface is unchanged): for name
+  // "circleDust" ONLY, the 4 seeded draws drawVfx.js:15-18 burns are
+  // passed through to the sink as raw u01 values (M4 task 2) — upstream
+  // derives instance.circles[0..3] from exactly these draws ×
+  // activeStage.scale, so the renderer can reproduce the browser's
+  // seeded dust positions bit-exactly. Filled by ml_drawVfx_cfg AFTER
+  // the queue snapshot; zero/absent everywhere else.
+  int has_dust;
+  double dust[4];
 } MlVfx;
 
 typedef struct {
