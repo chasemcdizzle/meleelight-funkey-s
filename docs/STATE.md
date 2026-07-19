@@ -1101,6 +1101,9 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 - 2026-07-16 — Whitelist-grammar rule (brawlback provenance): decision-
   bearing parsers = anchored empirical grammars, fail closed, corpus-
   validated; binding form PROCESS.md §3.
+- 2026-07-19 — Portability ruling: FunKey-specific code inventoried in
+  docs/PORTABILITY.md (4 layers + recipe); writers add rows in-commit
+  for device-specific additions; driver enforces at review.
 - Standing: never push to upstream/schmooblidon; origin only; no
   distribution of anything; writers never post to GitHub (driver owns
   tracker writes).

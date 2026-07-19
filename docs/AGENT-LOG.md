@@ -11681,3 +11681,25 @@ always assert the death CLASS, not just the exit code.
   pre-slack — bounded on both sides); app.start/app.end are written by
   the launcher inside the setsid body around the app itself (in-path).
   No further uncoupled witnesses found on the bracket surface.
+
+## driver — 2026-07-19 — both M4 arcs CLOSED; PORTABILITY ruling installed
+
+- Device-rig arc (iters 73-74 surfaces): CLOSED at VERDICT: GO round 4
+  (.loop/review-80-1.log) — 4 rounds, ~18 findings fixed with teeth
+  across iters 76/78/80 (quiesce backstop + deadman daemon-restore,
+  exact window, grammar exactness, restore-stamp causality coupling).
+- Ai-rig arc (task-4 surfaces): CLOSED at VERDICT: GO round 3
+  (.loop/review-79-1.log) — 3 rounds, ~10 findings fixed with teeth
+  across iters 77/79 (4-slot recon, evidence completeness, ERANGE,
+  coverage gates).
+- M4 arc ledger so far: vfx-rig 4r GO, task-2 renderer 4r GO, device-rig
+  4r GO, ai-rig 3r GO. Driver cold-verified every hardening iteration.
+- OWNER RULING (Chase, 2026-07-19): FunKey-S-specific port machinery
+  must be noted/manageable for future device ports. Installed
+  docs/PORTABILITY.md: the 4-layer inventory (device-agnostic /
+  platform-seam TU / FunKey-tuned constants / device-bound machinery)
+  + the porting recipe; the instruments (mathsweep, ABI asserts,
+  skip-attribution) ARE the port tools. BINDING writer rule from now
+  on: device-specific additions add an inventory row in the same
+  commit; driver enforces at review.
+- next: task 5 (live CPU integration).
