@@ -8744,3 +8744,142 @@ folded into the M4 ladder below. Issue #18 closed by the driver.
   exclusion CLASS by extending the render guard set, not by nudging the
   one failing frame's threshold. Instrument added: g_dbgDraw context on
   every template-shape violation.
+
+## iter 66 — 2026-07-18 — PRE-REGISTRATION: vfx-rig round-1 closure — check-vfx-seam aggregator classes (frozen before any run/edit; PROCESS §2)
+
+- **Task (driver triage .loop/review-64-triage.md, BINDING; full review
+  .loop/review-64-1.log)**: close the vfx-rig arc's four Medium
+  findings on `port/sim/calib/check-vfx-seam.sh` ONLY, by inheriting
+  the verify_m3.sh aggregator classes host-side (expect_verdict,
+  relay prefix, inventory pins, the iter-41 no-reclaim lock). No
+  component check script, no verify_m3.sh/riglib.sh device machinery,
+  no port/gfx/* (concurrent read-only Codex review in flight there).
+- **Method — whitelist grammar measured EMPIRICALLY (PROCESS §3 rule,
+  step 1) from the full real corpus**: the 11 iter-64 component logs
+  `port/sim/calib/build/vfx-seam.check-*.log` (10 capture components +
+  check-sim). Measured, uniform, zero exceptions:
+  - every capture component: exactly **3** `== gNN (<name>): <spec>
+    capture run A` lines, **3** `== gNN: <spec> capture run B` lines,
+    **3** `   capture byte-identical across two fresh runs` lines
+    (3-space indent), **6** `STREAM MATCH …` lines (2 per golden) —
+    the 3-carrier × 2-fresh-runs convention (iter-64 pre-reg matrix);
+  - full STREAM MATCH line grammar validated corpus-wide: 68/68 lines
+    match `^STREAM MATCH [a-z0-9-]+: [0-9]{1,6}/[0-9]{1,6} frames
+    exact, rngCalls=[0-9]{1,6}, rngCallsOutsideStep=1, specVersion=1$`
+    (0 false rejections); check-sim carries exactly **8** (the 8-golden
+    M2 gate);
+  - every verdict is the log's FINAL line and occurs exactly once;
+    the verdict-prefix discriminator `^<verdict>` occurs exactly **1×**
+    per genuine log (the wide word-prefixes `^ARTICLE ` etc. were
+    REJECTED as discriminators: 4× in genuine logs — the 3 `REPLAY RAN
+    … 0 divergences` lines share them; measured, not assumed).
+- **Fix designs (frozen)**:
+  - **M1 freshness contract** (triage's grammar arm — chosen over
+    rm-before-produce because the evidence lines are producer output
+    already STREAM-MATCH- and cmp-guarded at record time): per capture
+    component, anchored full-line counts asserted == the measured
+    literals (runA=3, runB=3, byte-stable=3, STREAM MATCH full-grammar
+    =6 AND `^STREAM MATCH ` prefix count =6 — any resembling-but-
+    malformed STREAM line is corruption); check-sim: both stream
+    counts == 8. A recorder that no-ops (stale capture replayed clean)
+    leaves no runA/runB/byte-stable/STREAM lines → loud death.
+  - **M2 verdict grammar** (expect_verdict adapted): exact full-line
+    verdict count == 1 (grep -cxF) AND verdict-prefix resemblance
+    count == 1 (grep -cE "^<verdict>") AND the log's final line == the
+    verdict. Duplicated verdict → count 2 → death; torn/extended
+    verdict line → resemblance 2 → death; non-final verdict → death.
+  - **M3 run lock** (iter-41 pattern, host-scoped): mkdir-atomic
+    `port/sim/calib/build/vfx-seam.lock`, NO reclamation (no pid
+    liveness, no auto-delete) — an existing lock is a loud refusal
+    spelling out the manual `rm -rf`; release trap installed only
+    AFTER acquisition (a losing contender can never release the
+    winner's lock). The fixed per-component log paths + shared capture
+    files in build/ become lock-guarded (triage's sanctioned option).
+  - **M4 inventory pin**: CHECKS/VERDICTS/SPECS (new parallel
+    spec-token array for the freshness grammar) each asserted length
+    == 10 literal + pairwise-unique entries (sort|uniq -d empty),
+    BEFORE the lock and any component run.
+  - **Relay contract inherited** (verify_m3.sh log-sentinel class):
+    all component bytes (stdout+stderr) reach the composed output only
+    through `  | `-prefixed relay_lines; the component log file keeps
+    the raw stdout bytes (corpus-identical grammar input); the final
+    `VFX SEAM MATCH` echo is the only possible unprefixed
+    column-0 occurrence.
+- **Teeth (pre-registered; probe copies under build/probe66/ built
+  from the iter-64 logs, so they run in seconds — no browser
+  captures)**: (T1/M4) probe with one CHECKS entry dropped → pin
+  death before lock/components; (T2/M3) pre-held lock + REAL script →
+  loud refusal naming the manual removal, nonzero, then lock removed;
+  (T3/M1) probe whose component 1 is a stub replaying the REAL iter-64
+  moves-shared log MINUS its `capture run A` lines with a clean MATCH
+  verdict + rc 0 (the no-op-recorder accident verbatim) → freshness
+  death, never a MATCH; (T4/M2) stub replaying the real log PLUS a
+  duplicated appended verdict line → verdict-grammar death. Pass =
+  all four die loudly with the predicted message class.
+- **Run cap (frozen)**: teeth are probe runs (die at/before component
+  1); ≤ 2 composed cold runs (~7 min each; expected: exactly 1 — the
+  done-check `bash port/sim/calib/check-vfx-seam.sh` → `VFX SEAM
+  MATCH`, exit 0, via nohup + bounded foreground until-loop polls,
+  PROCESS §7#1 verbatim). Refutation shape: any false rejection of the
+  strict grammars on the genuine cold run = a grammar/corpus mismatch
+  — re-measure against the NEW log bytes, fix the parser (never widen
+  to permissive), burn the second capped run; a second false rejection
+  → STOP and report.
+
+## iter 66 — 2026-07-18 — M4 hardening DONE: check-vfx-seam aggregator classes (vfx-rig round-1 triage closed)
+
+- **All four review-64 Mediums closed on the pre-registered designs**
+  (surface: `port/sim/calib/check-vfx-seam.sh` ONLY; verify_m3.sh /
+  riglib.sh / port/gfx untouched):
+  - **M1 freshness contract**: anchored full-line grammar counts per
+    capture component (runA=3, runB=3, byte-stable=3, STREAM MATCH
+    full-grammar=6 AND prefix-count=6; check-sim 8/8), literals
+    measured from the 11-log iter-64 corpus. A MATCH without fresh
+    re-record evidence is now a loud death.
+  - **M2 verdict grammar**: exact verdict count == 1 + verdict is the
+    FINAL line + exactly one `^<verdict>`-resembling line. The
+    measured discriminator is the verdict-prefix form — the wide word
+    prefixes were rejected by measurement (genuine `REPLAY RAN … 0
+    divergences` lines share them, 4×/log).
+  - **M3 run lock**: mkdir-atomic `build/vfx-seam.lock`, iter-41
+    no-reclaim posture (loud refusal + manual `rm -rf` instruction;
+    trap installed only after acquisition). Fixed component-log +
+    shared capture paths are now lock-guarded.
+  - **M4 inventory pin**: CHECKS/VERDICTS/SPECS (new spec-token
+    parallel array) each length == 10 literal + uniqueness, asserted
+    before the lock and any component run.
+  - **Relay contract** (imported alongside): all component bytes reach
+    the composed output only via `  | `-prefixed relay_lines; raw
+    component stdout still lands in the per-component log (the grammar
+    corpus stays byte-compatible). Verified on the cold run: exactly
+    ONE column-0 `VFX SEAM MATCH` in the whole composed log.
+- **Teeth (all 4 fired with the predicted message class;
+  .loop/m4-rig66-teeth.log)**: T1 dropped-CHECKS-entry → `inventory
+  pin — array CHECKS has 9 entries` (before lock/components); T2
+  pre-held lock → `VFX SEAM REFUSED: run lock … rm -rf` (and the
+  refused contender did NOT release the held lock — trap-after-acquire
+  proven); T3 no-op-recorder stub (real iter-64 log minus its `capture
+  run A` lines, clean MATCH, rc 0) → `freshness contract — … capture
+  run A: 0/3 … never a pass`; T4 duplicated appended verdict →
+  `verdict grammar — … found 2`.
+- **Cold done-check (run 1 of the ≤2 cap; ~7 min)**:
+  `bash port/sim/calib/check-vfx-seam.sh` → `VFX SEAM MATCH`,
+  DONECHECK_RC=0 (.loop/m4-rig66-donecheck.log; nohup + bounded
+  foreground polls, PROCESS §7#1). All 10 components + SIM CONFORMS
+  green through the new grammars — ZERO false rejections on fresh
+  logs (the strict-parser-vs-corpus validation held on live data, not
+  just the archived corpus).
+- **ZOOM OUT**: the four fixes are one CLASS event, not four one-offs —
+  check-vfx-seam.sh was a composing aggregator that had not inherited
+  the already-reviewed verify_m3.sh aggregator classes. The host-side
+  adaptations (inventory pin over parallel arrays, expect_verdict with
+  measured discriminators + final-line, evidence-freshness grammar,
+  no-reclaim host lock, relay prefix) now live in ONE host script and
+  form the REUSABLE HOST AGGREGATOR PATTERN: **fix_plan §M4 task 14's
+  verify_m4.sh must source/adapt these same classes** (it composes the
+  M4 golden suite + flows + OPK legs exactly the way verify_m3.sh
+  composes device legs — its freeze-manifest discipline is already
+  concretized; the component-log verdict/freshness/relay grammar and
+  the host lock come from here). Any FUTURE composing check (host or
+  device) starts from these classes; a bare rc+`grep -qx` composition
+  is the anti-pattern this arc priced.

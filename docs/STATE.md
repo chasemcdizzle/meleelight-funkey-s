@@ -3,7 +3,27 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-18, iter 65 — M4 task 2 DONE)
+## Live right now (updated: 2026-07-18, iter 66 — vfx-rig round-1 closure DONE)
+
+- **Iter 66 (M4 hardening — check-vfx-seam aggregator classes) DONE**:
+  all 4 review-64 Mediums (.loop/review-64-triage.md) closed on
+  `port/sim/calib/check-vfx-seam.sh` ONLY — the verify_m3.sh aggregator
+  classes adapted host-side: freshness-evidence grammar (runA/runB/
+  byte-stable/STREAM MATCH counts measured from the 11-log iter-64
+  corpus), expect_verdict (exact ×1 + final-line + measured
+  verdict-prefix resemblance), mkdir-atomic no-reclaim host lock
+  (`build/vfx-seam.lock`, iter-41 posture), 10-literal inventory pin
+  over CHECKS/VERDICTS/SPECS, `  | ` relay prefix (one column-0
+  `VFX SEAM MATCH` possible). Teeth 4/4 fired
+  (.loop/m4-rig66-teeth.log); cold done-check `VFX SEAM MATCH` rc 0,
+  zero grammar false-rejections on fresh logs
+  (.loop/m4-rig66-donecheck.log). **vfx-rig arc round 2 = closure
+  pending (driver: re-review or scoped confirm)**; the host aggregator
+  classes are the registered pattern for task-14's verify_m4.sh
+  assembly (AGENT-LOG iter 66 zoom-out). Tier-B sim-TU surface: clean
+  per reviewer (no action).
+
+## [superseded by iter 66] (updated: 2026-07-18, iter 65 — M4 task 2 DONE)
 
 - **Iter 65 (M4 task 2 — renderer vfx + overlay/banner/background + IoU
   re-freeze) DONE** (respawn writer after the credit-death; dead
