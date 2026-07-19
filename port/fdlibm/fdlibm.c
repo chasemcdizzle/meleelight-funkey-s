@@ -189,6 +189,43 @@ double ceil(double x) {
   return fd__u2d(u);
 }
 
+/* round(x)/lround(x) — STRONG OVERRIDES (M4 task 8, iter 74; the
+ * iter-38 class note "round/trunc also broken on device, zero sim call
+ * sites — extend overrides+sweep before any use" cashed in at its
+ * first use): the render plane's glyph/sprite blit anchors
+ * (port/gfx/gfx_overlay.c) call lround, and the SDK's static musl
+ * libc.a round/lround are the same unsafe-FP toint-folded family as
+ * its floor/ceil — measured 1-device-px glyph shifts against the host
+ * render (.loop/m4-task8-task3-donecheck.log, first run to ever reach
+ * the host<->device shot bit-compare). round is composed from the
+ * EXACT floor above (x - floor(x) is exactly representable for
+ * 0 <= e < 52 — Sterbenz-range subtraction), C99 semantics: ties away
+ * from zero, -0 preserved. NOTE: this is NOT ECMAScript Math.round —
+ * the sim uses js_round (ml_js.h, ties toward +Inf); round/lround are
+ * render-plane/C-plane only. lround is defined here as (long)round(x):
+ * identical for every in-range value; out-of-range/NaN is UB per C99
+ * exactly as in any libm (mathsweep guards its lr column; render
+ * callers pass finite pixel coords by construction). Differentially
+ * swept: mathsweep rr/lr columns, device-fdlibm vs host-libm anchor. */
+double round(double x) {
+  uint64_t u = fd__d2u(x);
+  int e = (int)((u >> 52) & 0x7FF) - 1023; /* unbiased exponent */
+  if (e >= 52) {
+    if (e == 1024) return x + x; /* inf or NaN */
+    return x;                    /* already integral */
+  }
+  if (u >> 63) {
+    double t = floor(-x);
+    if (t + x <= -0.5) t += 1.0;
+    return -t; /* t == 0 gives -0: sign preserved */
+  }
+  double t = floor(x);
+  if (x - t >= 0.5) t += 1.0;
+  return t;
+}
+
+long lround(double x) { return (long)round(x); }
+
 /* fmod(x,y) — classic Sun fdlibm e_fmod.c fixed-point algorithm
  * restated over the 64-bit pattern (the original's hi/lo-word shift
  * ladder is the same 53-bit-significand long division). fmod is EXACT:

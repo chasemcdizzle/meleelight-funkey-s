@@ -25,6 +25,7 @@ RIG_SCRIPTS="port/sim/device/adbsh.sh port/sim/device/riglib.sh \
 port/sim/device/check-device-g01.sh port/sim/device/check-device-conform.sh \
 port/gfx/check-device-render.sh port/gfx/check-device-input.sh \
 port/gfx/check-device-audio.sh port/gfx/check-device-opk.sh \
+port/sim/device/check-skip-attrib.sh \
 port/sim/device/verify_m3.sh"
 
 # The armv7 binaries the shared build produces (one docker run).
@@ -34,7 +35,9 @@ port/sim/device/verify_m3.sh"
 # -O3 TU), everything else -O2; -ffp-contract=off on every TU.
 # fk_input (M3 task 5) is the static uinput button injector
 # (port/tools/fk_input.c — the ssb64 pattern; no SDL, no sim).
-ARMBINS="sim_device csweep_arm fmt_diff_arm mathsweep_arm gfx_device fk_input"
+# sk_sampler (M4 task 8) is the static fork-free kernel-counter sampler
+# (port/sim/device/skip-attrib/sk_sampler.c — diagnostic instrument).
+ARMBINS="sim_device csweep_arm fmt_diff_arm mathsweep_arm gfx_device fk_input sk_sampler"
 
 # rig_lock_acquire — exclusive rig lock (iter 41, review rounds 1-3
 # recurring — the class is closed by REMOVING the cleverness): ONE
@@ -179,6 +182,92 @@ rig_proc_respawn_poll() {
       printf '%s\n' "$ppid"
       return 0
     fi
+  done
+  return 1
+}
+
+# rig_comm_pids <name> — pids whose /proc/<pid>/comm is EXACTLY <name>
+# (M4 task 8, iter 74). busybox pidof CANNOT see #!/bin/sh daemons
+# (comm = script name but argv[0] = sh), and busybox
+# `start-stop-daemon -K -x <script>` matches /proc/<pid>/exe — busybox
+# for a script — so the OS's own stop channel is a measured NO-OP for
+# the FunKey's shell daemons; the comm scan sees every process class
+# uniformly. Whitelist-parsed: every output line must be a bounded
+# decimal pid, else loud death. Echoes zero+ pid lines.
+rig_comm_pids() {
+  local d out line
+  d="$1"
+  out="$(dsh 'for c in /proc/[0-9]*/comm; do n="$(cat "$c" 2>/dev/null)"; if [ "x$n" = "x'"$d"'" ]; then c2="${c#/proc/}"; echo "${c2%/comm}"; fi; done')" || {
+    echo "DEVICE FAIL: comm scan for $d failed on the device" >&2
+    return 1
+  }
+  out="${out%$'\n'}" # the single measured dsh trailing-newline artifact
+  [ -z "$out" ] && return 0
+  while IFS= read -r line; do
+    if ! [[ "$line" =~ ^[0-9]{1,7}$ ]]; then
+      echo "DEVICE FAIL: comm scan for $d emitted a non-pid line ('$line')" >&2
+      return 1
+    fi
+    printf '%s\n' "$line"
+  done <<< "$out"
+}
+
+# rig_daemon_stop <name> — quiesce a device daemon (M4 task 8, iter 74:
+# the ATTRIBUTED skip-stall mitigation — low_bat_check's 2 s poll loop
+# preempts the paced app ~7-15 ms every ~123 frames; AGENT-LOG iter 74
+# verdict). EXACTLY-ONE running instance expected (boot state) — any
+# other inventory is a loud refusal, never a blind kill; SIGTERM by
+# pid; /proc liveness poll + comm-scan re-verify. The CALLER must
+# guarantee restoration (rig_daemon_restore in both the success path
+# and its cleanup trap). Echoes the killed pid.
+rig_daemon_stop() {
+  local d pids n pid rc gone
+  d="$1"
+  pids="$(rig_comm_pids "$d")" || return 1
+  n="$(printf '%s' "$pids" | grep -c '')" || true
+  if [ "$n" != 1 ]; then
+    echo "DEVICE FAIL: expected exactly 1 running '$d' before quiesce, found $n ('$pids') — unexpected device inventory, refusing to touch it" >&2
+    return 1
+  fi
+  pid="$pids"
+  dsh "kill $pid" || {
+    echo "DEVICE FAIL: kill $pid ($d) failed" >&2
+    return 1
+  }
+  gone=0
+  for _ in $(seq 1 8); do
+    rc=0
+    dsh "test ! -d /proc/$pid" >/dev/null 2>&1 || rc=$?
+    if [ "$rc" = 0 ]; then gone=1; break; fi
+    sleep 1
+  done
+  if [ "$gone" != 1 ]; then
+    echo "DEVICE FAIL: $d (pid $pid) still alive 8 s after SIGTERM" >&2
+    return 1
+  fi
+  pids="$(rig_comm_pids "$d")" || return 1
+  if [ -n "$pids" ]; then
+    echo "DEVICE FAIL: comm-scan still finds '$d' pids after the kill ('$pids')" >&2
+    return 1
+  fi
+  printf '%s\n' "$pid"
+}
+
+# rig_daemon_restore <name> <init-script> — restart a quiesced daemon
+# through its init-script START channel (start-stop-daemon -S execs
+# fine; only the -K stop arm is broken for scripts) and VERIFY
+# liveness by comm-scan (bounded poll). Returns nonzero when the
+# daemon never verifies — the caller decides loud-fail (main path) vs
+# loud-warn naming the manual recovery command (trap path).
+rig_daemon_restore() {
+  local d isc pids
+  d="$1"
+  isc="$2"
+  dsh "$isc start" >/dev/null || return 1
+  for _ in $(seq 1 8); do
+    sleep 1
+    pids="$(rig_comm_pids "$d")" || continue
+    if [ -n "$pids" ]; then return 0; fi
   done
   return 1
 }
@@ -625,6 +714,10 @@ rig_arm_build() {
       # no sim, no libm; kernel headers from the SDK sysroot.
       $CC -O2 -ffp-contract=off -Wall -Wextra -Werror -static \
         port/tools/fk_input.c -o "$DEVB/fk_input"
+      # sk_sampler (M4 task 8): static fork-free /proc counter sampler
+      # for the skip-stall attribution instrument — no SDL, no sim.
+      $CC -O2 -ffp-contract=off -Wall -Wextra -Werror -static \
+        port/sim/device/skip-attrib/sk_sampler.c -o "$DEVB/sk_sampler"
       # gfx_device (M3 task 4; M4 task 3 adds the vfx render plane TUs
       # gfx_vfx/gfx_overlay/gfx_bg — keep in sync with check-render.sh +
       # check-device-render.sh host lists): the SDL1.2 live-render app.
@@ -698,7 +791,7 @@ rig_arm_build() {
         echo "DEVICE FAIL: nm failed on $b — cannot verify fdlibm overrides" >&2
         exit 1
       fi
-      for s in floor ceil fmod; do
+      for s in floor ceil fmod round lround; do
         cnt="$(awk -v s="$s" '$2=="T" && $3==s {n++} END {print n+0}' "$nmout")"
         if [ "$cnt" != 1 ]; then
           echo "DEVICE FAIL: expected exactly 1 T definition of $s in $b, found $cnt" >&2

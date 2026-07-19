@@ -164,6 +164,7 @@ rig_lock_acquire
 RIG_PRESERVE_DTMP=1
 PARKED=0
 DEADMAN_ARMED=0
+LBC_STOPPED=0 # M4 task 8 mitigation state: low_bat_check quiesced (trap restores)
 
 # Cleanup (installed AFTER lock acquisition, riglib contract): kill our
 # app, RESTORE the frontend if we parked it, cancel the deadman ONLY
@@ -187,6 +188,19 @@ DEADMAN_ARMED=0
 # chokepoint has run (iter 56, review-55 H).
 task4_cleanup() {
   local prc restore_verified
+  # M4 task 8 mitigation restore (device hygiene): if this run quiesced
+  # low_bat_check and died before its verified restore, restart it via
+  # the init-script START channel + comm-scan verify (riglib; the -K
+  # stop arm is a measured no-op for shell daemons, so restore is
+  # start-only). Unverifiable restore = loud WARN naming the manual
+  # recovery command, never silent.
+  if [ "$LBC_STOPPED" = 1 ]; then
+    if rig_daemon_restore low_bat_check /etc/init.d/S12low-bat-check; then
+      echo "   mitigation restore: low_bat_check verified running again (comm-scan)" >&2
+    else
+      echo "WARN: low_bat_check did NOT verify as running after restart — run '/etc/init.d/S12low-bat-check start' on the device manually" >&2
+    fi
+  fi
   # pkill by process NAME — a `pkill -f <path>` pattern matches the adb
   # shell's OWN command line and kills it before the dsh RC marker can
   # print (measured iter 50: rc 71 on every cleanup). rc CAPTURED
@@ -891,6 +905,28 @@ for hf in "$BUILD/deadman.sh" "$BUILD/render-launch.sh"; do
 done
 dsh "chmod +x $DTMP/deadman.sh $DTMP/render-launch.sh"
 
+# SKIP-STALL MITIGATION (M4 task 8, ATTRIBUTED — AGENT-LOG iter 74):
+# the registered external stall class (isolated ~7-15 ms preemptions,
+# 1-3 skips per 3600 paced frames, the "~frames 1100-1500 zone") is
+# low_bat_check — a 2-second shell poll loop whose every wake forks
+# ~8 busybox children and reads the AXP20x battery over blocking i2c
+# sysfs; its wakes land every ~123 frames (2.05 s) and preempt the
+# paced app on the single-core V3s. Matrix-measured (iter 74):
+# live arms 2-3 skips / 33-34 events per run with a 123-frame event
+# comb; TWO consecutive quiesce arms 0 skips, comb gone. Mitigation:
+# quiesce low_bat_check for the paced window ONLY — comm-scan
+# kill-by-pid (exactly-one-instance refusal), restore via the
+# init-script START channel + comm-scan verify in BOTH the success
+# path (hard-gated below) and the cleanup trap. USB power is present
+# during any ADB run, so the low-battery-shutdown protection this
+# daemon provides is moot inside the window; the OPK play path is
+# untouched. skips==0 stays the unweakened gate — this removes
+# measured external interference, exactly like the pre-run sync and
+# the host quiet window (strictly-less-interference class).
+LBC_STOPPED=1 # pessimistic BEFORE the kill (the review-50 H2 class)
+lbc_pid="$(rig_daemon_stop low_bat_check)"
+echo "   mitigation: low_bat_check (pid $lbc_pid) quiesced for the paced window (trap restores)"
+
 # PRE-RUN SYNC (M4 task 3 — transient-skip class attribution, measured
 # across 5 paced attempts): the ~10 MB of pushes above go to SD through
 # the page cache; the kernel's dirty-expiry writeback (~30 s) then
@@ -984,6 +1020,15 @@ if ! dsh "test ! -f $DTMP/deadman.fired" >/dev/null 2>&1; then
   exit 1
 fi
 DEADMAN_ARMED=0
+# M4 task 8 mitigation restore (main path, HARD-GATED — an unrestored
+# daemon must never ride a passing gate; the trap only covers deaths):
+if rig_daemon_restore low_bat_check /etc/init.d/S12low-bat-check; then
+  LBC_STOPPED=0
+  echo "   mitigation restore: low_bat_check running again (comm-scan-verified)"
+else
+  echo "DEVICE FAIL: low_bat_check did not verify as running after restart — run '/etc/init.d/S12low-bat-check start' on the device manually" >&2
+  exit 1
+fi
 echo "   live run done (host-observed $((t1 - t0)) s; app rc 0; frontend restored; deadman cancelled without firing)"
 pullv "$DTMP/g01.dev-out.txt" "$DEVB/g01.dev-out.txt"
 pullv "$DTMP/g01.dev-tim.txt" "$DEVB/g01.dev-tim.txt"

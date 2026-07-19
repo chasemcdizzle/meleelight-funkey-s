@@ -143,3 +143,37 @@ Append new entries at the bottom; never edit or delete a recorded row.
   in slack; the M4 surface (~13 ms/frame) converts them into skips.
   Attribution/closure = fix_plan §M4 task 8 (the registered skip-burst
   instrument); gate posture unchanged (skips == 0 never weakened).
+
+## Iter 74 (2026-07-19) — M4 task 8: skip-stall attribution matrix (paced g01, full M4 visual surface, --attrib live)
+
+- Source: `.loop/m4-task8-a{1,2,4,5}-*.log` + harvested
+  `.loop/m4-task8-a5-corr-harvested.txt` — matrix runs of
+  `port/sim/device/check-skip-attrib.sh` (MLFK_SKATTRIB_MATRIX=1).
+  Same device/toolchain as iter 73; every leg STREAM MATCH 3600/3600.
+
+| arm | skips | events | note |
+|---|---|---|---|
+| A1 nosampler (all daemons live) | 2 | 34 | event comb every ~123 frames (2.05 s) |
+| A2 sampler (all daemons live) | 3 | 33 | same comb; i2c ~800 IRQ/s steady, ctxt ~1000/s |
+| A4 quiesce low_bat_check | 0 | 1 | comb GONE; 1 marginal 17.39 ms over-budget frame |
+| A5 quiesce low_bat_check | 0 | 3 | comb GONE; marginal non-skip events only |
+
+- ATTRIBUTION (AGENT-LOG iter 74, verdict shape (a)): the registered
+  external stall class = `low_bat_check` (FunKey OS battery poller,
+  2 s shell loop, ~8 forks + blocking AXP20x i2c sysfs reads per
+  wake) preempting the paced app ~7-15 ms on the single-core V3s.
+  Mitigation: check-device-render.sh quiesces it for the paced window
+  (comm-scan kill + verified init-START restore, trap-covered).
+  skips==0 gate unweakened.
+
+## Iter 74 addendum — mitigated task-3 gate run (quiesce live, lround fix)
+
+- Source: `.loop/m4-task8-task3-donecheck.log` — cold
+  `bash port/gfx/check-device-render.sh` → `DEVICE RENDER OK`, exit 0.
+  With low_bat_check quiesced for the paced window: **skips 0/3600**,
+  full p99 12.777 ms, render-only p99 5.598 ms, sim p99 7.429 ms,
+  present p99 1.400 ms — vs iter-73's best blocked attempt (15.510 /
+  7.056 with 1-3 skips): the stall class was also inflating p99 by
+  ~2.7 ms. Device shot BIT-IDENTICAL to host (PPM+PGM) after the
+  fdlibm round/lround strong overrides (the SDK musl lround was
+  shifting HUD glyph blit anchors 1 px — iter-38 class, 2nd instance).

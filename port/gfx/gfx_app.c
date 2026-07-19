@@ -17,6 +17,23 @@
 //            [--ready-file f]]
 //           [--tapjump-off-p1] [--legible]
 //           [--sndpack pack.bin [--audio-samples N]]
+//           [--attrib attrib.txt]
+//
+// --attrib (M4 task 8, skip-stall attribution — DIAGNOSTIC, off on
+// every gate path): per frame at frame START (plus one final sample
+// after the loop) record CLOCK_MONOTONIC ns, CLOCK_MONOTONIC_RAW ns,
+// and getrusage(RUSAGE_SELF) ru_nvcsw/ru_nivcsw/ru_minflt/ru_majflt
+// (CUMULATIVE — the host correlator computes deltas). RAM-buffered,
+// written post-run (no frame-loop I/O). GRAMMAR IS LOAD-BEARING
+// (paired with port/sim/device/skip-attrib/correlate-skips.js):
+// exactly frames+1 lines, each
+//   ^<mono_ns> <raw_ns> <nvcsw> <nivcsw> <minflt> <majflt>$
+// Interpretation: a late frame START against the absolute pacing
+// schedule exposes stalls landing in the pacing sleep; an nivcsw
+// jump = preempted by another task; nivcsw flat with wall-time loss
+// = interrupt-context time; minflt/majflt = paging; mono-vs-raw skew
+// drift = clock adjustment artifacts. Cost when enabled: two
+// clock_gettime + one getrusage per frame; zero when absent.
 //
 // --legible (M4 task 3): the stage-surface legibility clamp
 // (GFX_LEGIBLE_MIN_DEV_PX, gfx.h) — the DEVICE-path flag; browser-IoU
@@ -92,6 +109,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h> // --attrib: getrusage (M4 task 8)
 #include <time.h>
 
 #include "../sim/sim/sim.h"
@@ -241,6 +259,35 @@ static uint64_t now_ns(void) {
   return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
 }
 
+// --attrib capture (M4 task 8): one row per frame START + one tail row.
+// now_raw_ns/attrib_sample die loud on failure — a silently-zero row
+// would read as a plausible measurement (fail-loud beats fail-plausible).
+static uint64_t now_raw_ns(void) {
+  struct timespec ts;
+  if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) != 0) {
+    sim_fatal("clock_gettime(CLOCK_MONOTONIC_RAW) failed");
+  }
+  return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+
+typedef struct {
+  uint64_t mono, raw;
+  uint64_t nvcsw, nivcsw, minflt, majflt;
+} AttribRow;
+
+static void attrib_sample(AttribRow *row) {
+  struct rusage ru;
+  row->mono = now_ns();
+  row->raw = now_raw_ns();
+  if (getrusage(RUSAGE_SELF, &ru) != 0) {
+    sim_fatal("getrusage(RUSAGE_SELF) failed");
+  }
+  row->nvcsw = (uint64_t)ru.ru_nvcsw;
+  row->nivcsw = (uint64_t)ru.ru_nivcsw;
+  row->minflt = (uint64_t)ru.ru_minflt;
+  row->majflt = (uint64_t)ru.ru_majflt;
+}
+
 static void sleep_until_ns(uint64_t target) {
   for (;;) {
     const uint64_t now = now_ns();
@@ -365,6 +412,7 @@ int main(int argc, char **argv) {
   const char *shotPpm = 0, *shotPgm = 0;
   const char *recordPath = 0, *readyPath = 0, *keysPath = 0;
   const char *sndpackPath = 0;
+  const char *attribPath = 0; // M4 task 8: skip-stall attribution sidecar
   long seed = -1, p1 = -1, p2 = -1, stage = -1, frames = -1, difficulty = 3;
   long shotFrame = -1;
   long audioSamples = 512; // spike verdict default; flag = testing seam
@@ -406,6 +454,7 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--tapjump-off-p1") == 0) tapJumpOffP1 = true;
     else if (strcmp(a, "--legible") == 0) legible = true;
     else if (strcmp(a, "--sndpack") == 0 && hasV) sndpackPath = argv[++i];
+    else if (strcmp(a, "--attrib") == 0 && hasV) attribPath = argv[++i];
     else if (strcmp(a, "--audio-samples") == 0 && hasV) {
       audioSamples = strtol(argv[++i], 0, 10);
       audioSamplesGiven = true;
@@ -438,7 +487,8 @@ int main(int argc, char **argv) {
             "[--budget-ns N] [--shot-frame N --shot-ppm f --shot-pgm f] "
             "[--live --record-trace t.json --record-keys k.txt "
             "[--ready-file f]] [--tapjump-off-p1] [--legible] "
-            "[--sndpack pack.bin [--audio-samples N]]\n");
+            "[--sndpack pack.bin [--audio-samples N]] "
+            "[--attrib attrib.txt]\n");
     return 1;
   }
   // RAM-buffer overflow guards (sim_main.c --timing precedent, iter 45):
@@ -521,6 +571,14 @@ int main(int argc, char **argv) {
   long presentFails = 0; // platform_present nonzero rc count (review-50 M2)
   bool shotTaken = false;
 
+  // --attrib buffer (M4 task 8): frames+1 rows (one per frame start,
+  // one tail after the loop). RAM-only until the post-run flush.
+  AttribRow *attrib = 0;
+  if (attribPath) {
+    attrib = malloc(((size_t)frames + 1) * sizeof *attrib);
+    if (!attrib) sim_fatal("oom (attrib buffer)");
+  }
+
   // Live-session recording (RAM; flushed post-run — no frame-loop I/O).
   MlSb rec;
   ml_sb_init(&rec);
@@ -548,6 +606,7 @@ int main(int argc, char **argv) {
   char hex[65];
   const uint64_t tStart = now_ns();
   for (long f = 0; f < frames; f++) {
+    if (attrib) attrib_sample(&attrib[f]); // frame-START row (M4 task 8)
     platform_poll(&pin); // event pump (live mode consumes it below)
     const uint64_t deadline = tStart + (uint64_t)(f + 1) * budgetNs;
 
@@ -622,6 +681,7 @@ int main(int argc, char **argv) {
     if (pace == 1) sleep_until_ns(deadline);
   }
   const uint64_t tEnd = now_ns();
+  if (attrib) attrib_sample(&attrib[frames]); // tail row (M4 task 8)
 
   if (G.hasBridge && ml_ai_bridge_peek(&G.bridge) != 0) {
     sim_fatal("AI bridge has unconsumed entries after the last frame");
@@ -669,6 +729,24 @@ int main(int argc, char **argv) {
     }
   }
   if (fclose(tf) != 0) sim_fatal("--timing close/flush failed");
+
+  // --attrib flush (M4 task 8): frames+1 rows, grammar in the header
+  // comment (paired with correlate-skips.js).
+  if (attribPath) {
+    FILE *af = fopen(attribPath, "w");
+    if (!af) sim_fatal("cannot open --attrib file for writing");
+    for (long f = 0; f <= frames; f++) {
+      if (fprintf(af,
+                  "%" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
+                  " %" PRIu64 "\n",
+                  attrib[f].mono, attrib[f].raw, attrib[f].nvcsw,
+                  attrib[f].nivcsw, attrib[f].minflt, attrib[f].majflt) < 0) {
+        sim_fatal("--attrib write failed");
+      }
+    }
+    if (fclose(af) != 0) sim_fatal("--attrib close/flush failed");
+  }
+  free(attrib);
 
   if (shotFrame > 0) {
     if (!shotTaken) sim_fatal("shot frame never rendered");

@@ -3,7 +3,54 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-18, iter 73 — M4 task 3 landed+verified, done-check BLOCKED on the external stall class)
+## Live right now (updated: 2026-07-19, iter 74 — M4 task 8 DONE (re-ordered forward): stall class ATTRIBUTED + mitigated; task 3 DONE)
+
+- **Iter 74 (M4 task 8 — skip-stall attribution instrument,
+  driver-re-ordered forward) DONE; M4 task 3 UNBLOCKED → DONE** (full
+  entries: AGENT-LOG iter 74 pre-registration + result + addendum):
+  **SKIP ATTRIB VERDICT: (a)** — the external stall class =
+  `low_bat_check` (FunKey OS battery poller: 2 s shell loop, ~8
+  busybox forks + blocking AXP20x i2c sysfs reads per wake; event
+  comb every ~123 frames ≈ 2.05 s, phase-random per run — the
+  "1100-1500 zone" was phase+load illusion). Matrix: live arms 2-3
+  skips/33-34 events per 3600 paced frames; quiesce arms ×2 = 0
+  skips, comb gone. Instrument committed (Tier-B diagnostic):
+  gfx_app --attrib (per-frame mono/raw + rusage rows), sk_sampler.c
+  (fork-free 250 ms /proc counter snapshots), correlate-skips.js
+  (whitelist grammars + attrib_complete terminator), pre/post kernel
+  + per-pid snapshots; `bash port/sim/device/check-skip-attrib.sh` →
+  `SKIP ATTRIB OK` exit 0 cold (.loop/m4-task8-donecheck.log; arms
+  nosampler/sampler/quiesce via MLFK_SKATTRIB_ARM). MITIGATION in
+  check-device-render.sh: low_bat_check quiesced for the paced window
+  (riglib rig_comm_pids/rig_daemon_stop/rig_daemon_restore —
+  comm-scan kill-by-pid; busybox start-stop-daemon -K -x is a
+  measured NO-OP for script daemons and pidof is comm-blind), restore
+  hard-gated + trap-covered; skips==0 gate UNWEAKENED. The unblocked
+  task-3 rerun then hit the FIRST-ever-reached host<->device shot
+  bit-compare and exposed the SECOND iter-38-class instance: device
+  musl lround shifted HUD glyph anchors 1 px — fixed with fdlibm.c
+  exact round/lround STRONG overrides + mathsweep rr/lr columns + nm
+  assertion (floor ceil fmod round lround). **Task 3 cold done-check
+  GREEN: `DEVICE RENDER OK (full p99 12.777 ms, render-only p99
+  5.598 ms, sim p99 7.429 ms, present p99 1.400 ms, skips 0/3600)`
+  exit 0 (.loop/m4-task8-task3-donecheck.log; shot BIT-IDENTICAL
+  PPM+PGM; p99 recovered ~2.7 ms vs the blocked attempts).**
+  Regressions ALL green: CROSSCHECK OK, SIM CONFORMS 8/8, RENDER OK
+  (IoU 0.9059, no pin moved), DEVICE CONFORMS g01, DEVICE CONFORMS
+  8/8 + SIM P99 OK (.loop/m4-task8-{host,device}-regressions.log).
+  Manifest: riglib.sh + check-device-render.sh re-pinned arc-pending
+  (cite iter74) + anchor; SELF-CHECK 23/23 + ANCHOR GREEN. Driver
+  notes: (1) OPK PLAY path keeps low_bat_check live by design (valve
+  absorbs it; Chase's ratified playtest ran with it); task-14
+  verify_m4 assembly decides whether with-audio legs adopt the
+  quiesce (machinery is shared riglib); (2) check-device-audio.sh /
+  check-device-opk.sh paced legs don't yet carry the mitigation;
+  (3) Tier-B review round for the new instrument surfaces + the
+  fdlibm round/lround addition is driver-queueable; (4) 9/12 paced
+  runs consumed, device left clean (daemons verified restored, play
+  install untouched).
+
+## [superseded by iter 74] (updated: 2026-07-18, iter 73 — M4 task 3 landed+verified, done-check BLOCKED on the external stall class)
 
 - **Iter 73 (M4 task 3 — stage legibility + device render rung)
   LANDED + VERIFIED, done-check BLOCKED (honest report; full entry =

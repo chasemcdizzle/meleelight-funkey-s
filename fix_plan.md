@@ -1452,6 +1452,18 @@ overruns):
   nav + a unique evidence-OPK title (small dedicated iteration).
   check-device-audio.sh is NOT yet threaded with --vfxdata/--glyphs
   (out of task scope; cannot pass until task 6/14 threads it).
+  **DONE (iter 74, 2026-07-19 — UNBLOCKED by task 8's attribution +
+  mitigation)**: cold done-check `DEVICE RENDER OK (full p99 12.777
+  ms, render-only p99 5.598 ms, sim p99 7.429 ms, present p99
+  1.400 ms, skips 0/3600)` exit 0
+  (.loop/m4-task8-task3-donecheck.log). skips==0 achieved (gate
+  UNWEAKENED) via the run-harness low_bat_check quiesce (riglib
+  rig_daemon_stop/restore, trap-covered + hard-gated restore); the
+  first-ever-reached shot bit-compare then exposed the device musl
+  lround shifting HUD glyph anchors 1 px (iter-38 round/trunc class,
+  2nd instance) — fixed by fdlibm.c round/lround strong overrides +
+  mathsweep rr/lr columns + nm assertion; shot now BIT-IDENTICAL
+  host<->device. Full trail: AGENT-LOG iter 74 + addendum.
 - task 4 — **ai.js structure-parallel C port, capture-replay
   verified**: port/sim/ai.c (+ helpers) translated from src/main/ai.js
   (1,575 lines) over the MlAiVal tagged-value model; verified by
@@ -1500,6 +1512,26 @@ overruns):
   done-check: `bash port/gfx/check-skip-attrib.sh` → prints
   `SKIP ATTRIB RECORDED`, exit 0 (asserts the verdict needle in the
   AGENT-LOG entry, M2CAL-report precedent).
+  **DONE (iter 74, 2026-07-19 — driver RE-ORDERED forward + re-specced
+  the done-check to `bash port/sim/device/check-skip-attrib.sh` →
+  `SKIP ATTRIB OK`, recorded in the iter-74 brief/entry)**: cold
+  done-check `SKIP ATTRIB OK (arm=sampler, skips=3/3600, events=37,
+  stream MATCH)` exit 0 (.loop/m4-task8-donecheck.log).
+  **SKIP ATTRIB VERDICT: (a)** — the stall class is `low_bat_check`
+  (FunKey OS battery poller: 2 s shell loop, ~8 forks + blocking
+  AXP20x i2c sysfs reads per wake; event comb every ~123 frames =
+  2.05 s, phase-random). Matrix: live arms 2-3 skips / 33-34 events;
+  quiesce arms ×2 = 0 skips, comb gone. Instrument: gfx_app --attrib
+  (per-frame mono/raw clocks + rusage), sk_sampler (fork-free 250 ms
+  /proc counters), correlate-skips.js (whitelist grammars), pre/post
+  kernel+pidtable snapshots. Mitigation landed in
+  check-device-render.sh (task-3 unblock proven). NEW gotcha classes:
+  busybox start-stop-daemon -K -x is a NO-OP for script daemons +
+  pidof is comm-blind (quiesce = comm-scan + kill-by-pid); adbd
+  merges device stderr into pulled streams; bash-3.2 same-statement
+  `local` expansion + expansion-error-exits-0-under-EXIT-trap (the
+  SKA_OK fail-closed guard). Full data: AGENT-LOG iter 74 + addendum,
+  device-perf.md iter-74 tables.
 - task 9 — **FOH core + menu flows, host**: port/foh/ screen machine —
   start screen → main menu → CSS (5 chars, human/CPU + difficulty
   slider) → stage select → match launch; options screens for the

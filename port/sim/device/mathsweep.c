@@ -3,7 +3,10 @@
 // the composed js_round (ml_js.h) — i.e. every raw libm function the
 // device sim TU set can reach (measured, iter 38: floor ~86 sites,
 // ceil via js_round, sqrt 8 sites, fmod 30 sites, fabs via js_abs;
-// no raw round/trunc/exp/log call sites exist).
+// no raw round/trunc/exp/log call sites existed THEN — M4 task 3's
+// render plane added lround blit anchors (gfx_overlay.c), so iter 74
+// cashed in the registered note "extend overrides+sweep before any
+// use": fdlibm.c round/lround strong overrides + the rr/lr columns).
 //
 // WHY: the FunKey SDK's static musl libc.a ships floor/ceil/round whose
 // +-2^52 "toint" trick was optimized away when the SDK's libc was built
@@ -78,10 +81,22 @@ static void sweep1(uint64_t bits) {
   const float xf = (float)x;
   printf("v %016" PRIx64 " f=%016" PRIx64 " c=%016" PRIx64 " s=%016" PRIx64
          " a=%016" PRIx64 " r=%016" PRIx64 " sf=%08" PRIx32 " af=%08" PRIx32
-         "\n",
+         " rr=%016" PRIx64,
          bits, canon_bits(floor(x)), canon_bits(ceil(x)),
          canon_bits(sqrt(x)), canon_bits(fabs(x)), canon_bits(js_round(x)),
-         canon_bits_f(sqrtf(xf)), canon_bits_f(fabsf(xf)));
+         canon_bits_f(sqrtf(xf)), canon_bits_f(fabsf(xf)),
+         canon_bits(round(x)));
+  // lround (M4 task 8): the render plane's blit-anchor call (C99 raw
+  // round family — NOT js_round). long is 32-bit on armv7 and 64-bit
+  // on the host anchor, and out-of-range/NaN lround is UB, so the
+  // column is emitted ONLY inside a conservative shared in-range guard
+  // (identical on both sides); everything else prints the fixed 'oor'
+  // token. In-range values byte-compare like every other column.
+  if (isfinite(x) && fabs(x) <= 2147483000.0) {
+    printf(" lr=%lld\n", (long long)lround(x));
+  } else {
+    printf(" lr=oor\n");
+  }
 }
 
 static void sweep2(uint64_t a, uint64_t b) {

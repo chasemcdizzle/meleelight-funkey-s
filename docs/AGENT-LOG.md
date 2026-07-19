@@ -10128,3 +10128,323 @@ injectPin, servedDistSha256, all *-frozen.txt).
   class with four refuted internal theories on record — the task-8
   instrument inherits a concrete head start (per-pass profiler +
   the frame-zone/probe evidence).
+
+## iter 74 — 2026-07-18 — M4 task 8 (RE-ORDERED FORWARD) PRE-REGISTRATION: skip-stall attribution instrument + matrix (frozen before any run/edit; PROCESS §2)
+
+- **Task (fix_plan §M4 task 8, driver re-order + re-spec)**: build the
+  attribution instrument for the registered external stall class
+  (isolated ~7-15 ms kernel-side stalls, 1-3 per 3600 paced frames,
+  clustered ~frames 1100-1500 + scattered; iters 54/57/62/73 history;
+  task 3 is BLOCKED on it) and ATTRIBUTE it. Driver-respecced
+  done-check: `bash port/sim/device/check-skip-attrib.sh` →
+  `SKIP ATTRIB OK`, exit 0 (supersedes the fix_plan seed's
+  port/gfx path + `SKIP ATTRIB RECORDED` needle — recorded as a
+  driver-brief re-spec, fix_plan annotated in this iteration).
+- **Evidence base inherited (not re-litigated)**: REFUTED already —
+  host adbd polling (50 s quiet window), dirty writeback (pre-run
+  sync), rig on-device machinery (no-deadman probe), swap (pswpin/out
+  0), DVFS (no cpufreq), fresh boot. Latest failing run's skips:
+  frames 1105/1229/1475 (driver cold, .loop/driver-cold-m4t3-donecheck.log).
+- **Device recon (read-only, pre-design; logged .loop/m4-task8-recon.log)**:
+  single-core Cortex-A7, kernel 4.14.14-funkey SMP-built/1-cpu.
+  IRQ inventory: arch_timer ~850/s, mv64xxx_i2c ~700/s (heaviest
+  device — something polls the AXP20x PMIC continuously), musb (USB
+  gadget) ~73/s, sunxi-mmc, dma, TE (display tear) ~55/s, spi0 kthread
+  state=D stime 2411 jiffies/1674 s (the SPI panel push path).
+  Userspace daemons: fkgpiod (ELF, 0.57% CPU), low_bat_check,
+  system_stats (start-stop-daemon init scripts S12/S13 — clean
+  stop/restart channels), adbd, frontend, gmenu2x, syslogd/klogd.
+  fork rate ~4.4/s system-wide (processes counter) — shell-loop
+  daemons fork busybox constantly. NO /proc/<pid>/schedstat
+  (CONFIG_SCHED_INFO off), NO ftrace (/sys/kernel/debug/tracing
+  absent), NO busybox timeout applet.
+- **INSTRUMENT DESIGN (frozen)**: single-core rule — in-app capture at
+  frame boundaries beats a concurrent sampler; the sampler exists as a
+  SEPARATE matrix arm whose own perturbation is measured (iter-62
+  probe-order lesson).
+  1. In-app (gfx_app --attrib <file>, flag off = zero cost, no gate
+     path passes it): per frame at frame start + once post-loop,
+     RAM-buffered, written post-run: CLOCK_MONOTONIC ns,
+     CLOCK_MONOTONIC_RAW ns, getrusage(SELF) ru_nvcsw, ru_nivcsw,
+     ru_minflt, ru_majflt (cumulative; host computes deltas). Cost = 2
+     clock_gettime + 1 getrusage ≈ µs-scale; measured by comparing
+     p50s vs the iter-73 baseline in the report. Interpretation key:
+     late frame START vs the absolute schedule exposes stalls landing
+     in the pacing SLEEP (invisible to the work buckets); nivcsw delta
+     at the stall frame = preempted-by-a-task; nivcsw flat + wall loss
+     = interrupt-context time; minflt/majflt = paging; mono-vs-raw
+     skew drift = clock adjustment artifacts.
+  2. On-device C sampler (port/sim/device/skip-attrib/sk_sampler.c,
+     joins ARMBINS/shared stamp): every 250 ms reads /proc/stat +
+     /proc/interrupts + /proc/softirqs via held fds (pread, no forks),
+     CLOCK_MONOTONIC-stamped, RAM-buffered, written post-run to tmpfs
+     — gives per-window IRQ/softirq/ctxt deltas to bracket each stall
+     timestamp. Sampler arms only.
+  3. Pre/post run (host-driven dsh, OUTSIDE the paced window):
+     /proc/interrupts, /proc/stat, /proc/vmstat, /proc/softirqs,
+     /proc/uptime, dmesg, /proc/timer_list, and the FULL per-pid
+     /proc/*/stat table (utime/stime/nivcsw per process) — a 10 ms
+     stall consumed by a process = ≥1 jiffy delta in exactly that
+     process; steady consumers (fkgpiod et al) are the background
+     against which quiesce arms discriminate.
+  4. Host correlator (port/sim/device/skip-attrib/correlate-skips.js,
+     whitelist grammars, judge_complete-style terminator): joins
+     timing rows + attrib rows + sampler windows + pre/post deltas;
+     an EVENT = skipped frame OR full_ns > budget OR late-start >
+     2 ms; emits per-event correlated evidence + run-level deltas.
+- **MATRIX (frozen; cap 12 paced device runs total this iteration,
+  early-stop on confirmed verdict; one variable per arm)**:
+  A1 nosampler (attrib only — the sampler-perturbation control),
+  A2 sampler (default arm), A3 sampler repeat (stability of zone +
+  signature). Then EVIDENCE-GATED arms (pre-registered decision tree):
+  if per-event nivcsw jumps ⇒ per-pid delta names a process ⇒ A4/A5 =
+  quiesce that daemon (init.d stop, trap-restored + pidof-verified;
+  allowlist ONLY low_bat_check / system_stats / fkgpiod) ×2 confirm;
+  if nivcsw flat + IRQ-window spike ⇒ the IRQ source: daemon-driven
+  (i2c poller) ⇒ quiesce its driver daemon; USB/musb ⇒ A-noadb
+  (device-side wrapper stops adbd around the run, self-restarting,
+  watchdog-bounded — implemented ONLY if evidence points there);
+  inherent (arch_timer/spi0/mmc) ⇒ verdict (b). Each arm = full 3600
+  paced frames, frontend parked + deadman (the reviewed render-check
+  machinery adapted), connected-quiet + pre-run sync (kept:
+  strictly-less-interference mitigations).
+- **VERDICT SHAPES (frozen)**: (a) attributable + eliminable — a
+  stoppable/restorable service explains the events AND 2 consecutive
+  quiesce-arm runs show skips == 0 ⇒ implement the quiesce+restore
+  mitigation in the run harness (device hygiene: restoration
+  trap-guaranteed AND verified by pidof, never firmware/saves), rerun
+  task 3's cold done-check; green ⇒ un-block task 3. (b) attributable
+  + NOT eliminable — kernel-inherent source; document rate, magnitude,
+  source precisely; STOP (driver owns the gate-design decision; the
+  render gate does NOT widen this iteration). (c) unattributable
+  within the matrix — honest exposure report + what a deeper
+  instrument needs (ftrace/CONFIG_SCHED_INFO require a kernel rebuild
+  — out of scope, firmware is untouchable). REFUTATION honesty: if
+  the instrumented runs show ZERO events (the class fails to
+  reproduce), that itself is recorded and the verdict is (c) with the
+  reproduction-rate data; do NOT retry-farm beyond the cap.
+- **done-check (frozen form)**: check-skip-attrib.sh = pins + shared
+  arm build (sk_sampler joins ARMBINS; script joins RIG_SCRIPTS) +
+  ONE paced instrumented device run (default arm: sampler) + STREAM
+  MATCH vs frozen g01 (the instrument may not perturb the sim) +
+  attrib/sampler artifact whitelist grammars + correlator
+  attrib_complete + the AGENT-LOG verdict needle
+  `SKIP ATTRIB VERDICT:` (M2CAL-report precedent) ⇒ prints
+  `SKIP ATTRIB OK` exit 0. Skips are REPORTED, never asserted zero
+  (they are the phenomenon, not the pass criterion).
+- **Teeth (frozen)**: T1 attrib-grammar — truncate a copy of the
+  attrib artifact ⇒ correlator loud death; T2 timing/attrib row-count
+  mismatch ⇒ loud death; T3 sampler-grammar — corrupt a sampler line
+  ⇒ loud death; T4 needle — run the needle grep against a
+  needle-free AGENT-LOG copy ⇒ loud death; T5 instrument-perturbation
+  gate — the run's stream is verify-stream judged (standing, every
+  run). Restores by construction (teeth run on COPIES).
+- **Freeze-manifest discipline**: riglib.sh bytes change (ARMBINS +
+  RIG_SCRIPTS + sampler build) ⇒ re-pin its manifest row (status
+  stays arc-pending, cite = this entry) + verify_m3.sh
+  MANIFEST_SHA256 anchor updated SAME commit + 23/23 self-check
+  logged. gfx_app.c/sk_sampler.c/correlate-skips.js/
+  check-skip-attrib.sh are new/edited NON-gate diagnostic surfaces
+  (Tier B — diagnostic instrument; gfx_app.c's --attrib arm is
+  off on every gate path; driver may queue the review round).
+- **Constraints echoed**: render gate NEVER widens; skips==0 stays;
+  no firmware/saves edits; every runtime knob (daemon stops, adbd)
+  trap-restored + verified; docker serial; output → .loop/m4-task8-*.
+
+## iter 74 — 2026-07-19 — M4 task 8 RESULT: skip-stall ATTRIBUTED — low_bat_check's 2-second poll loop; mitigation landed; task 3 UNBLOCKED (pending the cold rerun recorded below)
+
+- **SKIP ATTRIB VERDICT: (a) — attributable + eliminable. The
+  registered external stall class (iters 54/57/62/73: isolated
+  ~7-15 ms kernel-side preemptions, 1-3 render skips per 3600 paced
+  frames, "clustered ~frames 1100-1500") is `low_bat_check` —
+  /usr/local/sbin/low_bat_check, the FunKey OS battery-poll shell
+  daemon (SLEEP_SECS=2): every 2 s wake forks ~8 busybox children
+  (cat/awk/printf/subshells) and reads the AXP20x battery capacity +
+  USB presence over BLOCKING i2c sysfs, preempting the paced app on
+  the single-core V3s.** The event comb is periodic at ~123 frames
+  (2.05 s = the 2 s sleep + ~50 ms of loop work), phase-random per
+  run; a skip results only when a wake lands on frames already near
+  the ~13 ms M4 work level — which is why M3-era ~11 ms frames
+  absorbed the class in slack and why the "frame-zone cluster" was an
+  illusion of phase + load, not a zone.
+- **Matrix (5 paced instrumented runs; cap 12; every leg
+  STREAM MATCH 3600/3600 — the instrument never perturbed the sim)**:
+  | arm | log | skips | events | signature |
+  |---|---|---|---|---|
+  | A1 nosampler | .loop/m4-task8-a1-nosampler.log | 2 (fr 1204, 1450) | 34 | event comb Δ∈{122..125} frames: 1202→1326→1448→1573→1695→1819→1942→2065→2188→2312→(2680=+3×123)→2927→3050→3297→3543 |
+  | A2 sampler | .loop/m4-task8-a2-sampler.log | 3 (fr 1128, 1251, 2604; 1128→1251=123) | 33 | same comb, shifted phase; sampler windows: i2c IRQ ~800/s STEADY (all windows — not event-correlated), d_ctxt ~230-266/250 ms, fork bursts d_procs up to 13/window |
+  | A4' quiesce (aborted) | .loop/m4-task8-a4-quiesce-lbc.log | — | — | run data lost at the restore-verify abort; yielded the stop-channel class finding below |
+  | A4 quiesce lbc | .loop/m4-task8-a4-quiesce-lbc2.log | **0** | 1 (fr 1245: 17.39 ms over-budget, no skip) | comb GONE |
+  | A5 quiesce lbc (confirm) | .loop/m4-task8-a5-quiesce-lbc-confirm.log + .loop/m4-task8-a5-corr-harvested.txt | **0** | 3 (fr 3109 18.7 ms over-budget no-skip; 2 late-starts ~2.1/2.4 ms) | comb GONE |
+  Two consecutive quiesce runs at skips == 0 = the pre-registered
+  shape-(a) criterion. Supporting evidence: every event carries
+  d_nivcsw ≥ 1 (preemption, not IRQ-context loss); per-pid CPU deltas
+  name the steady background (fkgpiod 73 jiffies/63 s, spi0 113 —
+  display push, adbd 16, ksoftirqd 16) while low_bat_check's own row
+  shows only its shell (11 jiffies) — its CHILDREN's CPU dies with
+  them (per-pid-table blind spot, noted); the ~123-frame comb +
+  quiesce elimination carry the attribution. Refuted (again, with
+  data): paging (majflt 0, pswp 0), clock adjustment (mono-vs-raw
+  drift ~500 ns over 63 s), iowait (~0), IRQ storms (i2c heavy but
+  steady in every window — the constant fkgpiod/PMIC background, not
+  the stall).
+- **INSTRUMENT (committed)**: gfx_app `--attrib` (per-frame
+  CLOCK_MONOTONIC + CLOCK_MONOTONIC_RAW + getrusage nvcsw/nivcsw/
+  minflt/majflt rows, frames+1, RAM-buffered; zero cost when absent —
+  no gate path passes it; host-proven stream-identical with/without),
+  `port/sim/device/skip-attrib/sk_sampler.c` (fork-free 250 ms
+  /proc/{stat,interrupts,softirqs} snapshotter, held-fd pread,
+  length-prefixed blocks + DONE terminator, <5 MB RAM; joins ARMBINS),
+  `port/sim/device/skip-attrib/correlate-skips.js` (whitelist
+  grammars end-to-end; EVENT = skip OR full>budget OR late-start
+  >2 ms — late frame STARTS expose stalls landing in the pacing
+  sleep; attrib_complete file-tail terminator),
+  `port/sim/device/check-skip-attrib.sh` (RIG_SCRIPTS member; the
+  render-check park/deadman/quiet-window/sync machinery adapted;
+  arms nosampler/sampler/quiesce via MLFK_SKATTRIB_ARM,
+  MLFK_SKATTRIB_MATRIX=1 = evidence-gathering mode skipping only the
+  needle assert). Instrument cost: A1/A2 full percentiles within the
+  iter-73 band (p50 ~9.5 ms class unchanged) — the 3-syscall probe is
+  noise-level, as pre-registered.
+- **MITIGATION (the run harness, per shape (a))**:
+  riglib gains `rig_comm_pids` / `rig_daemon_stop` /
+  `rig_daemon_restore`; check-device-render.sh quiesces low_bat_check
+  for the paced window ONLY — exactly-one-instance refusal, SIGTERM
+  by pid, comm-scan verified gone; restore via the init-script START
+  channel + comm-scan verify HARD-GATED in the success path AND
+  covered in the cleanup trap (WARN naming the manual recovery
+  command). USB power is present during any ADB run, so the daemon's
+  low-battery-shutdown protection is moot inside the window; OPK play
+  path untouched; skips==0 gate UNWEAKENED (this removes measured
+  external interference — the pre-run-sync / quiet-window class).
+- **NEW device gotcha classes (measured this iteration)**:
+  (1) busybox `start-stop-daemon -K -x <script>` is a NO-OP for
+  #!/bin/sh daemons (matches /proc/pid/exe = busybox; `-o` masks rc)
+  and busybox pidof cannot see script comms — the OS's own stop
+  channel silently does nothing; A4' tripled the daemon before the
+  comm-scan rework (device hand-restored to boot state: extras
+  killed, pidfile → 183). Stop/verify by COMM-SCAN + kill-by-pid;
+  restart via the init START arm (which works).
+  (2) This adbd MERGES device stderr into the stream — a pid dying
+  between glob and cat injected "cat: can't open .../stat" into a
+  pulled snapshot (A5); producers must silence expected-churn stderr
+  (fixed), strict grammars catch the rest.
+  (3) bash 3.2: `local a="$1" b="$SKAB/$a"` expands BOTH words before
+  either assignment (unbound-variable death), AND a set -u expansion
+  error with an EXIT trap installed exits 0 — check scripts now carry
+  a fail-closed SKA_OK exit guard (the only legal rc-0 exit is
+  through the verdict line).
+- **Teeth** (.loop/m4-task8-teeth.log, on COPIES of A5's real
+  artifacts): T1 truncated attrib → exact-count death; T2 truncated
+  timing → death; T3a corrupted sampler length-prefix → block-grammar
+  death; T3b missing DONE terminator → death; T4 needle-free
+  AGENT-LOG copy → count 0 (the check dies); T4b value-plane nibble
+  disposition recorded (self-referential-data class: pullv sha binds
+  transit; in-grammar RAM fabrication = the same registered exposure
+  as every --timing artifact). T5 standing: every run STREAM-MATCH
+  judged.
+- **Honest exposure / notes for the driver**: (1) the OPK PLAY path
+  keeps low_bat_check live by design — real play absorbs the ~2 s
+  wake in the frameskip valve (1-3 skips/min, imperceptible; Chase's
+  ratified playtest ran with it live); whether the M4 gate's
+  with-audio legs also quiesce is task-14 assembly policy (the
+  machinery is now shared riglib). (2) check-device-audio.sh /
+  check-device-opk.sh paced legs do NOT yet carry the mitigation
+  (out of brief scope; same one-line adoption when their tasks
+  touch them). (3) per-pid deltas cannot see short-lived children's
+  CPU (they die with their jiffies) — fork-burst counting (d_procs)
+  + periodicity carried that signal instead. (4) events != 0 remain
+  possible under quiesce (A4/A5 showed 1-3 marginal over-budget/
+  late-start non-skip events — ordinary work-level variance, no comb,
+  no skips).
+- **Run-cap honesty**: 5 paced instrumented runs + the 2 cold
+  done-check runs below = 7 of the pre-registered 12. One aborted
+  quiesce attempt (A4') consumed a paced run and its data (pull
+  ordering: pulls sat AFTER the restore gate; the fix — pulls could
+  move earlier — was NOT taken to keep the restore hard-gate first;
+  registered as a known cost).
+- **done-checks (cold, recorded after this entry was written — the
+  needle must exist first)**: `bash port/sim/device/check-skip-attrib.sh`
+  → SKIP ATTRIB OK (.loop/m4-task8-donecheck.log); regression + task-3
+  unblock proof: `bash port/gfx/check-device-render.sh` →
+  DEVICE RENDER OK (.loop/m4-task8-task3-donecheck.log).
+- **ZOOM OUT**: (1) "external interference on a single-core device"
+  is a CLASS with a systematic instrument now (attrib rows + sampler
+  + pre/post snapshots + the comm-scan quiesce arm) — future stall
+  hunts start from check-skip-attrib.sh's matrix seams, not from
+  theory; (2) vendor OS daemons are part of the device's measured
+  performance envelope — enumerate and characterize them BEFORE
+  chasing kernel ghosts (the i2c/fork background was visible in
+  /proc/interrupts from the first recon); (3) never trust a platform
+  service-control verb until its mechanism is verified against the
+  process class it manages (the -K/-x no-op cost one tripled daemon
+  and one lost run).
+
+## iter 74 — 2026-07-19 — M4 task 8 ADDENDUM: the un-blocked task-3 rerun exposed a SECOND registered-class instance (device lround) — fixed, all gates green
+
+- **Chronology (the entry above froze before these runs; recorded
+  verbatim)**: with the quiesce mitigation live, the first task-3
+  rerun achieved **skips 0/3600** — and then died at the host<->device
+  shot BIT-COMPARE, the FIRST time ANY M4-era run ever reached that
+  clause (measured: no .loop/m4-task3* or driver-cold log contains the
+  "device shot == host" line — every iter-73 attempt died earlier at
+  the skip/p99 gates; iter-73's "shot BIT-IDENTICAL" claim was
+  established on interim runs BEFORE the render-optimization round and
+  never re-proven mechanically after it — honesty correction on
+  record).
+- **ROOT CAUSE (the iter-38 class, second instance, pre-registered
+  path cashed in)**: 206 differing pixels = specific HUD glyphs
+  shifted one device px left. gfx_overlay.c's glyph/sprite blit
+  anchors call **lround** — and the SDK's static musl libc.a
+  round/lround are the same unsafe-FP-folded family as its
+  floor/ceil/fmod (iter 38: "round/trunc also broken on device, zero
+  sim call sites — extend overrides+sweep before ANY use"; M4 task 3
+  added the first use without cashing the note). A/B isolated: the
+  pre-edit host binary's shot == current host shot (my instrument edit
+  changed nothing host-side); the divergence pre-dates this iteration
+  and was invisible only because no run ever reached the comparator.
+- **CLASS FIX**: port/fdlibm/fdlibm.c gains exact C99 `round` (floor-
+  composed over the existing exact floor; ties away from zero, -0
+  preserved — explicitly NOT js_round's ECMAScript ties-toward-+Inf)
+  and `lround` = (long)round(x) as STRONG OVERRIDES — every
+  fdlibm.c-linking TU inherits them; riglib's nm assertion extended to
+  `floor ceil fmod round lround` (both sim_device and gfx_device);
+  mathsweep gains the `rr=` (round bits) and range-guarded `lr=`
+  (lround; long is 32-bit on armv7 — shared conservative in-range
+  guard, 'oor' token outside) columns — the 257k-input device-fdlibm
+  vs host-libm anchor now differentially proves the new overrides
+  every check-device-g01.sh run.
+- **FINAL COLD RESULTS (the recorded done-checks)**:
+  - task 8: `bash port/sim/device/check-skip-attrib.sh` →
+    `SKIP ATTRIB OK (arm=sampler, skips=3/3600, events=37, stream
+    MATCH)` exit 0 (.loop/m4-task8-donecheck.log; default arm leaves
+    daemons LIVE by design — the instrument observes the class, the
+    needle assert + grammars + STREAM MATCH gate the pass).
+  - task 3 UNBLOCKED: `bash port/gfx/check-device-render.sh` →
+    `DEVICE RENDER OK (full p99 12.777 ms, render-only p99 5.598 ms,
+    sim p99 7.429 ms, present p99 1.400 ms, skips 0/3600)` exit 0
+    (.loop/m4-task8-task3-donecheck.log): skips 0 (quiesce
+    mitigation), shot BIT-IDENTICAL host<->device PPM+PGM (lround
+    fix), all budgets met with margin regained (12.78 vs iter-73's
+    15.51 — the stall class was also inflating p99).
+  - regressions ALL green: `DEVICE CONFORMS g01` (mathsweep rr/lr
+    anchored) + `DEVICE CONFORMS 8/8 + SIM P99 OK`
+    (.loop/m4-task8-device-regressions.log); `CROSSCHECK OK`,
+    `SIM CONFORMS` 8/8, `RENDER OK` IoU min 0.9059/0.88 no pin moved
+    (.loop/m4-task8-host-regressions.log — required: fdlibm.c is in
+    every sim TU; the new symbols change no existing body).
+- **Freeze manifest**: riglib.sh + check-device-render.sh re-pinned
+  (arc-pending, cite iter74) + verify_m3.sh MANIFEST_SHA256 same
+  commit; self-check 23/23 + anchor green
+  (.loop/m4-task8-manifest-selfcheck.log).
+- **Paced-run accounting (final)**: 9 of the 12-run cap (A1, A2, A4',
+  A4, A5, skattrib cold ×2, task-3 rerun ×2).
+- **ZOOM OUT (addendum)**: (1) a "registered note for the future" is a
+  LANDMINE unless every new call site is swept against it — the
+  iter-38 round/trunc note predicted this exact failure 36 iterations
+  early; class fix = the overrides now exist and the nm assertion
+  makes silent libm resolution of the round family impossible in rig
+  binaries; (2) a gate clause nobody has ever REACHED is not evidence
+  — attempt-ordering can mask a whole comparator for an entire
+  iteration (the shot cmp sat behind the skip gate); when a claim
+  matters, check which clause actually executed in the logs.
