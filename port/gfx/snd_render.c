@@ -13,9 +13,14 @@
 //   snd_render --pack p.bin --events e.txt --frames N --out pcm.raw
 //
 // Verdict grammar (load-bearing; whitelist rule):
-//   snd-render OK frames=<n> plays=<n> stops=<n> steals=<n>
-//     maxvoices=<n> bytes=<n>
-// (one line, one trailing newline).
+//   snd-render OK frames=<n> plays=<n> stops=<n> stopsm=<n> stopsu=<n>
+//     steals=<n> maxvoices=<n> bytes=<n>
+// (one line, one trailing newline). stopsm/stopsu = the snd_mixer.h
+// matched/unmatched stop-event split (M4 iter 84, review-82 H:
+// stopsm + stopsu == stops; a stop event that deactivates no voice —
+// howler stale-id/ended-voice no-op — is counted unmatched, so the
+// check can pin the measured matched plane instead of inferring it
+// from aggregate token counts).
 //
 // TEST-ONLY tooth seams (negative testing, the pack --drop-name
 // precedent; the gate path never passes them — the differential would
@@ -285,8 +290,13 @@ int main(int argc, char **argv) {
   if (evIdx != g_ev_len) sim_fatal("events beyond the last frame");
   if (fclose(out) != 0) sim_fatal("PCM close failed");
 
-  printf("snd-render OK frames=%ld plays=%llu stops=%llu steals=%" PRIu64
-         " maxvoices=%" PRIu64 " bytes=%" PRIu64 "\n",
-         frames, g_plays, g_stops, mix.steals, mix.maxVoices, bytes);
+  if (mix.stopsMatched + mix.stopsUnmatched != mix.stops) {
+    sim_fatal("stop split does not sum to the stop total");
+  }
+  printf("snd-render OK frames=%ld plays=%llu stops=%llu stopsm=%" PRIu64
+         " stopsu=%" PRIu64 " steals=%" PRIu64 " maxvoices=%" PRIu64
+         " bytes=%" PRIu64 "\n",
+         frames, g_plays, g_stops, mix.stopsMatched, mix.stopsUnmatched,
+         mix.steals, mix.maxVoices, bytes);
   return 0;
 }

@@ -31,6 +31,22 @@
 // basename-only trace, and resolved-path containment in the golden
 // home (no ../ escape). Resembles-but-doesn't-match = corruption =
 // refusal, never a partial parse.
+//
+// ID GRAMMAR EXTENSION (iter 84 — the goldens-snd fold, review-82
+// triage): ids/names accept the s-prefix family, ^[ms][0-9]{2}$ —
+// m = match/CPU-coverage goldens (gen-trace.js seeded traces), s =
+// SCENARIO goldens (CRAFTED committed generators; manifest comment).
+// This is the ONLY grammar delta; the whole iter-83 schema (key
+// set/order, ranges, cpu/difficulty coupling, containment) applies to
+// s-rows unchanged.
+//
+// X2-IDENTITY + REFREEZE DISCIPLINE (iter 84 — review-82 M5): runA and
+// runB must be DISTINCT files (resolved path and dev:ino — passing one
+// recording twice can never impersonate two independent runs), and
+// --refreeze on a DIFFERING existing frozen file additionally requires
+// the OLD file's specVersion !== the current specVersion (CHECKSUM.md
+// §8's "only legitimate with a spec version bump" made MECHANICAL —
+// a same-spec refreeze is refused loudly).
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -92,11 +108,12 @@ function loadManifest() {
       vdie(where + " key set/order {" + keys.join(",") + "} != {" +
         GOLDEN_KEYS.join(",") + "} (exact schema, fail closed)");
     }
-    if (typeof g.id !== "string" || !/^m[0-9]{2}$/.test(g.id)) {
-      vdie(where + " id '" + g.id + "' fails ^m[0-9]{2}$");
+    if (typeof g.id !== "string" || !/^[ms][0-9]{2}$/.test(g.id)) {
+      vdie(where + " id '" + g.id + "' fails ^[ms][0-9]{2}$ (m = match/CPU " +
+        "goldens, s = crafted-scenario goldens — iter-84 grammar)");
     }
-    if (typeof g.name !== "string" || !/^m[0-9]{2}(-[a-z0-9]+)+$/.test(g.name)) {
-      vdie(where + " name '" + g.name + "' fails ^m[0-9]{2}(-[a-z0-9]+)+$");
+    if (typeof g.name !== "string" || !/^[ms][0-9]{2}(-[a-z0-9]+)+$/.test(g.name)) {
+      vdie(where + " name '" + g.name + "' fails ^[ms][0-9]{2}(-[a-z0-9]+)+$");
     }
     if (g.name.slice(0, 3) !== g.id) {
       vdie(where + " name '" + g.name + "' does not begin with its id '" + g.id + "'");
@@ -164,6 +181,23 @@ const [id, fileA, fileB] = argv;
 const refreeze = argv.length === 4;
 if (!/^[a-z0-9-]+$/.test(id)) {
   die("golden id '" + id + "' fails the whitelist [a-z0-9-]");
+}
+
+// X2-IDENTITY (iter 84, review-82 M5): the two runs must be two
+// DISTINCT files — same resolved path or same inode (hardlink/symlink
+// alias) means one recording was passed twice, which can never prove
+// run-to-run determinism.
+if (path.resolve(fileA) === path.resolve(fileB)) {
+  die("runA and runB are the SAME path (" + fileA + ") — x2 identity " +
+    "requires two independent recordings");
+}
+{
+  const stA = fs.statSync(fileA);
+  const stB = fs.statSync(fileB);
+  if (stA.dev === stB.dev && stA.ino === stB.ino) {
+    die("runA and runB are the same file (dev:ino alias) — x2 identity " +
+      "requires two independent recordings");
+  }
 }
 
 const g = goldenById(id);
@@ -243,6 +277,23 @@ if (fs.existsSync(outPath)) {
     die(`${outPath} exists and DIFFERS from this recording. A frozen stream ` +
         "is a contract artifact; overwriting requires --refreeze and is only " +
         "legitimate with a spec version bump (oracle/CHECKSUM.md §8).");
+  }
+  // REFREEZE DISCIPLINE (iter 84, review-82 M5): --refreeze is only
+  // legitimate with a spec version bump — PROVE the difference
+  // mechanically. The old file's own specVersion must differ from the
+  // current oracle/CHECKSUM.md spec version; otherwise a drifting
+  // browser run could be blessed as a same-spec contract.
+  let oldSpec = null;
+  try { oldSpec = JSON.parse(old).specVersion; } catch (e) {
+    die(`${outPath} exists but is not parseable JSON (${e.message}) — ` +
+        "refusing to refreeze over an unreadable contract artifact; " +
+        "investigate the corruption first");
+  }
+  if (oldSpec === specVersion()) {
+    die(`--refreeze refused: the existing ${outPath} carries specVersion ` +
+        `${oldSpec} and the current spec is ALSO ${specVersion()} — a ` +
+        "differing same-spec recording is drift, not a legitimate " +
+        "re-freeze (oracle/CHECKSUM.md §8 requires a spec version bump).");
   }
 }
 fs.writeFileSync(outPath, text);

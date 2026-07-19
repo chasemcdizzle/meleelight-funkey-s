@@ -78,6 +78,17 @@
 #     count semantics (rc 1 IS "0 matches"), rc >= 2 (and any nonzero
 #     awk rc) is a READ ERROR and dies loudly. Never a silent 0 count.
 #
+# ITER-84 (the iter-83-registered residual, review-82 window): the
+# check-sim leg's log shape was BRIDGE-PRESENCE-DEPENDENT (8 STREAM
+# MATCH warm vs 10 cold) and false-rejected on a bridge-less build/
+# tree. Adopted the check-ai-live.sh class fix: the g07/g08 AIBRIDGE1
+# artifacts are REMOVED up front so the gate's cold capture-record arm
+# ALWAYS runs — the leg's grammar now pins the deterministic COLD shape
+# (CPU goldens x2 STREAM MATCH each = 10 total, plus exactly 2 'AI
+# bridge artifact absent' lines; freshness and fixed grammar in one
+# move). Judge validated against the genuine cold-shape corpus
+# (.loop/m4-mixrig84-vfxjudge.log).
+#
 # ROUND-3 RESIDUALS (iter 69 — .loop/review-68-1.log; grammars
 # re-validated 55/55 against the same archived corpus, zero false
 # rejections — .loop/m4-rig69-corpusval.log):
@@ -166,7 +177,11 @@ CARRIERS=(
 )
 
 # The 8-golden identity set the check-sim regression leg must judge
-# (the M2 EXIT gate's full manifest, frozen names).
+# (the M2 EXIT gate's full manifest, frozen names). The CPU goldens'
+# bridge artifacts are removed before the leg runs (iter 84 — forced
+# cold capture-record shape; their STREAM MATCH count is 2 each:
+# capture verify + sim replay).
+ORACLE_CPU_IDS=(g07 g08)
 SIM_GOLDENS=(
   "g01-fox-marth-battlefield"
   "g02-falco-puff-ystory"
@@ -193,7 +208,11 @@ if [ "${#SIM_GOLDENS[@]}" != 8 ]; then
   echo "VFX SEAM FAIL: inventory pin — SIM_GOLDENS has ${#SIM_GOLDENS[@]} entries, want exactly 8 (the frozen M2-gate golden set)" >&2
   exit 1
 fi
-for arr in CHECKS VERDICTS SPECS SIM_GOLDENS; do
+if [ "${#ORACLE_CPU_IDS[@]}" != 2 ]; then
+  echo "VFX SEAM FAIL: inventory pin — ORACLE_CPU_IDS has ${#ORACLE_CPU_IDS[@]} entries, want exactly 2 (the M2-gate bridge-fed CPU goldens)" >&2
+  exit 1
+fi
+for arr in CHECKS VERDICTS SPECS SIM_GOLDENS ORACLE_CPU_IDS; do
   dupes="$(eval 'printf "%s\n" "${'"$arr"'[@]}"' | sort | uniq -d)"
   if [ -n "$dupes" ]; then
     echo "VFX SEAM FAIL: inventory pin — duplicate entries in $arr:" >&2
@@ -384,23 +403,35 @@ vfx_judge_log() {
       grammar_die "freshness contract — $clog STREAM MATCH evidence off (prefix count: $sm/6, full grammar: $smfull/6); a STREAM-MATCH-resembling malformed line or a missing per-run stream guard is CORRUPTION"
     fi
   else
+    # COLD SHAPE (iter 84): the bridge artifacts are removed before
+    # this leg runs, so the gate's capture-record arm is FORCED — the
+    # CPU goldens each carry TWO STREAM MATCH lines (capture verify +
+    # sim replay) and exactly two cold capture-record lines appear.
     for name in "${SIM_GOLDENS[@]}"; do
       id="${name%%-*}"
       banner_line="== $id ($name)"
+      wantsm=1
+      case " ${ORACLE_CPU_IDS[*]} " in
+        (*" $id "*) wantsm=2 ;;
+      esac
       c="$(count_e "$clog" "^STREAM MATCH $name: $STREAM_RE_TAIL")"
       a="$(count_aff "$clog" "STREAM MATCH $name: ")"
       b="$(count_x "$clog" "$banner_line")"
       b2="$(count_aff "$clog" "$banner_line")"
-      if [ "$c" != 1 ] || [ "$a" != 1 ] || [ "$b" != 1 ] || [ "$b2" != 1 ]; then
-        grammar_die "identity binding — check-sim evidence for $name in $clog: stream full-grammar $c/1, stem-affine $a/1, banner exact $b/1, banner-affine $b2/1 (all 8 goldens must each be judged exactly once; a torn banner fragment is CORRUPTION, never ignorable — iter 69, review-68 M2 residual)"
+      if [ "$c" != "$wantsm" ] || [ "$a" != "$wantsm" ] || [ "$b" != 1 ] || [ "$b2" != 1 ]; then
+        grammar_die "identity binding — check-sim evidence for $name in $clog: stream full-grammar $c/$wantsm, stem-affine $a/$wantsm, banner exact $b/1, banner-affine $b2/1 (all 8 goldens must each be judged exactly once, CPU goldens carrying the forced-cold double stream; a torn banner fragment is CORRUPTION, never ignorable)"
       fi
     done
     banners="$(count_e "$clog" '^== ')"
     if [ "$banners" != 8 ]; then
       grammar_die "freshness contract — $clog carries $banners '== '-family banner lines, want exactly 8 (one per golden); an extra or torn banner is CORRUPTION"
     fi
-    if [ "$sm" != 8 ] || [ "$smfull" != 8 ]; then
-      grammar_die "freshness contract — $clog STREAM MATCH evidence off (prefix count: $sm/8, full grammar: $smfull/8); check-sim must judge all 8 goldens"
+    if [ "$sm" != 10 ] || [ "$smfull" != 10 ]; then
+      grammar_die "freshness contract — $clog STREAM MATCH evidence off (prefix count: $sm/10, full grammar: $smfull/10 — 6 human + 2x2 CPU cold shape); a malformed or missing stream line is CORRUPTION"
+    fi
+    c="$(count_x "$clog" "   AI bridge artifact absent — recording the ai capture")"
+    if [ "$c" != 2 ]; then
+      grammar_die "freshness contract — $clog carries $c cold capture-record lines, want exactly 2 (the bridge artifacts were removed up front; a warm arm here means stale bridge evidence)"
     fi
   fi
 }
@@ -429,6 +460,12 @@ for idx in "${!CHECKS[@]}"; do
 done
 
 echo "=== [regression] port/sim/check-sim.sh (checksum stream untouched)"
+# FRESHNESS (iter 84 — the ai-live class fix): remove the CPU goldens'
+# bridge artifacts so the gate's cold capture-record arm ALWAYS runs —
+# the leg's log shape is deterministic and the captures provably fresh.
+for cid in "${ORACLE_CPU_IDS[@]}"; do
+  rm -f "$BUILD/$cid.trace.txt" "$BUILD/$cid.ai-bridge.txt"
+done
 run_component port/sim/check-sim.sh "SIM CONFORMS" "" ""
 
 echo "VFX SEAM MATCH"

@@ -3,7 +3,41 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 83 — M4 hardening DONE: ai-live rig arc round 1 CLOSED, AI LIVE CONFORMS)
+## Live right now (updated: 2026-07-19, iter 84 — M4 hardening DONE: mixer-rig round 1 CLOSED + goldens-snd FOLDED, both cold checks green)
+
+- **Iter 84 (M4 hardening — review-82 round-1 closure: stop witnesses +
+  exposure pins + the goldens-snd fold) DONE** (full entry: AGENT-LOG
+  iter 84 pre-registration + result; latest AGENT-LOG id: iter 84):
+  s01 now lives in port/goldens-m4/ (git mv, stream/trace/generator
+  BYTES UNCHANGED — sha proof in the entry; freezer re-freeze from the
+  archived record-s01 runs → 'unchanged (byte-identical re-freeze)');
+  port/goldens-snd/ deleted whole (recorder/freezer twins dead);
+  freeze-stream-m4.js id grammar ^[ms][0-9]{2}$ + x2-identity
+  (path/dev:ino) + mechanical --refreeze spec-bump proof; record-m4.sh
+  crafted-trace refusal for s-ids. check-mixer-fidelity.sh hardened:
+  four FROZEN s01 stop witnesses (frame/sound/preceding-play-id; the
+  mixer stop counter now splits matched/unmatched on both differential
+  sides — unmatched pinned 0 everywhere), per-golden EXPOSURE_PINS
+  (over-cap set pinned {g06,m02}, peak 9, steals 2), 3-producer sha
+  pin table + full both-manifest inventory binding + eval-kill, run
+  lock + rm-before-produce/made(), file-byte verdict grammars,
+  git-guard rc case-split. check-vfx-seam.sh check-sim leg = forced
+  cold 10-line shape (the iter-83 residual closed). Cold:
+  `bash port/gfx/check-mixer-fidelity.sh` → MIXER FIDELITY OK
+  (.loop/m4-mixrig84-donecheck.log) + `bash port/sim/check-ai-live.sh`
+  → AI LIVE CONFORMS (.loop/m4-mixrig84-donecheck2.log — run-cap
+  overage recorded honestly in the entry: guard-vs-uncommitted-fold
+  bootstrap + one externally-interfered run; CLASS FLAG for the
+  driver: $CAL/build is shared unlocked scratch across composed
+  checks/sessions). Teeth all fired (.loop/m4-mixrig84-teeth.log).
+  **Driver next: mixer arc ROUND 2 with the COMPLETE diff of d0927fa
+  plus the iter-84 commit (the round-2 rule). LOUD: review-82's GUARDON.c:56 High
+  (as_shieldDepletion return ignored — the raise-arm depletion break)
+  is NOT in the triage and NOT fixed here (sim TU, out of surface) —
+  it belongs to the queued Tier-B sim-TU round and must not be
+  dropped.**
+
+## [superseded by iter 84] (2026-07-19, iter 83 — M4 hardening DONE: ai-live rig arc round 1 CLOSED, AI LIVE CONFORMS)
 
 - **Iter 83 (M4 hardening — review-81 round-1 closure: ai-live
   aggregator kit + golden-home grammar) DONE** (full entry: AGENT-LOG

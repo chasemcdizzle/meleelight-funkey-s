@@ -45,8 +45,15 @@
 // unlimited measures true concurrency (and must bit-match the C mixer
 // wherever concurrency <= 8); capped must bit-match it EVERYWHERE.
 // Verdict grammar (load-bearing):
-//   snd-ref OK frames=<n> plays=<n> stops=<n> maxvoices=<n> steals=<n>
-//     bytes=<n>
+//   snd-ref OK frames=<n> plays=<n> stops=<n> stopsm=<n> stopsu=<n>
+//     maxvoices=<n> steals=<n> bytes=<n>
+// stopsm/stopsu (M4 iter 84, review-82 H) = the INDEPENDENTLY counted
+// matched/unmatched stop-event split: a stop event that removes at
+// least one live voice is matched; one that finds none (howler
+// stale-id / already-ended-voice no-op) is unmatched. stopsm + stopsu
+// == stops. The check cross-binds this count against the C mixer's
+// own split — the matched plane is measured on both sides, never
+// inferred from aggregate token counts.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -151,6 +158,7 @@ let playCounter = 0;
 let startSeq = 0;
 let maxVoices = 0;
 let steals = 0;
+let stopsMatched = 0, stopsUnmatched = 0;
 
 function expire(nowOut) {
   voices = voices.filter((v) =>
@@ -167,12 +175,16 @@ for (let f = 0; f <= frames; f++) {
     const e = events[evIdx++];
     expire(frameStartOut);
     if (e.stop) {
-      // howler stop semantics (header note)
+      // howler stop semantics (header note); matched = the event
+      // removed at least one live voice (iter 84 split)
+      const before = voices.length;
       if (e.hasId) {
         voices = voices.filter((v) => !(v.name === e.name && v.id === e.id));
       } else {
         voices = voices.filter((v) => v.name !== e.name);
       }
+      if (voices.length < before) stopsMatched++;
+      else stopsUnmatched++;
     } else {
       const s = lib.get(e.name);
       if (!s) die("play event for a name not in the SND1 map: " + e.name);
@@ -221,11 +233,16 @@ for (let f = 0; f <= frames; f++) {
 }
 if (evIdx !== events.length) die("events beyond the last frame");
 
+if (stopsMatched + stopsUnmatched !== nStops) {
+  die("stop split does not sum to the stop total");
+}
 fs.writeFileSync(outPath, out);
 console.log(
   "snd-ref OK frames=" + String(frames) +
   " plays=" + String(nPlays) +
   " stops=" + String(nStops) +
+  " stopsm=" + String(stopsMatched) +
+  " stopsu=" + String(stopsUnmatched) +
   " maxvoices=" + String(maxVoices) +
   " steals=" + String(steals) +
   " bytes=" + String(out.length));
