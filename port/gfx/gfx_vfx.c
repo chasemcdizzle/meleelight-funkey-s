@@ -498,6 +498,18 @@ static RastCol vcol(double r, double g, double b, double a) {
   return c;
 }
 
+// Config/event-carried double -> int conversion guard (review-65 r2 M2):
+// (int)x is UB when x is NaN/inf or its truncation exceeds int range
+// (C11 6.3.1.4) — validate BEFORE the cast, die loud on out-of-domain.
+// Truncation semantics for every in-domain value are exactly (int)x.
+static int vfx_cfg_int(double x, const char *what) {
+  if (!(x > -2147483649.0 && x < 2147483648.0)) { // NaN fails both
+    fprintf(stderr, "gfx_vfx: %s out of int-cast domain\n", what);
+    gfx_fatal("gfx_vfx: double->int conversion out of domain");
+  }
+  return (int)x;
+}
+
 // ===========================================================================
 // the queue
 // ===========================================================================
@@ -562,7 +574,7 @@ static void vspawn(const VSpawn *c) {
     case 2: v->facingKind = 1; v->facingX = c->fX; v->facingY = c->fY; break;
     case 3:
       v->facingKind = 2;
-      v->swingPnum = (int)c->fPnum;
+      v->swingPnum = vfx_cfg_int(c->fPnum, "swing pnum");
       snprintf(v->swingType, sizeof v->swingType, "%s", c->fSwing);
       v->swingFrame = c->fFrame;
       break;
@@ -846,7 +858,8 @@ static const MlPlayer *live_player(int p) {
 }
 
 static int live_char(int p) {
-  const int c = (int)g_st->sim.characterSelections[p];
+  const int c = vfx_cfg_int(g_st->sim.characterSelections[p],
+                            "characterSelections");
   if (c < 0 || c >= GFX_CHARS) gfx_fatal("gfx_vfx: live char range");
   return c;
 }
@@ -855,8 +868,10 @@ static int live_char(int p) {
 static void dv_sing_gen(VInst *v, double rMin, double rMax, double notePhase,
                         double posScale, double posPhase) {
   const double S = g_g->scale, OX = g_g->offx, OY = g_g->offy;
-  const int p = (int)v->face; // sing configs carry face = slot
+  // review-65 r2 M2: the finiteness no-op check must run BEFORE the int
+  // cast (a NaN face — the omitted-face sentinel — hit UB first).
   if (!isfinite(v->face)) return;
+  const int p = vfx_cfg_int(v->face, "sing face"); // face = slot
   const MlPlayer *pl = live_player(p);
   const double frame = v->timer;
   const double posX = pl->phys.pos.x, posY = pl->phys.pos.y + 8;
@@ -1068,7 +1083,7 @@ static void dv_draw(VInst *v) {
       vm_save();
       vm_translate(cX, cY);
       const VfxNode *paths = tpl_key(V_FIREFOXCHARGE, "path");
-      const int facing = (int)v->facing;
+      const int facing = vfx_cfg_int(v->facing, "firefoxcharge facing");
       if (facing < 0 || facing >= paths->n) {
         gfx_fatal("gfx_vfx: firefoxcharge facing frame range");
       }
@@ -1268,7 +1283,7 @@ static void dv_draw(VInst *v) {
       break;
     }
     case V_FALCONPUNCH: {
-      const int p = (int)v->facing;
+      const int p = vfx_cfg_int(v->facing, "falconpunch facing");
       const MlPlayer *pl = live_player(p);
       vm_save();
       const int frame = (int)t - 1;
@@ -1288,7 +1303,7 @@ static void dv_draw(VInst *v) {
       break;
     }
     case V_FIREFOXLAUNCH: {
-      const int p = (int)v->facing;
+      const int p = vfx_cfg_int(v->facing, "firefoxlaunch facing");
       const MlPlayer *pl = live_player(p);
       if (strcmp(pl->actionState, "UPSPECIALLAUNCH") == 0) {
         vm_save();
@@ -1363,8 +1378,10 @@ static void dv_draw(VInst *v) {
       break;
     }
     case V_SHINELOOP: {
-      const int p = (int)v->face;
+      // review-65 r2 M2: finiteness no-op check BEFORE the int cast (a
+      // NaN face — the omitted-face sentinel — hit UB first).
       if (!isfinite(v->face)) break;
+      const int p = vfx_cfg_int(v->face, "shineloop face");
       const MlPlayer *pl = live_player(p);
       const double tX = (pl->phys.pos.x * S) + OX;
       const double tY = ((pl->phys.pos.y + 6) * -S) + OY;
@@ -1491,7 +1508,7 @@ static void dv_draw(VInst *v) {
         v->posPrevX = pl->phys.posPrev.x;
         v->posPrevY = pl->phys.posPrev.y;
       }
-      const int frame = (int)v->swingFrame;
+      const int frame = vfx_cfg_int(v->swingFrame, "swing frame");
       const VfxNode *sw = sword_lookup(v->swingType);
       if (frame < 0 || frame + 1 >= sw->n) break; // swordSwings[t][f+1] undefined
       const VfxNode *swordPrev = vn_at(sw, frame);
@@ -1746,52 +1763,154 @@ static struct {
   int hasF; double f;
 } g_inj[INJ_CAP];
 
+// Whitelist-exact INJECT1 grammar (review-65 r2 M1; PROCESS section-3
+// grammar rule). Producer = check-render.sh's emitter, grammar measured
+// from its bytes: "INJECT1\n", exactly one "AT <frame>\n", >=1
+// "V <name> <x> <y> <face|-> <f|->\n" (single spaces, String(x)
+// exact-decimal numbers, identifier names, unique), one "END\n", then
+// EOF. ANY deviation — prefix resemblance, trailing fields/garbage,
+// duplicate/unordered records, non-finite or partially-parsed numbers,
+// content after END, an unterminated final line — is corruption and
+// dies loudly. Symmetric with the three JS-side pin validators.
+
+// exact-decimal number token: -?(0|[1-9][0-9]*)(\.[0-9]+)?
+static int inj_num_ok(const char *s) {
+  const char *p = s;
+  if (*p == '-') p++;
+  if (*p == '0') {
+    p++;
+  } else if (*p >= '1' && *p <= '9') {
+    while (*p >= '0' && *p <= '9') p++;
+  } else {
+    return 0;
+  }
+  if (*p == '.') {
+    p++;
+    if (!(*p >= '0' && *p <= '9')) return 0;
+    while (*p >= '0' && *p <= '9') p++;
+  }
+  return *p == 0;
+}
+
+// identifier token: [A-Za-z][A-Za-z0-9]* (the emitter-enforced grammar)
+static int inj_ident_ok(const char *s) {
+  if (!((*s >= 'A' && *s <= 'Z') || (*s >= 'a' && *s <= 'z'))) return 0;
+  for (s++; *s; s++) {
+    if (!((*s >= 'A' && *s <= 'Z') || (*s >= 'a' && *s <= 'z') ||
+          (*s >= '0' && *s <= '9'))) return 0;
+  }
+  return 1;
+}
+
+// read one \n-terminated line (strict: EOF here or an overlong /
+// unterminated line is corruption); strips the \n. Returns 0 on EOF
+// when eofOk, else dies.
+static int inj_line(FILE *f, char *buf, size_t cap, int eofOk,
+                    const char *what) {
+  if (!fgets(buf, (int)cap, f)) {
+    if (eofOk) return 0;
+    fprintf(stderr, "gfx_vfx: inject: truncated table (expected %s)\n", what);
+    gfx_fatal("inject: truncated table");
+  }
+  size_t n = strlen(buf);
+  if (n == 0 || buf[n - 1] != '\n') {
+    fprintf(stderr, "gfx_vfx: inject: unterminated/overlong line (%s)\n", what);
+    gfx_fatal("inject: unterminated line");
+  }
+  buf[n - 1] = 0;
+  return 1;
+}
+
+// split a line into exactly nWant single-space-separated nonempty
+// fields (no leading/trailing/double spaces); dies otherwise.
+static void inj_fields(char *line, char **out, int nWant) {
+  int n = 0;
+  char *p = line;
+  if (*p == 0 || *p == ' ') gfx_fatal("inject: malformed field layout");
+  while (*p) {
+    if (n >= nWant) gfx_fatal("inject: trailing fields on record");
+    out[n++] = p;
+    char *sp = strchr(p, ' ');
+    if (!sp) break;
+    *sp = 0;
+    p = sp + 1;
+    if (*p == 0 || *p == ' ') gfx_fatal("inject: malformed field layout");
+  }
+  if (n != nWant) gfx_fatal("inject: missing fields on record");
+}
+
+static double inj_num(const char *tok, const char *what) {
+  if (!inj_num_ok(tok)) {
+    fprintf(stderr, "gfx_vfx: inject: bad %s token '%s'\n", what, tok);
+    gfx_fatal("inject: number fails the exact-decimal grammar");
+  }
+  char *end;
+  double v = strtod(tok, &end);
+  if (*end || !isfinite(v)) gfx_fatal("inject: number parse failure");
+  return v;
+}
+
 void gfx_vfx_inject_load(const char *path) {
   g_inj_frame = -1;
   g_inj_n = 0;
   FILE *f = fopen(path, "r");
   if (!f) gfx_fatal("inject: cannot open table");
   char line[256];
-  int seenEnd = 0;
-  if (!fgets(line, sizeof line, f) || strcmp(line, "INJECT1\n") != 0) {
-    gfx_fatal("inject: bad magic");
-  }
-  while (fgets(line, sizeof line, f)) {
-    if (strcmp(line, "END\n") == 0) { seenEnd = 1; break; }
-    if (strncmp(line, "AT ", 3) == 0) {
-      g_inj_frame = strtol(line + 3, 0, 10);
-      if (g_inj_frame <= 0) gfx_fatal("inject: bad AT frame");
-    } else if (strncmp(line, "V ", 2) == 0) {
-      if (g_inj_n >= INJ_CAP) gfx_fatal("inject: table overflow");
-      char faceTok[32], fTok[32];
-      if (sscanf(line + 2, "%23s %lf %lf %31s %31s", g_inj[g_inj_n].name,
-                 &g_inj[g_inj_n].px, &g_inj[g_inj_n].py, faceTok, fTok) != 5) {
-        gfx_fatal("inject: bad V line");
-      }
-      if (strcmp(faceTok, "-") == 0) {
-        g_inj[g_inj_n].hasFace = 0;
-      } else {
-        g_inj[g_inj_n].hasFace = 1;
-        char *end;
-        g_inj[g_inj_n].face = strtod(faceTok, &end);
-        if (*end) gfx_fatal("inject: bad face token");
-      }
-      if (strcmp(fTok, "-") == 0) {
-        g_inj[g_inj_n].hasF = 0;
-      } else {
-        g_inj[g_inj_n].hasF = 1;
-        char *end;
-        g_inj[g_inj_n].f = strtod(fTok, &end);
-        if (*end) gfx_fatal("inject: bad f token");
-      }
-      g_inj_n++;
-    } else {
-      gfx_fatal("inject: unknown line");
+  // 1. magic
+  inj_line(f, line, sizeof line, 0, "magic");
+  if (strcmp(line, "INJECT1") != 0) gfx_fatal("inject: bad magic");
+  // 2. exactly one AT line, [1-9][0-9]*, <= 9 digits
+  inj_line(f, line, sizeof line, 0, "AT line");
+  if (strncmp(line, "AT ", 3) != 0) gfx_fatal("inject: expected AT line");
+  {
+    const char *d = line + 3;
+    size_t nd = strlen(d);
+    if (nd == 0 || nd > 9 || d[0] < '1' || d[0] > '9') {
+      gfx_fatal("inject: bad AT frame");
     }
+    for (const char *p = d; *p; p++) {
+      if (*p < '0' || *p > '9') gfx_fatal("inject: bad AT frame");
+    }
+    g_inj_frame = strtol(d, 0, 10);
   }
-  fclose(f);
+  // 3. >=1 V records, then END
+  int seenEnd = 0;
+  while (inj_line(f, line, sizeof line, 0, "V record or END")) {
+    if (strcmp(line, "END") == 0) { seenEnd = 1; break; }
+    if (strncmp(line, "V ", 2) != 0) gfx_fatal("inject: unknown line");
+    if (g_inj_n >= INJ_CAP) gfx_fatal("inject: table overflow");
+    char *fld[5];
+    inj_fields(line + 2, fld, 5);
+    if (!inj_ident_ok(fld[0]) || strlen(fld[0]) > 23) {
+      gfx_fatal("inject: bad config name");
+    }
+    for (int i = 0; i < g_inj_n; i++) {
+      if (strcmp(g_inj[i].name, fld[0]) == 0) {
+        gfx_fatal("inject: duplicate config name");
+      }
+    }
+    snprintf(g_inj[g_inj_n].name, sizeof g_inj[g_inj_n].name, "%s", fld[0]);
+    g_inj[g_inj_n].px = inj_num(fld[1], "pos.x");
+    g_inj[g_inj_n].py = inj_num(fld[2], "pos.y");
+    if (strcmp(fld[3], "-") == 0) {
+      g_inj[g_inj_n].hasFace = 0;
+    } else {
+      g_inj[g_inj_n].hasFace = 1;
+      g_inj[g_inj_n].face = inj_num(fld[3], "face");
+    }
+    if (strcmp(fld[4], "-") == 0) {
+      g_inj[g_inj_n].hasF = 0;
+    } else {
+      g_inj[g_inj_n].hasF = 1;
+      g_inj[g_inj_n].f = inj_num(fld[4], "f");
+    }
+    g_inj_n++;
+  }
   if (!seenEnd) gfx_fatal("inject: missing END");
-  if (g_inj_frame < 0 || g_inj_n == 0) gfx_fatal("inject: empty table");
+  if (g_inj_n == 0) gfx_fatal("inject: empty table");
+  // 4. nothing after END — the very next read must be EOF
+  if (fgetc(f) != EOF) gfx_fatal("inject: content after END");
+  fclose(f);
 }
 
 void gfx_vfx_inject_fire(long frame) {

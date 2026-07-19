@@ -184,6 +184,15 @@ for (const a of CONSOLE_ALLOW) {
     console.error("capture-canvas: inject pin violated (inkNames must be a nonempty unique subset of names)");
     process.exit(1);
   }
+  // Exact ordered inkNames pin (review-65 r2 M5): hard-coded here and in
+  // check-render.sh + iou.js (twin-pin class) — a name silently dropped
+  // from expected-render.json's inkNames must die on every side.
+  if (pin.inkNames.length !== 5 ||
+      pin.inkNames.join(" ") !== "firefoxcharge firefoxtail shine dashDust groundBounce") {
+    console.error("capture-canvas: inject pin violated — inkNames [" + pin.inkNames.join(", ") +
+      "] != the hard-pinned reviewed 5-name set");
+    process.exit(1);
+  }
 }
 
 const MIME = {
@@ -351,19 +360,19 @@ async function main() {
   const frames = [];
   let masksWritten = 0;
   const t0 = Date.now();
-  for (let done = 0; done < g.frames; done += CHUNK) {
-    const n = Math.min(CHUNK, g.frames - done);
-    const chunk = await page.evaluate(
-      (o) => window.__gfxRunChunk(o.n, o.sampled, o.inject),
-      { n, sampled, inject: INJECT });
-    frames.push(...chunk);
+
+  const decodeMask = (b64s, what) => {
+    const m = Buffer.from(b64s, "base64");
+    if (m.length !== 1200 * 750) {
+      console.error(`capture-canvas: ${what} is ${m.length} bytes (want 900000)`);
+      process.exit(1);
+    }
+    return m;
+  };
+  const drain = async () => {
     const captured = await page.evaluate(() => window.__gfxDrainCaptured());
     for (const f of Object.keys(captured)) {
-      const m = Buffer.from(captured[f].mask, "base64");
-      if (m.length !== 1200 * 750) {
-        console.error(`capture-canvas: frame ${f} mask is ${m.length} bytes (want 900000)`);
-        process.exit(1);
-      }
+      const m = decodeMask(captured[f].mask, `frame ${f} mask`);
       fs.writeFileSync(path.join(OUT_DIR, `f${String(f).padStart(4, "0")}.mask.bin`), m);
       const png = captured[f].png;
       const pfx = "data:image/png;base64,";
@@ -375,7 +384,126 @@ async function main() {
         Buffer.from(png.slice(pfx.length), "base64"));
       masksWritten++;
     }
+  };
+  const runPlain = async (count) => {
+    for (let done = 0; done < count; done += CHUNK) {
+      const n = Math.min(CHUNK, count - done);
+      const chunk = await page.evaluate(
+        (o) => window.__gfxRunChunk(o.n, o.sampled, o.inject),
+        { n, sampled, inject: null });
+      frames.push(...chunk);
+      await drain();
+    }
+  };
+
+  // Browser-side attribution masks (review-65 r2 M4): the replay is
+  // segmented around the pinned injection frame; that ONE frame runs
+  // through a dedicated evaluate which keeps the canonical path
+  // byte-for-byte (step -> inject -> native-RNG render -> mask, exactly
+  // what __gfxRunChunk did) and ADDITIONALLY records, without stepping
+  // the sim again: one full render and one leave-one-out render per
+  // inkNames effect, all under a DETERMINISTIC page-local mulberry32
+  // swapped in via window.__nativeRandom (reseeded per render, so det
+  // and loo share the render-RNG stream and differ only by the dropped
+  // effect's draws plus the queue-order-bounded ripple — the browser
+  // twin of the C leave-one-out baselines; the gameplay chain is
+  // untouched, STREAM MATCH still gates the whole capture). The
+  // vfxQueue is snapshot/restored (JSON clones) around the extra
+  // renders; a final full-restore + native-RNG render leaves the page
+  // in single-render-equivalent state (queue timers advanced once,
+  // canvas ctx state from a full render — non-sampled frames follow).
+  const DET_SEED = 0xC0FFEE42; // render-plane only, never the gameplay chain
+  if (!Number.isInteger(INJECT.frame) || INJECT.frame < 1 || INJECT.frame > g.frames) {
+    console.error("capture-canvas: inject.frame outside the replay range");
+    process.exit(1);
   }
+  await runPlain(INJECT.frame - 1);
+  const special = await page.evaluate(async (o) => {
+    const r = await window.__runFrames(1, {});
+    if (r[0].f !== o.inject.frame) {
+      throw new Error("gfx-capture: injection-frame misalignment: stepped " + r[0].f +
+        " expected " + o.inject.frame);
+    }
+    window.__gfxInject(o.inject.configs);
+    // upstream vfxQueue module (unique-match hard-fail, findModule class)
+    const cache = window.__wpCache;
+    if (!cache) throw new Error("gfx-capture: __wpCache hook missing");
+    const hits = [];
+    for (const id of Object.keys(cache)) {
+      const m = cache[id];
+      if (m && m.exports && Array.isArray(m.exports.vfxQueue) &&
+          typeof m.exports.addToVfxQueue === "function" &&
+          typeof m.exports.dropFromVfxQueue === "function" &&
+          typeof m.exports.resetVfxQueue === "function") hits.push(m.exports);
+    }
+    if (hits.length !== 1) {
+      throw new Error("gfx-capture: vfxQueue module matched " + hits.length + " times (need exactly 1)");
+    }
+    const qmod = hits[0];
+    for (const c of o.inject.configs) {
+      if (!qmod.vfxQueue.some((v) => v && v.name === c.name)) {
+        throw new Error("gfx-capture: injected config '" + c.name + "' missing from vfxQueue post-inject");
+      }
+    }
+    const snap = JSON.parse(JSON.stringify(qmod.vfxQueue));
+    const restore = (skip) => {
+      const q = qmod.vfxQueue;
+      q.length = 0;
+      for (const inst of snap) {
+        if (skip !== null && inst.name === skip) continue;
+        q.push(JSON.parse(JSON.stringify(inst)));
+      }
+    };
+    // canonical render + mask (native render RNG — the unchanged path)
+    window.__gfxRender();
+    window.__gfxCaptured[r[0].f] = window.__gfxCaptureMask();
+    // deterministic full + leave-one-out renders
+    const mk = (seed) => {
+      let a = seed >>> 0;
+      return () => {
+        a |= 0; a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    };
+    const savedNative = window.__nativeRandom;
+    let det = null;
+    const loo = {};
+    try {
+      restore(null);
+      window.__nativeRandom = mk(o.seed);
+      window.__gfxRender();
+      det = window.__gfxCaptureMask().mask;
+      for (const nm of o.inkNames) {
+        restore(nm);
+        window.__nativeRandom = mk(o.seed);
+        window.__gfxRender();
+        loo[nm] = window.__gfxCaptureMask().mask;
+      }
+    } finally {
+      window.__nativeRandom = savedNative;
+      restore(null);
+      window.__gfxRender(); // state-equivalence render (native RNG)
+    }
+    return { rec: r[0], det: det, loo: loo };
+  }, { inject: INJECT, inkNames: EXPECTED_RENDER.injectPin.inkNames, seed: DET_SEED });
+  frames.push(special.rec);
+  {
+    const tag = String(INJECT.frame).padStart(4, "0");
+    fs.writeFileSync(path.join(OUT_DIR, `f${tag}.det.mask.bin`),
+      decodeMask(special.det, "det mask"));
+    for (const nm of EXPECTED_RENDER.injectPin.inkNames) {
+      if (typeof special.loo[nm] !== "string") {
+        console.error(`capture-canvas: leave-one-out mask for '${nm}' missing`);
+        process.exit(1);
+      }
+      fs.writeFileSync(path.join(OUT_DIR, `f${tag}.loo-${nm}.mask.bin`),
+        decodeMask(special.loo[nm], `loo-${nm} mask`));
+    }
+  }
+  await drain();
+  await runPlain(g.frames - INJECT.frame);
   const wall = Date.now() - t0;
   const wanted = sampledList.length;
   if (masksWritten !== wanted) {

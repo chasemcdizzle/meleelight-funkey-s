@@ -3,7 +3,32 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-18, iter 69 — vfx-rig round-3 residuals closed)
+## Live right now (updated: 2026-07-18, iter 70 — task-2 renderer arc round-2 Mediums closed)
+
+- **Iter 70 (M4 task 2 hardening round 2 — INJECT1 grammar, cast
+  domain, region fix, browser attribution, inkNames pin, closure
+  TOCTOU, iou parsers) DONE**: all 7 review-65 round-2 Mediums
+  (.loop/review-65-triage-r2.md / .loop/review-65-3.log) closed on
+  port/gfx/{gfx_vfx.c,iou.js,check-render.sh,capture-canvas.js,
+  expected-render.json}. M1 whitelist-exact INJECT1 C parser (+
+  emit-side grammar guard); M2 vfx_cfg_int cast-domain guard at 8
+  sites (2 cited + 6 class siblings; isfinite no-op reordered before
+  the cast); M3 firefoxcharge judge region cfg.face->cfg.f (measured
+  delta: frames 1/5 box -> 3/7 box, 26.6 px wider x; NO pinned value
+  moved, 0.88 aggregate untouched, run-1 min 0.8982); M4 browser
+  leave-one-out attribution (deterministic det/loo masks at the
+  injection frame, evaluate-only — gfx-pagelib.js untouched; iou.js
+  bdiff>0 per effect); M5 exact ordered 5-name inkNames pin in 4
+  validator sites; M6 final closure-identity re-check before
+  RENDER OK; M7 full-corpus VFXDATA1 validation + exact 16-hex
+  scale.bits grammar. Cold done-check RENDER OK DONECHECK_RC=0
+  (.loop/m4-task2r70-donecheck.log); 7/7 teeth fired with predicted
+  classes incl. a REAL end-to-end TOCTOU run and a pre-fix UBSan
+  diagnostic at the cited line (.loop/m4-task2r70-teeth.log);
+  check-sim.sh skipped (zero port/sim bytes — justified in the log).
+  **Task-2 renderer arc round 3 = CLOSURE (driver)**: rerun the
+  reviewer on the new commit; per PROCESS §3 bounded convergence the
+  arc is at round 3 of ~8.
 
 - **Iter 69 (M4 hardening — carrier uniqueness + banner affine counts)
   DONE**: both review-68 Mediums (.loop/review-68-1.log) closed on
@@ -704,10 +729,10 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   M4 seeds registered (mixer fidelity + music, stop-path coverage,
   skip-burst instrument). Regressions green: DEVICE RENDER OK (11.065
   ms full p99) + SIM CONFORMS (.loop/m3-task6-reg-{render,sim}.log).
-- **Latest AGENT-LOG entry**: iter 67 (M4 task 2 hardening DONE —
-  injection-set pin + per-effect ink assertions; pre-registration +
-  DONE entries); latest log id: .loop/m4-task2r67-donecheck.log (also
-  m4-task2r67-{donecheck-run1,teeth}.log).
+- **Latest AGENT-LOG entry**: iter 70 (M4 task 2 hardening round 2
+  DONE — review-65 r2's 7 Mediums; pre-registration + DONE entries);
+  latest log id: .loop/m4-task2r70-donecheck.log (also
+  m4-task2r70-teeth.log).
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull

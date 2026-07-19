@@ -12,9 +12,13 @@
 //   - IoU = |A&B| / |A|B| per frame, compared against the frozen
 //     threshold in expected-render.json (never loosened).
 //
-// Per-effect injection assertions (review-65 M2, iter 67): at the pinned
-// injection frame, every inkNames effect must contribute ink on BOTH
-// sides — (i) browser mask ink > 0 in the effect's derived region,
+// Per-effect injection assertions (review-65 M2, iter 67; browser
+// attribution added review-65 r2 M4, iter 70): at the pinned injection
+// frame, every inkNames effect must contribute ink on BOTH sides —
+// (i) browser mask ink > 0 in the effect's derived region, (i') browser
+// LEAVE-ONE-OUT differential ink > 0 (f<tag>.det.mask.bin vs
+// f<tag>.loo-<name>.mask.bin, both rendered by the capture under a
+// deterministic page-local render RNG — the browser twin of (iii)),
 // (ii) C with-inject ink > 0 in the region, (iii) C LEAVE-ONE-OUT
 // DIFFERENTIAL ink > 0 in the region: the full render diffed against a
 // baseline whose INJECT1 dropped exactly that effect. (iii) is the
@@ -136,6 +140,18 @@ const INJ = exp.inject;
     console.error("iou: inject pin violated (inkNames must be a nonempty unique subset of names)");
     process.exit(1);
   }
+  // Exact ordered inkNames pin (review-65 r2 M5): the 5 live-drawing
+  // effects, HARD-CODED here and in check-render.sh + capture-canvas.js
+  // (the sampledFrameCount twin-pin class) — a name silently dropped
+  // from expected-render.json's inkNames would otherwise pass every
+  // subset check while its leave-one-out and regional assertions
+  // vanish. Changing the set is a reviewed change to all four files.
+  if (PIN.inkNames.length !== 5 ||
+      PIN.inkNames.join(" ") !== "firefoxcharge firefoxtail shine dashDust groundBounce") {
+    console.error("iou: inject pin violated — inkNames [" + PIN.inkNames.join(", ") +
+      "] != the hard-pinned reviewed 5-name set");
+    process.exit(1);
+  }
   if (PIN.names.some((n) => !/^[A-Za-z][A-Za-z0-9]*$/.test(n))) {
     console.error("iou: inject pin violated (names must match the identifier grammar — they double as artifact path tokens)");
     process.exit(1);
@@ -178,15 +194,116 @@ const SRC_W = 1200, SRC_H = 750;
 // zero differential ink.
 // ---------------------------------------------------------------------------
 
+// Full-corpus VFXDATA1 validation (review-65 r2 M7; PROCESS section-3
+// grammar rule). Producer = gfx-pagelib.js __gfxDumpVfxData; grammar
+// MEASURED from the committed vfxdata-frozen.txt (the entire real
+// corpus validates with zero false rejections): magic first line, then
+// TPL blocks (TPL immediately followed by FRAMES, then any of
+// COLOUR/SKIP/KEY inside the block), then SWORD lines, then one END as
+// the last line, file \n-terminated, nothing after. Tokens: identifiers
+// [A-Za-z][A-Za-z0-9]* (SWORD types are a subset), exact-decimal
+// numbers -?(0|[1-9][0-9]*)(\.[0-9]+)?, balanced nonempty single
+// bracket streams on KEY/SWORD. A file that RESEMBLES the grammar but
+// deviates anywhere is corruption -> fail closed (the old scanner
+// extracted plausible values from truncated/damaged corpora).
+const NUM_RE = /^-?(0|[1-9][0-9]*)(\.[0-9]+)?$/;
+const IDENT_RE = /^[A-Za-z][A-Za-z0-9]*$/;
+
+function vfxCorpusDie(lineNo, why) {
+  console.error(`iou: vfxdata corpus INVALID at line ${lineNo}: ${why} (fail closed — corrupt/truncated artifact)`);
+  process.exit(1);
+}
+
+function validateBracketStream(toks, lineNo) {
+  // one balanced nonempty [ ... ] group spanning the whole token list
+  if (toks.length < 2 || toks[0] !== "[") vfxCorpusDie(lineNo, "stream must open with [");
+  let depth = 0;
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i];
+    if (t === "[") depth++;
+    else if (t === "]") {
+      depth--;
+      if (depth < 0) vfxCorpusDie(lineNo, "unbalanced ]");
+      if (depth === 0 && i !== toks.length - 1) vfxCorpusDie(lineNo, "content after the closing ]");
+    } else if (!NUM_RE.test(t)) {
+      vfxCorpusDie(lineNo, `bad token '${t}'`);
+    } else if (depth === 0) {
+      vfxCorpusDie(lineNo, "number outside brackets");
+    }
+  }
+  if (depth !== 0) vfxCorpusDie(lineNo, "unbalanced [");
+}
+
+function validateVfxCorpus(txt) {
+  if (!txt.endsWith("\n")) vfxCorpusDie(0, "missing final newline");
+  const lines = txt.slice(0, -1).split("\n");
+  if (lines[0] !== "VFXDATA1") vfxCorpusDie(1, "bad magic");
+  if (lines[lines.length - 1] !== "END") vfxCorpusDie(lines.length, "last line must be END");
+  // state: 0 = before first TPL, 1 = expect FRAMES (just saw TPL),
+  // 2 = inside a TPL block, 3 = in the SWORD tail
+  let state = 0, tplCount = 0;
+  for (let i = 1; i < lines.length - 1; i++) {
+    const ln = i + 1;
+    const line = lines[i];
+    const sp = line.split(" ");
+    const kind = sp[0];
+    if (kind === "END") vfxCorpusDie(ln, "END before the last line");
+    if (state === 1) {
+      if (kind !== "FRAMES" || sp.length !== 2 || !/^(0|[1-9][0-9]*)$/.test(sp[1])) {
+        vfxCorpusDie(ln, "TPL must be immediately followed by a FRAMES line");
+      }
+      state = 2;
+      continue;
+    }
+    if (kind === "TPL") {
+      if (state === 3) vfxCorpusDie(ln, "TPL after the SWORD tail");
+      if (sp.length !== 2 || !IDENT_RE.test(sp[1])) vfxCorpusDie(ln, "bad TPL line");
+      state = 1;
+      tplCount++;
+      continue;
+    }
+    if (kind === "SWORD") {
+      if (state !== 2 && state !== 3) vfxCorpusDie(ln, "SWORD outside the tail");
+      if (sp.length < 3 || !IDENT_RE.test(sp[1])) vfxCorpusDie(ln, "bad SWORD line");
+      validateBracketStream(sp.slice(2), ln);
+      state = 3;
+      continue;
+    }
+    if (state !== 2) vfxCorpusDie(ln, `${kind} line outside a TPL block`);
+    if (kind === "COLOUR") {
+      if (sp.length !== 4 || !sp.slice(1).every((t) => /^(0|[1-9][0-9]*)$/.test(t))) {
+        vfxCorpusDie(ln, "bad COLOUR line");
+      }
+    } else if (kind === "SKIP") {
+      if (sp.length !== 3 || !IDENT_RE.test(sp[1]) || !IDENT_RE.test(sp[2])) {
+        vfxCorpusDie(ln, "bad SKIP line");
+      }
+    } else if (kind === "KEY") {
+      if (sp.length < 3 || !IDENT_RE.test(sp[1])) vfxCorpusDie(ln, "bad KEY line");
+      validateBracketStream(sp.slice(2), ln);
+    } else {
+      vfxCorpusDie(ln, `unknown line kind '${kind}'`);
+    }
+  }
+  if (state === 1) vfxCorpusDie(lines.length, "TPL without FRAMES at corpus end");
+  if (tplCount === 0) vfxCorpusDie(lines.length, "no TPL blocks");
+}
+
+let vfxCorpusValidated = null;
+
 function parseVfxTplKey(txt, tpl, key) {
-  // Minimal VFXDATA1 walk: find "TPL <tpl>" block, then its "KEY <key> ..."
-  // line; tokenize "[", "]" and String(x) numbers into nested arrays.
+  // VFXDATA1 lookup — only ever runs over a corpus that passed the full
+  // validation above (cached per content; iou.js reads one file).
+  if (vfxCorpusValidated !== txt) {
+    validateVfxCorpus(txt);
+    vfxCorpusValidated = txt;
+  }
   const lines = txt.split("\n");
   let inTpl = false;
   for (const line of lines) {
     if (line.startsWith("TPL ")) { inTpl = (line === "TPL " + tpl); continue; }
     if (!inTpl || !line.startsWith("KEY " + key + " ")) continue;
-    const toks = line.slice(("KEY " + key + " ").length).trim().split(/\s+/);
+    const toks = line.slice(("KEY " + key + " ").length).split(" ");
     const stack = [[]];
     for (const t of toks) {
       if (t === "[") { const a = []; stack[stack.length - 1].push(a); stack.push(a); }
@@ -249,6 +366,15 @@ function injectRegions() {
     console.error("iou: stages.json: stage " + STAGE_IDX + " transform missing/malformed");
     process.exit(1);
   }
+  // Exact hex grammar (review-65 r2 M7): Buffer.from(_, "hex") silently
+  // truncates at the first invalid character and ignores trailing
+  // bytes — a corrupt/suffixed bits string would parse to a plausible
+  // double. Measured producer form (pipeline stages.json): exactly 16
+  // lowercase hex chars. Resembles-but-doesn't-match = corruption.
+  if (!/^[0-9a-f]{16}$/.test(st.scale.bits)) {
+    console.error("iou: stages.json: scale.bits fails the exact 16-lowercase-hex grammar (fail closed — corrupt artifact)");
+    process.exit(1);
+  }
   const S = Buffer.from(st.scale.bits, "hex").readDoubleBE(0);
   if (!Number.isFinite(S) || S <= 0) {
     console.error("iou: stages.json: bad stage scale");
@@ -278,9 +404,14 @@ function injectRegions() {
       x0 = cX - r; x1 = cX + r; y0 = cY - r; y1 = cY + r;
     } else if (cfg.name === "firefoxcharge") {
       const paths = parseVfxTplKey(vfxTxt, "firefoxcharge", "path");
-      const facing = cfg.face;
+      // review-65 r2 M3: the frame index is cfg.f — upstream drawVfx
+      // maps f -> vfxQueue[..].facing and firefoxcharge.js draws
+      // path[facing] + path[(facing+4)%10] (cfg.face is the MIRROR flag
+      // fed to drawArrayPathNew, not a frame). The old cfg.face read
+      // measured frames 1/5 instead of the drawn 3/7 (narrower bounds).
+      const facing = cfg.f;
       if (!Number.isInteger(facing) || facing < 0 || facing >= paths.length) {
-        console.error("iou: firefoxcharge inject config facing out of template range");
+        console.error("iou: firefoxcharge inject config f (frame index) out of template range");
         process.exit(1);
       }
       const second = (facing + 4) % 10;
@@ -412,14 +543,40 @@ const injResults = [];
   const noInk = loadPgm(path.join(RENDER_NOINJ, `f${tag}.pgm`));
   const regions = injectRegions();
 
+  // Browser-side attributable differential (review-65 r2 M4): the
+  // capture additionally rendered the injection frame under a
+  // DETERMINISTIC page-local render RNG — one full render
+  // (f<tag>.det.mask.bin) and one leave-one-out render per inkNames
+  // effect (f<tag>.loo-<name>.mask.bin), same reseed per render, so det
+  // and loo-X differ only by X's draws (plus the queue-order-bounded
+  // RNG ripple into later movers' own regions — the same argument as
+  // the C leave-one-out, now deterministic on the browser side too).
+  // bdiff > 0 in X's region is browser ATTRIBUTION: a browser injection
+  // that silently skipped X makes loo-X identical to det inside X's
+  // region by construction — the presence-in-box check alone could not
+  // see that (another layer's pixels keep presence nonzero).
+  const loadBrowserMask = (fp) => {
+    const b = fs.readFileSync(fp);
+    if (b.length !== SRC_W * SRC_H) {
+      console.error(`iou: ${fp}: ${b.length} bytes (want ${SRC_W * SRC_H})`);
+      process.exit(1);
+    }
+    return b;
+  };
+  const detMask = loadBrowserMask(path.join(CANVAS, `f${tag}.det.mask.bin`));
+
   for (const r of regions) {
-    // (i) browser mask ink in the canvas-space region
-    let browser = 0;
+    // (i) browser mask ink in the canvas-space region + (i') browser
+    // LEAVE-ONE-OUT differential (det vs loo-X) in the same region
+    let browser = 0, bdiff = 0;
+    const looMask = loadBrowserMask(path.join(CANVAS, `f${tag}.loo-${r.name}.mask.bin`));
     const bx0 = Math.max(0, Math.floor(r.x0)), bx1 = Math.min(SRC_W - 1, Math.ceil(r.x1));
     const by0 = Math.max(0, Math.floor(r.y0)), by1 = Math.min(SRC_H - 1, Math.ceil(r.y1));
     for (let y = by0; y <= by1; y++) {
       for (let x = bx0; x <= bx1; x++) {
-        if (src[y * SRC_W + x]) browser++;
+        const i = y * SRC_W + x;
+        if (src[i]) browser++;
+        if (detMask[i] !== looMask[i]) bdiff++;
       }
     }
     // (ii) C with-inject ink in the device-space box, plus the bg
@@ -440,12 +597,13 @@ const injResults = [];
         if (a !== l) diff++;
       }
     }
-    const ok = browser > 0 && cink > 0 && diff > 0;
-    console.log(`INJ ${r.name} browser=${browser} c=${cink} diff=${diff} bg=${bg} ${ok ? "OK" : "FAIL"}`);
-    injResults.push({ name: r.name, browser, c: cink, diff, bg, pass: ok });
+    const ok = browser > 0 && bdiff > 0 && cink > 0 && diff > 0;
+    console.log(`INJ ${r.name} browser=${browser} bdiff=${bdiff} c=${cink} diff=${diff} bg=${bg} ${ok ? "OK" : "FAIL"}`);
+    injResults.push({ name: r.name, browser, bdiff, c: cink, diff, bg, pass: ok });
     if (!ok) {
       console.error(`iou: injected effect '${r.name}' failed its per-effect ink assertion at frame ${INJ.frame} ` +
-        "(browser/c/leave-one-out diff must all be nonzero in the derived region — a side is not drawing this effect)");
+        "(browser presence, browser leave-one-out bdiff, C ink, and C leave-one-out diff must all be nonzero " +
+        "in the derived region — a side is not drawing this effect)");
       process.exit(1);
     }
   }

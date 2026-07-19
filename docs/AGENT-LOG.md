@@ -9343,3 +9343,219 @@ folded into the M4 ladder below. Issue #18 closed by the driver.
   .loop/ contaminated a round — one void round cost ~35 min. Standing
   practice now: purge or hard-scope per round; candidate §3 amendment
   (per-round artifact dirs) deferred until a second occurrence.
+
+## iter 70 — 2026-07-18 — PRE-REGISTRATION: task-2 renderer-rig round-2 Mediums — INJECT1 grammar, cast domain, region field, browser attribution, inkNames pin, closure TOCTOU, iou parsers (frozen before any run/edit; PROCESS §2)
+
+- SCOPE (driver triage .loop/review-65-triage-r2.md, BINDING; full log
+  .loop/review-65-3.log): 7 genuine Mediums on the task-2 renderer arc,
+  round 2. Surface: port/gfx/{gfx_vfx.c,iou.js,check-render.sh,
+  capture-canvas.js,expected-render.json} (+ docs). port/sim/calib/*
+  untouched.
+- METHOD (per fix, frozen):
+  - M1 gfx_vfx.c INJECT1 parser -> whitelist-exact (PROCESS §3 grammar
+    rule, producer grammar measured from the check-render.sh emitter:
+    String(x) numbers): exactly "INJECT1\n", then exactly one
+    "AT <[1-9][0-9]*>\n", then >=1 "V <ident<=23> <num> <num> <num|-> <num|->\n"
+    (single spaces, exact-decimal grammar -?(0|[1-9][0-9]*)(\.[0-9]+)?,
+    unique names), then one "END\n", then EOF; every line \n-terminated
+    (truncation guard); any deviation = distinct gfx_fatal. Emit side
+    gains the same number-grammar guard in vline().
+  - M2 double->int cast UB class: new vfx_cfg_int(x, what) — fatal
+    unless x > -2147483649.0 && x < 2147483648.0 (NaN/inf/overflow die
+    BEFORE the cast; truncation semantics preserved exactly).
+    Sites (grep-measured class sweep of config/event-carried casts):
+    dv_sing_gen (isfinite no-op check MOVED BEFORE the cast — the
+    modeled no-op semantics kept), V_SHINELOOP (same reorder),
+    V_FIREFOXCHARGE facing, V_FALCONPUNCH facing, V_FIREFOXLAUNCH
+    facing, V_SWING swingFrame, vspawn fPnum, live_char. NOT in class
+    (renderer-internal counters, documented): (int)v->timer sites,
+    (int)floor(st2), V_FIREFOXLAUNCH (int)pl->timer (sim-plane,
+    stream-bounded domain, in-arm guard).
+  - M3 iou.js firefoxcharge region: cfg.face -> cfg.f (upstream
+    drawVfx maps f->facing; firefoxcharge.js draws path[facing] +
+    path[(facing+4)%10]; config face=1 is the MIRROR flag — the
+    derivation comment already said frames 3/7, the code read the wrong
+    field and measured 1/5). Region re-derived; measured delta recorded.
+  - M4 browser-side per-effect attribution: at the injection frame the
+    capture (capture-canvas.js, page.evaluate — gfx-pagelib.js
+    untouched) after the CANONICAL native-RNG render+mask additionally
+    renders under a DETERMINISTIC page-local mulberry32 (seed
+    0xC0FFEE42, reseeded per render, swapped via window.__nativeRandom;
+    never the gameplay chain — STREAM MATCH still gates): one full-det
+    render + one leave-one-out render per inkNames effect (vfxQueue
+    snapshot/restore via the upstream vfxQueue module, unique-match
+    lookup; JSON clones; final full restore + native-RNG render leaves
+    the page in single-render-equivalent state). Masks ->
+    f0150.det.mask.bin / f0150.loo-<name>.mask.bin. iou.js asserts per
+    effect bdiff(det,loo)>0 inside the derived region (browser twin of
+    the C leave-one-out; same queue-order RNG-ripple containment
+    argument, now deterministic on both sides).
+  - M5 inkNames exact ordered pin: the 5-name list
+    "firefoxcharge firefoxtail shine dashDust groundBounce" + count 5
+    HARD-CODED in all three validators (check-render.sh early block +
+    INJECT1 emitter block, capture-canvas.js, iou.js); changing the set
+    becomes a reviewed 4-file change.
+  - M6 post-capture TOCTOU: final closure-identity re-check (re-derive
+    capture-closure.js map, re-hash every member + the three data-plane
+    digests, compare vs the sidecar snapshot) immediately before
+    RENDER OK.
+  - M7 iou.js auxiliary parsers: full-corpus VFXDATA1 validation before
+    any TPL/KEY lookup (grammar measured from the committed
+    vfxdata-frozen.txt: 7 anchored line forms, TPL->FRAMES adjacency,
+    block membership, bracket balance, exact-decimal tokens, one END,
+    nothing after); stages.json scale.bits -> exact /^[0-9a-f]{16}$/
+    (measured: all six stages 16 lowercase hex) before Buffer.from.
+- RUN CAP: <= 2 fresh-capture check-render.sh runs (run 1 = cold
+  done-check; run 2 = T-M6 TOCTOU probe run) + unit teeth reusing run-1
+  artifacts on perturbed COPIES only. Overruns documented, never
+  absorbed.
+- TEETH (perturb -> observe -> restore, restores byte-proven):
+  - T-M1 crafted INJECT1 probes vs the built binary: (a) junk line
+    after END, (b) trailing-garbage V record -> both distinct fatals;
+    positive control = run 1's real inject.txt.
+  - T-M2 -fsanitize=float-cast-overflow probe build in /tmp: PRE-fix
+    gfx_vfx.c (git HEAD) + "V sing 0 0 - -" -> UBSan invalid-cast
+    diagnostic; FIXED build same input -> clean no-op; FIXED +
+    face 2147483648 (grammar-legal, > INT_MAX) -> vfx_cfg_int fatal.
+  - T-M3 pre-fix iou.js (git HEAD copy in /tmp) vs run-1 artifacts ->
+    old INJ firefoxcharge region numbers; fixed run's numbers on
+    record; delta reported. Refutation shape: if the wider region
+    breaks the soundness guard or any judged value legitimately shifts,
+    that is a documented reviewed change — the 0.88 aggregate pin must
+    NOT move; if it wants to, STOP and report (never re-freeze).
+  - T-M4 canvas-dir COPY with f0150.loo-dashDust.mask.bin replaced by
+    f0150.det.mask.bin (== a browser injection that silently skipped
+    dashDust: LOO == det in its region by construction) -> iou.js
+    bdiff=0 death.
+  - T-M5 probe expected-render.json with firefoxtail dropped from
+    inkNames -> all three validators die (check-render.sh early,
+    capture-canvas.js pre-browser, iou.js).
+  - T-M6 run 2: background poller appends a probe line to
+    gfx-pagelib.js the moment run 2's no-inject render artifact
+    appears (post-capture, pre-final-check window) -> death at the NEW
+    final closure re-check; restore reverse-edit, byte-proven.
+  - T-M7 truncated vfxdata COPY (queried keys still present — the old
+    scanner would succeed) -> corpus-validation death; stages.json COPY
+    with bits "4012000000000000ff" -> hex-grammar death.
+- PASS = cold `bash port/gfx/check-render.sh` -> RENDER OK, exit 0
+  (.loop/m4-task2r70-donecheck.log) + all 7 teeth fire with the
+  predicted message classes + restores proven. REGRESSION:
+  check-sim.sh only if port/sim bytes change (none planned — gfx_vfx.c
+  is render-plane, not in check-sim.sh's TU list; verified by grep and
+  justified in the log if skipped).
+
+## iter 70 — 2026-07-18 — M4 task 2 hardening round 2 DONE: INJECT1 grammar, cast domain, region fix, browser attribution, inkNames pin, closure TOCTOU, iou parsers (review-65 r2's 7 Mediums closed)
+
+- DONE-CHECK: cold `bash port/gfx/check-render.sh` -> `RENDER OK`,
+  DONECHECK_RC=0 (.loop/m4-task2r70-donecheck.log; fresh capture, both
+  STREAM MATCH 3600/3600, IOU MIN 0.8982 >= 0.88 — the frozen aggregate
+  pin UNMOVED, all 5 INJ lines green incl. the NEW bdiff browser
+  differential, INJ REGIONS SOUND, NEW final-closure line green).
+  Capture budget: exactly the pre-registered 2 fresh-capture runs
+  (run 1 = this done-check; run 2 = the T-M6 TOCTOU run, green
+  end-to-end until the injected death at the final check). Surface:
+  port/gfx/{gfx_vfx.c,iou.js,check-render.sh,capture-canvas.js,
+  expected-render.json} exactly; port/sim/calib/* untouched.
+- **M1 (INJECT1 whitelist grammar)**: gfx_vfx_inject_load rebuilt to the
+  measured emitter grammar — magic, exactly one AT [1-9][0-9]* (<=9
+  digits), >=1 V records (exactly 6 single-space fields; identifier
+  name <=23 chars, unique; exact-decimal -?(0|[1-9][0-9]*)(\.[0-9]+)?
+  numbers via inj_num_ok + full-consume strtod + isfinite; face/f "-"
+  optional), one END, then EOF (fgetc), every line \n-terminated
+  (overlong/unterminated = death). Emit side (check-render.sh vline)
+  gains the same numTok grammar guard. Tooth: post-END junk ->
+  "inject: content after END"; 7th field on a V record ->
+  "inject: trailing fields on record"; real table = rc 0 control.
+- **M2 (double->int cast UB class)**: vfx_cfg_int() validates
+  x > -2147483649.0 && x < 2147483648.0 (NaN/inf fail) BEFORE (int);
+  truncation semantics unchanged for every in-domain value. Applied at
+  the config/event-carried cast sites: dv_sing_gen + V_SHINELOOP (both
+  with the isfinite no-op check MOVED BEFORE the cast — modeled no-op
+  semantics kept), V_FIREFOXCHARGE/V_FALCONPUNCH/V_FIREFOXLAUNCH
+  facing, V_SWING swingFrame, vspawn fPnum, live_char. Class-sweep
+  note: (int)v->timer sites + (int)floor(st2) are renderer-internal
+  counters (never config-carried), V_FIREFOXLAUNCH's (int)pl->timer is
+  sim-plane data bounded by the stream — left as-is, documented.
+  Tooth (UBSan float-cast-overflow probe builds, /tmp, full relink):
+  PRE-fix + sing-omitted-face -> "gfx_vfx_prefix.c:858:17: runtime
+  error: nan is outside the range of representable values of type
+  'int'" (the cited line exactly); FIXED same input -> rc 0 clean
+  no-op, zero diagnostics; FIXED + face 2147483648 (grammar-legal) ->
+  "sing face out of int-cast domain" fatal.
+- **M3 (firefoxcharge region field)**: iou.js derives the frame index
+  from cfg.f (upstream drawVfx maps f->facing; firefoxcharge.js draws
+  path[facing] + path[(facing+4)%10]; cfg.face is the mirror flag) —
+  the old cfg.face read measured frames 1/5 where the renderer draws
+  3/7. MEASURED REGION DELTA (canvas px, pre-margin, config pos (0,10)
+  on battlefield): frames 1/5 box x[550.3,649.7] y[359.0,443.5] ->
+  frames 3/7 box x[537.0,663.0] y[375.0,443.0] — 26.6 px wider in x
+  (the drawn ink the old region missed laterally), 16 px shorter in
+  never-drawn top band. INJ firefoxcharge: browser 4260->4395,
+  c 230->244, diff 138->139. NO frozen pin moved (regions are derived,
+  not pinned; the 0.88 aggregate is untouched — run-1 min 0.8982).
+  Pre-fix iou.js on the same artifacts: rc 0 (the accident on record —
+  presence checks satisfied by nearby ink inside a wrong region).
+- **M4 (browser-side attribution)**: capture-canvas.js segments the
+  replay around the pinned injection frame; that frame runs a
+  dedicated evaluate keeping the canonical path byte-identical (step ->
+  __gfxInject -> native-RNG __gfxRender -> mask) and ADDS, sim
+  untouched: a deterministic full render + one leave-one-out render
+  per inkNames effect under a page-local mulberry32 (seed 0xC0FFEE42,
+  reseeded per render, swapped via window.__nativeRandom — never the
+  gameplay chain; STREAM MATCH still gates), vfxQueue module located
+  unique-match through __wpCache, snapshot/restored via JSON clones,
+  final full-restore + native-RNG render = single-render-equivalent
+  page state. Masks f0150.det.mask.bin + f0150.loo-<name>.mask.bin;
+  iou.js asserts per-effect bdiff(det,loo) > 0 in the derived region
+  (browser twin of the C leave-one-out; same queue-order RNG-ripple
+  containment argument, now deterministic browser-side too).
+  gfx-pagelib.js NOT modified (evaluate-only; the brief's surface
+  held). Live bdiff: 3080/485/1071/1515/1571. Tooth: canvas COPY with
+  loo-dashDust := det (== a browser injection that silently skipped
+  dashDust, by construction) -> `INJ dashDust browser=4315 bdiff=0 ...
+  FAIL`, rc 1 — browser presence stayed nonzero, bdiff killed it (the
+  finding's exact presence-vs-attribution gap, measured).
+- **M5 (inkNames exact pin)**: the ordered 5-name set hard-coded in
+  FOUR validator sites (check-render.sh early + INJECT1 emitter,
+  capture-canvas.js pre-browser, iou.js judge); changing the set is
+  now a reviewed 4-file change. Tooth: probe expected-render.json with
+  firefoxtail dropped from inkNames only -> all three tools die naming
+  the shrunk set; restore cmp-proven.
+- **M6 (post-capture closure TOCTOU)**: final closure-identity re-check
+  in check-render.sh immediately before RENDER OK — re-derives
+  capture-closure.js, re-hashes every member + the three data-plane
+  digests against the sidecar snapshot; drift = loud death, no
+  verdict. Tooth (run 2, REAL end-to-end TOCTOU on the live path): a
+  background poller appended a probe line to gfx-pagelib.js the moment
+  the no-inject render artifact appeared (post-capture, pre-verdict);
+  the run died at "FINAL closure check: port/gfx/gfx-pagelib.js
+  changed after the capture", zero RENDER OK occurrences; restore
+  reverse-edited, git-status clean (byte-identical to HEAD).
+- **M7 (iou.js auxiliary parsers)**: full-corpus VFXDATA1 validation
+  (validateVfxCorpus, cached) before any TPL/KEY lookup — 7 anchored
+  line forms measured from the committed corpus, TPL->FRAMES
+  adjacency, block membership, balanced single bracket streams,
+  exact-decimal tokens, one END as last line, \n-terminated; zero
+  false rejections on the real 164-line corpus (proven in-run and by
+  the accidental no-op probe, honestly annotated in the teeth log).
+  scale.bits now /^[0-9a-f]{16}$/ before Buffer.from (which silently
+  truncates at invalid chars). Teeth: head-66 truncated corpus
+  (queried keys all present) -> "corpus INVALID at line 66: last line
+  must be END" while the OLD scanner printed IOU OK on the same bytes
+  (accident measured); bits+"ff" -> exact-hex-grammar death.
+- TEETH LOG: .loop/m4-task2r70-teeth.log (all perturbations in /tmp
+  copies except T-M5's in-place swap and T-M6's live append — both
+  restored byte-proven). REGRESSION: check-sim.sh SKIPPED, justified:
+  zero port/sim bytes changed (git status = the 5 gfx-surface files +
+  docs only; check-sim.sh references no gfx TU — grep 0).
+- ZOOM OUT: (a) the INJECT1 + VFXDATA1 + hex fixes are the SAME class
+  (PROCESS §3 whitelist-grammar) applied to three parsers in one
+  sweep — the class fix, not three one-offs; permissive-parser
+  surfaces in this repo should now be extinct on the render rig; any
+  new decision-bearing parser starts whitelist-exact. (b) vfx_cfg_int
+  is the cast-site twin of the same philosophy: validate the domain
+  BEFORE the operation whose out-of-domain behavior is undefined —
+  grep-sweep at fix time found 6 sibling sites beyond the 2 cited.
+  (c) Teeth refute designs, not just implementations: the first
+  truncation probe was a no-op (164-line corpus vs head -2000) — the
+  retry, not silence, is what proves the tooth; recorded honestly.

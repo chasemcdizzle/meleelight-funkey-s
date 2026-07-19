@@ -127,12 +127,22 @@ if (pin.inkNames.length === 0 || new Set(pin.inkNames).size !== pin.inkNames.len
   console.error("check-render: inject pin violated (inkNames must be a nonempty unique subset of names)");
   process.exit(1);
 }
+// Exact ordered inkNames pin (review-65 r2 M5): hard-coded here and in
+// capture-canvas.js + iou.js (twin-pin class) — a name silently dropped
+// from expected-render.json inkNames must die on every side, never
+// quietly shrink the leave-one-out/regional coverage.
+if (pin.inkNames.length !== 5 ||
+    pin.inkNames.join(" ") !== "firefoxcharge firefoxtail shine dashDust groundBounce") {
+  console.error("check-render: inject pin violated — inkNames [" + pin.inkNames.join(", ") +
+    "] != the hard-pinned reviewed 5-name set");
+  process.exit(1);
+}
 if (pin.names.some(n => !/^[A-Za-z][A-Za-z0-9]*$/.test(n))) {
   console.error("check-render: inject pin violated (names must match the identifier grammar — they double as artifact path tokens)");
   process.exit(1);
 }
 '
-echo "inject pin OK (7-name reviewed set, frame in corpus)"
+echo "inject pin OK (7-name reviewed set, 5-name inkNames pin, frame in corpus)"
 
 # frozen params. FRAMES_LIST/GOLDEN come from expected-render.json whose
 # corpus pin was validated above (node JSON reads, exact compare below).
@@ -405,15 +415,37 @@ if (!pin || !Array.isArray(pin.names) ||
   console.error("check-render: INJECT1 emitter — inject table does not match the reviewed injectPin");
   process.exit(1);
 }
+// review-65 r2 M5: the exact 5-name inkNames pin sits on the emitter
+// too — the leave-one-out tables below are derived FROM inkNames.
+if (!Array.isArray(pin.inkNames) || pin.inkNames.length !== 5 ||
+    pin.inkNames.join(" ") !== "firefoxcharge firefoxtail shine dashDust groundBounce") {
+  console.error("check-render: INJECT1 emitter — inkNames != the hard-pinned reviewed 5-name set");
+  process.exit(1);
+}
+// Emit-side number grammar guard (review-65 r2 M1): the C parser is
+// whitelist-exact — every emitted number must match the exact-decimal
+// grammar it pins (String(x) emits exponent forms for extreme values;
+// an out-of-grammar config is a config error, die at emit time).
+const NUM_RE = /^-?(0|[1-9][0-9]*)(\.[0-9]+)?$/;
+const numTok = (v, what) => {
+  const s = String(v);
+  if (typeof v !== "number" || !NUM_RE.test(s)) {
+    console.error("check-render: inject config " + what +
+      " fails the INJECT1 exact-decimal grammar: " + JSON.stringify(v));
+    process.exit(1);
+  }
+  return s;
+};
 const vline = (c) => {
   if (typeof c.name !== "string" || !c.pos ||
       typeof c.pos.x !== "number" || typeof c.pos.y !== "number") {
     console.error("check-render: bad inject config " + JSON.stringify(c));
     process.exit(1);
   }
-  const face = ("face" in c) ? String(c.face) : "-";
-  const f = ("f" in c) ? String(c.f) : "-";
-  return "V " + c.name + " " + c.pos.x + " " + c.pos.y + " " + face + " " + f;
+  const face = ("face" in c) ? numTok(c.face, c.name + ".face") : "-";
+  const f = ("f" in c) ? numTok(c.f, c.name + ".f") : "-";
+  return "V " + c.name + " " + numTok(c.pos.x, c.name + ".pos.x") + " " +
+         numTok(c.pos.y, c.name + ".pos.y") + " " + face + " " + f;
 };
 const emit = (fp, configs) => {
   const lines = ["INJECT1", "AT " + inj.frame];
@@ -569,5 +601,52 @@ node "$GFX/iou.js" --canvas "$CANVAS" --render "$BUILD/render-a" \
   --stages "$TABLES/stages.json" --stage "$G_STAGE" \
   --expected "$EXP" --report "$BUILD/iou-report.json"
 made "$BUILD/iou-report.json"
+
+# --- 7. FINAL closure-identity re-check (review-65 r2 M6) --------------------
+# The capture bound the input-closure bytes it consumed into the sidecar
+# (pre-consumption snapshot, re-verified at sidecar-write time), but the
+# judging stages above run for tens of seconds AFTER that: a member
+# edited post-capture (a normal editor save of gfx-pagelib.js is enough)
+# would let this run print RENDER OK for current bytes that were never
+# captured. Close the TOCTOU window: immediately before the verdict,
+# re-derive the closure, re-hash EVERY member and the three data-plane
+# digests, and require identity with the sidecar snapshot. Any drift =
+# loud death, no verdict.
+node -e '
+const fs = require("fs"), crypto = require("crypto");
+const h = (fp) => crypto.createHash("sha256").update(fs.readFileSync(fp)).digest("hex");
+const side = "'"$CANVAS"'/capture.digests.json";
+const d = JSON.parse(fs.readFileSync(side, "utf8"));
+if (!d.closure || typeof d.closure !== "object" || Array.isArray(d.closure)) {
+  console.error("check-render: FINAL closure check: sidecar has no closure map");
+  process.exit(1);
+}
+const { closureFiles } = require("./port/gfx/capture-closure.js");
+const files = closureFiles("'"$G_TRACE"'");
+const want = Object.keys(files).sort();
+const got = Object.keys(d.closure).sort();
+if (want.join("\n") !== got.join("\n")) {
+  console.error("check-render: FINAL closure check: member-set drift (sidecar: [" +
+    got.join(", ") + "] vs current: [" + want.join(", ") + "])");
+  process.exit(1);
+}
+for (const k of want) {
+  if (d.closure[k] !== h(files[k])) {
+    console.error("check-render: FINAL closure check: " + k +
+      " changed after the capture (the judged masks were produced from different bytes) — no verdict");
+    process.exit(1);
+  }
+}
+for (const [key, fp] of [["gfxdata", "'"$BUILD"'/gfxdata.txt"],
+                         ["vfxdata", "'"$BUILD"'/vfxdata.txt"],
+                         ["glyphs", "'"$BUILD"'/vfxglyphs.txt"]]) {
+  if (d[key] !== h(fp)) {
+    console.error("check-render: FINAL closure check: " + key +
+      " drifted after the capture — no verdict");
+    process.exit(1);
+  }
+}
+'
+echo "final closure identity verified (no post-capture drift)"
 
 echo "RENDER OK"
