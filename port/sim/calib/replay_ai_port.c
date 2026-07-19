@@ -37,6 +37,14 @@
 // documented-dead arms (H_LEDGE_CTA / GEN_RUT_UPTILT /
 // FOX_RESPAWN_INARR — measured-dead upstream, AGENT-LOG iter 75) stay
 // ZERO. A dead arm going live or a live arm going dead is loud.
+// COVERAGE-TABLE PIN (iter 79, review-77 round-2 M2): --ncov-pin N
+// asserts the compiled ML_AI_NCOV == the frozen pin (twin-pinned in
+// check-ai-replay.sh + expected-capture-aiport.json coverage.ncov) and
+// --dead-pin pins the dead-arm NAMES against the compiled list — a
+// grown counter universe (new named-but-unhit arm) is a reviewed
+// change, never a silent pass. Every strtol in this TU is
+// errno/ERANGE-guarded (saturation = corruption, review-77 M1).
+#include <errno.h>
 #include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
@@ -447,8 +455,9 @@ static void parse_expect(const char *spec) {
       exit(1);
     }
     char *end = NULL;
+    errno = 0; // ERANGE class guard (iter 79, review-77 round-2 M1)
     const long v = strtol(eq + 1, &end, 10);
-    if (end == eq + 1 || *end != 0 || v < 0) {
+    if (errno == ERANGE || end == eq + 1 || *end != 0 || v < 0) {
       fprintf(stderr, "EXPECT PARSE FAIL: bad count '%s' for key '%s'\n",
               eq + 1, tok);
       exit(1);
@@ -476,6 +485,8 @@ int main(int argc, char **argv) {
   const char *expect_spec = NULL;
   bool strict = false, stop_first = false, cover = false;
   long cover_gate = -1;
+  long ncov_pin = -1;              // iter 79: pinned ML_AI_NCOV
+  const char *dead_pin_spec = NULL; // iter 79: pinned dead-arm names (csv)
   int max_print = 5;
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--strict") == 0) strict = true;
@@ -484,11 +495,24 @@ int main(int argc, char **argv) {
     else if (strcmp(argv[i], "--expect") == 0 && i + 1 < argc) expect_spec = argv[++i];
     else if (strcmp(argv[i], "--cover-gate") == 0 && i + 1 < argc) {
       char *end = NULL;
+      errno = 0; // ERANGE class guard (iter 79)
       cover_gate = strtol(argv[++i], &end, 10);
-      if (end == argv[i] || *end != 0 || cover_gate < 0) {
+      if (errno == ERANGE || end == argv[i] || *end != 0 || cover_gate < 0) {
         fprintf(stderr, "bad --cover-gate value '%s'\n", argv[i]);
         return 1;
       }
+    }
+    else if (strcmp(argv[i], "--ncov-pin") == 0 && i + 1 < argc) {
+      char *end = NULL;
+      errno = 0; // ERANGE class guard (iter 79)
+      ncov_pin = strtol(argv[++i], &end, 10);
+      if (errno == ERANGE || end == argv[i] || *end != 0 || ncov_pin < 0) {
+        fprintf(stderr, "bad --ncov-pin value '%s'\n", argv[i]);
+        return 1;
+      }
+    }
+    else if (strcmp(argv[i], "--dead-pin") == 0 && i + 1 < argc) {
+      dead_pin_spec = argv[++i];
     }
     else if (strcmp(argv[i], "--max-print") == 0 && i + 1 < argc) max_print = atoi(argv[++i]);
     else if (!path) path = argv[i];
@@ -498,7 +522,8 @@ int main(int argc, char **argv) {
     fprintf(stderr, "usage: replay_ai_port <capture.jsonl> [--strict] "
                     "[--max-print N] [--stop-first] [--cover]\n"
                     "       [--expect records=N,runAI=N,Math.random=N,rngBoot=N]"
-                    " [--cover-gate N]\n");
+                    " [--cover-gate N]\n"
+                    "       [--ncov-pin N] [--dead-pin name1,name2,name3]\n");
     return 1;
   }
   // fail-closed evidence mode (review-75 M4): strict replay without the
@@ -548,9 +573,15 @@ int main(int argc, char **argv) {
     // frame field: strict parse (M5 sibling audit, iter 77) — the value
     // routes the RNG-generator decision (frame 0 = sweep), so a
     // garbage-to-0 permissive parse would silently misroute a record.
+    // ERANGE (iter 79, review-77 round-2 M1): an overflowing decimal
+    // saturates to LONG_MAX with no other symptom — routing only
+    // distinguishes zero from nonzero, so saturation would pass every
+    // downstream gate. Overflow is CORRUPTION, never a lucky route.
     char *frame_end = NULL;
+    errno = 0;
     const long frame = strtol(frame_s, &frame_end, 10);
-    if (frame_end == frame_s || *frame_end != 0 || frame < 0) {
+    if (errno == ERANGE || frame_end == frame_s || *frame_end != 0 ||
+        frame < 0) {
       fail("malformed frame field");
     }
 
@@ -670,6 +701,59 @@ int main(int argc, char **argv) {
     fprintf(stderr, "-- ai.c arm coverage (records that hit each arm) --\n");
     for (int k = 0; k < ML_AI_NCOV && ml_ai_cov_names[k]; k++) {
       fprintf(stderr, "COV %-24s %ld\n", ml_ai_cov_names[k], ml_ai_cov[k]);
+    }
+  }
+
+  // COVERAGE-TABLE PIN (iter 79, review-77 round-2 M2): the counter
+  // UNIVERSE itself is pinned. The round-2 accident: growing ML_AI_NCOV
+  // together with a new NAMED-but-unhit arm grows both sides of the
+  // named==ML_AI_NCOV check in lockstep — live stays at the gate value,
+  // the dead trio stays zero, and a newly UNCOVERED branch passes.
+  // --ncov-pin carries the frozen table size (twin-pinned:
+  // check-ai-replay.sh literal + expected-capture-aiport.json
+  // coverage.ncov); table growth is a REVIEWED change touching all
+  // three pin sites, never a silent bump.
+  if (ncov_pin >= 0 && ncov_pin != ML_AI_NCOV) {
+    fprintf(stderr,
+            "COVERAGE PIN FAIL: compiled ML_AI_NCOV %d != pinned %ld "
+            "(the counter universe changed — re-measure live/dead arms "
+            "and update the twin pins deliberately)\n",
+            ML_AI_NCOV, ncov_pin);
+    return 2;
+  }
+  // --dead-pin: the pinned dead-arm NAMES must be exactly the compiled
+  // g_dead_arms list (bijection, no dupes) — a renamed/dropped/added
+  // dead arm is drift between the pins file and the binary.
+  if (dead_pin_spec) {
+    bool matched[3] = {false, false, false};
+    int ntok = 0;
+    char dbuf[256];
+    if (strlen(dead_pin_spec) >= sizeof dbuf) {
+      fprintf(stderr, "bad --dead-pin value (too long)\n");
+      return 1;
+    }
+    strcpy(dbuf, dead_pin_spec);
+    for (char *tok = strtok(dbuf, ","); tok; tok = strtok(NULL, ",")) {
+      ntok++;
+      int hit = -1;
+      for (int d = 0; d < 3; d++) {
+        if (strcmp(tok, g_dead_arms[d]) == 0) hit = d;
+      }
+      if (hit == -1 || matched[hit]) {
+        fprintf(stderr,
+                "DEAD-ARM PIN FAIL: pinned name '%s' %s the compiled dead "
+                "list — the pins file and the binary disagree; re-measure "
+                "deadness, never rename silently\n",
+                tok, hit == -1 ? "is not in" : "duplicates within");
+        return 2;
+      }
+      matched[hit] = true;
+    }
+    if (ntok != 3) {
+      fprintf(stderr,
+              "DEAD-ARM PIN FAIL: %d pinned dead arms, compiled list has 3\n",
+              ntok);
+      return 2;
     }
   }
 

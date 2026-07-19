@@ -3,7 +3,38 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 78 — device-rig arc round-2 residuals CLOSED; device-rig round 3 = closure-or-cap)
+## Live right now (updated: 2026-07-19, iter 79 — ai-rig arc round-2 residuals CLOSED; ai-rig round 3 = closure-or-cap)
+
+- **Iter 79 (M4 hardening — ai-rig arc round-2 residuals, 2 Mediums)
+  DONE** (full entry: AGENT-LOG iter 79 pre-registration + result;
+  driver triage .loop/review-77-triage.md; RESPAWN iteration — the
+  first writer died on a usage limit mid-teeth, this session reviewed
+  + adopted its in-tree edits then ran all evidence fresh): M1 ERANGE
+  guard (errno reset + `errno == ERANGE` in the fail condition) on the
+  replay_ai_port.c frame strtol AND its class siblings (parse_expect
+  counts, --cover-gate, --ncov-pin) — an overflowing decimal is now
+  corruption death, never LONG_MAX saturation; M2 the coverage-table
+  UNIVERSE is pinned: expected-capture-aiport.json `coverage`
+  {ncov 64, liveArms 61, deadArms by NAME} + check-ai-replay.sh's
+  frozen NCOV_FROZEN=64 twin (asserted before the lock) feeding
+  --cover-gate/--ncov-pin/--dead-pin, replay asserts ncov-pin ==
+  compiled ML_AI_NCOV + dead-pin names == compiled g_dead_arms
+  (bijection); a grown named-but-unhit arm can no longer pass in
+  lockstep. Teeth 6/6 with asserted death classes
+  (.loop/m4-airig79-teeth.log): T5 positive control 0 divergences;
+  T1 the reviewer's exact overflowing-frame probe → `malformed frame
+  field` exit 3; T2 overflow --expect → EXPECT PARSE FAIL; T3a the
+  reviewer's exact accident DEMONSTRATED (NCOV-65+PROBE_NEW_ARM probe
+  binary PASSES under old flags) → T3b same probe dies under
+  --ncov-pin 64 (COVERAGE PIN FAIL exit 2); T4 wrong dead-pin name →
+  DEAD-ARM PIN FAIL exit 2. Cold check GREEN first attempt: `AI MATCH`
+  exit 0 (.loop/m4-airig79-donecheck.log; run cap held, 1 composed
+  run). No device surfaces touched.
+  **Driver next: ai-rig arc ROUND 3 = closure-or-cap (grammar-variant
+  re-raises → cap naming the class, per the triage ruling); device-rig
+  round 3 runs concurrently (iter 78).**
+
+## [superseded by iter 79] (updated: 2026-07-19, iter 78 — device-rig arc round-2 residuals CLOSED; device-rig round 3 = closure-or-cap)
 
 - **Iter 78 (M4 hardening — device-rig arc round-2 residuals, 4
   Mediums) DONE** (full entry: AGENT-LOG iter 78 pre-registration +

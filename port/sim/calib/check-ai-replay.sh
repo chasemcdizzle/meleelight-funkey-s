@@ -39,9 +39,17 @@
 #   - EVIDENCE COMPLETENESS (M4): the replay runs with --expect fed
 #     from the pins file (per-record-type inventory; truncation =
 #     corruption death) — --strict REQUIRES it.
-#   - COVERAGE GATE (M7): the replay runs with --cover --cover-gate 61
+#   - COVERAGE GATE (M7): the replay runs with --cover --cover-gate
 #     (live arms pinned per golden, measured iter 75; the 3
 #     documented-dead arms pinned ZERO).
+#   - COVERAGE-TABLE PIN (iter 79, review-77 round-2 M2): ML_AI_NCOV is
+#     TWIN-pinned — the frozen NCOV_FROZEN literal below must equal the
+#     pins file's coverage.ncov, and the replay asserts that pin
+#     against its compiled ML_AI_NCOV (--ncov-pin); the 3 dead arms are
+#     pinned BY NAME (--dead-pin, bijection vs the compiled list). A
+#     grown counter universe (a new named-but-unhit arm) is a reviewed
+#     change, never a silent coverage pass. The frame strtol (and every
+#     strtol sibling in the replay TU) is ERANGE-guarded (M1).
 #   - HYGIENE GUARD RC CASE-SPLIT (M2): the no-commit guard captures
 #     git's exit code explicitly — a status read error is corruption,
 #     never a clean pass.
@@ -72,6 +80,22 @@ corpuskeys="$(printf '%s\n' "${CORPUS[@]}" | sort | tr '\n' ' ')"
 corpuskeys="${corpuskeys% }"
 if [ "$pinkeys" != "$corpuskeys" ]; then
   fail "corpus inventory pin — CORPUS {$corpuskeys} != expected-pin keys {$pinkeys} (both directions must agree; an untested pinned golden or an unpinned tested golden is corruption)"
+fi
+
+# COVERAGE-TABLE PIN (iter 79, review-77 round-2 M2) — before the lock
+# and before anything runs. ML_AI_NCOV frozen literal: the twin of the
+# pins file's coverage.ncov; the binary asserts the value against its
+# compiled ML_AI_NCOV at gate time (--ncov-pin).
+NCOV_FROZEN=64
+cov_ncov="$(node -e "process.stdout.write(String(require('./$PINS').coverage.ncov))")"
+cov_live="$(node -e "process.stdout.write(String(require('./$PINS').coverage.liveArms))")"
+cov_dead="$(node -e "process.stdout.write(require('./$PINS').coverage.deadArms.join(','))")"
+if [ "$cov_ncov" != "$NCOV_FROZEN" ]; then
+  fail "coverage-table pin — pins-file coverage.ncov $cov_ncov != frozen literal $NCOV_FROZEN (twin pin; a counter-universe change is a reviewed change, never a silent bump)"
+fi
+ndead="$(node -e "process.stdout.write(String(require('./$PINS').coverage.deadArms.length))")"
+if [ "$ndead" != 3 ]; then
+  fail "coverage-table pin — $ndead pinned dead arms, want exactly 3 (the measured-dead trio, AGENT-LOG iter 75)"
 fi
 
 # RUN LOCK (iter 77, review-75; the iter-41/66 no-reclaim pattern): the
@@ -126,9 +150,11 @@ for id in "${CORPUS[@]}"; do
   rm -f "$BUILD/$id.aiport.b.jsonl" "$BUILD/$id.aiport-run.b.json"
   # bit-exact replay, full record set (pre marshal + C runAI + post
   # compare) + the evidence-completeness inventory + the coverage gate
-  # (61 live arms per golden, measured iter 75; dead arms pinned ZERO)
+  # (live/dead/ncov pins fed from the pins file — single source; the
+  # NCOV_FROZEN literal above is the script-side twin, iter 79)
   "$BUILD/ai_port_replay" "$BUILD/$id.aiport.jsonl" --strict --max-print 5 \
-    --expect "$expect" --cover --cover-gate 61
+    --expect "$expect" --cover --cover-gate "$cov_live" \
+    --ncov-pin "$cov_ncov" --dead-pin "$cov_dead"
 done
 
 # no-commit guard (rc CASE-SPLIT, iter 77 review-75 M2): captures are

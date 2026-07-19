@@ -11387,3 +11387,131 @@ always assert the death CLASS, not just the exit code.
   completion: a whitelist grammar that recognizes N line classes but
   requires only K<N of them silently accepts truncation — when the
   producer's table is FIXED, require it whole.
+
+## iter 79 — 2026-07-19 — PRE-REGISTRATION: ai-rig arc round-2 residuals — ERANGE + coverage-table pin (frozen before any run/edit; PROCESS §2)
+
+- **Task (driver triage .loop/review-77-triage.md, BINDING; full review
+  .loop/review-77-1.log, VERDICT: NO-GO r2)**: close the TWO round-2
+  Mediums on the M4 task-4 ai-rig surfaces. Surface:
+  `port/sim/calib/{replay_ai_port.c,check-ai-replay.sh,
+  expected-capture-aiport.json}`. `port/sim/ai.h` holds the ML_AI_NCOV
+  literal (64) — read, NOT edited. NO device surfaces
+  (port/sim/device/* + port/gfx/* untouched).
+- **Fixes**:
+  M1 ERANGE on the frame strtol (replay_ai_port.c:552): errno reset
+     before + `errno == ERANGE` in the fail condition — an overflowing
+     positive decimal frame is CORRUPTION DEATH (`malformed frame
+     field`, exit 3), never LONG_MAX saturation that happens to route
+     nonzero. ZOOM-OUT class audit: the SAME errno guard on every
+     strtol in the TU (parse_expect count values, --cover-gate, the
+     new --ncov-pin) — saturating-parse-accepted-as-value is a class,
+     not a site.
+  M2 coverage-table pin: the round-2 accident — a grown ML_AI_NCOV plus
+     a new named-but-unhit arm grows BOTH sides of the
+     named==ML_AI_NCOV check in lockstep, so an uncovered branch
+     passes. Fix: the counter UNIVERSE is pinned. TWIN pin:
+     expected-capture-aiport.json gains `coverage` {ncov: 64,
+     liveArms: 61, deadArms: [H_LEDGE_CTA, GEN_RUT_UPTILT,
+     FOX_RESPAWN_INARR] — by NAME}; check-ai-replay.sh carries the
+     frozen literal NCOV_FROZEN=64, asserts pins-file ncov == literal
+     + exactly 3 pinned dead names BEFORE any run, and feeds the
+     replay `--ncov-pin`/`--dead-pin`/`--cover-gate` FROM the pins
+     file; replay_ai_port.c asserts ncov-pin == compiled ML_AI_NCOV
+     and dead-pin names == the compiled g_dead_arms list (bijection,
+     no dupes). Table growth = a reviewed change touching all three
+     pin sites, never a silent bump.
+- **Teeth (pre-registered)**:
+  T1 (M1, the reviewer's exact probe): a COPY of the canonical g07
+     capture with one positive frame field replaced by an overflowing
+     decimal → replay death `malformed frame field` exit 3 (round-2
+     measured 0 divergences on this probe).
+  T2 (M1 class): `--expect records=<overflowing decimal>` → EXPECT
+     PARSE FAIL death.
+  T3 (M2, the reviewer's exact accident): probe build in /tmp — ai.h
+     ML_AI_NCOV 64→65 + `X(PROBE_NEW_ARM)` appended to COV_LIST —
+     (a) probe binary under the OLD flag set PASSES (demonstrates the
+     round-2 accident is real), (b) probe binary under `--ncov-pin 64`
+     → COVERAGE PIN death exit 2.
+  T4 (M2): real binary with one wrong `--dead-pin` name → DEAD-ARM PIN
+     death exit 2.
+  T5 (positive control): real binary + real g07 capture + the full new
+     flag set → 0 divergences, exit 0.
+- **Run cap**: ≤ 1 composed run (cold `bash
+  port/sim/calib/check-ai-replay.sh`) + unit probes (existing iter-77
+  canonical captures + the /tmp probe build; no browser runs outside
+  the composed check).
+- **Pass** = cold AI MATCH exit 0 (.loop/m4-airig79-donecheck.log) +
+  teeth as registered (.loop/m4-airig79-teeth.log).
+
+## iter 79 — 2026-07-19 — M4 hardening RESULT: ERANGE + coverage-table pin — round-2 ai-rig findings ALL closed, cold check green
+
+- **RESPAWN NOTE (honest)**: the first iter-79 writer session died on a
+  usage limit mid-teeth (edits complete, "build and run the teeth" was
+  next). This session REVIEWED the dirty tree first (git diff, all four
+  files read in context against ai.h/ai.c), adopted the edits unchanged
+  — they matched the frozen pre-registration exactly (ERANGE guard on
+  all 4 strtol sites; --ncov-pin/--dead-pin plumbing; twin pins in
+  script + pins file) — then ran the teeth and the cold check fresh.
+  Nothing from the dead session's unlogged runs was trusted or reused.
+- **Cold done-check GREEN, first attempt**: `bash
+  port/sim/calib/check-ai-replay.sh` → `AI MATCH` exit 0
+  (.loop/m4-airig79-donecheck.log; both goldens, ×2 byte-identical
+  captures, STREAM MATCH ×4, pins, strict replay 3826/3745 records ×
+  0 divergences with the FULL new flag set --ncov-pin 64 --dead-pin
+  H_LEDGE_CTA,GEN_RUT_UPTILT,FOX_RESPAWN_INARR fed from the pins
+  file). Run cap held: exactly 1 composed run; unit teeth used the
+  existing iter-77 canonical captures + a /tmp probe build only.
+- **M1 (ERANGE on the frame strtol) CLOSED**: errno reset + `errno ==
+  ERANGE` in the fail condition at the frame parse (replay_ai_port.c)
+  — an overflowing positive decimal frame is now `malformed frame
+  field` corruption death (exit 3), never LONG_MAX saturation that
+  happens to route nonzero. ZOOM-OUT class audit applied: the SAME
+  guard on every strtol in the TU (parse_expect counts, --cover-gate,
+  the new --ncov-pin). Teeth: T1 = the reviewer's exact probe (copy of
+  the canonical g07 capture, live runAI line 2000's frame 1915 →
+  99999999999999999999; cmp-verified single-line delta) → `MARSHAL
+  FAIL …:2000: malformed frame field` exit 3; T2 = `--expect
+  records=<same overflow>` → `EXPECT PARSE FAIL: bad count` exit 1.
+- **M2 (coverage-table pin) CLOSED**: the counter UNIVERSE is pinned.
+  expected-capture-aiport.json gains `coverage` {ncov: 64, liveArms:
+  61, deadArms: [H_LEDGE_CTA, GEN_RUT_UPTILT, FOX_RESPAWN_INARR] — by
+  NAME}; check-ai-replay.sh carries the frozen twin literal
+  NCOV_FROZEN=64, asserts pins-file ncov == literal + exactly 3 dead
+  names BEFORE the lock/any run, and feeds --cover-gate/--ncov-pin/
+  --dead-pin FROM the pins file (single source); the replay asserts
+  ncov-pin == compiled ML_AI_NCOV and dead-pin names == the compiled
+  g_dead_arms list (bijection, no dupes, exit 2 on drift). Table
+  growth = a reviewed change touching all three pin sites. Teeth:
+  T3a = the reviewer's exact accident DEMONSTRATED — probe binary
+  (/tmp copies: ai.h ML_AI_NCOV 64→65 + `X(PROBE_NEW_ARM)` appended
+  to ai.c's COV_LIST — the list lives in ai.c, pre-reg said ai.h;
+  noted, immaterial) under the OLD flag set PASSES (3745 records, 0
+  divergences, exit 0: named==NCOV grew in lockstep, live 61, dead
+  trio 0 — the uncovered arm sailed through); T3b = same probe binary
+  under `--ncov-pin 64` → `COVERAGE PIN FAIL: compiled ML_AI_NCOV 65
+  != pinned 64` exit 2; T4 = real binary, one wrong --dead-pin name →
+  `DEAD-ARM PIN FAIL: pinned name 'H_LEDGE_WRONG' is not in the
+  compiled dead list` exit 2.
+- **Teeth 6/6 as pre-registered** (T5 positive control first: real
+  binary + real g07 capture + full new flag set → 3745 records, 0
+  divergences, exit 0; then T1/T2/T3a/T3b/T4) —
+  .loop/m4-airig79-teeth.log; every negative tooth asserts its death
+  CLASS, not just the rc (the iter-77 lesson held). Harness gotcha
+  caught in-session: the first teeth script read `rc=$?` after a
+  `| tail` pipe (captures tail's rc, always 0) — rerun with unpiped
+  rc capture before anything was believed; the logged run is the
+  honest one.
+- **ZOOM OUT**: (1) saturating-parse-accepted-as-value is a CLASS, not
+  a site — wherever strtol/strtoul guards check only end-pointer and
+  sign, ERANGE rides through as a legal-looking extremum; the fix is
+  the errno idiom applied TU-wide, and any future parse added to a
+  replay TU inherits the audit question. (2) a gate whose two sides
+  derive from the SAME mutable definition (named==ML_AI_NCOV) can
+  grow in lockstep and is not a pin — pins must anchor to a FROZEN
+  copy outside the compiled artifact (here: twin literals in the
+  script + pins file, cross-asserted against the binary at run time);
+  same shape as the M0 spec-version pin parsed live from CHECKSUM.md.
+  (3) shell rc-after-pipe is a standing evidence hazard: any tooth
+  harness that pipes the subject's output must use PIPESTATUS or an
+  unpiped capture — an all-zeros rc column that LOOKS like six passes
+  is the tell.
