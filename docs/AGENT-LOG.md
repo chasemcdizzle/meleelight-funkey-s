@@ -9868,3 +9868,19 @@ injectPin, servedDistSha256, all *-frozen.txt).
   where a fresh browser dump is compared against the frozen reference;
   if task 3 pins glyph bytes over ADB, pin the frozen file's sha, never
   a fresh capture's.
+
+## driver — 2026-07-18 — task-2 renderer arc CLOSED (GO r4); tasks 1-2 fully closed
+
+- Task-2 arc: CLOSED at VERDICT: GO round 4 (.loop/review-71-1.log).
+  Arc ledger: r1 VOID (stale-artifact contamination — hygiene lesson),
+  r2 genuine (7 Mediums fixed iter 70: INJECT1 grammar, int-cast
+  guards, region field fix, browser attribution, inkNames pin, closure
+  re-check, corpus grammar), r3 (loo trajectory continuity, iter 71),
+  r4 GO + the DRIVER-FOUND glyph-jitter class (iter 72: cold re-run
+  caught a 1-pixel font-rasterization jitter the writer's in-session
+  x2 could not see — bit-cmp → measured comparator, 21-pair
+  characterization; the cold-re-run discipline's clearest catch yet).
+- M4 tasks 1-2 (vfx seam + renderer vfx/overlay) fully closed with both
+  arcs. Chase's two playtest gaps (firefox/shine invisible; platform
+  legibility) are now half-closed: vfx renders on host — task 3 puts it
+  on the device with the legibility adaptation.
