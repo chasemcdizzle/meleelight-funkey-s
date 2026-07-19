@@ -22,7 +22,10 @@
 #   [2] SNDPACK — fresh pipeline audio stage, pack x2 byte-identical,
 #       sha256 pinned AND cross-checked against check-device-audio.sh's
 #       frozen pin (one pack identity across the audio surface).
-#   [3] THE DIFFERENTIAL — for EVERY golden (8 oracle + m01/m02 + s01,
+#   [3] THE DIFFERENTIAL — for EVERY golden (8 oracle + m01/m02 +
+#       s01/s02 — s02 joined iter 85 with the GUARDON depletion-break
+#       scenario; its exposure row was measured out-of-band on the
+#       fixed sim then frozen, .loop/m4-iter85-donecheck.log,
 #       all inventory-pinned): replay on sim_host_snd with the event tap
 #       (each run judged STREAM MATCH by the PINNED-UNCHANGED
 #       verify-stream.js against its frozen stream — instrumentation
@@ -205,19 +208,20 @@ ORACLE_NAMES=(
   "g07-falco-falcon-battlefield"
   "g08-fox-puff-fdest"
 )
-M4_IDS=(m01 m02 s01)
+M4_IDS=(m01 m02 s01 s02)
 M4_NAMES=(
   "m01-falcon-marth-d1-ystory"
   "m02-falcon-fox-d9-dreamland"
   "s01-marth-fox-stops-battlefield"
+  "s02-marth-fox-guardon-break-battlefield"
 )
 # The M2-gate bridge-fed CPU goldens (their differential replays feed
 # the AIBRIDGE1 artifacts leg [1] records fresh).
 BRIDGE_CPU_IDS=(g07 g08)
 if [ "${#ORACLE_IDS[@]}" != 8 ] || [ "${#ORACLE_NAMES[@]}" != 8 ] || \
-   [ "${#M4_IDS[@]}" != 3 ] || [ "${#M4_NAMES[@]}" != 3 ] || \
+   [ "${#M4_IDS[@]}" != 4 ] || [ "${#M4_NAMES[@]}" != 4 ] || \
    [ "${#BRIDGE_CPU_IDS[@]}" != 2 ]; then
-  fail "inventory pin — pinned array lengths off (oracle ${#ORACLE_IDS[@]}/8+${#ORACLE_NAMES[@]}/8, m4 ${#M4_IDS[@]}/3+${#M4_NAMES[@]}/3, bridge ${#BRIDGE_CPU_IDS[@]}/2)"
+  fail "inventory pin — pinned array lengths off (oracle ${#ORACLE_IDS[@]}/8+${#ORACLE_NAMES[@]}/8, m4 ${#M4_IDS[@]}/4+${#M4_NAMES[@]}/4, bridge ${#BRIDGE_CPU_IDS[@]}/2)"
 fi
 for arr in ORACLE_IDS ORACLE_NAMES M4_IDS M4_NAMES BRIDGE_CPU_IDS; do
   dupes="$(eval 'printf "%s\n" "${'"$arr"'[@]}"' | sort | uniq -d)"
@@ -265,10 +269,11 @@ EXPOSURE_PINS=(
   "m01 4 0 0 0 0"
   "m02 9 1 0 0 0"
   "s01 5 0 4 4 0"
+  "s02 4 0 2 2 0"
 )
 MAXV_ALL_PIN=9
 STEALS_ALL_PIN=2
-DIFF_COUNT_PIN=11
+DIFF_COUNT_PIN=12
 if [ "${#EXPOSURE_PINS[@]}" != "$DIFF_COUNT_PIN" ]; then
   fail "exposure pin — table has ${#EXPOSURE_PINS[@]} rows, want $DIFF_COUNT_PIN"
 fi

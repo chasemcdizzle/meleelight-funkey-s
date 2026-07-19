@@ -12874,3 +12874,200 @@ Mixer arc round 2 = driver re-review with the COMPLETE diff.
   MY prematurely-launched cold run — mea culpa on record; the
   single-writer rule extends to composed CHECK RUNS; deferred-cold-run
   is now driver practice while a writer is active).
+
+## iter 85 — 2026-07-19 — M4 micro PRE-REGISTRATION: GUARDON depletion-break fix + s02 scenario golden (frozen before any edit; PROCESS §2)
+
+**Surface**: `port/sim/characters/shared/moves/GUARDON.c` (the review-82
+un-triaged High, queued by the driver 2026-07-19) + a NEW crafted
+scenario golden s02 in `port/goldens-m4/` + the reviewed inventory-pin
+updates that an s02 row forces (check-mixer-fidelity.sh [0b]).
+
+**THE BUG (measured, .loop/review-82-1.log)**: GUARDON.c:56 calls
+`as_shieldDepletion` in statement position, dropping its bool return.
+Upstream (`src/characters/shared/moves/GUARDON.js` main -> `physics/
+actionStateShortcuts.js shieldDepletion`, :280-299) runs
+`actionStates[characterSelections[p]].SHIELDBREAKFALL.init(p,input)`
+INSIDE shieldDepletion when shieldHP <= 0 — a shield depleting to break
+while being RAISED transitions to SHIELDBREAKFALL; our C leaves the
+victim stuck in GUARDON. The C slice API (as_shieldDepletion, header
+note) returns the break-arm flag and the CALLER performs the real
+dispatch after the slice write-back — GUARD.c:40-52 (iter 82) is the
+committed pattern; GUARDON.c is its exact sibling and the ONLY other
+live upstream caller (GUARDOFF.js's call is commented out upstream —
+import-only; replay_asshort.c drives the slice directly and the
+seam-logged as_dispatch covers the arm there).
+
+**THE FIX (pre-registered shape)**: GUARDON.c's static
+`shield_depletion` helper adopts GUARD.c's form verbatim: capture
+`const bool broke`, write back the 5 slice fields unchanged, then
+`if (broke) mv_dispatch(S, MV_CS(S,p), "SHIELDBREAKFALL", "init", p,
+in, 0);`. (Upstream quirk carried by the pattern: upstream's inner
+`init(p,input)` receives the SHADOWED `input` — the analog NUMBER, not
+the buffer — but SHIELDBREAKFALL.init/main/interrupt never dereference
+their input arg on the init frame, so passing the real buffer is
+unobservable-equivalent; same reasoning as the iter-82 GUARD fix.)
+
+**VERIFY (browser ground truth — the bug is zero-live on all 11
+current goldens, so a TARGETED probe golden s02 is recorded)**:
+- Scenario (battlefield, p1=0 marth, p2=2 fox, cpu=false, seed 9002 =
+  run RNG seed only — s-golden grammar, iter 84): fox shields at
+  mid-stage until shieldHP is a sliver (hold1 ~213 frames at rA=1.0;
+  0.28/frame off 60 HP), releases (GUARD -> GUARDOFF, fox GUARDOFF=15
+  -> WAIT; regen 0.07/frame while shielding===false), re-presses ~18
+  frames later -> GUARDON (fox GUARDON=8; depletion budget 8x0.28 =
+  2.24 HP) -> the break lands on a GUARDON frame (arithmetic target:
+  HP-at-repress ~1.6 -> break at GUARDON timer ~6) -> SHIELDBREAKFALL
+  -> land -> FURAFURA; marth (s01's measured approach recipe: dash
+  right, short left-walk turn, hold B) charge-swings the dizzy fox ->
+  DAMAGE; fox stick-up getup, then fresh-edge dash off the LEFT edge
+  holding down+away (the g01/s01 recipe) -> the KO; neutral tail to
+  3600 (both players >=1 stock, match live) — the FULL M0 quality
+  contract, checked mechanically by check-quality.js at record time.
+  NO contract accommodation is expected; if the scenario cannot
+  produce a KO within the recording cap, the fallback is pre-registered
+  HERE as: STOP, log the blocker, never weaken any golden's contract.
+- Generator `port/goldens-m4/gen-s02-trace.js` (committed,
+  deterministic, no RNG — the gen-s01 form); all boundary constants
+  MEASURED host-side on the bit-exact C sim (post-fix) via
+  `--dump-frames` envelope probes, then frozen in the generator.
+- Record via the HARDENED `record-m4.sh` (browser x2-identity,
+  quality contract, freeze, self-verify) after adding the s02 manifest
+  row (grammar `^[ms][0-9]{2}$`, name-derived trace, cpu=false/
+  difficulty=null — freeze-stream-m4.js validates the full grammar).
+- C replay: sim_host replays s02 -> wrap-run.js -> UNCHANGED
+  verify-stream.js vs the fresh-frozen s02 stream -> STREAM MATCH.
+
+**INVENTORY DECISION (pre-registered)**: s02 JOINS the mixer corpus.
+Reasons: (a) check-mixer-fidelity.sh [0b] pins the M4 manifest id+name
+inventory BOTH DIRECTIONS — an s02 row breaks the pin regardless, so
+the reviewed pin update is forced; (b) keeping the script's uniform
+"every loop derives from the pinned arrays" shape (no sim-only carve-
+out machinery) is the smaller, stronger change: M4_IDS/M4_NAMES gain
+s02, DIFF_COUNT_PIN 11->12, one EXPOSURE_PINS row for s02
+(measured-then-frozen from the s02 differential run; expected: no
+steals, no new over-cap golden — MAXV_ALL_PIN 9 / STEALS_ALL_PIN 2
+expected unchanged; ANY drift is a loud pin update in the same
+commit); (c) s02's shieldbreak/furaloop/charge-stop episode gives the
+mixer differential a second independent stop-path schedule for free.
+s01-specific legs ([4b] witnesses, [5] app leg) are NOT extended to
+s02 — witnesses are s01's frozen contract, the app leg needs one
+scenario only. check-ai-live.sh pins only cpu==true id sets (s02 is
+cpu=false) — expected green with the manifest row; run + logged.
+
+**RUN CAPS (PROCESS §2)**: host sim iterations FREE (probe runs with
+--dump-frames; each seconds); browser recordings <= 6 runs total =
+<= 3 record-m4.sh invocations (x2 runs each); composed regressions:
+check-sim.sh <= 2, check-mixer-fidelity.sh <= 2, check-ai-live.sh
+<= 2 cold runs (overage = honest ledger entry). No device, no docker
+beyond the standing pipeline images, no pushes.
+
+**TEETH (pre-registered)**:
+- T1 (the fix's tooth): with the fix REVERTED (working-tree only),
+  the s02 replay DIVERGES from the frozen browser stream at the
+  measured break frame (fox stuck in GUARDON vs SHIELDBREAKFALL);
+  restore -> STREAM MATCH. Logged with the measured first-divergence
+  frame.
+- T2 (regressions): SIM CONFORMS (all 8 oracle goldens — the fix is
+  zero-live there by measurement), MIXER FIDELITY OK (s01 witnesses +
+  all exposure pins incl. the new s02 row), AI LIVE CONFORMS
+  (manifest-changed re-run).
+- T3 (class sweep): mechanical statement-position sweep of every
+  non-void as_* call site (grep + condition-position classification)
+  -> verdict logged; expected: GUARDON.c:56 was the LAST ignored
+  return (GUARD.c fixed iter 82; all other non-void as_* calls sit in
+  condition/assignment position).
+
+**Zoom-out slot (to fill at result)**: 2nd instance of the
+zero-coverage-dispatch-scaffold class (a dispatch arm faithful in
+structure but dead on all goldens, silently dropped in translation);
+the sweep verdict decides whether the class is now CLOSED mechanically.
+
+## iter 85 — 2026-07-19 — M4 micro RESULT: GUARDON depletion-break fix + s02 scenario golden — browser-verified STREAM MATCH
+
+**THE FIX (port/sim/characters/shared/moves/GUARDON.c)**: the static
+`shield_depletion` helper now captures `as_shieldDepletion`'s bool and,
+after the 5-field slice write-back, dispatches
+`mv_dispatch(S, MV_CS(S,p), "SHIELDBREAKFALL", "init", p, in, 0)` when
+the break arm fired — GUARD.c's iter-82 form verbatim. Upstream
+expression shape carried: `shieldDepletion` (actionStateShortcuts.js
+:280-299) runs `SHIELDBREAKFALL.init(p,input)` INSIDE itself at
+shieldHP <= 0 (with the SHADOWED `input` — the analog number;
+unobservable, SHIELDBREAKFALL never dereferences its input arg on the
+init frame), and GUARDON.main's `shieldDepletion(p,input)` call
+(GUARDON.js:50) reaches it whenever the interrupt returned false and
+!inCSS — identical to GUARD.main. The C slice API returns the arm flag
+and the caller dispatches (as_shieldDepletion header note).
+
+**s02 PROBE-TRACE FACTS (all measured host-side on the bit-exact fixed
+C sim, then browser-recorded)**:
+- Generator `port/goldens-m4/gen-s02-trace.js` (deterministic, no RNG;
+  regeneration is byte-identical — cmp-proven vs the tuned copy).
+  Constants: SHIELD1_ON=360, SHIELD1_OFF=573 (213 full-analog GUARD
+  depletion frames: 60 - 0.28x213 = 0.36 HP), REPRESS=590 (17
+  shielding===false regen frames x 0.07 -> HP 1.5499999999998346
+  measured at sim frame 590, WAIT), BREAK2=596.
+- THE BREAK: WAIT -> GUARDON on sim frame 591 (fox GUARDON=8, budget
+  2.24 HP); depletion crosses 0 on GUARDON timer 6 = **sim frame 596**
+  (GUARDON timer 5 on 595 -> SHIELDBREAKFALL timer 1 on 596). The
+  arithmetic first guess WAS the measured value — zero retunes.
+- Tail: SHIELDBREAKFALL -> SHIELDBREAKSTAND -> FURAFURA (frame ~700);
+  marth's charged swing -> DAMAGEFLYN 28% (~732); DOWNWAIT -> stick-up
+  getup (DOWNSTANDN ~845) -> fresh-edge dash off the LEFT edge with
+  down+away -> KO (DEADDOWN; stocks 4/3, REBIRTH ~1000); neutral tail,
+  match live at 3600. FULL M0 quality contract — mechanically:
+  `QUALITY OK: KO=[DEADDOWN] hit=[DAMAGEFLYN] stocks=[4,3]
+  playing=true gameMode=3`. NO contract accommodation needed.
+- Browser record: `bash port/goldens-m4/record-m4.sh s02` first
+  attempt — x2 IDENTICAL, frozen
+  `s02-marth-fox-guardon-break-battlefield.sha256.json` (3600 frames,
+  rngCalls=39, rngCallsOutsideStep=1, specVersion=1)
+  (.loop/m4-iter85-record-s02.log). Browser runs used: 2 of <= 6.
+- C REPLAY: sim_host (fixed build) replays s02 -> **STREAM MATCH
+  3600/3600 exact, rngCalls=39** vs the frozen browser stream
+  (.loop/m4-iter85-s02-c-replay.log) — the C break frame IS the
+  browser break frame, bit-exact through KO and respawn.
+
+**INVENTORY (the pre-registered decision executed)**: s02 JOINED the
+mixer corpus — check-mixer-fidelity.sh M4_IDS/M4_NAMES + array-length
+pins 3->4, DIFF_COUNT_PIN 11->12, EXPOSURE_PINS row `s02 4 0 2 2 0`
+MEASURED out-of-band on the fixed sim (sim_host_snd tap + snd_render +
+both references: maxvoices=4, steals=0, stops=2 matched=2 unmatched=0,
+C==capped-ref AND C==unlimited-ref BIT-IDENTICAL, 10584000 PCM bytes)
+then frozen; MAXV_ALL_PIN=9/STEALS_ALL_PIN=2 unchanged (s02 under
+cap); over-cap set stays {g06,m02}. s01-only legs ([4b] witnesses,
+[5] app leg) deliberately NOT extended. Manifest row s02 (seed 9002 =
+run-RNG only; s-grammar) + comment documenting the scenario;
+freeze-stream-m4.js validated the full grammar at freeze time.
+
+**TEETH**:
+- T1 FIRED: fix reverted (reverse-edit; restore from stashed fixed
+  bytes + cmp, never `git checkout --`) -> rebuilt sim diverges from
+  the frozen s02 stream at **frame 596 exactly** (the break frame;
+  rngCalls 39 -> 37, the dropped break-path draws); restored -> fresh
+  rebuild -> STREAM MATCH (.loop/m4-iter85-tooth.log).
+- T2: `bash port/sim/check-sim.sh` -> SIM CONFORMS (all 8 oracle
+  goldens; .loop/m4-iter85-checksim.log) — the fix is zero-live on the
+  oracle corpus, as review-82 predicted. Composed cold runs
+  (check-mixer-fidelity.sh / check-ai-live.sh) run post-commit per the
+  iter-84 bootstrap lesson (the golden-home no-commit guards require
+  the contract artifacts committed); results amended below.
+- T3 SWEEP (.loop/m4-iter85-sweep.log): 460 non-void as_* call sites
+  scanned across port/sim; after this fix the ONLY statement-position
+  call is replay_asshort.c:389 — the calib slice driver, correct by
+  design (post-state envelope judges; as_dispatch seam-logs the arm).
+  **No sim/move TU drops a non-void as_* return — the class is CLOSED
+  mechanically.**
+
+**Zoom-out (HARD RULE 8)**: 2nd instance of the
+zero-coverage-dispatch-scaffold class (iter-82 GUARD.c was the 1st):
+a dispatch arm structurally faithful but dead on every golden gets
+silently dropped in translation and survives every stream gate — the
+countermeasure is (a) the T3 mechanical sweep, now run to completion:
+class CLOSED, and (b) the s-golden pattern itself (CRAFTED scenario
+traces that put zero-live arms under browser ground truth — s01 stops,
+s02 the GUARDON break; future zero-live arms found by review get the
+same treatment). Run ledger: browser recordings 2/<=6 (one record-m4.sh
+invocation); host probe runs 6 (4 dump-frames probes + tooth + final);
+check-sim 1/<=2; sweep+measurement scripts host-only. No device, no
+pushes, frozen streams untouched (s02 is NEW; s01/oracle bytes
+unmoved).

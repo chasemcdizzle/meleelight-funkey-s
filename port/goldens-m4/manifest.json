@@ -1,5 +1,5 @@
 {
-  "comment": "M4 golden registry (fix_plan \u00a7M4 conventions; HARD RULE 3: only M0 tasks write oracle/ \u2014 M4-NEW goldens live HERE, recorded by port/goldens-m4/record-m4.sh which reuses the oracle/harness bytes VERBATIM by path and judged by the UNCHANGED oracle/harness/verify-stream.js). Schema, char/stage indices, seed convention (seed = the run's Math.random seed AND the gen-trace.js seed: node oracle/harness/gen-trace.js <trace> 3800 <seed>) and the record-time gameplay-quality contract (>=1 KO, >=1 DAMAGE*/CAPTUREDAMAGE state, both players >=1 stock at the final frame \u2014 checked MECHANICALLY by check-quality.js) are the oracle/goldens/manifest.json conventions verbatim. m01/m02 (M4 task 5): CPU-difficulty coverage traces \u2014 d1 and d9 flip the difficulty-gated ai.js arms that g07/g08's d5 never exercises, and put marthAI/foxAI live as CPUs for the first time (g07 falcon = empty falconAI; g08 puff = jiggsAI). ID GRAMMAR (iter 84): ^[ms][0-9]{2}$ \u2014 m = match/CPU-coverage goldens whose trace is gen-trace.js seeded chaos; s = SCENARIO goldens whose trace is CRAFTED by a committed deterministic generator (byte-reproducible; `seed` is then ONLY the run's Math.random seed, and record-m4.sh REFUSES to auto-generate a missing s-trace \u2014 regenerate via the named generator). s01 (M4 task 6, folded here from the dissolved port/goldens-snd/ in iter 84 with its frozen stream bytes UNCHANGED): the stop-path scenario \u2014 generator gen-s01-trace.js; fires all four in-match Howl .stop arms (NSG release, NSG charge==122 auto, hitDetection FURAFURA, FURAFURA-interrupt wake) plus two furaloop/shieldbreakercharge episodes, two shield breaks, one KO and one DAMAGE hit.",
+  "comment": "M4 golden registry (fix_plan \u00a7M4 conventions; HARD RULE 3: only M0 tasks write oracle/ \u2014 M4-NEW goldens live HERE, recorded by port/goldens-m4/record-m4.sh which reuses the oracle/harness bytes VERBATIM by path and judged by the UNCHANGED oracle/harness/verify-stream.js). Schema, char/stage indices, seed convention (seed = the run's Math.random seed AND the gen-trace.js seed: node oracle/harness/gen-trace.js <trace> 3800 <seed>) and the record-time gameplay-quality contract (>=1 KO, >=1 DAMAGE*/CAPTUREDAMAGE state, both players >=1 stock at the final frame \u2014 checked MECHANICALLY by check-quality.js) are the oracle/goldens/manifest.json conventions verbatim. m01/m02 (M4 task 5): CPU-difficulty coverage traces \u2014 d1 and d9 flip the difficulty-gated ai.js arms that g07/g08's d5 never exercises, and put marthAI/foxAI live as CPUs for the first time (g07 falcon = empty falconAI; g08 puff = jiggsAI). ID GRAMMAR (iter 84): ^[ms][0-9]{2}$ \u2014 m = match/CPU-coverage goldens whose trace is gen-trace.js seeded chaos; s = SCENARIO goldens whose trace is CRAFTED by a committed deterministic generator (byte-reproducible; `seed` is then ONLY the run's Math.random seed, and record-m4.sh REFUSES to auto-generate a missing s-trace \u2014 regenerate via the named generator). s01 (M4 task 6, folded here from the dissolved port/goldens-snd/ in iter 84 with its frozen stream bytes UNCHANGED): the stop-path scenario \u2014 generator gen-s01-trace.js; fires all four in-match Howl .stop arms (NSG release, NSG charge==122 auto, hitDetection FURAFURA, FURAFURA-interrupt wake) plus two furaloop/shieldbreakercharge episodes, two shield breaks, one KO and one DAMAGE hit. s02 (iter 85): the GUARDON depletion-break scenario — generator gen-s02-trace.js; fox's shield depletes to a sliver in GUARD, regenerates through GUARDOFF/WAIT, and the re-press depletes it to BREAK on a GUARDON frame (sim frame 596, GUARDON timer 6 — upstream shieldDepletion's SHIELDBREAKFALL arm fired from GUARDON.main, the review-82 High GUARDON.c had dropped), then FURAFURA, one charged-swing DAMAGE hit and one edge-dash KO (full quality contract).",
   "goldens": [
     {
       "id": "m01",
@@ -31,6 +31,18 @@
       "trace": "s01-marth-fox-stops-battlefield.trace.json",
       "frames": 3600,
       "seed": 9001,
+      "p1": 0,
+      "p2": 2,
+      "stage": 0,
+      "cpu": false,
+      "difficulty": null
+    },
+    {
+      "id": "s02",
+      "name": "s02-marth-fox-guardon-break-battlefield",
+      "trace": "s02-marth-fox-guardon-break-battlefield.trace.json",
+      "frames": 3600,
+      "seed": 9002,
       "p1": 0,
       "p2": 2,
       "stage": 0,

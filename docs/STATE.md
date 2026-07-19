@@ -3,7 +3,32 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 84 — M4 hardening DONE: mixer-rig round 1 CLOSED + goldens-snd FOLDED, both cold checks green)
+## Live right now (updated: 2026-07-19, iter 85 — M4 micro DONE: GUARDON depletion-break fix + s02 scenario golden, browser-verified)
+
+- **Iter 85 (M4 micro — the review-82 un-triaged High: GUARDON.c:56
+  dropped as_shieldDepletion's return) DONE** (full entry: AGENT-LOG
+  iter 85 pre-registration + result; latest AGENT-LOG id: iter 85):
+  GUARDON.c's shield_depletion now dispatches SHIELDBREAKFALL.init on
+  the break flag — GUARD.c's iter-82 form verbatim. Browser-verified
+  by NEW crafted golden **s02-marth-fox-guardon-break-battlefield**
+  (gen-s02-trace.js; the shield depletes to break ON a GUARDON frame —
+  sim frame 596, GUARDON timer 6 — then FURAFURA/DAMAGE/KO, full
+  quality contract, browser x2-identity, rngCalls=39): C replay
+  STREAM MATCH 3600/3600. Tooth: fix reverted -> divergence at frame
+  596 exactly; restored -> match. T3 sweep: 460 non-void as_* call
+  sites — no sim/move TU drops a return; the
+  zero-coverage-dispatch-scaffold class (GUARD iter 82, GUARDON iter
+  85) is CLOSED mechanically (.loop/m4-iter85-sweep.log). s02 JOINED
+  the mixer corpus (check-mixer-fidelity.sh inventory 3->4 +
+  DIFF_COUNT 12 + measured exposure row `s02 4 0 2 2 0`; aggregate
+  pins unchanged; s01-only witness/app legs not extended).
+  Regressions: SIM CONFORMS (.loop/m4-iter85-checksim.log) + post-
+  commit cold MIXER FIDELITY OK / AI LIVE CONFORMS (see the result
+  entry's amended ledger). **Driver next: the queued Tier-B sim-TU
+  review round now has its GUARDON High CLOSED; mixer arc round 2
+  reviews should use the complete diff incl. this commit.**
+
+## [superseded by iter 85] (2026-07-19, iter 84 — M4 hardening DONE: mixer-rig round 1 CLOSED + goldens-snd FOLDED, both cold checks green)
 
 - **Iter 84 (M4 hardening — review-82 round-1 closure: stop witnesses +
   exposure pins + the goldens-snd fold) DONE** (full entry: AGENT-LOG
