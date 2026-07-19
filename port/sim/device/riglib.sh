@@ -253,12 +253,27 @@ rig_daemon_stop() {
   printf '%s\n' "$pid"
 }
 
-# rig_daemon_restore <name> <init-script> — restore a quiesced daemon
-# to the recorded boot cardinality: EXACTLY ONE instance (iter 76,
-# review-73 M — rig_daemon_stop REFUSES any pre-stop inventory != 1,
-# so ==1 is the only cardinality this rig ever owes; FunKey-OS
-# reality: each init script starts exactly one instance at boot,
-# measured recon iter 74). IDEMPOTENT + EXACT-COUNT:
+# rig_restore_stamp <stamp-devpath|""> — write the COUPLED restore
+# success witness (iter 80, review-78 M — the causality gap). Internal
+# to rig_daemon_restore; an empty path means no stamp was requested
+# (trap / rig_qd_normalize callers — no bracket evidence there). A
+# failed stamp write on a restored daemon is a LOUD nonzero: the
+# daemon IS up, but the run's bracket evidence is unwritable, and
+# unwritable evidence is never a pass.
+rig_restore_stamp() {
+  [ -n "$1" ] || return 0
+  dsh "date +%s > $1" >/dev/null || {
+    echo "DEVICE FAIL: daemon restored but the coupled restore stamp $1 could not be written — bracket evidence incomplete" >&2
+    return 1
+  }
+}
+
+# rig_daemon_restore <name> <init-script> [<stamp-devpath>] — restore a
+# quiesced daemon to the recorded boot cardinality: EXACTLY ONE
+# instance (iter 76, review-73 M — rig_daemon_stop REFUSES any
+# pre-stop inventory != 1, so ==1 is the only cardinality this rig
+# ever owes; FunKey-OS reality: each init script starts exactly one
+# instance at boot, measured recon iter 74). IDEMPOTENT + EXACT-COUNT:
 #   1 already running -> success WITHOUT touching the START channel
 #     (re-entry safe: the trap may run after a verified main-path
 #     restore; busybox start-stop-daemon cannot see script daemons,
@@ -268,16 +283,31 @@ rig_daemon_stop() {
 #     only the -K stop arm is broken for scripts), then a bounded
 #     comm-scan poll for EXACTLY 1;
 #   >1 at any point -> LOUD refusal, never "restored".
-# Returns nonzero when the daemon never verifies at exactly one — the
-# caller decides loud-fail (main path) vs loud-warn naming the manual
-# recovery command (trap path).
+# COUPLED RESTORE STAMP (iter 80, review-78 M): when <stamp-devpath>
+# is given, THIS helper writes `date +%s` there immediately after the
+# comm-scan verifies EXACTLY ONE — the stamp IS the restore's success
+# witness, never a caller-side marker. Callers MUST NOT write the
+# stamp independently: an elapsed-time witness cannot prove
+# first-action sequencing unless coupled to the operation, so any
+# chore inserted before this call, or a stall inside this helper
+# (pre-scan, init start, verify poll), inflates the bracket's
+# app-end->stamp bound and dies there.
+# Returns nonzero when the daemon never verifies at exactly one (or a
+# requested stamp cannot be written) — the caller decides loud-fail
+# (main path) vs loud-warn naming the manual recovery command (trap
+# path).
 rig_daemon_restore() {
-  local d isc pids n
+  local d isc stamp pids n
   d="$1"
   isc="$2"
+  stamp="${3:-}"
   pids="$(rig_comm_pids "$d")" || return 1
   n="$(printf '%s' "$pids" | grep -c '')" || true
-  if [ "$n" = 1 ]; then return 0; fi # already at boot cardinality — idempotent
+  if [ "$n" = 1 ]; then
+    # already at boot cardinality — idempotent success (comm-scan ==1)
+    rig_restore_stamp "$stamp" || return 1
+    return 0
+  fi
   if [ "$n" != 0 ]; then
     echo "DEVICE FAIL: $d has $n instances before restore ('$pids') — want 0 or 1; refusing to start more" >&2
     return 1
@@ -287,7 +317,10 @@ rig_daemon_restore() {
     sleep 1
     pids="$(rig_comm_pids "$d")" || continue
     n="$(printf '%s' "$pids" | grep -c '')" || true
-    if [ "$n" = 1 ]; then return 0; fi
+    if [ "$n" = 1 ]; then
+      rig_restore_stamp "$stamp" || return 1
+      return 0
+    fi
     if [ "$n" != 0 ]; then
       echo "DEVICE FAIL: $d has $n instances after the restore START ('$pids') — want exactly 1" >&2
       return 1
@@ -370,11 +403,18 @@ rig_dev_ts() {
 #   astart - qstop <= pre-slack    (nothing sits between the stop and
 #                                   the launch but the launch dsh itself)
 #   astart <= aend                 (sane lifetime ordering)
-#   aend <= qrestore               (restore initiated after app exit)
+#   aend <= qrestore               (restore verified after app exit)
 #   qrestore - aend <= post-slack  (the restore is the FIRST post-exit
-#                                   step: only exit-poll latency fits;
-#                                   any pull/hash/cmp chore re-inserted
-#                                   into the window blows this bound)
+#                                   step AND qrestore is the COUPLED
+#                                   stamp rig_daemon_restore ITSELF
+#                                   writes on verified success — iter
+#                                   80, review-78 M: the bound measures
+#                                   the REAL app-end->restore-verified
+#                                   latency, incl. the helper's
+#                                   comm-scans and >=1 s verify poll;
+#                                   any pull/hash/cmp chore inserted
+#                                   before the restore call, or a stall
+#                                   inside the helper, blows this bound)
 # Pure host logic (no dsh) so teeth invoke the REAL body standalone.
 rig_quiesce_bracket_assert() {
   local label qstop astart aend qrestore pre post v

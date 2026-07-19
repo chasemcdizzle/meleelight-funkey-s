@@ -109,7 +109,15 @@ SHOT_FRAME=900
 # STANDING TOOTH; quiesce arm only in this script): device-clock stamp
 # deltas, judged by riglib rig_quiesce_bracket_assert.
 QW_PRE_SLACK_S=10   # stop-complete -> app-start (the launch dsh only)
-QW_POST_SLACK_S=10  # app-end -> restore-start (exit-poll latency only)
+QW_POST_SLACK_S=15  # app-end -> LAST restore VERIFIED (iter 80,
+                    # review-78 M — the coupled stamp: each
+                    # rig_daemon_restore in the loop overwrites
+                    # qrestore.ts on verified success, so the bound
+                    # covers the WHOLE 2-daemon restore sequence:
+                    # exit-poll <=2 s + 2 x (pre-scan dsh, init start,
+                    # >=1 s verify poll, marker-clear dshs); worst
+                    # model ~12 s at measured sub-second dsh RTT —
+                    # minutes-scale stalls stay fatal)
 # M3 (iter 78, review-76 M — SUFFIX-FREE verdict grammar; supersedes
 # iter 76's form whose open ' — .+' suffix let
 # 'SKIP ATTRIB VERDICT: (a) — superseded; do not use' ride as a full
@@ -735,11 +743,17 @@ fi
 # the deadman's restore arm stands down. The bracket assert below is
 # the review-76 M1 STANDING TOOTH: device-clock stamps prove the
 # stop/restore bracket contains only the app lifetime.
+# COUPLED STAMP (iter 80, review-78 M — the causality gap): qrestore.ts
+# is written by rig_daemon_restore ITSELF on each verified success —
+# every restore in the loop overwrites it, so the surviving value is
+# the LAST daemon's verified-restore time and the bracket bounds the
+# WHOLE daemon-down window app-end->all-restored. No independent
+# marker exists any more: a chore inserted before or between the
+# restores inflates the bound and dies at the assert.
 if [ "$ARM" = quiesce ]; then
-  dsh "date +%s > $DTMP/qrestore.ts"
   for d in $DAEMONS_STOPPED; do
     isc="$(init_script "$d")"
-    if rig_daemon_restore "$d" "$isc"; then
+    if rig_daemon_restore "$d" "$isc" "$DTMP/qrestore.ts"; then
       dsh "rm -f $DTMP/qd.$d.$DM_NONCE"
       dsh "test ! -f $DTMP/qd.$d.$DM_NONCE"
       echo "   quiesce restore: $d running again (comm-scan-verified, exactly 1; marker cleared)"

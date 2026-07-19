@@ -3,7 +3,44 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 79 — ai-rig arc round-2 residuals CLOSED; ai-rig round 3 = closure-or-cap)
+## Live right now (updated: 2026-07-19, iter 80 — device-rig arc round-3 Medium CLOSED; device-rig round 4 = closure-or-cap)
+
+- **Iter 80 (M4 hardening — device-rig round-3 Medium: restore-stamp
+  causality coupling) DONE** (full entry: AGENT-LOG iter 80
+  pre-registration + result; finding: .loop/review-78-1.log, VERDICT
+  NO-GO on the one substantive Medium — qrestore.ts was stamped
+  independently of rig_daemon_restore, so the bracket bounded
+  app-end→marker, not app-end→actual restore): the stamp is now
+  COUPLED to the operation — `rig_daemon_restore <name> <init-script>
+  [<stamp-devpath>]` ITSELF writes the stamp only after its comm-scan
+  verifies exactly one instance (new internal rig_restore_stamp; loud
+  nonzero on an unwritable stamp); both callers stop writing it
+  independently (render passes the path; skip-attrib's quiesce arm
+  passes it per loop restore — surviving value = LAST daemon verified,
+  bracket bounds the whole daemon-down window); trap/normalize paths
+  stay 2-arg. Slack model follows the semantics: render post-slack
+  stays 10 s, skip-attrib 10→15 s (2-daemon model, worst ~12 s).
+  Teeth 8/8 (.loop/m4-rig80-teeth.log) incl. the reviewer's exact
+  probes: old-scheme 3 s chore INVISIBLE (demonstrated) → coupled
+  scheme kills it; in-helper comm-scan stall killed; coupling +
+  compat + refusal arms proven on REAL bodies (transport stubbed).
+  Cold check GREEN first attempt: `DEVICE RENDER OK … skips 0/3600`
+  exit 0 (.loop/m4-rig80-donecheck.log, one arm rebuild as expected;
+  live bracket `end->restore 3 s` — now includes the restore's own
+  verify latency). Manifest re-pins (riglib + check-device-render,
+  cite iter80) + anchor same commit, self-check 23/23 + ANCHOR GREEN
+  (.loop/m4-rig80-manifest-selfcheck.log). Run cap held (1 paced run;
+  skip-attrib not re-run — changed region is quiesce-arm-only,
+  justified in the pre-reg). Device left clean. HONEST NOTE: the
+  writer ended a turn waiting on the background run (failure mode #1)
+  and was driver-nudged back to foreground polling; no evidence
+  affected, logged in the AGENT-LOG result entry.
+  **Driver next: device-rig arc ROUND 4 = closure-or-cap
+  (grammar-variant re-raises → cap naming the class, per the triage
+  ruling; round 3 closed M2/M3/M4 — only this Medium was
+  substantive).**
+
+## [superseded by iter 80] (updated: 2026-07-19, iter 79 — ai-rig arc round-2 residuals CLOSED; ai-rig round 3 = closure-or-cap)
 
 - **Iter 79 (M4 hardening — ai-rig arc round-2 residuals, 2 Mediums)
   DONE** (full entry: AGENT-LOG iter 79 pre-registration + result;

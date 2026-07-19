@@ -11515,3 +11515,169 @@ always assert the death CLASS, not just the exit code.
   harness that pipes the subject's output must use PIPESTATUS or an
   unpiped capture — an all-zeros rc column that LOOKS like six passes
   is the tell.
+
+## iter 80 — 2026-07-19 — PRE-REGISTRATION: device-rig arc round-3 Medium — restore-stamp causality coupling (frozen before any run/edit; PROCESS §2)
+
+- **Task (driver brief, from the round-3 arc verdict
+  .loop/review-78-1.log tail — ONE substantive Medium, VERDICT NO-GO;
+  M2/M3/M4 of round 3 assessed closed)**: `qrestore.ts` is stamped
+  independently of `rig_daemon_restore` — the bracket witness bounds
+  app-end→marker, not app-end→ACTUAL restore. Chores accidentally
+  inserted after the marker (pull/hash/sampler-stop) are invisible even
+  when they stall for minutes; a stalled comm-scan INSIDE the helper
+  before the init start is likewise invisible while the witness reports
+  2 s. An elapsed-time witness cannot prove first-action sequencing
+  unless coupled to the restore operation. Surface:
+  port/sim/device/riglib.sh + the two callers' call shape ONLY
+  (port/gfx/check-device-render.sh, port/sim/device/check-skip-attrib.sh).
+  NOT touched: port/sim/calib/*, gate limits (skips==0 etc.), the
+  bracket's other three bounds, oracle/.
+- **Fix (frozen)**: couple the stamp to the operation.
+  `rig_daemon_restore` gains an optional 3rd arg `<stamp-devpath>`; the
+  helper ITSELF writes `date +%s > <stamp>` immediately after its
+  comm-scan verifies EXACTLY ONE instance (both success arms:
+  idempotent already-at-1, and init-start→bounded-verify) — the stamp
+  IS the restore's success witness, never a caller-side marker. A
+  failed stamp write on a restored daemon is a LOUD nonzero (bracket
+  evidence unwritable ≠ pass). Callers stop writing qrestore.ts
+  independently: check-device-render.sh passes `$DTMP/qrestore.ts` as
+  the 3rd arg (standalone `dsh "date +%s > …"` line DELETED);
+  check-skip-attrib.sh's quiesce arm passes it inside the restore loop
+  — each verified restore overwrites the stamp, so the surviving value
+  is the LAST daemon's verified-restore time and the bracket bounds the
+  WHOLE daemon-down window app-end→all-restored. Trap paths +
+  rig_qd_normalize stay 2-arg (no bracket there; no stamp).
+  SLACK MODEL RECALIBRATION (semantic change, not a loosening): the
+  post bound now measures app-end→restore-VERIFIED — exit-poll (≤2 s
+  cadence) + the helper's own latency (pre-scan dsh, init start, ≥1 s
+  verify poll). Render (1 daemon): QW_POST_SLACK_S stays 10 (worst
+  model ~6 s). Skip-attrib quiesce arm (2 daemons + per-daemon
+  marker-clear dshs inside the window): QW_POST_SLACK_S 10→15 (worst
+  model ~12 s at measured sub-second dsh RTT; minutes-scale stalls
+  stay fatal). Bracket-assert doc updated to the coupled semantics;
+  failure-message classes unchanged.
+- **Run cap (frozen): ≤ 1 paced device run + probes** — the cold
+  `bash port/gfx/check-device-render.sh` done-check (contains the one
+  paced g01 render; docker arm rebuild expected — riglib +
+  check-device-render + check-skip-attrib bytes are RIG_SCRIPTS stamp
+  inputs; serial). check-skip-attrib.sh is NOT re-run (justified): its
+  changed region lives ONLY under the non-default quiesce arm
+  (ARM=sampler default — the iter-78 cold run never executed the
+  region either); the changed call shape is the SAME riglib function +
+  stamp param the render cold run exercises live; the edited lines are
+  covered by bash -n + host teeth on the REAL bodies; a second paced
+  check would blow the frozen cap for zero additional live coverage.
+- **Teeth (host-only, REAL riglib bodies with ONLY the device
+  transport stubbed — dsh/rig_comm_pids function overrides after
+  sourcing; causal deltas from REAL `date +%s` around REAL sleeps,
+  never synthetic constants; .loop/m4-rig80-teeth.log)**:
+  T1a the round-3 accident DEMONSTRATED: old scheme emulated
+  (independent stamp, then a 3 s chore, then restore) → bracket with
+  post-slack 2 PASSES (the chore is invisible — the reviewer's exact
+  gap); T1b the coupled fix catches it: same 3 s chore before a
+  coupled-stamp restore → bracket death "post-run chores ran before
+  the daemon restore"; T1c stalled comm-scan INSIDE the helper (stub
+  sleeps 3 s pre-verify) → coupled stamp inflated → same bracket
+  death (the finding's second face); T1d positive control:
+  started-arm restore (0→start→verified, real 1 s poll) with instant
+  stubs → stamp file EXISTS (coupling proven) + bracket passes at
+  slack 10; T2 stamp-write failure on a restored daemon →
+  rig_daemon_restore nonzero naming "coupled restore stamp"; T3
+  2-arg call (trap/normalize shape) → rc 0 AND no stamp file written;
+  T4 >1-instance refusal unchanged (dies, no stamp).
+- **Pass criteria (frozen)**: cold `bash port/gfx/check-device-render.sh`
+  → `DEVICE RENDER OK` exit 0 (.loop/m4-rig80-donecheck.log) with the
+  quiesce-bracket OK line present (end->restore now the coupled
+  latency); all teeth logged; manifest re-pins (riglib.sh +
+  check-device-render.sh, arc-pending cite iter80) + verify_m3.sh
+  MANIFEST_SHA256 anchor SAME commit + self-check
+  (.loop/m4-rig80-manifest-selfcheck.log) — pins finalized BEFORE the
+  device run so the rebuild covers final bytes; device left clean; ONE
+  atomic commit.
+- **Refutation shapes**: cold bracket death with end->restore just over
+  10 s → the render slack model is wrong (measure the logged delta, ONE
+  bounded recalibration round, then STOP and report — never widen
+  blind); teeth T1a failing (old scheme NOT invisible) → the finding's
+  premise mis-modeled — STOP and re-read the review before touching
+  slack; any cold-check regression not attributable to these edits →
+  STOP and report, never iterate blind on the device.
+
+## iter 80 — 2026-07-19 — M4 hardening RESULT: restore-stamp causality coupling — round-3 Medium CLOSED, cold check green
+
+- **HONEST PROCESS NOTE**: this writer ended a turn waiting on the
+  background cold run (failure mode #1, §7#1); the driver nudged with
+  ground truth (run alive mid-rebuild) and the session resumed with
+  foreground polling. No evidence was affected — the run was already
+  logging to .loop/m4-rig80-donecheck.log and nothing was believed
+  before its exit 0 — but the stop itself is logged here honestly.
+- **The Medium (review-78-1.log, VERDICT NO-GO) CLOSED**: qrestore.ts
+  is now COUPLED to the operation — `rig_daemon_restore` gained an
+  optional 3rd arg `<stamp-devpath>` and ITSELF writes `date +%s`
+  there only after its comm-scan verifies EXACTLY ONE instance (both
+  success arms; new internal `rig_restore_stamp`, loud nonzero when a
+  restored daemon's stamp is unwritable — unwritable evidence is never
+  a pass). Callers no longer write the stamp independently:
+  check-device-render.sh deleted its standalone `dsh "date +%s > …"`
+  and passes the stamp path; check-skip-attrib.sh's quiesce arm passes
+  it inside the restore loop (each verified restore overwrites — the
+  surviving value is the LAST daemon's verified-restore time, so the
+  bracket bounds the WHOLE daemon-down window app-end→all-restored).
+  Trap paths + rig_qd_normalize stay 2-arg (no stamp, no bracket).
+  SLACK MODEL follows the semantic change (not a loosening): render
+  QW_POST_SLACK_S stays 10 (1 daemon, worst ~6 s); skip-attrib 10→15
+  (2 daemons × verify poll + marker-clear dshs, worst ~12 s;
+  minutes-scale stalls stay fatal). Bracket-assert doc updated;
+  failure-message classes unchanged.
+- **Cold done-check GREEN, first attempt**: `bash
+  port/gfx/check-device-render.sh` → `DEVICE RENDER OK (full p99
+  12.650 ms, render-only p99 5.590 ms, sim p99 7.437 ms, present p99
+  1.332 ms, skips 0/3600)` exit 0 (.loop/m4-rig80-donecheck.log; one
+  docker arm rebuild as expected — RIG_SCRIPTS bytes are stamp
+  inputs). The coupled bracket fired live: `quiesce bracket OK [render
+  low_bat_check]: stop->start 0 s, app 60 s, end->restore 3 s` — the
+  delta grew 2→3 s because the bound now INCLUDES the restore's own
+  comm-scan + verify-poll latency (the reviewer's point made
+  measurable), well inside slack 10. Run cap held: exactly 1 paced
+  device run. check-skip-attrib.sh NOT re-run (justified in the
+  pre-registration: its changed region lives only under the
+  non-default quiesce arm — even iter 78's cold run never executed it;
+  same riglib call shape proven live by the render run; bash -n +
+  host teeth cover the edited lines).
+- **Teeth 8/8 as pre-registered** (.loop/m4-rig80-teeth.log; REAL
+  riglib bodies, only dsh/rig_comm_pids stubbed, causal deltas from
+  real `date +%s` around real sleeps): T1a the round-3 accident
+  DEMONSTRATED — old scheme (independent stamp, 3 s chore, restore)
+  PASSES the bracket at slack 2, the chore invisible; T1b the coupled
+  fix catches the SAME chore → "post-run chores ran before the daemon
+  restore" death; T1c 3 s stall INSIDE the helper's comm-scan →
+  same death (the finding's second face); T1d positive control:
+  started-arm restore (0→start→verified via the real ≥1 s poll) —
+  stamp file EXISTS + bracket passes at slack 10; T2 unwritable stamp
+  on a restored daemon → loud "coupled restore stamp" death; T3 2-arg
+  call → rc 0 AND no stamp (trap/normalize compat); T4 >1-instance
+  refusal unchanged, no stamp on refusal. Harness gotcha caught
+  in-session: a shell-variable call counter inside a
+  command-substitution stub lives in a subshell and never increments —
+  T1d's counter moved to a FILE before anything was believed.
+- **Freeze manifest**: riglib.sh + check-device-render.sh re-pinned
+  (arc-pending, cite iter80-AGENT-LOG-rig-round3-medium) +
+  verify_m3.sh MANIFEST_SHA256 anchor updated SAME commit; self-check
+  23/23 rows + ANCHOR GREEN (.loop/m4-rig80-manifest-selfcheck.log);
+  pins finalized BEFORE the device run so the rebuild covered final
+  bytes (the verify_m3.sh manifest row is normalized — excludes the
+  anchor line — so it survives the anchor edit by construction).
+- **ZOOM OUT**: an elapsed-time witness recorded NEXT TO an operation
+  is a CLASS of false evidence — it proves marker sequencing, not
+  operation sequencing; the fix class is writing the witness INSIDE
+  the operation's success path, so every stall between detection and
+  verified completion lands in the measured bound. Same family as the
+  iter-76 "hashes prove identity, not approval" and the iter-79
+  lockstep-pin lesson: evidence must be coupled to the thing it
+  claims, not adjacent to it. Anywhere else a rig stamps "X happened"
+  from OUTSIDE X is suspect — audited the bracket's other three
+  stamps: qstop.ts is written by the caller AFTER rig_daemon_stop
+  returns verified-gone (coupled by sequencing to a VERIFIED
+  operation, and any inserted chore inflates stop→start against
+  pre-slack — bounded on both sides); app.start/app.end are written by
+  the launcher inside the setsid body around the app itself (in-path).
+  No further uncoupled witnesses found on the bracket surface.

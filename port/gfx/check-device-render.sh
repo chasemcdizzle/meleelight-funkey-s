@@ -138,7 +138,11 @@ WALL_MAX_MS=66000 # measured 60000 ms (iter 50); pacing can't silently die
 # STANDING TOOTH, every gate run): device-clock stamp deltas judged by
 # riglib rig_quiesce_bracket_assert after the low_bat_check restore.
 QW_PRE_SLACK_S=10   # stop-complete -> app-start (the launch dsh only)
-QW_POST_SLACK_S=10  # app-end -> restore-start (exit-poll latency only)
+QW_POST_SLACK_S=10  # app-end -> restore-VERIFIED (iter 80, review-78 M
+                    # — the coupled stamp: exit-poll latency + the ONE
+                    # low_bat_check restore's own latency: pre-scan
+                    # dsh, init start, >=1 s verify poll; worst model
+                    # ~6 s at measured sub-second dsh RTT)
 DEADMAN_S="${MLFK_DEADMAN_S:-300}" # frontend-park deadman window (~4x the
                     # healthy park span; MLFK_DEADMAN_S = negative-testing
                     # override ONLY, default unchanged)
@@ -1066,8 +1070,13 @@ fi
 # trap + deadman only cover deaths). Exact-cardinality comm-scan verify
 # (riglib, iter 76), then the nonce-scoped quiesce marker is removed
 # RC-verified so the deadman's restore arm stands down.
-dsh "date +%s > $DTMP/qrestore.ts"
-if rig_daemon_restore low_bat_check /etc/init.d/S12low-bat-check; then
+# COUPLED STAMP (iter 80, review-78 M — the causality gap): qrestore.ts
+# is written by rig_daemon_restore ITSELF, only after its comm-scan
+# verifies exactly one instance — the stamp IS the restore's success
+# witness. No independent marker exists any more: a chore inserted
+# before this call, or a stall inside the helper, inflates the
+# bracket's end->restore bound below and dies there.
+if rig_daemon_restore low_bat_check /etc/init.d/S12low-bat-check "$DTMP/qrestore.ts"; then
   dsh "rm -f $DTMP/qd.low_bat_check.$DM_NONCE"
   dsh "test ! -f $DTMP/qd.low_bat_check.$DM_NONCE"
   LBC_STOPPED=0
@@ -1079,8 +1088,9 @@ fi
 # Quiesce-bracket STANDING TOOTH (iter 78, review-76 M1): device-clock
 # stamps prove the stop/restore bracket contained only the app
 # lifetime — qstop.ts (stop complete) -> app.start.ts / app.end.ts
-# (launcher, inside the setsid body) -> qrestore.ts (restore
-# initiation). Any chore re-inserted into the window blows a slack.
+# (launcher, inside the setsid body) -> qrestore.ts (restore VERIFIED
+# — the coupled stamp, written by rig_daemon_restore itself; iter 80,
+# review-78 M). Any chore re-inserted into the window blows a slack.
 qstop_ts="$(rig_dev_ts "$DTMP/qstop.ts")" || exit 1
 appstart_ts="$(rig_dev_ts "$DTMP/app.start.ts")" || exit 1
 append_ts="$(rig_dev_ts "$DTMP/app.end.ts")" || exit 1
