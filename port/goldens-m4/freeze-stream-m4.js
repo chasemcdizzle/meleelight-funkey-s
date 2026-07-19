@@ -21,6 +21,16 @@
 // manifest; output is fully deterministic (no timestamps/environment);
 // an existing DIFFERING frozen file fails without --refreeze
 // (only legitimate with a spec version bump, oracle/CHECKSUM.md §8).
+//
+// MANIFEST GRAMMAR (iter 83 — review-81 round-1 closure, PROCESS §3
+// whitelist rule): the freezer is the artifact-minting authority, so it
+// validates the WHOLE manifest before trusting any row — exact
+// top-level and per-golden key set/order, types, ranges, id/name/trace
+// grammar, duplicate id/name/trace rejection, a raw duplicate-JSON-key
+// token guard (JSON.parse is silently last-wins), name-derived
+// basename-only trace, and resolved-path containment in the golden
+// home (no ../ escape). Resembles-but-doesn't-match = corruption =
+// refusal, never a partial parse.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -30,19 +40,130 @@ const { streamDigest, sha256File, specVersion } =
 const GOLDENS_DIR = __dirname; // port/goldens-m4
 
 function die(msg) { console.error("freeze-stream-m4: " + msg); process.exit(1); }
+function vdie(msg) { die("manifest grammar — " + msg); }
+
+// The exact per-golden schema, key ORDER included (measured from the
+// committed manifest; a reordered or widened row is a reviewed change).
+const GOLDEN_KEYS = ["id", "name", "trace", "frames", "seed",
+  "p1", "p2", "stage", "cpu", "difficulty"];
+
+function loadManifest() {
+  const mPath = path.join(GOLDENS_DIR, "manifest.json");
+  const raw = fs.readFileSync(mPath, "utf8");
+  let m;
+  try { m = JSON.parse(raw); } catch (e) {
+    vdie("manifest.json is not valid JSON: " + e.message);
+  }
+  if (typeof m !== "object" || m === null || Array.isArray(m)) {
+    vdie("top level is not an object");
+  }
+  const topKeys = Object.keys(m).sort().join(",");
+  if (topKeys !== "comment,goldens") {
+    vdie("top-level keys {" + topKeys + "} != {comment,goldens} (exact schema)");
+  }
+  if (typeof m.comment !== "string") vdie("comment is not a string");
+  if (!Array.isArray(m.goldens) || m.goldens.length < 1) {
+    vdie("goldens is not a nonempty array");
+  }
+  // raw duplicate-JSON-key guard: each schema key token must occur in
+  // the raw bytes EXACTLY once per golden (JSON.parse keeps the LAST
+  // duplicate silently; a doctored row with two "trace" keys parses
+  // clean — refuse it at the byte level).
+  for (const k of GOLDEN_KEYS) {
+    const tok = JSON.stringify(k) + ":";
+    let cnt = 0, i = -1;
+    while ((i = raw.indexOf(tok, i + 1)) !== -1) cnt++;
+    if (cnt !== m.goldens.length) {
+      vdie("raw token " + tok + " occurs " + cnt + " times, want exactly " +
+        m.goldens.length + " (one per golden; a duplicated JSON key is " +
+        "silently last-wins — corruption, refuse)");
+    }
+  }
+  const dir = path.resolve(GOLDENS_DIR);
+  const ids = new Set(), names = new Set(), traces = new Set();
+  m.goldens.forEach(function (g, idx) {
+    const where = "goldens[" + idx + "]";
+    if (typeof g !== "object" || g === null || Array.isArray(g)) {
+      vdie(where + " is not an object");
+    }
+    const keys = Object.keys(g);
+    if (keys.length !== GOLDEN_KEYS.length ||
+        GOLDEN_KEYS.some(function (k, j) { return keys[j] !== k; })) {
+      vdie(where + " key set/order {" + keys.join(",") + "} != {" +
+        GOLDEN_KEYS.join(",") + "} (exact schema, fail closed)");
+    }
+    if (typeof g.id !== "string" || !/^m[0-9]{2}$/.test(g.id)) {
+      vdie(where + " id '" + g.id + "' fails ^m[0-9]{2}$");
+    }
+    if (typeof g.name !== "string" || !/^m[0-9]{2}(-[a-z0-9]+)+$/.test(g.name)) {
+      vdie(where + " name '" + g.name + "' fails ^m[0-9]{2}(-[a-z0-9]+)+$");
+    }
+    if (g.name.slice(0, 3) !== g.id) {
+      vdie(where + " name '" + g.name + "' does not begin with its id '" + g.id + "'");
+    }
+    if (g.trace !== g.name + ".trace.json") {
+      vdie(where + " trace '" + g.trace + "' != name-derived '" + g.name +
+        ".trace.json' (basename-only by construction; no path escape " +
+        "from the golden home)");
+    }
+    if (path.basename(g.trace) !== g.trace) {
+      vdie(where + " trace '" + g.trace + "' is not a bare basename");
+    }
+    if (path.dirname(path.resolve(dir, g.trace)) !== dir) {
+      vdie(where + " trace resolves outside the golden home " + dir);
+    }
+    if (path.dirname(path.resolve(dir, g.name + ".sha256.json")) !== dir) {
+      vdie(where + " frozen-stream path resolves outside the golden home " + dir);
+    }
+    if (!Number.isInteger(g.frames) || g.frames < 1 || g.frames > 999999) {
+      vdie(where + " frames " + g.frames + " is not an integer in 1..999999");
+    }
+    if (!Number.isInteger(g.seed) || g.seed < 0 || g.seed > 4294967295) {
+      vdie(where + " seed " + g.seed + " is not an integer in 0..2^32-1");
+    }
+    if (!Number.isInteger(g.p1) || g.p1 < 0 || g.p1 > 4) {
+      vdie(where + " p1 " + g.p1 + " outside the char domain 0-4");
+    }
+    if (!Number.isInteger(g.p2) || g.p2 < 0 || g.p2 > 4) {
+      vdie(where + " p2 " + g.p2 + " outside the char domain 0-4");
+    }
+    if (!Number.isInteger(g.stage) || g.stage < 0 || g.stage > 5) {
+      vdie(where + " stage " + g.stage + " outside the stage domain 0-5");
+    }
+    if (typeof g.cpu !== "boolean") vdie(where + " cpu is not a boolean");
+    if (g.cpu === true) {
+      if (!Number.isInteger(g.difficulty) || g.difficulty < 1 || g.difficulty > 9) {
+        vdie(where + " cpu golden difficulty " + g.difficulty +
+          " is not an integer in 1..9");
+      }
+    } else if (g.difficulty !== null) {
+      vdie(where + " non-cpu golden difficulty must be null, got " + g.difficulty);
+    }
+    if (ids.has(g.id)) vdie("duplicate golden id " + g.id);
+    if (names.has(g.name)) vdie("duplicate golden name " + g.name);
+    if (traces.has(g.trace)) vdie("duplicate golden trace " + g.trace);
+    ids.add(g.id); names.add(g.name); traces.add(g.trace);
+  });
+  return m;
+}
 
 function goldenById(id) {
-  const m = JSON.parse(
-    fs.readFileSync(path.join(GOLDENS_DIR, "manifest.json"), "utf8"));
+  const m = loadManifest();
   const g = m.goldens.find((x) => x.id === id || x.name === id);
-  if (!g) throw new Error("golden not in port/goldens-m4/manifest.json: " + id);
+  if (!g) die("golden not in port/goldens-m4/manifest.json: " + id);
   return g;
 }
 
-const [id, fileA, fileB] = process.argv.slice(2);
-const refreeze = process.argv.includes("--refreeze");
-if (!id || !fileA || !fileB) {
+// STRICT argv (no silent extra-arg tolerance): exactly
+// <id> <runA> <runB> or <id> <runA> <runB> --refreeze.
+const argv = process.argv.slice(2);
+if (!(argv.length === 3 || (argv.length === 4 && argv[3] === "--refreeze"))) {
   die("usage: node freeze-stream-m4.js <golden-id> <runA.json> <runB.json> [--refreeze]");
+}
+const [id, fileA, fileB] = argv;
+const refreeze = argv.length === 4;
+if (!/^[a-z0-9-]+$/.test(id)) {
+  die("golden id '" + id + "' fails the whitelist [a-z0-9-]");
 }
 
 const g = goldenById(id);

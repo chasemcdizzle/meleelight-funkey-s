@@ -12345,3 +12345,183 @@ are DRIVER-SCHEDULED next (the m4 freeze manifest will pin them at task
   scenario-golden method (craft on the bit-exact C sim for free,
   record browser ×2 once) — the cost profile that makes future
   coverage holes cheap to close.
+
+## iter 83 — 2026-07-19 — M4 hardening PRE-REGISTRATION: ai-live rig arc round-1 closure — aggregator kit + golden-home grammar (frozen before any run/edit; PROCESS §2)
+
+- **Task**: close the task-5 live-CPU rig arc's round-1 findings
+  (.loop/review-81-triage.md BINDING; full log .loop/review-81-1.log,
+  VERDICT: NO-GO — 1 High + 5 Medium, "the standard classes, mostly
+  check-ai-live.sh not inheriting the aggregator kit"). Surface:
+  port/sim/check-ai-live.sh + port/goldens-m4/{record-m4.sh,
+  freeze-stream-m4.js} (+ manifest consumers). NOT touched:
+  check-sim.sh / check-ai-bridge.sh / check-ai-replay.sh /
+  verify-stream.js / wrap-run.js (now PINNED instead), the mixer/snd
+  surfaces (task-6 arc pending), port/goldens-snd/, the frozen m4
+  streams (teeth use copies).
+- **Fixes (frozen, per triage)**:
+  - **H stale-evidence**: rm-before-produce + made() (the riglib
+    pattern, local copy) on EVERY artifact the aggregator produces or
+    consumes-fresh: sim_host, simdata, ml_tables/ml_stages, per-golden
+    trace txts + ai-bridge artifacts (forced cold shape), sim_host_live,
+    $id.ai-live-{out,cov,run.json}, every per-leg log. A wrap-run stub
+    that exits 0 without writing now dies at made(), and a planted
+    stale run JSON is deleted before the producer runs.
+  - **M1 composed-evidence discipline (the check-vfx-seam.sh kit
+    adapted)**: per sub-check fresh raw log (tee + '  | ' relay
+    contract), verdict grammar (exact-line ×1 + affinity counter ×1 +
+    FINAL line), per-golden identity binding measured from the REAL
+    corpus (.loop/m4-task5-donecheck.log): check-sim leg = 8 banners ×1
+    exact+affine, per-name STREAM MATCH full grammar (g01-g06 ×1,
+    g07/g08 ×2 — bridge artifacts rm'd up front so the cold
+    capture-record shape is FORCED deterministic, '   AI bridge
+    artifact absent' ×2), totals 10/10; ai/aiport legs = 4 banners,
+    byteid sections '2 0 1 1', per-name STREAM MATCH ×2, 'REPLAY RAN
+    …, 0 divergences' anchored ×2, build-OK line ×1; live legs =
+    verify-stream stdout captured per golden, STREAM MATCH full
+    grammar with frames pinned ×1 = final line. The M2-contract
+    witness now asserts rc==1 (case-split: rc 0 = ACCEPTED death, rc
+    other = wrong-error death) AND the SPECIFIC 2-line usage message
+    by anchored full-line grammar incl. '(--cpu without --ai-bridge
+    needs the live-AI build)' — never bare rc.
+  - **M2 producer pins**: check-sim.sh pin joined by
+    check-ai-bridge.sh, check-ai-replay.sh, wrap-run.js,
+    verify-stream.js — 5-line strict pin table (64-hex + full-line
+    shasum grammar + pin-count inventory); update discipline
+    documented in-script (a reviewed producer change updates its pin
+    in the same commit).
+  - **M3 inventory-execution binding**: ORACLE_CPU_IDS=(g07 g08) +
+    M4_CPU_IDS=(m01 m02) pinned arrays; BOTH manifests' cpu==true id
+    sets asserted == the arrays (both directions); oracle manifest's
+    full name list asserted == the frozen SIM_GOLDENS 8-name judge
+    set; every loop (bridge-rm, live replays, witness params, leg
+    judges) derives from the arrays/parsed params — zero independent
+    literals.
+  - **M4 eval-class kill (PROCESS §3 whitelist-grammar)**:
+    `eval "$(node …)"` replaced in BOTH check-ai-live.sh and
+    record-m4.sh by rc-checked key=value line-parse with per-key
+    anchored whitelists (name ^[a-z0-9][a-z0-9-]*$, seed ^[0-9]{1,10}$,
+    p1/p2 ^[0-4]$, stage ^[0-5]$, frames ^[1-9][0-9]{0,5}$, difficulty
+    ^[1-9]$ / ^([1-9]|null)$, cpu ^(true|false)$), duplicate-line
+    rejection, exact line-count, and trace === name+'.trace.json'
+    (basename-only by construction). freeze-stream-m4.js gains full
+    manifest validation: exact top-level + per-golden key set/order,
+    types, ranges, id/name/trace grammar + dup rejection, raw
+    duplicate-JSON-key token counts, name-derived trace, and resolved-
+    path containment in the golden home (no ../ escape) + strict argv.
+    record-m4.sh also gains: unknown-arg refusal, a no-reclaim run
+    lock, rm-before-produce + made() on the A/B run JSONs (the H class
+    applied to the recorder — closes the review's 6th finding).
+- **Teeth (pre-registered; throwaway sed-variants of the script in
+  gitignored build/, never the tracked bytes; frozen m4 streams
+  untouched — copies only)**: T-H wrap stubbed to ':' + stale
+  run.json planted → made() death. T-M1a judges fed the GENUINE
+  archived iter-81 corpus sections → PASS (zero false rejections =
+  the PROCESS §3 corpus validation); then nibbles: deleted STREAM
+  MATCH line → identity death; duplicated verdict → exact-count death;
+  torn final verdict → affinity death. T-M1b witness stub rc 1 +
+  wrong message → grammar death; stub rc 0 → ACCEPTED death. T-M2
+  flipped pin literal → refusal before any run. T-M3
+  M4_CPU_IDS=(m01 m01) → inventory death before the lock. T-M4
+  hostile manifest COPIES (trace '../escape…', name with '/', dup id,
+  raw dup key) fed to a sibling-dir freeze-stream-m4.js copy +
+  record-m4/check-ai-live parse variants → validation deaths;
+  positive controls: freezer re-freeze of the REAL m01/m02 archived
+  runs → 'unchanged (byte-identical re-freeze)', record-m4.sh m01
+  full re-record → same.
+- **Run caps (frozen)**: composed check-ai-live cold runs ≤ 2 (expect
+  1); teeth/validation variant runs ≤ 18 (each sub-minute except T-H's
+  one cc build); browser runs ≤ 3 (the record-m4 positive control);
+  docker/pipeline serial.
+- **Pass**: cold `bash port/sim/check-ai-live.sh` → `AI LIVE CONFORMS`
+  exit 0 (.loop/m4-ailive83-donecheck.log) + all teeth fire as
+  registered.
+- **Refutation shapes**: (a) a judge false-rejects the genuine
+  archived corpus → grammar mis-measured → re-measure from the log
+  bytes and fix (≤ 2 bounded rounds, then STOP and report); (b) the
+  cold run diverges in a LIVE leg → NOT a rig grammar issue (sim TUs
+  untouched this iteration) → STOP and report as environment drift,
+  do not chase; (c) the record-m4 positive control fails on browser
+  environment grounds → record honestly, fall back to the parse
+  variant + freezer positive control (the recorder's parse/lock/made
+  logic is still tooth-proven).
+
+## iter 83 — 2026-07-19 — M4 hardening RESULT: ai-live aggregator kit + golden-home grammar — review-81 round 1 CLOSED, cold check green
+
+**DONE.** Cold done-check `bash port/sim/check-ai-live.sh` →
+`AI LIVE CONFORMS`, exit 0 (.loop/m4-ailive83-donecheck.log, RC-MARKER
+0 — §7#1 detached run + bounded foreground polls): forced-COLD check-sim
+shape (10/10 stream evidence incl. both fresh ai captures), witness OK
+(rc 1 + the exact 2-line usage message), all four LIVE legs STREAM MATCH
+frames-pinned, AI BRIDGE OK + AI MATCH judged by grammar, the final
+`AI LIVE CONFORMS` the only unprefixed anchored verdict (relay
+contract). All triage findings fixed; teeth 22/22
+(.loop/m4-ailive83-teeth.log).
+
+**Per-fix (triage → landed form)**:
+- **H stale-evidence**: rm-before-produce + local made() on every
+  produced/consumed-fresh artifact in check-ai-live.sh (sim_host,
+  simdata, generated tables, per-golden trace txts + bridge artifacts,
+  sim_host_live, $id.ai-live-{out,cov,run.json}, every per-leg log) AND
+  in record-m4.sh (the A/B run JSONs + a no-reclaim recorder lock —
+  the review's 6th finding closed under the same class). Tooth: wrap
+  stubbed to success + stale g07 run JSON planted → the plant is
+  DELETED pre-producer and made() dies (both halves proven).
+- **M1 composed evidence**: the check-vfx-seam kit adapted — per
+  sub-check fresh raw log + '  | ' relay, verdict grammar (exact ×1 +
+  affinity ×1 + final line), per-golden banner/STREAM MATCH identity
+  binding, byteid positional sections, 0-divergences anchors, plus the
+  witness message grammar. Grammars measured from the REAL iter-81
+  corpus and validated against it (5 reconstructed sections + 4 live
+  lines, zero false rejections) via harnesses built from the script's
+  OWN extracted bytes. NOTE: check-sim's log shape is bridge-presence-
+  dependent (8 vs 10 STREAM MATCH) — the aggregator FORCES the cold
+  shape by removing the bridge artifacts up front (freshness + fixed
+  grammar in one move).
+- **M2 producer pins**: 5-entry strict pin table (check-sim.sh +
+  check-ai-bridge.sh + check-ai-replay.sh + wrap-run.js +
+  verify-stream.js; full-line shasum grammar + pin-count inventory;
+  update discipline documented in-script). Tooth: flipped pin → loud
+  refusal before any run.
+- **M3 inventory-execution binding**: pinned ORACLE_CPU_IDS/M4_CPU_IDS
+  arrays asserted == both manifests' cpu==true sets (both directions) +
+  oracle names == the frozen SIM_GOLDENS judge set; every loop incl.
+  the witness params derives from the arrays/parsed params — zero
+  independent literals. Tooth: (m01 m01) → inventory death pre-lock.
+- **M4 eval-class kill**: `eval "$(node …)"` dead in both scripts —
+  rc-checked key=value line-parse, per-key anchored whitelists, dup
+  rejection, exact line counts, trace === name+'.trace.json'.
+  freeze-stream-m4.js now validates the WHOLE manifest before trusting
+  a row (exact key set/order, types, ranges, id/name grammar, dup
+  id/name/trace, raw duplicate-JSON-key token guard, resolved-path
+  containment) + strict argv. Teeth: ../ trace, hostile slash-name,
+  dup id, raw dup key → four distinct validation deaths in a
+  sibling-dir freezer COPY; record-m4/check-ai-live parse variants →
+  whitelist deaths before any run; positive controls: freezer
+  re-freeze of the REAL archived m01/m02 runs → 'unchanged
+  (byte-identical re-freeze)' ×2, and a FULL end-to-end
+  `record-m4.sh m01` re-record (browser ×2, quality contract, freeze,
+  self-check) → byte-identical re-freeze
+  (.loop/m4-ailive83-record-pos.log). Frozen streams byte-untouched.
+- The no-commit guard now also covers the golden CONTRACT artifacts
+  (manifest/traces/frozen streams — scripts under $M4G deliberately
+  excluded so an in-flight reviewed edit can run its own done-check).
+
+**Caps (honest)**: composed cold runs 1/≤2 ✓; browser runs 2/≤3 (+1
+verify-only self-check) ✓; teeth/variant executions 22 vs the
+pre-registered ≤18 — overage of 4, ALL inside the registered tooth
+LIST (the M4 hostile-manifest class was enumerated as 4 separate
+deaths where the cap arithmetic had counted 2; every execution is
+sub-second and matches a pre-registered tooth, no unregistered
+experiments). No device, no pushes, upstream/oracle read-only.
+
+**ZOOM-OUT note**: the class here was "a composed gate that trusts
+child exit codes" — closed by making the vfx-seam aggregator kit the
+default posture for ANY composed check (this is its 4th consumer:
+vfx-seam, check-ai-replay, mixer-fidelity partially, now ai-live).
+Residual observed (registered, NOT fixed — outside surface):
+check-vfx-seam.sh's own check-sim leg pins 8 STREAM MATCH lines, which
+FALSE-REJECTS on a build/ tree without bridge artifacts (check-sim then
+emits the 10-line cold shape). Benign today (its runs follow warm
+trees) but it is the same bridge-presence dependency this iteration
+closed in ai-live — flag for the next vfx-seam or driver window.
+Round 2 of the review arc = closure (driver-scheduled).

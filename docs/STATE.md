@@ -3,7 +3,34 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 82 — M4 task 6 DONE: mixer fidelity, MIXER FIDELITY OK)
+## Live right now (updated: 2026-07-19, iter 83 — M4 hardening DONE: ai-live rig arc round 1 CLOSED, AI LIVE CONFORMS)
+
+- **Iter 83 (M4 hardening — review-81 round-1 closure: ai-live
+  aggregator kit + golden-home grammar) DONE** (full entry: AGENT-LOG
+  iter 83 pre-registration + result; latest AGENT-LOG id: iter 83):
+  all 6 review-81 findings fixed on port/sim/check-ai-live.sh +
+  port/goldens-m4/{record-m4.sh,freeze-stream-m4.js} — rm-before-
+  produce + made() freshness (H), the vfx-seam evidence-grammar kit
+  incl. the anchored M2-witness message (M1), a 5-producer sha256 pin
+  table (M2), pinned-array inventory-execution binding (M3), and the
+  eval-class kill + full manifest schema/dup/range/basename-
+  containment grammar in the freezer (M4). Cold done-check
+  `bash port/sim/check-ai-live.sh` → `AI LIVE CONFORMS` exit 0
+  (.loop/m4-ailive83-donecheck.log); teeth 22/22
+  (.loop/m4-ailive83-teeth.log — corpus-validated grammars, zero
+  false rejections); end-to-end record-m4.sh m01 re-record →
+  byte-identical re-freeze (.loop/m4-ailive83-record-pos.log).
+  Frozen streams/manifest byte-untouched; check-sim.sh/
+  check-ai-bridge.sh/check-ai-replay.sh/wrap-run.js/verify-stream.js
+  untouched (now pinned). Registered residual (outside surface):
+  check-vfx-seam.sh's check-sim leg false-rejects on a bridge-less
+  build/ tree (8-vs-10 STREAM MATCH cold shape — the class ai-live
+  now forces deterministic). **ai-live rig arc round 2 = CLOSURE
+  pending (driver-scheduled re-review of the round-1 fixes); the
+  task-6 audio-rig Tier-A arc + Tier-B sim-TU round still queued
+  (iter-82 note).**
+
+## [superseded by iter 83] (2026-07-19, iter 82 — M4 task 6 DONE: mixer fidelity, MIXER FIDELITY OK)
 
 - **Iter 82 (M4 task 6 — mixer fidelity + real play-ids + stop-path
   coverage) DONE** (full entry: AGENT-LOG iter 82 pre-registration +
