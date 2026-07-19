@@ -3,7 +3,29 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-18, iter 67 — task-2 rig round-1 Mediums closed)
+## Live right now (updated: 2026-07-18, iter 68 — vfx-rig round-2 residuals closed)
+
+- **Iter 68 (M4 hardening — vfx-seam identity binding + truncated
+  resemblance + rc case-split) DONE**: all three review-66 Mediums
+  (.loop/review-66-triage.md) closed on
+  `port/sim/calib/check-vfx-seam.sh` ONLY. M1: grammar counts now bind
+  IDENTITY — frozen CARRIERS array (3 carrier golden names per
+  component; runA/runB banners exact ×1 each, per-name STREAM MATCH
+  ×2, byte-stable bound positionally `3 0 1 1 1`) + 8-name SIM_GOLDENS
+  for check-sim. M2: the `count_aff` affinity counter (extension OR
+  torn PREFIX of the exact literal) on the verdict + every evidence
+  literal + STREAM stems. M3: grep rc case-split in all count helpers
+  (rc 0/1 = count, rc ≥ 2 / any awk rc = loud corruption death; no
+  blanket suppression). Grammars validated 55/55 against the full
+  archived corpus (11 raw iter-66 logs + 44 reconstructed sections
+  from the 4 archived composed runs) with ZERO false rejections
+  (.loop/m4-rig68-corpusval.log); teeth 5/5 fired
+  (.loop/m4-rig68-teeth.log); cold done-check `VFX SEAM MATCH`
+  DONECHECK_RC=0 (.loop/m4-rig68-donecheck.log). **vfx-rig arc round
+  3 = CLOSURE PENDING (driver: closure-only re-review per the triage's
+  "round 3 = closure-only")**. Judgment now lives in `vfx_judge_log`
+  — the registered template (with the round-2 refinements) for task-14
+  verify_m4.sh.
 
 - **Iter 67 (M4 task 2 hardening — injection-set pin + per-effect ink
   assertions) DONE**: both review-65 Mediums (.loop/review-65-triage.md)
@@ -43,8 +65,8 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   `VFX SEAM MATCH` possible). Teeth 4/4 fired
   (.loop/m4-rig66-teeth.log); cold done-check `VFX SEAM MATCH` rc 0,
   zero grammar false-rejections on fresh logs
-  (.loop/m4-rig66-donecheck.log). **vfx-rig arc round 2 = closure
-  pending (driver: re-review or scoped confirm)**; the host aggregator
+  (.loop/m4-rig66-donecheck.log). Round-2 review returned 3 Mediums
+  (M1 identity/M2 truncation/M3 rc split) — closed by iter 68; the host aggregator
   classes are the registered pattern for task-14's verify_m4.sh
   assembly (AGENT-LOG iter 66 zoom-out). Tier-B sim-TU surface: clean
   per reviewer (no action).

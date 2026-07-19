@@ -9064,3 +9064,144 @@ folded into the M4 ladder below. Issue #18 closed by the driver.
   registered template for any future per-cause render assertion.
   (b) The node -p ANSI class fired again on a NUMBER extraction — the
   String() rule from M2 task 17 held; instance recorded at the site.
+
+## iter 68 — 2026-07-18 — PRE-REGISTRATION: vfx-rig round-2 residuals — identity binding + truncated resemblance + grep rc case-split (frozen before any run/edit; PROCESS §2)
+
+- **Task (driver triage .loop/review-66-triage.md, BINDING; full review
+  .loop/review-66-1.log)**: close the three round-2 Mediums on
+  `port/sim/calib/check-vfx-seam.sh` ONLY. Round 3 = closure-only.
+- **Fix designs (frozen)**:
+  - **M1 identity binding**: grammar counts bind IDENTITY, not
+    cardinality. New CARRIERS parallel array (10 entries; the three
+    carrier golden NAMES per spec, measured from the corpus — NOT
+    unique across components by design: g01/g04/g06 is the shared/
+    asshort/physics/hitdet set, so the uniqueness pin does NOT extend
+    to CARRIERS; per-entry 3-token shape is pinned instead) + a frozen
+    8-name SIM_GOLDENS identity set for check-sim. Per carrier golden:
+    runA banner exact ×1, runB banner exact ×1, per-name STREAM MATCH
+    full-grammar ×2 (check-sim: per-name ×1 over all 8 + banner `== gNN
+    (name)` ×1 each). byte-stable lines carry no name — identity bound
+    POSITIONALLY: awk sectional count (sections delimited by the runA
+    banner family `^== g[0-9]{2} \(`) must be exactly `3 0 1 1 1`
+    (3 sections; 0 byte-stable lines before the first banner; 1 per
+    section). Family totals kept (`^== ` == 6 capture / == 8 check-sim,
+    STREAM prefix == full == 6/8).
+  - **M2 truncated-attempt resemblance (the AFFINITY counter — one
+    device for the whole class)**: `count_aff <file> <literal>` counts
+    nonempty lines L with `index(L,lit)==1 OR index(lit,L)==1` — L
+    extends the literal or is a proper PREFIX of it (torn write).
+    Verdict: exact ×1 + affinity ×1 + final-line (replaces the
+    `^$want`-only resemblance, which missed prefixes). The same
+    counter becomes the triage's "resemblance counters on the
+    runA/runB/byte-stable banner families": per-banner affinity ×1,
+    byte-stable affinity ×3, and per-name STREAM-stem
+    (`STREAM MATCH <name>: `) affinity ×2 (a tear at ANY byte of a
+    stream line is a prefix of the stem or an extension of it).
+  - **M3 grep rc case-split**: all count helpers split rc — grep rc
+    0/1 = count semantics (rc 1 IS "0 matches", a legal count); rc ≥ 2
+    (and ANY nonzero awk rc) = read error → `grammar_die` (loud
+    corruption death, exit 2 through the command-substitution +
+    `set -e` chain). No blanket `|| true` anywhere in the helpers.
+- **Method**: grammars validated against the FULL archived genuine
+  corpus BEFORE the one composed run — the 11 raw iter-66 component
+  logs (`port/sim/calib/build/vfx-seam.check-*.log`) + all 44
+  component sections reconstructed from the 4 archived composed runs
+  (.loop/m4-task2-vfxseam.log and .loop/driver-cold-m4t1-donecheck.log
+  — iter-64-era, unprefixed, aggregator lines `=== `/`    -> `/
+  `VFX SEAM MATCH`/`DONECHECK_RC=` excluded as aggregator bytes; and
+  .loop/m4-rig66-donecheck.log + .loop/driver-cold-rig66-donecheck.log
+  — relay-prefixed, `  | ` stripped). 55 judgments via a probe copy
+  (build/probe68/, the iter-66 stub mechanism: real vfx_judge_log
+  bytes, only the driver tail replaced). Pass = 55/55, zero false
+  rejections.
+- **Teeth (pre-registered; expected message class stated before
+  firing)**: T1 identity — genuine moves-fox log with g01's whole
+  block replaced by a DUPLICATE of g03's block (all totals preserved:
+  runA 3, runB 3, byte-stable 3, STREAM 6, verdict final) →
+  identity death (g01 runA exact count 0/1), fed through the REAL
+  run_component via a stub component script. T2 truncation — genuine
+  log + torn `MOVES fox MAT` line before the exact final verdict →
+  verdict affinity 2 → corruption death. T3 rc split — count_x/count_e
+  on (a) a chmod-000 log and (b) a vanished path → `grammar_die` rc
+  death message, NEVER a 0 count.
+- **Run cap**: ≤ 1 composed run (~7 min; fixes are parse-side —
+  corpus-validated first). Pass = cold `VFX SEAM MATCH` exit 0
+  (.loop/m4-rig68-donecheck.log) + teeth fired
+  (.loop/m4-rig68-teeth.log) + 55/55 corpus
+  (.loop/m4-rig68-corpusval.log).
+- **Refutation shapes**: any corpus false rejection = the grammar
+  mis-measured → fix the grammar against the measured bytes (never
+  relax to permissive parsing), revalidate; if a tooth fails to fire =
+  the check is not wired / not sharp → fix wiring, refire; if the cold
+  run false-rejects a FRESH log whose bytes are genuine = grammar
+  over-frozen on stale corpus → remeasure from the fresh log, record
+  the delta, revalidate all 56, no second composed run without it
+  passing the archived 55 first.
+
+## iter 68 — 2026-07-18 — M4 hardening DONE: vfx-seam identity binding + truncated resemblance + rc case-split (vfx-rig round-2 residuals closed)
+
+- **All three review-66 Mediums closed on the pre-registered designs**
+  (surface: `port/sim/calib/check-vfx-seam.sh` ONLY):
+  - **M1 identity binding**: new CARRIERS parallel array (10 entries,
+    3 carrier golden NAMES each, measured from the corpus; inventory
+    pin extended — length 10 + per-entry 3-gNN-token shape, uniqueness
+    deliberately NOT applied to CARRIERS since g01/g04/g06 is the
+    shared/asshort/physics/hitdet set) + frozen 8-name SIM_GOLDENS.
+    Per carrier: runA banner exact ×1 + affine ×1, runB exact ×1 +
+    affine ×1, per-NAME STREAM full-grammar ×2 + stem-affine ×2; the
+    id-less byte-stable line is bound POSITIONALLY (awk sectional count
+    over the runA banner family must be exactly `3 0 1 1 1`).
+    check-sim: per-name stream ×1 + `== gNN (name)` banner ×1 over all
+    8 + `^== ` family == 8. Family totals kept (`^== ` == 6, STREAM
+    prefix == full == 6/8).
+  - **M2 truncated-attempt resemblance**: ONE device for the class —
+    `count_aff <file> <literal>` counts nonempty lines that extend the
+    literal OR are a proper PREFIX of it (torn write). Verdict: exact
+    ×1 + affine ×1 + final-line (replaces `^$want`, which was blind to
+    prefixes); the same counter is the resemblance guard on the
+    runA/runB/byte-stable literals and the per-name STREAM stems (a
+    tear at ANY byte of a stream line is stem-affine).
+  - **M3 grep rc case-split**: `grammar_die` + count_x/count_e split
+    grep's rc — 0/1 is count semantics (rc 1 IS "0 matches"), rc ≥ 2
+    is a read error and dies loudly; any nonzero awk rc (count_aff,
+    byteid_sections) likewise. No `|| true` remains in any helper.
+    Judgment extracted into `vfx_judge_log` (run_component calls it) —
+    also the probe seam the teeth/corpus validation reuse.
+- **Corpus validation (zero false rejections; the §3 whitelist step-4
+  ritual; .loop/m4-rig68-corpusval.log)**: 55/55 component-log
+  judgments pass — the 11 raw iter-66 logs
+  (`port/sim/calib/build/vfx-seam.check-{moves-shared,moves-fox,
+  moves-falco,moves-falcon,moves-marth,moves-puff,article,asshort,
+  physics,hitdet}-replay.log` + `vfx-seam.check-sim.log`) and all 44
+  sections reconstructed from the 4 archived composed runs
+  (.loop/m4-task2-vfxseam.log, .loop/driver-cold-m4t1-donecheck.log —
+  iter-64-era unprefixed, aggregator lines excluded;
+  .loop/m4-rig66-donecheck.log, .loop/driver-cold-rig66-donecheck.log
+  — relay-prefix-stripped). Probe copies under build/probe68/ carry
+  the REAL script bytes with only the driver tail replaced.
+- **Teeth (5/5 fired with the predicted message class;
+  .loop/m4-rig68-teeth.log)**: T1 g01-block-replaced-by-duplicate-g03
+  stub (ALL totals preserved: 3/3/3/6, clean verdict — the exact
+  round-2 scenario; fed through the REAL run_component) → `identity
+  binding — '== g01 (…): moves-fox capture run A' … exact 0/1`; T2
+  torn `MOVES fox MAT` + exact final → `2 verdict-affine lines`
+  corruption death; T3a chmod-000 log → `grep -cxF rc 2 … never a 0
+  count`; T3b vanished path → `grep -cE rc 2` death; T3c unreadable
+  log through the full judge → the same helper death, never a clean
+  judgment.
+- **Cold done-check (run 1 of the ≤1 cap; ~7 min)**:
+  `bash port/sim/calib/check-vfx-seam.sh` → `VFX SEAM MATCH`,
+  DONECHECK_RC=0 (.loop/m4-rig68-donecheck.log; nohup + bounded
+  foreground polls, PROCESS §7#1). All 10 components + SIM CONFORMS
+  green through the identity-bound grammars — zero false rejections on
+  fresh logs; exactly one column-0 `VFX SEAM MATCH`; lock released.
+- **ZOOM OUT**: the three residuals are one CLASS event — round 1
+  ported the aggregator classes but kept COUNTING where the producer
+  grammar offers IDENTITY, and kept `^literal` resemblance where
+  corruption is truncation-shaped. The registered pattern gains its
+  round-2 refinements: (a) bind identities whenever evidence lines
+  carry them, positions when they don't; (b) resemblance = the
+  affinity counter (prefix ∪ extension of the exact literal), not a
+  regex prefix; (c) every decision-bearing text read distinguishes
+  "counted 0" from "could not read". verify_m4.sh (fix_plan §M4 task
+  14) inherits vfx_judge_log's shape with these refinements built in.
