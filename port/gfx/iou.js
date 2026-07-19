@@ -18,7 +18,9 @@
 // (i) browser mask ink > 0 in the effect's derived region, (i') browser
 // LEAVE-ONE-OUT differential ink > 0 (f<tag>.det.mask.bin vs
 // f<tag>.loo-<name>.mask.bin, both rendered by the capture under a
-// deterministic page-local render RNG — the browser twin of (iii)),
+// deterministic page-local render RNG — the browser twin of (iii); the
+// canonical injection-frame render shares that RNG and det is asserted
+// byte-identical to it, review-70 r3 trajectory continuity),
 // (ii) C with-inject ink > 0 in the region, (iii) C LEAVE-ONE-OUT
 // DIFFERENTIAL ink > 0 in the region: the full render diffed against a
 // baseline whose INJECT1 dropped exactly that effect. (iii) is the
@@ -564,6 +566,22 @@ const injResults = [];
     return b;
   };
   const detMask = loadBrowserMask(path.join(CANVAS, `f${tag}.det.mask.bin`));
+
+  // Trajectory-continuity pin, JUDGE SIDE (review-70 r3, iter 71): the
+  // capture's injection-frame CANONICAL render runs on the same
+  // deterministic page-local render RNG and the det mask is a strict
+  // REPLAY of it (pre-render snapshot restored + same reseed) — byte-
+  // identical by construction, asserted capture-side too (twin-pin
+  // class). A divergence means the canonical render left the det
+  // trajectory (e.g., a native-RNG canonical or a finally re-render
+  // regression) and the loo attribution baselines no longer share the
+  // trajectory frames 151+ continued from. Fail closed.
+  if (Buffer.compare(src, detMask) !== 0) {
+    console.error("iou: injection-frame canonical mask != det replay mask — " +
+      "trajectory continuity broken (capture-canvas.js review-70 r3 contract; fail closed)");
+    process.exit(1);
+  }
+  console.log(`INJ DET==CANONICAL f${tag} (trajectory continuity)`);
 
   for (const r of regions) {
     // (i) browser mask ink in the canvas-space region + (i') browser

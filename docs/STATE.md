@@ -3,7 +3,30 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-18, iter 70 — task-2 renderer arc round-2 Mediums closed)
+## Live right now (updated: 2026-07-18, iter 71 — task-2 arc round-3 Medium closed: loo trajectory continuity)
+
+- **Iter 71 (M4 task 2 hardening round 3 — loo trajectory continuity)
+  DONE**: the single review-70 round-3 Medium (.loop/review-70-1.log,
+  NO-GO; capture-canvas.js:487) closed on
+  port/gfx/{capture-canvas.js,iou.js,expected-render.json(comment)}.
+  The injection-frame canonical render joined the deterministic
+  render-plane RNG; det = strict replay ASSERTED bitwise-equal to the
+  canonical mask (capture-side throw + iou.js judge twin, negative
+  tooth proven); post-canonical vfxQueue restored BY REFERENCE, the
+  finally native re-render DELETED — zero native draws at the frame,
+  frames 151+ continue exactly the saved-mask trajectory. Accident
+  measured pre-fix (probe OLD arm: randomTail 0/4 equal, star scatter
+  moved), continuity measured post-fix (NEW arm: 4/4 identical,
+  det==canonical) — .loop/m4-task2r71-probe-{old,new}.log; declared
+  probe deviation (184-mask form is lifetime-blind, template FRAMES
+  measured) pre-registered. Cold done-check RENDER OK DONECHECK_RC=0
+  (.loop/m4-task2r71-donecheck.log): IOU MIN 0.8982 -> 0.9026, f0150
+  0.9339 -> 0.9319, bdiff values identical, NO pinned value moved;
+  check-sim.sh skipped (zero port/sim bytes). **Task-2 renderer arc
+  round 4 = CLOSURE-OR-CAP (driver)**: rerun the reviewer on the new
+  commit; per PROCESS §3 bounded convergence, if round 4 raises only
+  variants of closed classes the arc CAPS with the recurring objection
+  class named.
 
 - **Iter 70 (M4 task 2 hardening round 2 — INJECT1 grammar, cast
   domain, region fix, browser attribution, inkNames pin, closure

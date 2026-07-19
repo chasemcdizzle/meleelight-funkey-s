@@ -9559,3 +9559,151 @@ folded into the M4 ladder below. Issue #18 closed by the driver.
   (c) Teeth refute designs, not just implementations: the first
   truncation probe was a no-op (164-line corpus vs head -2000) — the
   retry, not silence, is what proves the tooth; recorded honestly.
+
+## iter 71 — 2026-07-18 — PRE-REGISTRATION: task-2 round-3 Medium — loo trajectory continuity at the injection frame (frozen before any run/edit; PROCESS §2)
+
+FINDING (.loop/review-70-1.log tail, round-3 NO-GO, the single Medium;
+capture-canvas.js:487): at the injection frame the canonical render
+(line 458) consumes NATIVE RNG and produces post-render vfx queue state
+(dVfx/firefoxTail.js:7-8 lazily creates `randomTail` = 4 Math.random
+values on first draw; shine spawns stars with random annulus positions)
+— trajectory A, saved as f0150.mask.bin. The det/loo machinery then
+restores the PRE-render queue snapshot and the finally block performs a
+SECOND native render without any way to rewind native RNG — so the
+continuing queue (frames 151+) carries trajectory-B state (a fresh
+randomTail, fresh star scatter) while frame 150's saved mask is
+trajectory A. Render-only discontinuity in the browser reference;
+STREAM MATCH is blind to it by construction (render plane is off the
+checksum surface).
+
+FIX DESIGN (frozen now):
+- The injection-frame CANONICAL render joins the deterministic
+  render-plane RNG trajectory: `window.__nativeRandom = mk(DET_SEED)`
+  around it (same page-local mulberry32 the det/loo renders already
+  use; the gameplay seeded chain is untouched — __gfxRender's
+  Math.random swap discipline is unchanged, STREAM MATCH still gates
+  the whole capture). Native RNG is now consumed ZERO times at the
+  injection frame, so its "position" is trivially preserved.
+- Immediately after the canonical render: capture the mask (unchanged)
+  and save `snapPost = qmod.vfxQueue.slice()` — the post-canonical
+  queue state BY REFERENCE (the live instances the canonical render
+  mutated/spawned).
+- det render = a strict REPLAY of the canonical render: restore the
+  pre-render JSON snapshot, reseed mk(DET_SEED), render. ASSERT
+  det.mask === canonical.mask (bitwise; throw = capture death). loo
+  renders unchanged (restore-minus-one + reseed), operating on clones
+  only — side-effect-free observations.
+- finally: restore `window.__nativeRandom` and set the live queue back
+  to snapPost's instances. The final native re-render is GONE
+  (capture-canvas.js:487 deleted). Frames 151+ evolve from exactly the
+  state the single canonical render produced: one trajectory.
+- Judge-side twin (iou.js): at the injection frame assert
+  f0150.mask.bin byte-identical to f0150.det.mask.bin (Buffer
+  compare) before the per-effect assertions — a regression that
+  returns the canonical render to native RNG (or breaks the
+  snapshot/restore replay) dies on BOTH sides.
+- expected-render.json comment block gains the round-3 paragraph (no
+  pinned VALUE changes; 0.88 threshold, corpus, injectPin untouched).
+
+PRE-REGISTERED TEETH:
+(a) det==canonical assertion LIVE twice: capture-side throw in the
+    dedicated evaluate + judge-side byte compare in iou.js. Free tooth:
+    it mechanically proves the observation machinery (snapshot/restore
+    + reseed) reproduces the canonical render exactly, hence every loo
+    baseline shares the canonical trajectory.
+(b) Discontinuity probe — DECLARED DEVIATION from the brief's
+    "diff masks at the first post-150 sampled frame (184)" form,
+    reasoned BEFORE running: measured template lifetimes
+    (vfxdata-frozen.txt: firefoxcharge FRAMES 1, shine 3, dashDust 8,
+    groundBounce 8, firefoxtail 15, star 15; renderVfx.js increments
+    timer then drops at timer > frames) put every injection artifact's
+    death at <= ~frame 168 (last stars spawned by shine at ~153 + 15).
+    Frame 184's with/without-injection mask diff is therefore pure
+    per-frame native-RNG scatter under BOTH the old and new code and
+    cannot discriminate the accident. The DIRECT observable of the
+    exact discontinuity the reviewer named is firefoxtail's randomTail:
+    probe (.loop/m4-task2r71-probe.js, gitignored diagnostic — numbers
+    recorded here) boots the g01 page exactly like the capture, replays
+    to frame 150, runs the injection-frame code path (OLD arm = the
+    pre-fix logic verbatim; NEW arm = the fixed logic), and reports
+    (i) trajectory A = randomTail on the live queue instance right
+    after the canonical render, (ii) trajectory B = randomTail on the
+    continuing queue instance after the evaluate's restore path (what
+    frames 151+ actually render from), (iii) det==canonical mask
+    equality. EXPECTATIONS: OLD arm — A != B (4/4 doubles differ,
+    native draws) AND det != canonical (seeded vs native): the accident
+    measured. NEW arm — A == B identically (same instance, 4/4 equal)
+    AND det == canonical: continuity proven. Run cap: 2 probe page
+    sessions (150 frames each) + the single cold done-check capture.
+
+PREDICTIONS: cold `bash port/gfx/check-render.sh` -> RENDER OK exit 0;
+f0150's aggregate IoU and per-effect INJ numbers shift by render-RNG
+scatter only (the canonical sample stream changed from native to the
+det seed — same distribution); the frozen 0.88 pin holds. If any pinned
+value is violated it will be REPORTED as a refutation (loud, in the
+results entry + final report), never absorbed.
+
+## iter 71 — 2026-07-18 — M4 task 2 hardening round 3 DONE: loo trajectory continuity at the injection frame (review-70 r3's Medium closed)
+
+SURFACE: port/gfx/{capture-canvas.js,iou.js,expected-render.json
+(comment only)} + docs. Frozen pins untouched (0.88 threshold, corpus,
+injectPin, servedDistSha256, all *-frozen.txt).
+
+- **The Medium (capture-canvas.js:487)**: injection-frame canonical
+  render consumed NATIVE RNG (randomTail, star scatter = trajectory A,
+  saved in f0150.mask.bin); the det/loo machinery then restored the
+  PRE-render queue and the finally block re-rendered natively —
+  unrewindable native draws put the continuing queue on trajectory B.
+  MEASURED before fixing (probe OLD arm,
+  .loop/m4-task2r71-probe-old.log): randomTail A vs B 0/4 components
+  equal, both spawned stars moved, det!=canonical.
+- **Fix (as pre-registered)**: canonical render joined the
+  deterministic render-plane RNG (mk(DET_SEED) around it — same
+  page-local mulberry32 as det/loo; gameplay chain untouched, run still
+  STREAM-MATCH gated); snapPost = post-canonical vfxQueue BY REFERENCE;
+  det = strict replay (pre-render snapshot + same reseed) ASSERTED
+  bitwise-equal to the canonical mask (capture-side throw); loo renders
+  clone-only; finally restores snapPost + the native binding and NEVER
+  re-renders — zero native draws at the frame, frames 151+ continue
+  exactly the rendered trajectory. Judge twin: iou.js Buffer-compares
+  f0150.mask.bin vs f0150.det.mask.bin, dies "trajectory continuity
+  broken" on any diff, prints INJ DET==CANONICAL on pass.
+- **Teeth (2/2 + judge tooth, .loop/m4-task2r71-teeth.log)**: (b) probe
+  NEW arm (.loop/m4-task2r71-probe-new.log): randomTail A==B 4/4
+  (same instance), stars identical, det==canonical — continuity
+  measured; run cap honored (2 probe sessions + 1 cold capture).
+  (a) assertion live both sides; T-J: one flipped byte in a /tmp copy
+  of f0150.det.mask.bin -> iou.js exit 1 with the predicted message,
+  zero verdict lines (.loop/m4-task2r71-tooth-judge.log).
+- **Cold done-check**: `bash port/gfx/check-render.sh` -> RENDER OK,
+  DONECHECK_RC=0 (.loop/m4-task2r71-donecheck.log). Numbers vs iter 70:
+  f0150 IoU 0.9339 -> 0.9319 (render-RNG sample change, canonical now
+  det-seeded); IOU MIN 0.8982 -> 0.9026 (both >= 0.88 pin — no pin
+  moved, no refutation); per-effect bdiff IDENTICAL
+  (3080/485/1071/1515/1571 — det/loo were already deterministic), C
+  ink/diff/bg identical (C side untouched), f0150 browser presence
+  shifted with the new sample stream (firefoxcharge 4395->4660,
+  firefoxtail 2363->2628, shine 3868->3873, dashDust 4315->4320,
+  groundBounce 20009->20274). REGRESSION: check-sim.sh SKIPPED,
+  justified — zero port/sim bytes changed (git status = 3 gfx files +
+  docs).
+- **Pre-registration deviation, declared before running**: the brief's
+  "diff masks at 184 with/without injection" probe form is
+  discontinuity-blind — measured template lifetimes (firefoxcharge 1 /
+  shine 3 / dashDust 8 / groundBounce 8 / firefoxtail 15 / star 15)
+  end every injection artifact by ~frame 168, so any 184 diff is pure
+  per-frame native-RNG scatter under BOTH code paths. The probe
+  observes the reviewer's named state directly (randomTail A vs B) —
+  strictly sharper, one page session per arm.
+- ZOOM OUT: this is the observer-effect CLASS the rig already polices
+  at the sim seam (capture runs STREAM-MATCH guarded so instrumentation
+  cannot perturb the CHECKSUM plane) — round 3 extends the same
+  invariant to the RENDER plane, where STREAM MATCH is blind: every
+  extra observation render must be provably side-effect-free
+  (snapshot/restore + swapped RNG + replay-equality assertion), and
+  "restore then redo" is NEVER equivalent to "never disturb" when the
+  redo consumes an unrewindable stream. Standing rule for future rig
+  observers: observe clones under a reseedable stream, restore the
+  observed trajectory by reference, and assert the replay reproduces
+  the observed output bit-for-bit (the assertion is what turns the
+  discipline into a tooth).

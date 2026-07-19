@@ -396,22 +396,32 @@ async function main() {
     }
   };
 
-  // Browser-side attribution masks (review-65 r2 M4): the replay is
-  // segmented around the pinned injection frame; that ONE frame runs
-  // through a dedicated evaluate which keeps the canonical path
-  // byte-for-byte (step -> inject -> native-RNG render -> mask, exactly
-  // what __gfxRunChunk did) and ADDITIONALLY records, without stepping
+  // Browser-side attribution masks (review-65 r2 M4; trajectory
+  // continuity review-70 r3, iter 71): the replay is segmented around
+  // the pinned injection frame; that ONE frame runs through a dedicated
+  // evaluate (step -> inject -> canonical render -> mask, the
+  // __gfxRunChunk shape) which ADDITIONALLY records, without stepping
   // the sim again: one full render and one leave-one-out render per
   // inkNames effect, all under a DETERMINISTIC page-local mulberry32
-  // swapped in via window.__nativeRandom (reseeded per render, so det
-  // and loo share the render-RNG stream and differ only by the dropped
-  // effect's draws plus the queue-order-bounded ripple — the browser
-  // twin of the C leave-one-out baselines; the gameplay chain is
-  // untouched, STREAM MATCH still gates the whole capture). The
-  // vfxQueue is snapshot/restored (JSON clones) around the extra
-  // renders; a final full-restore + native-RNG render leaves the page
-  // in single-render-equivalent state (queue timers advanced once,
-  // canvas ctx state from a full render — non-sampled frames follow).
+  // swapped in via window.__nativeRandom (reseeded per render — the
+  // browser twin of the C leave-one-out baselines; the gameplay chain
+  // is untouched, STREAM MATCH still gates the whole capture). The
+  // CANONICAL render itself runs on the SAME deterministic render-plane
+  // RNG (review-70 r3 fix): a native-RNG canonical render produced
+  // post-render queue state (firefoxtail.randomTail, shine star
+  // scatter) that the old finally-path re-render could not reproduce —
+  // native RNG cannot be rewound — leaving frame 150's saved mask on
+  // trajectory A while frames 151+ continued on trajectory B (measured:
+  // randomTail 0/4 components equal, .loop/m4-task2r71-probe-old.log).
+  // Now: canonical render (det seed, live queue) -> mask; snapPost =
+  // the post-canonical queue instances BY REFERENCE; det render = a
+  // strict REPLAY (pre-render JSON snapshot restored + same reseed),
+  // ASSERTED bitwise-equal to the canonical mask (iou.js re-asserts it
+  // judge-side); loo renders operate on clones only; finally restores
+  // snapPost and NEVER re-renders. Native RNG is consumed zero times at
+  // this frame, so the continuing simulation sees exactly the state the
+  // single canonical render produced: one trajectory. (Canvas pixel
+  // state needs no restore — every render begins with clearScreen.)
   const DET_SEED = 0xC0FFEE42; // render-plane only, never the gameplay chain
   if (!Number.isInteger(INJECT.frame) || INJECT.frame < 1 || INJECT.frame > g.frames) {
     console.error("capture-canvas: inject.frame outside the replay range");
@@ -454,10 +464,6 @@ async function main() {
         q.push(JSON.parse(JSON.stringify(inst)));
       }
     };
-    // canonical render + mask (native render RNG — the unchanged path)
-    window.__gfxRender();
-    window.__gfxCaptured[r[0].f] = window.__gfxCaptureMask();
-    // deterministic full + leave-one-out renders
     const mk = (seed) => {
       let a = seed >>> 0;
       return () => {
@@ -470,11 +476,32 @@ async function main() {
     const savedNative = window.__nativeRandom;
     let det = null;
     const loo = {};
+    let snapPost = null;
     try {
+      // canonical render + mask — on the deterministic render-plane RNG
+      // (review-70 r3): its queue side effects ARE the trajectory that
+      // frames 151+ continue from, and det below replays it exactly.
+      window.__nativeRandom = mk(o.seed);
+      window.__gfxRender();
+      const canonical = window.__gfxCaptureMask();
+      window.__gfxCaptured[r[0].f] = canonical;
+      // post-canonical-render queue state, by REFERENCE (the live
+      // instances this render mutated/spawned — restored in finally;
+      // the det/loo renders below touch JSON clones only)
+      snapPost = qmod.vfxQueue.slice();
+      // det = strict replay of the canonical render: same pre-render
+      // snapshot, same reseed -> must reproduce the mask bit-for-bit
+      // (free tooth: proves the observation machinery is side-effect-
+      // free and every loo baseline shares the canonical trajectory)
       restore(null);
       window.__nativeRandom = mk(o.seed);
       window.__gfxRender();
       det = window.__gfxCaptureMask().mask;
+      if (det !== canonical.mask) {
+        throw new Error("gfx-capture: det replay mask != canonical mask at the injection frame " +
+          "(snapshot/restore + reseed failed to reproduce the canonical render — " +
+          "trajectory continuity broken)");
+      }
       for (const nm of o.inkNames) {
         restore(nm);
         window.__nativeRandom = mk(o.seed);
@@ -483,8 +510,13 @@ async function main() {
       }
     } finally {
       window.__nativeRandom = savedNative;
-      restore(null);
-      window.__gfxRender(); // state-equivalence render (native RNG)
+      // restore the post-canonical-render trajectory; NEVER re-render
+      // (a re-render here was the review-70 r3 discontinuity)
+      if (snapPost !== null) {
+        const q = qmod.vfxQueue;
+        q.length = 0;
+        for (const inst of snapPost) q.push(inst);
+      }
     }
     return { rec: r[0], det: det, loo: loo };
   }, { inject: INJECT, inkNames: EXPECTED_RENDER.injectPin.inkNames, seed: DET_SEED });
