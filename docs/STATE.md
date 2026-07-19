@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 74 — M4 task 8 DONE (re-ordered forward): stall class ATTRIBUTED + mitigated; task 3 DONE)
+## Live right now (updated: 2026-07-19, tasks 3+8 done): stall class ATTRIBUTED + mitigated; task 3 DONE)
 
 - **Iter 74 (M4 task 8 — skip-stall attribution instrument,
   driver-re-ordered forward) DONE; M4 task 3 UNBLOCKED → DONE** (full

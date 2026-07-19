@@ -10448,3 +10448,26 @@ injectPin, servedDistSha256, all *-frozen.txt).
   — attempt-ordering can mask a whole comparator for an entire
   iteration (the shot cmp sat behind the skip gate); when a claim
   matters, check which clause actually executed in the logs.
+
+## driver — 2026-07-19 — tasks 3+8 DONE (driver-cold-verified); the attribution campaign closed
+
+- Iter-74 verdict (a) driver-verified COLD: DEVICE RENDER OK skips
+  0/3600 (full p99 12.695ms), low_bat_check quiesce + restore both
+  comm-scan-verified in my own run. Safety review: the mitigation
+  stops/restarts a userland battery-poll SHELL DAEMON for the bounded
+  paced window only (charging management is AXP20x hardware/kernel —
+  untouched); restoration hard-gated + trap-covered + verified; OPK
+  human play keeps the daemon live by design (the valve absorbs it —
+  Chase's ratified playtest ran that way). Safety reasoning accepted.
+- The skip-stall campaign (iters 73-74) closed with: the vfx render
+  surface optimized bit-identically (20.8→12.7ms p99), the stall class
+  attributed to a 2s userland poll comb (~123-frame period, phase
+  illusion explained), a THIRD device-libc class instance found+fixed
+  (musl lround, 1px HUD anchors — fdlibm strong overrides + mathsweep
+  columns extended), and the standing per-pass render profiler landed.
+- Driver policy notes adopted from iter-74's decision points: (1) the
+  with-audio gate legs (tasks 6/7/14) adopt the quiesce at task-14
+  assembly (shared riglib machinery — one-line adoption when those
+  scripts are touched); (2) OPK play stays unmitigated (valve-absorbed).
+- next: Tier-A arc over the iter 73+74 rig surfaces (batched), then
+  task 4 (ai.js port).
