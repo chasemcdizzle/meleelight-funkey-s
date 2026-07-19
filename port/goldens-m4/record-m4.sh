@@ -147,6 +147,16 @@ fi
 trap 'rm -rf "$LOCK"' EXIT
 
 if [ ! -f "$M4G/$TRACE" ]; then
+  # CRAFTED-TRACE REFUSAL (iter 84 — the goldens-snd fold): s-prefixed
+  # goldens are SCENARIO goldens whose trace is a committed deterministic
+  # generator's output (manifest comment; e.g. s01 -> gen-s01-trace.js),
+  # NOT gen-trace.js seeded chaos — auto-generating here would silently
+  # fabricate a WRONG trace whose recording could then be frozen. Die
+  # loudly instead; the operator regenerates via the named generator.
+  case "$NAME" in
+    (s*)
+      die "trace $M4G/$TRACE is missing and '$NAME' is a CRAFTED-scenario golden — record-m4.sh will NOT gen-trace.js it; regenerate with the golden's committed generator (s01: node port/goldens-m4/gen-s01-trace.js $M4G/$TRACE) and re-run" ;;
+  esac
   echo "record-m4.sh: generating trace ($SEED)"
   node "$HARNESS/gen-trace.js" "$M4G/$TRACE" 3800 "$SEED"
 fi

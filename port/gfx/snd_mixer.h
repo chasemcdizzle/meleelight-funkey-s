@@ -103,6 +103,12 @@ typedef struct {
   // event counters (deterministic given the sim's event stream; the
   // check cross-asserts device values against host truth)
   uint64_t starts, stops, steals;
+  // M4 iter 84 (review-82 H): `stops` counts stop EVENTS (unchanged M3
+  // semantics — the gfx_app summary grammar stays intact); the SPLIT
+  // records whether the event deactivated at least one voice (matched)
+  // or found none (unmatched — howler stale-id/ended-voice no-op).
+  // stopsMatched + stopsUnmatched == stops always.
+  uint64_t stopsMatched, stopsUnmatched;
   uint64_t maxVoices; // concurrency high-water (M4 task 6 measurement)
 } SndMixer;
 
@@ -217,12 +223,16 @@ static const SndEntry *snd_stop_base(SndMixer *m, const char *token) {
 static void snd_event_stop_id(SndMixer *m, const char *token, int hasId,
                               double id) {
   const SndEntry *e = snd_stop_base(m, token);
+  bool matched = false;
   for (int v = 0; v < SND_VOICES; v++) {
     if (m->voice[v].e != e) continue;
     if (hasId && (double)m->voice[v].id != id) continue;
     m->voice[v].e = 0;
+    matched = true;
   }
   m->stops++;
+  if (matched) m->stopsMatched++;
+  else m->stopsUnmatched++;
 }
 
 // One sound event from the sim's queue (ml_snd_sink contract: play

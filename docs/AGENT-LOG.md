@@ -12525,3 +12525,171 @@ emits the 10-line cold shape). Benign today (its runs follow warm
 trees) but it is the same bridge-presence dependency this iteration
 closed in ai-live — flag for the next vfx-seam or driver window.
 Round 2 of the review arc = closure (driver-scheduled).
+
+## iter 84 — 2026-07-19 — M4 hardening PRE-REGISTRATION: mixer-rig round-1 closure — stop witnesses + goldens-snd fold + aggregator kit (frozen before any run/edit; PROCESS §2)
+
+- **Task**: close the mixer-rig arc's round-1 findings + execute the
+  driver's fold decision (.loop/review-82-triage.md BINDING; full log
+  .loop/review-82-1.log, VERDICT: NO-GO). Surface:
+  port/gfx/{check-mixer-fidelity.sh,snd_reference.js,snd_render.c,
+  snd_mixer.h}, port/goldens-snd/ (dissolved), port/goldens-m4/
+  (receives s01; iter-83's hardened recorder/freezer REUSED), plus the
+  iter-83-flagged check-vfx-seam.sh check-sim-leg residual. NOT
+  touched: check-sim.sh, verify-stream.js, wrap-run.js, oracle/,
+  frozen streams (BYTES — the s01 FILE moves), sim TUs, gfx_app.c
+  (its audio-summary grammar keeps total stops; the split lives in the
+  mixer + offline renderers).
+- **TRIAGE-SCOPE NOTE (recorded)**: review-82 carries TWO Highs the
+  driver triage does not list — (1) GUARDON.c:56 ignores the new
+  as_shieldDepletion return (a sim-TU finding; STATE.md iter-82 queues
+  the Tier-B sim-TU round — OUT of this iteration's surface, flagged
+  loudly for the driver in the result entry + final report); (2) the
+  unpinned browser/device exposure (unlimited-comparison set decided
+  dynamically) — folded INTO this iteration under the brief's M2
+  "exact golden inventories bound to the loops" as a measured-then-
+  frozen per-golden exposure table (it is an inventory pin).
+- **Fixes (frozen, per triage)**:
+  - **H stop-arm witnesses**: the four s01 stop events pinned as EXACT
+    frozen witnesses (frame, sound, preceding-play ordinal + frame;
+    arm attribution documented per witness): S 191
+    shieldbreakercharge.stop id=1005 <- P 171 ord 5 (NSG B-release) ·
+    S 697 shieldbreakercharge.stop id=1018 <- P 571 ord 18 (NSG
+    charge==122 auto) · S 701 furaloop.stop id=1021 <- P 649 ord 21
+    (hitDetection FURAFURA) · S 1419 furaloop.stop id=1030 <- P 1181
+    ord 30 (FURAFURA wake) — judged by a strict full-line witness
+    judge (id derivation 1000+ordinal re-verified against the play
+    stream, exactly one stop per witness tuple, total stops == 4).
+    Mixer stop counter SPLITS matched/unmatched (snd_mixer.h
+    stopsMatched/stopsUnmatched; total `stops` unchanged — the M3
+    counter semantics and gfx_app summary grammar are untouched);
+    snd_render.c + snd_reference.js verdict grammars gain
+    stopsm=/stopsu= and the check binds C == capped-ref (everywhere)
+    == unlimited-ref (on <=8 goldens) and pins the measured per-golden
+    values (expectation from code reading: all live stops matched —
+    furaloop is a loop, the charge stops follow their plays closely;
+    MEASURE first, freeze whatever is true, assert unmatched == pin).
+  - **FOLD**: git mv s01 trace + frozen stream + gen-s01-trace.js into
+    port/goldens-m4/ (sha256 before/after proof; stream bytes
+    4229cdebcbc18edb1f62812feb017fdfc24b87011b3af7159c674501cd5d9126,
+    trace 26e0589a8ffe5d6af5f666c3afd4a8fd7519e1a8b18e0535defe57c76735
+    7651 — MUST be unchanged post-move); s01 row added to the m4
+    manifest under the FULL iter-83 grammar; freeze-stream-m4.js
+    id/name grammar extended MINIMALLY: ^m[0-9]{2}$ -> ^[ms][0-9]{2}$
+    (s = scenario goldens with CRAFTED traces; documented in the
+    manifest comment + freezer header); record-m4.sh gains the
+    crafted-trace refusal (an s-id with a missing trace file DIES
+    pointing at the committed crafted generator — gen-trace.js would
+    silently fabricate a wrong trace); port/goldens-snd/ deleted
+    ENTIRELY (recorder/freezer twins die; gen-s01-trace.js is NOT a
+    twin — it moves, provenance preserved);
+    check-mixer-fidelity.sh consumes the goldens-m4 home. Re-pin
+    verification WITHOUT browser runs: freeze-stream-m4.js re-freeze
+    from the ARCHIVED oracle/harness/out/record-s01-{a,b}.json ->
+    MUST print 'unchanged (byte-identical re-freeze)', + verify-stream
+    self-check of run A vs the moved frozen file. COORDINATION:
+    check-ai-live.sh pins the m4 manifest's cpu==true set == (m01
+    m02) — s01 is cpu=false so the pin holds; full cold re-run as
+    regression.
+  - **M2 producer pins + inventories (check-mixer-fidelity.sh)**:
+    3-line strict pin table (check-sim.sh ce0882be…, wrap-run.js
+    b835b5f8…, verify-stream.js f4207234… — the ai-live [0] kit, same
+    update discipline) + pinned ORACLE_IDS (8)/M4_IDS (m01 m02 s01)
+    arrays asserted == BOTH manifests' full id lists (both
+    directions), every loop derived from the arrays + strict
+    read_golden line-parse (the eval class dies here too — PROCESS §3
+    retroactive rule, 2nd instance in this script's family) + the
+    measured-then-frozen per-golden EXPOSURE TABLE (unlimited-ref
+    maxvoices / C steals / stops / stopsm / stopsu per golden:
+    g01 6/0, g02 4/0, g03 8/0, g04 5/0, g05 7/0 + 12 stops,
+    g06 9/1, g07 3/0, g08 6/0, m01 4/0, m02 9/1, s01 5/0 + 4 stops;
+    over-cap set pinned == {g06,m02}, 9 unlimited comparisons,
+    MAXV_ALL == 9, STEALS_ALL == 2 — closes review High #2).
+  - **M3 isolation/freshness**: no-reclaim run lock (mixerfid.lock,
+    iter-41 posture) + rm-before-produce + made() on EVERY produced
+    artifact (AUDIO_OUT stage output, pack a/b + verdicts, per-golden
+    schedule/sim-out/run JSON/PCM/verdict files, app-leg outputs,
+    tooth artifacts).
+  - **M4 grammars**: pack verdict = exactly-one full-grammar line +
+    exactly-one resembling line + single-line file, judged from FILE
+    BYTES (trailing-newline asserted; the $(cat) class dies);
+    renderer/reference verdict + schedule terminator judged the same
+    way; git-guard rc case-split (status rc != 0 = CORRUPT evidence,
+    never a clean pass).
+  - **M5 x2-identity + refreeze discipline (freeze-stream-m4.js)**:
+    runA/runB must be distinct files (resolved path + dev:ino) and the
+    meta re-pin stays per-run; --refreeze on DIFFERING bytes
+    additionally requires the OLD frozen file's specVersion !== the
+    current one (CHECKSUM.md §8 made mechanical) — a same-spec
+    refreeze is refused loudly.
+  - **M6 path containment**: inherited whole via the fold (iter-83's
+    freezer grammar: name-derived basename-only trace + resolved-path
+    containment; the snd twins that lacked it are deleted).
+  - **L reference assurance debt**: REGISTERED EXPOSURE ONLY (per
+    triage): the reference has no analytical PCM fixture / browser
+    lifecycle oracle and models ids as 1000+playCount without howler
+    load/reset allocations — candidate task-14 hardening; the id
+    plane is opaque + internally consistent and off the checksum
+    surface.
+  - **ALSO (iter-83 residual, same class)**: check-vfx-seam.sh's
+    check-sim leg adopts ai-live's deterministic bridge-artifact
+    rm-up-front + the cold 10-line shape (CPU goldens x2 STREAM MATCH
+    + 2 'AI bridge artifact absent' lines). Regression = the LEG's
+    judge only, validated by harness from the modified script's OWN
+    bytes against the genuine cold-shape check-sim log produced by
+    the ai-live regression run (PASS) and a warm-doctored copy
+    (DEATH) — the full vfx matrix is NOT re-run (justification: the
+    10 component legs' code path is byte-untouched; only the
+    else-branch of vfx_judge_log + the pre-leg rm changed, and the
+    composed run costs hours against zero new coverage).
+- **Run caps (frozen)**: composed check-mixer-fidelity cold runs <= 2
+  (expect 1 + one fix round headroom); composed check-ai-live cold
+  runs <= 2 (expect 1); standalone renderer/reference/witness probe
+  executions <= 24 (measurement of the split counters + witness
+  values on the EXISTING iter-82 schedules); teeth/harness executions
+  <= 20; browser runs 0 (the archived record-s01 A/B runs are the
+  re-pin evidence); no device, no docker.
+- **Teeth (pre-registered; tracked bytes never perturbed — sed
+  variants + sandbox copies in gitignored build/, frozen streams
+  untouched)**: T-W arm-swap (s01 schedule copy: drop the frame-191
+  release stop, DUPLICATE the frame-697 auto stop — aggregate counts
+  preserved, proven by re-running the old aggregate greps on the
+  doctored copy) -> witness-judge death; T-SPLIT snd_render
+  --tooth-stop-id-skew on s01 -> verdict stopsm=0 stopsu=4 (the split
+  counter SEES de-routing); T-EXP exposure-judge harness (extracted
+  from the modified check's own bytes) fed g06 maxv=8 -> death,
+  genuine row -> pass; T-INV sed-variant M4_IDS=(m01 m02) -> inventory
+  death BEFORE the lock and any run; T-PPIN sed-variant flipped
+  check-sim pin nibble -> refusal before any run; T-PACK pack-grammar
+  harness: verdict + one resembling extra line -> death, genuine
+  single-line -> pass; T-GIT git-guard harness outside a repo ->
+  rc-case-split death; T-FRZ1 freezer with runA==runB path -> death;
+  T-FRZ2 sandbox-dir freezer copy + nibble-doctored frozen s01 +
+  archived genuine runs: without --refreeze -> differs-death (control),
+  WITH --refreeze -> spec-version-equality death (the new M5 arm);
+  T-FRZ3 sandbox manifest id 'x01' -> id-grammar death; T-REC sandbox
+  record-m4.sh with the s01 row and NO trace file -> crafted-trace
+  refusal death; T-VFX judge harness: genuine cold log -> pass,
+  warm-doctored -> death. Positive controls: freezer re-freeze of the
+  genuine archived s01 runs -> 'unchanged (byte-identical re-freeze)';
+  witness judge on the genuine schedule -> pass.
+- **Pass**: cold `bash port/gfx/check-mixer-fidelity.sh` ->
+  `MIXER FIDELITY OK` exit 0 (.loop/m4-mixrig84-donecheck.log) + cold
+  `bash port/sim/check-ai-live.sh` -> `AI LIVE CONFORMS` exit 0
+  (.loop/m4-mixrig84-donecheck2.log) + all teeth fire + the fold sha
+  proof recorded.
+- **Refutation shapes (frozen)**: (a) split counters disagree C vs
+  reference on g05/s01 -> a REAL matched-plane semantic divergence:
+  ONE bounded fix round on whichever side violates the documented
+  howler semantics, second divergence -> STOP + report. (b) a new
+  grammar false-rejects genuine corpus bytes -> grammar mis-measured:
+  re-measure from the real files, <= 2 rounds, then STOP. (c) the
+  ai-live cold run fails at its m4-manifest pins post-fold -> the
+  coordination risk the brief names: fix the grammar minimally and
+  re-run (within the <= 2 cap); a LIVE-leg stream failure -> NOT a
+  rig issue (sim TUs untouched) -> STOP + report as environment
+  drift. (d) the freezer re-freeze of the archived s01 runs does NOT
+  print 'unchanged' -> the snd/m4 freezer twins were not
+  output-equivalent -> STOP + report; the frozen bytes are NEVER
+  force-overwritten. (e) the witness measurement contradicts the
+  iter-82 arm attribution -> STOP + report (the AGENT-LOG record
+  would be wrong — that is a finding, not a tuning knob).
