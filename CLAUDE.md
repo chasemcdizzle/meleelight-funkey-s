@@ -981,6 +981,40 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   re-replay, never `git checkout --` (index-restore reverts unstaged
   work).
 
+- **Live CPU integration + d1/d9 coverage goldens (M4 task 5 committed
+  form):** `bash port/sim/check-ai-live.sh` → `AI LIVE CONFORMS`, exit 0
+  — the sim's runAI site runs the REAL C ai.c LIVE (seeded-chain draws
+  via logged ml_random, bank + bookkeeping writes; the pollInputs
+  slot-0 alias re-copy stays the caller's job) through the
+  `ml_sim_runai_live` POINTER SEAM: NULL in sim_tick.c, constructor-
+  installed by `port/sim/sim/sim_ai_live.c` (linked only alongside
+  ai.c) — so the FROZEN `check-sim.sh` build (whose TU list never gains
+  ai.c) is symbol- and behavior-identical, and `--cpu` without
+  `--ai-bridge` still errors there (in-check M2-contract witness).
+  check-sim.sh is BYTE-UNTOUCHED and its sha256 is PINNED inside
+  check-ai-live.sh. AIBRIDGE1 = the archival `--ai-bridge` arm
+  (check-ai-bridge.sh stays green; composed in). The check composes:
+  check-sim.sh (bridge-fed, 8/8) + live g07/g08 vs the frozen oracle
+  streams + live m01/m02 vs `port/goldens-m4/*.sha256.json` + the
+  ai-bridge and aiport rigs — every stream judged by the UNCHANGED
+  verify-stream.js. NEW golden machinery (HARD RULE 3: oracle/
+  read-only): `port/goldens-m4/{manifest.json,record-m4.sh,
+  freeze-stream-m4.js,check-quality.js}` — record = oracle/harness
+  run.js/compare.js/gen-trace.js BY PATH, browser ×2-identity, the M0
+  gameplay-quality contract checked MECHANICALLY, M0-format freeze
+  (streamlib required by path). Goldens: m01
+  falcon/CPU-marth(d1)/ystory seed 8114 (first live CPU on a
+  moving-platform stage) · m02 falcon/CPU-fox(d9)/dreamland seed 8109.
+  `sim_host_live --ai-cover` dumps the ml_ai_cov arm table (stderr,
+  diagnostic). GameState bank is now `[4][8]` (ai.js:357 reads
+  `[i][1]`). Gotcha classes: (1) frozen-build link seams — new symbols
+  behind a constructor-installed pointer OUTSIDE GameState (memset-
+  safe), never referenced from frozen-list TUs; (2) trace quality is
+  STRUCTURAL, not seed luck — laser damage carries percent but NO
+  DAMAGE state, wide blastzones suppress SD KOs, and a d1 CPU deals no
+  kill knockback (marthAI's whole action block is `pdiff>=2`-gated:
+  d1 proves its OFF side); diagnose before re-rolling seeds.
+
 ## Build/gotcha notes (the loop appends here)
 
 - Log to tmpfs during play, copy to SD on exit (SD streaming = multi-second

@@ -44,7 +44,13 @@ typedef struct {
   // input chains (main.js gameTick local `input` becomes oldInputBuffers):
   MlInputBuffer prevBuf[4];      // human slots (and starting-window nulls)
   MlAiInputBuffer prevBufAi[4];  // CPU slots (task 16's tagged chain)
-  MlAiInput bank[4];             // aiInputBank[i][0] rows (chained)
+  // aiInputBank[4][8] (input.js:118 aiPlayerN = 8x inputData()): row 0 is
+  // the chained AI row; rows 1..7 are page-boot inputData() values —
+  // NEVER written upstream (measured: ai.js's only non-[0] access is the
+  // READ `aiInputBank[i][1].a`, ai.js:357) — value-identical to
+  // ai_null_input(). Widened from [4] single rows for the M4 task-5 live
+  // C AI (ml_runAI's MlAiSim.bank wants the full 4x8 plane).
+  MlAiInput bank[4][8];
   bool slotIsAi[4];
   // per-tick buffers (gameTick's `input`), rebuilt every frame:
   MlInputBuffer curBuf[4];       // plain projection every consumer reads
@@ -140,5 +146,22 @@ void sim_game_tick(GameState *g, const MlInput *traceRow[4]);
 
 // Fatal host abort (all *_out_of_domain / *_fail seams route here).
 void sim_fatal(const char *what) __attribute__((noreturn));
+
+// --- live-AI seam (M4 task 5) ---------------------------------------------------
+//
+// LINK-SEAM CONSTRAINT: port/sim/check-sim.sh (the M2 EXIT GATE — never
+// edited, HARD RULE 3) builds the sim WITHOUT port/sim/ai.c, so no TU on
+// its frozen list may reference ml_runAI directly. The live arm therefore
+// crosses a POINTER seam: NULL by default (defined in sim_tick.c);
+// port/sim/sim/sim_ai_live.c (linked ONLY by builds that also link ai.c,
+// e.g. check-ai-live.sh's sim_host_live) installs the real driver via a
+// constructor — which runs before main, and the pointers live OUTSIDE
+// GameState so sim_boot_page's memset cannot wipe them. In the M2-gate
+// build the pointer stays NULL and --cpu without --ai-bridge errors
+// exactly as before: the frozen gate's behavior is preserved bit-for-bit.
+extern void (*ml_sim_runai_live)(GameState *g, int i);
+// Optional diagnostic twin: dump the ml_ai_cov arm table (sim_main
+// --ai-cover; stderr; never gating).
+extern void (*ml_sim_ai_cov_dump)(void);
 
 #endif // ML_SIM_H

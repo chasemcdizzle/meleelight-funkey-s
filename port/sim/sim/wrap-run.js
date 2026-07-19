@@ -6,7 +6,13 @@
 // `node oracle/harness/verify-stream.js <out-run.json> <frozen>` judges
 // the C sim exactly like a browser run.
 //
-// Usage: node wrap-run.js <goldenId> <sim-output.txt> <out-run.json>
+// Usage: node wrap-run.js <goldenId> <sim-output.txt> <out-run.json> \
+//          [<manifest.json>]
+//
+// The optional 4th arg (M4 task 5) selects an ALTERNATE golden manifest
+// (e.g. port/goldens-m4/manifest.json — same schema); omitted, the
+// oracle manifest is used exactly as before (all pre-M4 invocations are
+// byte-identical in behavior).
 //
 // Sim output contract (HARD-FAILED, exit 3, on any violation):
 //   - lines "F <n> <64-lowercase-hex>": the per-frame checksum stream,
@@ -33,14 +39,17 @@ function die(msg) {
   process.exit(3);
 }
 
-const [goldenId, simOutPath, outRunPath] = process.argv.slice(2);
+const [goldenId, simOutPath, outRunPath, manifestArg] = process.argv.slice(2);
 if (!goldenId || !simOutPath || !outRunPath) {
-  console.error("usage: node wrap-run.js <goldenId> <sim-output.txt> <out-run.json>");
+  console.error("usage: node wrap-run.js <goldenId> <sim-output.txt> " +
+    "<out-run.json> [<manifest.json>]");
   process.exit(1);
 }
 
-const manifest = JSON.parse(fs.readFileSync(
-  path.join(REPO, "oracle", "goldens", "manifest.json"), "utf8"));
+const manifestPath = manifestArg
+  ? path.resolve(manifestArg)
+  : path.join(REPO, "oracle", "goldens", "manifest.json");
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 const g = manifest.goldens.find((x) => x.id === goldenId);
 if (!g) {
   console.error("wrap-run: unknown golden id " + goldenId + " (have: " +

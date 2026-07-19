@@ -11,8 +11,12 @@
 //   (!starting && !versusMode ? matchTimerTick : startTimer countdown) ->
 //   frameByFrame bookkeeping (ml_input_end_of_tick).
 // update(i) (main.js:894-908): !starting && currentPlayers[i] != -1 &&
-// playerType[i]==1 && actionState != "SLEEP" -> runAI(i) (the task-16
-// bridge), then physics(i, input).
+// playerType[i]==1 && actionState != "SLEEP" -> runAI(i), then
+// physics(i, input). runAI has TWO arms (M4 task 5): the LIVE C ai.c
+// (default when sim_ai_live.c is linked and no --ai-bridge is given;
+// draws live off the seeded chain) and the M2 task-16 AIBRIDGE1 archival
+// path (--ai-bridge; retained as the frozen M2 contract — check-sim.sh's
+// build has ONLY this arm).
 //
 // SEAM WIRING (replaces the replay drivers' oracle-fed seams with the
 // REAL upstream import graph):
@@ -20,7 +24,9 @@
 // - mlp_hd_* -> hit_detection.c getters (task 6 real bodies);
 // - mv_article_* -> article.c inits (the task-13 documented swap);
 // - mv_hq_push6 -> the live hitQueue;
-// - runAI -> ml_ai_bridge_apply + the pollInputs bank-row alias re-copy;
+// - runAI -> ml_runAI via the ml_sim_runai_live pointer seam (sim.h), or
+//   ml_ai_bridge_apply under --ai-bridge; + the pollInputs bank-row alias
+//   re-copy in both arms;
 // - every *_out_of_domain / *_fail -> sim_fatal (loud, HARD RULE 2).
 //
 // EVENT QUEUES: ml_events' sound/vfx/dispatch-note/rng-log queues are
@@ -45,6 +51,12 @@ void sim_fatal(const char *what) {
   fprintf(stderr, "SIM FATAL frame %ld: %s\n", G.frame, what);
   exit(3);
 }
+
+// live-AI pointer seam (sim.h; M4 task 5): NULL unless sim_ai_live.c is
+// linked — its constructor installs the real ai.c driver. The frozen
+// M2-gate build (check-sim.sh's TU list) never links it.
+void (*ml_sim_runai_live)(GameState *g, int i) = 0;
+void (*ml_sim_ai_cov_dump)(void) = 0;
 
 void mv_out_of_domain(const char *what) { sim_fatal(what); }
 void ml_phys_out_of_domain(const char *what) { sim_fatal(what); }
@@ -281,7 +293,7 @@ void sim_game_tick(GameState *g, const MlInput *traceRow[4]) {
       // input[i] = interpretInputs(i, true, playerType[i], old[i])
       if (g->slotIsAi[i]) {
         // pollInputs returns the aiInputBank ROW (alias; ai_bridge.h)
-        const MlAiInput polled = g->bank[i];
+        const MlAiInput polled = g->bank[i][0];
         ml_ai_interpret_inputs(&g->inp, i, true, 1, &g->prevBufAi[i], &polled,
                                &g->curBufAi[i]);
       } else {
@@ -295,34 +307,44 @@ void sim_game_tick(GameState *g, const MlInput *traceRow[4]) {
     if (!g->starting && g->inp.currentPlayers[i] != -1 &&
         g->sim.playerType[i] == 1 &&
         strcmp(g->sim.player[i].actionState, "SLEEP") != 0) {
-      // runAI(i) — the task-16 recorded-input bridge
-      if (!g->hasBridge) sim_fatal("CPU slot without an AI bridge artifact");
-      const MlAiBridgeEntry *e = ml_ai_bridge_peek(&g->bridge);
-      if (e == 0) sim_fatal("AI bridge exhausted at a runAI site");
-      if (e->frame != g->frame || e->slot != i) {
-        fprintf(stderr, "bridge entry (frame %ld slot %d) at runAI site "
-                        "(frame %ld slot %d)\n",
-                e->frame, e->slot, g->frame, i);
-        sim_fatal("AI bridge (frame,slot) desync");
+      // runAI(i) (ai.js:874) — two arms, M4 task 5:
+      if (g->hasBridge) {
+        // ARCHIVAL arm: the task-16 recorded-input bridge (--ai-bridge)
+        const MlAiBridgeEntry *e = ml_ai_bridge_peek(&g->bridge);
+        if (e == 0) sim_fatal("AI bridge exhausted at a runAI site");
+        if (e->frame != g->frame || e->slot != i) {
+          fprintf(stderr, "bridge entry (frame %ld slot %d) at runAI site "
+                          "(frame %ld slot %d)\n",
+                  e->frame, e->slot, g->frame, i);
+          sim_fatal("AI bridge (frame,slot) desync");
+        }
+        const MlAiBridgeApplyResult r =
+            ml_ai_bridge_apply(e, &g->rng, &g->bank[i][0]);
+        if (r.bad_draw != -1) {
+          uint64_t want, got;
+          memcpy(&want, &e->draws[r.bad_draw], 8);
+          memcpy(&got, &r.bad_draw_got, 8);
+          fprintf(stderr,
+                  "runAI draw %d/%d: recorded %016llx, chain %016llx\n",
+                  r.bad_draw, e->ndraws, (unsigned long long)want,
+                  (unsigned long long)got);
+          sim_fatal("AI bridge seeded-draw chain mismatch");
+        }
+        if (r.bad_field != -1) {
+          sim_fatal("AI bridge never-AI-written field diverged from the chain");
+        }
+        ml_ai_bridge_advance(&g->bridge);
+      } else if (ml_sim_runai_live) {
+        // LIVE arm: the real C runAI (port/sim/ai.c via sim_ai_live.c) —
+        // draws live off the seeded chain (logged ml_random), writes the
+        // bank row + player bookkeeping itself. Never touches AIBRIDGE1.
+        ml_sim_runai_live(g, i);
+      } else {
+        sim_fatal("CPU slot without an AI bridge artifact or live-AI TU");
       }
-      const MlAiBridgeApplyResult r =
-          ml_ai_bridge_apply(e, &g->rng, &g->bank[i]);
-      if (r.bad_draw != -1) {
-        uint64_t want, got;
-        memcpy(&want, &e->draws[r.bad_draw], 8);
-        memcpy(&got, &r.bad_draw_got, 8);
-        fprintf(stderr,
-                "runAI draw %d/%d: recorded %016llx, chain %016llx\n",
-                r.bad_draw, e->ndraws, (unsigned long long)want,
-                (unsigned long long)got);
-        sim_fatal("AI bridge seeded-draw chain mismatch");
-      }
-      if (r.bad_field != -1) {
-        sim_fatal("AI bridge never-AI-written field diverged from the chain");
-      }
-      ml_ai_bridge_advance(&g->bridge);
       // the pollInputs alias: buffer slot 0 IS the bank row post-runAI
-      g->curBufAi[i].slot[0] = g->bank[i];
+      // (both arms — the caller's job, ai_bridge.h contract)
+      g->curBufAi[i].slot[0] = g->bank[i][0];
     }
     // physics consumes the plain projection (built AFTER runAI so the
     // alias write-through is visible; rule-16 truthiness buttons)

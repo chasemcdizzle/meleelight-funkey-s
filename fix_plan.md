@@ -1503,6 +1503,37 @@ overruns):
   re-survey). check-sim.sh untouched.
   done-check: `bash port/sim/check-ai-live.sh` → prints
   `AI LIVE CONFORMS`, exit 0.
+  **DONE (iter 81, 2026-07-19) — committed form**: cold done-check
+  `AI LIVE CONFORMS` exit 0 (.loop/m4-task5-donecheck.log). The runAI
+  site is two-armed via the `ml_sim_runai_live` POINTER SEAM (sim.h;
+  constructor-installed by NEW port/sim/sim/sim_ai_live.c, linked only
+  alongside ai.c — the frozen check-sim.sh TU list never sees the new
+  symbols and its binary still refuses --cpu without --ai-bridge, the
+  in-check M2-contract witness). check-sim.sh BYTE-UNTOUCHED (its
+  sha256 is now PINNED inside check-ai-live.sh) — the iter-81 brief's
+  "edit check-sim.sh" instruction was refused per HARD RULE 3 + this
+  section's conventions (AGENT-LOG iter 81). GameState bank [4]→[4][8]
+  (ai.js:357 reads [i][1]); alias slot-0 re-copy common to both arms;
+  --ai-cover arm-table diagnostic. NEW goldens (browser ×2-identity,
+  M0 quality contract checked MECHANICALLY by
+  port/goldens-m4/check-quality.js at record time): m01
+  falcon/CPU-marth(d1)/ystory seed 8114 rngCalls=59 (first live CPU on
+  a MOVING-PLATFORM stage) · m02 falcon/CPU-fox(d9)/dreamland seed
+  8109 rngCalls=411; recorder = port/goldens-m4/record-m4.sh +
+  freeze-stream-m4.js (oracle/harness bytes reused BY PATH; M0
+  freeze format verbatim; oracle/ read-only). All FOUR CPU goldens
+  replay LIVE to STREAM MATCH (unchanged verify-stream.js), ZERO
+  divergence rounds. Rule-16 verdict: no capture adoption — the live
+  path has no JS→C marshal; the full-trace frozen-stream oracle is the
+  stronger check (no trap fired). Coverage delta measured (--ai-cover):
+  FOX_REACT/TILT/TURN/SHDL_*/RESPAWN_* + GEN_TW_CLEAR newly live;
+  marthAI's whole action block is `pdiff>=2`-gated so d1 proves its
+  OFF side (MARTH_* zero-live registered honest). Pre-reg amendments
+  (structural, evidenced): m01 fox→falcon (laser damage carries no
+  DAMAGE state), pstadium→ystory (wide blastzones suppress the only
+  d1 KO source), ladder extension — 24-browser-run cap held exactly.
+  Teeth 5/5 (.loop/m4-task5-teeth.log). gfx_app live mode = registered
+  deferral to the device tasks (frozen-pinned option surface).
 - task 6 — **mixer fidelity + real play-ids + stop-path coverage**
   (iter-57 seeds): real per-play ids through the mixer (mv_howl_play_id
   backed by voice ids; .stop routing for furaloop/shieldbreakercharge),

@@ -3,7 +3,41 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 80 — device-rig arc round-3 Medium CLOSED; device-rig round 4 = closure-or-cap)
+## Live right now (updated: 2026-07-19, iter 81 — M4 task 5 DONE: live CPU integration, AI LIVE CONFORMS)
+
+- **Iter 81 (M4 task 5 — live CPU integration) DONE** (full entry:
+  AGENT-LOG iter 81 pre-registration + result): the sim's runAI site now
+  runs the REAL C ai.c LIVE (seeded-chain draws, bank + bookkeeping
+  writes) via the `ml_sim_runai_live` pointer seam — constructor-
+  installed by new port/sim/sim/sim_ai_live.c, linked only with ai.c so
+  the FROZEN check-sim.sh build is symbol- and behavior-identical
+  (its sha256 is now pinned inside the new check). AIBRIDGE1 stays as
+  the archival --ai-bridge arm. ALL FOUR CPU goldens conform on the
+  live path (unchanged verify-stream.js, zero divergence rounds):
+  g07/g08 vs the frozen oracle streams + the NEW d1/d9 coverage
+  goldens in port/goldens-m4/ — m01 falcon/CPU-marth(d1)/ystory seed
+  8114 (first live CPU on a moving-platform stage) and m02
+  falcon/CPU-fox(d9)/dreamland seed 8109 — browser ×2-identity,
+  mechanical M0 quality contract, M0-format freeze (recorder reuses
+  oracle/harness bytes by path; oracle/ untouched). Cold done-check
+  `bash port/sim/check-ai-live.sh` → `AI LIVE CONFORMS` exit 0
+  (.loop/m4-task5-donecheck.log; composes check-sim.sh bridge-fed +
+  live legs + check-ai-bridge.sh + check-ai-replay.sh). Teeth 5/5
+  (.loop/m4-task5-teeth.log). Rule-16 verdict: no capture adoption
+  (no JS→C marshal on the live path; full-trace stream oracle is the
+  binding check). Coverage delta measured (--ai-cover): FOX_* arms +
+  GEN_TW_CLEAR newly live; marthAI d1 proves the `pdiff>=2` OFF side
+  (MARTH_* zero-live registered). NOTE: the brief's "edit
+  check-sim.sh" was refused per HARD RULE 3 + fix_plan §M4 conventions
+  (recorded in both AGENT-LOG entries); gfx_app live mode deferred to
+  the device tasks (pinned option surface).
+  **Driver next: Tier-B round for the sim-TU changes + Tier-A arc for
+  the new scripts (check-ai-live.sh, record-m4.sh, freeze-stream-m4.js,
+  check-quality.js); then task 6 (mixer fidelity) — its stop-path live
+  witness and offline-render differential are unblocked and the m4
+  goldens/manifest machinery it can reuse now exists.**
+
+## [superseded by iter 81] (updated: 2026-07-19, iter 80 — device-rig arc round-3 Medium CLOSED; device-rig round 4 = closure-or-cap)
 
 - **Iter 80 (M4 hardening — device-rig round-3 Medium: restore-stamp
   causality coupling) DONE** (full entry: AGENT-LOG iter 80

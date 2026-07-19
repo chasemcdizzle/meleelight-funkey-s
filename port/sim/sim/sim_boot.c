@@ -336,7 +336,9 @@ void sim_boot_page(GameState *g) {
   for (int i = 0; i < 4; i++) {
     nullInputs(&g->prevBuf[i]);
     ai_null_inputs(&g->prevBufAi[i]);
-    g->bank[i] = ai_null_input(); // aiInputBank rows = new inputData()
+    // aiInputBank[i] = 8x new inputData() (input.js:95-118): every row's
+    // value plane == ai_null_input(); rows 1..7 are never written (sim.h)
+    for (int k = 0; k < 8; k++) g->bank[i][k] = ai_null_input();
     g->slotIsAi[i] = false;
   }
   // fountain's module-private platformStates (page-boot literals,

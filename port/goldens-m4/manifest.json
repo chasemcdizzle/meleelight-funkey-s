@@ -1,0 +1,29 @@
+{
+  "comment": "M4 golden registry (fix_plan \u00a7M4 conventions; HARD RULE 3: only M0 tasks write oracle/ \u2014 M4-NEW goldens live HERE, recorded by port/goldens-m4/record-m4.sh which reuses the oracle/harness bytes VERBATIM by path and judged by the UNCHANGED oracle/harness/verify-stream.js). Schema, char/stage indices, seed convention (seed = the run's Math.random seed AND the gen-trace.js seed: node oracle/harness/gen-trace.js <trace> 3800 <seed>) and the record-time gameplay-quality contract (>=1 KO, >=1 DAMAGE*/CAPTUREDAMAGE state, both players >=1 stock at the final frame \u2014 checked MECHANICALLY by check-quality.js) are the oracle/goldens/manifest.json conventions verbatim. m01/m02 (M4 task 5): CPU-difficulty coverage traces \u2014 d1 and d9 flip the difficulty-gated ai.js arms that g07/g08's d5 never exercises, and put marthAI/foxAI live as CPUs for the first time (g07 falcon = empty falconAI; g08 puff = jiggsAI).",
+  "goldens": [
+    {
+      "id": "m01",
+      "name": "m01-falcon-marth-d1-ystory",
+      "trace": "m01-falcon-marth-d1-ystory.trace.json",
+      "frames": 3600,
+      "seed": 8114,
+      "p1": 4,
+      "p2": 0,
+      "stage": 1,
+      "cpu": true,
+      "difficulty": 1
+    },
+    {
+      "id": "m02",
+      "name": "m02-falcon-fox-d9-dreamland",
+      "trace": "m02-falcon-fox-d9-dreamland.trace.json",
+      "frames": 3600,
+      "seed": 8109,
+      "p1": 4,
+      "p2": 2,
+      "stage": 3,
+      "cpu": true,
+      "difficulty": 9
+    }
+  ]
+}

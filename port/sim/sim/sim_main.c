@@ -3,7 +3,17 @@
 // Replays ONE golden trace end-to-end and emits the CHECKSUM.md stream:
 //   sim_host --trace <trace.txt> --simdata <simdata.txt> --seed <u32>
 //            --p1 <char> --p2 <char> --stage <id> --frames <n>
-//            [--cpu --difficulty <n> --ai-bridge <file>] [--timing <file>]
+//            [--cpu --difficulty <n> [--ai-bridge <file>]] [--timing <file>]
+//
+// CPU arms (M4 task 5): --cpu with --ai-bridge replays the M2 AIBRIDGE1
+// recording (the archival path). --cpu WITHOUT --ai-bridge runs the LIVE
+// C AI (port/sim/ai.c) — only legal when the sim_ai_live.c TU is linked
+// (check-ai-live.sh's sim_host_live); in the frozen M2-gate build
+// (check-sim.sh — never edited) the live seam is NULL and the old
+// "--cpu requires --ai-bridge" error is preserved bit-for-bit.
+// --ai-cover (live builds only): dump the ml_ai_cov arm table to stderr
+// after the run — coverage-delta diagnostic, never part of the judged
+// stdout stream.
 // stdout: "F <frame> <sha256hex>" per frame (1..n), then
 //         "RNG <rngCalls> <rngCallsOutsideStep>", then "SIM OK".
 // (wrap-run.js turns this into a verify-stream.js-compatible run JSON;
@@ -180,6 +190,7 @@ int main(int argc, char **argv) {
   const char *timingPath = 0; // per-frame sim-only ns (written post-run)
   long seed = -1, p1 = -1, p2 = -1, stage = -1, frames = -1, difficulty = 3;
   bool cpu = false;
+  bool aiCover = false;      // M4 task 5: post-run arm-table dump (stderr)
   bool tapJumpOffP1 = false; // M3 task 5: replays of S1 live sessions
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i];
@@ -195,6 +206,7 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--frames") == 0 && hasV) frames = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--difficulty") == 0 && hasV) difficulty = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--cpu") == 0) cpu = true;
+    else if (strcmp(a, "--ai-cover") == 0) aiCover = true;
     else if (strcmp(a, "--tapjump-off-p1") == 0) tapJumpOffP1 = true;
     else if (strcmp(a, "--dump-frames") == 0 && hasV) dumpFrames = argv[++i];
     else {
@@ -202,12 +214,21 @@ int main(int argc, char **argv) {
       return 1;
     }
   }
+  // --cpu without --ai-bridge = LIVE C AI, legal only when the live seam
+  // is installed (sim_ai_live.c linked; constructors run before main).
+  // The M2-gate build has a NULL seam: the original error is preserved.
   if (!tracePath || !simdataPath || seed < 0 || p1 < 0 || p2 < 0 ||
-      stage < 0 || frames <= 0 || (cpu && !bridgePath)) {
+      stage < 0 || frames <= 0 ||
+      (cpu && !bridgePath && ml_sim_runai_live == 0)) {
     fprintf(stderr,
             "usage: sim_host --trace t.txt --simdata s.txt --seed N --p1 N "
             "--p2 N --stage N --frames N [--cpu --difficulty N "
-            "--ai-bridge f] [--timing f] [--tapjump-off-p1]\n");
+            "[--ai-bridge f]] [--timing f] [--tapjump-off-p1] [--ai-cover]\n"
+            "(--cpu without --ai-bridge needs the live-AI build)\n");
+    return 1;
+  }
+  if (aiCover && ml_sim_ai_cov_dump == 0) {
+    fprintf(stderr, "sim_host: --ai-cover needs the live-AI build\n");
     return 1;
   }
 
@@ -223,7 +244,10 @@ int main(int argc, char **argv) {
   for (int k = 0; k < ML_BOOT_DRAWS; k++) (void)ml_rng_next(&G.rng);
   G.rngStateAtReset = G.rng.a;
 
-  if (cpu) {
+  if (cpu && bridgePath) {
+    // ARCHIVAL arm (M4 task 5): --ai-bridge selects the M2 AIBRIDGE1
+    // replay. Without it (live builds only — gated above), the runAI
+    // site takes the LIVE ml_sim_runai_live arm and hasBridge stays 0.
     if (ml_ai_bridge_load(&G.bridge, bridgePath) != 0) {
       sim_fatal("AI bridge artifact failed to load");
     }
@@ -302,6 +326,8 @@ int main(int argc, char **argv) {
     if (fclose(tf) != 0) sim_fatal("--timing file close/flush failed");
     free(tbuf);
   }
+
+  if (aiCover) ml_sim_ai_cov_dump(); // stderr; never on the judged stream
 
   const uint32_t total = draws_between(G.rngStateAtReset, G.rng.a);
   const uint32_t outside = draws_between(G.rngStateAtReset, G.rngStateAtFrame1);

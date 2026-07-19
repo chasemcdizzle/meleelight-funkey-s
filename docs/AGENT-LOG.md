@@ -11703,3 +11703,288 @@ always assert the death CLASS, not just the exit code.
   on: device-specific additions add an inventory row in the same
   commit; driver enforces at review.
 - next: task 5 (live CPU integration).
+
+## iter 81 — 2026-07-19 — M4 task 5 PRE-REGISTRATION: live CPU integration — bridge retired from the live path + d1/d9 coverage goldens (frozen before any run/edit; PROCESS §2)
+
+- **Task (fix_plan §M4 task 5)**: (1) the sim's runAI site gains a LIVE
+  arm — the real C `ml_runAI` (port/sim/ai.c, task 4) drawing off the
+  seeded chain and writing the bank + bookkeeping itself; the AIBRIDGE1
+  arm stays in the tree as the M2 archival path (`--ai-bridge` retained,
+  documented); (2) g07/g08 replay LIVE (no bridge artifact) →
+  STREAM MATCH vs the frozen oracle streams via the unchanged
+  verify-stream.js; (3) two NEW CPU goldens at difficulty 1 and 9
+  recorded browser ×2-identity into `port/goldens-m4/` (NOT oracle/ —
+  HARD RULE 3), frozen, then live-replayed; (4) rule-16 re-survey
+  verdict recorded; (5) `bash port/sim/check-ai-live.sh` composes the
+  legs → `AI LIVE CONFORMS`, exit 0.
+- **BRIEF-vs-PLAN CONFLICT RULING (recorded prominently)**: the iter-81
+  brief's item 2 directs editing `port/sim/check-sim.sh` (switch its
+  g07/g08 arm to live AI). fix_plan §M4 conventions say the OPPOSITE,
+  verbatim: "`port/sim/check-sim.sh` (the M2 EXIT GATE) is NEVER
+  edited: its bridge-fed form stays the frozen M2 contract; M4 adds
+  live-AI checks alongside, never in place of it", and task 5's spec
+  ends "check-sim.sh untouched". CLAUDE.md HARD RULE 3 (never edit the
+  gates) + PROCESS ("where they overlap, the stricter rule wins")
+  resolve this: **check-sim.sh stays byte-untouched**; the live-AI
+  proof of g07/g08 runs inside check-ai-live.sh against the SAME frozen
+  streams with the SAME unchanged verify-stream.js judge — the
+  equivalence the brief wanted ("frozen streams don't move") is proven
+  without touching the gate. check-ai-live.sh additionally sha256-PINS
+  check-sim.sh's bytes (turning the "never edited" convention into a
+  mechanical check). Path note: the brief names
+  `port/sim/calib/check-ai-live.sh`; fix_plan's done-check is
+  `bash port/sim/check-ai-live.sh` — fix_plan governs (sibling of
+  check-sim.sh; it is a sim-level aggregator, not a calib rig).
+- **Design (frozen)**: link-seam constraint — check-sim.sh's TU list is
+  frozen and does NOT include ai.c, so no frozen-list TU may reference
+  `ml_runAI` directly. The live arm crosses a POINTER seam:
+  `ml_sim_runai_live` (extern fn ptr, defined NULL in sim_tick.c),
+  installed by a constructor in NEW `port/sim/sim/sim_ai_live.c` (the
+  live driver TU, linked ONLY into `sim_host_live` by check-ai-live.sh).
+  In the M2-gate build the pointer stays NULL and `--cpu` without
+  `--ai-bridge` errors exactly as today — the M2 contract is
+  byte-preserved AND behavior-preserved. sim_ai_live.c populates
+  MlAiSim per the iter-75 notes: live `&G.sim.player[k]` pointers,
+  cS/playerType copies, gameSettings.turbo truthiness, CTAB1
+  `ml_attributes[cS].multiJump`, an MlAiStage view (ledgePos from STAB1
+  — upstream never mutates it; ground/platform refreshed per call from
+  the LIVE stage plane so moving platforms stay faithful), the tagged
+  4×8 bank, and persistent `curentAction` slice state (static — one
+  match per process). GameState's bank widens `[4]` → `[4][8]`
+  (upstream aiInputBank is 8 rows; ai.js:357 reads `[i][1]`, which is
+  page-boot `inputData()` — value-identical to ai_null_input(), never
+  written). The bank-row alias + post-runAI slot-0 re-copy stay the
+  caller's job (ai_bridge.h contract), now common to both arms. runAI
+  draws flow through the logged `ml_random()` on `ml_active_rng` — NO
+  bridge draw-burn on the live arm. `--ai-cover` (new diagnostic flag)
+  dumps the ml_ai_cov table to stderr post-run via a second pointer
+  seam (coverage-delta evidence only, never gating). wrap-run.js gains
+  an OPTIONAL 4th positional (alternate manifest path) — additive; all
+  existing invocations byte-identical behavior. gfx_app does NOT gain
+  the live mode this task (its option surface is frozen-pinned by the
+  device-rig manifest and this task is host-side; registered deferral
+  to the device tasks 6/7/14, not a silent drop).
+- **d1/d9 golden choices (frozen)**: m01 = p1 fox(2) vs CPU **marth(0)
+  d1**, stage pstadium(2), name `m01-fox-marth-d1-pstadium`; m02 = p1
+  falcon(4) vs CPU **fox(2) d9**, stage dreamland(3), name
+  `m02-falcon-fox-d9-dreamland`. Rationale: marthAI + foxAI have never
+  run live as CPUs (g07 falcon = EMPTY falconAI body; g08 puff =
+  jiggsAI), so both char-AIs go live for the first time; d1/d9 flip the
+  measured difficulty-gated arms (ai.js:1285 `difficulty>1` else-arm at
+  d1; :547 platform-recovery `>=3` off at d1 / on at d9;
+  MissedTechPercent 85−20d → 65 at d1, −95 at d9 (always-tech);
+  CAPTURE mash threshold 8−2d → negative at d9 (always-burst); :1215
+  ledge-extra 15−d value spread); pstadium adds a never-CPU stage,
+  dreamland has full platforms for the d9 platform arm. Seed ladders
+  (in order, cap 4 each): m01 8101→8104, m02 8109→8112; manifest seed
+  doubles as the gen-trace seed (M0 convention, 3800-frame trace,
+  3600 verified frames).
+- **Recorder (frozen)**: `port/goldens-m4/` gains manifest.json +
+  record-m4.sh + freeze-stream-m4.js + check-quality.js. record-m4.sh
+  mirrors oracle/record.sh: two fresh browser runs via the UNCHANGED
+  oracle/harness/run.js (fdlibm shim default-on) → compare.js identity
+  → the M0 GAMEPLAY QUALITY CONTRACT checked MECHANICALLY from the run
+  JSON coverage (≥1 /^DEAD/ key in actionStatesSeen, ≥1
+  /^(DAMAGE|CAPTUREDAMAGE)/ key, exactly 2 stocks entries both ≥1,
+  playing===true, gameMode===3 — strict, fail closed) →
+  freeze-stream-m4.js (streamlib.js required by path from
+  oracle/harness — byte reuse, zero transcription; identical frozen
+  format incl. rngCallsOutsideStep==1 pin, param pins, deterministic
+  bytes, --refreeze semantics) into port/goldens-m4/<name>.sha256.json
+  → verify-stream.js self-check. oracle/ is READ-ONLY throughout.
+- **Run caps (frozen)**: browser runs ≤ 24 total (2 per record attempt
+  + 1 self-check per freeze; ≤ 4 seed attempts per golden); composed
+  check-ai-live.sh cold run ×1 plus ≤ 2 warm bring-up runs per leg;
+  teeth rebuilds ≤ 6. Docker/pipeline runs stay serial.
+- **Refutation shapes (frozen)**: (a) live g07/g08 divergence = a REAL
+  integration bug (bridge-vs-live semantics) — localize via
+  `--dump-frames` byte-diff vs `oracle/harness/run.js
+  --capture-frames` (M2CAL procedure), class-fix, NEVER epsilon; one
+  bounded evidence round, then stop and report. (b) d1/d9 divergence
+  with g07/g08 green = a rule-16 domain gap or an untranslated-arm bug
+  — FIRST record an aiport capture over the diverging trace + run
+  survey-shapes, THEN model-fix per the M2 discipline; one bounded
+  round. (c) browser ×2 non-identity on a new trace = try the next
+  seed (cap 4); persistent across seeds = determinism regression —
+  STOP and report (never freeze a flaky stream). (d) quality-contract
+  failure = next seed (cap 4); all four fail = STOP and report (the
+  contract is never loosened). (e) rngCalls mismatch with stream match
+  is impossible-by-construction to pass (verify-stream pins it) — any
+  such state is a divergence, shape (a)/(b).
+- **Rule-16 re-survey plan (frozen)**: the live path carries NO JS→C
+  marshal for the AI plane — every value originates in translated C
+  (tagged literal writes) or in already-modeled sim state; the
+  end-to-end oracle (bit-exact frozen-stream equality over the FULL
+  3600 frames, plus the rngCalls pin) is strictly stronger evidence
+  than a module-capture survey. DECISION: the ai-spec does NOT adopt
+  m01/m02 as carriers this task; justification recorded, escalation =
+  refutation shape (b). Any C trap firing on the new traces
+  (ml_from_ai tag guards, caps, ml_ai_out_of_domain) is treated as a
+  domain gap, not noise.
+- **Teeth (pre-registered)**: T1 bridge-file deletion → the live g07
+  replay is UNAFFECTED (bridge artifacts removed from build/, live run
+  still STREAM MATCH; also proves non-consumption). T2 live draw-site
+  perturbation (drop one seeded draw in ai.c, rebuild sim_host_live) →
+  stream divergence at/near the first AI-active frame + rngCalls
+  mismatch → verify-stream nonzero; restore by reverse edit +
+  0-divergence re-run (never `git checkout --`). T3 new-golden
+  judgment: (i) nibble the RUN-json side → verify-stream frame
+  rejection (proves per-frame judgment — the m3-task2 lesson: a frozen
+  -side nibble only trips the integrity seal); (ii) nibble a frozen
+  m01 COPY → seal rejection (proves the seal; restore). T4
+  check-quality.js fed a synthetic run JSON lacking DEAD / lacking
+  DAMAGE / with a 0 stock → three loud failures. T5 check-sim.sh
+  byte-pin: flip a byte in a THROWAWAY copy arrangement is
+  unexercisable without editing the gate — instead assert the pin
+  grammar by feeding the pin check a wrong expected hash in a temp
+  variant of check-ai-live.sh; simpler: tooth = run the pin check
+  function against a modified temp file path. (Bounded: if the T5
+  harness proves awkward, record the pin as assert-only with T5
+  dropped — noted in the result entry.)
+- **Success criteria**: cold `bash port/sim/check-ai-live.sh` →
+  `AI LIVE CONFORMS` exit 0 (composes check-sim.sh UNCHANGED
+  bridge-fed + live g07/g08 + live m01/m02 + check-ai-bridge.sh +
+  check-ai-replay.sh); teeth logged; frozen oracle goldens
+  byte-untouched (git status clean on oracle/); one atomic commit.
+
+## iter 81 — 2026-07-19 — M4 task 5 RESULT: live CPU integration — AI LIVE CONFORMS, all four CPU goldens bit-exact on the LIVE C AI, zero divergence rounds
+
+**DONE.** Cold done-check `bash port/sim/check-ai-live.sh` →
+`AI LIVE CONFORMS`, exit 0 (.loop/m4-task5-donecheck.log): [0] the
+check-sim.sh byte pin, [1] the UNCHANGED M2 EXIT GATE green in its
+bridge-fed form (SIM CONFORMS 8/8), [2] sim_host_live build + the
+M2-contract witness (the gate's own binary still refuses --cpu without
+--ai-bridge), [3] LIVE g07/g08 (no AIBRIDGE1 consumed) STREAM MATCH vs
+the frozen oracle streams, [4] LIVE m01/m02 STREAM MATCH vs the frozen
+port/goldens-m4/ streams, [5] AI BRIDGE OK (archival rig intact),
+[6] AI MATCH (aiport rig intact), no-commit guard.
+(SESSION NOTE, honest: the writer session dropped once on a transient
+API error mid-task — connection closed, not a usage limit; resumed via
+ground-truth-from-disk, no evidence affected.)
+
+**Landed**: sim.h GameState bank `[4]`→`[4][8]` (upstream aiInputBank is
+8 rows; ai.js:357 reads `[i][1]` — page-boot inputData(), never written)
++ the `ml_sim_runai_live`/`ml_sim_ai_cov_dump` pointer seams (defined
+NULL in sim_tick.c; documented link-seam rationale in sim.h);
+sim_tick.c runAI site: bridge arm iff hasBridge, else the LIVE arm via
+the seam, else loud fatal — the pollInputs alias slot-0 re-copy is now
+common to both arms; sim_main.c accepts `--cpu` WITHOUT `--ai-bridge`
+only when the live seam is installed (the M2-gate build's usage error is
+preserved bit-for-bit) + `--ai-cover` (stderr arm-table dump,
+diagnostic); NEW port/sim/sim/sim_ai_live.c (constructor-installed live
+driver: live player pointers, cS/pt copies, turbo truthiness, CTAB1
+multiJump, MlAiStage view — STAB1 ledgePos static + LIVE ground/platform
+per call so moving platforms stay faithful, persistent curentAction
+slice state); wrap-run.js optional 4th positional (alternate manifest —
+additive, default path byte-equivalent); NEW port/goldens-m4/
+{manifest.json, record-m4.sh, freeze-stream-m4.js, check-quality.js} —
+the M4 recorder reusing oracle/harness bytes BY PATH (run.js,
+compare.js, gen-trace.js, verify-stream.js, streamlib.js required by
+path; oracle/ read-only, HARD RULE 3); NEW port/sim/check-ai-live.sh
+(the composed done-check; whitelist-grammar posture: all stream
+judgments delegated to the unchanged strict verify-stream.js, inventory
+pins both-directions, no-reclaim run lock, rc-case-split no-commit
+guard, check-sim.sh sha256 byte pin turning fix_plan's "never edited"
+convention mechanical).
+
+**BRIEF DEVIATION (recorded, pre-registered)**: the brief's item 2
+("update check-sim.sh's g07/g08 invocation to live") was NOT performed —
+it contradicts HARD RULE 3 + fix_plan §M4 verbatim ("check-sim.sh is
+NEVER edited … M4 adds live-AI checks alongside, never in place of it";
+task 5: "check-sim.sh untouched"). The stricter rule wins (PROCESS
+preamble). The equivalence the brief wanted is proven in
+check-ai-live.sh: the same frozen streams, the same unchanged judge,
+live arm — bit-identity live-vs-bridge follows because BOTH pass the
+same frozen contract. Also: the done-check lives at
+`port/sim/check-ai-live.sh` (fix_plan's path), not the brief's
+`port/sim/calib/` variant. gfx_app does NOT grow the live mode this
+task (its option surface is pinned by the device-rig freeze manifest;
+host-side task) — REGISTERED deferral to the device tasks (6/7/14),
+where verify_m4.sh leg 1 requires live-AI g07/g08 on device.
+
+**The d1/d9 goldens (recorded facts)**:
+- m01 `m01-falcon-marth-d1-ystory` — falcon(4) vs CPU marth(0)
+  difficulty 1, ystory(1), seed 8114, 3600 frames, rngCalls=59,
+  rngCallsOutsideStep=1. Quality: KO=[DEADDOWN] (falcon SD),
+  hit=[DAMAGEN2,DAMAGEFLYN,DAMAGEFALL], stocks=[3,4], playing, mode 3.
+- m02 `m02-falcon-fox-d9-dreamland` — falcon(4) vs CPU fox(2)
+  difficulty 9, dreamland(3), seed 8109, 3600 frames, rngCalls=411,
+  rngCallsOutsideStep=1. Quality: KO=[DEADDOWN],
+  hit=[DAMAGEN2,DAMAGEFLYN,DAMAGEFALL], stocks=[3,4], playing, mode 3.
+Both recorded browser ×2 bit-identical (fdlibm shim on), frozen by
+freeze-stream-m4.js (M0-identical format), self-checked, then
+live-replayed by the C sim to STREAM MATCH. m01 additionally puts a
+MOVING-PLATFORM stage under a live CPU for the first time (the
+MlAiStage live platform refresh is exercised against ystory's rails).
+
+**PRE-REGISTRATION AMENDMENTS (recorded, with evidence)**: the frozen
+m01 choice (fox vs marth d1, pstadium, seeds 8101-8104) failed the
+quality contract 4/4 with a STRUCTURAL cause, not seed luck: (a) fox's
+random-trace damage output is LASER-dominated — percent without DAMAGE
+states (8101: marth 36% all-laser, zero DAMAGE keys; 8102: KO present
+but zero DAMAGE); (b) at d1, marthAI's entire turn/tilt/grab block is
+gated `pdiff >= 2` (ai.js:491) — the CPU deals no knockback, so the
+trace's only KO source is an SD, and (c) pstadium's wide blastzones
+suppress SDs (8103/8104: no KO). Amendment 1: p1 fox→falcon (melee
+damage → real DAMAGE states; SD-prone). Amendment 2: stage
+pstadium→ystory (small blastzones; bonus: moving-platform coverage).
+Amendment 3: ladder extended 8113/8114 after 8105-8108 spent (8105-8106
+pstadium: no KO; 8107/8113 ystory: DAMAGE-or-KO near misses). All
+within the FROZEN global cap: 24 browser runs used exactly (11 record
+attempts ×2 + 2 freeze self-checks are verify-only). m02 passed on its
+first seed (8109). The quality contract itself was never loosened.
+
+**Rule-16 re-survey VERDICT (as pre-registered)**: the ai-spec does NOT
+adopt m01/m02 as capture carriers. Justification: the live path has NO
+JS→C marshal on the AI plane — every value originates in the translated
+C (exact literal tags) or already-modeled sim state; the binding check
+is END-TO-END bit-exact frozen-stream equality over the full 3600
+frames + the rngCalls pin, on all four CPU goldens — strictly stronger
+than a module-capture survey. No C trap (aiv tag guards, caps,
+ml_ai_out_of_domain, ml_from_ai) fired on either new trace; zero
+divergences. Escalation path (a capture + survey-shapes over a
+diverging trace) stays registered for any future divergence.
+
+**Live-arm coverage delta (--ai-cover, measured; g07+g08 live vs
+m01+m02)**: NEWLY LIVE — FOX_REACT (93), FOX_RESPAWN_MACHINE (152),
+FOX_RESPAWN_TRIGGER (1), FOX_SHDL_DO (126), FOX_SHDL_TRIGGER (9),
+FOX_TILT (69), FOX_TURN (6) (all m02, the d9 fox) + GEN_TW_CLEAR (1,
+m01). d1 coverage is the OFF side: marthAI's `pdiff>=2` gate false
+every call — MARTH_TURN/TILT/REACT remain zero-live BY CONSTRUCTION at
+d1 (honest note: a marth CPU at d>=2 is still uncovered live; the
+task-4 sweep covers marthAI record-level). Still zero-live overall: the
+GEN_* arms whose triggers need human-vs-human states (grab/capture
+mash, SDI, shield-react, runoff, platdrop, tech...), H_* helpers behind
+them, FOX_LEDGESTALL, FOX_RESPAWN_INARR (measured-dead), MARTH_*.
+Difficulty VALUE spreads exercised: MissedTechPercent 85−20d, mash
+threshold 8−2d, ledge-extra 15−d — live d1/d9 values now on record.
+
+**Teeth (.loop/m4-task5-teeth.log; all fired)**: T1 bridge-artifact
+deletion → live g07 STREAM MATCH with zero bridge files on disk
+(non-consumption). T2 live draw-site drop (ai.c :609, g08 carrier) →
+divergence at frame 293 + rngCalls 1575≠1496, verify rc=2; reverse-edit
+restore → STREAM MATCH. T3(i) run-side nibble → per-frame rejection
+rc=2; T3(ii) frozen-COPY nibble → integrity-seal rejection BEFORE frame
+comparison (m3-task2 lesson, re-proven). T4 check-quality probes ×5
+(no-DEAD / no-DAMAGE / 0-stock / not-playing / missing-stocks) all
+loud-fail + positive control OK. T5 byte-pin variant with wrong pin →
+loud refusal before any run.
+
+**Regressions green (composed INTO the done-check)**: check-sim.sh (SIM
+CONFORMS, bridge-fed, byte-untouched — pin-proven), check-ai-bridge.sh
+(AI BRIDGE OK), check-ai-replay.sh (AI MATCH). gfx TU compile smoke
+green against the changed sim headers (gfx_app/render/overlay/replay +
+sim_boot/sim_tick). PORTABILITY.md: no new rows (host-side; ai.c
+already Layer 0).
+
+**ZOOM-OUT note**: the link-seam problem ("a frozen gate build must not
+see new symbols") got a CLASS mechanism — the constructor-installed
+pointer seam outside GameState (memset-safe) — reusable for any future
+frozen-build-plus-extension split (target sim, FOH drivers). The
+quality-contract failures were diagnosed to structural causes before
+amending (measurement over seed-fishing); the laser-damage-without-
+DAMAGE-state shape is now on record for future trace selection. Tier-B
+review round for the sim TUs + Tier-A arc for the new scripts
+(check-ai-live.sh, record-m4.sh, freeze-stream-m4.js, check-quality.js)
+are DRIVER-SCHEDULED next (the m4 freeze manifest will pin them at task
+14; arc-pending status noted for verify_m4.sh's authoritative mode).
