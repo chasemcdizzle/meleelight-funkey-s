@@ -44,9 +44,10 @@
 // - NEUTRALSPECIAL{GROUND,AIR} (shield breaker): phys.shieldBreaker*
 //   trio + player.shieldBreakerID (Howl play id) modeled since task 9;
 //   `player[p].shieldBreakerID = sounds.shieldbreakercharge.play()`
-//   CONSUMES the Howl id — an ORACLE-FED SEAM (mv_howl_play_id below;
-//   the id is a global howler counter, unrecoverable chain state — the
-//   task-5 launch-getter discipline);
+//   CONSUMES the Howl id — an ORACLE-FED SEAM in the replay
+//   (ml_howl_play_id / ml_howl_id_oracle, ml_events.h — M4 task 6;
+//   the id is a global howler counter, unrecoverable chain state in
+//   the capture domain — the task-5 launch-getter discipline);
 //   `sounds.shieldbreakercharge.stop(id)` is a stop token
 //   ("shieldbreakercharge.stop"). The timer-46 arm writes
 //   hitboxes.id[i].dmg — upstream this MUTATES the GLOBAL charHitboxes
@@ -95,15 +96,17 @@ extern bool mv_marth_pair(const char *state, const char *key, double idx,
 // this.<key>.length — missing key traps.
 extern double mv_marth_arr_len(const char *state, const char *key);
 
-// --- Howl play-id oracle seam ------------------------------------------------
+// --- Howl play-id seam (M4 task 6 form) --------------------------------------
 // `player[p].shieldBreakerID = sounds.shieldbreakercharge.play()` — the
 // returned id is howler's GLOBAL play counter (advanced by every sound in
-// the match, most outside this cluster's records): unrecoverable chain
-// state, so the capture records each consumed id in the record's post
-// "sbid" list and the driver injects it here (task-5 launch-getter
-// discipline). The driver re-emits consumed ids so count/order teeth live
-// in the post compare (plus the id itself lands in player.shieldBreakerID).
-extern double mv_howl_play_id(const char *name);
+// the match, most outside this cluster's records). The call sites now use
+// ml_howl_play_id (ml_events.h): in the integrated sim the id derives
+// from the sim's own play-event count (howler-parallel, off the checksum
+// surface); the moves-marth replay driver still injects the RECORDED
+// browser ids (the capture's post "sbid" list) via the ml_howl_id_oracle
+// hook — the oracle-fed seam semantics are unchanged, only the seam's
+// plumbing moved to ml_events.c (task-6 class fix: one id plane, not one
+// counter per binary).
 
 // --- hitboxes.id[idx].dmg write (rule-10 element-field mirror) ---------------
 static inline void mv_hb_set_dmg(MlSim *S, double p, int idx, double v) {

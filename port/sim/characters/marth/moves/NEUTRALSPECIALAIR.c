@@ -58,7 +58,8 @@ static AsTri mr_main(MlSim *S, double p, const MlInputBuffer in[4],
       pl->phys.shieldBreakerChargeAttempt = false;
       pl->colourOverlayBool = false;
       pl->timer = 42;
-      ml_sound_stop("shieldbreakercharge.stop");
+      ml_sound_stop_id("shieldbreakercharge.stop",
+                       pl->hasShieldBreakerID ? 1 : 0, pl->shieldBreakerID);
     }
   }
   if (pl->phys.shieldBreakerCharging) {
@@ -70,7 +71,8 @@ static AsTri mr_main(MlSim *S, double p, const MlInputBuffer in[4],
       pl->phys.shieldBreakerCharging = false;
       pl->phys.shieldBreakerChargeAttempt = false;
       pl->colourOverlayBool = false;
-      ml_sound_stop("shieldbreakercharge.stop");
+      ml_sound_stop_id("shieldbreakercharge.stop",
+                       pl->hasShieldBreakerID ? 1 : 0, pl->shieldBreakerID);
     }
   }
 
@@ -96,7 +98,7 @@ static AsTri mr_main(MlSim *S, double p, const MlInputBuffer in[4],
     } else if (pl->timer == 11) {
       ml_sound_play("shieldbreakercharge");
       pl->hasShieldBreakerID = true;
-      pl->shieldBreakerID = mv_howl_play_id("shieldbreakercharge");
+      pl->shieldBreakerID = ml_howl_play_id("shieldbreakercharge");
     } else if (pl->timer == 43) {
       ml_sound_play("shieldbreakershout");
       ml_sound_play("shieldbreaker2");

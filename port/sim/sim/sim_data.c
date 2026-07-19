@@ -908,10 +908,6 @@ void mv_hq_push6(MlSim *S, double a, double b, double c, bool d, bool e,
   (void)S; (void)a; (void)b; (void)c; (void)d; (void)e; (void)f;
   sim_fatal("mv_hq_push6 reached in test main");
 }
-double mv_howl_play_id(const char *name) {
-  (void)name;
-  sim_fatal("mv_howl_play_id reached in test main");
-}
 void mv_article_laser(MlSim *S, double p, double x, double y, double rotate) {
   (void)S; (void)p; (void)x; (void)y; (void)rotate;
   sim_fatal("mv_article_laser reached in test main");

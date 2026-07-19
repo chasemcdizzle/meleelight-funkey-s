@@ -1544,6 +1544,37 @@ overruns):
   the registered coverage hole closes here, not by assertion).
   done-check: `bash port/gfx/check-mixer-fidelity.sh` → prints
   `MIXER FIDELITY OK`, exit 0.
+  **DONE (iter 82, 2026-07-19) — committed form**: cold done-check
+  `MIXER FIDELITY OK (goldens=11 diff=bit-identical maxvoices=9
+  steals=2 s01stops=4)` exit 0 (.loop/m4-task6-donecheck.log; composes
+  check-sim.sh). Differential: sim_host_snd (snd_events_tap.c
+  constructor TU; STREAM-MATCH-guarded schedules) → snd_render.c (the
+  snd_mixer.h math verbatim, offline) vs snd_reference.js (INDEPENDENT
+  impl from SND1 + vendored-howler semantics; unlimited + capped-8
+  modes) — BIT-IDENTICAL 11/11 goldens vs the capped reference and
+  9/9 vs unlimited where concurrency ≤ 8 (MEASURED: g06/m02 peak 9
+  voices, 1 steal each = the registered device-vs-browser exposure;
+  zero divergence rounds). Real ids: the id plane lives ONCE in
+  ml_events.c (ml_howl_play_id = 1000 + play count, howler-parallel,
+  off-surface; ml_sound_stop_id enqueues identical token bytes + feeds
+  ml_snd_stop_id_sink; mixer stop(id) = howler semantics incl.
+  stale-id no-op; calib ml_howl_id_oracle preserves the marth sbid
+  injection; sim_tick.c's dead counter = registered cleanup, no-edit
+  window). FOUND+FIXED (zero-coverage latent bug): as_shieldDepletion's
+  SHIELDBREAKFALL dispatch was note-only — a depletion break left the
+  victim IN GUARD; + SHIELDBREAKFALL.land's missing-normal trap
+  contradicted upstream's 2-arg landType-1 call (god-array jank →
+  DX_NUM NaN arm; sweep's 3-arg form kept). NEW GOLDEN s01
+  (port/goldens-snd/ — location = concurrent-review constraint; fold
+  into goldens-m4 post-arc, registered): crafted deterministic trace
+  (gen-s01-trace.js), browser ×2 first-attempt, quality contract,
+  C replay bit-exact 3600/3600 rngCalls=57; ALL FOUR stop arms live
+  (NSG release 191 · NSG auto-122 697 · hitdet-FURAFURA 701 ·
+  FURAFURA-wake 1419). Teeth 6/6 incl. stop-id-skew (id routing
+  load-bearing) + steal-flip on g06's real steal. Regressions:
+  ASSHORT/MOVES SHARED/MOVES marth/HITDET MATCH + RENDER OK.
+  Honest: NSA charge arms + FURASLEEP variant zero-live; device rung
+  (audio-on + offline-render cmp on device) = task 7/14 deferral.
 - task 7 — **music streaming from SD**: the M1 music PCM packed to
   device SD; 2×64 KB double-buffer streamer TU feeding the mixer's
   music voice (Start/Loop sprite windows from sounds.json); device g01

@@ -10,6 +10,14 @@ MlEvents ml_events;
 MlRng *ml_active_rng = 0;
 void (*ml_snd_sink)(const char *name) = 0;   // M3 task 6 (header note)
 void (*ml_vfx_sink)(const MlVfx *cfg) = 0;   // M4 task 1 (header note)
+void (*ml_snd_stop_id_sink)(const char *nameDotStop, int hasId,
+                            double id) = 0;  // M4 task 6 (header note)
+double (*ml_howl_id_oracle)(const char *name) = 0; // calib injection only
+
+// Play-event count since process start (howler-global-counter parallel;
+// NEVER reset — upstream's Howler._counter is page-global). Module
+// state, deliberately not in MlEvents: ml_ev_reset must not touch it.
+static unsigned long long g_snd_play_count = 0;
 
 void ml_ev_reset(void) {
   ml_events.snd_count = 0;
@@ -131,6 +139,7 @@ void ml_drawVfx_laser(const char *name, double x, double y, double face,
 void ml_sound_play(const char *name) {
   if (ml_events.snd_count >= ML_EV_CAP) ml_events_fail("sound queue overflow");
   ml_events.snd[ml_events.snd_count++] = name;
+  g_snd_play_count++; // howler: every play() allocates ++Howler._counter
   if (ml_snd_sink) ml_snd_sink(name);
 }
 
@@ -138,6 +147,20 @@ void ml_sound_stop(const char *nameDotStop) {
   if (ml_events.snd_count >= ML_EV_CAP) ml_events_fail("sound queue overflow");
   ml_events.snd[ml_events.snd_count++] = nameDotStop;
   if (ml_snd_sink) ml_snd_sink(nameDotStop);
+}
+
+void ml_sound_stop_id(const char *nameDotStop, int hasId, double id) {
+  // Token enqueue + plain-sink forward: byte-identical to ml_sound_stop
+  // (the capture/checksum comparison surface never sees the id).
+  ml_sound_stop(nameDotStop);
+  if (ml_snd_stop_id_sink) ml_snd_stop_id_sink(nameDotStop, hasId, id);
+}
+
+double ml_howl_play_id(const char *name) {
+  if (ml_howl_id_oracle) return ml_howl_id_oracle(name); // calib injection
+  // id of the play event this call site just fired (header note):
+  // howler ids start above 1000, one per play().
+  return (double)(1000ull + g_snd_play_count);
 }
 
 void ml_dispatch_note(const char *phase, const char *move) {

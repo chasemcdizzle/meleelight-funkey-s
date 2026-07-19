@@ -1189,7 +1189,8 @@ void hd_executeHits(MlSim *S, HdQueues *q) {
 
     // if in furafura, make sure sfx stops (:761)
     if (strcmp(P(S, v)->actionState, "FURAFURA") == 0) {
-      ml_sound_stop("furaloop.stop"); // sounds.furaloop.stop(furaLoopID)
+      // sounds.furaloop.stop(player[v].furaLoopID) — id-routed (M4 task 6)
+      ml_sound_stop_id("furaloop.stop", 1, P(S, v)->furaLoopID);
     }
     // switch (hitbox.type) — strict matching
     if (hitbox->type == 2) {

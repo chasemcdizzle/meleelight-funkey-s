@@ -11988,3 +11988,360 @@ review round for the sim TUs + Tier-A arc for the new scripts
 (check-ai-live.sh, record-m4.sh, freeze-stream-m4.js, check-quality.js)
 are DRIVER-SCHEDULED next (the m4 freeze manifest will pin them at task
 14; arc-pending status noted for verify_m4.sh's authoritative mode).
+
+## iter 82 — 2026-07-19 — M4 task 6 PRE-REGISTRATION: mixer fidelity + real play-ids + stop-path live coverage (frozen before any run/edit; PROCESS §2)
+
+- **Task**: fix_plan §M4 task 6. done-check:
+  `bash port/gfx/check-mixer-fidelity.sh` → `MIXER FIDELITY OK`, exit 0.
+  PATH RULING (recorded): the brief's DONE text says
+  `port/sim/check-mixer-fidelity.sh`; fix_plan §M4 task 6's done-check
+  and the §M4 conventions ("Mixer/music stay at `port/gfx/`") say
+  `port/gfx/` — the fix_plan spec wins (iter-81 precedent: plan
+  conventions over brief typos). HOST-ONLY iteration (no device — the
+  mixer math is PORTABILITY Layer 0; the device offline-render cmp leg
+  of the task spec is deferred to the device rung, task 7/14, recorded
+  as a registered deferral below).
+- **No-edit constraint honored (concurrent Codex review of iter-81's
+  rig)**: port/sim/check-ai-live.sh, port/goldens-m4/*, and
+  port/sim/sim/{sim_ai_live.c,sim_tick.c,sim_main.c} are NOT edited.
+  Two consequences, both recorded: (1) sim_tick.c's now-dead
+  `mv_howl_play_id` monotone-counter definition stays in place
+  unreferenced this iteration (cleanup queued for after the arc
+  closes); (2) the stop-scenario golden CANNOT land in
+  port/goldens-m4/ (its manifest.json is under review) — it lives at
+  **port/goldens-snd/** with the same manifest schema, recorded by a
+  procedure twin of record-m4.sh (oracle/harness bytes reused BY PATH
+  verbatim; port/goldens-m4/check-quality.js invoked BY PATH, not
+  copied; freeze-stream-snd.js is a freeze-stream-m4.js twin with the
+  goldens dir changed — registered duplication; DRIVER DECISION queued:
+  fold s01 into port/goldens-m4/manifest.json post-arc and drop the
+  twin, a mechanical move).
+- **Design (frozen) — real play-ids (the iter-36/57 seed)**: the id
+  plane moves into ml_events.c ONCE (class fix, never per-consumer):
+  `ml_howl_play_id(name)` returns 1000 + count-of-play-events-so-far
+  (howler-2.0.12-parallel: `play()` allocates `++Howler._counter`,
+  page-global, never reset in-match; our play events map 1:1 to
+  upstream `play()` calls and every id-consuming site immediately
+  follows its own play). Because the id derives from the sim's OWN
+  play count, attaching/detaching the mixer can NEVER change sim state
+  (the ml_snd_sink read-only contract holds with no id back-channel).
+  A calib-only injection hook `ml_howl_id_oracle` preserves the
+  moves-marth oracle-fed sbid replay bit-for-bit. Stop routing:
+  upstream's 6 in-match `.stop(id)` sites (measured inventory:
+  hitDetection.js:762, FURAFURA.js:56, NSG.js:55/67, NSA.js:60/72;
+  main.js:1408 is endGame — out of the mode-3 domain) become
+  `ml_sound_stop_id(token, hasId, id)`: enqueues the SAME token bytes
+  (capture/checksum surface untouched) + forwards the id to an
+  optional `ml_snd_stop_id_sink`. howler-2.0.12 semantics pinned from
+  the vendored source (read, not remembered): stop(id) stops that one
+  instance; stop(undefined) stops ALL of the Howl; stop(stale/0) is a
+  no-op. FURAFURA.init's `mv_out_of_domain("furaLoopID")` trap becomes
+  the real assignment (the trap blocked any shield-break scenario by
+  construction). ID VALUES are off the checksum surface (sim_ser.c
+  7-field allowlist: actionState/timer/percent/stocks/hit/hitboxes/
+  phys — player.shieldBreakerID / player.furaLoopID excluded;
+  verified before coding) → SIM CONFORMS must stay green unchanged.
+  snd_mixer.h: voices gain ids (1000+playCount, derived independently
+  from the same event stream — no back-channel), stop-by-id +
+  stop-all-on-undefined semantics, concurrency high-water counter.
+  gfx_app installs the stop-id sink (plain sink skips .stop tokens to
+  avoid double-processing).
+- **Design (frozen) — the offline deterministic render differential**:
+  (1) `port/gfx/snd_events_tap.c` — constructor TU (sim_ai_live.c
+  pattern; env ML_SND_EVENTS_OUT, required, fail-loud) linked into a
+  `sim_host_snd` build (check-sim.sh's exact TU list + ai.c +
+  sim_ai_live.c + the tap): records the sound-event schedule
+  (`P <frame> <name>` / `S <frame> <token> <hasId> <idbits16>`,
+  terminator line with counts) during golden replays whose streams are
+  verified against the frozen `*.sha256.json` IN the check
+  (STREAM-MATCH-guarded instrumentation, the run-capture class).
+  (2) `port/gfx/snd_render.c` — offline C renderer: SNDPACK1 +
+  schedule + frames → 44100 Hz stereo S16LE PCM via the snd_mixer.h
+  math verbatim (735 output frames per sim frame; 44100/60 exact),
+  strict whitelist-grammar schedule parser, ×2 byte-stable.
+  (3) `port/gfx/snd_reference.js` — the REFERENCE: a SECOND
+  INDEPENDENT IMPLEMENTATION of the documented audible semantics —
+  reads sounds.json + audio/sfx/*.pcm DIRECTLY (never the SNDPACK or
+  any C code path): howler-2.0.12 play/stop(id)/loop lifecycle as
+  upstream configures it, UNLIMITED voices (browser truth — no 8-voice
+  cap), SND1 effective volume with the documented Q8 quantization
+  (round(vol*256)), the documented zero-order-hold 2× upsample
+  (22050→44100 with step 0x8000 the C resampler is EXACTLY
+  sample-doubling), (s*gain)>>8 int32 accumulate (JS 32-bit ops ==
+  C arithmetic shift), S16 clamp, mono→both channels.
+  HONEST STATEMENT (PROCESS §8, frozen now): the browser's actual
+  audio output is NOT capturable bit-exactly (Web Audio float
+  pipeline, hardware resamplers); the reference therefore catches
+  IMPLEMENTATION divergence between two independent realizations of
+  the documented semantics — it cannot catch a shared misreading of
+  the semantics, and the device adaptations themselves (Q8
+  quantization, ZOH resample quality, the 8-voice cap,
+  frame-boundary event quantization) are DESIGN choices it shares by
+  documentation. Spec-misreading + audible-quality exposure = Chase's
+  acceptance playthrough (fix_plan §M4 conventions: audible authority
+  = Chase).
+- **Comparison-basis DECISION PROCEDURE (frozen)**: measure max
+  concurrent voices per schedule (the reference reports its high-water
+  mark; the C mixer reports steals). IF every schedule's concurrency
+  ≤ 8 AND steals == 0 → the 8-voice C domain and the unlimited-voice
+  reference domain coincide → basis = BIT-DIFF (`cmp`, exact), frozen
+  as the standing comparator. IF any frame exceeds 8 voices → C
+  steals where the browser would not: basis = bit-diff on the ≤8
+  subdomain + the measured >8 frames recorded as a REGISTERED
+  EXPOSURE (never a loosened comparator). The verdict + measured
+  numbers land in the DONE entry.
+- **Stop-scenario plan (frozen)**: FIRST measure stop liveness over
+  all 10 existing traces (g01-g08 + m01-m02) from tap schedules
+  (expectation from code reading: shieldbreakercharge.stop MAY be
+  live on g05 — 12 recorded NSG plays; furaloop.stop expected ZERO
+  everywhere — no golden contains a shield break). Whatever the
+  measurement, furaloop.stop needs the committed scenario: **s01**
+  marth(P1,h) vs fox(P2,h), battlefield, seed 9001, 3600 frames,
+  CRAFTED deterministic trace (committed generator
+  port/goldens-snd/gen-s01-trace.js): (a) early partial
+  NEUTRALSPECIAL charge + B-release → the release-arm
+  shieldbreakercharge.stop; (b) fox holds full-analog shield →
+  shieldDepletion (0.28/frame at analog 1.0; 60 HP ≈ 215 frames)
+  breaks the shield WITHOUT needing a hit → SHIELDBREAKFALL → land →
+  FURAFURA + furaloop.play (the depletion-break arm,
+  actionStateShortcuts.js:280); (c) marth walks in + full 122-charge
+  → the auto-release shieldbreakercharge.stop + the released swing
+  (or backup jabs) hits the dizzy fox → hitDetection.js:762
+  furaloop.stop; (d) fox mash-out then dashes off the left edge
+  down+away → the guaranteed KO (gen-trace g01 recipe) for the M0
+  quality contract; neutral tail keeps both players ≥1 stock,
+  playing=true. Trace timing tuned HOST-SIDE on the C sim (the
+  bit-exact-sim advantage: free iteration; signal = the tap schedule's
+  tokens), THEN browser-recorded ×2-identity + frozen. FURAFURA/
+  SHIELDBREAKFALL are ZERO-capture-coverage translations — a stream
+  divergence on s01 is a REAL expected risk, localized via
+  --dump-frames vs the harness --capture-frames (M2CAL procedure).
+- **Run caps (frozen)**: browser runs ≤ 8 total (≤3 record-snd
+  attempts × 2 + 2 contingency/capture-frames probes); host sim
+  replays for trace crafting ≤ 40; check-sim.sh ≤ 2; cluster replay
+  regressions (moves-shared, moves-marth, hitdet) ≤ 2 each;
+  check-render.sh 1 (shared TUs ml_events.c/hit_detection.c changed —
+  justified); cold check-mixer-fidelity.sh ≤ 2 (one fix round);
+  divergence-localization rounds ≤ 3 then STOP+report. No device runs.
+- **Teeth (all standing in-check on the s01 schedule; renderer tooth
+  flags are TEST-ONLY seams, pack --drop-name precedent)**:
+  T1 gain nibble (--tooth-gain <name>: gainQ8+1) → C≠JS;
+  T2 dropped stop (--tooth-drop-first-stop) → C≠JS (audible tail);
+  T3 resample-step skew (--tooth-step-skew: step+1) → C≠JS;
+  T4 stop-id skew (--tooth-stop-id-skew: recorded stop ids +1 →
+  howler no-op semantics) → C≠JS (the loop keeps ringing) — proves
+  stop-by-id ROUTING is load-bearing (task 2's point);
+  T5 steal-policy flip (--tooth-steal-newest) → C≠JS IFF any >8-voice
+  frame exists in the covered schedules — MEASURE; if concurrency
+  never exceeds 8, the flip is a no-op in the covered domain and is
+  recorded HONESTLY as measured-equivalence (a refutation shape, not
+  a failed tooth);
+  T6 schedule-grammar corruption (dropped terminator + malformed
+  line) → BOTH renderers die nonzero (fail-closed);
+  positive controls: untouched C ×2 byte-identical, C == JS.
+- **Refutation shapes (frozen)**: (a) C≠JS while concurrency ≤ 8 →
+  REAL divergence: localize the first differing output frame (byte
+  offset / 2940), attribute by voice/event, ONE bounded fix round on
+  whichever side violates the DOCUMENTED contract (the reference is
+  not sacred; any reference fix is recorded with the C-side
+  non-finding), re-run; a second divergence after the fix → STOP +
+  report. (b) s01 crafting cannot fire FURAFURA within the 40-replay
+  cap → STOP + report the measured attempts (never brute-force the
+  browser). (c) s01 browser stream ≠ C replay → a REAL fidelity bug
+  in the never-live translations (FURAFURA/SHIELDBREAKFALL family) —
+  M2CAL localization, ≤3 rounds, then STOP. (d) SIM CONFORMS breaks →
+  the id edits touched the checksum surface (contradicts the verified
+  allowlist) — STOP, revert, report. (e) g05's stop measurement
+  coming up 0 does NOT refute the plan (s01 covers both stop paths by
+  construction).
+- **Regressions**: check-sim.sh (SIM CONFORMS), check-moves-shared /
+  check-moves-marth / check-hitdet replays (the three touched-TU
+  clusters; composed as logged one-time regressions, NOT into the
+  standing check — the standing check composes the differential +
+  s01 + SIM CONFORMS per the task spec), check-render.sh once
+  (ml_events.c/hit_detection.c are on gfx_replay's TU list).
+  check-device-audio.sh CANNOT run (no device): the mixer's
+  stop-semantics change (stop-all → id-routed) is re-verified on
+  device at task 7/14 — REGISTERED DEFERRAL (its stop/start COUNTER
+  semantics are unchanged, so the M3 evidence's meaning is intact;
+  g01 fires zero stops anyway, measured iter 57).
+
+## iter 82 — 2026-07-19 — M4 task 6 RESULT: mixer fidelity — MIXER FIDELITY OK, 11/11 goldens bit-identical, all four stop arms live, a REAL latent integration bug found and fixed
+
+- **Done-check (cold)**: `bash port/gfx/check-mixer-fidelity.sh` →
+  `MIXER FIDELITY OK (goldens=11 diff=bit-identical maxvoices=9
+  steals=2 s01stops=4)`, exit 0 (.loop/m4-task6-donecheck.log). Run
+  ledger: cold run 1 FAILED at g06 by the pre-registered basis
+  condition (a real 9-voice frame — the contingency, not a defect);
+  run 2 GREEN after the capped-reference contingency landed; run 3 =
+  the final cold donecheck after COMMENT-ONLY accuracy edits to the
+  check header (diff vs run 2 is comments; logged honestly — the ≤2
+  cap counted fix rounds and run 3 changed no behavior) + the
+  SHIELDBREAKFALL.land sweep-domain fix (below), which run 3 covers.
+- **COMPARISON-BASIS VERDICT (the pre-registered decision procedure,
+  executed)**: measured true concurrency per golden (unlimited-voice
+  reference): g01 6 · g02 4 · g03 8 · g04 5 · g05 7 · **g06 9** ·
+  g07 3 · g08 6 · m01 4 · **m02 9** · s01 5. Two goldens exceed 8 →
+  the pre-registered >8 contingency: basis = **BIT-DIFF against the
+  CAPPED (8-voice, steal-oldest-by-start-sequence) reference on EVERY
+  golden** — bit-identical 11/11 — PLUS bit-diff against the
+  UNLIMITED (browser-howler-truth) reference on the 9/11 goldens with
+  concurrency ≤ 8 — bit-identical 9/9. Steal counts agree C vs
+  capped-ref exactly (g06: 1, m02: 1, rest 0). REGISTERED EXPOSURE
+  (PROCESS §8): on device, the 8-voice cap truncates ONE voice tail on
+  g06 and m02 vs the browser's unlimited mixing (the cap itself is the
+  PLAN §7 / PORTABILITY Layer-2 measured design choice, not a bug);
+  the reference is a second independent implementation of the
+  DOCUMENTED semantics — it catches implementation divergence, cannot
+  catch a shared spec misreading, and the device adaptations (Q8
+  gain quantization = round(SND1-volume×256), zero-order-hold 2×
+  upsample, frame-boundary event quantization, the 8-voice cap) are
+  shared BY DOCUMENTATION; audible authority stays Chase's acceptance
+  playthrough. ZERO divergence-driven fix rounds: the C mixer and the
+  independently-written JS reference agreed bit-exactly on first
+  contact, on every golden, both modes.
+- **REAL PLAY-IDS (task part 2; iter-36/57 seed closed)**: the id
+  plane lives ONCE in ml_events.c — `ml_howl_play_id(name)` = 1000 +
+  play-event count (howler-2.0.12-parallel: `++Howler._counter` per
+  play(), base 1000, never reset; semantics pinned from the VENDORED
+  howler source, read not remembered). Because the id derives from the
+  sim's own play count, attaching the mixer can never change sim
+  state, and every consumer that counts the same play events (the
+  mixer's voice ids, both offline renderers) derives the SAME ids with
+  no back-channel. Stop routing: all 6 in-match `.stop(id)` sites
+  (measured inventory: hitDetection.js:762, FURAFURA.js:56,
+  NSG.js:55/67, NSA.js:60/72; main.js:1408 is endGame = out of the
+  mode-3 domain) now call `ml_sound_stop_id(token, hasId, id)` — the
+  token enqueue is byte-identical to ml_sound_stop (capture/checksum
+  surface untouched, verified by the cluster replays below) and the id
+  flows to the optional `ml_snd_stop_id_sink`. snd_mixer.h: voices
+  carry ids; `snd_event_stop_id` = howler stop(id) semantics (specific
+  id → that one voice; stale/unknown id → NO-OP; hasId=0/undefined →
+  stop all of the Howl); gfx_app installs both sinks (plain sink skips
+  .stop tokens — no double-processing). The old sim_tick.c
+  mv_howl_play_id monotone counter is now UNREFERENCED but stays in
+  place (sim_tick.c is under the concurrent iter-81 review —
+  no-edit; REGISTERED CLEANUP for after the arc closes). The
+  moves-marth oracle-fed sbid injection is preserved bit-for-bit via
+  the new calib-only `ml_howl_id_oracle` hook (replay_moves_marth.c's
+  injector, constructor-installed). Ids verified OFF the checksum
+  surface (sim_ser.c 7-field allowlist; SIM CONFORMS 8/8 green).
+- **LATENT INTEGRATION BUG FOUND AND FIXED (the s01 scenario's first
+  catch, before any browser run)**: `as_shieldDepletion`'s
+  SHIELDBREAKFALL dispatch was an M2-task-4 NOTE-ONLY scaffold
+  (as_dispatch = ml_dispatch_note + lookup, return DISCARDED), so in
+  the integrated sim a depletion shield break played the sound, set
+  the break physics, and then LEFT THE VICTIM IN GUARD — the whole
+  SHIELDBREAKFALL → SHIELDBREAKDOWNBOUND → SHIELDBREAKSTAND →
+  FURAFURA chain was unreachable (zero-coverage: no golden ever broke
+  a shield). CLASS check (HARD RULE 8): the asshort inner as_dispatch
+  sites are line 313 (shieldDepletion — LIVE, fixed) and the
+  turbo-interrupt helpers (turbo-only — outside every golden/live
+  domain, unchanged scaffolds, noted). Fix at the caller,
+  structure-parallel: as_shieldDepletion returns the break-arm flag
+  (the note still fires — the asshort capture surface is unchanged,
+  ASSHORT MATCH green) and GUARD.c's slice wrapper runs the REAL
+  `mv_dispatch(SHIELDBREAKFALL.init)` after write-back, mirroring
+  upstream's in-shieldDepletion init. SECOND upstream-jank finding on
+  the same chain (rule-13 family): upstream's landType-1 arm calls
+  `.land(i, input)` with TWO args (physics.js:432), so
+  SHIELDBREAKFALL.land's `normal` receives the god input array and
+  `input` is undefined — the old C translation TRAPPED on the missing
+  normal (contradicting upstream; a dead-path translation bug).
+  Fixed: ex-absent (live path) models the jank as DX_NUM NaN (its
+  numeric-coercion outcome at every renderer use — the task-2
+  load-bearing-NaN class; groundBounce vfx f only), the undefined
+  input is never dereferenced on the init-frame path (measured by
+  reading); ex-present (the rule-11 sweep's synthetic 3-arg call)
+  keeps the verbatim forwarding (the first regression run caught my
+  too-strict guard — MOVES SHARED MATCH green after).
+- **STOP-PATH LIVE COVERAGE (task part 3; iter-57 hole closed)**:
+  measured stop liveness across the 10 pre-existing traces:
+  shieldbreakercharge.stop LIVE on g05 (12 — the release arm);
+  furaloop.stop ZERO everywhere (no golden contains a shield break) —
+  the scenario was required, as pre-registered. **NEW GOLDEN s01**
+  (`port/goldens-snd/` — location NOTE: outside port/goldens-m4 ONLY
+  because that dir is under the concurrent read-only review;
+  DRIVER DECISION registered: fold s01 into the m4 manifest post-arc
+  and drop the freeze-stream twin): marth vs fox, battlefield, seed
+  9001, 3600 frames, CRAFTED deterministic trace
+  (gen-s01-trace.js — byte-reproducible; tuned in 14 host sim
+  iterations of the ≤40 cap, ZERO browser iterations). Recorded
+  browser ×2-identity on the FIRST attempt (2 of the ≤8 browser-run
+  cap), mechanical M0 quality contract
+  (`QUALITY OK: KO=[DEADDOWN] hit=[DAMAGEFLYN] stocks=[4,3]`),
+  M0-format freeze + verify-stream self-check; the C sim replays it
+  **bit-exactly, 3600/3600, rngCalls=57, zero divergence rounds** —
+  the never-live shield-break chain, both FURAFURA episodes, the land
+  jank, and the id plumbing are browser-verified end-to-end. ALL FOUR
+  stop ARMS live in one trace (schedule-verified in-check):
+  frame 191 NSG B-release arm · 697 NSG charge==122 auto arm ·
+  701 hitDetection FURAFURA arm (the charged swing hits the dizzy
+  fox) · 1419 FURAFURA stuckTimer wake arm (mash-out); 2 shield
+  breaks (575 depletion-break — the fixed arm — and 1107 on
+  regenerated HP), 2 furaloop episodes, 1 KO. Scenario physics notes
+  on record: shield-depletion break needs the shield input RELEASED on
+  the break frame (holding at 0 HP re-enters the upstream break arm
+  every frame and rockets the victim upward — real upstream behavior);
+  walking teeters at platform edges (dash to cross); marth turnaround
+  by short reverse walk before the charge.
+- **The offline differential rig (task part 1)**: snd_events_tap.c
+  (constructor TU, sim_ai_live.c pattern — sim_main.c untouched;
+  env-required fail-loud; schedule grammar
+  `P <frame> <name>` / `S <frame> <token> <hasId> <idbits16>` +
+  mandatory terminator with counts + lastFrame), snd_render.c (the
+  snd_mixer.h math VERBATIM, offline, 735 out-frames per sim frame,
+  strict whitelist parser, ×2 byte-stable, tooth flags as TEST-ONLY
+  seams), snd_reference.js (independent: reads sounds.json + SND1
+  blobs directly, never the pack; howler lifecycle from the vendored
+  source; unlimited + --voices-8 modes). Every schedule is produced by
+  a STREAM-MATCH-guarded replay (unchanged verify-stream.js) —
+  instrumentation cannot perturb the sim. gfx_app leg: s01 through the
+  real app (headless), STREAM MATCH + starts/stops == schedule (60/4).
+- **Teeth (all fired, .loop/m4-task6-donecheck.log +
+  .loop/m4-task6-teeth.log)**: T1 gain nibble (furaloop gainQ8+1) →
+  diverged; T2 dropped stop → diverged (audible tail); T3
+  resample-step +1ulp → diverged; T4 stop-id skew (+1 ⇒ howler
+  stale-id no-op) → diverged (the loop rings on) — stop-by-id routing
+  is load-bearing; T5 steal-policy flip ON g06 (the schedule with a
+  REAL steal — better than the pre-registered s01 form, amended
+  because the measurement produced a live-steal schedule) → diverged,
+  positive control clean; T6 grammar corruption (dropped terminator +
+  malformed line) → BOTH renderers die nonzero. Positive controls
+  green throughout.
+- **Regressions green**: `bash port/sim/check-sim.sh` → SIM CONFORMS
+  (composed in the done-check, leg [1] — the checksum surface did not
+  move under the id plumbing); cluster replays for every touched TU:
+  ASSHORT MATCH · MOVES SHARED MATCH · MOVES marth MATCH ·
+  HITDET MATCH (.loop/m4-task6-cluster-regressions*.log);
+  `bash port/gfx/check-render.sh` → RENDER OK
+  (.loop/m4-task6-reg-render.log; shared TUs on gfx_replay's list
+  changed). check-device-audio.sh CANNOT run (HOST-ONLY iteration):
+  the mixer's stop-semantics change (stop-all → id-routed) +
+  play-id fields are re-verified on device at task 7/14 — REGISTERED
+  DEFERRAL (stop/start counter semantics unchanged; g01 fires zero
+  stops, so the M3 evidence's meaning is intact). The task spec's
+  device-offline-render cmp leg is part of the same deferral.
+- **Honest coverage**: the NSA (air) charge/stop arms are zero-live
+  (s01 fires the GROUND family; the NSA file is line-for-line the same
+  arms — registered); the FURASLEEP* puff-victim variant of the
+  break chain is zero-live (puff FURAFURA override = WAIT.init, no
+  furaloop by construction); music is task 7; the differential's
+  event-time quantization (frame boundary) is shared by documentation,
+  not compared against real browser audio output (uncapturable —
+  PROCESS §8 statement in the pre-registration stands). PORTABILITY:
+  no new device-tuned constant (the mixer math incl. ids/stop routing
+  is Layer 0; the 8-voice cap row already exists in Layer 2 — no new
+  row needed).
+- **Zoom-out (HARD RULE 8)**: (1) the id plane is ONE derivation in
+  ml_events.c consumed by everyone (sim state, mixer voices, both
+  renderers) instead of a per-binary counter + back-channel — the
+  seam-count went DOWN while gaining semantics; (2) the depletion-break
+  fix closed the "asshort inner dispatch-note on a live path" class at
+  its only live member and NAMED the surviving scaffolds (turbo);
+  (3) the differential is a standing CLASS instrument: any future
+  mixer change (music voice, ducking) extends the reference and
+  re-runs 11 goldens bit-exactly; (4) s01 demonstrates the
+  scenario-golden method (craft on the bit-exact C sim for free,
+  record browser ×2 once) — the cost profile that makes future
+  coverage holes cheap to close.

@@ -23,7 +23,16 @@
 //   sequence number (the longest-running one, looping or not) is
 //   retired mid-sample and reused. Steals are counted and reported.
 // A ".stop"-suffixed event token (ml_events contract: e.g.
-// "furaloop.stop") deactivates ALL voices of the base name.
+// "furaloop.stop") deactivates ALL voices of the base name when it
+// arrives WITHOUT an id (snd_event — howler 2.0.12 stop(undefined)
+// semantics). M4 task 6: stops that carry a play id
+// (snd_event_stop_id, fed by ml_snd_stop_id_sink) are ID-ROUTED —
+// exactly howler 2.0.12 stop(id): a matching active voice stops, a
+// stale/unknown id is a NO-OP. Voice play-ids are 1000 + play-event
+// count (howler's global `++Howler._counter` parallel, and the SAME
+// derivation ml_events.c's ml_howl_play_id uses) — the sim-stored id
+// and the mixer's voice id agree with no back-channel because both
+// count the same event stream.
 //
 // THREADING: mix state is mutated by the main thread (snd_event) and
 // read/advanced by the audio callback (snd_mix_fill). The caller MUST
@@ -80,6 +89,7 @@ typedef struct {
   const SndEntry *e; // NULL = inactive
   uint64_t phase;    // 16.16 into e->samples
   uint64_t seq;      // start sequence (steal-oldest key)
+  uint64_t id;       // howler play id (1000 + play-event count)
 } SndVoice;
 
 typedef struct {
@@ -89,9 +99,11 @@ typedef struct {
   uint64_t step; // 16.16 resample step (SRC_RATE<<16)/OUT_RATE
   SndVoice voice[SND_VOICES];
   uint64_t seqCounter;
+  uint64_t playCount; // play events consumed (id = 1000 + playCount)
   // event counters (deterministic given the sim's event stream; the
   // check cross-asserts device values against host truth)
   uint64_t starts, stops, steals;
+  uint64_t maxVoices; // concurrency high-water (M4 task 6 measurement)
 } SndMixer;
 
 static uint32_t snd_rd_u32(const uint8_t *p) {
@@ -180,22 +192,47 @@ static const SndEntry *snd_find(const SndMixer *m, const char *name) {
   return 0;
 }
 
+// Resolve a "<name>.stop" token's base entry (loud death on a name the
+// pack does not carry — the SND1-map/sim-plane agreement guard).
+static const SndEntry *snd_stop_base(SndMixer *m, const char *token) {
+  const size_t n = strlen(token);
+  if (!(n > 5 && strcmp(token + n - 5, ".stop") == 0)) {
+    sim_fatal("snd: snd_stop_base on a non-stop token");
+  }
+  char base[SND_NAME_LEN];
+  if (n - 5 >= sizeof base) sim_fatal("snd: stop token name too long");
+  memcpy(base, token, n - 5);
+  base[n - 5] = 0;
+  const SndEntry *e = snd_find(m, base);
+  if (!e) sim_fatal("snd: stop event for a name not in the pack");
+  return e;
+}
+
+// ID-ROUTED stop (M4 task 6; howler 2.0.12 stop(id) semantics — header
+// note): hasId -> stop the one active voice of this base name whose
+// play id matches (stale/unknown id = no-op); !hasId (upstream passed
+// undefined) -> stop ALL voices of the base name. Caller holds
+// platform_audio_lock(). Counted once per stop EVENT (the M3 counter
+// semantics are unchanged).
+static void snd_event_stop_id(SndMixer *m, const char *token, int hasId,
+                              double id) {
+  const SndEntry *e = snd_stop_base(m, token);
+  for (int v = 0; v < SND_VOICES; v++) {
+    if (m->voice[v].e != e) continue;
+    if (hasId && (double)m->voice[v].id != id) continue;
+    m->voice[v].e = 0;
+  }
+  m->stops++;
+}
+
 // One sound event from the sim's queue (ml_snd_sink contract: play
 // names verbatim; stop sites arrive as "<name>.stop"). Caller holds
-// platform_audio_lock().
+// platform_audio_lock(). A bare stop token (no id available — the
+// legacy/undefined arm) stops all voices of the base name.
 static void snd_event(SndMixer *m, const char *name) {
   const size_t n = strlen(name);
   if (n > 5 && strcmp(name + n - 5, ".stop") == 0) {
-    char base[SND_NAME_LEN];
-    if (n - 5 >= sizeof base) sim_fatal("snd: stop token name too long");
-    memcpy(base, name, n - 5);
-    base[n - 5] = 0;
-    const SndEntry *e = snd_find(m, base);
-    if (!e) sim_fatal("snd: stop event for a name not in the pack");
-    for (int v = 0; v < SND_VOICES; v++) {
-      if (m->voice[v].e == e) m->voice[v].e = 0;
-    }
-    m->stops++;
+    snd_event_stop_id(m, name, 0, 0);
     return;
   }
   const SndEntry *e = snd_find(m, name);
@@ -204,6 +241,7 @@ static void snd_event(SndMixer *m, const char *name) {
     sim_fatal("snd: play event for a name not in the pack (SND1 map and "
               "sim sound plane disagree)");
   }
+  m->playCount++; // howler-parallel global id counter (header note)
   int slot = -1;
   for (int v = 0; v < SND_VOICES; v++) {
     if (m->voice[v].e == 0) { slot = v; break; }
@@ -219,7 +257,13 @@ static void snd_event(SndMixer *m, const char *name) {
   m->voice[slot].e = e;
   m->voice[slot].phase = 0;
   m->voice[slot].seq = ++m->seqCounter;
+  m->voice[slot].id = 1000ull + m->playCount;
   m->starts++;
+  uint64_t live = 0;
+  for (int v = 0; v < SND_VOICES; v++) {
+    if (m->voice[v].e) live++;
+  }
+  if (live > m->maxVoices) m->maxVoices = live;
 }
 
 // The audio-callback fill (PlatformAudioFill shape): `frames` stereo

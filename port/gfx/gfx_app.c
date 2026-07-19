@@ -399,9 +399,23 @@ static SndMixer g_mix;
 // The ml_snd_sink chokepoint target: runs on the sim (main) thread at
 // sound-event enqueue time; the lock brackets the mixer-state mutation
 // against the audio callback (headless: no-op lock, no callback).
+// M4 task 6: stop tokens are handled by the ID-ROUTED twin below
+// (ml_sound_stop_id fires BOTH sinks with the same token — skipping
+// them here prevents double-processing; every in-match stop site
+// passes an id, so no bare stop can reach the mixer unrouted).
 static void app_snd_sink(const char *name) {
+  const size_t n = strlen(name);
+  if (n > 5 && strcmp(name + n - 5, ".stop") == 0) return; // id sink owns it
   platform_audio_lock();
   snd_event(&g_mix, name);
+  platform_audio_unlock();
+}
+
+// The ml_snd_stop_id_sink target (M4 task 6): id-routed stops — howler
+// 2.0.12 stop(id)/stop(undefined) semantics (snd_mixer.h header note).
+static void app_snd_stop_sink(const char *token, int hasId, double id) {
+  platform_audio_lock();
+  snd_event_stop_id(&g_mix, token, hasId, id);
   platform_audio_unlock();
 }
 
@@ -558,6 +572,7 @@ int main(int argc, char **argv) {
       sim_fatal("platform_audio_start failed");
     }
     ml_snd_sink = app_snd_sink; // the sound-event chokepoint tap
+    ml_snd_stop_id_sink = app_snd_stop_sink; // id-routed stops (task 6)
   }
 
   // RAM buffers (post-run flush; NO file I/O in the frame loop)
@@ -706,6 +721,7 @@ int main(int argc, char **argv) {
   memset(&astats, 0, sizeof astats);
   if (sndpackPath) {
     ml_snd_sink = 0;
+    ml_snd_stop_id_sink = 0;
     platform_audio_stop();
     platform_audio_stats(&astats);
   }

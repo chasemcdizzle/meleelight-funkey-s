@@ -525,15 +525,21 @@ static double g_sbid[SBID_CAP];
 static int g_sbid_count = 0; // recorded ids for THIS record
 static int g_sbid_used = 0;  // consumed by the C body so far
 
-double mv_howl_play_id(const char *name) {
+// Injected through ml_events.h's ml_howl_id_oracle hook (M4 task 6: the
+// call sites moved from the per-binary mv_howl_play_id seam to the one
+// ml_events.c id plane; this driver still feeds the RECORDED ids).
+static double sbid_oracle(const char *name) {
   if (strcmp(name, "shieldbreakercharge") != 0) {
-    mv_out_of_domain("mv_howl_play_id: unexpected Howl name");
+    mv_out_of_domain("sbid_oracle: unexpected Howl name");
   }
   if (g_sbid_used >= g_sbid_count) {
     report_div("sbid-underflow", g_lineno, "(recorded id)", name);
     longjmp(g_rec_jmp, 1);
   }
   return g_sbid[g_sbid_used++];
+}
+__attribute__((constructor)) static void sbid_oracle_install(void) {
+  ml_howl_id_oracle = sbid_oracle;
 }
 
 // --- RNG chains --------------------------------------------------------------------

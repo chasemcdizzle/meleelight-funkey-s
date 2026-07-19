@@ -37,12 +37,19 @@ static void shield_depletion(MlSim *S, double p, const MlInputBuffer in[4]) {
   st.shielding = pl->phys.shielding;
   st.pos = pl->phys.pos;   // M4 task 1: breakShield vfx read set
   st.face = pl->phys.face;
-  as_shieldDepletion((int)MV_CS(S, p), &st, MV_IN(in, p));
+  const bool broke = as_shieldDepletion((int)MV_CS(S, p), &st, MV_IN(in, p));
   pl->phys.grounded = st.grounded;
   pl->phys.kDec = st.kDec;
   pl->phys.kVel = st.kVel;
   pl->phys.shieldHP = st.shieldHP;
   pl->phys.shielding = st.shielding;
+  if (broke) {
+    // upstream runs SHIELDBREAKFALL.init(p, input) INSIDE shieldDepletion
+    // (actionStateShortcuts.js:297) — the slice API returns the arm flag
+    // and the real dispatch happens here, after the slice write-back
+    // (M4 task 6; as_shieldDepletion header note).
+    mv_dispatch(S, MV_CS(S, p), "SHIELDBREAKFALL", "init", p, in, 0);
+  }
 }
 
 static AsTri mv_main(MlSim *S, double p, const MlInputBuffer in[4],

@@ -293,7 +293,7 @@ void as_fastfall(int charId, double *cVelY, bool *fastfalled,
 }
 
 // --- shieldDepletion (:280-299) ---------------------------------------------------------
-void as_shieldDepletion(int charId, AsShieldDepState *st, const MlInput in[4]) {
+bool as_shieldDepletion(int charId, AsShieldDepState *st, const MlInput in[4]) {
   const ml_attributes_t *at = attr(charId);
   // upstream shadows the parameter: var input = max(lA, rA)
   double input = js_max(in[0].lA, in[0].rA);
@@ -311,7 +311,9 @@ void as_shieldDepletion(int charId, AsShieldDepState *st, const MlInput in[4]) {
     ml_drawVfx("breakShield", st->pos.x, st->pos.y, st->face);
     ml_sound_play("shieldbreak");
     as_dispatch(charId, "SHIELDBREAKFALL", "init");
+    return true; // caller runs the real SHIELDBREAKFALL.init (header note)
   }
+  return false;
 }
 
 // --- shieldSize (:301-314) ---------------------------------------------------------------

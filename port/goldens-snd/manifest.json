@@ -1,0 +1,17 @@
+{
+  "comment": "s01 stop-path scenario golden (M4 task 6). Schema = port/goldens-m4/manifest.json verbatim, EXCEPT: the trace is CRAFTED (gen-s01-trace.js, deterministic hand-authored scenario — see its header), not gen-trace.js seeded chaos, so `seed` here is ONLY the run's Math.random seed. LOCATION NOTE (AGENT-LOG iter 82): this golden lives outside port/goldens-m4/ solely because that directory was under a concurrent read-only review when task 6 ran; folding s01 into the m4 manifest post-arc is a registered driver decision. Recorded by record-snd.sh (oracle/harness bytes reused BY PATH; port/goldens-m4/check-quality.js invoked BY PATH; judged by the UNCHANGED oracle/harness/verify-stream.js). The scenario fires all four in-match Howl .stop arms (NSG release, NSG charge==122 auto, hitDetection FURAFURA, FURAFURA-interrupt wake) plus two furaloop/shieldbreakercharge play episodes, one KO and one DAMAGE hit.",
+  "goldens": [
+    {
+      "id": "s01",
+      "name": "s01-marth-fox-stops-battlefield",
+      "trace": "s01-marth-fox-stops-battlefield.trace.json",
+      "frames": 3600,
+      "seed": 9001,
+      "p1": 0,
+      "p2": 2,
+      "stage": 0,
+      "cpu": false,
+      "difficulty": null
+    }
+  ]
+}

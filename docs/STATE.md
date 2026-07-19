@@ -3,7 +3,46 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 81 — M4 task 5 DONE: live CPU integration, AI LIVE CONFORMS)
+## Live right now (updated: 2026-07-19, iter 82 — M4 task 6 DONE: mixer fidelity, MIXER FIDELITY OK)
+
+- **Iter 82 (M4 task 6 — mixer fidelity + real play-ids + stop-path
+  coverage) DONE** (full entry: AGENT-LOG iter 82 pre-registration +
+  result): the OFFLINE deterministic render differential is live —
+  every golden's sound-event schedule (STREAM-MATCH-guarded tap) renders
+  through the C mixer math (snd_render.c, offline, ×2 stable) and an
+  INDEPENDENT reference (snd_reference.js from SND1 + vendored-howler
+  semantics) to BIT-IDENTICAL PCM: 11/11 vs the capped-8 reference,
+  9/9 vs browser-unlimited where concurrency ≤ 8 (measured exposure:
+  g06/m02 peak 9 voices → 1 steal each on device vs browser — the
+  8-voice cap is the PLAN §7 design choice). Real play-ids: one id
+  plane in ml_events.c (howler-parallel play counter, off-surface),
+  id-routed stops through ml_snd_stop_id_sink, mixer stop(id) = howler
+  semantics; marth sbid replay preserved via ml_howl_id_oracle.
+  FOUND+FIXED a zero-coverage latent integration bug: depletion shield
+  break left the victim in GUARD (note-only as_dispatch scaffold) +
+  SHIELDBREAKFALL.land's dead-path trap contradicted upstream's 2-arg
+  land call. NEW GOLDEN s01 (port/goldens-snd/ — outside goldens-m4
+  ONLY because of the concurrent review; folding it in post-arc is a
+  registered driver decision): crafted marth-vs-fox shield-break
+  scenario, browser ×2 first attempt, C replay bit-exact
+  (3600/3600, rngCalls=57, zero divergence rounds), ALL FOUR in-match
+  .stop arms live. Cold done-check
+  `bash port/gfx/check-mixer-fidelity.sh` → `MIXER FIDELITY OK
+  (goldens=11 diff=bit-identical maxvoices=9 steals=2 s01stops=4)`
+  exit 0 (.loop/m4-task6-donecheck.log; composes check-sim.sh).
+  Teeth 6/6 (incl. stop-id-skew + steal-flip on g06's real steal).
+  Regressions: ASSHORT/MOVES SHARED/MOVES marth/HITDET MATCH +
+  RENDER OK. Registered deferrals: device audio rung (id-routed stop
+  semantics + offline-render device cmp) → task 7/14; sim_tick.c dead
+  mv_howl_play_id counter cleanup → post-arc (no-edit window).
+  **Driver next: Tier-A arc for the new audio-rig surfaces
+  (check-mixer-fidelity.sh, snd_render.c, snd_reference.js,
+  snd_events_tap.c, record-snd.sh/freeze-stream-snd.js) + Tier-B round
+  for the sim-TU changes (shield-break chain, id plumbing); then task 7
+  (music streaming — the differential rig + SND1 sprite windows are
+  its seams).**
+
+## [superseded by iter 82] (updated: 2026-07-19, iter 81 — M4 task 5 DONE: live CPU integration, AI LIVE CONFORMS)
 
 - **Iter 81 (M4 task 5 — live CPU integration) DONE** (full entry:
   AGENT-LOG iter 81 pre-registration + result): the sim's runAI site now

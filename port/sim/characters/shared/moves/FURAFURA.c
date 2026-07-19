@@ -17,11 +17,12 @@ static AsTri mv_init(MlSim *S, double p, const MlInputBuffer in[4],
   const double vfxX = pl->phys.pos.x + (4 + ml_random() * 2) * pl->phys.face;
   const double vfxY = pl->phys.pos.y + 11 + ml_random() * 3;
   ml_drawVfx("furaFura", vfxX, vfxY, pl->phys.face);
-  // player[p].furaLoopID = sounds.furaloop.play() — the Howl play id is an
-  // emulator-environment value outside the sim domain (rule 7; zero-live:
-  // no shieldbreak reaches FURAFURA over the goldens).
+  // player[p].furaLoopID = sounds.furaloop.play() — one upstream
+  // expression: the play event + the consumed howler id (M4 task 6:
+  // ml_howl_play_id replaces the old rule-7 trap; the id is off the
+  // checksum surface and derives from the sim's own play count).
   ml_sound_play("furaloop");
-  mv_out_of_domain("FURAFURA: furaLoopID = Howl play id");
+  pl->furaLoopID = ml_howl_play_id("furaloop");
   mv_dispatch(S, MV_CS(S, p), "FURAFURA", "main", p, in, 0);
   return AS_UNDEF;
 }
@@ -68,7 +69,8 @@ static AsTri mv_interrupt(MlSim *S, double p, const MlInputBuffer in[4],
   (void)ex;
   MlPlayer *pl = mv_player(S, p);
   if (pl->phys.stuckTimer <= 0) {
-    ml_sound_stop("furaloop.stop"); // sounds.furaloop.stop(furaLoopID)
+    // sounds.furaloop.stop(player[p].furaLoopID) — id-routed (M4 task 6)
+    ml_sound_stop_id("furaloop.stop", 1, pl->furaLoopID);
     mv_dispatch(S, MV_CS(S, p), "WAIT", "init", p, in, 0);
     return AS_TRUE;
   } else if (pl->timer > mv_frames(MV_CS(S, p), "FURAFURA")) {

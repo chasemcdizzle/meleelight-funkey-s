@@ -159,7 +159,14 @@ void as_reduceByTraction(bool applyDouble, int charId, double *cVelX);
 void as_airDrift(int charId, double *cVelX, const MlInput in[4]);
 void as_fastfall(int charId, double *cVelY, bool *fastfalled,
                  const MlInput in[4]);
-void as_shieldDepletion(int charId, AsShieldDepState *st, const MlInput in[4]);
+// Returns true iff the break arm fired (shieldHP <= 0): upstream's arm
+// runs `SHIELDBREAKFALL.init(p, input)` INSIDE shieldDepletion — the
+// slice API cannot dispatch a move, so the note fires here (as_dispatch,
+// the M2 comparison surface) and the CALLER (GUARD.c) makes the real
+// mv_dispatch on a true return (M4 task 6: the s01 scenario flushed out
+// that the note-only dispatch left the live sim stuck in GUARD after a
+// depletion break — a zero-coverage integration gap until then).
+bool as_shieldDepletion(int charId, AsShieldDepState *st, const MlInput in[4]);
 void as_shieldSize(bool lock, int charId, double shieldHP,
                    AsShieldSizeOut *out, const MlInput in[4]);
 bool as_mashOut(const MlInput in[4]);

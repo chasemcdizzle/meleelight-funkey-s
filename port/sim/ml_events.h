@@ -99,6 +99,39 @@ extern MlEvents ml_events;
 // runs on the sim thread (the gfx_app mixer locks its own audio state).
 extern void (*ml_snd_sink)(const char *name);
 
+// STOP-ID SINK (M4 task 6): the ml_snd_sink twin for id-routed stops.
+// Upstream's in-match Howl stops all pass a play id
+// (`sounds.X.stop(player.someID)`, howler 2.0.12: a specific id stops
+// that ONE instance; `undefined` stops ALL instances of the Howl; a
+// stale/0 id is a no-op). ml_sound_stop_id enqueues the same ".stop"
+// token bytes as ml_sound_stop (capture/checksum surface untouched) and
+// forwards (hasId, id) here so the mixer can route the stop to the
+// exact voice. Default NULL = byte-identical behavior. Same contract as
+// ml_snd_sink: READ-ONLY wrt sim state, no RNG, sim thread.
+extern void (*ml_snd_stop_id_sink)(const char *nameDotStop, int hasId,
+                                   double id);
+
+// HOWL PLAY-ID SEAM (M4 task 6; replaces sim_tick.c's mv_howl_play_id
+// monotone counter at the consuming call sites). Upstream:
+// `player.shieldBreakerID = sounds.shieldbreakercharge.play()` /
+// `player.furaLoopID = sounds.furaloop.play()` consume howler's GLOBAL
+// id counter (howler 2.0.12: `self._id = ++Howler._counter`, counter
+// starts at 1000, allocated once per play(), page-global, never reset).
+// Structure-parallel model: ml_sound_play counts every play event
+// (1:1 with upstream play() calls — the captures verified the token
+// streams), and ml_howl_play_id returns 1000 + playCount = the id of
+// the play event the call site just fired. The id therefore derives
+// from the sim's OWN event count: attaching a mixer can never change
+// sim state (the sink read-only contract needs no id back-channel),
+// and any consumer that counts the same play events (snd_mixer.h, the
+// offline renderers) derives the SAME ids independently. The values
+// are off the checksum surface (sim_ser.c 7-field allowlist).
+// ml_howl_id_oracle: CALIB-ONLY injection hook — the moves-marth
+// replay feeds the RECORDED browser ids (oracle-fed seam, M2 task 11);
+// never installed by sim/gfx builds.
+extern double (*ml_howl_id_oracle)(const char *name);
+double ml_howl_play_id(const char *name);
+
 // VFX SINK (M4 task 1): the ml_snd_sink twin for the vfx plane. The
 // integrated sim resets the ml_events queues at every tick stage, so the
 // M4 renderer consumes vfx events through this enqueue-time chokepoint
@@ -121,6 +154,12 @@ void ml_sound_play(const char *name);
 // the M4 mixer can distinguish stop events; the capture records the same
 // token, so the queues compare bit-exactly.
 void ml_sound_stop(const char *nameDotStop);
+// The id-routed form (M4 task 6): enqueues the SAME token as
+// ml_sound_stop (bit-identical queue/capture surface) and forwards the
+// upstream-passed play id to ml_snd_stop_id_sink. hasId=0 models an
+// `undefined` id (howler: stop ALL of the Howl — marth's
+// pre-first-play shieldBreakerID read).
+void ml_sound_stop_id(const char *nameDotStop, int hasId, double id);
 void ml_dispatch_note(const char *phase, const char *move);
 
 // --- drawVfx (src/main/vfx/drawVfx.js), structure-parallel ---------------
