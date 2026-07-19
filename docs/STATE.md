@@ -3,7 +3,24 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-18, iter 68 — vfx-rig round-2 residuals closed)
+## Live right now (updated: 2026-07-18, iter 69 — vfx-rig round-3 residuals closed)
+
+- **Iter 69 (M4 hardening — carrier uniqueness + banner affine counts)
+  DONE**: both review-68 Mediums (.loop/review-68-1.log) closed on
+  `port/sim/calib/check-vfx-seam.sh` ONLY. R1: each CARRIERS entry's 3
+  tokens asserted DISTINCT at the inventory pin (cross-component
+  repetition stays legal — g01/g04/g06 serves four components by
+  design); R2: the check-sim `== gNN (name)` banner literal gets
+  `count_aff` like every other decision literal (banner exact ×1 +
+  banner-affine ×1 per golden — torn `=`/`==` fragments now die).
+  Grammars re-validated 55/55 against the same archived corpus, zero
+  false rejections (.loop/m4-rig69-corpusval.log); teeth 2/2 fired
+  with the predicted message classes (.loop/m4-rig69-teeth.log); cold
+  done-check `VFX SEAM MATCH` DONECHECK_RC=0
+  (.loop/m4-rig69-donecheck.log). **vfx-rig arc round 4 =
+  CLOSURE-OR-CAP (driver)**: per PROCESS §3 bounded convergence, if
+  round 4 raises only grammar-variant re-raises of the closed classes,
+  the arc CAPS with the recurring objection class named.
 
 - **Iter 68 (M4 hardening — vfx-seam identity binding + truncated
   resemblance + rc case-split) DONE**: all three review-66 Mediums
@@ -21,9 +38,9 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   from the 4 archived composed runs) with ZERO false rejections
   (.loop/m4-rig68-corpusval.log); teeth 5/5 fired
   (.loop/m4-rig68-teeth.log); cold done-check `VFX SEAM MATCH`
-  DONECHECK_RC=0 (.loop/m4-rig68-donecheck.log). **vfx-rig arc round
-  3 = CLOSURE PENDING (driver: closure-only re-review per the triage's
-  "round 3 = closure-only")**. Judgment now lives in `vfx_judge_log`
+  DONECHECK_RC=0 (.loop/m4-rig68-donecheck.log). Round-3 review
+  returned 2 Mediums (carrier uniqueness + check-sim banner affinity,
+  .loop/review-68-1.log) — closed by iter 69. Judgment lives in `vfx_judge_log`
   — the registered template (with the round-2 refinements) for task-14
   verify_m4.sh.
 

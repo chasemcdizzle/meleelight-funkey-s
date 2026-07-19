@@ -9205,3 +9205,120 @@ folded into the M4 ladder below. Issue #18 closed by the driver.
   regex prefix; (c) every decision-bearing text read distinguishes
   "counted 0" from "could not read". verify_m4.sh (fix_plan §M4 task
   14) inherits vfx_judge_log's shape with these refinements built in.
+
+## iter 69 — 2026-07-18 — PRE-REGISTRATION: vfx-rig round-3 residuals — carrier uniqueness + check-sim banner affinity (frozen before any run/edit; PROCESS §2)
+
+- **Task (driver brief; full round-3 review .loop/review-68-1.log —
+  VERDICT: NO-GO, two Mediums, both grammar-variant residuals of the
+  closed round-2 classes)**: close both on
+  `port/sim/calib/check-vfx-seam.sh` ONLY. Round 4 = closure-or-cap
+  (PROCESS §3 bounded convergence: if round 4 raises only
+  grammar-variant re-raises, the arc CAPS with the class named).
+- **Fix designs (frozen)**:
+  - **R1 (review-68 M1 residual, inventory pin ~line 190)**: CARRIERS
+    entries assert their 3 tokens are DISTINCT (seen-list inside the
+    existing shape-pin loop; death message class "repeats carrier").
+    Cross-component repetition stays legal by design — g01/g04/g06
+    legitimately serves shared/asshort/physics/hitdet. Closes the
+    accident: a merge turning `A B C` into `A B B` binds B twice and
+    leaves C's genuine evidence UNBOUND while every aggregate count
+    still passes.
+  - **R2 (review-68 M2 residual, check-sim leg ~line 369)**: the
+    check-sim banner literal `== gNN (name)` gains `count_aff` ×1 like
+    every other decision literal (banner exact ×1 AND banner-affine
+    ×1). Closes the accident: torn fragments `=` / `==` are proper
+    prefixes of every banner literal but invisible to the `^== `
+    family count and to every exact count.
+- **Method**: corpus validation BEFORE the one composed run — the same
+  55-file archived genuine corpus as iter 68 (the 11 raw iter-66
+  component logs `port/sim/calib/build/vfx-seam.check-*.log` + the 44
+  sections reconstructed from the 4 archived composed runs, preserved
+  at `port/sim/calib/build/probe68/corpus/`), judged via a probe69
+  copy carrying the REVISED script bytes with only the driver tail
+  replaced (the iter-66/68 probe mechanism). Pass = 55/55, zero false
+  rejections (.loop/m4-rig69-corpusval.log). R1 is array-shape (not
+  log-parsing): its genuine-data validation is the shipped CARRIERS
+  passing the pin in every probe invocation + the cold run.
+- **Teeth (pre-registered; expected message class stated before
+  firing; .loop/m4-rig69-teeth.log)**: T1 carrier-dup — probe copy of
+  the REVISED full script with the moves-fox CARRIERS entry set to
+  `g01-fox-marth-battlefield g04-puff-falcon-dreamland
+  g04-puff-falcon-dreamland` (3 shaped tokens, so ONLY uniqueness can
+  fire) → inventory-pin uniqueness death ("repeats carrier"), nonzero
+  rc, BEFORE lock/components. T2 torn-banner — genuine archived
+  check-sim log copy + a torn `==` line inserted before the final
+  verdict (matches NO exact count and NOT `^== ` — the review's exact
+  scenario) → identity-binding death for g01 (banner exact 1/1,
+  banner-affine 2/1), nonzero rc, through the probe judge.
+- **Run cap**: unit teeth against archived logs + ONE cold composed
+  run (`bash port/sim/calib/check-vfx-seam.sh`, ~7 min; §7#1 VERBATIM:
+  nohup-detached with rc-marker last line, bounded foreground polls,
+  never end-turn while live) → .loop/m4-rig69-donecheck.log.
+- **Refutation shapes**: any corpus false rejection = grammar
+  mis-measured → fix against the measured bytes (never relax to
+  permissive parsing), revalidate all 55 before the composed run; a
+  tooth that fails to fire = check not wired/sharp → fix wiring,
+  refire; if the cold run false-rejects FRESH genuine bytes = grammar
+  over-frozen → remeasure from the fresh log, record the delta,
+  revalidate the archived 55 — a second composed run is outside the
+  cap: STOP and report instead.
+
+## iter 69 — 2026-07-18 — M4 hardening DONE: carrier uniqueness + banner affine counts (vfx-rig round-3 residuals closed)
+
+- **Both review-68 Mediums closed on the pre-registered designs**
+  (surface: `port/sim/calib/check-vfx-seam.sh` ONLY; full round-3
+  review .loop/review-68-1.log):
+  - **R1 (M1 residual)**: the CARRIERS inventory pin now asserts each
+    entry's 3 tokens are DISTINCT (seen-list inside the existing
+    shape-pin loop) — an `A B B` merge accident dies at the pin,
+    before the lock and any component run, instead of binding B twice
+    while C's genuine evidence goes unbound under green aggregates.
+    Cross-component repetition stays legal (g01/g04/g06 serves
+    shared/asshort/physics/hitdet by design — unchanged).
+  - **R2 (M2 residual)**: the check-sim leg's `== gNN (name)` banner
+    literal now gets `count_aff` like every other decision literal —
+    banner exact ×1 AND banner-affine ×1 per SIM_GOLDENS name. Torn
+    fragments `=` / `==` (proper prefixes of every banner literal,
+    invisible to the `^== ` family count and every exact count) are
+    now corruption deaths.
+- **Corpus validation (the §3 whitelist step-4 ritual; zero false
+  rejections; .loop/m4-rig69-corpusval.log)**: 55/55 judgments pass
+  with the revised grammars over the SAME archived genuine corpus as
+  iter 68 — the 11 raw iter-66 component logs
+  (`port/sim/calib/build/vfx-seam.check-{moves-shared,moves-fox,
+  moves-falco,moves-falcon,moves-marth,moves-puff,article,asshort,
+  physics,hitdet}-replay.log` + `vfx-seam.check-sim.log`) and the 44
+  reconstructed sections preserved at
+  `port/sim/calib/build/probe68/corpus/{m4-task2-vfxseam,
+  driver-cold-m4t1-donecheck,m4-rig66-donecheck,
+  driver-cold-rig66-donecheck}.NN.log`, via the probe69 copy (real
+  revised script bytes, driver tail replaced). R1's genuine-data leg:
+  the shipped CARRIERS passes the revised pin in all 56 invocations
+  (55 probe + the cold run).
+- **Teeth (2/2 fired with the predicted message class;
+  .loop/m4-rig69-teeth.log)**: T1 probe copy with the moves-fox
+  CARRIERS entry `g01-… g04-… g04-…` (3 SHAPED tokens so only the new
+  pin can fire) → `repeats carrier 'g04-puff-falcon-dreamland'`
+  inventory-pin death before lock/components; T2 genuine check-sim log
+  + torn `==` inserted before the final verdict (control shown in-log:
+  `^== ` family still 8, exact banner still 1 — the old grammars are
+  blind to it) → `banner exact 1/1, banner-affine 2/1` identity death
+  for g01.
+- **Cold done-check (run 1 of the ≤1 cap)**:
+  `bash port/sim/calib/check-vfx-seam.sh` → `VFX SEAM MATCH`,
+  DONECHECK_RC=0 (.loop/m4-rig69-donecheck.log; §7#1 verbatim — nohup
+  detached with rc-marker last line + bounded foreground polls). All
+  10 components + SIM CONFORMS green through the revised grammars —
+  zero false rejections on fresh logs; exactly one column-0
+  `VFX SEAM MATCH`; lock released.
+- **ZOOM OUT**: both residuals are grammar-variant refinements of the
+  round-2 classes, not new classes — (a) an identity list is only an
+  identity BINDING if its members are distinct (uniqueness is part of
+  the pin, pinned where legality allows it: per-entry here, cross-array
+  where entries are singular); (b) "every decision literal gets the
+  affinity counter" means EVERY literal — the check-sim banner was the
+  one literal with exact-only counting left. Both refinements fold
+  into the registered vfx_judge_log template that task-14's
+  verify_m4.sh inherits. Round 4 = closure-or-cap per PROCESS §3: if
+  it raises only further grammar-variant re-raises of these closed
+  classes, the arc CAPS with the class named.

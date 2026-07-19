@@ -78,6 +78,20 @@
 #     count semantics (rc 1 IS "0 matches"), rc >= 2 (and any nonzero
 #     awk rc) is a READ ERROR and dies loudly. Never a silent 0 count.
 #
+# ROUND-3 RESIDUALS (iter 69 — .loop/review-68-1.log; grammars
+# re-validated 55/55 against the same archived corpus, zero false
+# rejections — .loop/m4-rig69-corpusval.log):
+#   - CARRIER UNIQUENESS (M1 residual): each CARRIERS entry's 3 tokens
+#     must be DISTINCT (an `A B B` merge accident binds B twice and
+#     leaves C's genuine evidence UNBOUND with all aggregates green).
+#     Cross-component repetition stays legal (g01/g04/g06 serves four
+#     components by design).
+#   - BANNER AFFINITY, check-sim leg (M2 residual): the `== gNN (name)`
+#     banner literal gets count_aff like every other decision literal —
+#     torn fragments `=` / `==` are proper prefixes of every banner
+#     literal yet invisible to the `^== ` family count and every exact
+#     count. Banner exact ×1 AND banner-affine ×1 per golden.
+#
 # Prints VFX SEAM MATCH, exit 0. Never weakened: exact equality only.
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
@@ -189,6 +203,7 @@ for arr in CHECKS VERDICTS SPECS SIM_GOLDENS; do
 done
 for entry in "${CARRIERS[@]}"; do
   ntok=0
+  seen=" "
   for tok in $entry; do
     ntok=$((ntok + 1))
     case "$tok" in
@@ -198,6 +213,13 @@ for entry in "${CARRIERS[@]}"; do
         exit 1
         ;;
     esac
+    case "$seen" in
+      *" $tok "*)
+        echo "VFX SEAM FAIL: inventory pin — CARRIERS entry '$entry' repeats carrier '$tok'; want 3 DISTINCT carrier goldens per component (iter 69, review-68 M1 residual: a duplicated carrier binds one golden twice and leaves another UNBOUND while every aggregate count stays green — corruption, never a pass)" >&2
+        exit 1
+        ;;
+    esac
+    seen="$seen$tok "
   done
   if [ "$ntok" != 3 ]; then
     echo "VFX SEAM FAIL: inventory pin — CARRIERS entry '$entry' has $ntok tokens, want exactly 3 carrier golden names" >&2
@@ -305,7 +327,7 @@ byteid_sections() {
 # SIM_GOLDENS is its frozen identity set).
 vfx_judge_log() {
   local clog="$1" want="$2" spec="$3" carriers="$4"
-  local c a b last sm smfull banners secs name id ra_line rb_line
+  local c a b b2 last sm smfull banners secs name id ra_line rb_line banner_line
   test -s "$clog" || grammar_die "empty or missing log $clog"
   # VERDICT GRAMMAR: exactly one exact verdict line, it is the FINAL
   # line, and exactly one line is verdict-AFFINE (extension OR torn
@@ -364,11 +386,13 @@ vfx_judge_log() {
   else
     for name in "${SIM_GOLDENS[@]}"; do
       id="${name%%-*}"
+      banner_line="== $id ($name)"
       c="$(count_e "$clog" "^STREAM MATCH $name: $STREAM_RE_TAIL")"
       a="$(count_aff "$clog" "STREAM MATCH $name: ")"
-      b="$(count_x "$clog" "== $id ($name)")"
-      if [ "$c" != 1 ] || [ "$a" != 1 ] || [ "$b" != 1 ]; then
-        grammar_die "identity binding — check-sim evidence for $name in $clog: stream full-grammar $c/1, stem-affine $a/1, banner $b/1 (all 8 goldens must each be judged exactly once)"
+      b="$(count_x "$clog" "$banner_line")"
+      b2="$(count_aff "$clog" "$banner_line")"
+      if [ "$c" != 1 ] || [ "$a" != 1 ] || [ "$b" != 1 ] || [ "$b2" != 1 ]; then
+        grammar_die "identity binding — check-sim evidence for $name in $clog: stream full-grammar $c/1, stem-affine $a/1, banner exact $b/1, banner-affine $b2/1 (all 8 goldens must each be judged exactly once; a torn banner fragment is CORRUPTION, never ignorable — iter 69, review-68 M2 residual)"
       fi
     done
     banners="$(count_e "$clog" '^== ')"
