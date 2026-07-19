@@ -9322,3 +9322,24 @@ folded into the M4 ladder below. Issue #18 closed by the driver.
   verify_m4.sh inherits. Round 4 = closure-or-cap per PROCESS §3: if
   it raises only further grammar-variant re-raises of these closed
   classes, the arc CAPS with the class named.
+
+## driver — 2026-07-18 — vfx-rig arc CLOSED (GO r4); task-2 arc r2 rerun genuine (7 Mediums → iter 70)
+
+- Vfx-rig arc (check-vfx-seam.sh): CLOSED at VERDICT: GO, round 4
+  (.loop/review-69-1.log) — 4 rounds, ~11 findings fixed with teeth
+  (iters 66/68/69: aggregator classes, identity binding, truncated
+  resemblance, rc case-split, carrier uniqueness, banner affine).
+  Driver cold-verified after every iteration.
+- Task-2 renderer arc: round 2's first run was VOID (judged a stale
+  truncated artifact, re-emitted round-1 text verbatim); rerun with
+  purged artifacts + hard scoping produced a GENUINE round (current
+  files verified, fc40108 closures confirmed, percentShake ordering +
+  leave-one-out proof + all 45 arms verified clean): 7 new Mediums
+  (INJECT1 parser grammar, face int-cast UB, firefoxcharge region field
+  mix-up, browser attribution, inkNames subset, post-capture TOCTOU
+  re-check, iou.js auxiliary parsers) — triaged
+  (.loop/review-65-triage-r2.md), iter-70 writer dispatched.
+- PROCESS note (review-artifact hygiene): stale review/diff artifacts in
+  .loop/ contaminated a round — one void round cost ~35 min. Standing
+  practice now: purge or hard-scope per round; candidate §3 amendment
+  (per-round artifact dirs) deferred until a second occurrence.
