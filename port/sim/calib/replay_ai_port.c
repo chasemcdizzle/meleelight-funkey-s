@@ -18,11 +18,25 @@
 //
 // Usage: replay_ai_port <capture.jsonl> [--strict] [--max-print N]
 //                       [--stop-first] [--cover]
+//                       [--expect records=N,runAI=N,Math.random=N,rngBoot=N]
+//                       [--cover-gate N]
 //
 // Marshalling is STRICT (prevention rule 7): any shape outside the
 // captured domain aborts with exit 3 — never guess. An under-projected
 // spec read-set surfaces here as a missing-key hard-fail, not a silent
 // default.
+//
+// EVIDENCE COMPLETENESS (iter 77, review-75 M4): --expect pins the
+// per-record-type inventory (strict grammar — exactly those four keys,
+// each once, integer values; anything else is a parse death) and the
+// getline loop is ferror-checked — a truncated or mid-read-failed
+// capture is CORRUPTION, never a 0-divergence pass. --expect is
+// REQUIRED under --strict (fail-closed evidence mode).
+// COVERAGE GATE (iter 77, review-75 M7): --cover-gate N asserts the
+// arm table is fully populated, exactly N arms have hits, and the 3
+// documented-dead arms (H_LEDGE_CTA / GEN_RUT_UPTILT /
+// FOX_RESPAWN_INARR — measured-dead upstream, AGENT-LOG iter 75) stay
+// ZERO. A dead arm going live or a live arm going dead is loud.
 #include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
@@ -76,6 +90,20 @@ static bool cv_bool(const CanonVal *v) {
 static const char *cv_str(const CanonVal *v) {
   if (v->type != CV_STR) fail("expected string");
   return v->str;
+}
+
+// Representability guard (iter 77, review-75 M5): every cast of a
+// CAPTURED double to an integer type proves membership in [lo, hi] and
+// integrality FIRST — NaN fails the range comparison, so NaN/inf/huge/
+// fractional bit-flips are a rule-7 marshal death, never UB. All
+// integer-domain casts in this TU go through here (sole exception:
+// atoi on the operator's own --max-print argv, which is not captured
+// data and not decision-bearing).
+static long cv_int_range(const CanonVal *v, double lo, double hi,
+                         const char *what) {
+  const double d = cv_num(v);
+  if (!(d >= lo && d <= hi) || floor(d) != d) fail(what);
+  return (long)d;
 }
 
 // number-or-undefined -> ToNumber (prevention rule 2): the ECBp
@@ -269,6 +297,14 @@ static void cv_ai_stage(const CanonVal *v, MlAiStage *out) {
   if (lp->type != CV_ARR || lp->count > ML_AI_MAX_LEDGE) {
     fail("ledgePos shape");
   }
+  // rule 7 (iter 77, review-75 M6): ai.c's NearestLedge reads
+  // ledgePos[0] unconditionally (ai.js:897 semantics) — an empty list
+  // is outside the consumable domain and must die at the marshal, not
+  // feed an out-of-bounds read. Every captured record carries 2 ledges
+  // (measured, both goldens).
+  if (lp->count < 1) {
+    fail("ledgePos empty — ai.c NearestLedge reads [0] unconditionally");
+  }
   out->ledgePosLen = lp->count;
   for (int j = 0; j < lp->count; j++) out->ledgePos[j] = cv_vec2(lp->items[j]);
   cv_surf_list(obj_req(v, "platform"), out->platform, &out->platformLen,
@@ -283,9 +319,8 @@ static MlAiStage g_stage;
 
 static void run_ai_record(long frame, const CanonVal *args, CanonBuf *post) {
   if (args->type != CV_ARR || args->count != 2) fail("runAI: want [i, pre]");
-  const double slot_d = cv_num(args->items[0]);
-  const int slot = (int)slot_d;
-  if (slot_d != (double)slot || slot < 0 || slot > 3) fail("runAI: bad slot");
+  // representability BEFORE the cast (review-75 M5): NaN/inf/huge die here
+  const int slot = (int)cv_int_range(args->items[0], 0, 3, "runAI: bad slot");
   const CanonVal *pre = args->items[1];
   obj_expect_keys(pre, 6);
 
@@ -345,18 +380,26 @@ static void run_ai_record(long frame, const CanonVal *args, CanonBuf *post) {
   }
 
   // post envelope {bank, bk, rng} — byte-parallel to the spec's literal.
+  // bk is the FOUR-SLOT bookkeeping array (iter 77, review-75 M3): a
+  // foreign-slot bookkeeping write in either implementation is now a
+  // divergence, never silently oracle-fed into the next record.
   cb_puts(post, "{\"bank\":");
   ai_input_canon(post, &g_bank[slot][0]);
-  cb_puts(post, ",\"bk\":{\"ca\":");
-  cb_qstr(post, g_players[slot].currentAction);
-  cb_puts(post, ",\"cs\":");
-  cb_qstr(post, g_players[slot].currentSubaction);
-  cb_puts(post, ",\"cta\":");
-  if (sim.hasCurentAction[slot]) cb_qstr(post, sim.curentAction[slot]);
-  else cb_puts(post, "undef");
-  cb_puts(post, ",\"lm\":");
-  cb_num(post, g_players[slot].lastMash);
-  cb_puts(post, "},\"rng\":[");
+  cb_puts(post, ",\"bk\":[");
+  for (int k = 0; k < 4; k++) {
+    if (k) cb_putc(post, ',');
+    cb_puts(post, "{\"ca\":");
+    cb_qstr(post, g_players[k].currentAction);
+    cb_puts(post, ",\"cs\":");
+    cb_qstr(post, g_players[k].currentSubaction);
+    cb_puts(post, ",\"cta\":");
+    if (sim.hasCurentAction[k]) cb_qstr(post, sim.curentAction[k]);
+    else cb_puts(post, "undef");
+    cb_puts(post, ",\"lm\":");
+    cb_num(post, g_players[k].lastMash);
+    cb_putc(post, '}');
+  }
+  cb_puts(post, "],\"rng\":[");
   for (int k = 0; k < ml_events.rng_count; k++) {
     if (k) cb_putc(post, ',');
     cb_num(post, ml_events.rng[k]);
@@ -364,25 +407,108 @@ static void run_ai_record(long frame, const CanonVal *args, CanonBuf *post) {
   cb_puts(post, "]}");
 }
 
+// --- the --expect inventory (iter 77, review-75 M4) --------------------------
+// Strict grammar (whitelist rule, PROCESS section 3): exactly the four
+// known keys, each exactly once, comma-separated, values nonnegative
+// decimal integers with no trailing bytes. Anything else — unknown key,
+// duplicate, malformed number — is a parse death, never a partial pin.
+
+static const char *const g_exp_keys[4] = {"records", "runAI", "Math.random",
+                                          "rngBoot"};
+static long g_exp_vals[4];
+static bool g_exp_seen[4];
+
+static void parse_expect(const char *spec) {
+  char buf[256];
+  if (strlen(spec) >= sizeof buf) {
+    fprintf(stderr, "EXPECT PARSE FAIL: spec too long\n");
+    exit(1);
+  }
+  strcpy(buf, spec);
+  char *save = NULL;
+  for (char *tok = strtok_r(buf, ",", &save); tok;
+       tok = strtok_r(NULL, ",", &save)) {
+    char *eq = strchr(tok, '=');
+    if (!eq || eq == tok || eq[1] == 0) {
+      fprintf(stderr, "EXPECT PARSE FAIL: token '%s' is not key=value\n", tok);
+      exit(1);
+    }
+    *eq = 0;
+    int idx = -1;
+    for (int k = 0; k < 4; k++) {
+      if (strcmp(tok, g_exp_keys[k]) == 0) idx = k;
+    }
+    if (idx == -1) {
+      fprintf(stderr, "EXPECT PARSE FAIL: unknown key '%s'\n", tok);
+      exit(1);
+    }
+    if (g_exp_seen[idx]) {
+      fprintf(stderr, "EXPECT PARSE FAIL: duplicate key '%s'\n", tok);
+      exit(1);
+    }
+    char *end = NULL;
+    const long v = strtol(eq + 1, &end, 10);
+    if (end == eq + 1 || *end != 0 || v < 0) {
+      fprintf(stderr, "EXPECT PARSE FAIL: bad count '%s' for key '%s'\n",
+              eq + 1, tok);
+      exit(1);
+    }
+    g_exp_seen[idx] = true;
+    g_exp_vals[idx] = v;
+  }
+  for (int k = 0; k < 4; k++) {
+    if (!g_exp_seen[k]) {
+      fprintf(stderr, "EXPECT PARSE FAIL: missing key '%s'\n", g_exp_keys[k]);
+      exit(1);
+    }
+  }
+}
+
+// The 3 documented-dead arms (measured-dead upstream, AGENT-LOG iter 75;
+// FORMAT.md "The aiport spec"): pinned ZERO by --cover-gate.
+static const char *const g_dead_arms[3] = {"H_LEDGE_CTA", "GEN_RUT_UPTILT",
+                                           "FOX_RESPAWN_INARR"};
+
 // --- main --------------------------------------------------------------------
 
 int main(int argc, char **argv) {
   const char *path = NULL;
+  const char *expect_spec = NULL;
   bool strict = false, stop_first = false, cover = false;
+  long cover_gate = -1;
   int max_print = 5;
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--strict") == 0) strict = true;
     else if (strcmp(argv[i], "--stop-first") == 0) stop_first = true;
     else if (strcmp(argv[i], "--cover") == 0) cover = true;
+    else if (strcmp(argv[i], "--expect") == 0 && i + 1 < argc) expect_spec = argv[++i];
+    else if (strcmp(argv[i], "--cover-gate") == 0 && i + 1 < argc) {
+      char *end = NULL;
+      cover_gate = strtol(argv[++i], &end, 10);
+      if (end == argv[i] || *end != 0 || cover_gate < 0) {
+        fprintf(stderr, "bad --cover-gate value '%s'\n", argv[i]);
+        return 1;
+      }
+    }
     else if (strcmp(argv[i], "--max-print") == 0 && i + 1 < argc) max_print = atoi(argv[++i]);
     else if (!path) path = argv[i];
     else { fprintf(stderr, "unknown arg: %s\n", argv[i]); return 1; }
   }
   if (!path) {
     fprintf(stderr, "usage: replay_ai_port <capture.jsonl> [--strict] "
-                    "[--max-print N] [--stop-first] [--cover]\n");
+                    "[--max-print N] [--stop-first] [--cover]\n"
+                    "       [--expect records=N,runAI=N,Math.random=N,rngBoot=N]"
+                    " [--cover-gate N]\n");
     return 1;
   }
+  // fail-closed evidence mode (review-75 M4): strict replay without the
+  // record inventory would accept a truncated capture as 0 divergences.
+  if (strict && !expect_spec) {
+    fprintf(stderr, "replay_ai_port: --strict requires --expect "
+                    "(evidence-completeness inventory; review-75 M4)\n");
+    return 1;
+  }
+  if (expect_spec) parse_expect(expect_spec);
   FILE *f = fopen(path, "r");
   if (!f) { fprintf(stderr, "cannot open %s\n", path); return 1; }
   g_file = path;
@@ -393,6 +519,7 @@ int main(int argc, char **argv) {
   char *line = NULL;
   size_t linecap = 0;
   long replayed = 0, divergences = 0, printed = 0;
+  long n_runai = 0, n_mr = 0, n_boot = 0; // per-record-type inventory (M4)
   long first_div_line = -1;
 
   CanonBuf out, post;
@@ -418,7 +545,14 @@ int main(int argc, char **argv) {
     char *tab4 = strchr(ret_s, '\t');
     const char *post_s = NULL;
     if (tab4) { *tab4 = 0; post_s = tab4 + 1; }
-    const long frame = strtol(frame_s, NULL, 10);
+    // frame field: strict parse (M5 sibling audit, iter 77) — the value
+    // routes the RNG-generator decision (frame 0 = sweep), so a
+    // garbage-to-0 permissive parse would silently misroute a record.
+    char *frame_end = NULL;
+    const long frame = strtol(frame_s, &frame_end, 10);
+    if (frame_end == frame_s || *frame_end != 0 || frame < 0) {
+      fail("malformed frame field");
+    }
 
     canon_arena_reset();
     const char *err = NULL;
@@ -433,22 +567,26 @@ int main(int argc, char **argv) {
     bool want_post = false;
 
     if (strcmp(fn, "rngBoot") == 0) {
+      n_boot++;
       if (args->type != CV_ARR || args->count != 2) fail("rngBoot shape");
       if (g_boot_seen) fail("rngBoot: seen twice");
       g_boot_seen = true;
-      const double seed = cv_num(args->items[0]);
-      const double boot = cv_num(args->items[1]);
-      if (seed < 0 || seed != (double)(uint32_t)seed) fail("rngBoot: bad seed");
-      if (boot < 0 || boot != (double)(long)boot) fail("rngBoot: bad count");
-      ml_rng_seed(&g_rng, (uint32_t)seed);
-      for (long k = 0; k < (long)boot; k++) (void)ml_rng_next(&g_rng);
+      // representability BEFORE the casts (review-75 M5)
+      const uint32_t seed = (uint32_t)cv_int_range(
+          args->items[0], 0, 4294967295.0, "rngBoot: bad seed");
+      const long boot = cv_int_range(args->items[1], 0, 2147483647.0,
+                                     "rngBoot: bad count");
+      ml_rng_seed(&g_rng, seed);
+      for (long k = 0; k < boot; k++) (void)ml_rng_next(&g_rng);
       cb_num(&out, (double)g_rng.a); // additive-advance formula pin
     } else if (strcmp(fn, "Math.random") == 0) {
+      n_mr++;
       if (args->type != CV_ARR || args->count != 0) fail("Math.random shape");
       if (!g_boot_seen) fail("Math.random before rngBoot");
       if (frame == 0) g_frame0_draws++;
       cb_num(&out, ml_rng_next(&g_rng));
     } else if (strcmp(fn, "runAI") == 0) {
+      n_runai++;
       if (!g_boot_seen) fail("runAI before rngBoot");
       if (!post_s) fail("runAI: missing post-state field");
       want_post = true;
@@ -490,6 +628,15 @@ int main(int argc, char **argv) {
       if (stop_first) break;
     }
   }
+  // EVIDENCE COMPLETENESS (iter 77, review-75 M4): getline returns -1
+  // on error AND on EOF — a mid-file read error must be a corruption
+  // death, never a short-but-clean replay.
+  if (ferror(f)) {
+    fprintf(stderr, "READ FAIL %s:%ld: stream error mid-capture "
+                    "(ferror set — CORRUPT evidence, never EOF)\n",
+            path, g_lineno);
+    return 3;
+  }
   free(line);
   fclose(f);
 
@@ -501,10 +648,76 @@ int main(int argc, char **argv) {
     return 2;
   }
 
+  // per-record-type inventory vs the pinned counts (review-75 M4):
+  // truncation preserves well-formedness of every surviving record —
+  // only the inventory can see it.
+  if (expect_spec) {
+    const long got[4] = {replayed, n_runai, n_mr, n_boot};
+    bool inv_fail = false;
+    for (int k = 0; k < 4; k++) {
+      if (got[k] != g_exp_vals[k]) {
+        fprintf(stderr,
+                "INVENTORY FAIL: %s count %ld, pinned %ld "
+                "(a truncated/partial capture is CORRUPT evidence)\n",
+                g_exp_keys[k], got[k], g_exp_vals[k]);
+        inv_fail = true;
+      }
+    }
+    if (inv_fail) return 2;
+  }
+
   if (cover) {
     fprintf(stderr, "-- ai.c arm coverage (records that hit each arm) --\n");
     for (int k = 0; k < ML_AI_NCOV && ml_ai_cov_names[k]; k++) {
       fprintf(stderr, "COV %-24s %ld\n", ml_ai_cov_names[k], ml_ai_cov[k]);
+    }
+  }
+
+  // COVERAGE GATE (iter 77, review-75 M7): live-arm count pinned, dead
+  // arms pinned ZERO — replacing a live preset with a duplicate (counts
+  // preserved, chain untouched) or a dead arm going live is now loud.
+  if (cover_gate >= 0) {
+    int named = 0;
+    long live = 0;
+    for (int k = 0; k < ML_AI_NCOV && ml_ai_cov_names[k]; k++) {
+      named++;
+      if (ml_ai_cov[k] > 0) live++;
+    }
+    if (named != ML_AI_NCOV) {
+      fprintf(stderr,
+              "COVERAGE GATE FAIL: arm table has %d named arms, want %d "
+              "(a shrunken counter universe is CORRUPT instrumentation)\n",
+              named, ML_AI_NCOV);
+      return 2;
+    }
+    if (live != cover_gate) {
+      fprintf(stderr,
+              "COVERAGE GATE FAIL: %ld arms hit, pinned %ld "
+              "(a live arm going dead — e.g. a duplicated preset — or a "
+              "dead arm going live is drift, never a pass)\n",
+              live, cover_gate);
+      return 2;
+    }
+    for (int d = 0; d < 3; d++) {
+      int idx = -1;
+      for (int k = 0; k < ML_AI_NCOV && ml_ai_cov_names[k]; k++) {
+        if (strcmp(ml_ai_cov_names[k], g_dead_arms[d]) == 0) idx = k;
+      }
+      if (idx == -1) {
+        fprintf(stderr,
+                "COVERAGE GATE FAIL: documented-dead arm '%s' missing from "
+                "the table (renamed/dropped counter — fail closed)\n",
+                g_dead_arms[d]);
+        return 2;
+      }
+      if (ml_ai_cov[idx] != 0) {
+        fprintf(stderr,
+                "COVERAGE GATE FAIL: documented-dead arm '%s' went LIVE "
+                "(%ld hits) — the deadness measurement (AGENT-LOG iter 75) "
+                "no longer holds; reclassify before passing\n",
+                g_dead_arms[d], ml_ai_cov[idx]);
+        return 2;
+      }
     }
   }
 

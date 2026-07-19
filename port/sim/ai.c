@@ -576,7 +576,14 @@ static AiLedgeRet ai_CPULedge(MlAiSim *sim, MlPlayer *cpu, int p) {
     if (strcmp(cpu->actionState, "FALLAERIAL") == 0) { // :1253
       // :1254 `cpu.curentAction = "NONE"` — the upstream TYPO field
       // (write-only; nothing anywhere reads it). Modeled on the sim
-      // slice; the typo is load-bearing for the replay (tooth T4).
+      // slice. This arm is measured-DEAD upstream (:228 clears
+      // TOURNAMENTWINNER unless paction CLIFF*, :1253 needs FALLAERIAL
+      // — contradiction; coverage arm H_LEDGE_CTA pinned ZERO by the
+      // check's --cover-gate). T4-as-registered was therefore
+      // undischargeable and was REFUTED (AGENT-LOG iter 75): the cta
+      // plane is witnessed by tooth T4a (cta-serializer perturbation →
+      // 3663 divergences, every runAI record) and the q2 comparison-typo
+      // arm by tooth T4b (1 divergence via the sweep MASHING preset).
       AI_COV(H_LEDGE_CTA);
       sim->hasCurentAction[p] = true;
       ai_strcpy(sim->curentAction[p], "NONE");

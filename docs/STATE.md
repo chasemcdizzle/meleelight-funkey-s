@@ -3,7 +3,37 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 76 — device-rig arc round-1 findings CLOSED; rig arc round 2 = closure pending)
+## Live right now (updated: 2026-07-19, iter 77 — ai-rig arc round-1 findings CLOSED; ai-rig round 2 = closure pending)
+
+- **Iter 77 (M4 hardening — task-4 ai-rig arc round-1 closure) DONE**
+  (full entry: AGENT-LOG iter 77 pre-registration + result): ALL
+  triage items closed (.loop/review-75-triage.md; review
+  .loop/review-75-1.log r1 NO-GO) + the two round-1 findings outside
+  the M-list (stale-capture High, run lock) closed with the standard
+  classes. Highlights: spec-aiport.js recon bookkeeping allowlist is
+  now PER-SLOT and the post `bk` is the FOUR-SLOT array (foreign-slot
+  bookkeeping writes = wsViol in-page AND divergence in C; captures
+  re-recorded by the check, pins counts invariant); replay gained
+  --expect strict-grammar record inventory (REQUIRED under --strict;
+  ferror-checked — truncation/read error = corruption death),
+  representability guards before every captured-data cast (+ a
+  SIBLING found by the audit: the frame field's NULL-endptr strtol,
+  now full-token validated), ledgePos-empty rule-7 death, and
+  --cover-gate 61 (live arms pinned per golden; the 3 documented-dead
+  arms pinned ZERO); check-ai-replay.sh gained corpus inventory pin,
+  no-reclaim run lock, freshness contract, rc-case-split hygiene
+  guard; ai.c H_LEDGE_CTA comment now cites T4a/T4b (T4 refuted).
+  Cold check GREEN: `AI MATCH` (.loop/m4-airig77-donecheck.log, 4×
+  STREAM MATCH, 0 divergences, 61 live arms per golden); 12 teeth
+  fired with asserted death CLASSES incl. the reviewer's three exact
+  probes now dying (.loop/m4-airig77-teeth.log). check-sim skip
+  justified mechanically (ai.o byte-identical HEAD vs worktree);
+  bridge surface untouched (git status 0 lines). Composed runs 2/2,
+  probe captures 1/2.
+  **Driver next: ai-rig arc ROUND 2 (closure re-review of the iter-77
+  surfaces); device-rig arc round 2 runs concurrently (iter 76).**
+
+## [superseded by iter 77] (updated: 2026-07-19, iter 76 — device-rig arc round-1 findings CLOSED; rig arc round 2 = closure pending)
 
 - **Iter 76 (M4 hardening — iters-73/74 device-rig arc round-1
   closure) DONE** (full entry: AGENT-LOG iter 76 pre-registration +

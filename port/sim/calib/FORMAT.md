@@ -1281,11 +1281,16 @@ records:
   cookie-zeroing class — bool in sweep presets; truthiness-marshaled);
   `as` = {ground, ledgePos, platform} (the ai.js activeStage read set).
   Under-projection fails LOUD in the strict C marshal (rule 7).
-- **post** `{bank, bk, rng}` — byte-parallel to the M2 ai spec's
-  envelope (bank = post-runAI row, bk = {ca,cs,cta,lm}, rng = the
-  attributed draws).
-- **RECON**: the M2 write-set reconciliation carried over verbatim
-  (wsViol pinned ZERO).
+- **post** `{bank, bk, rng}` — bank (the post-runAI row) and rng (the
+  attributed draws) byte-parallel to the M2 ai spec's envelope; `bk` is
+  the FOUR-SLOT bookkeeping array `[{ca,cs,cta,lm} ×4]` (iter 77,
+  review-75 M3 — the replay emits and compares all four slots, so a
+  foreign-slot bookkeeping write in either implementation is a
+  divergence, never an invisible oracle-feed into the next record).
+- **RECON**: the M2 write-set reconciliation with a PER-SLOT
+  bookkeeping allowlist (iter 77): only the slot runAI runs for may
+  change its bookkeeping keys; any other slot's bookkeeping write is a
+  wsViol (pinned ZERO).
 - **SWEEP** (rules 11/12, 153 presets): a deterministic frame-0 battery
   drives runAI through the arms g07 (falcon: zero AI RNG) and g08
   (puff) never exercise — CATCHWAIT, DROPTHROUGHPLATFORM,
@@ -1317,9 +1322,16 @@ records:
 Replay: `replay_ai_port.c` — strict pre marshal → `port/sim/ai.c`
 `ml_runAI` on the chained C mulberry32 → byte-compare of {bank,bk,rng};
 `--cover` prints the ai.c arm-hit table (the honest-coverage
-instrument). Task check: `bash port/sim/calib/check-ai-replay.sh` →
-`AI MATCH` (x2 byte-stable captures, STREAM MATCH both runs, pins,
-0-divergence strict replay, no-commit guard).
+instrument); `--expect records=N,runAI=N,Math.random=N,rngBoot=N` is
+the evidence-completeness inventory (iter 77, review-75 M4 — strict
+grammar, REQUIRED under `--strict`; truncation/ferror = corruption
+death) and `--cover-gate N` pins the live-arm count and the 3
+documented-dead arms at ZERO (review-75 M7). Task check:
+`bash port/sim/calib/check-ai-replay.sh` → `AI MATCH` (corpus
+inventory pin, no-reclaim run lock, freshness-guarded ×2 byte-stable
+captures, STREAM MATCH both runs, pins, 0-divergence strict replay
+with inventory + coverage gates, rc-case-split no-commit guard —
+iter 77 hardening classes).
 
 ## The undef-ret allowlist (rule 8)
 

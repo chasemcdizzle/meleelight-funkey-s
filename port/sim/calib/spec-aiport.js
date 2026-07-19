@@ -8,11 +8,15 @@
 //   args = [i, pre] where pre is the grep-measured runAI READ-SET
 //   projection (players / bank rows 0-1 of slot i / cS / playerType /
 //   gameSettings.turbo / activeStage geometry), post = {bank, bk, rng}
-//   byte-parallel to the M2 spec's envelope.
+//   (bank/rng byte-parallel to the M2 spec's envelope; bk WIDENED iter
+//   77 to the FOUR-SLOT bookkeeping array [{ca,cs,cta,lm} x4] —
+//   review-75 M3: foreign-slot bookkeeping writes are divergences).
 // Under-projection fails LOUD in the C replay (strict marshal, rule 7).
 //
-// The M2 write-set RECONCILIATION is carried over verbatim (wsViol
-// pinned ZERO; belt and braces on the new capture). RNG: rngBoot +
+// The M2 write-set RECONCILIATION is carried over and STRENGTHENED
+// (iter 77, review-75 M3): the bookkeeping exclusion is a PER-SLOT
+// allowlist — only slot i's bookkeeping may change; any other slot's
+// bookkeeping write is a wsViol (pinned ZERO). RNG: rngBoot +
 // attributed runAI draw lists + standalone Math.random records.
 //
 // SWEEP (rules 11/12): g07's falcon AI hits zero RNG arms and g08's puff
@@ -140,7 +144,13 @@
         });
       };
 
-      // --- write-set recon (spec-ai verbatim) -----------------------------
+      // --- write-set recon (spec-ai lineage; FOUR-SLOT bookkeeping
+      // added iter 77, review-75 M3) ---------------------------------------
+      // The BK exclusion is a per-slot ALLOWLIST: only the slot runAI is
+      // running for may legitimately change its bookkeeping keys (they
+      // are the recorded output). Every OTHER slot's bookkeeping is
+      // recon-compared too — a foreign-slot bookkeeping write is a
+      // wsViol, never an invisible oracle-feed into the next record.
       const playerMinusBK = (k) => {
         const src = M.player[k];
         const o = {};
@@ -148,6 +158,11 @@
           if (BK.indexOf(key) === -1) o[key] = src[key];
         }
         return ctx.canon(o);
+      };
+      const bkOne = (k) => {
+        const p = M.player[k];
+        return { ca: p.currentAction, cs: p.currentSubaction,
+                 cta: p.curentAction, lm: p.lastMash };
       };
       const reconSnap = () => {
         const rows = [];
@@ -157,6 +172,8 @@
         return {
           players: [playerMinusBK(0), playerMinusBK(1),
                     playerMinusBK(2), playerMinusBK(3)],
+          bk: [ctx.canon(bkOne(0)), ctx.canon(bkOne(1)),
+               ctx.canon(bkOne(2)), ctx.canon(bkOne(3))],
           bank: rows,
           pt: ctx.canon(M.playerType),
           cs: ctx.canon(M.characterSelections),
@@ -187,6 +204,14 @@
             viol("player[" + k + "] (minus bookkeeping) changed");
           }
         }
+        // per-slot bookkeeping allowlist (iter 77, review-75 M3): only
+        // slot i's bookkeeping may change (it is the recorded output)
+        for (let k = 0; k < 4; k++) {
+          if (k === i) continue;
+          if (post.bk[k] !== pre.bk[k]) {
+            viol("player[" + k + "] bookkeeping changed (foreign-slot write)");
+          }
+        }
         for (let k = 0; k < 4; k++) {
           for (let j = 0; j < 8; j++) {
             if (k === i && j === 0) continue;
@@ -200,11 +225,12 @@
         if (post.gs !== pre.gs) viol("gameSettings changed");
         if (post.as !== pre.as) viol("activeStage changed");
 
-        const p = M.player[i];
+        // bk = the FOUR-SLOT bookkeeping array (iter 77, review-75 M3):
+        // the C replay emits + compares all four slots, so a foreign-slot
+        // bookkeeping write in either implementation is a divergence.
         const postCanon =
           '{"bank":' + ctx.canon(bank[i][0]) +
-          ',"bk":' + ctx.canon({ ca: p.currentAction, cs: p.currentSubaction,
-                                 cta: p.curentAction, lm: p.lastMash }) +
+          ',"bk":' + ctx.canon([bkOne(0), bkOne(1), bkOne(2), bkOne(3)]) +
           ',"rng":[' + draws.map((v) => ctx.canon(v)).join(",") + "]}";
         ctx.push("runAI", argsCanon, ctx.canon(ret), postCanon);
         return ret;

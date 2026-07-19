@@ -11001,3 +11001,204 @@ SKIP ATTRIB VERDICT: (a) — low_bat_check 2 s poll comb (attributed iter 74; ca
   watchdog's span; (3) the strictest reconciliation is producer chain
   vs consumer chain (timing skips == EV skips == app summary skips)
   — every decision-bearing count now has two independent witnesses.
+
+## iter 77 — 2026-07-19 — PRE-REGISTRATION: ai-rig arc (iter 75) round-1 closure — 4-slot recon + evidence completeness + coverage gates (frozen before any run/edit; PROCESS §2)
+
+- **Task (driver triage .loop/review-75-triage.md, BINDING; full review
+  .loop/review-75-1.log, VERDICT: NO-GO r1)**: close ALL round-1
+  findings on the M4 task-4 ai-rig surfaces. Surface:
+  `port/sim/calib/{check-ai-replay.sh,spec-aiport.js,replay_ai_port.c,
+  expected-capture-aiport.json}` + ONE comment in `port/sim/ai.c`
+  (+ the FORMAT.md "aiport spec" section kept accurate — doc collateral
+  of the envelope change). NO device surfaces (iter-76 rig-arc round-2
+  closure runs concurrently; port/sim/device/* + port/gfx/* untouched).
+- **Fixes (triage M1-M7 + L, all)**:
+  M1 corpus inventory pin in check-ai-replay.sh: CORPUS asserted exactly
+     {g07,g08}, unique, == expected-capture-aiport.json golden keys both
+     directions, BEFORE anything runs (check-vfx-seam.sh inventory-pin
+     class).
+  M2 no-commit hygiene guard rc CASE-SPLIT: explicit exit-code capture
+     of `git status --porcelain` (no if-pipeline fail-open; the
+     review-66 M3 pattern) — a status read error dies loudly.
+  M3 FOUR-SLOT bookkeeping recon + envelope: spec-aiport.js reconSnap
+     gains per-slot canon of the 4 bookkeeping keys
+     {currentAction,currentSubaction,curentAction,lastMash}; wrapper
+     compares them for every slot k != i (foreign-slot write → wsViol);
+     post envelope `bk` becomes the 4-ELEMENT array [{ca,cs,cta,lm}×4]
+     and replay_ai_port.c emits + compares all four slots. Captures
+     RE-RECORDED by the check itself (fresh ×2 per golden, each run
+     STREAM MATCH vs the frozen golden — unchanged verify-stream.js);
+     frozen OLD ai captures/spec untouched; expected-capture-aiport.json
+     comment re-frozen (counts expected UNCHANGED: same record set,
+     wider post payload).
+  M4 evidence completeness in the replay: ferror() checked after the
+     getline loop (a mid-file read error is corruption, never EOF); NEW
+     `--expect records=N,runAI=N,Math.random=N,rngBoot=N` per-record-
+     type inventory (strict grammar: exactly these 4 keys, each once,
+     integer values; unknown/dup/malformed → death) compared at EOF —
+     truncation = corruption death; `--expect` is REQUIRED under
+     --strict (fail-closed evidence mode). check-ai-replay.sh feeds it
+     from the pins file (single source).
+  M5 numeric representability proven BEFORE every cast on captured
+     data: shared range/integrality guard (NaN/inf/huge/fractional →
+     rule-7 MARSHAL FAIL) at the runAI slot cast and the rngBoot
+     seed/boot casts + a TU-wide sibling-cast grep recorded in the
+     result entry.
+  M6 ledgePos marshal strictness: empty list → rule-7 hard-fail
+     (ai.c NearestLedge reads [0] unconditionally — the marshal refuses
+     what the code cannot consume).
+  M7 coverage GATES: check runs the replay with `--cover --cover-gate
+     61`; the gate asserts (a) the names table is fully populated (64),
+     (b) live-arm count == 61 per golden (measured iter 75, both
+     goldens), (c) the 3 documented-dead arms H_LEDGE_CTA /
+     GEN_RUT_UPTILT / FOX_RESPAWN_INARR exist in the table AND stay
+     ZERO — a dead arm going live or a live arm going dead is loud.
+  L  ai.c:577 comment corrected: T4-as-registered was refuted (the
+     :1254 site is measured-dead); cite T4a (cta-serializer witness,
+     3663 divergences) + T4b (q2 typo witness) instead.
+- **Also closed from the round-1 review (outside the triage M-list, in
+  writing)**: the High "stale captures can vacuously pass" + Medium "no
+  run lock" findings — both closed with the standard aggregator classes
+  on the SAME surface (check-ai-replay.sh): FRESHNESS = rm -f all four
+  capture outputs before each golden's runs + test -s after each run
+  (a no-op recorder now dies, never replays stale bytes); RUN LOCK =
+  the mkdir-atomic no-reclaim host lock (iter-41/66 pattern, lock
+  beside the guarded build/ files, trap installed only after
+  acquisition). Cheap class closures on an in-surface file beat
+  dispositions (PROCESS §3 review bar).
+- **Run caps**: composed check runs ≤ 2 (expect 1 — it performs the M3
+  re-record: 2 fresh captures per golden, each STREAM MATCH, like iter
+  75); probe CAPTURE runs (browser) ≤ 2 (the M3 wsViol tooth's
+  injected-spec probe run + 1 spare); replay/probe invocations
+  unbounded (local seconds); M7 duplicate-record candidate attempts
+  ≤ 6.
+- **Teeth (registered; ALL on probe copies — no tracked file is ever
+  perturbed, so the cold done-check needs no restore round)**:
+  T77-1 (M1) probe copy of the check with CORPUS=(g07) → corpus-pin
+        death BEFORE any capture run.
+  T77-2 (M2) the guard block extracted verbatim into a probe harness
+        with `git` shimmed rc 128 → case-split death; control without
+        the shim passes.
+  T77-3 (M3-C) g07 capture copy with ONE in-match record's FOREIGN-slot
+        bk value bit-edited → exactly 1 divergence (rc 2).
+  T77-3b (M3-JS) probe spec copy (spec-aiportprobe.js, deleted after)
+        injecting `player[0].currentAction = "PROBE"` inside the
+        wrapped runAI window → capture run dies loudly on wsViol
+        (finalCheck throw, nonzero rc).
+  T77-4 (M4) (a) the reviewer's EXACT 155-record probe (--strict, no
+        --expect) → now dies (missing --expect); (b) truncated copy
+        WITH correct --expect → inventory corruption death.
+  T77-5 (M5) NaN bit-pattern (d:7ff8000000000000) injected as rngBoot
+        seed / runAI slot in a 3-record probe → MARSHAL FAIL rc 3
+        (previously UB casts).
+  T77-6 (M6) the reviewer's EXACT ledgePos:[] 3-record probe → MARSHAL
+        FAIL rc 3 (previously rc 0).
+  T77-7 (M7) g07 capture copy with the unique-arm zero-rng sweep record
+        (REBIRTHWAIT preset; fallback GEN_TECH_CLEAR) replaced by a
+        DUPLICATE of another zero-rng sweep record (GEN_RUNOFF_AIR
+        family) — counts preserved, chain untouched, 0 divergences →
+        coverage-gate death (live 60 != 61), the review's exact
+        accident scenario.
+- **Pass criteria**: cold `bash port/sim/calib/check-ai-replay.sh` →
+  `AI MATCH` exit 0 (.loop/m4-airig77-donecheck.log) AND every tooth
+  fires with its REGISTERED death class (not merely nonzero), logged in
+  .loop/m4-airig77-teeth.log.
+- **Refutation shapes**: R1 pins mismatch on the re-record (counts
+  should be invariant — same record set) → investigate 1 bounded round;
+  re-freeze ONLY with the delta understood and written down, else STOP.
+  R2 STREAM MATCH failure → the recon/bk widening perturbed the sim
+  (it is read-only by construction) → my edit is buggy; ≤ 2 debug
+  rounds then STOP. R3 replay divergences → C bk emission mismatch —
+  fix the SERIALIZER, never the comparator; ≤ 4 rounds. R4 T77-7 fires
+  divergence instead of coverage death for all ≤ 6 candidate pairs →
+  record honestly as partial, do NOT substitute a gate-parameter
+  perturbation silently. Default on any other wall: one bounded
+  evidence round, then STOP and report.
+- **Regressions**: `bash port/sim/check-sim.sh` SKIPPED — justified iff
+  the final ai.c diff is COMMENT-ONLY (asserted by reading the diff;
+  any code change voids the skip). `bash port/sim/calib/
+  check-ai-bridge.sh` untouched-verify by git diff (no edits to the
+  bridge surface). Frozen M2 ai spec/captures byte-untouched.
+
+## iter 77 — 2026-07-19 — M4 hardening RESULT: ai-rig 4-slot recon + evidence completeness + coverage gates — round-1 arc findings ALL closed, cold check green
+
+**DONE.** Final cold done-check `bash port/sim/calib/check-ai-replay.sh`
+→ `AI MATCH`, exit 0 (.loop/m4-airig77-donecheck.log): corpus pin, lock,
+freshness-guarded ×2 byte-identical FRESH captures per golden (the M3
+re-record), STREAM MATCH ×4, pins OK (counts INVARIANT as predicted —
+3745/3826; R1 not triggered), strict replay 0 divergences on both
+goldens WITH the new --expect inventory and --cover-gate 61 (61 live
+arms per golden, dead arms zero). Composed runs 2/2 (run 1 green,
+.loop/m4-airig77-donecheck-run1.log; run 2 = final cold after the M5
+sibling frame-parse fix landed mid-teeth). Probe capture runs 1/2.
+
+**Landed (per triage .loop/review-75-triage.md, ALL items)**:
+- M1 corpus inventory pin (CORPUS == {g07,g08} unique == pin keys, both
+  directions, before lock/build). M2 no-commit guard rc case-split.
+- M3 FOUR-SLOT bookkeeping: spec-aiport.js recon allowlist is PER-SLOT
+  (foreign-slot bookkeeping write → wsViol), post `bk` is the 4-slot
+  array [{ca,cs,cta,lm}×4]; replay_ai_port.c emits + compares all four;
+  captures re-recorded by the check (frozen OLD ai captures untouched);
+  expected-capture-aiport.json comment re-frozen, counts invariant.
+- M4 evidence completeness: ferror after getline; `--expect
+  records/runAI/Math.random/rngBoot` strict-grammar inventory, REQUIRED
+  under --strict (fail-closed evidence mode), fed from the pins file.
+- M5 representability BEFORE every captured-data cast (cv_int_range:
+  range+integrality guard, NaN-safe) at the slot + rngBoot seed/boot
+  sites; TU-wide sibling audit logged — FOUND ONE MORE: the record
+  FRAME field (strtol NULL-endptr on captured data routing the frame-0
+  sweep-RNG decision) — now full-token validated, malformed frame =
+  marshal death.
+- M6 ledgePos empty → rule-7 marshal death (NearestLedge reads [0]
+  unconditionally). M7 coverage GATES: --cover-gate 61 asserts table
+  fully populated (64), live == 61 per golden, and H_LEDGE_CTA /
+  GEN_RUT_UPTILT / FOX_RESPAWN_INARR pinned ZERO (a dead arm going live
+  or a live arm going dead is loud).
+- L ai.c H_LEDGE_CTA comment corrected (T4 refuted → T4a/T4b cited).
+- Round-1 High "stale captures" + Medium "no run lock" (outside the
+  triage M-list) closed with the standard classes on the same surface:
+  FRESHNESS (rm -f before runs + test -s after) and the mkdir-atomic
+  no-reclaim RUN LOCK (iter-41/66 pattern). FORMAT.md "The aiport spec"
+  updated to match the envelope/gates (doc collateral).
+
+**Teeth (.loop/m4-airig77-teeth.log; ALL on probe copies — zero tracked
+files perturbed, so the final cold run needed no restore round)**:
+T77-1 CORPUS=(g07) probe → corpus-pin death before any run. T77-2 guard
+block extracted verbatim + git shim rc 128 → case-split death; control
+passes. T77-3 foreign-slot bk bit-edit (line 164, frame 91, slot-0 lm)
+→ exactly 1 divergence rc 2. T77-3b probe spec injecting
+`player[0].currentAction="PROBE"` inside the wrapped window → 154
+wsViols, finalCheck throw, capture dies loudly (153 fresh-preset writes
++ 1 live — the per-slot recon sees every one). T77-4a the reviewer's
+exact 155-record probe (--strict, no --expect) → dies rc 1 (was rc 0);
+T77-4b truncated + pinned inventory → INVENTORY FAIL rc 2. T77-5a/b/c
+NaN seed / NaN slot / 2^63 slot → MARSHAL FAIL rc 3 (were UB casts);
+T77-5d malformed frame field → MARSHAL FAIL rc 3 (first probe attempt
+mis-injected via BSD-sed alternation and died on the WRONG class —
+caught, retried properly, recorded). T77-6 the reviewer's exact
+ledgePos:[] probe → MARSHAL FAIL rc 3 (was rc 0). T77-7 the review's
+exact accident: unique-arm zero-rng sweep record (REBIRTHWAIT, its
+target measured by a live-only vs full --cover diff) replaced by a
+duplicate of the zero-rng RUNOFF-FALL-LEFT record — counts preserved,
+chain untouched, control replay CLEAN rc 0 (0 divergences, inventory
+green) → --cover-gate kills it: `60 arms hit, pinned 61`, rc 2.
+
+**Regressions**: check-sim.sh SKIPPED — justification MECHANICAL: ai.c
+diff is comment-only AND the compiled ai.o is byte-identical HEAD vs
+worktree (cmp; logged in the teeth log). check-ai-bridge.sh
+untouched-verify: git status of the whole bridge surface (check script,
+spec-ai.js, expected-capture-ai.json, ai_bridge.{c,h},
+build-ai-bridge.js) = 0 lines — nothing to re-run. Frozen M2 ai
+spec/captures byte-untouched.
+
+**ZOOM-OUT note (HARD RULE 8)**: nothing here was a one-off — every fix
+is an instance of an already-registered aggregator/rig class (inventory
+pin, freshness, lock, rc case-split, whitelist grammar for --expect,
+strict-marshal rule 7, honest-coverage gating), now applied to the
+host-side single-cluster check they had skipped. The M5 audit finding
+(frame-field parse) confirms the class lesson: after fixing a cited
+instance, GREP THE TU for siblings before declaring the class closed —
+the sibling was decision-bearing (RNG routing) and invisible to the
+0-divergence stream. The T77-5d mis-injected probe re-teaches iter-72's
+lesson: a tooth that dies for the WRONG reason is a broken tooth —
+always assert the death CLASS, not just the exit code.
