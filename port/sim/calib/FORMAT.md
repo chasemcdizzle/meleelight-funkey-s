@@ -1257,6 +1257,70 @@ holds THE interpretInputs implementation, over tagged JS values
 measured domain is all-bool buttons — asserted on exit). Task 3's
 check-input-replay.sh re-verified bit-exact after the rebase.
 
+## The aiport spec (M4 task 4)
+
+The ai.js C-PORT boundary over the CPU goldens **g07/g08** — the
+successor recording to "The ai spec" above (which is FROZEN and stays
+the AIBRIDGE1 source; fix_plan §M4 task 5 retires the bridge from the
+live path, never this format). The M2 ai records carry only the post
+envelope; a C-port replay needs marshalable PRE state, so this spec
+wraps `runAI` ONLY (expectWrapped 1) and records 5-field mutation
+records:
+
+- **args** `[i, pre]` — pre is the grep-measured runAI READ-SET
+  projection (AGENT-LOG iter 75): `p` = 4 players ×
+  {actionState, charAttributes:{multiJump}, currentAction,
+  currentSubaction, difficulty, grounded (the TOP-LEVEL q1 read — no
+  playerObject defines it; recorded truthfully as undef and
+  marshal-asserted), hasHit, hit:{hitlag,hitstun}, lastMash,
+  phys:{ECBp, cVel, doubleJumped, face, fastfalled, grounded,
+  hurtBoxState, jumpsUsed, kVel, onLedge, pos, shieldHP}, timer}
+  (+ `curentAction` as a conditional own-key — the upstream typo field);
+  `bank2` = [aiInputBank[i][0], aiInputBank[i][1]] full tagged rows;
+  `cs`; `pt`; `gs` = {turbo} (a NUMBER in the live domain — the qjs
+  cookie-zeroing class — bool in sweep presets; truthiness-marshaled);
+  `as` = {ground, ledgePos, platform} (the ai.js activeStage read set).
+  Under-projection fails LOUD in the strict C marshal (rule 7).
+- **post** `{bank, bk, rng}` — byte-parallel to the M2 ai spec's
+  envelope (bank = post-runAI row, bk = {ca,cs,cta,lm}, rng = the
+  attributed draws).
+- **RECON**: the M2 write-set reconciliation carried over verbatim
+  (wsViol pinned ZERO).
+- **SWEEP** (rules 11/12, 153 presets): a deterministic frame-0 battery
+  drives runAI through the arms g07 (falcon: zero AI RNG) and g08
+  (puff) never exercise — CATCHWAIT, DROPTHROUGHPLATFORM,
+  RUNOFFPLATFORM, platform-drop, SHIELD/CPUShield (shieldHP 5 pins the
+  do-something arm deterministically), LEDGESTALL, LEDGEDASH (marth/
+  puff/fox arms), SDI (difficulty 4), CPUrecover (fox charge/firefox,
+  marth side-b/up-b/UPSPECIAL, puff multijump, generic), REVERSEUPTILT,
+  MASHING (incl. the q2 comparison-typo arm), CAPTURE mash (both
+  bank[i][1].a arms), DAMAGEFALL/CPUTech, DOWNWAIT, WAVESHINEANY,
+  CAPTURECUT/CPUGrabRelease (fox + other), REBIRTHWAIT, CLIFFWAIT/
+  CPULedge, LEDGEJUMP/LEDGEAIRATTACK/LEDGEAIRATTACK2, and the marth/
+  jiggs/fox char-AI turn/tilt/react/SHDL/RESPAWNMULTISHINE arms with
+  turbo variants. All four player slots are swapped for fresh upstream
+  `playerObject`s, playerType/cS/bank rows/turbo swapped and restored in
+  finally; Math.random is swapped for a mulberry32 seeded 0x0badf00d
+  which the C replay mirrors for every frame-0 runAI record.
+- **Measured DEAD arms** (upstream-unreachable via runAI; C carries them
+  verbatim, coverage counters pin them 0): the ai.js:1254 curentAction
+  typo write (:228 clears TOURNAMENTWINNER unless paction CLIFF*, :1253
+  needs FALLAERIAL — contradiction); the REVERSEUPTILT :279 UPTILT-arm
+  (:150 clears the subaction unless paction UPTILT, which :271 clears
+  on); the LEDGESTALL GRAB completion (:219 always clears — currentAction
+  "LEDGESTALL" is never in its list); CPULedge :1249's
+  LANDINGFALLSPECIAL arm (:233's list excludes it); CPUrecover's fox
+  side-b :1544 (its |ydiff|<=10 window contradicts the :1521 falling
+  gate); foxAI's SHIELDMULTISHINE arm (q3 TDZ — C traps); the q4
+  `in`-array arm.
+
+Replay: `replay_ai_port.c` — strict pre marshal → `port/sim/ai.c`
+`ml_runAI` on the chained C mulberry32 → byte-compare of {bank,bk,rng};
+`--cover` prints the ai.c arm-hit table (the honest-coverage
+instrument). Task check: `bash port/sim/calib/check-ai-replay.sh` →
+`AI MATCH` (x2 byte-stable captures, STREAM MATCH both runs, pins,
+0-divergence strict replay, no-commit guard).
+
 ## The undef-ret allowlist (rule 8)
 
 

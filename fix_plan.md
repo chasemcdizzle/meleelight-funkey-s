@@ -1472,6 +1472,26 @@ overruns):
   wsViol) — plus a fresh re-record proving the rig unchanged.
   done-check: `bash port/sim/calib/check-ai-replay.sh` → prints
   `AI MATCH`, exit 0.
+  **DONE (iter 75, 2026-07-19) — committed form**: cold done-check
+  `AI MATCH` exit 0 (.loop/m4-task4-donecheck.log). port/sim/ai.{h,c} —
+  all 22 ai.js functions over MlAiSim (god-module slice; tagged bank
+  writes with exact literal tags, rule 16; curentAction typo field as
+  slice state; fdlibm transcendentals incl. fd_tan; quirks q1-q8
+  verbatim); NEW spec-aiport.js (runAI-only wrap, read-set pre
+  projection in args, M2-parallel post {bank,bk,rng}, recon wsViol==0,
+  153-preset rule-11/12 sweep on a 0x0badf00d mulberry32) + replay_ai_
+  port.c (strict marshal, chained RNG, --cover arm table) + expected-
+  capture-aiport.json + check-ai-replay.sh; FORMAT.md "The aiport spec".
+  0 divergences over 7571 records (3510 live + 153 sweep per golden);
+  ZERO divergence-driven fix rounds. Honest coverage MEASURED: 61/64
+  arms hit per golden; the 3 zero-hit arms + 5 more surfaces are
+  measured-DEAD upstream (incl. the ai.js:1254 curentAction write —
+  :228/:1253 contradiction — and REVERSEUPTILT's :279 completion;
+  FORMAT.md lists all). Teeth: nibble→1, live-draw drop→1104 cascade,
+  bk-write drop→3/1, cta-serializer→3663 (=every record), q2-typo
+  "fix"→1 (sweep witness); T4-as-preregistered amended on the measured
+  dead site (AGENT-LOG). Regressions: SIM CONFORMS + AI BRIDGE OK
+  (bridge path untouched). M2 ai spec/captures/AIBRIDGE1 byte-frozen.
 - task 5 — **live CPU integration, bridge retired from the live
   path**: sim_main/gfx_app grow a live-AI mode (C runAI at the
   update(i) site; bank-row alias + post-runAI slot re-copy semantics

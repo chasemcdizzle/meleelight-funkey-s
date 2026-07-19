@@ -3,7 +3,31 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, tasks 3+8 done): stall class ATTRIBUTED + mitigated; task 3 DONE)
+## Live right now (updated: 2026-07-19, iter 75 — M4 task 4 DONE: ai.js C port, AI MATCH)
+
+- **Iter 75 (M4 task 4 — ai.js structure-parallel C port) DONE** (full
+  entry: AGENT-LOG iter 75 pre-registration + result): cold done-check
+  `bash port/sim/calib/check-ai-replay.sh` → `AI MATCH` exit 0
+  (.loop/m4-task4-donecheck.log). port/sim/ai.{h,c} (22 fns over
+  MlAiSim; tagged bank writes, curentAction typo as slice state, fdlibm
+  math, quirks q1-q8 verbatim) verified by the NEW aiport capture spec
+  (runAI-only, pre read-set projection + M2-parallel post, wsViol==0,
+  153-preset sweep) — 0 divergences over 7571 records on g07+g08,
+  ZERO divergence-driven fix rounds. Honest coverage measured via the
+  --cover arm instrument: 61/64 arms per golden; 3 zero-hit + 5 more
+  surfaces measured-DEAD upstream (FORMAT.md "The aiport spec" lists
+  them — incl. the ai.js:1254 curentAction write, dead by the
+  :228/:1253 contradiction; T4 tooth amended accordingly, recorded).
+  Teeth all fired (.loop/m4-task4-teeth.log): nibble→1, draw-drop→1104
+  cascade, bk-drop→3/1, cta-serializer→3663, q2-typo→1. Regressions
+  green: SIM CONFORMS + AI BRIDGE OK (AIBRIDGE1/check-sim.sh
+  byte-untouched — task 5 retires the bridge from the live path).
+  Task-5 handoff notes in the AGENT-LOG entry (MlAiSim population,
+  bank-row alias/slot-0 re-copy stays caller's job, same seeded stream,
+  rule-16 re-survey on new goldens). Device untouched this iteration
+  (host-only task; iters 73-74 device-rig Codex arc unaffected).
+
+## [superseded by iter 75] (updated: 2026-07-19, tasks 3+8 done): stall class ATTRIBUTED + mitigated; task 3 DONE)
 
 - **Iter 74 (M4 task 8 — skip-stall attribution instrument,
   driver-re-ordered forward) DONE; M4 task 3 UNBLOCKED → DONE** (full

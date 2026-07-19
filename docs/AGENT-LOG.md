@@ -10471,3 +10471,264 @@ injectPin, servedDistSha256, all *-frozen.txt).
   scripts are touched); (2) OPK play stays unmitigated (valve-absorbed).
 - next: Tier-A arc over the iter 73+74 rig surfaces (batched), then
   task 4 (ai.js port).
+
+## iter 75 — 2026-07-19 — M4 task 4 PRE-REGISTRATION: ai.js structure-parallel C port + capture-replay verification (frozen before any run/edit; PROCESS §2)
+
+**Task (fix_plan §M4 task 4)**: `port/sim/ai.c` (+ ai.h) translated from
+upstream `src/main/ai.js`, verified by strict record-by-record replay of
+a NEW ai-port capture spec over g07/g08. done-check:
+`bash port/sim/calib/check-ai-replay.sh` → `AI MATCH`, exit 0.
+
+**Surface survey (measured by reading the whole file + grep, upstream
+`src/main/ai.js` @ pin 27af171, 1,575 lines)**:
+- 22 functions: exported `NearestEnemy, generalAI, marthAI, runAI,
+  isEnemyApproaching, NearestLedge, NearestFloor, isAboveGround, CPUSHDL,
+  CPUTech, CPUMissedTech, CPUWaveshineAny, CPUGrabRelease, CPUrecover`;
+  internal `jiggsAI, foxAI, falcoAI (empty), falconAI (empty),
+  CPUSDItoStage, CPUShield, CPULedge`; window-global `isOffstage`
+  (browser-global identity class). Module `let a = 0` is dead (only
+  commented consumers).
+- Math.random: 45 textual occurrences, 36 LIVE sites (9 in comments).
+  Math surface: pow ×2 (NearestEnemy — fdlibm fd_pow), atan ×3, cos ×3,
+  sin ×3, tan ×1 (CPUShield doSomethingChance — fd_tan, vendored since
+  M0), floor ×37, abs ×48, sign ×24, min ×9, max ×1, PI ×2; sqrt ×6 all
+  commented. floor/abs are exact ops; min/max/sign via ml_js.h (JS NaN
+  semantics); transcendentals via port/fdlibm.
+- aiInputBank[i][0] live write fields: {a,b,csX,csY,l,lA,lsX,lsY,x,y,z}
+  (matches the M2 task-16 measured write set; `.r` only in a comment).
+  Value TAGS at write sites are mixed number/bool per site (rule 16):
+  entry resets write l=0 (number) but x=false (bool); CATCHWAIT a=1.0,
+  marth-LEDGESTALL x=1.0 (numbers into buttons) — every site translated
+  with its exact literal tag over MlAiVal.
+- Player bookkeeping writes: currentAction/currentSubaction/lastMash +
+  the `curentAction` TYPO field (ai.js:1254, CPULedge TOURNAMENTWINNER
+  arm) — write-only upstream (no reader anywhere); carried verbatim,
+  modeled as MlAiSim slice state (falcon canEdgeCancel class), NOT an
+  MlPlayer widening (nothing outside ai.js ever reads it).
+- Upstream quirks carried verbatim (registered before translating):
+  (q1) ai.js:262 reads `player[i].grounded` — NOT phys.grounded; no
+  playerObject ever has a top-level `grounded` (grep: only
+  physicsObject's this.grounded) → always undefined → `!(undefined)` ===
+  true. Capture records it; C marshal hard-asserts undef.
+  (q2) ai.js:402 `player[i].currentAction == "NONE";` — a COMPARISON as
+  a statement (typo): only lastMash=0 executes. Tooth T4b candidate.
+  (q3) foxAI:732 reads `nearest` before its `const` declaration (:778)
+  — TDZ ReferenceError if currentAction ever == "SHIELDMULTISHINE"
+  (nothing sets it; grep: zero writers) → C trap (mv_out_of_domain
+  class), unsweepable by construction (JS would throw).
+  (q4) foxAI:772 `currentSubaction in ["LASER1","LASER2","REVERSE"]` —
+  JS `in` on an ARRAY tests index keys, not membership: false for every
+  value ai.js can write; C models own-key semantics ("0"/"1"/"2"/
+  "length") with a comment (prototype-chain names are out of the
+  write-domain).
+  (q5) CPUSDItoStage even-timer arm reads hoisted-unassigned
+  `imperfection` → theta = atan(...) + undefined = NaN → lsX/lsY NaN →
+  consumer isNaN⇒0. NaN model (ToNumber(undefined) = canonical NaN).
+  (q6) marthAI/jiggsAI/foxAI pdiff>=3 blocks read hoisted `distx`
+  assigned only under currentAction=="NONE" → undefined→NaN model.
+  (q7) typo args carried verbatim: isAboveGround(pos.x, px + 1.0)
+  (generalAI:157, y arg is x+1) and isAboveGround(pos.x, pos.x)
+  (CPUShield:1218); foxAI:732's `.indexOf(paction)` used truthily
+  (unreached — behind the q3 trap).
+  (q8) the marth/jiggs/fox smash-turn outer conditions differ in
+  parenthesization — each transcribed from its own line, never assumed
+  identical (task-11 "delta-2" lesson).
+
+**Capture sufficiency decision (pre-registered)**: the frozen M2 ai-spec
+captures do NOT suffice — not because of vfx (runAI has no vfx surface:
+zero drawVfx imports/calls in ai.js — measured, so the M4 task-1
+widening is irrelevant here) but because the M2 records carry only the
+POST envelope {bank,bk,rng} (spec-ai.js's recon snapshots were compared
+in-page, never written). A C-port replay needs the marshalable PRE state
+(the runAI read set). Resolution: NEW spec `spec-aiport.js` + NEW
+capture files + NEW pins (`expected-capture-aiport.json`) — frozen M2
+ai captures and spec-ai.js stay byte-untouched; check-ai-bridge.sh must
+stay green (regression).
+
+**New spec design (aiport)**: wraps runAI only (expectWrapped 1,
+hand-wrapped). Record: args `[i, pre]`, ret undef, post {bank, bk, rng}
+(byte-same envelope construction as spec-ai). pre = grep-measured runAI
+read-set projection: p = 4 players × {actionState, charAttributes:{mj},
+currentAction, currentSubaction, curentAction (own-key conditional),
+difficulty, grounded (top-level, q1), hasHit, hit:{hitlag,hitstun},
+lastMash, phys:{ECBp, cVel, doubleJumped, face, fastfalled, grounded,
+hurtBoxState, jumpsUsed, kVel, onLedge, pos, shieldHP}, timer};
+bank2 = [bank[i][0], bank[i][1]] full 22-key rows; cs; pt; gs={turbo};
+as={ground, ledgePos, platform} (the ai.js activeStage read set).
+Under-projection fails LOUD: the C marshal is strict (rule 7) and every
+C read goes through marshaled fields — a missing key is a hard-fail,
+never a guess; each widening gets logged. The M2 write-set RECON +
+wsViol pin ZERO are carried over verbatim (belt and braces on the new
+capture). RNG: rngBoot + attributed runAI draw lists + standalone
+Math.random records (chain-order faithful; runAI never nests).
+
+**Sweep (rules 11/12)**: g07's falcon AI hits ZERO rng arms and g08's
+puff covers only part of the machine; task 5 (live CPU, new d1/d9
+traces) and M4 live play are the reachable future domain → a
+deterministic frame-0 sweep battery (~60-85 presets) drives runAI
+through otherwise-dead arms: CATCHWAIT, DROPTHROUGHPLATFORM,
+RUNOFFPLATFORM, platform-drop, SHIELD/CPUShield, LEDGESTALL machines,
+LEDGEDASH (all 3 char arms), SDI (difficulty 4), CPUrecover (fox
+firefox/sideb, marth sideb/upb, multijump), REVERSEUPTILT, MASHING/
+CAPTURE mash (both bank[i][1].a arms), DAMAGEFALL tech/jump, DOWNWAIT,
+WAVESHINEANY, CAPTURECUT GrabRelease (fox + other), REBIRTHWAIT,
+CLIFFWAIT/CPULedge (incl. the TOURNAMENTWINNER curentAction typo site —
+tooth T4's guaranteed record), walk-toward, and the marth/jiggs/fox
+char-AI turn/tilt/react/SHDL/RESPAWNMULTISHINE arms (turbo variants
+included: gameSettings.turbo swapped + restored). Mechanics: swap all 4
+player refs for fresh `new playerObject(...)`s, swap
+playerType/cS/bank[i][0..1] rows/turbo, Math.random → local mulberry32
+0x0badf00d for the sweep window (moves-shared precedent), restore ALL in
+finally; non-perturbation proven mechanically by ×2 byte-stability +
+STREAM MATCH (rule 12). Draw-gated arms cannot be steered — multi-arm
+draw sites get repeated calls; coverage is MEASURED, not assumed (below).
+Documented skips: q3's TDZ arm (throws upstream — trap only), in-marth
+cS==1||2 branch (dead by dispatch construction), LEDGEDASH-from-live
+(only reachable via presets, swept), falcoAI/falconAI bodies (empty).
+
+**Coverage instrument (Tier-B diagnostic)**: ai.c carries cheap arm
+counters (AI_COV(id) at every measured branch arm, ~45 ids); the replay
+prints the hit table under --cover. The honest-coverage note reports
+MEASURED zero-hit arms over live+sweep records — never "assumed
+covered".
+
+**Replay driver (replay_ai_port.c, M2-CAL pattern)**: streams the JSONL;
+rngBoot seeds + fast-forwards the chained mulberry32; standalone
+Math.random burns+verifies draw-for-draw (frame-0 standalone count
+asserted == 1, the startGame draw); every runAI record: marshal pre
+(strict) → MlAiSim + MlPlayer[4] + tagged bank rows → ml_ev_reset →
+ml_runAI(sim, i) with ml_active_rng = chained rng (frame-0 records:
+sweep rng mirror, asshort precedent) → serialize post {bank (22-key
+canon-order tagged row), bk {ca,cs,cta,lm}, rng (ml_events.rng log)} →
+byte-compare vs the record's post. 0 divergences required (--strict).
+
+**Run caps**: ≤6 capture runs per golden total across all projection
+widenings (2 needed per final rig state; each widening costs 2); replay
+runs unbounded (local seconds); translation fix rounds ≤15; teeth = 4
+perturbations + reverse-edit restores (never `git checkout --`,
+iter-64 lesson) each proven by a clean re-run.
+
+**Teeth (registered)**: T1 post-nibble in a COPY of one live record's
+post bank field → exactly 1 divergence. T2 drop one MEASURED-LIVE draw
+site in ai.c (chosen from the coverage table) → chain-cascade
+divergence count recorded (expect ≫1: every later draw shifts). T3 drop
+a measured-live bookkeeping write → divergence count recorded. T4
+"fix" the curentAction typo (write currentAction instead at
+CPULedge:1254) → ≥1 divergence (the TOURNAMENTWINNER sweep record
+guarantees a witness even at zero live hits) — the typo is load-bearing.
+All four restored + final clean run.
+
+**Refutation shapes**: R1 capture ×2 byte-mismatch or STREAM MATCH
+failure → sweep restoration bug; ≤4 debug attempts, then drop the
+offending presets (recorded) — never ship a perturbing spec. R2 marshal
+hard-fail → under-projection; widen + re-record (logged per widening;
+counts against the 6-run cap). R3 a divergence class surviving 15 fix
+rounds → STOP, report honestly, do NOT weaken the comparator. R4 the
+coverage table contradicts a deadness assumption → reclassify in the
+result entry. Default on any other wall: one bounded evidence round,
+then STOP and report.
+
+**Constraints honored**: no device; port/sim/device/*,
+port/gfx/check-device-render.sh, port/fdlibm/fdlibm.c untouched (Codex
+review in flight; fdlibm consumed link-only); oracle/ + frozen captures
+untouched (new captures = new files + pins); AIBRIDGE1 path untouched
+(task 5 retires it); check-sim.sh + check-ai-bridge.sh re-run as
+regressions and logged. Expected diff size: >400 lines (translation-
+heavy; overrun pre-registered by the fix_plan task list note).
+
+## iter 75 — 2026-07-19 — M4 task 4 RESULT: ai.js structure-parallel C port — AI MATCH, 0 divergences over 7571 records (g07+g08, live + sweep)
+
+**DONE.** Cold done-check `bash port/sim/calib/check-ai-replay.sh` →
+`AI MATCH`, exit 0 (.loop/m4-task4-donecheck.log): per golden ×2
+byte-identical fresh aiport captures, STREAM MATCH on all four runs
+(sweep + wrapper provably non-perturbing), pins OK, strict C replay
+0 divergences (g07: 3745 records, g08: 3826; runAI 3663 each = 3510
+live + 153 sweep presets).
+
+**Landed**: `port/sim/ai.{h,c}` (the full 22-function translation over
+MlAiSim — the ai.js god-module slice: player/cS/playerType/turbo/aS/
+tagged aiInputBank + the write-only `curentAction` typo field as slice
+state (falcon-canEdgeCancel class) + multiJump as marshaled table plane;
+every expression shape/eval order/value TAG verbatim, all Math.* through
+fdlibm (fd_pow/fd_atan/fd_cos/fd_sin/fd_tan) + js_min/js_max/js_sign;
+draws via logged ml_random); `port/sim/calib/spec-aiport.js` (runAI-only
+wrap with the read-set pre projection in args + M2-parallel post
+{bank,bk,rng}, the M2 recon carried verbatim wsViol==0, and the 153-
+preset rule-11/12 sweep battery — all 4 player slots swapped for fresh
+upstream playerObjects, sweep mulberry32 0x0badf00d, total finally-
+restore); `port/sim/calib/replay_ai_port.c` (strict marshal → ml_runAI
+→ byte-compare; chained RNG, frame-0 records on the mirrored sweep gen;
+--cover arm table); `expected-capture-aiport.json` (measured-then-frozen
+pins); `check-ai-replay.sh`; FORMAT.md "The aiport spec". Frozen M2 ai
+captures/spec/bridge untouched.
+
+**Capture-sufficiency decision (as pre-registered)**: M2 ai captures
+insufficient — they lack pre state (vfx irrelevant: runAI has zero vfx
+surface, measured). New spec + new files + new pins; spec-ai.js frozen.
+
+**Survey confirmed** (pre-registration figures held): 1,575 lines, 22
+fns, 36 live Math.random sites, 11 live bank-write fields, bookkeeping =
+{currentAction, currentSubaction, lastMash, curentAction}. Quirks q1-q8
+all carried verbatim (top-level player.grounded undef read — marshal-
+asserted; the :402 comparison-statement typo; the foxAI TDZ trap; the
+q4 in-array arm; the CPUSDItoStage NaN-theta arm; hoisted-undefined
+distx/disty as NaN; the substr/arg typos; per-body parenthesization).
+
+**Fix rounds**: ZERO divergence-driven rounds — the translation replayed
+0-divergence on the first complete build. Two R2-class marshal
+corrections during bring-up (player projection is 11 keys, not 12;
+gameSettings.turbo is a NUMBER in the live domain — the qjs
+cookie-zeroing class — truthiness-marshaled over bool|number) and one
+sweep-geometry correction (the default cpu pos originally satisfied the
+:157 above-platform typo check and consumed platform-drop draws; moved
+to (-30,10) where isAboveGround(x, x+1) is "none"). Run tally: 4 aiport
+captures per golden total (cap was 6).
+
+**Honest coverage (MEASURED — the --cover instrument, 64 arms)**: 61/64
+arms hit on EACH golden (live + sweep; g07 falcon AI alone fires zero
+RNG arms — the sweep carries the char-AI/helper coverage; g08 live:
+jiggs tilt 315, react 972, walk 1082, ledge 56, dmgfall-tech 87).
+The 3 zero-hit arms are MEASURED-DEAD upstream (unreachable via runAI,
+C carries them verbatim): (1) ai.js:1254 curentAction typo write (:228
+clears TOURNAMENTWINNER unless paction CLIFF*, :1253 needs FALLAERIAL —
+contradiction); (2) REVERSEUPTILT's :279 UPTILT completion (:150 clears
+the subaction unless paction UPTILT, which :271 then clears on); (3) the
+q4 in-array arm (own-key semantics, false over the whole write domain).
+Also measured-dead (no counters, documented in FORMAT.md): LEDGESTALL
+GRAB completion (:219), CPULedge :1249 LANDINGFALLSPECIAL arm, CPUrecover
+fox side-b :1544 (|ydiff|<=10 contradicts the :1521 gate), marth :478 /
+fox :705 substr(0,4)=="CLIFF" clears (4-char prefix never equals a
+5-char string), the in-marth/jiggs cS==1||2 / cS==2 copy-paste branches.
+foxAI SHIELDMULTISHINE = the q3 TDZ trap (unsweepable by construction).
+
+**Teeth** (.loop/m4-task4-teeth.log; reverse-edit restores + clean
+re-runs): T1 post-nibble → exactly 1. T2 live-draw-site drop (:609) →
+1104-divergence cascade on g08. T3 bookkeeping-write drop (:406) → 3/1
+divergences (only value-changing clears are visible — the comparator
+sees values, not writes; noted). T4a cta-serializer perturbation → 3663
+divergences = EVERY runAI record on both goldens. T4b q2-typo "fixed" →
+1 divergence each (the sweep MASHING preset witnesses the typo).
+**Pre-registration AMENDMENT (recorded)**: T4-as-registered (perturb the
+:1254 site) is undischargeable — the site is dead upstream (measured,
+above); T4a+T4b + the grep-asserted site presence replace it.
+
+**Regressions green**: `bash port/sim/check-sim.sh` → SIM CONFORMS
+(bridge path unperturbed; .loop/m4-task4-regression-sim.log);
+`bash port/sim/calib/check-ai-bridge.sh` → AI BRIDGE OK (17,893 records
+0 divergences; .loop/m4-task4-regression-bridge.log). AIBRIDGE1
+untouched (task 5 retires it).
+
+**Task-5 notes (live CPU integration)**: (1) ml_runAI takes MlAiSim —
+sim_main must populate player pointers, cS/pt, gameSettings.turbo
+TRUTHINESS, an MlAiStage view built from STAB1 (ledgePos/platform/
+ground), the tagged bank, and the CTAB1 multiJump per slot; curentAction
+slice state persists across frames (write-only). (2) The bank-row alias
++ post-runAI slot-0 re-copy semantics stay the caller's job (ai_bridge.h
+contract). (3) runAI draws come from the SAME seeded stream via
+ml_active_rng — no bridge draw-burn at the call site anymore. (4) rule
+16 reminder: new goldens (d1/d9 traces) widen value domains — re-survey
+the pre projection if the marshal hard-fails. ZOOM-OUT note: the
+capture-first + strict-marshal + sweep pattern needed ZERO new rules
+this task — the two widenings were existing classes (rule 7 loop, qjs
+cookie-zeroing); the one new instrument (the --cover arm table) is the
+honest-coverage generalization of rule 11's "sweep-or-document".
