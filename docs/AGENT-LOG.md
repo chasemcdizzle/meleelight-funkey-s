@@ -12853,3 +12853,24 @@ zero new code; (4) the ai-live kit (pins + inventories + eval-kill +
 made()) is now on its 3rd consumer (ai-live, mixer-fidelity, vfx-seam
 cold-shape) — the composed-gate posture is converging to one shape.
 Mixer arc round 2 = driver re-review with the COMPLETE diff.
+
+## driver — 2026-07-19 — iter-84 verified; GUARDON return-drop queued as iter 85; process notes
+
+- Iter-84 driver-cold-verified (MIXER FIDELITY OK, bit-identical 11
+  goldens) + pushed via ours-merge a787911: the writer AMENDED its
+  commit after the driver had already pushed the pre-amend form —
+  resolved without force-push per HARD RULE 4 (tree == 20dbbf1).
+  PROCESS lesson recorded: drivers must not push a writer commit until
+  the FINAL REPORT arrives (the report is the handoff boundary);
+  writers must never amend after their done-check evidence is written.
+- QUEUED iter 85 (before task 7): review-82's un-triaged High —
+  GUARDON.c:56 ignores as_shieldDepletion's return (a depletion break
+  while RAISING shield leaves the victim stuck in GUARDON — the exact
+  sibling of the GUARD bug iter-82 fixed). Sim TU fix, structure-
+  parallel, browser-verified via an s01-style scenario extension or
+  targeted probe; SIM CONFORMS + s01 STREAM MATCH must hold.
+- Driver observation also recorded: concurrent composed checks share
+  unlocked build dirs (iter-84's run-2 kill by "another session" was
+  MY prematurely-launched cold run — mea culpa on record; the
+  single-writer rule extends to composed CHECK RUNS; deferred-cold-run
+  is now driver practice while a writer is active).
