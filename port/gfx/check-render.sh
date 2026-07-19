@@ -354,16 +354,25 @@ cmp "$BUILD/vfxdata.txt" "$GFX/vfxdata-frozen.txt" || {
   exit 1
 }
 echo "captured VFXDATA matches the committed frozen artifact"
-# VFXGLYPHS freeze tripwire (M4 task 2): glyph dumps measured x2
-# byte-identical in-session (iter 65; the browser rasterizes Arial
-# deterministically within a pinned browser build), so the gfxdata
-# regenerate+cmp class applies. A legitimate browser/font change becomes
-# a REVIEWED re-freeze, never silent drift.
-cmp "$BUILD/vfxglyphs.txt" "$GFX/vfxglyphs-frozen.txt" || {
-  echo "check-render: captured VFXGLYPHS differs from the committed port/gfx/vfxglyphs-frozen.txt (re-freeze is a reviewed change)" >&2
+# VFXGLYPHS freeze tripwire (M4 task 2; comparison REPLACED iter 72 —
+# glyph-jitter class fix): the iter-65 "x2 byte-identical in-session"
+# measurement under-sampled the cross-session distribution — browser
+# canvas TEXT rasterization flips single antialiased pixels across
+# Math.round boundaries (~1-in-8 cold captures, driver find). The
+# bit-exact cmp was therefore a FALSE oracle on healthy code; replacing
+# it with the measured-then-frozen glyph-compare.js contract is a
+# measurement-honesty correction, NOT a weakening: structure (names,
+# dimensions, offsets, advances, counts, line shape) stays EXACT, pixel
+# channels get the frozen tolerance (delta<=4, <=16 differing pixels of
+# 19,764; measured max 1/1, .loop/m4-task2r72-probe.log), twin-pinned in
+# glyph-compare.js + expected-render.json glyphComparePins. Legitimate
+# browser/font drift still becomes a REVIEWED re-freeze, never silence.
+node "$GFX/glyph-compare.js" --judge "$GFX/vfxglyphs-frozen.txt" \
+  "$BUILD/vfxglyphs.txt" "$EXP" || {
+  echo "check-render: captured VFXGLYPHS violates the frozen glyph-compare contract vs port/gfx/vfxglyphs-frozen.txt (re-freeze is a reviewed change)" >&2
   exit 1
 }
-echo "captured VFXGLYPHS matches the committed frozen artifact"
+echo "captured VFXGLYPHS matches the committed frozen artifact (glyph-compare contract)"
 IFS=',' read -r -a SAMPLED <<< "$FRAMES_LIST"
 for f in "${SAMPLED[@]}"; do
   tag=$(printf 'f%04d' "$f")

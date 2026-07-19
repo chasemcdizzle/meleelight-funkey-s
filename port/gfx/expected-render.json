@@ -136,5 +136,23 @@
   "seedThreshold": 0.85,
   "retired": { "m3Task3Pin": 0.91, "note": "vfx/overlay-blind reduced-sequence exposure closed by M4 task 2" },
   "measuredAtFreeze": { "run1Min": 0.897, "run1MinFrame": 3599, "run2Min": 0.8835, "run2MinFrame": 1297, "max": 0.9846 },
-  "retarget": { "k": 0.2, "dy": 45 }
+  "retarget": { "k": 0.2, "dy": 45 },
+  "glyphComparePins": {
+    "comment": [
+      "Glyph-jitter class fix (iter 72): browser-rasterized TEXT is not",
+      "bit-deterministic cross-session — the vfxglyphs cmp tripwire was",
+      "a false oracle (driver find: 1 flipped antialiased pixel in ~8",
+      "cold runs). glyph-compare.js --judge replaces it: STRUCTURE exact,",
+      "pixel channels within maxChannelDelta, and at most maxDiffPixels",
+      "of the 19,764 atlas pixels may differ at all. MEASURED basis",
+      "(.loop/m4-task2r72-probe.log; 21-pair matrix over frozen +",
+      "preserved-failed + 5 fresh sessions): structural drift 0/21, max",
+      "channel delta 1, max differing-pixel count 1 (sprite ready RGBA",
+      "px 2576, r 234<->235). Frozen at 4x + floor per the iter-72",
+      "pre-registration: delta 4, count 16. Twin-pinned (hard-coded) in",
+      "glyph-compare.js; NEVER loosened (CLAUDE.md hard rule 3)."
+    ],
+    "maxChannelDelta": 4,
+    "maxDiffPixels": 16
+  }
 }

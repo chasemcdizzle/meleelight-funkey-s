@@ -3,7 +3,31 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-18, iter 71 — task-2 arc round-3 Medium closed: loo trajectory continuity)
+## Live right now (updated: 2026-07-18, iter 72 — glyph-jitter class fix: measured glyph comparison)
+
+- **Iter 72 (M4 task 2 micro-iteration — glyph-jitter class fix) DONE**:
+  the driver's cold-r71 finding (committed vfxglyphs-frozen.txt vs
+  fresh capture: ONE hex char of 43,013 — sprite "ready" RGBA px 2576,
+  r 234<->235, delta 1; ~1-in-8 cold runs) root-classed: bit-freezing
+  browser-rasterized TEXT assumes a determinism canvas font rendering
+  does not provide. Pre-registered characterization (new standing
+  instrument port/gfx/glyph-jitter-probe.js, 5 fresh sessions + frozen
+  + preserved-failed = 21 pairs, .loop/m4-task2r72-probe.log):
+  structural drift 0/21, max channel delta 1, max diff-pixel count 1.
+  Refutation shape (c) fired -> measured-then-frozen comparator
+  port/gfx/glyph-compare.js replaces the vfxglyphs cmp in
+  check-render.sh: structure EXACT, channels within 4, <=16 of 19,764
+  pixels may differ; twin-pinned (script + expected-render.json
+  glyphComparePins). vfxglyphs-frozen.txt NOT re-frozen (5/5 fresh
+  sessions byte-matched it). Teeth T1-T7 all bite incl. negative
+  control: the preserved failing pair now PASSES
+  (.loop/m4-task2r72-teeth.log). Cold RENDER OK x2, fresh sessions
+  (donecheck{,2}.log): IOU MIN 0.9010 / 0.9030, streams MATCH. This
+  was a measurement-honesty correction, not a weakening — documented
+  with exposure figures in the AGENT-LOG entry. Task-3 note: device
+  path consumes the COMMITTED frozen file (browser-free) — device
+  comparisons stay bit-exact; pin the frozen sha, never a fresh
+  capture's.
 
 - **Iter 71 (M4 task 2 hardening round 3 — loo trajectory continuity)
   DONE**: the single review-70 round-3 Medium (.loop/review-70-1.log,

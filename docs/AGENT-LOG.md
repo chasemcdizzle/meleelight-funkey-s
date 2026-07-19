@@ -9707,3 +9707,164 @@ injectPin, servedDistSha256, all *-frozen.txt).
   observed trajectory by reference, and assert the replay reproduces
   the observed output bit-for-bit (the assertion is what turns the
   discipline into a tooth).
+
+## iter 72 — 2026-07-18 — M4 task 2 PRE-REGISTRATION: glyph-jitter class fix (frozen before any run/edit; PROCESS §2)
+
+- FINDING (driver, cold r71 re-run): committed vfxglyphs-frozen.txt vs
+  fresh capture — exactly ONE byte of 43,013 on line 130 differs; first
+  occurrence in ~8 cold runs (.loop/driver-cold-m4t2r71-donecheck.log,
+  failed pair preserved: port/gfx/build/vfxglyphs.txt). Byte-level
+  ground truth (measured this session, pre-registration input): sprite
+  "ready" RGBA pixel 2576 (x=16,y=20 of 128x42), r channel 234->235
+  (delta +1), g/b/a identical, alpha=255 — a Math.round(rSum/aSum)
+  boundary flip from sub-ulp antialiasing scatter in the browser's Arial
+  rasterization. CLASS: bit-freezing browser-rasterized TEXT assumes a
+  determinism canvas font rendering does not provide (the iter-65 x2
+  in-session byte-identity measurement was real but under-sampled the
+  cross-session distribution).
+- METHOD (characterization FIRST): new committed instrument
+  `port/gfx/glyph-jitter-probe.js` — N fresh browser sessions (each a
+  full chromium.launch -> served pinned dist -> the capture-canvas.js
+  init-script stack verbatim -> `__gfxDumpGlyphs()` -> teardown; no
+  match setup — glyph rasterization consumes only (browser build, font,
+  canvas ops), documented probe simplification), dumps to
+  build/glyphchar/s<N>.txt. Then pairwise-compare ALL of
+  {frozen, preserved-failed, s1..s5} = 21 pairs: structural lines
+  (VFXGLYPHS1/GLYPH/SPRITE/END headers, line count, mask-line lengths)
+  must be byte-exact; for FMASK/SMASK/RGBA report every differing
+  pixel, per-channel delta, and per-pair differing-pixel count.
+- RUN CAP: 5 probe sessions + <=2 cold check-render.sh runs (the
+  done-checks). Teeth run against the comparator directly on perturbed
+  COPIES (no extra check-render runs, no tracked-file writes).
+- DECISION RULE (frozen now): the "deterministic rasterization exists"
+  alternative is already REFUTED as an assumption by the preserved pair
+  (Arial is a local system font — no font-load race to await; proving
+  any config change eliminates a ~1-in-8-cold-runs event needs >>30
+  runs, outside the cap). Therefore, unless a refutation shape fires,
+  the fix is the measured-then-frozen comparison
+  (`port/gfx/glyph-compare.js`, wired into check-render.sh in place of
+  the glyph cmp): structural fields EXACT (any header/name/dimension/
+  advance/line-count/mask-length drift = death), pixel channels within
+  a frozen per-channel tolerance, and a frozen cap on the NUMBER of
+  differing pixels. Tolerance freeze rule: maxChannelDelta =
+  max(4, 4x measured max delta); maxDiffPixels = max(16, 4x measured
+  max per-pair count) — frozen into expected-render.json BEFORE the
+  first passing done-check, never loosened after. vfxglyphs-frozen.txt
+  is NOT re-frozen unless a probe session shows structural drift vs it
+  (freeze-file bytes stay the reviewed reference; the comparator
+  absorbs the pixel jitter honestly). This is a measurement-honesty
+  correction, not a weakening: the old cmp was wrong about its own
+  input's determinism (hard rule 1 — the check must do what it claims;
+  a check that fails 1-in-8 on healthy code is a false oracle).
+- REFUTATION SHAPES: (a) any pair differs STRUCTURALLY
+  (header/dimension/advance/line count) -> tolerance scheme
+  insufficient (a 5-grid bbox cell flip needs a different design) —
+  record, STOP, report to driver; (b) measured channel delta > 0x10 or
+  per-pair differing-pixel count > 8 -> the frozen tolerance would be
+  loose enough to risk masking real drift — one bounded evidence round
+  (mechanism re-exam), then STOP and report; (c) all probe pairs
+  byte-identical (jitter not reproduced in 5 sessions) -> NOT evidence
+  of determinism (the preserved pair stands); freeze tolerances from
+  the preserved pair alone (delta 1 -> tol 4; count 1 -> cap 16) and
+  document the low-exposure basis.
+- TEETH (pre-registered; perturbed copies of the fresh capture, judged
+  by glyph-compare.js): T1 GLYPH header dimension change -> death;
+  T2 SPRITE name change ("ready"->"reado") -> death; T3 one channel
+  perturbed by 0x80 (way outside tolerance) -> death; T4 (cap+1) pixels
+  each perturbed by +1 (count-cap breach) -> death; T5 mask-line length
+  change -> death; T6 NEGATIVE CONTROL: the preserved failing pair
+  (frozen vs build/vfxglyphs.txt) must PASS. Log:
+  .loop/m4-task2r72-teeth.log.
+- DONE-CHECK: cold `bash port/gfx/check-render.sh` -> RENDER OK exit 0
+  TWICE (two fresh browser sessions — the pair that could previously
+  disagree); .loop/m4-task2r72-donecheck{,2}.log.
+
+## iter 72 — 2026-07-18 — M4 task 2 DONE: glyph-jitter class fix — measured glyph comparison — RENDER OK x2
+
+- HONEST PROCESS NOTE: after launching done-check run 1 in the
+  background this writer ENDED ITS TURN to wait (§7#1 failure mode #1);
+  the driver nudged with ground truth (run 1 complete on disk) and the
+  session resumed foreground. Run 2 was then driven nohup + bounded
+  foreground poll per the nudge.
+- CHARACTERIZATION (pre-registered matrix, .loop/m4-task2r72-probe.log):
+  new standing instrument `port/gfx/glyph-jitter-probe.js` (5 fully
+  fresh browser sessions, capture-canvas.js init stack verbatim, dump
+  only) + `glyph-compare.js --measure` pairwise over 7 versions
+  {frozen, preserved-failed (driver's cold-r71 capture), s1..s5} = 21
+  pairs. RESULT: structural drift 0/21; 15 pairs byte-identical (frozen
+  == s1..s5, one sha); the 6 pairs involving preserved-failed each show
+  EXACTLY 1 differing pixel — sprite "ready" RGBA px 2576 (16,20),
+  r 234<->235, delta 1, alpha 255 (a Math.round(rSum/aSum) boundary
+  flip on one antialiased edge cell). Measured jitter domain:
+  maxChannelDelta 1, maxDiffPixels 1, structure always exact.
+  (Matrix log note: the first pairwise block in the log had a zsh
+  1-index scripting bug — empty first arg, rc=1; marked DISREGARD in
+  the log, corrected block follows it. Probe sessions ran ONCE; the
+  correction re-ran only the offline comparisons, run cap intact.)
+- DECISION (refutation shape (c) fired, exactly as pre-registered):
+  jitter not reproduced in 5 fresh sessions -> NOT evidence of
+  determinism (the preserved pair stands; Arial is a local system font,
+  no font-load race to await; proving any deterministic-rasterization
+  config for a ~1-in-8 event needs >>30 runs, outside the cap). Fix =
+  measured-then-frozen comparison: `port/gfx/glyph-compare.js --judge`
+  replaces the vfxglyphs cmp in check-render.sh. STRUCTURE EXACT
+  (line count, record order, every GLYPH/SPRITE header byte-for-byte —
+  names, dims, offsets, advances — mask tags/lengths, VFXGLYPHS1/END
+  frame = death on any drift); pixel channels within frozen
+  maxChannelDelta 4; at most maxDiffPixels 16 of the 19,764 atlas
+  pixels (5,140 FMASK/SMASK + 14,624 RGBA) may differ AT ALL. Freeze
+  rule applied: max(4, 4x measured 1) / max(16, 4x measured 1). Twin
+  pins: hard-coded in glyph-compare.js AND frozen in
+  expected-render.json glyphComparePins, --judge asserts they agree
+  (the inkNames twin-pin class). vfxglyphs-frozen.txt NOT re-frozen —
+  its bytes sit inside the tolerance family (5/5 fresh sessions matched
+  it byte-exactly); no reviewed re-freeze needed.
+- MEASUREMENT-HONESTY, not weakening (hard rules 1/3): the old cmp
+  claimed a determinism its input does not have — a check that fails
+  ~1-in-8 cold runs on healthy code is a false oracle. The replacement
+  is TIGHTER about everything the artifact actually pins (structure,
+  and 255-level channel values to within 4) and honest about the one
+  thing it cannot pin (sub-ulp AA scatter across a rounding boundary).
+  Teeth prove it still bites (below). The gates/oracle surface is
+  untouched: vfxglyphs is a RENDER-plane artifact, not on the
+  CHECKSUM.md stream; verify-stream.js and all sim checks unchanged.
+- TEETH (.loop/m4-task2r72-teeth.log; perturbed /tmp COPIES only,
+  frozen + fresh shas proven untouched in-log): T1a SPRITE dim change
+  -> grammar death (RGBA length mismatch); T1b GLYPH advance nudge ->
+  structural death; T2 sprite name "ready"->"reado" -> structural
+  death; T3 one channel delta 0x80 -> out-of-tolerance death; T4 17
+  pixels each +1 -> count-cap death (16 allowed, 17 dies); T5
+  mask-line length +1 pair -> grammar death; T6 NEGATIVE CONTROL: the
+  preserved failing pair PASSES (1 pixel, delta 1 — the class fix
+  working); T7 (extra, twin-pin class): loosened JSON pin
+  maxChannelDelta=64 -> twin-pin death.
+- EXPOSURE (PROCESS §8): the comparator cannot detect a real regression
+  whose ONLY effect is <=16 pixels each within +/-4 per channel of the
+  frozen atlas (0.081% of pixels at <=1.6% of channel range) — bounded
+  by structure-exactness (any dimension/offset/name/advance drift still
+  dies) and by the IoU + banner-drop teeth downstream (a glyph plane
+  that drifts visibly moves f30/f76/f100 IoU). Detectable-exposure
+  basis is LOW-N (one jitter instance across ~10 cold captures + 5
+  probe sessions); if a future cold run trips the 4/16 caps that is
+  evidence, not noise — investigate before any re-freeze.
+- DONE-CHECK: cold `bash port/gfx/check-render.sh` -> RENDER OK exit 0
+  TWICE, two fresh browser sessions (.loop/m4-task2r72-donecheck{,2}.log):
+  run 1 IOU MIN 0.9010, run 2 IOU MIN 0.9030 (threshold 0.88, 24
+  frames); both fresh glyph dumps this time byte-matched frozen
+  (GLYPHS MATCH, 0 differing pixels — consistent with the ~1-in-8
+  rate); both captures STREAM MATCH; x2 C renders byte-identical.
+- ZOOM OUT: the CLASS is "bit-freezing browser-rasterized text" — an
+  in-session x2 byte-identity measurement (iter 65) under-sampled the
+  cross-session distribution. Committed frozen artifacts in this repo
+  now split cleanly: EXECUTED-DATA planes (gfxdata/vfxdata: page-JS
+  values, genuinely deterministic, cmp stays) vs RASTERIZED-pixel
+  planes (glyphs: AA-rounding-sensitive, measured-then-frozen
+  comparator). Any FUTURE browser-rasterized artifact starts with a
+  cross-session characterization matrix, never an in-session x2. The
+  standing probe (glyph-jitter-probe.js) makes that a one-command
+  measurement. NOTE for M4 task 3 (device glyphs): the DEVICE path
+  consumes the COMMITTED vfxglyphs-frozen.txt (browser-free), so
+  device-side comparisons stay bit-exact — the jitter class lives only
+  where a fresh browser dump is compared against the frozen reference;
+  if task 3 pins glyph bytes over ADB, pin the frozen file's sha, never
+  a fresh capture's.
