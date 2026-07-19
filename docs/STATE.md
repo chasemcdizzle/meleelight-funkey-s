@@ -3,7 +3,42 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-18, iter 72 — glyph-jitter class fix: measured glyph comparison)
+## Live right now (updated: 2026-07-18, iter 73 — M4 task 3 landed+verified, done-check BLOCKED on the external stall class)
+
+- **Iter 73 (M4 task 3 — stage legibility + device render rung)
+  LANDED + VERIFIED, done-check BLOCKED (honest report; full entry =
+  AGENT-LOG iter 73)**: legibility = device-only `--legible`
+  (GFX_LEGIBLE_MIN_DEV_PX 2.0 device px, gfx.h rationale, twin-pinned,
+  standing in-check no-legible-differs witness; host IoU path
+  byte-untouched); --vfxdata/--glyphs threaded through
+  check-device-render.sh / check-device-opk.sh / mlfk.sh with the
+  COMMITTED frozen files' sha pins (iter-72 rule); arm build + host
+  backends gain the vfx render TUs; judge-shot criterion-5 retired
+  (reviewed pin change — ink-suppressed bg art); arm-gcc-10.2 -Werror
+  class fixes (hit_detection.h noreturn decl — SIM CONFORMS 8/8 rerun
+  green; overlay buffer); dv_start countdown clamped to the atlas
+  domain (valve-tooth-found C-only skip-desync state); bit-identical
+  render optimization round measured with the NEW -DMLFK_RENDER_PROF
+  per-pass profiler (batch blend prims + rast_fill cov-window +
+  unit-circle table): device render p99 13.20 -> 7.06 ms, full p99
+  20.79 -> 15.51 (all budgets MET; trail in device-perf.md iter-73).
+  GREEN: host RENDER OK (IoU min 0.9041, no pin moved), STREAM MATCH
+  every device attempt, device shot BIT-IDENTICAL to host, teeth all
+  fired, manifest re-pin 5 producers arc-pending + anchor SELF-CHECK
+  23/23 GREEN. **BLOCKED: skips==0 unreachable today — 8/8 paced
+  attempts carried 1-3 skips from isolated ~7-15 ms EXTERNAL kernel
+  stalls (frames ~1118-1290 zone, the iters-54/59 zone); adbd-poll /
+  writeback / rig-machinery / swap / DVFS / fresh-boot all REFUTED by
+  isolation probes. skips==0 unweakened; task-8 attribution instrument
+  = closure path; do NOT retry blind (driver: one cold retry on fresh
+  device state is legitimate new evidence).** ALSO REGISTERED:
+  check-device-opk.sh's frozen nav is stale (post-M3 inventory: the
+  persistent meleelight.opk + 4 other OPKs; two same-title entries) —
+  failed loud as designed, needs re-measured nav + unique evidence-OPK
+  title; check-device-audio.sh still unthreaded (task 6/14). Device
+  left clean, play install untouched.
+
+## [superseded by iter 73] (updated: 2026-07-18, iter 72 — glyph-jitter class fix: measured glyph comparison)
 
 - **Iter 72 (M4 task 2 micro-iteration — glyph-jitter class fix) DONE**:
   the driver's cold-r71 finding (committed vfxglyphs-frozen.txt vs
@@ -776,10 +811,11 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   M4 seeds registered (mixer fidelity + music, stop-path coverage,
   skip-burst instrument). Regressions green: DEVICE RENDER OK (11.065
   ms full p99) + SIM CONFORMS (.loop/m3-task6-reg-{render,sim}.log).
-- **Latest AGENT-LOG entry**: iter 70 (M4 task 2 hardening round 2
-  DONE — review-65 r2's 7 Mediums; pre-registration + DONE entries);
-  latest log id: .loop/m4-task2r70-donecheck.log (also
-  m4-task2r70-teeth.log).
+- **Latest AGENT-LOG entry**: iter 73 (M4 task 3 RESULT — landed +
+  verified, done-check BLOCKED on the external stall class; honest
+  report); latest log id: .loop/m4-task3-donecheck.log (attempt
+  family + m4-task3-teeth.log, m4-task3-prof*-device.log,
+  m4-task3-manifest-selfcheck.log).
 - **Device**: FunKey-S on ADB, id 12c00003237f5528, healthy. adbd drops
   exit codes → RC-echo via port/sim/device/adbsh.sh. /tmp tmpfs 128 MB;
   big artifacts → /mnt/mlfk-scratch; ADB pulls ~4.4 MB/s (budget pull

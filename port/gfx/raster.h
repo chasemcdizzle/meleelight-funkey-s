@@ -55,6 +55,18 @@ void rast_ink_enable(int on);
 // the ink-enable flag; used by the glyph/sprite blitter (gfx_overlay.c).
 void rast_blend_px(Raster *rz, int x, int y, RastCol col, unsigned a256);
 
+// Batch blend primitives (M4 task 3, measured-hotspot class fix — see
+// raster.c): pixel loops moved into this -O3 TU, arithmetic EXACTLY
+// rast_blend_px's (bit-identical by construction).
+//   rast_fill_row_opaque — one full row at y, opaque colour (a256==256).
+//   rast_blit_a8mask     — the glyph-mask loop (a8 alpha, 0 skipped).
+//   rast_blit_rgba       — the sprite loop (RGBA rows, alpha 0 skipped).
+void rast_fill_row_opaque(Raster *rz, int y, RastCol col);
+void rast_blit_a8mask(Raster *rz, const uint8_t *mask, int w, int h,
+                      int x0, int y0, RastCol col);
+void rast_blit_rgba(Raster *rz, const uint8_t *rgba, int w, int h,
+                    int x0, int y0);
+
 // --- path building (screen space, floats) --------------------------------
 // Paths accumulate into a static edge table; rast_fill consumes it.
 void rast_path_reset(void);

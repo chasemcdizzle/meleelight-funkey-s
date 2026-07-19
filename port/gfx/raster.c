@@ -89,6 +89,80 @@ void rast_blend_px(Raster *rz, int x, int y, RastCol col, unsigned a256) {
   if (g_ink_on) rz->ink[idx] = 1;
 }
 
+// --- batch blend primitives (M4 task 3, measured-hotspot class fix) --------
+// ATTRIBUTION (device, .loop/m4-task3-prof-device.log): per-pixel
+// rast_blend_px calls issued from -O2 TUs dominated the device render
+// time — bg gradient 240x150 calls/frame (~4.0 ms), glyph/sprite mask
+// blits (~1.5 ms avg, multi-ms banner peaks). These three primitives
+// move the PIXEL LOOP into this -O3 TU with the clip/ink checks hoisted
+// per row, replicating rast_blend_px's arithmetic EXACTLY (same integer
+// ops, same order, same skip conditions) — bit-identical output by
+// construction, proven mechanically by the x2 byte-stable renders + the
+// pre/post-optimization host-shot cmp (AGENT-LOG iter 73).
+
+// One full row [0,RAST_W) at y, OPAQUE colour (col.a256 must be 256):
+// exactly the loop `for x: rast_blend_px(rz, x, y, col, 256)`.
+void rast_fill_row_opaque(Raster *rz, int y, RastCol col) {
+  if (col.a256 != 256) gfx_fatal("rast_fill_row_opaque: non-opaque colour");
+  if (y < rz->clipY0 || y >= rz->clipY1) return;
+  const uint16_t c565 = pack565(col.r, col.g, col.b);
+  uint16_t *fbrow = &rz->fb[(size_t)y * RAST_W];
+  for (int x = 0; x < RAST_W; x++) fbrow[x] = c565;
+  if (g_ink_on) memset(&rz->ink[(size_t)y * RAST_W], 1, RAST_W);
+}
+
+// A8 mask blit: exactly gfx_overlay.c's blit_mask loop —
+//   for y,x: a8 = mask[y*w+x]; if (!a8) continue;
+//            rast_blend_px(rz, x0+x, y0+y, col, (a8*256)/255)
+void rast_blit_a8mask(Raster *rz, const uint8_t *mask, int w, int h,
+                      int x0, int y0, RastCol col) {
+  if (!mask) return;
+  const uint16_t c565 = pack565(col.r, col.g, col.b);
+  for (int y = 0; y < h; y++) {
+    const int py = y0 + y;
+    if (py < rz->clipY0 || py >= rz->clipY1) continue;
+    const uint8_t *mrow = &mask[(size_t)y * (size_t)w];
+    for (int x = 0; x < w; x++) {
+      const unsigned a8 = mrow[x];
+      if (!a8) continue;
+      const int px = x0 + x;
+      if (px < 0 || px >= RAST_W) continue;
+      unsigned a = (((a8 * 256u) / 255u) * col.a256) >> 8;
+      if (!a) continue;
+      if (a > 256) a = 256;
+      const size_t idx = (size_t)py * RAST_W + (size_t)px;
+      rz->fb[idx] = (a >= 256) ? c565 : blend565(rz->fb[idx], c565, a);
+      if (g_ink_on) rz->ink[idx] = 1;
+    }
+  }
+}
+
+// RGBA sprite blit: exactly gfx_overlay.c's sprite loop —
+//   for y,x: px = rgba[4*(y*w+x)]; if (!px[3]) continue;
+//            rast_blend_px(rz, x0+x, y0+y, {px[0..2],256}, (px[3]*256)/255)
+void rast_blit_rgba(Raster *rz, const uint8_t *rgba, int w, int h,
+                    int x0, int y0) {
+  if (!rgba) return;
+  for (int y = 0; y < h; y++) {
+    const int py = y0 + y;
+    if (py < rz->clipY0 || py >= rz->clipY1) continue;
+    const uint8_t *rrow = &rgba[4 * (size_t)y * (size_t)w];
+    for (int x = 0; x < w; x++) {
+      const uint8_t *p = &rrow[4 * x];
+      if (!p[3]) continue;
+      const int px = x0 + x;
+      if (px < 0 || px >= RAST_W) continue;
+      unsigned a = ((p[3] * 256u) / 255u); // col.a256 == 256: (a*256)>>8 == a
+      if (!a) continue;
+      if (a > 256) a = 256;
+      const uint16_t c565 = pack565(p[0], p[1], p[2]);
+      const size_t idx = (size_t)py * RAST_W + (size_t)px;
+      rz->fb[idx] = (a >= 256) ? c565 : blend565(rz->fb[idx], c565, a);
+      if (g_ink_on) rz->ink[idx] = 1;
+    }
+  }
+}
+
 void rast_clear(Raster *rz, uint8_t r, uint8_t g, uint8_t b,
                 int clipY0, int clipY1) {
   const uint16_t c = pack565(r, g, b);
@@ -181,7 +255,14 @@ void rast_fill(Raster *rz, RastCol col) {
   const unsigned cov_inc = 256 / SUBS;
 
   for (int y = y0; y < y1; y++) {
-    memset(g_cov, 0, sizeof(g_cov));
+    // Touched-column window (M4 task 3, measured-hotspot class fix —
+    // many-small-fill frames paid a full 240-column memset + scan per
+    // row per fill call): g_cov is all-zero OUTSIDE the window by
+    // invariant (static zero init + the end-of-row re-zero below), the
+    // accumulation tracks [covLo, covHi], and the blend loop visits
+    // only that window. BIT-IDENTICAL: every skipped column holds
+    // cv == 0, which the old loop skipped via `if (!cv) continue`.
+    int covLo = RAST_W, covHi = -1;
     for (int s = 0; s < SUBS; s++) {
       const float sy = (float)y + ((float)s + 0.5f) * substep;
       while (next < g_nedges && g_edges[g_order[next]].ymin <= sy) {
@@ -216,21 +297,27 @@ void rast_fill(Raster *rz, RastCol col) {
           if (xb > RAST_W) xb = RAST_W;
           if (xb <= xa) continue;
           const int ia = ifloorf(xa), ib = ifloorf(xb);
+          if (ia < covLo) covLo = ia;
           if (ia == ib) {
             g_cov[ia] += (uint16_t)((xb - xa) * (float)cov_inc);
+            if (ia > covHi) covHi = ia;
           } else {
             g_cov[ia] += (uint16_t)(((float)(ia + 1) - xa) * (float)cov_inc);
             for (int x = ia + 1; x < ib; x++) g_cov[x] += (uint16_t)cov_inc;
             if (ib < RAST_W) {
               g_cov[ib] += (uint16_t)((xb - (float)ib) * (float)cov_inc);
+              if (ib > covHi) covHi = ib;
+            } else if (ib - 1 > covHi) {
+              covHi = ib - 1; // interior loop wrote up to ib-1
             }
           }
         }
       }
     }
+    if (covHi < covLo) continue; // no coverage on this row (invariant holds)
     uint16_t *row = rz->fb + (size_t)y * RAST_W;
     uint8_t *inkrow = rz->ink + (size_t)y * RAST_W;
-    for (int x = 0; x < RAST_W; x++) {
+    for (int x = covLo; x <= covHi; x++) {
       unsigned cv = g_cov[x];
       if (!cv) continue;
       if (cv > 256) cv = 256;
@@ -239,6 +326,8 @@ void rast_fill(Raster *rz, RastCol col) {
       row[x] = (a >= 256) ? c565 : blend565(row[x], c565, a);
       if (g_ink_on) inkrow[x] = 1;
     }
+    // restore the all-zero invariant for the touched window only
+    memset(&g_cov[covLo], 0, (size_t)(covHi - covLo + 1) * sizeof(g_cov[0]));
   }
   rast_path_reset();
 }
@@ -266,13 +355,32 @@ void rast_stroke_seg(Raster *rz, float x0, float y0, float x1, float y1,
 
 #define CIRCLE_SEGS 32
 
+// Unit-circle table (M4 task 3, measured-hotspot class fix): the 32
+// segment angles are FIXED compile-time constants, yet every
+// rast_circle/rast_ring call burned 64/124 fdlibm double-precision trig
+// calls (stock icons alone ~1,500/frame on device). The table entries
+// are computed ONCE by the IDENTICAL expressions the loops used inline
+// — same float bit patterns, so every derived vertex is bit-identical.
+static float g_circ_cos[CIRCLE_SEGS], g_circ_sin[CIRCLE_SEGS];
+static int g_circ_init = 0;
+static void circ_init(void) {
+  if (g_circ_init) return;
+  g_circ_cos[0] = 1.0f; // unused (i starts at 1; begin point is literal)
+  g_circ_sin[0] = 0.0f;
+  for (int i = 1; i < CIRCLE_SEGS; i++) {
+    const float t = (float)i * (RAST_TWO_PI / CIRCLE_SEGS);
+    g_circ_cos[i] = (float)fd_cos((double)t);
+    g_circ_sin[i] = (float)fd_sin((double)t);
+  }
+  g_circ_init = 1;
+}
+
 void rast_circle(Raster *rz, float cx, float cy, float rad, RastCol col) {
+  circ_init();
   rast_path_reset();
   rast_sub_begin(cx + rad, cy);
   for (int i = 1; i < CIRCLE_SEGS; i++) {
-    const float t = (float)i * (RAST_TWO_PI / CIRCLE_SEGS);
-    rast_sub_line(cx + rad * (float)fd_cos((double)t),
-                  cy + rad * (float)fd_sin((double)t));
+    rast_sub_line(cx + rad * g_circ_cos[i], cy + rad * g_circ_sin[i]);
   }
   rast_sub_close();
   rast_fill(rz, col);
@@ -283,20 +391,17 @@ void rast_ring(Raster *rz, float cx, float cy, float rad, float w,
   const float ro = rad + w * 0.5f;
   float ri = rad - w * 0.5f;
   if (ri < 0) ri = 0;
+  circ_init(); // bit-identical unit-circle table (note above)
   rast_path_reset();
   rast_sub_begin(cx + ro, cy);
   for (int i = 1; i < CIRCLE_SEGS; i++) {
-    const float t = (float)i * (RAST_TWO_PI / CIRCLE_SEGS);
-    rast_sub_line(cx + ro * (float)fd_cos((double)t),
-                  cy + ro * (float)fd_sin((double)t));
+    rast_sub_line(cx + ro * g_circ_cos[i], cy + ro * g_circ_sin[i]);
   }
   rast_sub_close();
   // inner contour wound the other way -> nonzero-winding annulus
   rast_sub_begin(cx + ri, cy);
   for (int i = CIRCLE_SEGS - 1; i >= 1; i--) {
-    const float t = (float)i * (RAST_TWO_PI / CIRCLE_SEGS);
-    rast_sub_line(cx + ri * (float)fd_cos((double)t),
-                  cy + ri * (float)fd_sin((double)t));
+    rast_sub_line(cx + ri * g_circ_cos[i], cy + ri * g_circ_sin[i]);
   }
   rast_sub_close();
   rast_fill(rz, col);

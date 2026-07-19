@@ -101,3 +101,45 @@ Append new entries at the bottom; never edit or delete a recorded row.
   iter-50 device-libm class fix (integer floor/ceil helpers + fdlibm
   trig routing; sqrtf/fabsf swept healthy in mathsweep's new float
   columns).
+
+## Iter 73 (2026-07-18) — M4 visual surface (vfx + overlay + banner + bg + legibility) on device
+
+- Source: `.loop/m4-task3-donecheck*.log` (paced gate attempts),
+  `.loop/m4-task3-prof{,2,3,4}-device.log` (per-pass attribution runs,
+  `-DMLFK_RENDER_PROF`, --pace 0), `.loop/m4-task3-nodeadman-probe.log`
+  (isolation probe). Same device/toolchain; binary now links
+  gfx_vfx/gfx_overlay/gfx_bg (M4 task 2 surface) and runs with
+  --vfxdata/--glyphs/--legible.
+- Per-pass attribution (avg ns/frame, device, --pace 0):
+
+| build | clear | bg | stage1 | stage2 | players | articles | vfx | overlay | render p50/p99 ms |
+|---|---|---|---|---|---|---|---|---|---|
+| pre-optimization | 137k | 4,036k | 460k | 213k | 529k | 100k | 196k | 1,541k | 7.38 / 13.20 (paced) |
+| + batch blend prims | 142k | 1,488k | 461k | 216k | 533k | 100k | 189k | 1,501k | 4.63 / 8.19 |
+| + cov-window | 139k | 1,432k | 263k | 190k | 484k | 55k | 135k | 1,382k | 4.09 / 7.45 |
+| + circle table | 143k | 1,286k | 266k | 190k | 484k | 50k | 136k | 1,101k | 3.61 / 7.42 |
+
+- Optimization round (all BIT-IDENTICAL, proven by pre/post host
+  shot+stream cmp + x2 stability + RENDER OK IoU unchanged): batch
+  blend primitives in the -O3 raster TU (gradient rows, glyph masks,
+  sprite RGBA — the per-pixel rast_blend_px-across-TU class),
+  touched-column window in rast_fill (many-small-fills class),
+  unit-circle trig table (64-124 fdlibm calls per circle/ring at 32
+  FIXED angles — stock icons alone ~1,500 calls/frame).
+- Best paced gate attempt (attempt 10, post-reboot): full p99
+  15.510 ms (< 16.67), render p99 7.056 ms (< 8.0), sim p99 7.844 ms,
+  STREAM MATCH 3600/3600, shot BIT-IDENTICAL to host — **but skips
+  2/3600**. Delta vs the M3 task-4 baseline (full p99 11.400, render
+  2.540): render +~4.5 ms from the legitimate M4 visual surface.
+- **BLOCKER (registered): external stall class.** Every paced attempt
+  today (8 full runs incl. a no-deadman/no-poll isolation probe)
+  carried 1-3 render skips: isolated ~7-15 ms stalls hitting whichever
+  phase is running (sim/render/present alike), clustered ~19-21 s into
+  the run (frames ~1118-1290 — the SAME zone iters 54/59 recorded) +
+  scattered. Refuted as causes (measured): host-side adbd polling
+  (quiet-window probe), dirty-page writeback (pre-run sync), rig
+  on-device machinery (no-deadman probe), swap (pswpin/out = 0),
+  DVFS (no cpufreq). M3-era loads (~11 ms/frame) absorbed these stalls
+  in slack; the M4 surface (~13 ms/frame) converts them into skips.
+  Attribution/closure = fix_plan §M4 task 8 (the registered skip-burst
+  instrument); gate posture unchanged (skips == 0 never weakened).

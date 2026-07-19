@@ -1,8 +1,29 @@
 #!/usr/bin/env bash
-# M3 task 4 done-check: platform seam + SDL1.2 device backend + LIVE
-# device render (fix_plan §M3 task 4). Prints
+# M3 task 4 done-check, EXTENDED by M4 task 3 (stage-surface legibility
+# at device scale + the device rung for the M4 visual surface — vfx +
+# overlay + banner + background live on the FunKey): platform seam +
+# SDL1.2 device backend + LIVE device render. Prints
 #   DEVICE RENDER OK (full p99 X ms, render-only p99 Y ms, skips N)
 # exit 0, iff ALL of:
+#
+# M4 task 3 additions (fix_plan §M4 task 3; AGENT-LOG iter 73):
+#   - gfx_app now REQUIRES --vfxdata/--glyphs (M4 task 2): the DEVICE
+#     path consumes the COMMITTED frozen artifacts vfxdata-frozen.txt +
+#     vfxglyphs-frozen.txt (browser-free; iter-72 rule — pin the FROZEN
+#     file's sha256, never a fresh capture's), sha-pinned below and
+#     sha-verified onto the device.
+#   - LEGIBILITY (deliberate documented device-scale adaptation): every
+#     device-path gfx_app run passes --legible (stage-surface strokes
+#     clamped to GFX_LEGIBLE_MIN_DEV_PX device px — rationale in gfx.h;
+#     value twin-pinned below). The host reference leg passes it too, so
+#     the host<->device shot bit-compare stays valid. Standing
+#     legibility WITNESS: a host run WITHOUT --legible must produce a
+#     shot that DIFFERS from the legible host shot — proves the flag has
+#     an observable effect, and (because the device shot is cmp'd
+#     against the LEGIBLE reference) makes a flag-off device
+#     mechanically detectable.
+#   - The paced device run therefore renders WITH vfx + HUD overlay +
+#     Ready/GO banner + background art live; p99 limits unchanged.
 #
 #   1. THREE-BACKEND SEAM: the platform seam (port/gfx/platform.h —
 #      platform_init/present/poll/quit + PlatformInput) builds against
@@ -99,6 +120,18 @@ SHOT_FRAME=900              # pinned screenshot frame (mid-match, both players
                             # browser-vs-C reference for the same frame)
 GFXDATA_FROZEN=$GFX/gfxdata-frozen.txt
 GFXDATA_SHA256=5499a3dd5fc374d6ed988faf0bef6fa2e189eb314e892bdd83c7534dc0865c94
+# M4 task 3: the committed vfx render-plane artifacts (M4 task 2 outputs;
+# device path is browser-free — iter-72 rule: pin the FROZEN files' shas,
+# never a fresh capture's; check-render.sh cross-checks these bytes
+# against every fresh browser capture).
+VFXDATA_FROZEN=$GFX/vfxdata-frozen.txt
+VFXDATA_SHA256=545015a3d7e3bc138059fcb9711040758e729a7d21aac650b009ed7fdb5bd662
+VFXGLYPHS_FROZEN=$GFX/vfxglyphs-frozen.txt
+VFXGLYPHS_SHA256=8926cab4d648579d099053994bf309943b5a6bc3c5abf733af9ac6b71f3cbbeb
+# M4 task 3: the frozen legibility constant (documented adaptation;
+# rationale + authority in gfx.h). Twin-pinned: this literal must match
+# the gfx.h #define — constant drift dies loudly here, never silently.
+LEGIBLE_MIN_DEV_PX=2.0
 WALL_MIN_MS=58000 # review-50 M3: paced 3600-frame run wall window —
 WALL_MAX_MS=66000 # measured 60000 ms (iter 50); pacing can't silently die
 DEADMAN_S="${MLFK_DEADMAN_S:-300}" # frontend-park deadman window (~4x the
@@ -529,6 +562,29 @@ if [ "$gsum" != "$GFXDATA_SHA256" ]; then
   exit 1
 fi
 echo "   gfxdata-frozen pin OK ($GFXDATA_SHA256)"
+# M4 task 3: the two committed vfx render-plane artifacts (same class as
+# the GFXDATA pin — committed INPUT, content integrity here, freshness
+# is git's; asserted BEFORE any build/device work).
+made "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN"
+vsum="$(rig_host_sha256 "$VFXDATA_FROZEN")" || exit 1
+if [ "$vsum" != "$VFXDATA_SHA256" ]; then
+  echo "DEVICE FAIL: $VFXDATA_FROZEN sha256 $vsum != pinned $VFXDATA_SHA256" >&2
+  exit 1
+fi
+gsum2="$(rig_host_sha256 "$VFXGLYPHS_FROZEN")" || exit 1
+if [ "$gsum2" != "$VFXGLYPHS_SHA256" ]; then
+  echo "DEVICE FAIL: $VFXGLYPHS_FROZEN sha256 $gsum2 != pinned $VFXGLYPHS_SHA256" >&2
+  exit 1
+fi
+echo "   vfxdata/vfxglyphs frozen pins OK"
+# M4 task 3 twin pin: the frozen legibility constant must equal gfx.h's
+# #define (exact anchored line — a drifted constant is a reviewed change
+# to BOTH sites, never a silent divergence).
+if ! grep -q "^#define GFX_LEGIBLE_MIN_DEV_PX ${LEGIBLE_MIN_DEV_PX}\$" "$GFX/gfx.h"; then
+  echo "DEVICE FAIL: gfx.h GFX_LEGIBLE_MIN_DEV_PX != pinned ${LEGIBLE_MIN_DEV_PX} (twin-pin drift — reviewed change required)" >&2
+  exit 1
+fi
+echo "   legibility twin pin OK (GFX_LEGIBLE_MIN_DEV_PX ${LEGIBLE_MIN_DEV_PX})"
 
 bash pipeline/extractor/build-extractor.sh
 rm -f "$TABLES/ml_tables.c" "$TABLES/ml_tables.h" \
@@ -581,6 +637,7 @@ cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$BUILD/raster.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/gfx_app_headless" \
   "$BUILD/raster.o" "$GFX/gfx_app.c" "$GFX/platform_headless.c" \
   "$GFX/anim1.c" "$GFX/gfx_render.c" \
+  "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
   "${SIM_TUS[@]}" \
   port/sim/characters/shared/moves/*.c \
   port/sim/characters/fox/moves/*.c \
@@ -595,6 +652,7 @@ if command -v sdl2-config >/dev/null 2>&1; then
     -o "$BUILD/gfx_app_sdl2" \
     "$BUILD/raster.o" "$GFX/gfx_app.c" "$GFX/platform_sdl2.c" \
     "$GFX/anim1.c" "$GFX/gfx_render.c" \
+    "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
     "${SIM_TUS[@]}" \
     port/sim/characters/shared/moves/*.c \
     port/sim/characters/fox/moves/*.c \
@@ -617,7 +675,8 @@ for side in a b; do
     "$BUILD/g01.app-shot-$side.ppm" "$BUILD/g01.app-shot-$side.pgm"
   "$BUILD/gfx_app_headless" \
     --trace "$DEVB/g01.trace.txt" --simdata "$DEVB/simdata.txt" \
-    --gfxdata "$GFXDATA_FROZEN" --anim-dir "$TABLES" \
+    --gfxdata "$GFXDATA_FROZEN" --vfxdata "$VFXDATA_FROZEN" \
+    --glyphs "$VFXGLYPHS_FROZEN" --legible --anim-dir "$TABLES" \
     --seed "$seed" --p1 "$p1" --p2 "$p2" --stage "$stage" \
     --frames "$frames" --pace 0 \
     --out "$BUILD/g01.app-out-$side.txt" \
@@ -649,12 +708,46 @@ if [ "$app_skips" -ne 0 ] || [ "$app_present_fails" -ne 0 ]; then
 fi
 echo "   host summary OK (0 skips, 0 failed presents)"
 
+# M4 task 3 — the standing LEGIBILITY WITNESS: the same replay WITHOUT
+# --legible up to the shot frame must produce a DIFFERENT shot (PPM and
+# PGM ink plane both). Proves every run that the adaptation has an
+# observable effect at the pinned frame; and because the device shot is
+# bit-compared against the LEGIBLE host reference below, a device run
+# whose --legible flag was dropped produces exactly these no-legible
+# bytes and dies at that gating cmp — flag-off-on-device is
+# mechanically detectable, not assumed.
+rm -f "$BUILD/g01.app-shot-noleg.ppm" "$BUILD/g01.app-shot-noleg.pgm" \
+  "$BUILD/g01.app-out-noleg.txt" "$BUILD/g01.app-tim-noleg.txt"
+"$BUILD/gfx_app_headless" \
+  --trace "$DEVB/g01.trace.txt" --simdata "$DEVB/simdata.txt" \
+  --gfxdata "$GFXDATA_FROZEN" --vfxdata "$VFXDATA_FROZEN" \
+  --glyphs "$VFXGLYPHS_FROZEN" --anim-dir "$TABLES" \
+  --seed "$seed" --p1 "$p1" --p2 "$p2" --stage "$stage" \
+  --frames "$SHOT_FRAME" --pace 0 \
+  --out "$BUILD/g01.app-out-noleg.txt" \
+  --timing "$BUILD/g01.app-tim-noleg.txt" \
+  --shot-frame "$SHOT_FRAME" \
+  --shot-ppm "$BUILD/g01.app-shot-noleg.ppm" \
+  --shot-pgm "$BUILD/g01.app-shot-noleg.pgm" \
+  2> "$BUILD/g01.app-log-noleg.txt"
+made "$BUILD/g01.app-shot-noleg.ppm" "$BUILD/g01.app-shot-noleg.pgm"
+if cmp -s "$BUILD/g01.app-shot-noleg.ppm" "$BUILD/g01.app-shot-a.ppm"; then
+  echo "DEVICE FAIL: legibility witness — the no-legible shot PPM is byte-identical to the legible shot (the adaptation has NO observable effect at frame $SHOT_FRAME)" >&2
+  exit 1
+fi
+if cmp -s "$BUILD/g01.app-shot-noleg.pgm" "$BUILD/g01.app-shot-a.pgm"; then
+  echo "DEVICE FAIL: legibility witness — the no-legible shot PGM (ink plane) is byte-identical to the legible shot" >&2
+  exit 1
+fi
+echo "   legibility witness OK (no-legible shot differs from the legible reference, PPM + PGM)"
+
 echo "== [4/7] frameskip valve (standing tooth: 1000 ns budget => skips, flagged) =="
 rm -f "$BUILD/valve-out.txt" "$BUILD/valve-tim.txt" \
   "$BUILD/valve-shot.ppm" "$BUILD/valve-shot.pgm"
 "$BUILD/gfx_app_headless" \
   --trace "$DEVB/g01.trace.txt" --simdata "$DEVB/simdata.txt" \
-  --gfxdata "$GFXDATA_FROZEN" --anim-dir "$TABLES" \
+  --gfxdata "$GFXDATA_FROZEN" --vfxdata "$VFXDATA_FROZEN" \
+  --glyphs "$VFXGLYPHS_FROZEN" --legible --anim-dir "$TABLES" \
   --seed "$seed" --p1 "$p1" --p2 "$p2" --stage "$stage" \
   --frames 120 --pace 1 --budget-ns 1000 \
   --out "$BUILD/valve-out.txt" --timing "$BUILD/valve-tim.txt" \
@@ -688,13 +781,18 @@ rig_stamp_rehash gfx_device
 dsh "rm -rf $DTMP $DSD && mkdir -p $DTMP $DSD"
 adb -s "$DEV" push "$DEVB/gfx_device" "$DEVB/simdata.txt" \
   "$DEVB/g01.trace.txt" "$GFXDATA_FROZEN" \
+  "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" \
   "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2" "$DTMP/" >/dev/null
 rig_push_provenance "$DTMP" gfx_device
 dsh "chmod +x $DTMP/gfx_device"
 # sha-verify every pushed DATA file device-side against the host bytes
 # (the binary is covered by push provenance above). Digests come through
 # the strict full-line rig_dev_sha256 parser (iter 52, PROCESS §3).
+# M4 task 3: vfxdata/vfxglyphs join the list — their host bytes were
+# pinned to the COMMITTED frozen shas at step 1 (iter-72 rule), so this
+# device-side compare transitively binds the device copies to the pins.
 for hf in "$DEVB/simdata.txt" "$DEVB/g01.trace.txt" "$GFXDATA_FROZEN" \
+          "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" \
           "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2"; do
   bn="$(basename "$hf")"
   hsum="$(rig_host_sha256 "$hf")" || exit 1 # full-line grammar (iter 56)
@@ -704,7 +802,7 @@ for hf in "$DEVB/simdata.txt" "$DEVB/g01.trace.txt" "$GFXDATA_FROZEN" \
     exit 1
   fi
 done
-echo "   pushed data sha-verified on device (simdata, trace, gfxdata, 2 anim bins)"
+echo "   pushed data sha-verified on device (simdata, trace, gfxdata, vfxdata, vfxglyphs, 2 anim bins)"
 
 echo "== [6/7] device: LIVE paced g01 render (deadman-guarded park; detached launch) =="
 # DEADMAN (review-50 H1): a device-side backstop generated + pushed +
@@ -767,7 +865,8 @@ cd $DTMP || exit 9
 rm -f render.apprc gfx.pid.$DM_NONCE
 setsid sh -c './gfx_device \
   --trace $DTMP/g01.trace.txt --simdata $DTMP/simdata.txt \
-  --gfxdata $DTMP/gfxdata-frozen.txt --anim-dir $DTMP \
+  --gfxdata $DTMP/gfxdata-frozen.txt --vfxdata $DTMP/vfxdata-frozen.txt \
+  --glyphs $DTMP/vfxglyphs-frozen.txt --legible --anim-dir $DTMP \
   --seed $seed --p1 $p1 --p2 $p2 --stage $stage --frames $frames \
   --pace 1 --budget-ns $BUDGET_NS \
   --out $DTMP/g01.dev-out.txt --timing $DTMP/g01.dev-tim.txt \
@@ -792,6 +891,17 @@ for hf in "$BUILD/deadman.sh" "$BUILD/render-launch.sh"; do
 done
 dsh "chmod +x $DTMP/deadman.sh $DTMP/render-launch.sh"
 
+# PRE-RUN SYNC (M4 task 3 — transient-skip class attribution, measured
+# across 5 paced attempts): the ~10 MB of pushes above go to SD through
+# the page cache; the kernel's dirty-expiry writeback (~30 s) then
+# flushed them MID-RUN on the single-core V3s, landing isolated 7-14 ms
+# sim stalls in a stable frame zone (~1150-1250 ≈ 19-21 s in — the SAME
+# zone as iters 54/59's recorded spikes; reproduced with host polling
+# fully quiet, so adbd polls are refuted as the cause). Force the
+# flush to complete BEFORE the paced run: the stall happens here, on
+# rig time, never on frame time. (CLAUDE.md gotcha class: "SD streaming
+# = multi-second stalls".)
+dsh "sync"
 # arm the deadman BEFORE parking
 dsh "printf '%s' '$DM_NONCE' > $DTMP/deadman.nonce; rm -f $DTMP/deadman.cancel $DTMP/deadman.fired"
 dsh "setsid sh $DTMP/deadman.sh </dev/null >/dev/null 2>&1 & sleep 1"
@@ -817,7 +927,17 @@ esac
 
 t0=$(date +%s)
 dsh "sh -lc $DTMP/render-launch.sh"
-# bounded host-side poll for the detached run's rc file (§7#1 shape)
+# bounded host-side poll for the detached run's rc file (§7#1 shape).
+# QUIET WINDOW (M4 task 3 — the iter-62 "probe after-effect" class,
+# second face, measured: every dsh poll forks a shell through adbd ON
+# the single-core V3s DURING the paced run; isolated 7-14 ms sim
+# spikes — the registered transient-skip class — clustered on attempts
+# with mid-run polling): the run's duration is PINNED (3600 paced
+# frames; the wall window [58,66] s is asserted below), so the first
+# 50 s need no probes at all. Host-side sleep only, then the 2 s
+# cadence — completion detection is unchanged, mid-run device forks
+# drop from ~30 to ~5.
+sleep 50
 apprc_seen=0
 for _ in $(seq 1 "$APPRC_TRIES"); do
   if dsh "test -f $DTMP/render.apprc" >/dev/null 2>&1; then apprc_seen=1; break; fi

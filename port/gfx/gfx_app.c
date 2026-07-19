@@ -6,7 +6,8 @@
 // binary linked (headless = host/CI, SDL2 = host dev window, SDL1.2 =
 // the FunKey device — exactly ONE per target).
 //
-//   gfx_app --trace t.txt --simdata s.txt --gfxdata g.txt --anim-dir D
+//   gfx_app --trace t.txt --simdata s.txt --gfxdata g.txt
+//           --vfxdata v.txt --glyphs gl.txt --anim-dir D
 //           --seed N --p1 N --p2 N --stage N --frames N
 //           --out stream.txt --timing timing.txt
 //           [--cpu --difficulty N --ai-bridge f]
@@ -14,8 +15,12 @@
 //           [--shot-frame N --shot-ppm f.ppm --shot-pgm f.pgm]
 //           [--live --record-trace t.json --record-keys k.txt
 //            [--ready-file f]]
-//           [--tapjump-off-p1]
+//           [--tapjump-off-p1] [--legible]
 //           [--sndpack pack.bin [--audio-samples N]]
+//
+// --legible (M4 task 3): the stage-surface legibility clamp
+// (GFX_LEGIBLE_MIN_DEV_PX, gfx.h) — the DEVICE-path flag; browser-IoU
+// paths never pass it.
 //
 // AUDIO (M3 task 6): --sndpack loads a SNDPACK1 SFX pack (snd_mixer.h)
 // and starts the platform audio seam (44100/S16LSB/2ch, buffer
@@ -369,6 +374,7 @@ int main(int argc, char **argv) {
   bool cpu = false;
   bool live = false;
   bool tapJumpOffP1 = false;
+  bool legible = false; // M4 task 3: stage-surface legibility (device path)
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i];
     const bool hasV = i + 1 < argc;
@@ -398,6 +404,7 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--record-keys") == 0 && hasV) keysPath = argv[++i];
     else if (strcmp(a, "--ready-file") == 0 && hasV) readyPath = argv[++i];
     else if (strcmp(a, "--tapjump-off-p1") == 0) tapJumpOffP1 = true;
+    else if (strcmp(a, "--legible") == 0) legible = true;
     else if (strcmp(a, "--sndpack") == 0 && hasV) sndpackPath = argv[++i];
     else if (strcmp(a, "--audio-samples") == 0 && hasV) {
       audioSamples = strtol(argv[++i], 0, 10);
@@ -430,7 +437,7 @@ int main(int argc, char **argv) {
             "[--cpu --difficulty N --ai-bridge f] [--pace 0|1] "
             "[--budget-ns N] [--shot-frame N --shot-ppm f --shot-pgm f] "
             "[--live --record-trace t.json --record-keys k.txt "
-            "[--ready-file f]] [--tapjump-off-p1] "
+            "[--ready-file f]] [--tapjump-off-p1] [--legible] "
             "[--sndpack pack.bin [--audio-samples N]]\n");
     return 1;
   }
@@ -472,6 +479,10 @@ int main(int argc, char **argv) {
   // vfx sink BEFORE sim_setup_match (gfx_replay.c note: the boot
   // entrance/start events fire inside it).
   gfx_init(&g_gfx, (int)stage, backgroundType);
+  // M4 task 3: stage-surface legibility clamp (gfx.h rationale). The
+  // device path passes --legible on BOTH ends of its host<->device shot
+  // bit-compare; browser-IoU-compared paths never pass it.
+  g_gfx.legibility = legible ? 1 : 0;
   gfx_vfx_install(&g_gfx);
 
   sim_setup_match(&G, (int)p1, (int)p2, cpu ? 1 : 0, (int)difficulty,
@@ -731,6 +742,7 @@ int main(int argc, char **argv) {
     if (skips > 64) fprintf(stderr, " ... (%ld total)", skips);
     fprintf(stderr, "\n");
   }
+  gfx_render_prof_dump(); // empty unless built -DMLFK_RENDER_PROF
   free(tim);
   free(stream);
   return 0;

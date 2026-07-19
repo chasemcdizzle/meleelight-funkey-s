@@ -107,9 +107,17 @@ if [ "$MODE" = evidence ]; then
 else
   SND=""
   if [ -f "$DATA/sndpack.bin" ]; then SND="--sndpack $DATA/sndpack.bin"; fi
+  # M4 task 3: gfx_device now REQUIRES --vfxdata/--glyphs (the M4 vfx
+  # render plane); --legible = the documented device-scale
+  # stage-legibility adaptation (gfx.h GFX_LEGIBLE_MIN_DEV_PX). The data
+  # dir must carry vfxdata-frozen.txt + vfxglyphs-frozen.txt — a dir
+  # missing them fails LOUD (gfx_device usage/loader death -> rc != 0
+  # in opk.rc), never silently.
   # shellcheck disable=SC2086 — $SND is empty-or-two-words on purpose
   "$DIR/gfx_device" --live \
     --simdata "$DATA/simdata.txt" --gfxdata "$DATA/gfxdata-frozen.txt" \
+    --vfxdata "$DATA/vfxdata-frozen.txt" \
+    --glyphs "$DATA/vfxglyphs-frozen.txt" --legible \
     --anim-dir "$DATA" \
     --seed 1337 --p1 2 --p2 0 --stage 0 --frames 10800 \
     --pace 1 --budget-ns 16666667 --tapjump-off-p1 $SND \

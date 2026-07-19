@@ -36,6 +36,22 @@
 
 #define GFX_K 0.2
 #define GFX_DY 45.0
+// GFX_LEGIBLE_MIN_DEV_PX (M4 task 3): DELIBERATE, DOCUMENTED device-scale
+// adaptation — minimum on-screen stroke width, in DEVICE pixels, for ALL
+// stage-surface strokes (ground/ceiling/platforms/walls/ledge ticks/
+// moving platforms) when Gfx.legibility is set. Chase's S1-ratification
+// playtest (AGENT-LOG 2026-07-17): upstream-faithful lineWidth 1 canvas
+// px * GFX_K = 0.2 device px ≈ 0.03 mm of AA-faded coverage on the
+// 1.54" 240x240 panel (~6.2 px/mm) — illegible. 2.0 device px ≈ 0.32 mm
+// — legible without occluding gameplay. Rasterization is NOT checksummed
+// and the adaptation is OFF by default (legibility=0 keeps every path
+// byte-identical to the upstream-faithful render — the browser IoU
+// reference is compared ONLY against legibility-off renders); the device
+// path (--legible on gfx_app) turns it on on BOTH ends of its
+// host<->device shot bit-compare. Value frozen here + twin-pinned by
+// check-device-render.sh; visual authority = Chase's M4 acceptance
+// playthrough (fix_plan §M4 task 3, AGENT-LOG iter 73).
+#define GFX_LEGIBLE_MIN_DEV_PX 2.0
 #define GFX_CHARS 5
 #define GFX_PALETTES 7
 #define GFX_PALETTE_COLS 5
@@ -73,6 +89,10 @@ typedef struct {
   // exact upstream sites: drawStage=4, miniView bubble 6 then 1,
   // drawLaserLine=2.
   double fg2LineWidth;
+  // stage-surface legibility adaptation (M4 task 3): 0 = upstream-
+  // faithful widths (default; every host IoU path), 1 = clamp stage
+  // strokes to GFX_LEGIBLE_MIN_DEV_PX device px (the device path).
+  int legibility;
   const ml_stage_t *stab; // active STAB1 stage row
   Raster rz;
 } Gfx;
@@ -94,5 +114,10 @@ void gfx_render_frame(Gfx *g, const GameState *st);
 // binary PGM (P5, 0/255).
 void gfx_dump_ppm(const Gfx *g, const char *path);
 void gfx_dump_ink_pgm(const Gfx *g, const char *path);
+
+// Per-pass render-profiler dump (attribution instrument, M4 task 3):
+// prints avg ns/frame per pass to stderr in -DMLFK_RENDER_PROF builds;
+// EMPTY in default builds (compile-time gated — no hot-path cost).
+void gfx_render_prof_dump(void);
 
 #endif // GFX_GFX_H

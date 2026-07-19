@@ -923,7 +923,20 @@ static void dv_start(VInst *v) {
   if (v->timer < 90) {
     gfx_sprite_blit(g_g, "ready", 240, 420);
     // countdown (italic 700 70px): floor(startTimer*2) + " " + milli[2..3]
-    const double st2 = g_st->startTimer * 2;
+    double st2 = g_st->startTimer * 2;
+    // C-ONLY DOMAIN CLAMP (M4 task 3; found by the standing frameskip
+    // valve tooth): under the valve, this instance's RENDER-advanced
+    // timer lags sim time, so a post-skip render can reach this arm with
+    // a stale NEGATIVE startTimer — a state unreachable upstream (the
+    // browser renders every frame, so timer >= 90 flips to the GO arm
+    // before startTimer goes negative; measured: no golden's no-skip
+    // corpus ever requests '-'/'.'). Upstream fillText would rasterize
+    // "-1 .." fine; our atlas deliberately carries only reachable-domain
+    // glyphs and hard-fatals otherwise, so clamp to the atlas domain.
+    // IDENTITY on every no-skip path (st2 >= 0 there) — proven by the
+    // x2 byte-stability + host<->device bit-compare + browser-IoU
+    // corpus, all unchanged.
+    if (st2 < 0) st2 = 0;
     const double milli = fmod(st2, 1.0);
     char mstr[8];
     snprintf(mstr, sizeof mstr, "%.2f", milli); // "0.xy"

@@ -9884,3 +9884,247 @@ injectPin, servedDistSha256, all *-frozen.txt).
   arcs. Chase's two playtest gaps (firefox/shine invisible; platform
   legibility) are now half-closed: vfx renders on host — task 3 puts it
   on the device with the legibility adaptation.
+
+## iter 73 — 2026-07-18 — M4 task 3 PRE-REGISTRATION: stage-surface legibility at device scale + device render rung (frozen before any run/edit; PROCESS §2)
+
+- **Task (fix_plan §M4 task 3)**: (a) LEGIBILITY — a deliberate,
+  documented device-scale adaptation: minimum on-screen stroke width for
+  ALL stage surfaces on the 1.54" 240x240 panel (Chase's S1-ratification
+  finding: upstream-faithful ~1px canvas strokes are illegible); (b) the
+  DEVICE RUNG for the M4 visual surface: thread --vfxdata/--glyphs (+
+  the legibility flag) through check-device-render.sh +
+  check-device-opk.sh + the OPK launcher, arm build gains the vfx render
+  TUs, paced 3600-frame g01 live render runs WITH vfx+overlay+banner
+  live, p99 asserted, screenshot judged, stream verifies unchanged.
+- **LEGIBILITY DESIGN DECISION (pre-registered)**: DEVICE-ONLY FLAG
+  (`--legible` on gfx_app), NOT a both-sides re-measure. Rationale: the
+  host IoU corpus (check-render.sh, browser-vs-C) measures FAITHFULNESS
+  to the upstream render plane and must keep measuring exactly that —
+  the browser reference has no legibility adaptation, so putting the
+  adaptation on both sides would change what the IoU means; a flag off
+  by default leaves every host path byte-identical (gfx_replay does not
+  pass it; check-render.sh untouched semantics). The device path
+  (check-device-render.sh host-reference leg + device leg + OPK
+  launcher) turns the flag on on BOTH ends of its bit-compare, so the
+  host<->device shot cmp stays valid. CONSTANT (frozen):
+  GFX_LEGIBLE_MIN_DEV_PX = 2.0 device pixels, applied uniformly to ALL
+  stage-surface strokes (ground/ceiling/platforms/walls/ledge ticks/
+  moving platforms) via one helper (stage_w) at the three stage stroke
+  sites in gfx_render.c; geometry/fills/players/articles/vfx untouched.
+  Rationale for 2.0: panel is ~38.9 mm / 240 px = ~6.2 px/mm; upstream
+  lineWidth 1 canvas px * GFX_K 0.2 = 0.2 device px = ~0.03 mm of
+  AA-faded coverage (the measured illegibility); 2 device px = ~0.32 mm
+  — legible without occluding (thickest stage stroke upstream is 4
+  canvas px = 0.8 device px, so the clamp is uniform-binding on every
+  stage stroke). Value is frozen here + twin-pinned (gfx.h #define
+  cross-asserted by check-device-render.sh); Chase's M4 acceptance
+  playthrough is the visual authority that ratifies/amends it.
+- **Screenshot judgment plan**: the f900 shot now includes bg art +
+  vfx + overlay + legibility strokes on BOTH sides (host reference runs
+  --legible + vfx/glyphs). Bit-compare host<->device stays GATING and
+  needs no frozen-pin change (both sides regenerate per run).
+  judge-shot.js structural floors are expected to hold (colors >= 8,
+  band ink in [0.5%,90%], zero ink outside band — bg art is
+  ink-suppressed and the rasterizer clips to the band); if a floor
+  trips, that is a REVIEWED pin change to judge-shot.js, documented,
+  never a silent widening. NEW standing in-check assertion (the
+  "legibility pin"): a third host run WITHOUT --legible at the shot
+  frame must produce a shot that DIFFERS from the legible host shot
+  (PGM + PPM) — proves the flag has an observable effect every run;
+  combined with the gating device==host-legible cmp this makes a
+  flag-off device mechanically detectable (a flag-off device produces
+  the no-legible bytes, which are asserted != the reference the device
+  is compared against).
+- **Method / runs (caps frozen)**:
+  - Host: check-render.sh regression (1 fresh capture run) — must stay
+    RENDER OK with NO pinned value moved (the flag is off on that path).
+  - Device paced runs: <= 3 total. R1 = cold check-device-render.sh
+    (includes the ONE expected arm stamp rebuild — RIG_SCRIPTS +
+    port/gfx sources changed); R2 = check-device-opk.sh (OPK evidence
+    run, 900-frame paced); R3 = reserved ONLY for the registered
+    transient single-skip class (iters 54/57/62), never for a
+    non-transient failure.
+  - Docker builds SERIAL; one extra deliberate failing docker build for
+    the T2 tooth (see below) + the real rebuild.
+- **Perf refutation shapes**: (a) device render-only p99 > 8 ms (PLAN
+  §5 allowance; host render-only p99 grew 100us -> ~281-339us with the
+  vfx/overlay/bg passes, x2.8-3.4, so the device number is genuinely at
+  risk) -> measure the split (the timing artifact separates
+  sim/render/present), attribute the hotspot (likely the per-pixel bg
+  gradient), take ONE bounded bit-identical optimization round (e.g.
+  precomputed gradient rows — output bytes must be provably unchanged:
+  x2 byte-stability + host shot cmp + check-render.sh regression),
+  re-run once within the cap; still over -> STOP, honest FAIL report,
+  never a limit widening. (b) full p99 >= 16.67 ms -> same procedure,
+  same honesty. (c) transient single-skip -> the registered class,
+  R3 retry; a BURST or repeat -> stop and report (task-8 instrument is
+  the closure path, not retry budgets). Delta vs the M3 task-4 baseline
+  (full p99 11.400 ms, render-only 2.540 ms, no audio in this check)
+  is REPORTED either way.
+- **Teeth (frozen)**: T1 glyphs host-pin: perturb port/gfx/
+  vfxglyphs-frozen.txt (tmp-copy save/restore, cmp-verified) ->
+  check-device-render.sh dies at the frozen-pin check BEFORE any
+  build/device work; same probe for vfxdata. T2 vfx-TU-drop: remove
+  gfx_vfx.c from the riglib arm heredoc -> rig_arm_build LINK death
+  (gfx_vfx_* undefined) — proven with a real docker run, then restored
+  (byte-cmp) + real rebuild. T3 device-side glyph corruption: push a
+  corrupted vfxglyphs copy to the device, run the pinned
+  rig_dev_sha256-vs-pin compare -> loud mismatch death (the push
+  sha-verify class). T4 legibility: the standing in-check differential
+  (no-legible shot != legible shot) IS the tooth — additionally
+  documented as the flag-off-device detection chain above. All
+  restores proven by cmp/sha.
+- **Freeze-manifest discipline**: edited producers riglib.sh,
+  check-device-render.sh, check-device-opk.sh, opk/mlfk.sh re-pinned in
+  m3-freeze-manifest.txt with status truthfully flipped to arc-pending
+  (cite = this entry); verify_m3.sh MANIFEST_SHA256 anchor updated in
+  the SAME commit; 23/23 + anchor self-check run and logged.
+  verify_m3.sh consequently HARD-REFUSES authoritative runs until the
+  M4-era arcs close — correct per PROCESS §4 (producer change
+  invalidates prior gate evidence; the M3 gate's historical pass
+  stands in its logs).
+- **Registered exposure (honest, in-scope-limits)**: check-device-audio.sh
+  is NOT threaded this task (brief scope: render + opk + judges) — it
+  launches gfx_device without --vfxdata/--glyphs and so CANNOT pass
+  until its own threading lands (M4 task 6/14 surface, or a driver-
+  queued micro-iteration); its manifest row is untouched (bytes
+  unchanged). The persistent play install at /mnt/mlfk-data lacks
+  vfxdata-frozen.txt/vfxglyphs-frozen.txt — the OLD installed OPK is
+  self-consistent, but any re-provisioning with the NEW OPK must also
+  provision the two new data files (launcher will fail loud rc!=0 via
+  gfx_app usage/loader death, never silent).
+- **done-check**: cold `bash port/gfx/check-device-render.sh` ->
+  `DEVICE RENDER OK (...)`, exit 0 (.loop/m4-task3-donecheck.log).
+
+## iter 73 — 2026-07-18 — M4 task 3 RESULT: legibility + device rung landed and verified; done-check BLOCKED by the measured external stall class (honest report)
+
+- **VERDICT: NOT DONE — BLOCKED, with the full surface landed and every
+  host-judgeable leg green.** Cold `bash port/gfx/check-device-render.sh`
+  reached exit 0 on NO attempt: every paced device run carried 1-3
+  render skips from an external stall class (below); every OTHER gate
+  clause passed on the final attempts (STREAM MATCH 3600/3600, full p99
+  15.510 < 16.67, render p99 7.056 <= 8.0, shot BIT-IDENTICAL host<->
+  device, legibility witness, wall window, summary grammars). Logs:
+  .loop/m4-task3-donecheck*.log (attempts, labeled by failure),
+  .loop/m4-task3-prof*-device.log, .loop/m4-task3-nodeadman-probe.log,
+  .loop/m4-task3-teeth.log, .loop/m4-task3-reg-render{,-final}.log,
+  .loop/m4-task3-reg-checksim.log, .loop/m4-task3-opkcheck.log,
+  .loop/m4-task3-manifest-selfcheck.log.
+- **LEGIBILITY (as pre-registered)**: device-only --legible flag;
+  GFX_LEGIBLE_MIN_DEV_PX = 2.0 device px applied uniformly at the three
+  stage-surface stroke sites via stage_w() (gfx_render.c); rationale +
+  authority documented in gfx.h; twin-pinned (check-device-render.sh
+  grep of the #define); standing in-check WITNESS: a no-legible host
+  run's shot must DIFFER from the legible reference (PPM+PGM), and the
+  device shot is bit-compared against the LEGIBLE reference — flag-off-
+  on-device is mechanically detectable. Host IoU path untouched
+  (legibility=0 is the identity; final cold RENDER OK, IOU MIN 0.9041,
+  threshold 0.88, NO pinned value moved).
+- **DEVICE RUNG**: vfxdata/vfxglyphs frozen-sha pins (the committed
+  files' shas, iter-72 rule) in both device scripts; pushed +
+  device-sha-verified; arm build + both host backends gain
+  gfx_vfx/gfx_overlay/gfx_bg TUs; launcher/OPK args carry
+  --vfxdata/--glyphs/--legible (mlfk.sh live arm included).
+- **Reviewed pin change (pre-registered contingency)**: judge-shot.js
+  criterion 5 ("changed band pixel must be inked") RETIRED — M4 task
+  2's bg art is ink-SUPPRESSED by design, so 32,153 band pixels
+  legitimately differ without ink; count still reported
+  (changed_not_inked=), floors 1-4 unchanged (measured M4 surface: 767
+  colours, 10.7% band ink — inside the frozen floors). Pull-corruption
+  coverage moved wholly to the GATING host<->device bit-compare +
+  pullv shas (exposure noted in the file header).
+- **Arm-gcc-10.2 -Werror class (2 instances, first arm build of the M4
+  TUs)**: (1) hit_detection.h ml_hd_out_of_domain now declared noreturn
+  (every impl exits; gcc could not see the trap arm terminates —
+  maybe-uninitialized at the iter-64 clank-vfx offset). Attribute-only;
+  host + arm compile clean; check-sim.sh rerun → SIM CONFORMS 8/8.
+  (2) gfx_overlay.c timerText widened 8→24 (format-truncation
+  provable). ZOOM OUT: gcc 10.2 -O2 diagnostics are part of the arm
+  rung's value — host clang is blind to both classes.
+- **Valve tooth caught a REAL robustness bug**: under frameskip the
+  banner's render-advanced timer lags sim time and the countdown arm
+  can render a stale NEGATIVE startTimer → "-1 .." → out-of-atlas
+  glyph → fatal. C-only domain (browser renders every frame — the GO
+  arm flips first; no golden's no-skip corpus requests '-'/'.').
+  Fixed: clamp st2 >= 0 at dv_start with the domain note — identity on
+  every no-skip path (bit-compare + IoU corpus unchanged).
+- **PERF refutation (a)/(b) fired as pre-registered** — first paced
+  attempt: full p99 20.794, render p99 13.197 (M3 baseline 11.400 /
+  2.540; the vfx+overlay+bg surface added ~10.7 ms render p99).
+  ATTRIBUTION (new standing instrument: compile-time -DMLFK_RENDER_PROF
+  per-pass profiler in gfx_render.c, zero default cost — seeds task 8):
+  bg 4.04 ms/frame (per-pixel gradient), overlay 1.54, everything else
+  small. ONE bounded optimization round, AMENDED twice inside the same
+  measured class with the trail on record (PROCESS §2 honesty; the
+  iter-65 precedent): (i) batch blend primitives in the -O3 raster TU
+  (rast_fill_row_opaque / rast_blit_a8mask / rast_blit_rgba — the
+  per-pixel rast_blend_px-across-TU-boundary class); (ii)
+  touched-column window in rast_fill (many-small-fills class — the
+  laser/banner tail); (iii) unit-circle table (32 FIXED angles;
+  64-124 fdlibm doubles-trig calls per circle/ring, ~1,500/frame from
+  stock icons alone). EVERY step proven BIT-IDENTICAL: pre/post host
+  3600-frame shot + stream cmp (logged in m4-task3-teeth.log), x2
+  byte-stability, final cold RENDER OK with unchanged pins. Result:
+  render p99 13.20 → 7.06 ms paced (full trail:
+  docs/research/device-perf.md iter-73 table).
+- **THE BLOCKER (measured, registered — NOT fixed here)**: isolated
+  ~7-15 ms stalls hit whichever phase is running (sim, render, AND
+  present measured), 1-3 per run, clustered ~19-21 s in (frames
+  ~1118-1290 — the SAME zone iters 54/59 recorded) plus scattered;
+  each cascades the NEXT frame into one valve skip. REFUTED by
+  isolation probes: host adbd polling (50 s quiet window — skip
+  recurred), dirty-page writeback (pre-run `dsh sync` — recurred), rig
+  on-device machinery (manual paced run with NO deadman + NO mid-run
+  polls — 2 skips), swap (pswpin/pswpout 0), DVFS (no cpufreq), fresh
+  boot (reboot — 2 skips). Conclusion: kernel-side preemption inherent
+  to today's device state; M3-era ~11 ms frames absorbed it in slack,
+  the M4 ~13 ms frames cannot. skips==0 stays UNWEAKENED (hard rule
+  3); the quiet-window + pre-run-sync mitigations are KEPT (strictly
+  less interference); task-8's attribution instrument is the closure
+  path. do NOT retry blind — retry only on fresh evidence (e.g. a
+  cold driver run on a different day/device state) or after task 8.
+- **OPK leg (run once, failed LOUD as designed — separate registered
+  finding)**: packaging green (mksquashfs 4.4, contents cmp'd, 9 data
+  files sha-verified incl. vfx artifacts, launcher pins), but the
+  frozen iter-58 gmenu2x nav is STALE: /mnt/Applications now carries
+  the persistent meleelight.opk (M3 human-gate install) + 4 other
+  OPKs; two same-title "MeleeLight" entries make the frozen nav
+  inherently ambiguous. No boot marker → loud fail (the header's
+  documented fail-closed arm). Needs a re-measured nav + a
+  unique-title evidence OPK (small dedicated iteration). Device left
+  clean (only frontend + gmenu2x; evidence OPK removed, play install
+  untouched).
+- **TEETH** (.loop/m4-task3-teeth.log): T1a/T1b frozen-pin perturbation
+  → exact pin deaths before any build/device work (restores
+  cmp-clean); T1c legibility twin-pin (gfx.h 2.0→3.0) → twin-pin
+  death; T2 vfx-TU-drop → arm LINK death on all 7 gfx_vfx_*/render
+  symbols (riglib restored cmp-clean); T3 device-side glyph corruption
+  → sha-compare death; T4 = the standing in-check legibility witness +
+  the documented flag-off detection chain. The T2 first run ALSO
+  surfaced the real hit_detection -Werror break (predicted-class
+  bonus).
+- **Run-cap honesty**: pre-registered <= 3 paced runs; ACTUAL 8 full
+  paced attempts + 1 paced isolation probe + 4 non-paced attribution
+  runs + extra docker builds. Cause: the perf refutation consumed its
+  measured-optimize-remeasure cycle, then the stall class consumed
+  bounded isolation probes (each attempt refuted a NAMED theory, none
+  was a blind retry). All documented per the iter-65 overrun precedent.
+- **Freeze manifest**: 5 producers re-pinned (riglib.sh,
+  check-device-render.sh, check-device-opk.sh, mlfk.sh, judge-shot.js
+  — status truthfully arc-pending, cite this entry) +
+  verify_m3.sh MANIFEST_SHA256 → 21954526… same commit;
+  `SELF-CHECK 23/23 + ANCHOR GREEN`
+  (.loop/m4-task3-manifest-selfcheck.log). verify_m3.sh authoritative
+  runs now correctly hard-refuse until the M4-era arcs close.
+- **Regressions**: final cold `bash port/gfx/check-render.sh` →
+  RENDER OK, IOU MIN 0.9041 (.loop/m4-task3-reg-render-final.log);
+  `bash port/sim/check-sim.sh` → SIM CONFORMS
+  (.loop/m4-task3-reg-checksim.log; required — hit_detection.h changed).
+- **ZOOM OUT**: (1) per-pixel work crossing the -O2/-O3 TU boundary is
+  a CLASS — fixed with batch primitives at the boundary, not per-site
+  micro-edits; (2) "trap fns must be declared noreturn" is the truthful
+  fix for gcc flow-analysis false positives — never value-initialize to
+  silence; (3) the transient-skip story is now a MEASURED external
+  class with four refuted internal theories on record — the task-8
+  instrument inherits a concrete head start (per-pass profiler +
+  the frame-zone/probe evidence).

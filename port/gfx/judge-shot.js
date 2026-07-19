@@ -14,14 +14,28 @@
 //   4. Ink coverage inside the band is within [0.5%, 90%] of band
 //      pixels (0 = nothing composited; ~100% = garbage flood), and
 //      ZERO ink outside the band (the rasterizer clips there).
-//   5. PPM/PGM coherence: every band pixel differing from the
-//      background colour must be inked (ink is a superset of visible
-//      change by construction).
 //
-// Thresholds are STRUCTURAL floors (measured host render f0900: ~30
-// distinct colours, ~8% band ink), not perceptual tuning; they exist to
+// RETIRED criterion 5 (M4 task 3 — a REVIEWED pin change, pre-registered
+// in the iter-73 brief/AGENT-LOG): "every band pixel differing from the
+// background colour must be inked". TRUE for the M3 visual surface; made
+// structurally FALSE by M4 task 2's background-art plane, which is drawn
+// ink-SUPPRESSED by design (rast_ink_enable(0) — bg is not part of the
+// silhouette mask on either side), so gradient/starfield/mountain pixels
+// legitimately differ from the clear colour without ink (measured f0900:
+// 32,153 such pixels). The count is still REPORTED (changed_not_inked=)
+// for observability, no longer gated. EXPOSURE (PROCESS §8): PPM/PGM
+// cross-corruption on the pull path is no longer caught HERE — it is
+// fully covered downstream by check-device-render.sh's GATING bit-compare
+// of BOTH planes against the host render, and every pull is already
+// sha-verified by pullv; for host-side shots there is no transport to
+// corrupt.
+//
+// Thresholds are STRUCTURAL floors (measured host render f0900: M3
+// surface ~30 distinct colours, ~8% band ink; M4 surface with bg art +
+// vfx + overlay: ~767 colours, ~10.7% band ink — both inside the frozen
+// floors, which are unchanged), not perceptual tuning; they exist to
 // make "blank/black/flooded" loud, never to grade image quality (IoU vs
-// the browser is task 3's host-side check).
+// the browser is the host-side check).
 //
 // Usage: node judge-shot.js <shot.ppm> <shot.pgm>
 // Prints strict key=value lines (distinct colours, ink fraction) then
@@ -101,12 +115,11 @@ const inkFrac = inked / bandPixels;
 console.log("distinct_colours=" + String(colours.size));
 console.log("ink_fraction=" + inkFrac.toFixed(4));
 console.log("ink_outside_band=" + String(inkOutside));
+// reported only — no longer gated (retired criterion 5, header note)
+console.log("changed_not_inked=" + String(changedNotInked));
 
 if (colours.size < 8) die("band has only " + colours.size + " distinct colours (blank/flat frame)");
 if (inkFrac < 0.005) die("band ink fraction " + inkFrac.toFixed(4) + " < 0.005 (nothing composited)");
 if (inkFrac > 0.90) die("band ink fraction " + inkFrac.toFixed(4) + " > 0.90 (flooded frame)");
 if (inkOutside !== 0) die(inkOutside + " inked pixels OUTSIDE the letterbox band (clip breach)");
-if (changedNotInked !== 0) {
-  die(changedNotInked + " band pixels differ from background without ink (PPM/PGM incoherent)");
-}
 console.log("SHOT STRUCTURE OK");

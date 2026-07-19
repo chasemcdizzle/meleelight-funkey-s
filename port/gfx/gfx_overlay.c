@@ -168,14 +168,10 @@ void gfx_glyphs_load(const char *path) {
 
 static void blit_mask(Gfx *g, const uint8_t *mask, int w, int h, int x0,
                       int y0, RastCol col) {
-  if (!mask) return;
-  for (int y = 0; y < h; y++) {
-    for (int x = 0; x < w; x++) {
-      const unsigned a = mask[y * w + x];
-      if (!a) continue;
-      rast_blend_px(&g->rz, x0 + x, y0 + y, col, (a * 256u) / 255u);
-    }
-  }
+  // M4 task 3 (measured-hotspot class fix): the pixel loop rides the
+  // -O3 batch primitive — arithmetic exactly the old per-pixel
+  // rast_blend_px calls, bit-identical (raster.c note).
+  rast_blit_a8mask(&g->rz, mask, w, h, x0, y0, col);
 }
 
 static const Glyph *glyph_get(int fontId, char c) {
@@ -228,14 +224,9 @@ void gfx_sprite_blit(Gfx *g, const char *name, double anchorCanvasX,
   if (!sp || !sp->present) gfx_fatal("glyphs: unknown sprite blit");
   const int x0 = (int)lround(anchorCanvasX * GFX_K + sp->dx);
   const int y0 = (int)lround(anchorCanvasY * GFX_K + GFX_DY + sp->dy);
-  for (int y = 0; y < sp->h; y++) {
-    for (int x = 0; x < sp->w; x++) {
-      const uint8_t *px = &sp->rgba[4 * (y * sp->w + x)];
-      if (!px[3]) continue;
-      const RastCol col = { px[0], px[1], px[2], 256 };
-      rast_blend_px(&g->rz, x0 + x, y0 + y, col, (px[3] * 256u) / 255u);
-    }
-  }
+  // M4 task 3 (measured-hotspot class fix): -O3 batch primitive,
+  // bit-identical to the old per-pixel loop (raster.c note).
+  rast_blit_rgba(&g->rz, sp->rgba, sp->w, sp->h, x0, y0);
 }
 
 // --- renderOverlay -----------------------------------------------------------
@@ -267,7 +258,11 @@ void gfx_render_overlay(Gfx *g, const GameState *st) {
     snprintf(minStr, sizeof minStr, "%d", min);
     snprintf(secStr, sizeof secStr, "%.2f", fmod(mt, 60.0)); // (mt%60).toFixed(2)
     const size_t secLen = strlen(secStr);
-    char timerText[8];
+    // 24 >= minStr's worst case (15 chars of a 16-byte %d buffer) + ":cc"
+    // + NUL — sized so arm gcc 10.2 -Werror=format-truncation can PROVE
+    // no truncation (M4 task 3: first arm build of the M4 overlay TU;
+    // in-domain output is unchanged, minutes are 1-2 digits).
+    char timerText[24];
     char c0, c1;
     if (secLen < 5) { c0 = '0'; c1 = secStr[0]; }
     else            { c0 = secStr[0]; c1 = secStr[1]; }

@@ -109,6 +109,9 @@ static float by_(double cy) { return (float)(cy * GFX_K + GFX_DY); }
 static void bg_gradient(Gfx *g) {
   // drawBackgroundInit: bg1 linear gradient rgb(24,17,66) at canvas y 0 ->
   // black at 500, black below; drawn as flat rows into the fb (ink off).
+  // M4 task 3 (measured-hotspot class fix): the row loop rides the -O3
+  // batch primitive — exactly `for x: rast_blend_px(x, y, col, 256)`,
+  // bit-identical (raster.c note).
   for (int y = g->rz.clipY0; y < g->rz.clipY1; y++) {
     const double cy = ((double)y - GFX_DY) / GFX_K;
     double t = cy / 500.0;
@@ -116,7 +119,7 @@ static void bg_gradient(Gfx *g) {
     if (t > 1) t = 1;
     const RastCol col = { (uint8_t)(24 * (1 - t)), (uint8_t)(17 * (1 - t)),
                           (uint8_t)(66 * (1 - t)), 256 };
-    for (int x = 0; x < RAST_W; x++) rast_blend_px(&g->rz, x, y, col, 256);
+    rast_fill_row_opaque(&g->rz, y, col);
   }
 }
 

@@ -185,8 +185,24 @@ static const GfxRgb COL_WALLL   = { 0x47, 0xc6, 0x48 }; // "#47c648"
 static const GfxRgb COL_WALLR   = { 0x98, 0x67, 0xde }; // "#9867de"
 static const GfxRgb COL_LEDGE   = { 0xE7, 0xA4, 0x4C }; // "#E7A44C"
 
+// stage_w (M4 task 3): the stage-surface LEGIBILITY clamp — a deliberate,
+// documented device-scale adaptation (rationale + constant: gfx.h
+// GFX_LEGIBLE_MIN_DEV_PX). Applied UNIFORMLY at every stage-surface
+// stroke site (stroke_surface_list, ledge ticks, moving-plat fg2
+// strokes) and NOWHERE else — players/articles/vfx/overlay keep
+// upstream-faithful widths, fills are untouched. With g->legibility == 0
+// (default; every browser-IoU-compared path) this is the identity, so
+// host faithfulness measurements are byte-unchanged.
+static double stage_w(const Gfx *g, double w) {
+  if (g->legibility && w * GFX_K < GFX_LEGIBLE_MIN_DEV_PX) {
+    return GFX_LEGIBLE_MIN_DEV_PX / GFX_K;
+  }
+  return w;
+}
+
 static void stroke_surface_list(Gfx *g, const ml_stage_surface_t *list,
                                 int count, GfxRgb col, double w) {
+  w = stage_w(g, w);
   for (int j = 0; j < count; j++) {
     stroke_cseg(g,
                 canvas_x(g, ml_stage_f64(list[j].x1)),
@@ -233,7 +249,8 @@ static void draw_stage_init_layer(Gfx *g) {
     if (cap < len) len = cap;
     const double cxp = ax + len * fd_cos(ang), cyp = ay + len * fd_sin(ang);
     stroke_cseg(g, canvas_x(g, ax), canvas_y(g, ay),
-                canvas_x(g, cxp), canvas_y(g, cyp), 2.0, col_rgb(COL_LEDGE));
+                canvas_x(g, cxp), canvas_y(g, cyp), stage_w(g, 2.0),
+                col_rgb(COL_LEDGE));
   }
 }
 
@@ -254,7 +271,7 @@ static void draw_stage_fg2(Gfx *g) {
       stroke_cseg(g,
                   canvas_x(g, ml_stage_f64(pl->x1)), canvas_y(g, ml_stage_f64(pl->y1)),
                   canvas_x(g, ml_stage_f64(pl->x2)), canvas_y(g, ml_stage_f64(pl->y2)),
-                  g->fg2LineWidth, col_rgb(COL_PLAT));
+                  stage_w(g, g->fg2LineWidth), col_rgb(COL_PLAT));
     }
   }
   // box: pinned empty on VS stages (STAB1). polygon: the stage body,
@@ -613,22 +630,62 @@ static void render_articles(Gfx *g, const GameState *st) {
 
 // --- frame -------------------------------------------------------------------------
 
+// Per-pass render profiler (M4 task 3 attribution instrument; seeds the
+// task-8 skip-burst instrument): COMPILE-TIME gated — a default build
+// carries no timing calls and no branches (PROF expands to the bare
+// call), so shipped/gate binaries are unaffected. Build a scratch
+// binary with -DMLFK_RENDER_PROF for attribution runs; gfx_app calls
+// gfx_render_prof_dump() post-run (empty in default builds).
+#ifdef MLFK_RENDER_PROF
+#include <time.h>
+static uint64_t prof_now_ns(void) {
+  struct timespec ts;
+  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) gfx_fatal("prof clock");
+  return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+static uint64_t g_prof[8]; // clear,bg,stage1,stage2,players,articles,vfx,overlay
+static uint64_t g_prof_frames;
+#define PROF(i, call) do { \
+    const uint64_t prof_t_ = prof_now_ns(); \
+    call; \
+    g_prof[i] += prof_now_ns() - prof_t_; \
+  } while (0)
+void gfx_render_prof_dump(void) {
+  static const char *const names[8] = { "clear", "bg", "stage1", "stage2",
+                                        "players", "articles", "vfx",
+                                        "overlay" };
+  fprintf(stderr, "gfx_render prof (%llu frames), avg ns/frame:",
+          (unsigned long long)g_prof_frames);
+  for (int i = 0; i < 8; i++) {
+    fprintf(stderr, " %s=%llu", names[i],
+            (unsigned long long)(g_prof_frames ? g_prof[i] / g_prof_frames : 0));
+  }
+  fprintf(stderr, "\n");
+}
+#else
+#define PROF(i, call) call
+void gfx_render_prof_dump(void) {}
+#endif
+
 void gfx_render_frame(Gfx *g, const GameState *st) {
   // full gameMode-3 sequence (main.js renderTick "playing" branch):
   // clearScreen -> drawBackground -> drawStage -> renderPlayer x4 ->
   // renderArticles -> renderVfx -> renderOverlay(true). The background
   // pass is ink-suppressed (bg planes are not in the IoU mask on either
   // side — gfx_bg.c note); everything after it inks normally.
-  rast_clear(&g->rz, 0, 0, 0, (int)GFX_DY, (int)(GFX_DY + 750.0 * GFX_K));
-  gfx_render_background(g);
-  draw_stage_init_layer(g); // fg1 composite (static)
-  draw_stage_fg2(g);        // drawStage per-frame fg2 bits
+  PROF(0, rast_clear(&g->rz, 0, 0, 0, (int)GFX_DY, (int)(GFX_DY + 750.0 * GFX_K)));
+  PROF(1, gfx_render_background(g));
+  PROF(2, draw_stage_init_layer(g)); // fg1 composite (static)
+  PROF(3, draw_stage_fg2(g));        // drawStage per-frame fg2 bits
   for (int i = 0; i < 4; i++) {
-    if (st->sim.playerPresent[i]) render_player(g, st, i);
+    if (st->sim.playerPresent[i]) PROF(4, render_player(g, st, i));
   }
-  render_articles(g, st);
-  gfx_render_vfx(g, st);
-  gfx_render_overlay(g, st);
+  PROF(5, render_articles(g, st));
+  PROF(6, gfx_render_vfx(g, st));
+  PROF(7, gfx_render_overlay(g, st));
+#ifdef MLFK_RENDER_PROF
+  g_prof_frames++;
+#endif
 }
 
 // --- dumps -------------------------------------------------------------------------

@@ -111,8 +111,15 @@ typedef struct {
 extern void hd_dispatch(MlSim *sim, HdQueues *q, const HdDispCall *call);
 
 // Provided by the driver: fatal domain trap (mirrors upstream throw sites
-// or captured-domain overruns — rule 7).
-extern void ml_hd_out_of_domain(const char *what);
+// or captured-domain overruns — rule 7). Declared noreturn (M4 task 3,
+// measured): EVERY implementation aborts (sim_tick.c sim_fatal; the
+// calib replay drivers exit(3)) — without the attribute, arm gcc 10.2
+// -O2 -Werror cannot see the trap arm terminates and raises
+// maybe-uninitialized on values the trap guards (first instance: the
+// iter-64 clank-vfx offset in hd_executeHits). Same form as gfx_fatal
+// (raster.h). Attribute-only change: no ABI/behavior delta — the
+// implementations already never return.
+extern void ml_hd_out_of_domain(const char *what) __attribute__((noreturn));
 
 // --- the pipeline boundary (mutation captures) --------------------------------
 

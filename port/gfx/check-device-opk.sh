@@ -70,8 +70,10 @@
 #      exactly `RC=0\n`; the pulled stream is a STRICT full 900-frame
 #      stream whose every frame hash equals the frozen g01 stream's
 #      prefix (real conformance teeth on the OPK-installed binary);
-#      the in-app screenshot passes the UNCHANGED judge-shot.js
-#      (structural + non-blank); the app summary line parses under the
+#      the in-app screenshot passes judge-shot.js (structural +
+#      non-blank; criterion-5 retired for the M4 bg-art surface —
+#      reviewed pin change, judge-shot.js header + AGENT-LOG iter 73);
+#      the app summary line parses under the
 #      task-4 anchored grammar with 0 failed presents (render skips
 #      are NOT gated here — perf is the audio leg's business; a
 #      skip-flooded run cannot fake the shot: judge-shot rejects
@@ -125,6 +127,16 @@ EVID_SHOT_FRAME=450         # mid-run, in-match (post-`starting` window)
 BUDGET_NS=16666667          # 60 fps pacing budget
 GFXDATA_FROZEN=$GFX/gfxdata-frozen.txt
 GFXDATA_SHA256=5499a3dd5fc374d6ed988faf0bef6fa2e189eb314e892bdd83c7534dc0865c94
+# M4 task 3: the committed vfx render-plane artifacts (gfx_app now
+# REQUIRES --vfxdata/--glyphs; device path is browser-free — iter-72
+# rule: pin the FROZEN files' shas, never a fresh capture's). The
+# evidence args + the mlfk.sh live arm both consume these from the data
+# dir; --legible rides the same args (the documented device-scale
+# stage-legibility adaptation, gfx.h GFX_LEGIBLE_MIN_DEV_PX).
+VFXDATA_FROZEN=$GFX/vfxdata-frozen.txt
+VFXDATA_SHA256=545015a3d7e3bc138059fcb9711040758e729a7d21aac650b009ed7fdb5bd662
+VFXGLYPHS_FROZEN=$GFX/vfxglyphs-frozen.txt
+VFXGLYPHS_SHA256=8926cab4d648579d099053994bf309943b5a6bc3c5abf733af9ac6b71f3cbbeb
 # SNDPACK identity — the SAME frozen pin check-device-audio.sh owns
 # (iter 57, measured-then-frozen; that script is the pin's origin and
 # single point of re-freeze). Reuse-if-pinned, else rebuilt below.
@@ -378,6 +390,18 @@ if [ "$gsum" != "$GFXDATA_SHA256" ]; then
   echo "DEVICE FAIL: $GFXDATA_FROZEN sha256 $gsum != pinned $GFXDATA_SHA256" >&2
   exit 1
 fi
+# M4 task 3: vfxdata/vfxglyphs frozen pins (same committed-input class)
+made "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN"
+vsum="$(rig_host_sha256 "$VFXDATA_FROZEN")" || exit 1
+if [ "$vsum" != "$VFXDATA_SHA256" ]; then
+  echo "DEVICE FAIL: $VFXDATA_FROZEN sha256 $vsum != pinned $VFXDATA_SHA256" >&2
+  exit 1
+fi
+gsum2="$(rig_host_sha256 "$VFXGLYPHS_FROZEN")" || exit 1
+if [ "$gsum2" != "$VFXGLYPHS_SHA256" ]; then
+  echo "DEVICE FAIL: $VFXGLYPHS_FROZEN sha256 $gsum2 != pinned $VFXGLYPHS_SHA256" >&2
+  exit 1
+fi
 bash pipeline/extractor/build-extractor.sh
 rm -f "$TABLES/ml_tables.c" "$TABLES/ml_tables.h" \
   "$TABLES/ml_stages.c" "$TABLES/ml_stages.h" \
@@ -498,9 +522,11 @@ if [ "$dsum" != "$OPK_SHA" ]; then
   exit 1
 fi
 adb -s "$DEV" push "$DEVB/simdata.txt" "$DEVB/g01.trace.txt" \
-  "$GFXDATA_FROZEN" "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2" \
+  "$GFXDATA_FROZEN" "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" \
+  "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2" \
   "$BUILD/sndpack.bin" "$DSD/" >/dev/null
 for hf in "$DEVB/simdata.txt" "$DEVB/g01.trace.txt" "$GFXDATA_FROZEN" \
+          "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" \
           "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2" "$BUILD/sndpack.bin"; do
   bn="$(basename "$hf")"
   hsum="$(rig_host_sha256 "$hf")" || exit 1
@@ -513,7 +539,7 @@ done
 # the pinned evidence args (mode selector): generated fresh, pushed,
 # sha-verified — the launcher passes this line verbatim to gfx_device
 rm -f "$BUILD/opk-args"
-printf '%s' "--trace $DSD/g01.trace.txt --simdata $DSD/simdata.txt --gfxdata $DSD/gfxdata-frozen.txt --anim-dir $DSD --seed $seed --p1 $p1 --p2 $p2 --stage $stage --frames $EVID_FRAMES --pace 1 --budget-ns $BUDGET_NS --sndpack $DSD/sndpack.bin --out $DTMP/opk/opk-out.txt --timing $DTMP/opk/opk-tim.txt --shot-frame $EVID_SHOT_FRAME --shot-ppm $DTMP/opk/opk-shot.ppm --shot-pgm $DTMP/opk/opk-shot.pgm" > "$BUILD/opk-args"
+printf '%s' "--trace $DSD/g01.trace.txt --simdata $DSD/simdata.txt --gfxdata $DSD/gfxdata-frozen.txt --vfxdata $DSD/vfxdata-frozen.txt --glyphs $DSD/vfxglyphs-frozen.txt --legible --anim-dir $DSD --seed $seed --p1 $p1 --p2 $p2 --stage $stage --frames $EVID_FRAMES --pace 1 --budget-ns $BUDGET_NS --sndpack $DSD/sndpack.bin --out $DTMP/opk/opk-out.txt --timing $DTMP/opk/opk-tim.txt --shot-frame $EVID_SHOT_FRAME --shot-ppm $DTMP/opk/opk-shot.ppm --shot-pgm $DTMP/opk/opk-shot.pgm" > "$BUILD/opk-args"
 made "$BUILD/opk-args"
 adb -s "$DEV" push "$BUILD/opk-args" "$DSD/" >/dev/null
 hsum="$(rig_host_sha256 "$BUILD/opk-args")" || exit 1
@@ -557,9 +583,14 @@ if [ "$dsum" != "$hsum" ]; then
   echo "DEVICE FAIL: pushed nav script device sha ($dsum) != host sha ($hsum)" >&2
   exit 1
 fi
-echo "   pushed + sha-verified (OPK, 7 data files, fk_input, nav script)"
+echo "   pushed + sha-verified (OPK, 9 data files, fk_input, nav script)"
 
 echo "== [6/8] frontend cycle: respawn gmenu2x (deterministic start state) + inject nav =="
+# PRE-RUN SYNC (M4 task 3 — the measured dirty-writeback stall class,
+# see check-device-render.sh's note): flush the pushed OPK + data-plane
+# bytes to SD BEFORE the frontend launch, so expiry writeback never
+# lands inside the paced evidence run.
+dsh "sync"
 # marker must be ABSENT (frontend alive is the precondition under test)
 if ! dsh "test ! -f /mnt/disable_frontend" >/dev/null 2>&1; then
   echo "DEVICE FAIL: /mnt/disable_frontend present after normalization — frontend cannot run" >&2

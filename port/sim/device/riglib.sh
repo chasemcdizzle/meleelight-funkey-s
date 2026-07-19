@@ -625,7 +625,10 @@ rig_arm_build() {
       # no sim, no libm; kernel headers from the SDK sysroot.
       $CC -O2 -ffp-contract=off -Wall -Wextra -Werror -static \
         port/tools/fk_input.c -o "$DEVB/fk_input"
-      # gfx_device (M3 task 4): the SDL1.2 live-render app. DYNAMIC link
+      # gfx_device (M3 task 4; M4 task 3 adds the vfx render plane TUs
+      # gfx_vfx/gfx_overlay/gfx_bg — keep in sync with check-render.sh +
+      # check-device-render.sh host lists): the SDL1.2 live-render app.
+      # DYNAMIC link
       # (SDL 1.2 is LGPL — dynamic only; asserted after the build), -no-pie
       # for a deterministic file(1) signature + addr2line-able crashes.
       # raster.c is the ONE -O3 TU (PLAN 5); every TU -ffp-contract=off.
@@ -641,6 +644,7 @@ rig_arm_build() {
         "$DEVB/raster_arm.o" \
         "$GFX/gfx_app.c" "$GFX/platform_sdl1.c" \
         "$GFX/anim1.c" "$GFX/gfx_render.c" \
+        "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
         "$SIM/sim_boot.c" "$SIM/sim_tick.c" "$SIM/sim_ser.c" \
         "$SIM/sim_data.c" \
         "$CAL/canon.c" "$CAL/player_canon.c" \

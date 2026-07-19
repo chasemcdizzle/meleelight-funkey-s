@@ -1424,6 +1424,34 @@ overruns):
   (vfx live on screen).
   done-check: `bash port/gfx/check-device-render.sh` → prints
   `DEVICE RENDER OK`, exit 0 (with the legibility + vfx pins).
+  **IN PROGRESS / BLOCKED (iter 73, 2026-07-18) — landed + verified**:
+  legibility flag (--legible, GFX_LEGIBLE_MIN_DEV_PX 2.0 device px,
+  device-only — host IoU untouched; twin-pinned + standing in-check
+  differential witness), --vfxdata/--glyphs threaded through
+  check-device-render.sh / check-device-opk.sh / mlfk.sh (frozen-sha
+  pins per the iter-72 rule), arm build gains the vfx render TUs,
+  judge-shot criterion-5 retired (reviewed pin change — bg art is
+  ink-suppressed by design), arm-gcc-10.2 -Werror class fixes
+  (hit_detection.h noreturn decl, overlay buffer), bit-identical
+  render optimization round (batch blend prims + cov-window + circle
+  table; render p99 13.20 -> 7.06 ms — full measurement trail in
+  docs/research/device-perf.md iter-73). GREEN: RENDER OK (host, IoU
+  min 0.9041 unchanged pins), SIM CONFORMS 8/8, STREAM MATCH on every
+  device attempt, device shot BIT-IDENTICAL to host, full p99 15.51 <
+  16.67, render p99 7.06 < 8.0, teeth all fired. **BLOCKED on the
+  registered external stall class**: 8/8 paced attempts carried 1-3
+  skips from isolated ~7-15 ms kernel-side stalls (frames ~1118-1290
+  zone + scattered; adbd-poll/writeback/rig-machinery/swap all refuted
+  by isolation probes — device-perf.md). skips==0 stays unweakened;
+  task-8's attribution instrument is the closure path (driver may
+  re-order it, or retry the done-check cold on fresh device state).
+  ALSO REGISTERED: check-device-opk.sh's frozen gmenu2x nav is stale —
+  the device inventory changed post-M3 (persistent meleelight.opk +
+  4 other OPKs; two same-title MeleeLight entries make the frozen nav
+  ambiguous) — failed LOUD exactly as designed; needs a re-measured
+  nav + a unique evidence-OPK title (small dedicated iteration).
+  check-device-audio.sh is NOT yet threaded with --vfxdata/--glyphs
+  (out of task scope; cannot pass until task 6/14 threads it).
 - task 4 — **ai.js structure-parallel C port, capture-replay
   verified**: port/sim/ai.c (+ helpers) translated from src/main/ai.js
   (1,575 lines) over the MlAiVal tagged-value model; verified by
