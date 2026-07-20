@@ -275,24 +275,49 @@ void foh_persist_save(const FohPersist *p) {
     gfx_fatal("foh_persist: save failed — rename publish");
   }
   // directory durability, best-effort for the FAT class (EINVAL/
-  // ENOTSUP tolerated; a real I/O error is still loud)
+  // ENOTSUP tolerated; a real I/O error is still loud). review-100 M3:
+  // open(dir) FAILURE is no longer a silent skip — the rename is
+  // published but its directory entry was not proven durable, so the
+  // save is reported through a DISTINCT loud token (saved-nodirsync),
+  // NEVER the plain `saved`. The fsync EINVAL/ENOTSUP tolerance (the
+  // reviewed FAT class) is unchanged and keeps the plain `saved`; real
+  // durability is proven end-to-end by the reboot round-trip leg, not
+  // by an fsync rc.
+  bool dirDurable = true;
   const int dfd = open(dir, O_RDONLY);
   if (dfd >= 0) {
     if (fsync(dfd) != 0 && errno != EINVAL && errno != ENOTSUP) {
       gfx_fatal("foh_persist: save failed — dir fsync");
     }
     close(dfd);
+  } else {
+    dirDurable = false;
   }
-  fprintf(stderr, "foh_persist: saved\n");
+  fprintf(stderr, dirDurable ? "foh_persist: saved\n"
+                             : "foh_persist: saved-nodirsync\n");
 }
 
 // --- machine glue (single definition site) ----------------------------------
+
+// The bound render-state, captured at apply (review-100 M1: the
+// same-process stale-PB product bug). foh_persist_record_update
+// refreshes bound->targetRecords at the SAME improved-write so a
+// same-process return-to-target-select renders the NEW record without
+// a restart. ONE mechanism at the ONE write site — no scattered syncs,
+// no render read-through. Lifetime: the bound FohState is the driver's
+// live main()-scope state; record_update only fires (through the
+// finishGame hook) during that scope, so the pointer is always valid.
+// NULL until apply — record_update's refresh is a guarded no-op then
+// (e.g. the standalone --tooth-persist-finish arm, which loads but
+// never applies).
+static FohState *g_bound = 0;
 
 void foh_persist_apply(const FohPersist *p, FohState *s) {
   s->turbo = p->turbo;
   s->lCancelType = p->lCancelType;
   for (int k = 0; k < 4; k++) s->tapJumpOff[k] = p->tapJumpOff[k];
   memcpy(s->targetRecords, p->targetRecords, sizeof s->targetRecords);
+  g_bound = s; // review-100 M1: bind for the record-time refresh
 }
 
 void foh_persist_collect(FohPersist *p, const FohState *s) {
@@ -315,7 +340,13 @@ bool foh_persist_record_update(FohPersist *p, int ch, int tstage,
   const double rec = p->targetRecords[ch][tstage];
   // main.js:1442: matchTimer < rec || rec == -1
   const bool improved = (matchTimer < rec) || (rec == -1.0);
-  if (improved) p->targetRecords[ch][tstage] = matchTimer;
+  if (improved) {
+    p->targetRecords[ch][tstage] = matchTimer;
+    // review-100 M1: refresh the bound render copy at the SAME write so
+    // a same-process return-to-target-select renders the new record
+    // (the chokepoint owns the sync; no driver-side plumbing).
+    if (g_bound) g_bound->targetRecords[ch][tstage] = matchTimer;
+  }
   fprintf(stderr, "foh_persist: record char=%d tstage=%d improved=%d\n", ch,
           tstage, improved ? 1 : 0);
   return improved;

@@ -17824,3 +17824,375 @@ loosen gates one-off.
   covered, failure paths included) in riglib, manifest re-pin
   ceremony. ZOOM OUT: instrument-level fix in riglib, not per-check
   one-offs.
+
+## iter 102 — 2026-07-20 — M4 hardening PRE-REGISTRATION: persist-arc round-1 closure (review-100 triage, ALL dispositions) + the orphaned-deadman leak CLASS FIX (frozen before any run/edit; PROCESS §2)
+
+**Task**: TWO bundles, ONE atomic commit. Bundle A closes ALL
+dispositions in .loop/review-100-triage.md (codex Tier A round 1 over
+794a23b, NO-GO — .loop/review-100-1.log): H1 reboot witness, M1
+stale-PB product bug, M2 exact persist verifier, M3 dir-fsync
+loudness, M4 restore-before-verdict, L1 display pin. Bundle B ships
+the orphaned-deadman leak class fix registered in the driver
+post-iter-101 adjudication entry (device-check failure paths leak
+/tmp/mlfk/deadman.sh 2 s fork combs; skip counts doubled with orphan
+count 7->14; self-amplifying).
+
+**Surfaces (frozen)**: port/foh/check-device-persist.sh,
+port/foh/foh_persist.c, port/foh/foh_dev.c (the M1 witness producer
+arm), port/sim/device/riglib.sh,
+port/sim/device/m3-freeze-manifest.txt (riglib row re-pin) +
+port/sim/device/verify_m3.sh (MANIFEST_SHA256 anchor line ONLY — its
+normalized self-row excludes that line by design). REGISTERED
+surface addition beyond the triage list: port/foh/foh_persist.h — its
+header IS the stderr event-grammar contract doc; adding the M3
+`saved-nodirsync` token without the header would ship a stale
+contract (paired-doc rule). foh_app.c and foh_render.c need NO edit
+under the chosen M1 mechanism (chokepoint-owned; see below) — fewer
+touched surfaces than the triage allowed. Plus docs/AGENT-LOG.md,
+docs/STATE.md, docs/PORTABILITY.md (boot-identity row).
+Frozen flows/goldens/streams byte-untouched; zero re-freezes.
+
+**Method per finding (frozen)**:
+- **H1 (boot-identity reboot witness)**: capture PRE and POST boot
+  identity host-side around the power cycle. Primary source
+  /proc/sys/kernel/random/boot_id (canonical-UUID whitelist grammar);
+  MEASURED-first fallback: `btime <digits>` from /proc/stat
+  (bounded-decimal whitelist). The source used is recorded in the
+  check output and MUST be the same source on both sides. Judge =
+  `bootid_judge` — a PURE HOST function (the
+  rig_quiesce_bracket_assert precedent) asserting: same source, POST
+  != PRE (identity change = the cycle happened), and POST
+  /proc/uptime integer-seconds < the host-measured dispatch->read gap
+  (a fresh boot, not a stale one). OFFLINE witness stays; BOOTWAIT_S
+  demoted to a diagnostic token. Teeth: STANDING host teeth invoke
+  the REAL judge body (no-reboot POST==PRE -> exact death;
+  stale-boot uptime>=gap -> death; source-flip -> death; dead-tooth
+  guards) + ONE writer-run COPY tooth (the triage's literal form): a
+  COPY of the check with the reboot dispatch suppressed and the
+  offline witness forced runs for real and must DIE AT the boot-id
+  judge (dying anywhere else = wiring refuted).
+- **M1 (stale-PB PRODUCT BUG; chokepoint-owned refresh)**: the
+  chokepoint binds the machine copy at apply time —
+  foh_persist_apply(p, s) records s in a private foh_persist.c
+  static; foh_persist_record_update refreshes
+  bound->targetRecords[ch][ts] at the SAME improved-write. ONE
+  mechanism at the ONE write site; no driver-side syncs; drivers
+  byte-unchanged on this path (foh_app.c's apply call already
+  binds). The registered ALTERNATIVE (render read-through) is NOT
+  taken; switching to it would be a new pre-registration. Witness
+  (host headless flow leg): NEW foh_dev arm `--tooth-finish-at
+  <frame> <char> <tstage> <hex16>` fires the SAME crafted
+  tp_finish_game chain mid-flow (flow mode, no bridge, exact-grammar
+  args); leg = p02-persist-verify flow over a persist dir seeded
+  with the PRE-record file (records all -1), improve fired at frame
+  100 -> the frame-440 tss-record shot must be BYTE-IDENTICAL to the
+  existing p02 persisted-twin shot (which BOOTS with the record
+  already on disk). Under the shipped bug this shot shows the stale
+  "--:--:--" and the cmp fails — the tooth discriminates by
+  construction. Also asserts: improved=1 + 2 saved lines + post-leg
+  file == FILE_REC + trace == the p02 twin trace (hermeticity).
+  Device evidence: NOT taken (budget; the mechanism is
+  device-agnostic C — the host witness + the existing device shot
+  legs cover the READ path).
+- **M2 (exact positional MLFKPERSIST1 whitelist)**:
+  verify_persist_file rewritten: final byte must be LF; exactly 55
+  lines; positional asserts line-by-line — line 1 the exact header,
+  line 2 `turbo [01]`, line 3 `lcancel [0-2]`, line 4
+  `tapjump [01] [01] [01] [01]`, lines 5-54 `rec <c> <s> <hex16>`
+  with (c,s) equal to the canonical c-major progression at that
+  exact position (uniqueness by position), rec DOMAIN enforced on
+  the bits (== bff0000000000000 or unsigned-hex < 40b7700000000000 —
+  the [0,6000) finite band; fixed-length lowercase hex compares
+  lexicographically = numerically), line 55 `SUM <hex64>` with
+  shasum recompute over lines 1-54. Fail = grammar_die (fail
+  closed). CORPUS VALIDATION (mandatory, before shipping): every
+  archived genuine persist file from the iter-100/101 evidence
+  (port/foh/build/device-persist/{pull1..4}.dat +
+  host/file-{p01,rec,defaults}-want.dat) + every file this
+  iteration's own runs produce must pass with ZERO false
+  rejections; corrupt.dat must FAIL (negative control).
+- **M3 (dir-fsync loudness)**: foh_persist_save's dir-durability
+  step: open(dir) FAILURE (today's silent skip) -> emits
+  `foh_persist: saved-nodirsync` (distinct token), NEVER plain
+  `saved`; the fsync EINVAL/ENOTSUP tolerance (the reviewed FAT
+  class, header-documented) is UNCHANGED and stays plain `saved` —
+  real durability is proven end-to-end by the reboot round-trip leg,
+  not by an fsync rc. Check: every host+device leg asserts the
+  degraded token ABSENT and plain-saved counts unchanged; NEW host
+  tooth: chmod u=wx on the persist dir (search+write keep the
+  tmp/rename path alive; open(dir, O_RDONLY) fails) -> exactly one
+  saved-nodirsync, zero plain saved, published file bytes still
+  exact (restore chmod, cmp).
+- **M4 (verdict-bound pre-existing restore)**: backup pull via NEW
+  zero-byte-safe pull_bytes (pullv minus the non-empty assert; sha
+  equality judges — the empty-file sha is well-defined); the trap
+  backstop's `-s` gate becomes `-f` (zero-byte restored as bytes);
+  NEW [10] step BEFORE the verdict line: push the backup back,
+  pull-back, byte-verify pulled-back sha == backup sha, loud fail
+  otherwise; the EXIT-trap restore stays as backstop only.
+- **L1 (display pin derived independently)**: the check derives the
+  expected PERSONAL BEST string from REC_BITS via the SPEC formatting
+  rule only (targetselect.js:411-419 + the registered
+  integer-centisecond delta: cs=floor(rec*100+0.5),
+  "0<cs/6000>:<pad2 (cs%6000)/100>.<pad2 cs%100>") in a node one-liner
+  (bit-pattern -> double -> string; NOT the C renderer, NOT
+  foh_render.c), asserts derived == REC_DISPLAY alongside the shot
+  judges, and derives the defaults arm (bff0... -> "--:--:--") ==
+  the control expectation. Dead-tooth guard: a perturbed-bits
+  derivation must NOT equal REC_DISPLAY.
+- **Bundle B (orphaned-deadman leak class fix, riglib chokepoint)**:
+  LEAK MECHANISM (to verify by reading, recorded here as the frozen
+  hypothesis): failure-path cleanup touches deadman.cancel and then
+  rig_cleanup IMMEDIATELY wipes $DTMP — the cancel file is deleted
+  inside the deadman's 2 s sleep window, the deadman never sees it,
+  and the comb runs its full window with its nonce wiped (fires
+  nothing, unparks nothing) — every failed run leaks one comb
+  (iter-101: two failed runs, two combs, skips 7->14). CLASS FIX at
+  the chokepoint, never per-check: (1) `rig_orphan_reap` — a
+  ONE-dsh device-side scan+kill over /proc: any process (excluding
+  the scan shell $$/$PPID) whose cmdline contains /tmp/mlfk/ or
+  /mnt/mlfk-scratch (split-literal patterns so the scanner's own
+  cmdline can never match itself) is killed (TERM, bounded wait,
+  KILL escalation), each found process LOUDLY logged (pid+comm+
+  cmdline), output whitelist-parsed (`MLFKPROC ...` rows + a final
+  `MLFKSCAN <found> <left>` line; left must be 0). (2) STEP-0
+  wiring: rig_lock_acquire runs the reap right after acquiring the
+  lock — every rig-sourcing device check inherits it BY
+  CONSTRUCTION (verified: all 11 check scripts call
+  rig_lock_acquire; a check can never start over a stale comb). On
+  a step-0 find, the reap also assumes the killed deadman's DUTIES:
+  rig_qd_normalize (daemon restore off the markers) + stale
+  /mnt/disable_frontend removal (RC-verified) — killing the
+  backstop may never strand what it guarded. Failure at step-0 =
+  loud death (lock released explicitly — no trap exists yet).
+  (3) ALL-EXIT teardown: rig_cleanup runs the reap (best-effort,
+  WARN-visible — cleanup never masks the run's rc) BEFORE the $DTMP
+  wipe whenever RIG_PRESERVE_DTMP != 1; the PRESERVE arm keeps the
+  deadman armed ON PURPOSE (the review-52 backstop design is
+  unchanged). Inheritance by construction: every device check's
+  EXIT trap routes through rig_cleanup (grep evidence in the result
+  entry). TEETH (writer-run, on-device, copies/minimal consumers):
+  T-B1 a minimal rig consumer (sources adbsh+riglib, locks, traps
+  rig_cleanup, arms a real deadman via the persist-check heredoc
+  shape, then DIES mid-check) must leave ZERO deadman/mlfk
+  processes (discriminating: the OLD rig_cleanup loses the
+  cancel-wipe race by design and leaves the comb); T-B2 a planted
+  fake orphan (`setsid sh /tmp/mlfk/deadman.sh`-shaped sleeper)
+  must be found + loudly cleaned by the step-0 reap invoked through
+  the REAL rig_lock_acquire body (a fresh consumer run), device
+  then verified comb-free.
+- **Manifest re-pin ceremony**: my riglib.sh diff invalidates the
+  m3-freeze-manifest riglib row (which is ADDITIONALLY pre-existing
+  stale: pinned at the iter-89 bytes, drifted unpinned since iter
+  100 — registered in STATE iter-100 residuals). Re-pin the row to
+  the NEW bytes with honest status `arc-pending` (cite: this entry;
+  the persist-arc round 2 owns the GO) — reviewed-go would be a
+  false claim, and verify_m3 AUTHORITATIVE is already refused by 4
+  pre-existing arc-pending rows, so no behavior change. Anchor
+  recomputed with `openssl dgst -sha256` (shasum is sandbox-blocked
+  at the writer meta level; in-script shasum verified working).
+  Inline self-check (all rows vs bytes + anchor) must print ALL
+  ROWS GREEN + ANCHOR GREEN in the same commit (precedent 8bf15ba).
+  BASELINE (measured pre-edit, .loop/m4-per102-manifest-precheck.log):
+  every row GREEN except the riglib row (the registered pre-existing
+  staleness); the wrap-run.js row (iter-89 surprise) was ALREADY
+  re-pinned by 8bf15ba and is GREEN — recorded, nothing else touched.
+
+**Run plan + caps (frozen)**: [R0] measurement probes, <= 12 dsh
+batches total across R0/T-B teeth: boot_id presence + btime + uptime
+grammar on the live device (H1's measure-first), /proc scan shapes.
+[R1] corpus validation (host, offline). [R2] host smoke: bash -n on
+edited scripts + the M1 witness leg run manually against a hand-built
+foh_dev_headless (host, free) before any device run. [R3] T-B1/T-B2
+teeth (device, small). [R4] the H1 no-reboot COPY tooth = device
+check-run #1 (NO reboot; must die at the judge). [R5] the cold
+done-check `bash port/foh/check-device-persist.sh` = device check-run
+#2 + THE ONE reboot. Device check-run cap 2 + 1 reboot TOTAL
+(pre-registered; the H1 tooth consumes no reboot). Arm rebuilds <= 2
+(riglib/foh byte changes force exactly one planned rebuild at R4; the
+second is the repair slot). Cold host checks <= 4 (check-foh-flows.sh
+cold — REQUIRED regression, foh_persist.c/foh_dev.c are in its build;
+plus one repair re-run slot). check-sim/check-device-conform etc.:
+mechanical skip-proofs (no sim TU touched; riglib deltas are additive
+scan/teardown — check-device-target.sh's next cold run is the task-14
+ritual, registered). Early-stop: any cap breach or refutation -> STOP,
+report, no commit.
+
+**Pass criteria (frozen)**: `PERSIST OK (...)` exit 0 cold with
+honest counters incl. the new boot-identity tokens; all standing
+teeth pass with dead-tooth guards; corpus zero false rejections +
+corrupt negative; T-B1 zero survivors; T-B2 loud clean; COPY tooth
+dies at the boot-id judge exactly; FOH FLOWS OK cold, zero
+re-freezes; manifest self-check ALL ROWS GREEN + ANCHOR GREEN; tree
+-> ONE atomic commit.
+
+**Refutation shapes (frozen)**:
+- H1-a: boot_id ABSENT on this kernel -> the btime arm is the
+  recorded source (both the check and this ledger record which); if
+  BOTH absent -> STOP (no identity-grade witness exists; report).
+- H1-b: boot_id present but IDENTICAL across a real reboot (kernel
+  quirk) -> one bounded evidence round (btime cross-check on the same
+  cycle), then STOP and report; do NOT ship a witness that cannot
+  distinguish.
+- M1: witness shot != twin shot after the fix -> the bind-at-apply
+  mechanism is refuted for the render path -> one evidence round
+  (dump both persist planes + FohState at shot time), then STOP; the
+  render-read-through alternative needs a fresh pre-registration,
+  never a silent swap.
+- M2: ANY archived genuine file rejected -> my grammar is wrong ->
+  fix the parser against the measured corpus, NEVER loosen to a
+  permissive scan; a genuine file that truly violates the format =
+  format drift = STOP (corruption evidence, not a parser bug).
+- M3: a DEVICE leg emits saved-nodirsync (dir open fails on the
+  product path — unexpected) -> the device-leg plain-saved assert
+  fails -> STOP and report the measured device behavior; do NOT
+  weaken the assert or reclassify errno arms mid-flight.
+- Deadman T-B1: any survivor after the trap teardown -> the
+  all-exit-paths claim is refuted -> STOP (report the surviving
+  shape). T-B2: the scan misses the plant -> the predicate is
+  refuted -> one evidence round on the real /proc cmdline shapes,
+  then STOP.
+- COPY tooth: death anywhere other than the boot-id judge message ->
+  the H1 wiring is refuted -> one evidence round, then STOP.
+- Any refutation is recorded here with a do-NOT-retry-blind line.
+
+## iter 102 — 2026-07-20 — M4 hardening RESULT: persist-arc round-1 closure (review-100 ALL dispositions) + the orphaned-deadman leak CLASS FIX — PERSIST OK
+
+**RESPAWN NOTE (PROCESS §6)**: the original iter-102 writer died on a
+usage limit immediately after freezing the pre-registration above (and
+after beginning the riglib Bundle-B edits). This RESPAWN adopted the
+frozen pre-registration as binding + the partial riglib edits (reviewed,
+kept, completed), re-freezing nothing. One in-flight amendment: the
+pre-reg's M1 surface list named foh_dev.c as the witness producer arm
+and foh_persist.{c,h}; the chosen M1 mechanism touched NO foh_app.c /
+foh_render.c (chokepoint-owned bind-at-apply + refresh-at-record), so
+the shipped surface set is SMALLER than the triage allowed, as
+pre-registered.
+
+**COLD done-check**: `bash port/foh/check-device-persist.sh` ->
+**`PERSIST OK (sessions=2 powercycle=reboot bootid=bootid:PRE!=POST
+bootwait=12s legs=5 pulls=4 roundtrip=byte-exact record=00:14.50 resets
+missing=1 loud-corrupt=2 dirsync=plain-saved+degraded-tooth teeth=12)`**
+exit 0 (.loop/m4-per102-donecheck.log). The boot-identity witness fired
+on a REAL reboot: PRE boot_id 5b9b339e… != POST 8031437d…, POST uptime
+7 s < dispatch->read gap 13 s (a fresh cycle). ONE reboot; two device
+check-runs (the COPY tooth + this done-check), as pre-registered.
+
+**Bundle A — review-100 dispositions, all closed**:
+- **H1** (boot-identity reboot witness): MEASURED first — BOTH
+  /proc/sys/kernel/random/boot_id (canonical UUID) and /proc/stat btime
+  exist on this kernel; boot_id is the recorded primary. `bootid_judge`
+  is a PURE HOST function (same source both sides, POST != PRE, POST
+  uptime < gap). OFFLINE witness kept; BOOTWAIT_S demoted to a
+  diagnostic token. 4 standing host teeth invoke the REAL judge body
+  (no-reboot/stale/source-flip die, valid-cycle passes) + the writer-run
+  COPY tooth (reboot dispatch suppressed + offline witness forced) ran a
+  full device session and DIED EXACTLY at the boot-id judge
+  ("POST identity == PRE identity"), nowhere else
+  (.loop/m4-per102-h1-copytooth.log).
+- **M1** (PRODUCT BUG, same-process stale PB): chokepoint-owned refresh
+  — foh_persist_apply binds the FohState; foh_persist_record_update
+  refreshes bound->targetRecords at the SAME improved-write (ONE
+  mechanism, ONE site; foh_app.c/foh_render.c untouched). NEW foh_dev
+  `--tooth-finish-at <frame> <char> <tstage> <hex16>` fires the crafted
+  tp_finish_game chain mid-flow. Host witness leg: seeded FILE_P01
+  (records -1), improve at frame 100 -> the frame-440 tss-record shot is
+  BYTE-IDENTICAL to the persisted twin. DISCRIMINATION PROVEN: a rebuild
+  WITHOUT the refresh renders the stale "--:--:--" and the shot DIFFERS
+  (the leg fails under the bug); the write path is unaffected either way
+  (post-leg file == FILE_REC in both).
+- **M2** (exact positional MLFKPERSIST1 whitelist): verify_persist_file
+  rewritten — final-LF, exactly 55 lines, each line matched at its exact
+  index, the 50 rec rows carrying the canonical c-major (c,s)
+  progression by POSITION, rec bits domain-checked (== the -1.0 sentinel
+  or unsigned-hex < the 6000.0 cap 40b7700000000000, via an LC_ALL=C
+  fixed-16-hex compare = numeric order), SUM recompute over lines 1-54.
+  CORPUS-VALIDATED: 14 archived genuine files PASS (zero false
+  rejections), 5 corrupt controls (corrupt.dat + the th1-th4 tooth
+  variants) all REJECTED.
+- **M3** (dir-fsync loudness): open(dir) failure -> the DISTINCT loud
+  token `foh_persist: saved-nodirsync` (never plain `saved`); the FAT
+  fsync EINVAL/ENOTSUP tolerance is unchanged. Header event-grammar
+  contract updated (paired-doc). Every host+device leg asserts the
+  degraded token ABSENT; NEW host tooth T-H8 (chmod u=wx) -> exactly one
+  saved-nodirsync, zero plain saved, published bytes still exact.
+- **M4** (verdict-bound restore): NEW zero-byte-safe pull_bytes (sha
+  equality is the sole judge); the trap gate is now -f not -s (a
+  zero-byte user file is restored as bytes); NEW [10] step BEFORE the
+  verdict pushes the backup back, pulls it back, and byte-verifies
+  pull-back sha == backup sha; the EXIT trap stays a backstop
+  (PREEXIST_RESTORED guards the redundant re-push).
+- **L1** (display pin derived independently): derive_pb reads the record
+  bits and applies the SPEC rule (targetselect.js:411-419 + the
+  integer-centisecond delta) in node — NOT the C renderer — asserting
+  the derived string == REC_DISPLAY (00:14.50) and defaults ==
+  "--:--:--", dead-tooth guarded.
+
+**Bundle B — orphaned-deadman leak CLASS FIX** (riglib chokepoint;
+driver post-iter-101 adjudication): `rig_orphan_reap step0|cleanup` — a
+ONE-dsh /proc scan (cat cmdline | tr, split-literal /tmp/mlfk +
+/mnt/mlfk-scratch patterns, $$/$PPID excluded) killing by pid
+(TERM/wait/KILL), whitelist-parsed MLFKPROC rows + a final MLFKSCAN
+<found> <left> (left must be 0). STEP-0 wired into rig_lock_acquire
+(inherited by all 11 rig-sourcing checks by construction; loud
+clean-then-proceed + duty transfer — rig_qd_normalize + stale
+disable_frontend removal). CLEANUP wired into rig_cleanup before the
+$DTMP wipe (best-effort, WARN-visible), covering ALL exit paths (the
+skip-gate death was the iter-101 leak site). TEETH (device): T-B1 a
+consumer that arms a real deadman then dies mid-check -> trap teardown
+-> ZERO survivors (.loop/m4-per102-tb1.log); the DISCRIMINATOR
+(.loop/m4-per102-tb1-discriminator.log) shows the OLD teardown
+(cancel-then-immediate-wipe) LEAKS the comb and the reap then cleans it.
+T-B2 a planted fake orphan is found + loudly cleaned by the step-0 reap
+through the REAL rig_lock_acquire body (.loop/m4-per102-tb2.log).
+REAP ROBUSTNESS BUG FOUND + FIXED mid-run: the first COPY-tooth attempt
+died at [0] because a process vanishing mid-scan made a SHELL
+`< $p/cmdline` redirect print an un-suppressible open error that adb
+merged into the captured output and broke the whitelist grammar; fixed
+by letting `cat` open the file (its own stderr -> /dev/null) — verified
+robust across 5 reaps on a churning device.
+
+**Manifest re-pin ceremony** (same commit; precedent 8bf15ba): the
+riglib.sh row re-pinned to the new bytes
+(99a766dd…) with honest status `arc-pending` (the persist-arc round 2
+owns the GO; verify_m3 AUTHORITATIVE already refuses arc-pending rows,
+so no behavior change); the integrity anchor recomputed with
+`openssl dgst -sha256` (shasum blocked at the writer meta level) to
+a766de33…. Inline self-check: 23 rows GREEN + ANCHOR GREEN
+(.loop/m4-per102-manifest-selfcheck.log). Only the riglib row was
+invalidated by the diff; every other row (incl. wrap-run.js, already
+re-pinned by 8bf15ba) was GREEN at baseline and untouched.
+
+**Regressions**: cold `bash port/foh/check-foh-flows.sh` ->
+`FOH FLOWS OK (flows=7 shots=17 bridges=3 tbridges=2 states=4 tstates=2
+diverge=1 control=1 teeth=18)` exit 0, ZERO re-freezes (my
+foh_persist.c/foh_dev.c changes are in its build; the M1 bind is inert
+on those flows — no finish fires) (.loop/m4-per102-fohflows-cold.log).
+check-sim/check-target-sim: mechanical skip-proof — NO sim TU touched
+(the C diff is FOH-plane only: foh_persist.{c,h}, foh_dev.c; port/sim
+changes are rig/gate scripts, not sim TUs). Other device checks
+(target/conform/g01/audio/input/music/opk/render/skip-attrib):
+mechanical skip-proof — the riglib delta is START (rig_lock_acquire
+step-0) + TEARDOWN (rig_cleanup) only, additive and no-op on a clean
+device, changing nothing any check PROVES; check-device-target.sh's next
+cold run is the registered task-14 ritual.
+
+**HONEST COVERAGE**: unchanged from iter 100 — the
+sim-reaches-completion -> tp_finish_game edge is still not exercised
+end-to-end (the M1 witness and the record arm both drive the crafted
+finish downward, not the sim-reached trigger; probe-covered upstream).
+The M1 device READ path is covered by the existing dp02 shot legs; the
+M1 same-process REFRESH is host-witnessed only (device evidence not
+taken — the mechanism is device-agnostic C). New device semantics
+recorded in docs/PORTABILITY.md (boot-identity witness + deadman reap).
+
+**Run ledger vs caps (frozen)**: device check-runs 2/2 (COPY tooth +
+done-check) + 1/1 reboot; the first COPY-tooth launch aborted at [0] on
+the reap-robustness bug BEFORE any park/arm/reboot (a repair-slot
+re-run, no budget consumed). Arm rebuilds 1 (the COPY tooth; the
+done-check hit the stamp cache). Cold host checks 1 (check-foh-flows).
+Device teeth T-B1/T-B2 + the discriminator ran as small isolated
+consumers. Refutation shapes fired: the M1 discrimination refute
+(unfixed build), the H1 COPY-tooth death-at-judge, T-B1/T-B2, the
+reap-robustness bug (found, fixed, re-verified) — all resolved, none
+left the STOP condition standing.

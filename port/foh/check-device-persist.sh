@@ -119,6 +119,77 @@ count_e() { # anchored-regex count (rc case-split)
   printf '%s' "$c"
 }
 
+# L1 (review-100): derive the expected PERSONAL BEST display string
+# INDEPENDENTLY from a record's hex16 bit pattern via the SPEC rule
+# (targetselect.js:411-419 + the registered integer-centisecond delta
+# cs=floor(rec*100+0.5) -> "0<cs/6000>:<pad2 (cs%6000)/100>.<pad2
+# cs%100>"). bit-pattern -> double -> string, in node — NEVER the C
+# renderer / foh_render.c. -1.0 -> the "--:--:--" defaults display.
+derive_pb() { # <hex16> -> the spec display string on stdout
+  node -e '
+    const h = process.argv[1];
+    if (!/^[0-9a-f]{16}$/.test(h)) { process.stderr.write("bad hex16\n"); process.exit(3); }
+    const rec = Buffer.from(h, "hex").readDoubleBE(0);
+    if (rec === -1) { process.stdout.write("--:--:--"); process.exit(0); }
+    if (!(isFinite(rec) && rec >= 0 && rec < 6000)) { process.stderr.write("out of domain\n"); process.exit(4); }
+    const cs = Math.floor(rec * 100 + 0.5);
+    const p2 = n => String(n).padStart(2, "0");
+    process.stdout.write("0" + Math.floor(cs / 6000) + ":" + p2(Math.floor((cs % 6000) / 100)) + "." + p2(cs % 100));
+  ' "$1"
+}
+
+# H1 (review-100): identity-grade reboot witness. The old down-only
+# evidence (adb get-state != device) can be faked by a silently-failed
+# reboot + a USB/adbd blip. capture_bootid reads the device boot
+# identity HOST-SIDE: /proc/sys/kernel/random/boot_id (canonical UUID)
+# when present, else `btime` from /proc/stat (bounded decimal) — the
+# source is MEASURED at runtime and recorded; the SAME source must be
+# used on both sides (bootid_judge enforces it). Emits "<src> <id>".
+BOOTID_SRC=""
+capture_bootid() {
+  local raw
+  raw="$(adb -s "$DEV" shell 'cat /proc/sys/kernel/random/boot_id 2>/dev/null' 2>/dev/null || true)"
+  raw="${raw//$'\r'/}"; raw="${raw//[[:space:]]/}"
+  if [[ "$raw" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+    printf 'bootid %s' "$raw"; return 0
+  fi
+  raw="$(adb -s "$DEV" shell 'grep ^btime /proc/stat 2>/dev/null' 2>/dev/null || true)"
+  raw="${raw//$'\r'/}"; raw="${raw%$'\n'}"
+  if [[ "$raw" =~ ^btime\ ([1-9][0-9]{5,12})$ ]]; then
+    printf 'btime %s' "${BASH_REMATCH[1]}"; return 0
+  fi
+  fail "boot-identity: NEITHER /proc/sys/kernel/random/boot_id (canonical UUID) NOR /proc/stat btime is available on this kernel — no identity-grade reboot witness exists (H1-a refutation: STOP)"
+}
+# bootid_judge <pre-src> <pre-id> <post-src> <post-id> <post-uptime-s> <gap-s>
+# PURE HOST judge (the rig_quiesce_bracket_assert precedent): same
+# source both sides, POST != PRE (an identity change = the cycle
+# happened), and the rebooted integer uptime is YOUNGER than the
+# host-measured dispatch->read gap (a FRESH boot, not a stale one).
+# Loud death on any failure; no device I/O.
+bootid_judge() {
+  local psrc="$1" pid="$2" qsrc="$3" qid="$4" upt="$5" gap="$6"
+  [ "$psrc" = "$qsrc" ] || fail "boot-identity: source flipped across the cycle ($psrc -> $qsrc) — cannot compare identities"
+  [ "$pid" != "$qid" ] || fail "boot-identity: POST identity == PRE identity ($qid) — the device did NOT actually reboot (a silently-failed reboot + an adbd blip; do NOT pass a non-cycle as a cycle)"
+  [[ "$upt" =~ ^(0|[1-9][0-9]{0,7})$ ]] || fail "boot-identity: POST uptime '$upt' is not a canonical integer"
+  [[ "$gap" =~ ^(0|[1-9][0-9]{0,7})$ ]] || fail "boot-identity: dispatch->read gap '$gap' is not a canonical integer"
+  [ "$upt" -lt "$gap" ] || fail "boot-identity: POST uptime ${upt}s >= the dispatch->read gap ${gap}s — this is a STALE boot, not the cycle we triggered"
+  return 0
+}
+
+# M4 (review-100): ZERO-BYTE-SAFE pull — pullv with the non-empty assert
+# dropped. A pre-existing user file may legitimately be zero bytes; the
+# empty-file sha is well-defined, so sha equality is the sole judge (a
+# zero-byte file must be preserved as bytes, not treated as absent).
+pull_bytes() { # <device-path> <host-dst>
+  local dsum hsum
+  rm -f "$2"
+  adb -s "$DEV" pull "$1" "$2" >/dev/null
+  dsum="$(rig_dev_sha256 "$1")" || return 1
+  hsum="$(rig_host_sha256 "$2")" || return 1
+  [ "$dsum" = "$hsum" ] \
+    || { echo "DEVICE FAIL: pulled $2 != device $1 (device $dsum, host $hsum)" >&2; return 1; }
+}
+
 source port/sim/device/adbsh.sh
 require_device
 source port/sim/device/riglib.sh
@@ -129,17 +200,25 @@ PARKED=0
 DEADMAN_ARMED=0
 DM_NONCE=""
 PREEXIST=0
+PREEXIST_RESTORED=0
 cleanup() {
   rig_dsh_retry "pkill foh_device; true" \
     || echo "WARN: could not pkill foh_device on the device" >&2
   # product-surface residue: our test bytes leave; a pre-existing user
-  # file returns (pulled aside in [5]).
-  if [ "$PREEXIST" = 1 ] && [ -s "$BUILD/preexisting-mlfk-persist.dat" ]; then
+  # file returns (pulled aside in [5]). M4 (review-100): this trap is a
+  # BACKSTOP for the failure/death paths — the success path restores +
+  # byte-verifies in [10] BEFORE the verdict (PREEXIST_RESTORED guards
+  # the redundant re-push). The gate is -f, not -s: a zero-byte
+  # pre-existing user file is real bytes to restore, not "absent".
+  if [ "$PREEXIST" = 1 ] && [ "$PREEXIST_RESTORED" != 1 ] \
+     && [ -f "$BUILD/preexisting-mlfk-persist.dat" ]; then
     if adb -s "$DEV" push "$BUILD/preexisting-mlfk-persist.dat" "$DFILE" >/dev/null 2>&1; then
-      echo "   pre-existing $DFILE restored" >&2
+      echo "   pre-existing $DFILE restored (trap backstop)" >&2
     else
       echo "WARN: could not restore the pre-existing $DFILE (copy kept at $BUILD/preexisting-mlfk-persist.dat)" >&2
     fi
+  elif [ "$PREEXIST" = 1 ] && [ "$PREEXIST_RESTORED" = 1 ]; then
+    : # already restored + verified in [10]
   else
     rig_dsh_retry "rm -f $DFILE $DDATA/mlfk-persist.tmp" \
       || echo "WARN: could not wipe the persist test residue in $DDATA" >&2
@@ -382,34 +461,67 @@ made "$FLOWD/p00-persist-probe.flow" "$FLOWD/p01-persist-edit.flow" \
 # judge; rc must be 0.
 run_host() {
   local id="$1" od="$2" pd="$3"
+  shift 3 # any remaining args pass through (the M1 witness --tooth-finish-at)
   rm -rf "$od"
   mkdir -p "$od/shots"
   MLFK_PERSIST_DIR="$pd" \
   "$BUILD/foh_dev_headless" --flow "$FLOWD/$id.flow" --input flow \
-    --flow-out "$od/trace.txt" --shots-dir "$od/shots" --pace 0 \
+    --flow-out "$od/trace.txt" --shots-dir "$od/shots" --pace 0 "$@" \
     2> "$od/log.txt" || { cat "$od/log.txt" >&2; fail "host leg $id failed"; }
   made "$od/trace.txt" "$od/log.txt"
   node "$FOH/judge-foh-trace.js" "$od/trace.txt" "$id" 0 >/dev/null \
     || fail "host leg $id: trace failed the pinned judge"
+  # review-100 M3: the degraded dir-durability token must be ABSENT on
+  # every healthy leg (a saved-nodirsync here = an unexpected dir-open
+  # failure on the product/host path — never masked).
+  [ "$(count_xl "$od/log.txt" "foh_persist: saved-nodirsync")" = 0 ] \
+    || grammar_die "host leg $id: the degraded 'saved-nodirsync' token appeared on a healthy leg"
 }
 
-# strict MLFKPERSIST1 file verification, INDEPENDENT of the C loader
-# (the whitelist-grammar rule: anchored full-line counts + a shasum
-# recompute of the SUM seal).
+# EXACT POSITIONAL MLFKPERSIST1 whitelist verification, INDEPENDENT of
+# the C loader (review-100 M2 + the whitelist-grammar rule, PROCESS §3).
+# The format is a FIXED 55-line shape — so this asserts it BY POSITION:
+# final byte LF, exactly 55 lines, each line matched at its exact index
+# by an anchored full-line pattern, the 50 rec rows carrying the
+# canonical c-major (c 0..4, s 0..9) progression at their exact
+# position (uniqueness by position, not a global count), each rec bit
+# pattern in the C loader's domain (== the -1.0 sentinel or finite in
+# [0,6000)), and a shasum recompute of the SUM seal over lines 1..54.
+# Binary outcome: exact match -> pass; resembles-but-doesn't -> fail
+# closed (grammar_die). NO global counts, NO permissive scan.
+hex_lt() ( LC_ALL=C; [[ "$1" < "$2" ]]; ) # fixed 16-hex: byte order == numeric order
 verify_persist_file() { # <file> <ctx>
-  local f="$1" ctx="$2" nl sum want
+  local f="$1" ctx="$2" nl L sum want ln c s bits
   made "$f"
-  nl="$(grep -c "" "$f")" || fail "$ctx: cannot count lines"
+  # final byte MUST be LF (a torn last line is corruption, not a record)
+  [ -z "$(tail -c 1 "$f")" ] || grammar_die "$ctx: file does not end in a final LF"
+  nl="$(grep -c "" "$f")" || grammar_die "$ctx: cannot count lines"
   [ "$nl" = 55 ] || grammar_die "$ctx: $nl lines != 55 (MLFKPERSIST1 is exactly 55 LF lines)"
-  [ "$(count_xl "$f" "MLFKPERSIST1")" = 1 ] || grammar_die "$ctx: header line missing/duplicated"
-  [ "$(sed -n 1p "$f")" = "MLFKPERSIST1" ] || grammar_die "$ctx: line 1 is not the header"
-  [ "$(count_e "$f" '^turbo [01]$')" = 1 ] || grammar_die "$ctx: turbo line grammar"
-  [ "$(count_e "$f" '^lcancel [0-2]$')" = 1 ] || grammar_die "$ctx: lcancel line grammar"
-  [ "$(count_e "$f" '^tapjump [01] [01] [01] [01]$')" = 1 ] || grammar_die "$ctx: tapjump line grammar"
-  [ "$(count_e "$f" '^rec [0-4] [0-9] [0-9a-f]{16}$')" = 50 ] || grammar_die "$ctx: rec row count != 50"
-  [ "$(count_e "$f" '^SUM [0-9a-f]{64}$')" = 1 ] || grammar_die "$ctx: SUM line grammar"
-  sum="$(sed -n 55p "$f")"
-  [[ "$sum" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 55 is not the SUM line"
+  L="$(sed -n 1p "$f")"; [ "$L" = "MLFKPERSIST1" ] || grammar_die "$ctx: line 1 is not the exact header ('$L')"
+  L="$(sed -n 2p "$f")"; [[ "$L" =~ ^turbo\ [01]$ ]] || grammar_die "$ctx: line 2 turbo grammar ('$L')"
+  L="$(sed -n 3p "$f")"; [[ "$L" =~ ^lcancel\ [0-2]$ ]] || grammar_die "$ctx: line 3 lcancel grammar ('$L')"
+  L="$(sed -n 4p "$f")"; [[ "$L" =~ ^tapjump\ [01]\ [01]\ [01]\ [01]$ ]] || grammar_die "$ctx: line 4 tapjump grammar ('$L')"
+  ln=5
+  for c in 0 1 2 3 4; do
+    for s in 0 1 2 3 4 5 6 7 8 9; do
+      L="$(sed -n "${ln}p" "$f")"
+      [[ "$L" =~ ^rec\ ([0-4])\ ([0-9])\ ([0-9a-f]{16})$ ]] \
+        || grammar_die "$ctx: line $ln is not a rec row ('$L')"
+      [ "${BASH_REMATCH[1]}" = "$c" ] && [ "${BASH_REMATCH[2]}" = "$s" ] \
+        || grammar_die "$ctx: line $ln rec (char,stage)=(${BASH_REMATCH[1]},${BASH_REMATCH[2]}) != canonical ($c,$s) — order/progression violated"
+      bits="${BASH_REMATCH[3]}"
+      if [ "$bits" = bff0000000000000 ]; then
+        : # the -1.0 no-record sentinel
+      elif hex_lt "$bits" 40b7700000000000; then
+        : # finite non-negative in [0,6000): unsigned-hex < the 6000.0 cap
+      else
+        grammar_die "$ctx: line $ln rec bits $bits out of domain (not -1.0 and not finite [0,6000))"
+      fi
+      ln=$((ln + 1))
+    done
+  done
+  L="$(sed -n 55p "$f")"
+  [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 55 is not the SUM line ('$L')"
   sum="${BASH_REMATCH[1]}"
   want="$(head -n 54 "$f" | shasum -a 256 | cut -d' ' -f1)" || fail "$ctx: shasum failed"
   [ "$want" = "$sum" ] || grammar_die "$ctx: SUM seal $sum != recomputed $want (torn/corrupt file passed as evidence)"
@@ -522,6 +634,45 @@ verify_persist_file "$FILE_DEFAULTS" "defaults-control reference"
 [ "$(count_xl "$FILE_DEFAULTS" "turbo 0")" = 1 ] || fail "defaults file: turbo != 0"
 echo "   p02 twin + control OK (records/settings displays load-bearing; resave idempotent)"
 
+# L1 (review-100): the PERSONAL BEST display is pinned to a SPEC-derived
+# truth, not a self-consistent echo — so the byte-exact shot judges are
+# anchored to the format rule independently of the C renderer.
+L1_PB="$(derive_pb "$REC_BITS")" || fail "L1: PB derivation failed"
+[ "$L1_PB" = "$REC_DISPLAY" ] || fail "L1: spec-derived PB '$L1_PB' != pinned REC_DISPLAY '$REC_DISPLAY' (the display pin drifted from the format rule)"
+L1_DEF="$(derive_pb bff0000000000000)" || fail "L1: defaults derivation failed"
+[ "$L1_DEF" = "--:--:--" ] || fail "L1: spec-derived defaults display '$L1_DEF' != '--:--:--'"
+L1_PERT="$(derive_pb 402e000000000000)" || fail "L1: perturbed derivation failed"
+[ "$L1_PERT" != "$REC_DISPLAY" ] || fail "L1: dead-tooth — perturbed bits derived the same display as REC_BITS"
+echo "   L1 OK: PERSONAL BEST '$REC_DISPLAY' derived independently from the record bits (spec rule); defaults '--:--:--'; dead-tooth guarded"
+
+# M1 witness (review-100 PRODUCT BUG: same-process stale PB render). The
+# p02-persist-verify flow over a dir seeded with the PRE-record file
+# (FILE_P01: the edited settings, records all -1), with an improving
+# record fired MID-FLOW at frame 100 through --tooth-finish-at (the REAL
+# tp_finish_game -> hook -> chokepoint chain). Under the fix the
+# chokepoint refreshes the bound FohState at the record write, so the
+# SAME-PROCESS frame-440 tss-record shot renders the NEW record and is
+# BYTE-IDENTICAL to the persisted-twin shot (which BOOTS with the record
+# already on disk). Under the shipped bug that shot shows the stale
+# "--:--:--" (proven in this iteration's smoke: an unfixed build's shot
+# DIFFERS) — the tooth discriminates by construction.
+mk_pdir "$HP/m1-persist" "$FILE_P01"
+run_host p02-persist-verify "$HP/p02m1" "$PWD/$HP/m1-persist" \
+  --tooth-finish-at 100 "$REC_CHAR" "$REC_TSTAGE" "$REC_BITS"
+made "$HP/p02m1/shots/tss-record.ppm"
+cmp "$HP/p02m1/shots/tss-record.ppm" "$HP/p02twin/shots/tss-record.ppm" \
+  || fail "M1: the same-process improve->return-to-select tss-record shot != the persisted twin — the stale-PB product bug is NOT fixed (bound-FohState refresh refuted; STOP per the frozen refutation shape)"
+[ "$(count_xl "$HP/p02m1/log.txt" "foh_persist: record char=$REC_CHAR tstage=$REC_TSTAGE improved=1")" = 1 ] \
+  || grammar_die "M1 witness: expected exactly one improved=1 record line"
+[ "$(count_xl "$HP/p02m1/log.txt" "foh_persist: saved")" = 2 ] \
+  || grammar_die "M1 witness: expected exactly two saved lines (the mid-flow improve-save + the B-exit resave)"
+cmp "$HP/m1-persist/mlfk-persist.dat" "$FILE_REC" \
+  || fail "M1 witness: post-leg file != the host post-record reference (the record write path diverged)"
+cmp "$HP/p02m1/trace.txt" "$HP/p02twin/trace.txt" \
+  || fail "M1 witness: the mid-flow finish perturbed the structural trace (hermeticity broken)"
+teeth=$((teeth + 1))
+echo "    M1 witness OK: same-process PB refresh renders the new record (tss shot == persisted twin; file/trace hermetic)"
+
 # --- [4] host teeth (COPIES; the probe flow boots the loader) -----------------
 echo "== [4/10] host teeth =="
 tooth_boot() { # <name> <persist-dir> <want-line>
@@ -587,6 +738,46 @@ cmp "$HP/th6/mlfk-persist.dat" "$FILE_REC" \
   || fail "T-H6: the real file changed under a FAILED save (rename-atomicity broken)"
 teeth=$((teeth + 1))
 echo "    T-H6 OK: failed save dies loud with the real file byte-unchanged"
+# T-H8 (review-100 M3): dir-durability degraded token. chmod u=wx on the
+# persist dir keeps the tmp write + rename publish alive (search+write)
+# but makes open(dir, O_RDONLY) fail — an improving save must then emit
+# the DISTINCT loud token saved-nodirsync (NEVER plain saved), with the
+# published bytes still byte-exact.
+mk_pdir "$HP/th8" "$FILE_P01"
+chmod u=wx "$HP/th8"
+rc=0
+MLFK_PERSIST_DIR="$PWD/$HP/th8" \
+"$BUILD/foh_dev_headless" --tooth-persist-finish "$REC_CHAR" "$REC_TSTAGE" \
+  "$REC_BITS" 2> "$HP/th8.log" || rc=$?
+chmod u=rwx "$HP/th8"
+[ "$rc" = 0 ] || { cat "$HP/th8.log" >&2; fail "T-H8: the save did not succeed under u=wx (the tmp/rename publish must stay alive)"; }
+[ "$(count_xl "$HP/th8.log" "foh_persist: saved-nodirsync")" = 1 ] \
+  || grammar_die "T-H8: expected exactly one degraded 'saved-nodirsync' token"
+[ "$(count_xl "$HP/th8.log" "foh_persist: saved")" = 0 ] \
+  || grammar_die "T-H8: a plain 'saved' appeared when the dir-durability fsync could not run (degraded save masked)"
+cmp "$HP/th8/mlfk-persist.dat" "$FILE_REC" \
+  || fail "T-H8: the published file bytes are not exact under the degraded save"
+teeth=$((teeth + 1))
+echo "    T-H8 OK: dir-open failure -> loud saved-nodirsync (never plain saved), bytes exact"
+# H1 standing teeth (review-100): the REAL bootid_judge body must reject
+# every non-cycle and accept a valid one (dead-tooth guard). Run in a
+# subshell (bootid_judge's fail() exits) and require the exit class.
+bootid_tooth() { # <desc> <die|pass> <judge args...>
+  local desc="$1" expect="$2"; shift 2
+  local trc=0
+  ( bootid_judge "$@" ) >/dev/null 2>&1 || trc=$?
+  if [ "$expect" = die ]; then
+    [ "$trc" != 0 ] || fail "H1 tooth [$desc]: bootid_judge ACCEPTED a bad cycle (dead tooth)"
+  else
+    [ "$trc" = 0 ] || fail "H1 tooth [$desc]: bootid_judge REJECTED a valid cycle (dead-tooth guard)"
+  fi
+}
+bootid_tooth "no-reboot POST==PRE"     die  bootid AAAA bootid AAAA 5 60
+bootid_tooth "stale boot uptime>=gap"  die  bootid AAAA bootid BBBB 9000 60
+bootid_tooth "source flip"             die  btime  100  bootid 200  5 60
+bootid_tooth "valid cycle guard"       pass bootid AAAA bootid BBBB 5 60
+teeth=$((teeth + 1))
+echo "    H1 standing teeth OK: bootid_judge rejects non-cycle/stale/source-flip, accepts a valid cycle"
 
 # --- [5] arm build + push + pre-existing product state ------------------------
 echo "== [5/10] armv7 build (shared rig stamp) + push + provenance =="
@@ -614,10 +805,11 @@ prc=0
 dsh "test -f $DFILE" >/dev/null || prc=$?
 case "$prc" in
   0)
-    pullv "$DFILE" "$BUILD/preexisting-mlfk-persist.dat"
+    pull_bytes "$DFILE" "$BUILD/preexisting-mlfk-persist.dat" \
+      || fail "could not pull aside the pre-existing $DFILE (M4: the user's data must be preserved)"
     PREEXIST=1
     dsh "rm -f $DFILE $DDATA/mlfk-persist.tmp"
-    echo "   pre-existing $DFILE pulled aside (restored at cleanup)"
+    echo "   pre-existing $DFILE pulled aside (zero-byte-safe; verdict-bound restore in [10])"
     ;;
   1) dsh "rm -f $DDATA/mlfk-persist.tmp" ;;
   *) fail "cannot probe for a pre-existing $DFILE (rc $prc)" ;;
@@ -733,6 +925,13 @@ EOF
   fi
   pullv "$DTMP/$leg.trace.txt" "$BUILD/$leg.dev-trace.txt"
   pullv "$DTMP/$leg.applog.txt" "$BUILD/$leg.dev-applog.txt"
+  # review-100 M3: the degraded dir-durability token must be ABSENT on
+  # every DEVICE leg — the product path /mnt/mlfk-data is a real dir, so
+  # open(dir) must succeed and every save reports the plain 'saved'. A
+  # saved-nodirsync here means dir open failed on the product path (the
+  # M3 refutation shape) — STOP, do not weaken the assert.
+  [ "$(count_xl "$BUILD/$leg.dev-applog.txt" "foh_persist: saved-nodirsync")" = 0 ] \
+    || fail "leg $leg: the degraded 'foh_persist: saved-nodirsync' token appeared on the DEVICE product path — dir open failed on /mnt/mlfk-data (M3 refutation shape: STOP and report the measured device behavior)"
 }
 
 # strict foh summary assert for an unpaced flow leg (needle + anchored
@@ -784,6 +983,14 @@ unpark
 # --- [7] POWER CYCLE (pre-registered primary form: reboot over ADB) -----------
 echo "== [7/10] POWER CYCLE: device reboot + bounded adbd wait =="
 dsh "sync"
+# H1 (review-100): capture the PRE boot identity HOST-SIDE before the
+# dispatch. The offline-witness below proves the device went DOWN, but a
+# silently-failed reboot + a USB/adbd blip can fake that; the boot-id
+# judge (POST != PRE, POST uptime < gap) is the identity-grade witness.
+BOOTID_PRE="$(capture_bootid)"
+BOOTID_SRC="${BOOTID_PRE%% *}"
+BOOTID_PRE_ID="${BOOTID_PRE#* }"
+echo "   boot-identity source=$BOOTID_SRC PRE=$BOOTID_PRE_ID captured (identity-grade reboot witness)"
 # dispatch the device's own /sbin/reboot DETACHED via the HOUSE detach
 # recipe (CLAUDE.md §Device access: setsid … </dev/null + a trailing
 # sleep). MEASURED (iter 100 evidence round): a raw `adb shell "… &"`
@@ -819,6 +1026,21 @@ fi
 BOOTWAIT_S=$(( $(date +%s) - BOOT_T0 ))
 require_device
 rig_devsha_selftest
+# H1: the identity-grade JUDGE (the real witness; the offline check and
+# BOOTWAIT_S are now diagnostics). POST identity must DIFFER from PRE (a
+# real cycle happened) AND the rebooted uptime must be younger than the
+# host-measured dispatch->read gap (a FRESH boot, not a stale one).
+BOOTID_POST="$(capture_bootid)"
+BOOTID_POST_SRC="${BOOTID_POST%% *}"
+BOOTID_POST_ID="${BOOTID_POST#* }"
+POST_UPTIME="$(adb -s "$DEV" shell 'cat /proc/uptime 2>/dev/null' 2>/dev/null || true)"
+POST_UPTIME="${POST_UPTIME//$'\r'/}"
+POST_UPTIME="${POST_UPTIME%% *}"   # "<sec>.<frac> <idle>" -> "<sec>.<frac>"
+POST_UPTIME="${POST_UPTIME%%.*}"   # -> integer seconds
+[[ "$POST_UPTIME" =~ ^(0|[1-9][0-9]{0,7})$ ]] || fail "boot-identity: POST /proc/uptime unreadable ('$POST_UPTIME')"
+BOOT_GAP=$(( $(date +%s) - BOOT_T0 ))
+bootid_judge "$BOOTID_SRC" "$BOOTID_PRE_ID" "$BOOTID_POST_SRC" "$BOOTID_POST_ID" "$POST_UPTIME" "$BOOT_GAP"
+echo "   boot-identity JUDGED ($BOOTID_SRC): PRE=$BOOTID_PRE_ID != POST=$BOOTID_POST_ID; POST uptime ${POST_UPTIME}s < dispatch->read gap ${BOOT_GAP}s (a real fresh cycle)"
 # tmpfs wiped by the reboot: re-provision (same stamp, provenance re-verified)
 dsh "rm -rf $DTMP $DSD && mkdir -p $DTMP $DSD"
 provision
@@ -885,9 +1107,24 @@ unpark
 
 # --- [10] hygiene + verdict -----------------------------------------------------
 echo "== [10/10] hygiene =="
-# our test residue leaves the product dir now (cleanup also covers the
-# failure paths); a pre-existing user file is restored by the trap.
-if [ "$PREEXIST" != 1 ]; then
+# M4 (review-100): the pre-existing user file restore is VERDICT-BOUND —
+# done HERE, before the PERSIST OK line, and BYTE-VERIFIED (pull-back
+# sha == backup sha). The EXIT trap stays a backstop for failure/death
+# paths only (PREEXIST_RESTORED then makes it a no-op).
+if [ "$PREEXIST" = 1 ]; then
+  [ -f "$BUILD/preexisting-mlfk-persist.dat" ] \
+    || fail "M4: PREEXIST set but the backup is missing — cannot restore the user's data"
+  adb -s "$DEV" push "$BUILD/preexisting-mlfk-persist.dat" "$DFILE" >/dev/null \
+    || fail "M4: could not restore the pre-existing $DFILE before the verdict"
+  pull_bytes "$DFILE" "$BUILD/preexist-restored.dat" \
+    || fail "M4: could not pull back the restored pre-existing file for byte-verification"
+  bsum="$(rig_host_sha256 "$BUILD/preexisting-mlfk-persist.dat")" || exit 1
+  rsum="$(rig_host_sha256 "$BUILD/preexist-restored.dat")" || exit 1
+  [ "$bsum" = "$rsum" ] \
+    || fail "M4: restored pre-existing $DFILE sha ($rsum) != backup sha ($bsum) — the user's file was NOT faithfully restored"
+  PREEXIST_RESTORED=1
+  echo "   pre-existing $DFILE restored + BYTE-VERIFIED (sha $bsum) before the verdict"
+else
   dsh "rm -f $DFILE $DDATA/mlfk-persist.tmp"
   dsh "test ! -f $DFILE"
 fi
@@ -902,4 +1139,4 @@ done
 [ "$gm" = 1 ] || echo "WARN: gmenu2x not observed running after unpark (frontend respawn is OS-owned; verify by eye)" >&2
 rig_no_commit_guard "$BUILD" "$DEVB" "$TABLES"
 
-echo "PERSIST OK (sessions=2 powercycle=reboot bootwait=${BOOTWAIT_S}s legs=5 pulls=4 roundtrip=byte-exact record=$REC_DISPLAY resets missing=1 loud-corrupt=2 teeth=$teeth)"
+echo "PERSIST OK (sessions=2 powercycle=reboot bootid=${BOOTID_SRC}:PRE!=POST bootwait=${BOOTWAIT_S}s legs=5 pulls=4 roundtrip=byte-exact record=$REC_DISPLAY resets missing=1 loud-corrupt=2 dirsync=plain-saved+degraded-tooth teeth=$teeth)"

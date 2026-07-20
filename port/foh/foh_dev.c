@@ -1154,6 +1154,16 @@ int main(int argc, char **argv) {
   long pace = 1;
   uint64_t budgetNs = 16666667ull;
   bool cpuLive = false, legible = false, tapJumpOffP1 = false;
+  // review-100 M1 witness (--tooth-finish-at <frame> <char> <tstage>
+  // <hex16>): fire the crafted tp_finish_game chain MID-FLOW at <frame>
+  // (flow mode, no bridge), driving the REAL finishGame -> hook ->
+  // chokepoint -> bound-FohState refresh so the SAME-PROCESS return to
+  // target-select renders the new record. Same crafted state as the
+  // standalone --tooth-persist-finish arm, injected into the live flow.
+  long toothFinishFrame = -1;
+  int toothFinishChar = -1, toothFinishTstage = -1;
+  uint64_t toothFinishBits = 0;
+  bool toothFinishGiven = false;
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i];
     const bool hasV = i + 1 < argc;
@@ -1183,6 +1193,19 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--fb-witness-raw") == 0 && hasV) g_fbwit_raw = argv[++i];
     else if (strcmp(a, "--pace") == 0 && hasV) pace = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--budget-ns") == 0 && hasV) budgetNs = strtoull(argv[++i], 0, 10);
+    else if (strcmp(a, "--tooth-finish-at") == 0 && i + 4 < argc) {
+      toothFinishFrame = strtol(argv[++i], 0, 10);
+      toothFinishChar = (int)strtol(argv[++i], 0, 10);
+      toothFinishTstage = (int)strtol(argv[++i], 0, 10);
+      const char *bs = argv[++i];
+      if (strlen(bs) != 16) {
+        fprintf(stderr, "foh_dev: --tooth-finish-at wants <frame> <char 0-4> "
+                        "<tstage 0-9> <hex16>\n");
+        return 1;
+      }
+      toothFinishBits = parse_hex16(bs); // loud death on non-hex
+      toothFinishGiven = true;
+    }
     else if (strcmp(a, "--cpu-live") == 0) cpuLive = true;
     else if (strcmp(a, "--legible") == 0) legible = true;
     else if (strcmp(a, "--tapjump-off-p1") == 0) tapJumpOffP1 = true;
@@ -1231,6 +1254,10 @@ int main(int argc, char **argv) {
       audioSamples <= 0 || audioSamples > 65535 ||
       // the present witness samples SHOTS on the DEVICE input path only
       ((g_fbwit_path || g_fbwit_raw) && (!inPoll || !shotsDir)) ||
+      // review-100 M1 witness: flow mode only, no bridge, in-domain
+      (toothFinishGiven && (!inFlow || bridge || toothFinishFrame <= 0 ||
+                            toothFinishChar < 0 || toothFinishChar > 4 ||
+                            toothFinishTstage < 0 || toothFinishTstage > 9)) ||
       (musicManifest && !sndpackPath)) {
     fprintf(stderr,
             "usage: foh_dev --flow f.flow --input flow|poll --flow-out t.txt"
@@ -1244,7 +1271,9 @@ int main(int argc, char **argv) {
             " [live: --frames N --record-trace t.json --record-keys k.txt"
             " --gfxdata ... [--legible] [--tapjump-off-p1]]"
             " [--sndpack p [--audio-samples N]] [--music-manifest m.txt]"
-            " [--fb-witness w.txt [--fb-witness-raw D]] | --dump-keymap\n");
+            " [--fb-witness w.txt [--fb-witness-raw D]]"
+            " [flow: --tooth-finish-at F C S hex16 (M1 witness)]"
+            " | --dump-keymap\n");
     return 1;
   }
   if (frames > 1000000L) sim_fatal("foh_dev: --frames exceeds the buffer cap");
@@ -1381,6 +1410,27 @@ int main(int argc, char **argv) {
       }
     }
     foh_tick(&foh, &cur);
+    // review-100 M1 witness: fire the crafted finishGame chain MID-FLOW
+    // at the requested frame (the standalone --tooth-persist-finish
+    // state, injected into the live flow). Drives the REAL
+    // tp_finish_game -> tdev_finish_hook -> foh_persist chokepoint;
+    // the chokepoint's record-time bound-FohState refresh (foh_persist
+    // M1) then makes the later same-process tss-record shot render the
+    // NEW record. tp_finish_game touches only G/TP, never foh — the
+    // only effect on the FOH plane is the record refresh, so the flow
+    // trace stays identical to a plain p02 run (hermeticity).
+    if (toothFinishGiven && t == toothFinishFrame) {
+      double tt;
+      memcpy(&tt, &toothFinishBits, 8);
+      G.sim.characterSelections[0] = (double)toothFinishChar;
+      TP.targetStagePlaying = toothFinishTstage;
+      TP.targetCount = 1;
+      TP.targetsDestroyed = 1.0;
+      G.matchTimer = tt;
+      G.inp.playing = true;
+      tp_finish_hook = tdev_finish_hook;
+      tp_finish_game(&G);
+    }
     bool launched = false;
     for (int e = 0; e < foh.nev; e++) {
       const FohEvent *ev = &foh.ev[e];

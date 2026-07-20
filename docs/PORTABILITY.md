@@ -146,12 +146,34 @@ A new device = write one new backend TU (+ audio open params).
   is killed by this old adbd's teardown before the detach takes —
   measured iter 100) and relies on the SD `adb` marker restarting
   adbd at boot (~40 s to healthy; bounded 120 s wait + an offline
-  witness so a non-cycle can never pass as a cycle). A new target
-  re-measures its reboot/return path; the session/byte-identity
-  judgment structure ports as-is. The product save fires on the
-  options B-exit inside the render loop (upstream's own cookie-write
-  moment) — an SD-latency-sensitive target may need the save
-  deferred to a loop boundary (registered class note).
+  witness so a non-cycle can never pass as a cycle). IDENTITY-GRADE
+  reboot witness (iter 102, review-100 H1): the offline check alone
+  can be faked by a silently-failed reboot + an adbd blip, so the
+  cycle is JUDGED host-side on the boot identity — PRE vs POST
+  `/proc/sys/kernel/random/boot_id` (canonical UUID) with a `btime`
+  from `/proc/stat` fallback (source MEASURED at runtime; BOTH exist
+  on THIS kernel — boot_id is the primary), asserting POST != PRE and
+  POST `/proc/uptime` < the host-measured dispatch->read gap (a fresh
+  boot, not a stale one). A new target re-measures which identity
+  source exists (if NEITHER, no identity-grade witness — STOP); the
+  session/byte-identity judgment structure ports as-is. Directory
+  durability degradation is now LOUD: a save whose `open(dir)` for the
+  fsync fails emits `foh_persist: saved-nodirsync` (never a silent
+  plain `saved`) — device legs assert the plain form only. The product
+  save fires on the options B-exit inside the render loop (upstream's
+  own cookie-write moment) — an SD-latency-sensitive target may need
+  the save deferred to a loop boundary (registered class note).
+- **Deadman-orphan reap** (`port/sim/device/riglib.sh`
+  `rig_orphan_reap`, iter 102 — the orphaned-deadman leak class fix):
+  every rig-sourcing device check now scans `/proc` for processes
+  whose cmdline references the rig's device dirs (`/tmp/mlfk`,
+  `/mnt/mlfk-scratch`) at BOTH the shared entry (`rig_lock_acquire`
+  step-0: loud clean-then-proceed + duty transfer) and ALL exit paths
+  (`rig_cleanup` teardown, before the `$DTMP` wipe that would
+  otherwise lose a graceful `deadman.cancel` inside the comb's 2 s
+  poll window). FunKey-OS `/proc` + `cat cmdline | tr` shapes; the
+  scan-then-kill-by-pid PATTERN and the "teardown on every exit path,
+  never trust a cancel racing a wipe" rule are the portable parts.
 
 ## Porting recipe (when a new target appears)
 

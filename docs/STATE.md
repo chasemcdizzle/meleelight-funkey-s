@@ -3,7 +3,50 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-20, driver post-iter-101 — task-12-arc round-1 closure ADJUDICATED GREEN + orphaned-deadman stall class found; iter-102 next)
+## Live right now (updated: 2026-07-20, iter 102 — M4 hardening DONE: review-100 persist round-1 closure + the orphaned-deadman leak CLASS FIX, PERSIST OK cold)
+
+- **Iter 102 DONE** (respawn writer; original writer died on a usage
+  limit after freezing its pre-reg — this respawn adopted the pre-reg +
+  partial riglib edits; full trail: AGENT-LOG iter-102 pre-registration
+  + result). COLD done-check: **`PERSIST OK (sessions=2
+  powercycle=reboot bootid=bootid:PRE!=POST bootwait=12s legs=5 pulls=4
+  roundtrip=byte-exact record=00:14.50 resets missing=1 loud-corrupt=2
+  dirsync=plain-saved+degraded-tooth teeth=12)`** exit 0
+  (.loop/m4-per102-donecheck.log). ONE atomic commit.
+- **Bundle A — review-100 (persist-arc round 1) ALL dispositions
+  closed**: H1 identity-grade reboot witness (host-judged PRE!=POST
+  boot_id — fired on the real reboot: 5b9b339e… != 8031437d…, uptime
+  7s<13s gap; btime fallback measured-present; COPY tooth died exactly
+  at the judge); M1 same-process stale-PB PRODUCT BUG fixed at the
+  chokepoint (bind-at-apply + refresh-at-record; host witness shot ==
+  persisted twin, discrimination proven vs an unfixed rebuild); M2 exact
+  positional MLFKPERSIST1 whitelist (corpus-validated: 14 genuine PASS /
+  5 corrupt REJECT); M3 dir-fsync loudness (`saved-nodirsync` distinct
+  token); M4 verdict-bound byte-verified restore (zero-byte-safe); L1
+  spec-derived display pin.
+- **Bundle B — orphaned-deadman leak CLASS FIX** (riglib chokepoint):
+  `rig_orphan_reap` step-0 (rig_lock_acquire; inherited by all 11 rig
+  checks) + all-exit teardown (rig_cleanup, before the $DTMP wipe that
+  loses a racing deadman.cancel). Teeth green on device: T-B1 mid-check
+  death -> zero survivors (+ discriminator showing the OLD path leaks),
+  T-B2 planted orphan loudly reaped. A reap-robustness bug (vanishing
+  proc -> shell redirect leaked stderr into the whitelist grammar) was
+  found + fixed mid-run (cat opens the file). Manifest re-pinned SAME
+  commit: riglib row -> arc-pending, anchor recomputed (openssl); 23
+  rows GREEN + ANCHOR GREEN.
+- **Regressions**: cold FOH FLOWS OK (teeth=18), ZERO re-freezes;
+  check-sim/target-sim + other device checks mechanical skip-proof (no
+  sim TU touched; riglib delta is start/teardown-only;
+  check-device-target's next cold run is the task-14 ritual). New device
+  semantics in docs/PORTABILITY.md (boot-identity witness + deadman
+  reap).
+- **Queue**: task-12-arc round 2 (iter-101 diff + the COMPLETE task-12
+  packet, .loop/review-99-full-diff.txt) + persist-arc round 2 (reviews
+  THIS iter-102 hardening diff — owns the riglib arc-pending GO) → task
+  14 (verify_m4.sh assembly) → M4 GATE → provision → LOOP STOP:
+  m4-complete.
+
+## [superseded by iter-102] (updated: 2026-07-20, driver post-iter-101 — task-12-arc round-1 closure ADJUDICATED GREEN + orphaned-deadman stall class found; iter-102 next)
 
 - **Iter 101 (task-12-arc round-1 closure) DONE via DRIVER
   ADJUDICATION** (writer BLOCKED-HONEST at the skips gate 2/2; driver

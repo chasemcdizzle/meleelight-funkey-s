@@ -51,7 +51,11 @@
 // <dir>/mlfk-persist.dat -> best-effort directory fsync (EINVAL/
 // ENOTSUP tolerated — the FAT class; anything else fatal). rename is
 // the ONLY publish: any failure dies loudly BEFORE the real file is
-// touched. Emits `foh_persist: saved`.
+// touched. Emits `foh_persist: saved` on the durable path; if the
+// directory could NOT be opened for the durability fsync (the rename
+// published but its dir entry is not proven durable), emits the
+// DISTINCT loud token `foh_persist: saved-nodirsync` instead — NEVER a
+// silent-degraded plain `saved` (review-100 M3).
 //
 // DIR: $MLFK_PERSIST_DIR when set (hermetic checks: every check run
 // gets a FRESH dir so flows start from defaults); else the product
@@ -66,6 +70,8 @@
 //   foh_persist: reset cause=corrupt detail=<open|oversize|header|
 //                grammar|order|domain|sum|truncated>
 //   foh_persist: saved
+//   foh_persist: saved-nodirsync   (review-100 M3: dir open failed —
+//                the rename published, its dir entry not proven durable)
 //   foh_persist: record char=<0-4> tstage=<0-9> improved=<01>
 #ifndef FOH_FOH_PERSIST_H
 #define FOH_FOH_PERSIST_H
@@ -106,14 +112,20 @@ FohPersistStatus foh_persist_load(FohPersist *p);
 void foh_persist_save(const FohPersist *p);
 
 // Machine glue (single definition site — no per-driver field lists):
-// apply pushes settings + records into the FOH machine state; collect
-// pulls the settings fields back (records are chokepoint-owned and
-// only change through foh_persist_record_update).
+// apply pushes settings + records into the FOH machine state AND BINDS
+// that state as the record-refresh target (review-100 M1: the chokepoint
+// keeps FohState.targetRecords live in-process); collect pulls the
+// settings fields back (records are chokepoint-owned and only change
+// through foh_persist_record_update).
 void foh_persist_apply(const FohPersist *p, FohState *s);
 void foh_persist_collect(FohPersist *p, const FohState *s);
 
 // The finishGame record arm (main.js:1442-1443: improve-or-first).
-// Returns true when the record improved (caller saves). Emits the
+// Returns true when the record improved (caller saves). On an improve
+// it ALSO refreshes the bound FohState's targetRecords entry (the
+// apply-time binding) so a same-process return-to-target-select
+// renders the new record without a restart (review-100 M1 — the
+// stale-PB product bug; ONE mechanism at the ONE write site). Emits the
 // `foh_persist: record` event line. Domain-guarded (loud death on an
 // out-of-domain char/tstage/time — unreachable from the FOH plane).
 bool foh_persist_record_update(FohPersist *p, int ch, int tstage,

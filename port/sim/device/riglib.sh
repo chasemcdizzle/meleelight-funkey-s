@@ -46,6 +46,156 @@ port/sim/device/verify_m3.sh"
 # same raster -O3 TU, fdlibm strong overrides asserted.
 ARMBINS="sim_device csweep_arm fmt_diff_arm mathsweep_arm gfx_device fk_input sk_sampler foh_device"
 
+# rig_orphan_reap <step0|cleanup> — the ORPHANED-DEADMAN LEAK class fix
+# (iter 102; driver post-iter-101 adjudication: failed runs leaked
+# /tmp/mlfk/deadman.sh 2 s fork combs — the graceful deadman.cancel is
+# LOST BY DESIGN on every failure path, because rig_cleanup's $DTMP
+# wipe deletes the cancel file inside the deadman's 2 s poll window;
+# each leaked comb stalls later paced runs, the iter-74 low_bat_check
+# mechanism, skips doubling with orphan count 7->14). ONE dsh: scan
+# /proc for any process whose cmdline references the rig's device
+# dirs (/tmp/mlfk, /mnt/mlfk-scratch — split-literal patterns so the
+# scanning shell's OWN cmdline can never match itself; $$/$PPID
+# excluded as belt), LOUDLY log each find (pid+comm+cmdline), kill by
+# pid (TERM, bounded wait, KILL escalation), then re-scan — the final
+# `MLFKSCAN <found> <left>` line is whitelist-parsed and left must be
+# 0. Modes:
+#   step0   — the SHARED RIG ENTRY scan (called from rig_lock_acquire,
+#             so EVERY rig-sourcing device check inherits it by
+#             construction — a check must never start over a stale
+#             comb). LOUD clean-then-proceed; on a find it also
+#             assumes the killed deadman's duties (rig_qd_normalize
+#             daemon restore off the markers + stale
+#             /mnt/disable_frontend removal — killing the backstop
+#             may never strand what it guarded). Any failure = loud
+#             death (the lock is released explicitly: no trap exists
+#             yet at rig_lock_acquire time).
+#   cleanup — the ALL-EXIT-PATHS teardown (called from rig_cleanup
+#             before the $DTMP wipe, RIG_PRESERVE_DTMP != 1 only —
+#             the PRESERVE arm keeps the deadman armed ON PURPOSE,
+#             the review-52 backstop design). Best-effort +
+#             WARN-visible: cleanup never masks the run's rc.
+rig_orphan_reap() {
+  local mode out rc line last nfound nleft nscan bad
+  mode="$1"
+  rc=0
+  out="$(dsh '
+mlfk_scan() {
+  for p in /proc/[0-9]*; do
+    pid="${p#/proc/}"
+    [ "$pid" = "$$" ] && continue
+    [ "$pid" = "$PPID" ] && continue
+    # let cat open the file (its OWN stderr -> /dev/null): a process that
+    # vanishes mid-scan is the common case, and a SHELL "< $p/cmdline"
+    # redirect prints an un-suppressible open error to real stderr that
+    # adb merges into the captured output and breaks the whitelist
+    # grammar. cat swallows the vanish; an empty cl simply never matches.
+    cl="$(cat "$p/cmdline" 2>/dev/null | tr "\0" " ")"
+    case "$cl" in
+      *"/tmp/m""lfk"*|*"/mnt/m""lfk-scratch"*)
+        cm="$(cat "$p/comm" 2>/dev/null)"
+        echo "$pid ${cm:-?} $cl"
+        ;;
+    esac
+  done
+}
+n=0
+pids=""
+OUT="$(mlfk_scan)"
+if [ -n "$OUT" ]; then
+  printf "%s\n" "$OUT" | while IFS= read -r row; do
+    echo "MLFKPROC $row"
+  done
+  for pid in $(printf "%s\n" "$OUT" | while IFS= read -r row; do echo "${row%% *}"; done); do
+    kill "$pid" 2>/dev/null
+    pids="$pids $pid"
+    n=$((n+1))
+  done
+  sleep 3
+  for pid in $pids; do
+    if [ -d "/proc/$pid" ]; then kill -9 "$pid" 2>/dev/null; fi
+  done
+  sleep 1
+fi
+left=0
+OUT2="$(mlfk_scan)"
+if [ -n "$OUT2" ]; then left="$(printf "%s\n" "$OUT2" | grep -c "")"; fi
+echo "MLFKSCAN $n $left"')" || rc=$?
+  if [ "$rc" != 0 ]; then
+    if [ "$mode" = step0 ]; then
+      echo "DEVICE FAIL: step-0 mlfk orphan reap could not run (dsh rc $rc)" >&2
+      [ -n "${LOCK:-}" ] && rm -rf "$LOCK"
+      exit 1
+    fi
+    echo "WARN: cleanup mlfk orphan reap could not run (dsh rc $rc) — stale processes may remain on the device" >&2
+    return 1
+  fi
+  out="${out%$'\n'}"
+  last="${out##*$'\n'}"
+  nscan=0
+  bad=0
+  while IFS= read -r line; do
+    case "$line" in
+      MLFKSCAN\ *) nscan=$((nscan + 1)) ;;
+      MLFKPROC\ *)
+        echo "WARN: stale mlfk process found + reaped [$mode]: ${line#MLFKPROC }" >&2
+        ;;
+      *) bad=1 ;;
+    esac
+  done <<< "$out"
+  if [ "$nscan" != 1 ] || [ "$bad" != 0 ] ||
+     ! [[ "$last" =~ ^MLFKSCAN\ ([0-9]{1,4})\ ([0-9]{1,4})$ ]]; then
+    if [ "$mode" = step0 ]; then
+      echo "DEVICE FAIL: step-0 mlfk orphan reap output failed the whitelist grammar:" >&2
+      printf '%s\n' "$out" >&2
+      [ -n "${LOCK:-}" ] && rm -rf "$LOCK"
+      exit 1
+    fi
+    echo "WARN: cleanup mlfk orphan reap output failed the whitelist grammar (stale processes may remain):" >&2
+    printf '%s\n' "$out" >&2
+    return 1
+  fi
+  nfound="${BASH_REMATCH[1]}"
+  nleft="${BASH_REMATCH[2]}"
+  if [ "$nleft" != 0 ]; then
+    if [ "$mode" = step0 ]; then
+      echo "DEVICE FAIL: $nleft stale mlfk process(es) SURVIVED the step-0 reap (found $nfound) — inspect the device before running any check" >&2
+      [ -n "${LOCK:-}" ] && rm -rf "$LOCK"
+      exit 1
+    fi
+    echo "WARN: $nleft stale mlfk process(es) survived the cleanup reap (found $nfound)" >&2
+    return 1
+  fi
+  if [ "$nfound" != 0 ] && [ "$mode" = step0 ]; then
+    # duty transfer: the reaped deadman can no longer restore what a
+    # dead run left behind — restore it here, loudly, BEFORE any check
+    # work: quiesced daemons off their markers, then a stale frontend
+    # park marker (RC-verified gone).
+    if ! rig_qd_normalize; then
+      echo "DEVICE FAIL: step-0 reap killed a stale deadman but could not restore a marker-quiesced daemon — inspect the device" >&2
+      [ -n "${LOCK:-}" ] && rm -rf "$LOCK"
+      exit 1
+    fi
+    local mrc=0
+    dsh "test -f /mnt/disable_frontend" >/dev/null 2>&1 || mrc=$?
+    if [ "$mrc" = 0 ]; then
+      if ! dsh "rm -f /mnt/disable_frontend" >/dev/null 2>&1 ||
+         ! dsh "test ! -f /mnt/disable_frontend" >/dev/null 2>&1; then
+        echo "DEVICE FAIL: step-0 reap could not remove the stale /mnt/disable_frontend left by the reaped run" >&2
+        [ -n "${LOCK:-}" ] && rm -rf "$LOCK"
+        exit 1
+      fi
+      echo "   step-0 reap: stale /mnt/disable_frontend removed (RC-verified gone)" >&2
+    elif [ "$mrc" != 1 ]; then
+      echo "DEVICE FAIL: step-0 reap could not probe the frontend marker (rc $mrc)" >&2
+      [ -n "${LOCK:-}" ] && rm -rf "$LOCK"
+      exit 1
+    fi
+    echo "   step-0 reap: $nfound stale mlfk process(es) cleaned; device comb-free" >&2
+  fi
+  return 0
+}
+
 # rig_lock_acquire — exclusive rig lock (iter 41, review rounds 1-3
 # recurring — the class is closed by REMOVING the cleverness): ONE
 # mkdir-atomic lock at a SHARED host path keyed by the DEVICE id — the
@@ -57,6 +207,10 @@ ARMBINS="sim_device csweep_arm fmt_diff_arm mathsweep_arm gfx_device fk_input sk
 # rm -rf, which the message spells out. The release trap (rig_cleanup)
 # is installed by the CALLER only AFTER acquisition, so a losing
 # contender can never release the winner's lock.
+# Iter 102: acquisition is followed by the step-0 orphan reap
+# (rig_orphan_reap above) — the shared rig entry, inherited by every
+# consumer; it runs only AFTER the lock is held, so it can never touch
+# the device while another rig run legitimately owns it.
 rig_lock_acquire() {
   LOCK="${TMPDIR:-/tmp}/mlfk-rig-${DEV}.lock"
   if ! mkdir "$LOCK" 2>/dev/null; then
@@ -70,6 +224,7 @@ rig_lock_acquire() {
     echo "  are sure no rig is running, remove it manually: rm -rf '$LOCK'" >&2
     exit 1
   fi
+  rig_orphan_reap step0
 }
 
 # rig_cleanup — hygiene: device scratch never outlives the script.
@@ -94,6 +249,15 @@ rig_cleanup() {
     dsh "rm -rf $DSD" >/dev/null 2>&1 \
       || echo "WARN: device scratch cleanup failed — $DSD may remain on the device" >&2
   else
+    # iter 102 (the orphaned-deadman leak class): reap stale mlfk
+    # processes BY PID before the wipe. The graceful deadman.cancel is
+    # structurally lossy on failure paths — the wipe below deletes the
+    # cancel file inside the deadman's 2 s poll window, so the comb
+    # never sees it and outlives the run (the iter-101 leak). Every
+    # consumer's EXIT trap routes through this function, so teardown
+    # now covers ALL exit paths by construction. Best-effort +
+    # WARN-visible (cleanup never masks the run's real exit code).
+    rig_orphan_reap cleanup || true
     dsh "rm -rf $DTMP $DSD" >/dev/null 2>&1 \
       || echo "WARN: device scratch cleanup failed — $DTMP $DSD may remain on the device" >&2
   fi
