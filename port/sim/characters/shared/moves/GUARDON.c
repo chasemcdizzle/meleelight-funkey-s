@@ -43,30 +43,9 @@ static void shield_tilt(MlSim *S, double p, bool shieldstun,
   pl->phys.shieldPositionReal = st.shieldPositionReal;
 }
 
-static void shield_depletion(MlSim *S, double p, const MlInputBuffer in[4]) {
-  MlPlayer *pl = mv_player(S, p);
-  AsShieldDepState st;
-  st.grounded = pl->phys.grounded;
-  st.kDec = pl->phys.kDec;
-  st.kVel = pl->phys.kVel;
-  st.shieldHP = pl->phys.shieldHP;
-  st.shielding = pl->phys.shielding;
-  st.pos = pl->phys.pos;   // M4 task 1: breakShield vfx read set
-  st.face = pl->phys.face;
-  const bool broke = as_shieldDepletion((int)MV_CS(S, p), &st, MV_IN(in, p));
-  pl->phys.grounded = st.grounded;
-  pl->phys.kDec = st.kDec;
-  pl->phys.kVel = st.kVel;
-  pl->phys.shieldHP = st.shieldHP;
-  pl->phys.shielding = st.shielding;
-  if (broke) {
-    // upstream runs SHIELDBREAKFALL.init(p, input) INSIDE shieldDepletion
-    // (actionStateShortcuts.js:297) — the slice API returns the arm flag
-    // and the real dispatch happens here, after the slice write-back
-    // (iter 85; the GUARD.c iter-82 pattern, review-82 High sibling).
-    mv_dispatch(S, MV_CS(S, p), "SHIELDBREAKFALL", "init", p, in, 0);
-  }
-}
+// shieldDepletion: the shared mv_shield_depletion helper (moves_index.c
+// — iter 86, review-84 L: the GUARD/GUARDON duplicated statics hoisted;
+// slice + write-back + break dispatch, as_shieldDepletion header note).
 
 static AsTri mv_main(MlSim *S, double p, const MlInputBuffer in[4],
                      const MvX *ex) {
@@ -91,7 +70,7 @@ static AsTri mv_main(MlSim *S, double p, const MlInputBuffer in[4],
       }
       if (!pl->inCSS) {
         as_reduceByTraction(false, (int)MV_CS(S, p), &pl->phys.cVel.x);
-        shield_depletion(S, p, in);
+        mv_shield_depletion(S, p, in);
       }
       shield_tilt(S, p, false, in);
       {

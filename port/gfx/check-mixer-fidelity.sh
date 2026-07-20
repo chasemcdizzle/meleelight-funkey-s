@@ -464,6 +464,30 @@ if ! mkdir "$LOCK" 2>/dev/null; then
   exit 1
 fi
 trap 'rm -rf "$LOCK"' EXIT
+
+# --- SHARED-SCRATCH LOCK (iter 86, review-84 M — cross-SCRIPT isolation) ------
+# Legs [1]/[3]/[4] consume the calib build/ + sim-tables scratch, which
+# is shared with port/sim/check-ai-live.sh and
+# port/sim/calib/check-vfx-seam.sh — the mixer-only lock above cannot
+# see a sibling. ALL three take this ONE lock (own lock first, then
+# shared — the same order everywhere; mkdir is non-blocking so ordering
+# cannot deadlock). Composed children (check-sim.sh etc.) run INSIDE
+# the holder and never take it. NO auto-reclaim (iter-41 posture).
+mkdir -p "$CAL/build"
+SLOCK="$CAL/build/shared-scratch.lock"
+if ! mkdir "$SLOCK" 2>/dev/null; then
+  slockage="unknown"
+  if slockmtime="$(stat -f %m "$SLOCK" 2>/dev/null || stat -c %Y "$SLOCK" 2>/dev/null)"; then
+    slockage="$(( $(date +%s) - slockmtime )) s"
+  fi
+  echo "MIXER FIDELITY REFUSED: shared scratch lock $SLOCK already exists (age: $slockage)." >&2
+  echo "  A sibling consumer (check-ai-live.sh / check-vfx-seam.sh / another" >&2
+  echo "  check-mixer-fidelity.sh) may be rewriting the shared calib build/ +" >&2
+  echo "  sim-tables scratch right now. NO auto-reclaim (iter-41 posture). If" >&2
+  echo "  you are sure no run is live, remove it manually: rm -rf '$SLOCK'" >&2
+  exit 1
+fi
+trap 'rm -rf "$LOCK" "$SLOCK"' EXIT
 mkdir -p "$MF"
 
 # --- [1] SIM CONFORMS (the pinned M2 gate; forced-cold shared artifacts) ----
@@ -821,12 +845,16 @@ node "$GFX/snd_reference.js" --audio "$AUDIO_OUT" --events "$MF/g06.sndev.txt" \
 made "$MF/g06.ref8.keep.pcm"
 "$MF/snd_render" --pack "$MF/sndpack.bin" --events "$MF/g06.sndev.txt" \
   --frames 3600 --out "$MF/tooth5.pcm" --tooth-steal-newest > /dev/null
+# iter 86, review-84 M: made() after the tooth render — a renderer that
+# exits 0 without producing PCM can never "diverge" via cmp-vs-missing.
+made "$MF/tooth5.pcm"
 if cmp -s "$MF/tooth5.pcm" "$MF/g06.ref8.keep.pcm"; then
   fail "T5: steal-policy flip did NOT diverge on g06 (the schedule with a live steal)"
 fi
 # positive control: the unflipped render still matches
 "$MF/snd_render" --pack "$MF/sndpack.bin" --events "$MF/g06.sndev.txt" \
   --frames 3600 --out "$MF/tooth5c.pcm" > /dev/null
+made "$MF/tooth5c.pcm"
 cmp "$MF/tooth5c.pcm" "$MF/g06.ref8.keep.pcm" || fail "T5 positive control broke"
 echo "   tooth T5-steal-flip fired on g06 (divergence detected; positive control clean)"
 rm -f "$MF/tooth5.pcm" "$MF/tooth5c.pcm" "$MF/g06.ref8.keep.pcm"
@@ -853,7 +881,27 @@ if node "$GFX/snd_reference.js" --audio "$AUDIO_OUT" \
   fail "T6b: reference accepted a malformed line"
 fi
 echo "   tooth T6 fired (both renderers fail closed on grammar corruption)"
-rm -f "$MF/tooth6a.txt" "$MF/tooth6b.txt" "$MF/t6.pcm" "$MF/s01.ref.keep.pcm"
+# T6c/d/e exact-token grammar (iter 86, review-84 M — the reviewer's
+# `P 075` probe): leading-zero numerals and elastic whitespace keep the
+# SAME numeric values (the old sscanf/strtol parser accepted all three
+# silently) but violate the tap grammar — both renderers must die.
+sed 's/^P \([0-9]\)/P 0\1/' "$SD" > "$MF/tooth6c.txt"     # P 075-class
+sed 's/^P /P  /' "$SD" > "$MF/tooth6d.txt"                # elastic space
+sed 's/plays=\([0-9]\)/plays=0\1/' "$SD" > "$MF/tooth6e.txt" # plays=060-class
+for t in c d e; do
+  if "$MF/snd_render" --pack "$MF/sndpack.bin" --events "$MF/tooth6$t.txt" \
+    --frames 3600 --out "$MF/t6.pcm" > /dev/null 2>&1; then
+    fail "T6$t: C renderer accepted a leading-zero/elastic-whitespace schedule (exact-token grammar hole — the P 075 class)"
+  fi
+  if node "$GFX/snd_reference.js" --audio "$AUDIO_OUT" \
+    --events "$MF/tooth6$t.txt" --frames 3600 --out "$MF/t6.pcm" \
+    > /dev/null 2>&1; then
+    fail "T6$t: reference accepted a leading-zero/elastic-whitespace schedule"
+  fi
+done
+echo "   tooth T6c/d/e fired (leading-zero + elastic-whitespace probes die in both renderers)"
+rm -f "$MF/tooth6a.txt" "$MF/tooth6b.txt" "$MF/tooth6c.txt" \
+      "$MF/tooth6d.txt" "$MF/tooth6e.txt" "$MF/t6.pcm" "$MF/s01.ref.keep.pcm"
 
 # --- no-commit guard (rc CASE-SPLIT — iter 84; build output incl. -----------
 #     Nintendo-derived PCM is never tracked, and the golden contract

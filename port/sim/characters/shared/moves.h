@@ -188,6 +188,15 @@ const ml_attributes_t *mv_attr(double charId);
 void mv_screenShake(void);
 // playSounds(state, p) — actionStateShortcuts.js:144 via the mvData rows.
 void mv_playSounds(MlSim *S, const char *state, double p);
+// shieldDepletion slice + break dispatch (GUARD.js main / GUARDON.js:50
+// — the two live upstream callers; byte-identical duplicated statics
+// until iter 86, review-84 L — the sibling-drift class fix): builds the
+// AsShieldDepState slice, runs as_shieldDepletion, writes the 5 slice
+// fields back, and dispatches SHIELDBREAKFALL.init on the break flag
+// (upstream runs it INSIDE shieldDepletion, actionStateShortcuts.js:297
+// — the slice API returns the arm flag and the real dispatch happens
+// here, after the write-back; as_shieldDepletion header note).
+void mv_shield_depletion(MlSim *S, double p, const MlInputBuffer in[4]);
 // isFinalDeath() — builds the projected globals slice from MlSim.
 bool mv_isFinalDeath(MlSim *S);
 

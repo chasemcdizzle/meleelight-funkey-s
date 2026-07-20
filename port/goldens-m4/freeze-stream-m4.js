@@ -58,6 +58,23 @@ const GOLDENS_DIR = __dirname; // port/goldens-m4
 function die(msg) { console.error("freeze-stream-m4: " + msg); process.exit(1); }
 function vdie(msg) { die("manifest grammar — " + msg); }
 
+// SPEC-VERSION VALIDATION (iter 86, review-84 M): specVersion is a
+// decision-bearing value on BOTH sides of the refreeze gate, so it is
+// validated as a strict positive integer wherever it is read — the
+// CURRENT spec (streamlib's CHECKSUM.md parse) once up front, and the
+// OLD artifact's field before it may authorize --refreeze. A missing,
+// string, null, or non-integer version is CORRUPTION and a refusal —
+// never a launderable "difference" that unlocks the refreeze arm.
+function checkSpec(v, what) {
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 1) {
+    die(what + " specVersion " + JSON.stringify(v) + " is not a strict " +
+      "positive integer — corruption, refusing (a malformed version can " +
+      "never authorize or receive a freeze)");
+  }
+  return v;
+}
+const CUR_SPEC = checkSpec(specVersion(), "current oracle/CHECKSUM.md");
+
 // The exact per-golden schema, key ORDER included (measured from the
 // committed manifest; a reordered or widened row is a reviewed change).
 const GOLDEN_KEYS = ["id", "name", "trace", "frames", "seed",
@@ -252,7 +269,7 @@ const params = { trace: g.trace, traceSha256: traceSha256, frames: g.frames,
 const lines = [];
 lines.push("{");
 lines.push('"golden": ' + JSON.stringify(g.name) + ",");
-lines.push('"specVersion": ' + specVersion() + ",");
+lines.push('"specVersion": ' + CUR_SPEC + ",");
 lines.push('"params": ' + JSON.stringify(params) + ",");
 lines.push('"rngCalls": ' + a.coverage.rngCalls + ",");
 lines.push('"rngCallsOutsideStep": ' + a.coverage.rngCallsOutsideStep + ",");
@@ -278,24 +295,29 @@ if (fs.existsSync(outPath)) {
         "is a contract artifact; overwriting requires --refreeze and is only " +
         "legitimate with a spec version bump (oracle/CHECKSUM.md §8).");
   }
-  // REFREEZE DISCIPLINE (iter 84, review-82 M5): --refreeze is only
-  // legitimate with a spec version bump — PROVE the difference
-  // mechanically. The old file's own specVersion must differ from the
-  // current oracle/CHECKSUM.md spec version; otherwise a drifting
-  // browser run could be blessed as a same-spec contract.
-  let oldSpec = null;
-  try { oldSpec = JSON.parse(old).specVersion; } catch (e) {
+  // REFREEZE DISCIPLINE (iter 84, review-82 M5; iter 86, review-84 M):
+  // --refreeze is only legitimate with a spec version bump — PROVE the
+  // difference mechanically. The old file must parse, its specVersion
+  // must be a strict positive integer (checkSpec — a corrupt/missing/
+  // string version is a corruption death, never a launderable
+  // "difference"), and that integer must differ from the current
+  // oracle/CHECKSUM.md spec version; otherwise a drifting browser run
+  // could be blessed as a same-spec contract.
+  let oldParsed = null;
+  try { oldParsed = JSON.parse(old); } catch (e) {
     die(`${outPath} exists but is not parseable JSON (${e.message}) — ` +
         "refusing to refreeze over an unreadable contract artifact; " +
         "investigate the corruption first");
   }
-  if (oldSpec === specVersion()) {
+  const oldSpec = checkSpec(oldParsed.specVersion,
+    "existing frozen artifact " + outPath);
+  if (oldSpec === CUR_SPEC) {
     die(`--refreeze refused: the existing ${outPath} carries specVersion ` +
-        `${oldSpec} and the current spec is ALSO ${specVersion()} — a ` +
+        `${oldSpec} and the current spec is ALSO ${CUR_SPEC} — a ` +
         "differing same-spec recording is drift, not a legitimate " +
         "re-freeze (oracle/CHECKSUM.md §8 requires a spec version bump).");
   }
 }
 fs.writeFileSync(outPath, text);
 console.log(`FROZEN ${g.name}: ${a.frames.length} frames, ` +
-  `rngCalls=${a.coverage.rngCalls}, specVersion=${specVersion()} -> ${outPath}`);
+  `rngCalls=${a.coverage.rngCalls}, specVersion=${CUR_SPEC} -> ${outPath}`);

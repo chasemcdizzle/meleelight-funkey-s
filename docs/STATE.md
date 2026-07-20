@@ -3,7 +3,33 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 85 — M4 micro DONE: GUARDON depletion-break fix + s02 scenario golden, browser-verified)
+## Live right now (updated: 2026-07-19, iter 86 — M4 hardening DONE: dual-arc round-2 residuals closed, both cold checks green)
+
+- **Iter 86 (M4 hardening — BOTH arcs' round-2 residuals: review-83
+  1 Medium + review-84 5 Mediums/2 Lows) DONE** (full entry: AGENT-LOG
+  iter 86 pre-registration + result; latest AGENT-LOG id: iter 86):
+  (1) ai-live cov artifacts made()-guarded; (2) NEW shared-scratch lock
+  `port/sim/calib/build/shared-scratch.lock` taken by all three
+  calib-build/sim-tables consumers (mixer/ai-live/vfx-seam — they now
+  serialize; T-SLOCK: all three refuse under a held lock); (3) T5 tooth
+  made(); (4) record-m4.sh per-id crafted-generator dispatch (missing
+  generator = death naming it — T-GEN proven, s01 fallback dead);
+  (5) snd_render.c exact-token schedule grammar (P 075 / plays=060 /
+  elastic-whitespace probes DIE; 12/12 genuine schedules accepted —
+  zero false rejections; standing teeth T6c/d/e added); (6) freezer
+  strict specVersion validation on both refreeze sides (corrupt/
+  missing/string = corruption death; same-spec refusal intact —
+  T-FREEZER); (7) GUARD/GUARDON shield_depletion deduped into shared
+  `mv_shield_depletion` (moves_index.c — the sibling-drift class closed
+  at the root; producer pins untouched); (8) snd_mixer.h 2^53 play-id
+  bound assert. Colds: **MIXER FIDELITY OK** (12/12, all teeth;
+  .loop/m4-iter86-donecheck.log) + **AI LIVE CONFORMS**
+  (.loop/m4-iter86-donecheck2.log); perturbed contract artifacts
+  restored cmp-identical. **Driver next: both arcs round 3 = FINAL
+  CONFIRM reviews on this commit's bytes (closure checks of
+  review-83/review-84 residuals).**
+
+## [superseded by iter 86] (2026-07-19, iter 85 — M4 micro DONE: GUARDON depletion-break fix + s02 scenario golden, browser-verified)
 
 - **Iter 85 (M4 micro — the review-82 un-triaged High: GUARDON.c:56
   dropped as_shieldDepletion's return) DONE** (full entry: AGENT-LOG

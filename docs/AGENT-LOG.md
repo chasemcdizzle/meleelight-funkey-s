@@ -13071,3 +13071,190 @@ invocation); host probe runs 6 (4 dump-frames probes + tooth + final);
 check-sim 1/<=2; sweep+measurement scripts host-only. No device, no
 pushes, frozen streams untouched (s02 is NEW; s01/oracle bytes
 unmoved).
+
+## iter 86 — 2026-07-19 — M4 hardening PRE-REGISTRATION: dual-arc round-2 residuals — shared check lock, grammar exactness, helper dedup (frozen before any edit; PROCESS §2)
+
+**Surface (combined micro-iteration, driver brief)**: BOTH arcs' round-2
+review residuals — .loop/review-83-1.log (ai-live closure check: 1
+Medium) + .loop/review-84-1.log (mixer closure check: 5 Mediums + 2
+Lows). Files: `port/sim/check-ai-live.sh`,
+`port/gfx/{check-mixer-fidelity.sh,snd_render.c,snd_mixer.h}`,
+`port/goldens-m4/{record-m4.sh,freeze-stream-m4.js}`,
+`port/sim/calib/check-vfx-seam.sh` (edit justified: the same one-line
+shared-lock adoption the sibling scripts get),
+`port/sim/characters/shared/moves/{GUARD.c,GUARDON.c}` +
+`port/sim/characters/shared/{moves.h,moves_index.c}` (the dedup Low's
+shared-helper home).
+
+**FIXES (pre-registered shapes)**:
+1. (ai-live M) check-ai-live.sh leg [3]/[4]: `$id.ai-live-cov.txt` is
+   rm'd-before-produce but never made() — add it to the leg's made()
+   (the round-1 H "every produced artifact" completed).
+2. (mixer M, class) SHARED-SCRATCH LOCK: the calib build/ + sim-tables
+   scratch is shared by THREE composed consumers (check-mixer-fidelity,
+   check-ai-live, check-vfx-seam) whose per-script locks cannot see a
+   sibling. ONE shared lock `port/sim/calib/build/shared-scratch.lock`
+   taken by ALL three (own lock first, then shared — same order
+   everywhere; mkdir is non-blocking so ordering cannot deadlock; traps
+   release both; composed children never take it — they run inside the
+   holder). No auto-reclaim (iter-41 posture). Device checks keep their
+   own device-keyed lock (out of scope).
+3. (mixer M) T5 steal-flip tooth: made() on tooth5.pcm (and tooth5c.pcm)
+   after the tooth renders — a renderer that exits 0 without producing
+   PCM can no longer "diverge" via cmp-vs-missing-file.
+4. (mixer M) record-m4.sh missing-trace arm: per-id generator DISPATCH —
+   s-goldens resolve `gen-<id>-trace.js` from the golden's OWN id and
+   RUN it when committed; a missing generator is a loud death NAMING
+   that exact path (never the s01 message-fallback, never gen-trace.js
+   seeded chaos). m-goldens keep the gen-trace.js arm.
+5. (mixer M) snd_render.c schedule parser: EXACT-TOKEN grammar — sscanf
+   elasticity + strtol leading-zero tolerance removed (scan_num =
+   0|[1-9][0-9]* only, single-space field separators, end-of-line
+   asserted; terminator parsed by literal+scan_num). The reviewer's
+   `P 075` / `plays=060` probes must die.
+6. (mixer M) freeze-stream-m4.js: strict positive-integer specVersion
+   validation on BOTH sides of the refreeze gate — CUR spec validated
+   up front; the OLD artifact's field validated before it can authorize
+   --refreeze (missing/string/null = corruption death, not a
+   launderable "difference").
+7. (mixer L) GUARD.c/GUARDON.c `shield_depletion` duplicated helper
+   (the H2 sibling-drift class): hoisted to ONE shared helper
+   `mv_shield_depletion` in shared moves scope (moves.h decl +
+   moves_index.c body — already on every TU list; check-sim.sh bytes
+   and all producer pins UNCHANGED). Bodies are byte-identical today
+   (diff-verified); behavior change = zero by construction, proven by
+   SIM CONFORMS + s01/s02 STREAM MATCH inside the cold runs.
+8. (mixer L, registered) snd_mixer.h: fail-loud assert + comment at the
+   2^53 play-id double-uniqueness bound (unreachable by construction —
+   ~4.7 billion years of 60 fps play events; cheap, never a live arm).
+
+**TEETH (frozen)**:
+- T-SLOCK (fix 2): hold `shared-scratch.lock` externally -> ALL THREE
+  scripts refuse (nonzero + REFUSED naming the shared lock); release ->
+  covered by the cold runs. Log: .loop/m4-iter86-tooth-slock.log.
+- T-GEN (fix 4): (a) temp grammar-valid s03 row appended to the m4
+  manifest (stashed copy; restored + cmp-verified after) ->
+  `record-m4.sh s03` dies naming `gen-s03-trace.js`; (b) positive:
+  `gen-s02-trace.js` output cmp-identical to the committed s02 trace
+  (the dispatch target is the right generator). Log:
+  .loop/m4-iter86-tooth-gen.log.
+- T-FREEZER (fix 6): s02 frozen artifact stashed, then perturbed
+  (specVersion -> "1" string; specVersion key deleted) + synthesized
+  x2 run JSONs derived from the frozen frames -> --refreeze dies with
+  the corruption message BOTH times; positive control: original bytes
+  + one-hash-perturbed synthesized runs -> the same-spec refusal (the
+  iter-84 M5 closure) still fires. Artifact restored from stash,
+  cmp-verified against git HEAD bytes. Log:
+  .loop/m4-iter86-tooth-freezer.log.
+- T6c/d/e (fix 5, STANDING teeth in check-mixer-fidelity.sh): s01
+  schedule with leading-zero P frames / double-space fields /
+  leading-zero terminator count (numeric values UNCHANGED — the old
+  parser accepted all three) -> both renderers die nonzero; fires
+  inside the cold mixer run.
+- Fixes 1/3/8: no dedicated teeth — made()'s semantics are already
+  teeth-proven (iter 83) and fix 8 is unreachable by construction;
+  registered here.
+
+**RUN CAPS (frozen)**: <= 1 composed check-mixer-fidelity.sh cold + <= 1
+composed check-ai-live.sh cold, SEQUENTIAL (the new shared lock forces
+this anyway), pre-commit (script files under $M4G / port are not
+no-commit-guarded; contract artifacts stay clean). check-vfx-seam.sh is
+NOT fully run (cap; its lock adoption is proven by bash -n + T-SLOCK +
+the identical block passing live in both sibling cold runs; its
+check-sim child is executed inside BOTH composed colds). Teeth runs
+refuse/die in seconds. No device, no browser recordings outside the
+composed children, no pushes.
+
+**PASS CRITERIA (frozen)**: cold `MIXER FIDELITY OK` final line
+(.loop/m4-iter86-donecheck.log) + cold `AI LIVE CONFORMS` final line
+(.loop/m4-iter86-donecheck2.log); every tooth fires with its named
+message; perturbed contract artifacts restored cmp-identical; clean
+tree after ONE atomic commit.
+
+**REFUTATION SHAPES**: (a) any stream/differential divergence in the
+cold runs after fix 7 => the dedup is NOT behavior-neutral — revert to
+the duplicated-body form, report, do NOT retry blind; (b) the
+exact-token parser false-rejects any of the 12 genuine golden schedules
+(the real-corpus validation, PROCESS §3.4) => grammar mis-measured —
+re-derive from the JS regexes (snd_events_tap producer), one bounded
+re-run; (c) T-FREEZER's positive control stops firing => the strict
+validation broke the M5 same-spec refusal — fix before shipping. Each
+gets one bounded evidence round, then STOP and report.
+
+## iter 86 — 2026-07-19 — M4 hardening RESULT: dual-arc round-2 residuals — shared check lock, grammar exactness, helper dedup; both cold checks green
+
+**ALL 8 pre-registered fixes SHIPPED as frozen** (no scope drift):
+1. check-ai-live.sh: `$id.ai-live-cov.txt` now made()-asserted per LIVE
+   leg (round-1 H completed — every rm'd-before-produce artifact is
+   freshness-guarded).
+2. SHARED-SCRATCH LOCK `port/sim/calib/build/shared-scratch.lock` taken
+   by all three calib-build/sim-tables consumers (check-mixer-fidelity,
+   check-ai-live, check-vfx-seam; own lock first then shared, traps
+   release both, children never take it, no auto-reclaim).
+3. check-mixer-fidelity.sh T5: made() on tooth5.pcm/tooth5c.pcm after
+   their renders (cmp-vs-missing-file can no longer fake a divergence).
+4. record-m4.sh: per-id crafted-generator DISPATCH (`gen-<id>-trace.js`
+   run when committed; missing generator = loud death naming that exact
+   path; m-goldens keep gen-trace.js).
+5. snd_render.c: exact-token schedule grammar (scan_num 0|[1-9][0-9]*,
+   single-space fields, end-of-line asserted, sscanf/strtol-tolerance
+   gone) + STANDING teeth T6c/d/e in check-mixer-fidelity.sh.
+6. freeze-stream-m4.js: checkSpec() strict positive-integer specVersion
+   on BOTH refreeze sides (CUR_SPEC validated up front; old artifact's
+   field validated before it can authorize --refreeze).
+7. mv_shield_depletion hoisted to shared moves scope (moves.h +
+   moves_index.c); GUARD.c/GUARDON.c call the ONE body (their statics
+   were byte-identical; check-sim.sh bytes + every producer pin
+   untouched — moves_index.c is already on every TU list).
+8. snd_mixer.h: fail-loud assert at the 2^53 play-id double-uniqueness
+   bound (registered; unreachable by construction).
+
+**TEETH (all fired; logs)**:
+- T-SLOCK (.loop/m4-iter86-tooth-slock.log): held shared lock -> all
+  THREE scripts refuse rc 1 naming the shared lock; own locks + shared
+  lock released cleanly afterward.
+- T-GEN (.loop/m4-iter86-tooth-gen.log): temp s03 manifest row ->
+  record-m4.sh s03 dies rc 1 NAMING gen-s03-trace.js, zero s01
+  mentions; manifest restored cmp-identical (git-clean); positive:
+  gen-s02-trace.js output cmp-identical to the committed s02 trace.
+- T-FREEZER (.loop/m4-iter86-tooth-freezer.log): old specVersion as
+  STRING "1" -> corruption death; specVersion line DELETED ->
+  corruption death; positive controls: same-spec refusal (iter-84 M5)
+  still fires on a differing same-spec recording, and faithful
+  synthesized runs -> `unchanged (byte-identical re-freeze)` exit 0
+  (also proves the synthesis derivation exact). s02 frozen artifact
+  restored cmp-identical (git-clean).
+- Parser corpus validation (.loop/m4-iter86-render-preflight.log,
+  PROCESS §3.4): all 12 genuine iter-85 golden schedules accepted
+  (zero false rejections); probes `P 075` / `P<2 spaces>75` /
+  `plays=060` all die (rc 2, named grammar messages).
+- T6c/d/e fired again as standing teeth inside the cold mixer run.
+
+**COLD RUNS (sequential — the new shared lock held throughout each;
+writer-ran, driver re-runs per HARD RULE 7)**:
+- `bash port/gfx/check-mixer-fidelity.sh` -> **MIXER FIDELITY OK
+  (goldens=12 diff=bit-identical maxvoices=9 steals=2 s01stops=4)**,
+  rc 0 (.loop/m4-iter86-donecheck.log) — all 12 STREAM MATCH (incl.
+  s01/s02: fix 7 is stream-neutral), witnesses bound, app leg green,
+  teeth T1-T6e all fired.
+- `bash port/sim/check-ai-live.sh` -> **AI LIVE CONFORMS**, rc 0
+  (.loop/m4-iter86-donecheck2.log) — SIM CONFORMS cold shape 10/10,
+  M2-contract witness, 4 LIVE legs (cov artifacts now made()-guarded),
+  AI BRIDGE OK, AI MATCH.
+- check-vfx-seam.sh NOT fully run (pre-registered cap): its edit is the
+  one-line-class lock adoption, proven by bash -n + T-SLOCK + the
+  identical block passing live in both sibling cold runs; its check-sim
+  child ran inside BOTH composed colds.
+
+**Zoom-out (HARD RULE 8)**: fix 2 is the class fix for cross-SCRIPT
+scratch collisions (the per-script locks were instance fixes); fix 5
+closes the sscanf-elasticity instance of the whitelist-grammar class in
+the C consumer (the JS side was already strict — the differential was
+fail-closed in aggregate, but the standalone C verdict lied); fix 7
+closes the sibling-drift smell that produced the iter-82/85 GUARD/
+GUARDON Highs at its structural root (one body, drift impossible).
+Run ledger: 1 mixer composed + 1 ai-live composed (caps: 1+1), 0 full
+vfx-seam (cap: 0), teeth = refuse/die-fast invocations only. No device,
+no pushes, no contract-artifact drift (manifest + s02 frozen stream
+perturbed-and-restored cmp-identical, logged). Both arcs now enter
+round 3 = final confirm on this commit's bytes.

@@ -341,6 +341,29 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 trap 'rm -rf "$LOCK"' EXIT
 
+# --- SHARED-SCRATCH LOCK (iter 86, review-84 M — cross-SCRIPT isolation) ------
+# The calib build/ + sim-tables scratch is shared by THREE composed
+# consumers — this script, port/gfx/check-mixer-fidelity.sh and
+# port/sim/calib/check-vfx-seam.sh — and the per-script lock above
+# cannot see a sibling. ALL three take this ONE lock (own lock first,
+# then shared — the same order everywhere; mkdir is non-blocking so
+# ordering cannot deadlock). Composed children (check-sim.sh etc.) run
+# INSIDE the holder and never take it. NO auto-reclaim (iter-41 posture).
+SLOCK="$BUILD/shared-scratch.lock"
+if ! mkdir "$SLOCK" 2>/dev/null; then
+  slockage="unknown"
+  if slockmtime="$(stat -f %m "$SLOCK" 2>/dev/null || stat -c %Y "$SLOCK" 2>/dev/null)"; then
+    slockage="$(( $(date +%s) - slockmtime )) s"
+  fi
+  echo "AI LIVE REFUSED: shared scratch lock $SLOCK already exists (age: $slockage)." >&2
+  echo "  A sibling consumer (check-mixer-fidelity.sh / check-vfx-seam.sh /" >&2
+  echo "  another check-ai-live.sh) may be rewriting the shared calib build/ +" >&2
+  echo "  sim-tables scratch right now. NO auto-reclaim (iter-41 posture). If" >&2
+  echo "  you are sure no run is live, remove it manually: rm -rf '$SLOCK'" >&2
+  exit 1
+fi
+trap 'rm -rf "$LOCK" "$SLOCK"' EXIT
+
 # --- shared verdict/evidence grammar ------------------------------------------
 STREAM_RE_TAIL='[0-9]{1,6}/[0-9]{1,6} frames exact, rngCalls=[0-9]{1,6}, rngCallsOutsideStep=1, specVersion=1$'
 
@@ -538,7 +561,11 @@ for id in "${LIVE_IDS[@]}"; do
     --stage "${P_STAGE[$k]}" --frames "${P_FRAMES[$k]}" \
     --cpu --difficulty "${P_DIFF[$k]}" --ai-cover \
     > "$BUILD/$id.ai-live-out.txt" 2> "$BUILD/$id.ai-live-cov.txt"
-  made "$BUILD/$id.ai-live-out.txt"
+  # iter 86, review-83 M: the cov stderr artifact is rm'd-before-produce
+  # above, so it must be made()-asserted too — an --ai-cover arm that
+  # emits nothing can never pass as a covered run (the round-1 H's
+  # "every produced artifact" completed).
+  made "$BUILD/$id.ai-live-out.txt" "$BUILD/$id.ai-live-cov.txt"
   if [ -n "$wrapman" ]; then
     { node "$SIM/wrap-run.js" "$id" "$BUILD/$id.ai-live-out.txt" \
         "$BUILD/$id.ai-live-run.json" "$wrapman"; } 2>&1 | relay_lines

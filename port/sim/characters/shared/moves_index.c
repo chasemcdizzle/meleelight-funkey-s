@@ -112,6 +112,35 @@ void mv_playSounds(MlSim *S, const char *state, double p) {
   as_playSounds(rows, n, mv_player(S, p)->timer);
 }
 
+// shieldDepletion slice + break dispatch (moves.h note; iter 86,
+// review-84 L — the ONE shared body GUARD.c and GUARDON.c both call,
+// hoisted verbatim from their byte-identical duplicated statics):
+// upstream runs SHIELDBREAKFALL.init(p, input) INSIDE shieldDepletion
+// (actionStateShortcuts.js:297) — the C slice API returns the arm flag
+// and the real dispatch happens here, after the slice write-back
+// (as_shieldDepletion header note; pos/face are the M4 task-1
+// breakShield vfx read set).
+void mv_shield_depletion(MlSim *S, double p, const MlInputBuffer in[4]) {
+  MlPlayer *pl = mv_player(S, p);
+  AsShieldDepState st;
+  st.grounded = pl->phys.grounded;
+  st.kDec = pl->phys.kDec;
+  st.kVel = pl->phys.kVel;
+  st.shieldHP = pl->phys.shieldHP;
+  st.shielding = pl->phys.shielding;
+  st.pos = pl->phys.pos;
+  st.face = pl->phys.face;
+  const bool broke = as_shieldDepletion((int)MV_CS(S, p), &st, MV_IN(in, p));
+  pl->phys.grounded = st.grounded;
+  pl->phys.kDec = st.kDec;
+  pl->phys.kVel = st.kVel;
+  pl->phys.shieldHP = st.shieldHP;
+  pl->phys.shielding = st.shielding;
+  if (broke) {
+    mv_dispatch(S, MV_CS(S, p), "SHIELDBREAKFALL", "init", p, in, 0);
+  }
+}
+
 bool mv_isFinalDeath(MlSim *S) {
   AsFinalDeathState st;
   st.gameMode = S->gameMode;

@@ -265,6 +265,30 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 trap 'rm -rf "$LOCK"' EXIT
 
+# SHARED-SCRATCH LOCK (iter 86, review-84 M — cross-SCRIPT isolation):
+# the calib build/ + sim-tables scratch is shared by THREE composed
+# consumers — this script, port/sim/check-ai-live.sh and
+# port/gfx/check-mixer-fidelity.sh — and the per-script lock above
+# cannot see a sibling. ALL three take this ONE lock (own lock first,
+# then shared — the same order everywhere; mkdir is non-blocking so
+# ordering cannot deadlock). Composed children (check-sim.sh, the
+# cluster checks) run INSIDE the holder and never take it. NO
+# auto-reclaim (iter-41 posture).
+SLOCK="$BUILD/shared-scratch.lock"
+if ! mkdir "$SLOCK" 2>/dev/null; then
+  slockage="unknown"
+  if slockmtime="$(stat -f %m "$SLOCK" 2>/dev/null || stat -c %Y "$SLOCK" 2>/dev/null)"; then
+    slockage="$(( $(date +%s) - slockmtime )) s"
+  fi
+  echo "VFX SEAM REFUSED: shared scratch lock $SLOCK already exists (age: $slockage)." >&2
+  echo "  A sibling consumer (check-ai-live.sh / check-mixer-fidelity.sh /" >&2
+  echo "  another check-vfx-seam.sh) may be rewriting the shared calib build/ +" >&2
+  echo "  sim-tables scratch right now. NO auto-reclaim (iter-41 posture). If" >&2
+  echo "  you are sure no run is live, remove it manually: rm -rf '$SLOCK'" >&2
+  exit 1
+fi
+trap 'rm -rf "$LOCK" "$SLOCK"' EXIT
+
 # RELAY (log-sentinel contract): every relayed component byte carries
 # the visible '  | ' prefix in this script's own output.
 relay_lines() { sed 's/^/  | /'; }

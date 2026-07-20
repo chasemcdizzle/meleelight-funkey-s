@@ -147,18 +147,29 @@ fi
 trap 'rm -rf "$LOCK"' EXIT
 
 if [ ! -f "$M4G/$TRACE" ]; then
-  # CRAFTED-TRACE REFUSAL (iter 84 — the goldens-snd fold): s-prefixed
-  # goldens are SCENARIO goldens whose trace is a committed deterministic
-  # generator's output (manifest comment; e.g. s01 -> gen-s01-trace.js),
-  # NOT gen-trace.js seeded chaos — auto-generating here would silently
-  # fabricate a WRONG trace whose recording could then be frozen. Die
-  # loudly instead; the operator regenerates via the named generator.
+  # CRAFTED-TRACE DISPATCH (iter 84 refusal -> iter 86 per-id dispatch,
+  # review-84 M): s-prefixed goldens are SCENARIO goldens whose trace is
+  # a committed deterministic generator's output (manifest comment;
+  # gen-<id>-trace.js, no RNG — regeneration is byte-identical), NOT
+  # gen-trace.js seeded chaos. Dispatch to the golden's OWN generator by
+  # id; a MISSING generator is a loud death naming that exact path —
+  # never a sibling (s01) fallback and never gen-trace.js, either of
+  # which would silently fabricate a WRONG trace whose recording could
+  # then be frozen.
   case "$NAME" in
     (s*)
-      die "trace $M4G/$TRACE is missing and '$NAME' is a CRAFTED-scenario golden — record-m4.sh will NOT gen-trace.js it; regenerate with the golden's committed generator (s01: node port/goldens-m4/gen-s01-trace.js $M4G/$TRACE) and re-run" ;;
+      GEN="$M4G/gen-${NAME%%-*}-trace.js"
+      if [ ! -f "$GEN" ]; then
+        die "trace $M4G/$TRACE is missing and '$NAME' is a CRAFTED-scenario golden whose committed generator $GEN does NOT exist — refusing (no gen-trace.js fallback, no sibling-generator fallback); commit the golden's own generator first"
+      fi
+      echo "record-m4.sh: generating crafted trace via $GEN (committed deterministic generator)"
+      node "$GEN" "$M4G/$TRACE"
+      ;;
+    (*)
+      echo "record-m4.sh: generating trace ($SEED)"
+      node "$HARNESS/gen-trace.js" "$M4G/$TRACE" 3800 "$SEED"
+      ;;
   esac
-  echo "record-m4.sh: generating trace ($SEED)"
-  node "$HARNESS/gen-trace.js" "$M4G/$TRACE" 3800 "$SEED"
 fi
 test -s "$M4G/$TRACE" || die "trace $M4G/$TRACE missing or empty"
 

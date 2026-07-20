@@ -252,6 +252,17 @@ static void snd_event(SndMixer *m, const char *name) {
               "sim sound plane disagree)");
   }
   m->playCount++; // howler-parallel global id counter (header note)
+  // ID-UNIQUENESS BOUND (iter 86, review-84 L, registered): play ids
+  // travel through the sim's JS number plane as doubles, and
+  // snd_event_stop_id compares via (double)id — beyond 2^53 that
+  // conversion stops being injective and id-routing could silently
+  // mis-match. Unreachable by construction (2^53 play events at 60 fps
+  // is ~4.8 million years of nonstop play), so this is a cheap
+  // fail-loud assert, never a live arm.
+  if (m->playCount + 1000ull > (1ull << 53)) {
+    sim_fatal("snd: play-id counter reached the 2^53 double-uniqueness "
+              "bound (id routing would stop being exact)");
+  }
   int slot = -1;
   for (int v = 0; v < SND_VOICES; v++) {
     if (m->voice[v].e == 0) { slot = v; break; }

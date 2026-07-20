@@ -35,7 +35,12 @@
 // The schedule parser is STRICT full-line (PROCESS §3): every line must
 // match the tap grammar exactly, the SNDEV OK terminator with matching
 // counts is mandatory, and lastFrame must equal --frames (a schedule
-// from a partial run can never render as complete).
+// from a partial run can never render as complete). EXACT-TOKEN (iter
+// 86, review-84 M): numerals are 0|[1-9][0-9]* (leading zeros refused)
+// and fields are separated by EXACTLY one space with end-of-line
+// asserted — sscanf's whitespace elasticity and strtol's leading-zero
+// tolerance accepted resembling-but-nonmatching lines (`P 075`,
+// `plays=060`), which the whitelist rule forbids; sscanf is gone.
 //
 // PROVENANCE: output PCM derives from Nintendo-derived blobs — PRIVATE
 // USE ONLY, gitignored build output, never committed.
@@ -77,17 +82,39 @@ static void ev_push(const Ev *e) {
 }
 
 // strict token helpers ------------------------------------------------------
-static bool tok_long(const char *s, long *out) {
+// EXACT-TOKEN scanners (iter 86, review-84 M): each consumes from *ps
+// and advances it; the caller asserts the exact delimiter that follows.
+// scan_num accepts ONLY the tap grammar's numeral 0|[1-9][0-9]* —
+// leading zeros, signs, and embedded whitespace are refusals, never
+// value-preserving tolerance (PROCESS §3: resembles-but-doesn't-match
+// = corruption).
+static bool scan_num(const char **ps, unsigned long long *out) {
+  const char *s = *ps;
   if (*s < '0' || *s > '9') return false;
-  char *end = 0;
-  const long v = strtol(s, &end, 10);
-  if (end == s || *end != 0) return false;
+  if (s[0] == '0' && s[1] >= '0' && s[1] <= '9') return false; // leading zero
+  unsigned long long v = 0;
+  while (*s >= '0' && *s <= '9') {
+    if (v > (~0ull - 9ull) / 10ull) return false; // overflow guard
+    v = v * 10ull + (unsigned long long)(*s - '0');
+    s++;
+  }
   *out = v;
+  *ps = s;
   return true;
 }
 
-static bool tok_name(const char *s, bool allowStop, char *out, size_t cap) {
-  // [0-9A-Za-z]+ optionally followed by the literal ".stop"
+static bool scan_lit(const char **ps, const char *lit) {
+  const size_t n = strlen(lit);
+  if (strncmp(*ps, lit, n) != 0) return false;
+  *ps += n;
+  return true;
+}
+
+// [0-9A-Za-z]+ followed (allowStop) by the literal ".stop"; the caller
+// asserts the delimiter after the consumed token.
+static bool scan_name(const char **ps, bool allowStop, char *out,
+                      size_t cap) {
+  const char *s = *ps;
   size_t n = 0;
   while ((s[n] >= '0' && s[n] <= '9') || (s[n] >= 'a' && s[n] <= 'z') ||
          (s[n] >= 'A' && s[n] <= 'Z')) {
@@ -95,17 +122,19 @@ static bool tok_name(const char *s, bool allowStop, char *out, size_t cap) {
   }
   if (n == 0) return false;
   size_t total = n;
-  if (s[n] != 0) {
-    if (!allowStop || strcmp(s + n, ".stop") != 0) return false;
+  if (allowStop) {
+    if (strncmp(s + n, ".stop", 5) != 0) return false;
     total = n + 5;
-  } else if (allowStop) {
-    return false; // stop record must carry the .stop suffix
   }
   if (total + 1 > cap) return false;
   memcpy(out, s, total);
   out[total] = 0;
+  *ps = s + total;
   return true;
 }
+
+// tap frames fit long comfortably; anything larger is corruption.
+#define EV_FRAME_MAX 0x7fffffffull
 
 static void load_events(const char *path, long frames) {
   FILE *f = fopen(path, "r");
@@ -120,18 +149,19 @@ static void load_events(const char *path, long frames) {
     }
     line[--n] = 0;
     if (sawTerm) sim_fatal("events: bytes after the terminator");
-    if (strncmp(line, "SNDEV OK ", 9) == 0) {
-      unsigned long long tp, ts;
-      long lastFrame;
-      char tail;
-      if (sscanf(line, "SNDEV OK plays=%llu stops=%llu lastFrame=%ld%c",
-                 &tp, &ts, &lastFrame, &tail) != 3) {
-        sim_fatal("events: malformed terminator line");
+    const char *s = line;
+    if (scan_lit(&s, "SNDEV OK plays=")) {
+      // SNDEV OK plays=<n> stops=<n> lastFrame=<n>   (exact tokens)
+      unsigned long long tp = 0, ts = 0, lf = 0;
+      if (!scan_num(&s, &tp) || !scan_lit(&s, " stops=") ||
+          !scan_num(&s, &ts) || !scan_lit(&s, " lastFrame=") ||
+          !scan_num(&s, &lf) || *s != 0) {
+        sim_fatal("events: malformed terminator line (exact-token grammar)");
       }
       if (tp != plays || ts != stops) {
         sim_fatal("events: terminator counts disagree with the lines");
       }
-      if (lastFrame != frames) {
+      if (lf > EV_FRAME_MAX || (long)lf != frames) {
         sim_fatal("events: lastFrame != --frames (partial-run schedule)");
       }
       sawTerm = true;
@@ -139,44 +169,55 @@ static void load_events(const char *path, long frames) {
     }
     Ev e;
     memset(&e, 0, sizeof e);
+    unsigned long long fr;
     if (line[0] == 'P' && line[1] == ' ') {
-      // P <frame> <name>
-      char fnum[32], nm[64];
-      char tail[2];
-      if (sscanf(line + 2, "%31s %63s%1s", fnum, nm, tail) != 2) {
-        sim_fatal("events: malformed P line");
+      // P <frame> <name>   (single-space fields, end-of-line asserted)
+      s = line + 2;
+      if (!scan_num(&s, &fr)) {
+        sim_fatal("events: bad P frame (0|[1-9][0-9]* exactly)");
       }
-      if (!tok_long(fnum, &e.frame)) sim_fatal("events: bad P frame");
-      if (!tok_name(nm, false, e.name, sizeof e.name)) {
+      if (!scan_lit(&s, " ")) {
+        sim_fatal("events: malformed P line (exactly one space between fields)");
+      }
+      if (!scan_name(&s, false, e.name, sizeof e.name)) {
         sim_fatal("events: bad P name");
       }
+      if (*s != 0) sim_fatal("events: trailing bytes on a P line");
+      if (fr > EV_FRAME_MAX) sim_fatal("events: P frame out of range");
+      e.frame = (long)fr;
       e.isStop = 0;
       plays++;
     } else if (line[0] == 'S' && line[1] == ' ') {
-      // S <frame> <token> <hasId> <idbits16>
-      char fnum[32], nm[64], has[8], bits[32];
-      char tail[2];
-      if (sscanf(line + 2, "%31s %63s %7s %31s%1s", fnum, nm, has, bits,
-                 tail) != 4) {
-        sim_fatal("events: malformed S line");
+      // S <frame> <base>.stop <0|1> <idbits16>   (exact tokens)
+      s = line + 2;
+      if (!scan_num(&s, &fr)) {
+        sim_fatal("events: bad S frame (0|[1-9][0-9]* exactly)");
       }
-      if (!tok_long(fnum, &e.frame)) sim_fatal("events: bad S frame");
-      if (!tok_name(nm, true, e.name, sizeof e.name)) {
+      if (!scan_lit(&s, " ")) {
+        sim_fatal("events: malformed S line (exactly one space between fields)");
+      }
+      if (!scan_name(&s, true, e.name, sizeof e.name)) {
         sim_fatal("events: bad S token");
       }
-      if (strcmp(has, "0") == 0) e.hasId = 0;
-      else if (strcmp(has, "1") == 0) e.hasId = 1;
-      else sim_fatal("events: bad S hasId");
-      if (strlen(bits) != 16) sim_fatal("events: bad S idbits length");
+      if (!scan_lit(&s, " ")) {
+        sim_fatal("events: malformed S line (exactly one space between fields)");
+      }
+      if (s[0] == '0' && s[1] == ' ') e.hasId = 0;
+      else if (s[0] == '1' && s[1] == ' ') e.hasId = 1;
+      else sim_fatal("events: bad S hasId (0|1 exactly)");
+      s += 2;
       uint64_t v = 0;
       for (int k = 0; k < 16; k++) {
-        const char c = bits[k];
+        const char c = s[k];
         v <<= 4;
         if (c >= '0' && c <= '9') v |= (uint64_t)(c - '0');
         else if (c >= 'a' && c <= 'f') v |= (uint64_t)(c - 'a' + 10);
-        else sim_fatal("events: bad S idbits digit");
+        else sim_fatal("events: bad S idbits digit (16 lowercase hex exactly)");
       }
+      if (s[16] != 0) sim_fatal("events: trailing bytes on an S line");
       memcpy(&e.id, &v, 8);
+      if (fr > EV_FRAME_MAX) sim_fatal("events: S frame out of range");
+      e.frame = (long)fr;
       e.isStop = 1;
       stops++;
     } else {
