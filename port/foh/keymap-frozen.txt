@@ -1,0 +1,13 @@
+KEYMAP1
+map up U u
+map down D d
+map left L l
+map right R r
+map a A a
+map b B b
+map x X x
+map y Y y
+map start S s
+map l K k
+map r N n
+map menu Q q

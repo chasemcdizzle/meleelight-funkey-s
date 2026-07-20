@@ -79,6 +79,30 @@
 //   foh_dev music: <out> out frames, <st> starves, <re> refills,
 //    ring=32768 chunk=16384   (counters SUMMED across the menu and
 //    match tracks — the channel restarts at the LAUNCH switch)
+//
+// KEYMAP SSOT (iter 95, review-93 H2): the logical-button → FLOW1
+// letter → device letter-keysym mapping is compiled ONCE here
+// (kKeymap) and emitted verbatim by `--dump-keymap`; the committed
+// frozen copy is port/foh/keymap-frozen.txt. The device check cmp's
+// the dump against the frozen file, sha-pins the file, asserts each
+// row against platform_sdl1.c's poll-table source lines, and
+// flow-to-fkscript.js consumes the SAME file at runtime — a
+// common-mode injector/backend swap now requires editing the pinned
+// frozen mapping.
+//
+// PRESENT WITNESS (iter 95, review-93 H1): `--fb-witness <path>`
+// (poll mode + shots only; linux/device builds) reads the KERNEL fb
+// page displayed after platform_present at every sampled shot and
+// byte-compares it (under the measured pixel transform) against the
+// SUBMITTED Raster.fb — a dead/no-op presenter now DIES IN-APP
+// instead of passing pre-present RAM shots. Witness rows flush to
+// <path> in the strict FBWIT1 grammar the check re-judges. HONEST
+// COVERAGE: the witness sees the kernel fb page, not the physical
+// panel; only FOH-phase shot presents are sampled — match-phase
+// (bridge verify/live) presents stay unwitnessed (task-14 note).
+// `--fb-witness-raw <dir>` is the measurement instrument (dumps
+// yoffset + all fb pages + the submitted buffer per shot, no
+// judgment) used to pin the transform/page policy on a new kernel.
 #include <inttypes.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -102,6 +126,42 @@
 #define ML_BOOT_DRAWS 465 // the qjs boot pin (oracle/qjs/replay.sh)
 
 void gfx_fatal(const char *what) { sim_fatal(what); }
+
+// --- keymap SSOT (iter 95, review-93 H2) --------------------------------------
+// THE compiled logical-button table: logical name (the PlatformInput
+// field), FLOW1 letter, device letter keysym. Emitted verbatim by
+// --dump-keymap; frozen committed copy: port/foh/keymap-frozen.txt.
+typedef struct {
+  const char *logical;
+  char flowLetter;
+  char keysym;
+} KeymapRow;
+
+#define KEYMAP_ROWS 12
+static const KeymapRow kKeymap[KEYMAP_ROWS] = {
+    {"up", 'U', 'u'},    {"down", 'D', 'd'}, {"left", 'L', 'l'},
+    {"right", 'R', 'r'}, {"a", 'A', 'a'},    {"b", 'B', 'b'},
+    {"x", 'X', 'x'},     {"y", 'Y', 'y'},    {"start", 'S', 's'},
+    {"l", 'K', 'k'},     {"r", 'N', 'n'},    {"menu", 'Q', 'q'},
+};
+
+static bool *keymap_field(PlatformInput *in, int idx) {
+  switch (idx) {
+    case 0: return &in->up;
+    case 1: return &in->down;
+    case 2: return &in->left;
+    case 3: return &in->right;
+    case 4: return &in->a;
+    case 5: return &in->b;
+    case 6: return &in->x;
+    case 7: return &in->y;
+    case 8: return &in->start;
+    case 9: return &in->l;
+    case 10: return &in->r;
+    case 11: return &in->menu;
+    default: sim_fatal("keymap_field: bad index"); return 0;
+  }
+}
 
 // --- flow script (FLOW1; foh_app.c loader duplicated verbatim) --------------
 
@@ -142,22 +202,14 @@ static PlatformInput parse_buttons(const char *path, int lineNo,
                              "no duplicates, or '-')");
     }
     seen[c - 'A'] = true;
-    switch (c) {
-      case 'U': in.up = true; break;
-      case 'D': in.down = true; break;
-      case 'L': in.left = true; break;
-      case 'R': in.right = true; break;
-      case 'A': in.a = true; break;
-      case 'B': in.b = true; break;
-      case 'X': in.x = true; break;
-      case 'Y': in.y = true; break;
-      case 'S': in.start = true; break;
-      case 'K': in.l = true; break;
-      case 'N': in.r = true; break;
-      case 'Q': in.menu = true; break;
-      default:
-        flow_die(path, lineNo, "bad button letter (UDLRABXYSKNQ only)");
+    int idx = -1;
+    for (int k = 0; k < KEYMAP_ROWS; k++) {
+      if (kKeymap[k].flowLetter == c) { idx = k; break; }
     }
+    if (idx < 0) {
+      flow_die(path, lineNo, "bad button letter (UDLRABXYSKNQ only)");
+    }
+    *keymap_field(&in, idx) = true;
   }
   return in;
 }
@@ -412,6 +464,239 @@ static void write_shot_ppm(const uint16_t *fb, const char *path) {
     if (fwrite(rgb, 1, 3, f) != 3) sim_fatal("shot ppm write failed");
   }
   if (fclose(f) != 0) sim_fatal("shot ppm close failed");
+}
+
+// --- present witness: kernel-fb page readback (iter 95, review-93 H1) ---------
+// The FunKey kernel fb is 240x720 = 3 flip pages of RAST_W x RAST_H
+// (CLAUDE.md envelope note). The device libSDL's SDL_Flip software-
+// blits the 240x240 surface into the fb; FBIOPAN_DISPLAY is REJECTED
+// by this kernel (.loop/m3-task4r52-probe-sdlflip.log), so the
+// displayed-page policy and the pixel transform were MEASURED with the
+// --fb-witness-raw instrument (iter-95 probe, .loop/m4-foh95-probe.log)
+// and are PINNED here; any envelope drift = loud death, never a guess.
+// MEASURED (iter-95 probe, .loop/m4-foh95-probe2.log + analysis in
+// AGENT-LOG iter 95): vinfo = 240x240 vyres=720 bpp=16 ll=480,
+// yoffset ALWAYS 0 (FBIOPAN_DISPLAY rejected — no panning), and
+// read() on /dev/fb0 exposes ONLY the visible page (offsets past
+// 115200 fail) whose bytes equal the submitted RGB565 buffer under
+// the IDENTITY transform — uniquely among the 8 dihedral candidates
+// (byte-exact vs the archived iter-93 startup frame).
+#define FBWIT_DEV_PATH "/dev/fb0"
+#define FBWIT_VYRES 720u // declared virtual height (measured; 3 pages)
+#define FBWIT_LL 480u    // line_length bytes (measured)
+// display (x,y) shows submitted pixel sub[fbwit_sub_index(x,y)]:
+//   0 identity · 1 rot180 · 2 rot90cw · 3 rot90ccw · 4 hflip ·
+//   5 vflip · 6 transpose · 7 anti-transpose
+#define FBWIT_XFORM 0 // measured: identity, unique match
+
+typedef struct {
+  char name[33];
+  long tick;
+  uint32_t yoff;
+} FbWitRow;
+
+static const char *g_fbwit_path; // judged witness output (FBWIT1)
+static const char *g_fbwit_raw;  // measurement dump dir (instrument)
+static FbWitRow g_fbwit_rows[FLOW_SHOT_CAP];
+static int g_nfbwit;
+
+#ifdef __linux__
+#include <fcntl.h>
+#include <linux/fb.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+
+static int g_fb_fd = -1;
+
+static void fbwit_open(void) {
+  g_fb_fd = open(FBWIT_DEV_PATH, O_RDONLY);
+  if (g_fb_fd < 0) sim_fatal("fb witness: cannot open " FBWIT_DEV_PATH);
+}
+
+static size_t fbwit_sub_index(int x, int y) {
+  switch (FBWIT_XFORM) {
+    case 0: return (size_t)y * RAST_W + (size_t)x;
+    case 1: return (size_t)(RAST_H - 1 - y) * RAST_W + (size_t)(RAST_W - 1 - x);
+    case 2: return (size_t)(RAST_H - 1 - x) * RAST_W + (size_t)y;
+    case 3: return (size_t)x * RAST_W + (size_t)(RAST_W - 1 - y);
+    case 4: return (size_t)y * RAST_W + (size_t)(RAST_W - 1 - x);
+    case 5: return (size_t)(RAST_H - 1 - y) * RAST_W + (size_t)x;
+    case 6: return (size_t)x * RAST_W + (size_t)y;
+    case 7: return (size_t)(RAST_H - 1 - x) * RAST_W + (size_t)(RAST_W - 1 - y);
+    default: sim_fatal("fb witness: bad transform pin"); return 0;
+  }
+}
+
+// pread that tolerates PARTIAL reads (measured iter-95 probe: this
+// kernel's fb driver returns short reads on large requests) — only a
+// zero/negative return is fatal (a true read failure, never silence)
+static void fbwit_pread_all(void *dst, size_t n, off_t off) {
+  uint8_t *p = dst;
+  while (n > 0) {
+    const ssize_t r = pread(g_fb_fd, p, n, off);
+    if (r <= 0) sim_fatal("fb witness: fb read failed");
+    p += (size_t)r;
+    off += (off_t)r;
+    n -= (size_t)r;
+  }
+}
+
+// read one RAST_W x RAST_H page starting at fb row `pageTop` (stride ll)
+static void fbwit_read_page(uint32_t pageTop, uint32_t ll, uint16_t *dst) {
+  if (ll == (uint32_t)RAST_W * 2) {
+    fbwit_pread_all(dst, (size_t)RAST_W * RAST_H * 2, (off_t)pageTop * ll);
+    return;
+  }
+  for (int y = 0; y < RAST_H; y++) {
+    fbwit_pread_all(dst + (size_t)y * RAST_W, (size_t)RAST_W * 2,
+                    (off_t)(pageTop + (uint32_t)y) * ll);
+  }
+}
+
+static void fbwit_raw_dump(const char *name, const char *kind, int idx,
+                           const void *buf, size_t n) {
+  char p[640];
+  if (snprintf(p, sizeof p, "%s/%s.%s%d.bin", g_fbwit_raw, name, kind, idx) >=
+      (int)sizeof p) {
+    sim_fatal("fb witness: raw path overflow");
+  }
+  FILE *f = fopen(p, "wb");
+  if (!f) sim_fatal("fb witness: cannot open raw dump");
+  if (fwrite(buf, 1, n, f) != n) sim_fatal("fb witness: raw dump write failed");
+  if (fclose(f) != 0) sim_fatal("fb witness: raw dump close failed");
+}
+
+static void fbwit_sample(const char *name, const uint16_t *sub, long tick) {
+  struct fb_var_screeninfo vi;
+  struct fb_fix_screeninfo fi;
+  static uint16_t page[RAST_W * RAST_H];
+  if (ioctl(g_fb_fd, FBIOGET_VSCREENINFO, &vi) != 0) {
+    sim_fatal("fb witness: FBIOGET_VSCREENINFO failed");
+  }
+  if (ioctl(g_fb_fd, FBIOGET_FSCREENINFO, &fi) != 0) {
+    sim_fatal("fb witness: FBIOGET_FSCREENINFO failed");
+  }
+  if (g_fbwit_raw) {
+    // measurement instrument: record the envelope + EVERY page + the
+    // submitted buffer; no judgment here (host analysis pins the
+    // transform/page policy from these dumps).
+    char p[640];
+    if (snprintf(p, sizeof p, "%s/vinfo.txt", g_fbwit_raw) >= (int)sizeof p) {
+      sim_fatal("fb witness: raw path overflow");
+    }
+    FILE *f = fopen(p, "a");
+    if (!f) sim_fatal("fb witness: cannot open vinfo.txt");
+    if (fprintf(f,
+                "shot=%s tick=%ld xres=%u yres=%u vyres=%u bpp=%u yoffset=%u "
+                "xoffset=%u ll=%u\n",
+                name, tick, vi.xres, vi.yres, vi.yres_virtual,
+                vi.bits_per_pixel, vi.yoffset, vi.xoffset, fi.line_length) < 0) {
+      sim_fatal("fb witness: vinfo write failed");
+    }
+    if (fclose(f) != 0) sim_fatal("fb witness: vinfo close failed");
+    // sub FIRST (survives even if page reads fail), then every page
+    // this kernel lets us read — measured: reads past the visible
+    // page fail on this kernel; the instrument records what it can
+    // instead of dying (it is diagnostic, never a judge).
+    fbwit_raw_dump(name, "sub", 0, sub, (size_t)RAST_W * RAST_H * 2);
+    uint32_t npages = vi.yres_virtual / RAST_H;
+    if (npages > 4) npages = 4;
+    for (uint32_t k = 0; k < npages; k++) {
+      bool ok = true;
+      for (int y = 0; y < RAST_H && ok; y++) {
+        uint8_t *p = (uint8_t *)(page + (size_t)y * RAST_W);
+        size_t nleft = (size_t)RAST_W * 2;
+        off_t off = (off_t)(k * RAST_H + (uint32_t)y) * fi.line_length;
+        while (nleft > 0) {
+          const ssize_t r = pread(g_fb_fd, p, nleft, off);
+          if (r <= 0) { ok = false; break; }
+          p += (size_t)r;
+          off += (off_t)r;
+          nleft -= (size_t)r;
+        }
+      }
+      if (ok) {
+        fbwit_raw_dump(name, "page", (int)k, page, sizeof page);
+      } else {
+        fprintf(stderr, "foh_dev: fb witness raw: page %u unreadable on "
+                        "this kernel (recorded)\n", k);
+      }
+    }
+  }
+  if (!g_fbwit_path) return;
+  // judged mode: pinned envelope, displayed page from yoffset,
+  // transform compare — mismatch is an IN-APP death (a dead/no-op
+  // presenter must never pass).
+  if (vi.xres != (uint32_t)RAST_W || vi.yres != (uint32_t)RAST_H ||
+      vi.bits_per_pixel != 16 || vi.yres_virtual != FBWIT_VYRES ||
+      fi.line_length != FBWIT_LL) {
+    sim_fatal("fb witness: fb envelope differs from the measured pins");
+  }
+  if (vi.yoffset % (uint32_t)RAST_H != 0 || vi.yoffset >= FBWIT_VYRES) {
+    sim_fatal("fb witness: yoffset is not a page boundary");
+  }
+  fbwit_read_page(vi.yoffset, FBWIT_LL, page);
+  for (int y = 0; y < RAST_H; y++) {
+    for (int x = 0; x < RAST_W; x++) {
+      if (page[(size_t)y * RAST_W + (size_t)x] != sub[fbwit_sub_index(x, y)]) {
+        // best-effort diagnostic dump (we are about to die loudly)
+        char p[640];
+        if (snprintf(p, sizeof p, "%s.fail", g_fbwit_path) < (int)sizeof p) {
+          FILE *f = fopen(p, "wb");
+          if (f) {
+            fwrite(page, 2, (size_t)RAST_W * RAST_H, f);
+            fwrite(sub, 2, (size_t)RAST_W * RAST_H, f);
+            fclose(f);
+          }
+        }
+        fprintf(stderr,
+                "foh_dev: fb witness MISMATCH shot=%s tick=%ld yoff=%u at "
+                "(%d,%d)\n",
+                name, tick, vi.yoffset, x, y);
+        sim_fatal("fb witness: displayed fb page != submitted frame "
+                  "(dead/no-op presenter?)");
+      }
+    }
+  }
+  if (g_nfbwit >= FLOW_SHOT_CAP) sim_fatal("fb witness: row overflow");
+  strcpy(g_fbwit_rows[g_nfbwit].name, name);
+  g_fbwit_rows[g_nfbwit].tick = tick;
+  g_fbwit_rows[g_nfbwit].yoff = vi.yoffset;
+  g_nfbwit++;
+}
+#else
+static void fbwit_open(void) {
+  sim_fatal("--fb-witness/--fb-witness-raw require the linux kernel fb "
+            "(device build)");
+}
+static void fbwit_sample(const char *name, const uint16_t *sub, long tick) {
+  (void)name;
+  (void)sub;
+  (void)tick;
+  sim_fatal("fb witness sampled on a non-linux build (unreachable)");
+}
+#endif
+
+// witness rows flush (strict FBWIT1 grammar; the check re-judges it)
+static void fbwit_flush(const char *flowId) {
+  if (!g_fbwit_path) return;
+  FILE *f = fopen(g_fbwit_path, "w");
+  if (!f) sim_fatal("cannot open --fb-witness for writing");
+  if (fprintf(f, "FBWIT1 flow=%s xform=%d ll=%u vyres=%u\n", flowId,
+              (int)FBWIT_XFORM, (unsigned)FBWIT_LL, (unsigned)FBWIT_VYRES) <
+      0) {
+    sim_fatal("--fb-witness write failed");
+  }
+  for (int k = 0; k < g_nfbwit; k++) {
+    if (fprintf(f, "W %ld %s yoff=%u eq=1\n", g_fbwit_rows[k].tick,
+                g_fbwit_rows[k].name, g_fbwit_rows[k].yoff) < 0) {
+      sim_fatal("--fb-witness write failed");
+    }
+  }
+  if (fprintf(f, "END shots=%d\n", g_nfbwit) < 0) {
+    sim_fatal("--fb-witness write failed");
+  }
+  if (fclose(f) != 0) sim_fatal("--fb-witness close/flush failed");
 }
 
 // --- live-session input recording (gfx_app.c:381-431 duplicated verbatim) -----
@@ -761,6 +1046,17 @@ static void shot_capture(const char *name, const uint16_t *fb, long tick) {
 // --- main --------------------------------------------------------------------------
 
 int main(int argc, char **argv) {
+  // keymap SSOT dump arm (iter 95, review-93 H2): byte-exact against
+  // port/foh/keymap-frozen.txt (the check cmp's it every run).
+  if (argc == 2 && strcmp(argv[1], "--dump-keymap") == 0) {
+    printf("KEYMAP1\n");
+    for (int k = 0; k < KEYMAP_ROWS; k++) {
+      printf("map %s %c %c\n", kKeymap[k].logical, kKeymap[k].flowLetter,
+             kKeymap[k].keysym);
+    }
+    if (fflush(stdout) != 0) sim_fatal("--dump-keymap flush failed");
+    return 0;
+  }
   const char *flowPath = 0, *inputMode = 0, *flowOut = 0, *shotsDir = 0;
   const char *readyPath = 0, *bridge = 0;
   const char *simdataPath = 0, *bstateOut = 0;
@@ -800,6 +1096,8 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--music-manifest") == 0 && hasV) musicManifest = argv[++i];
     else if (strcmp(a, "--record-trace") == 0 && hasV) recordPath = argv[++i];
     else if (strcmp(a, "--record-keys") == 0 && hasV) keysPath = argv[++i];
+    else if (strcmp(a, "--fb-witness") == 0 && hasV) g_fbwit_path = argv[++i];
+    else if (strcmp(a, "--fb-witness-raw") == 0 && hasV) g_fbwit_raw = argv[++i];
     else if (strcmp(a, "--pace") == 0 && hasV) pace = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--budget-ns") == 0 && hasV) budgetNs = strtoull(argv[++i], 0, 10);
     else if (strcmp(a, "--cpu-live") == 0) cpuLive = true;
@@ -841,6 +1139,8 @@ int main(int argc, char **argv) {
       (pace != 0 && pace != 1) || budgetNs == 0 ||
       (audioSamplesGiven && !sndpackPath) ||
       audioSamples <= 0 || audioSamples > 65535 ||
+      // the present witness samples SHOTS on the DEVICE input path only
+      ((g_fbwit_path || g_fbwit_raw) && (!inPoll || !shotsDir)) ||
       (musicManifest && !sndpackPath)) {
     fprintf(stderr,
             "usage: foh_dev --flow f.flow --input flow|poll --flow-out t.txt"
@@ -853,7 +1153,8 @@ int main(int argc, char **argv) {
             " [--cpu-live]]"
             " [live: --frames N --record-trace t.json --record-keys k.txt"
             " --gfxdata ... [--legible] [--tapjump-off-p1]]"
-            " [--sndpack p [--audio-samples N]] [--music-manifest m.txt]\n");
+            " [--sndpack p [--audio-samples N]] [--music-manifest m.txt]"
+            " [--fb-witness w.txt [--fb-witness-raw D]] | --dump-keymap\n");
     return 1;
   }
   if (frames > 1000000L) sim_fatal("foh_dev: --frames exceeds the buffer cap");
@@ -906,6 +1207,7 @@ int main(int argc, char **argv) {
   if (platform_init("meleelight-foh") != 0) {
     sim_fatal("platform_init failed");
   }
+  if (g_fbwit_path || g_fbwit_raw) fbwit_open();
 
   g_have_audio = sndpackPath != 0;
   g_have_music = musicManifest != 0;
@@ -1044,13 +1346,18 @@ int main(int argc, char **argv) {
     }
     if (shotDue) {
       if (inPoll) {
+        const char *shotName;
         if (qEdge) {
-          shot_capture(g_shots[markerIdx].name, g_rz.fb, t);
+          shotName = g_shots[markerIdx].name;
           markerIdx++;
         } else {
-          shot_capture(g_shots[shotIdx].name, g_rz.fb, t);
+          shotName = g_shots[shotIdx].name;
           shotIdx++;
         }
+        shot_capture(shotName, g_rz.fb, t);
+        // present witness: the shot forced render+present this tick —
+        // verify the DISPLAYED kernel-fb page carries this frame
+        if (g_fbwit_path || g_fbwit_raw) fbwit_sample(shotName, g_rz.fb, t);
       } else {
         // flow mode may have several SHOT rows on one tick frame? the
         // loader enforces strictly increasing frames — exactly one.
@@ -1087,6 +1394,7 @@ int main(int argc, char **argv) {
       write_shot_ppm(g_shotbuf[k].fb, path);
     }
   }
+  fbwit_flush(flowId);
 
   long matchSkips = 0, matchPresentFails = 0;
   uint64_t matchWallMs = 0;

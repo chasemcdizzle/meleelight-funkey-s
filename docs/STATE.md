@@ -3,7 +3,49 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 94 — M4 task 11 DONE: target test data + sim plane, host; cold check green first attempt)
+## Live right now (updated: 2026-07-20, iter 95 — M4 hardening DONE: device-FOH round-1 closure, all review-93 dispositions shipped; cold check green first attempt)
+
+- **Iter 95 (M4 hardening — device-FOH round-1 closure, review-93
+  triage H1/H2/M1/M2/M3/M4/L ALL closed) DONE** (full entry:
+  AGENT-LOG iter 95 pre-registration + result; latest AGENT-LOG id:
+  iter 95). COLD, FIRST attempt: **`DEVICE FOH OK (flows=5 shots=13
+  bridge=1 states=3 opk=evidence fbwit=15 p99=13.754ms skips=0
+  underruns=0 starves=0 starts f01-vs-g01=281 f02-cpu-m01=16
+  f03-options=23 f04-nav=39 f05-vs-g03=14 teeth=12)`** exit 0
+  (.loop/m4-foh95-donecheck.log). **H1**: present witness form (a)
+  LANDED — foh_dev --fb-witness reads the DISPLAYED kernel-fb page
+  post-present per sampled shot (measured pins: identity transform
+  unique, ll=480, vyres=720, yoffset always 0, visible page only
+  readable — probe .loop/m4-foh95-probe2.log); a dead presenter now
+  dies in-app; 15/15 shots witnessed. **H2**: keymap SSOT
+  port/foh/keymap-frozen.txt (sha-pinned; consumed by
+  flow-to-fkscript, emitted by foh_dev --dump-keymap byte-exactly,
+  asserted against platform_sdl1.c's poll table) + permanent DEVICE
+  tooth: A<->B-swapped injector mapping through the REAL uinput->SDL
+  chain DIES at the judge. **M1**: bounded-delta trace judgment
+  (measured-then-frozen: ID 2 / anchor 40..240 / dev -90..+30) on all
+  5 legs — mid-run stalls no longer normalize away (fresh anchors
+  76-91). **M2**: foh-args sentinel removed + absence-verified
+  pre-verdict, trap-covered. **M3**: opk=evidence (task-14 deferral
+  named). **M4**: ordered 23-key timing whitelist + prefix-resemblance
+  death on all four summary parsers (corpus: zero false rejections).
+  **L**: PORTABILITY rows (check, fb pins, keymap, cadence bounds).
+  check-foh-flows.sh: mechanical skip-proof
+  (.loop/m4-foh95-fohflows-skip.txt — zero shared surfaces). Run
+  ledger: probe x2 (attempt 1 aborted by an instrument partial-read
+  defect, fixed) + cold check x1; arm rebuilds 3 vs planned 2
+  (overrun recorded, cause mechanical). Device left clean (verified).
+  **Driver next: review-93 ROUND 2 over the iter-95 diff
+  (check-device-foh.sh, foh_dev.c, flow-to-fkscript.js,
+  normalize-foh-trace.js, keymap-frozen.txt, PORTABILITY delta);
+  registered task-14 notes: render-rung witness inheritance,
+  match-phase witness, frontend-nav + live-branch exercise. Then
+  task 12 (target test FOH + device) after the iter-94 target arc.**
+- **Remaining to gate**: 12 (target test FOH+device), 13 (SD persist),
+  14 (verify_m4.sh) -> M4 GATE -> provision device -> LOOP STOP:
+  m4-complete -> Chase acceptance playthrough.
+
+## [superseded by iter 95] (2026-07-19, iter 94 — M4 task 11 DONE: target test data + sim plane, host; cold check green first attempt)
 
 - **Iter 94 (M4 task 11 — target test, data + sim plane, host) DONE**
   (full entry: AGENT-LOG iter 94 pre-registration + result; latest

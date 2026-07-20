@@ -14,16 +14,37 @@
 # the host twin's flow-fed PlatformInput construction never runs on the
 # device.
 #
-# JUDGMENT FORMS (pre-registered, AGENT-LOG iter 93):
+# JUDGMENT FORMS (pre-registered, AGENT-LOG iter 93; hardened iter 95
+# per the review-93 triage — H1/H2/M1/M2/M3/M4 all closed here):
 #  - device traces: judge-foh-trace.js grammar (frame-agnostic) +
 #    NORMALIZED-SEQUENCE byte-equality vs the frozen .expect
-#    (normalize-foh-trace.js = frame-field elision ONLY; wall-clock
-#    injection cannot be frame-exact; every structural fact — edges,
+#    (normalize-foh-trace.js elision; every structural fact — edges,
 #    causes, S values, LAUNCH params, shot names/order, transitions
-#    count — is byte-compared; frozen bytes untouched);
+#    count — is byte-compared; frozen bytes untouched) PLUS the
+#    BOUNDED-DELTA judgment (iter 95, review-93 M1): per-event device
+#    ticks vs the flow's injection cadence under measured-then-frozen
+#    bounds — a multi-second mid-run stall no longer normalizes away;
 #  - device shots: BYTE-EXACT vs host twin references (the task-3/
 #    iter-74 device-render bit-identity class; tick-indexed shots at
-#    identical ticks, q-marker shots at settled identical state);
+#    identical ticks, q-marker shots at settled identical state) PLUS
+#    the PRESENT WITNESS (iter 95, review-93 H1): foh_dev's
+#    --fb-witness reads the DISPLAYED kernel-fb page post-present at
+#    every sampled shot and dies in-app unless it byte-matches the
+#    submitted frame (measured page-policy/transform pins) — a
+#    dead/no-op presenter can no longer pass on pre-present RAM shots;
+#    witness rows re-judged here (strict FBWIT1 grammar, names in
+#    order, count pinned). HONEST COVERAGE: the witness sees the
+#    kernel fb page, not the physical panel, and samples FOH-phase
+#    shot presents only — match-phase presents stay unwitnessed
+#    (task-14 note; the render rung inherits the class at task 14);
+#  - keymap SSOT (iter 95, review-93 H2): port/foh/keymap-frozen.txt
+#    (sha-pinned) is THE logical-button→letter-keysym source of truth —
+#    flow-to-fkscript.js consumes it at runtime, foh_dev --dump-keymap
+#    must emit it byte-exactly, platform_sdl1.c's poll-table source
+#    lines are asserted against it row-by-row, and ONE permanent
+#    DEVICE tooth drives an A<->B-swapped injector mapping through the
+#    REAL uinput→SDL→platform_poll chain and requires the judge to DIE
+#    on the device trace;
 #  - f01 launch bridge: the FOH-launched match replays g01's trace on
 #    device with LIVE render + SFX + MUSIC, FULL 3600-frame stream
 #    judged by the UNCHANGED wrap-run.js + verify-stream.js vs the
@@ -40,10 +61,16 @@
 #    mlfk-foh.sh runs foh_device FROM THE MOUNT (boot marker bin sha ==
 #    the arm-build stamp record — the launcher enters the FOH, not the
 #    direct-match path), bounded no-input evidence run judged vs a
-#    constructed startup->title expectation + tick shots byte-exact.
-#    FRONTEND-NAV launch stays task 14's gate leg (iter-73 registered
-#    stale-nav note); the evidence OPK lives under the UNIQUE title
-#    "MeleeLight FOH" and is REMOVED at cleanup — the play install
+#    constructed startup->title expectation + tick shots byte-exact +
+#    the present witness on both shots. The verdict token is
+#    `opk=evidence` (iter 95, review-93 M3): this leg proves ONLY the
+#    mount-and-run evidence path — FRONTEND-NAV discovery/launch AND
+#    the mlfk-foh.sh live branch are task 14's gate leg (iter-73
+#    registered stale-nav note), NOT proven here. The evidence-mode
+#    sentinel $DSD/foh-args is explicitly removed + absence-verified
+#    BEFORE the verdict (iter 95, review-93 M2; trap-covered too). The
+#    evidence OPK lives under the UNIQUE title "MeleeLight FOH" and is
+#    REMOVED at cleanup — the play install
 #    /mnt/Applications/meleelight.opk is never touched.
 #
 # Rig plumbing INHERITED from port/sim/device/riglib.sh (lock, nonce
@@ -82,7 +109,13 @@ WALL_MAX_MS=66000
 QW_PRE_SLACK_S=10
 QW_POST_SLACK_S=10
 READY_TRIES=30
-DEADMAN_S="${MLFK_DEADMAN_S:-900}" # whole device phase (6 legs) backstop
+DEADMAN_S="${MLFK_DEADMAN_S:-900}" # whole device phase (7 legs) backstop
+# present-witness envelope pins (measured, iter-95 probe
+# .loop/m4-foh95-probe.log; must equal foh_dev.c's FBWIT_* pins — the
+# FBWIT1 header carries them and is judged byte-anchored below)
+FBWIT_XFORM_PIN=0
+FBWIT_LL_PIN=480
+FBWIT_VYRES_PIN=720
 
 # --- committed-input + producer pins ------------------------------------------
 # Producer byte pins (the check-foh-flows.sh discipline: a producer
@@ -94,8 +127,9 @@ f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
 453f49a250358d77ca9846909e5a20eba75ca9ed159ff5ce877bef802985a344 port/foh/judge-foh-trace.js
-e034539d69e1f55338e87f89c8c6573410c40a5bcd8dbc91066751f60c9c9fd4 port/gfx/judge-render-timing.js"
-N_PINS_WANT=6
+e034539d69e1f55338e87f89c8c6573410c40a5bcd8dbc91066751f60c9c9fd4 port/gfx/judge-render-timing.js
+2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e port/foh/keymap-frozen.txt"
+N_PINS_WANT=7
 # Audio artifact pins: sndpack + battlefield.pcm are TWIN-PINNED to the
 # reviewed literals in the sibling checks (asserted below via
 # rig_pin_assert_once — drift at either site is a loud death);
@@ -133,6 +167,11 @@ cleanup() {
   # our own processes first (kill is idempotent; rc-tolerant)
   rig_dsh_retry "pkill foh_device; pkill fk_input; true" \
     || echo "WARN: could not pkill foh_device/fk_input on the device" >&2
+  # evidence-mode sentinel (review-93 M2): best-effort trap-side removal
+  # (the success path removes + absence-verifies it BEFORE the verdict;
+  # rig_cleanup's $DSD wipe is the last backstop)
+  rig_dsh_retry "rm -f $DSD/foh-args" \
+    || echo "WARN: could not remove the evidence sentinel $DSD/foh-args" >&2
   if [ "$OPK_MOUNTED" = 1 ]; then
     rig_dsh_retry "umount $DTMP/opkmnt" \
       || echo "WARN: could not umount the evidence OPK at $DTMP/opkmnt" >&2
@@ -488,10 +527,71 @@ cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/foh_dev_headless" \
 made "$BUILD/foh_dev_headless"
 echo "   host twin built (raster -O3, all else -O2; -ffp-contract=off everywhere)"
 
+# --- keymap SSOT asserts (iter 95, review-93 H2) --------------------------------
+# (1) the COMPILED table == the frozen file, byte-exact
+rm -f "$BUILD/keymap-dump.txt"
+"$BUILD/foh_dev_headless" --dump-keymap > "$BUILD/keymap-dump.txt" \
+  || fail "foh_dev --dump-keymap failed"
+made "$BUILD/keymap-dump.txt"
+cmp "$BUILD/keymap-dump.txt" "$FOH/keymap-frozen.txt" \
+  || fail "foh_dev's compiled keymap != the frozen keymap-frozen.txt (SSOT drift)"
+# (2) platform_sdl1.c's poll table == the frozen file, row-by-row
+# (source-level assert; platform_sdl1.c is READ, never edited — its
+# bytes already feed the arm-build stamp, so source == shipped binary)
+n_kmap=0
+while IFS= read -r kln; do
+  [ "$kln" = "KEYMAP1" ] && continue
+  if ! [[ "$kln" =~ ^map\ ([a-z]+)\ [A-Z]\ ([a-z])$ ]]; then
+    fail "keymap-frozen.txt line fails the KEYMAP1 grammar: '$kln'"
+  fi
+  klogical="${BASH_REMATCH[1]}"
+  ksym="${BASH_REMATCH[2]}"
+  c="$(grep -cF "in->${klogical} = k[SDLK_${ksym}] != 0;" "$GFX/platform_sdl1.c")" || true
+  [ "$c" = 1 ] || fail "platform_sdl1.c poll table: 'in->${klogical} = k[SDLK_${ksym}]' occurs $c times (want exactly 1 — keymap SSOT drift)"
+  n_kmap=$((n_kmap + 1))
+done < "$FOH/keymap-frozen.txt"
+[ "$n_kmap" = 12 ] || fail "keymap-frozen.txt carries $n_kmap map rows (want 12)"
+c="$(grep -c "k\[SDLK_" "$GFX/platform_sdl1.c")" || true
+[ "$c" = 12 ] || fail "platform_sdl1.c carries $c k[SDLK_...] poll lines (want exactly 12 — an extra mapping line would escape the row asserts)"
+echo "   keymap SSOT OK (dump == frozen file; platform_sdl1 poll table == frozen file, 12/12)"
+
+# device fb-witness judge (strict FBWIT1 grammar; foh_dev.c dies in-app
+# on any mismatch — this re-judges the pulled rows fail-closed)
+judge_fbwit() { # <file> <flow-id> <shot-names...>
+  local wf="$1" fid="$2"
+  shift 2
+  local want=("$@") nw=${#want[@]} i=0 ln
+  made "$wf"
+  local nlines
+  nlines="$(grep -c "" "$wf")" || fail "fbwit $fid: cannot count lines"
+  [ "$nlines" = "$((nw + 2))" ] || grammar_die "fbwit $fid: $nlines lines (want $((nw + 2)))"
+  while IFS= read -r ln; do
+    if [ "$i" = 0 ]; then
+      [ "$ln" = "FBWIT1 flow=$fid xform=$FBWIT_XFORM_PIN ll=$FBWIT_LL_PIN vyres=$FBWIT_VYRES_PIN" ] \
+        || grammar_die "fbwit $fid: header '$ln' != pinned envelope"
+    elif [ "$i" -le "$nw" ]; then
+      if ! [[ "$ln" =~ ^W\ [0-9]{1,7}\ ([a-z0-9-]{1,32})\ yoff=(0|240|480)\ eq=1$ ]]; then
+        grammar_die "fbwit $fid: row $i fails the FBWIT1 grammar: '$ln'"
+      fi
+      [ "${BASH_REMATCH[1]}" = "${want[$((i - 1))]}" ] \
+        || grammar_die "fbwit $fid: row $i shot '${BASH_REMATCH[1]}' != expected '${want[$((i - 1))]}'"
+    else
+      [ "$ln" = "END shots=$nw" ] \
+        || grammar_die "fbwit $fid: trailer '$ln' != 'END shots=$nw'"
+    fi
+    i=$((i + 1))
+  done < "$wf"
+}
+
 # foh_dev summary parsers (whitelist grammars — foh_dev.c fprintf sites)
 parse_foh_summary() { # <log> <launched 0|1> <want-shots>
-  local log="$1" launched="$2" wshots="$3" re cnt line
+  local log="$1" launched="$2" wshots="$3" re cnt line pcnt
   unset foh_skips foh_fails foh_transitions
+  # resemblance = corruption (iter 95, review-93 M4 — the iter-86
+  # class): the PREFIX count must be exactly 1, so a foreign or
+  # malformed 'foh_dev foh:' line is death, never silence
+  pcnt="$(grep -c '^foh_dev foh:' "$log")" || true
+  [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt 'foh_dev foh:' lines (want exactly 1 — resemblance is corruption)"
   re="^foh_dev foh: [0-9]{1,12} ticks, [0-9]{1,12} transitions, ${wshots} shots, [0-9]{1,12} render skips, [0-9]{1,12} failed presents, launched=${launched}\$"
   cnt="$(grep -cE "$re" "$log")" || true
   [ "$cnt" = 1 ] || grammar_die "app log $log has $cnt lines matching the pinned foh-summary grammar (want 1: shots=$wshots launched=$launched)"
@@ -505,8 +605,10 @@ parse_foh_summary() { # <log> <launched 0|1> <want-shots>
   fi
 }
 parse_match_summary() { # <log> <frames> <pace>
-  local log="$1" fr="$2" pace="$3" re cnt line
+  local log="$1" fr="$2" pace="$3" re cnt line pcnt
   unset match_skips match_fails match_wall_ms
+  pcnt="$(grep -c '^foh_dev match:' "$log")" || true
+  [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt 'foh_dev match:' lines (want exactly 1 — resemblance is corruption)"
   re="^foh_dev match: ${fr} frames, [0-9]{1,12} render skips, [0-9]{1,12} failed presents, wall [0-9]{1,12} ms, pace=${pace} budget=${BUDGET_NS} ns\$"
   cnt="$(grep -cE "$re" "$log")" || true
   [ "$cnt" = 1 ] || grammar_die "app log $log has $cnt lines matching the pinned match-summary grammar (want 1)"
@@ -520,8 +622,10 @@ parse_match_summary() { # <log> <frames> <pace>
   fi
 }
 parse_audio_summary() { # <log>
-  local log="$1" re cnt line
+  local log="$1" re cnt line pcnt
   unset au_underruns au_badlen au_starts au_stops
+  pcnt="$(grep -c '^foh_dev audio:' "$log")" || true
+  [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt 'foh_dev audio:' lines (want exactly 1 — resemblance is corruption)"
   re='^foh_dev audio: [0-9]{1,12} callbacks, [0-9]{1,12} underruns, [0-9]{1,12} badlen, [0-9]{1,12} voice starts, [0-9]{1,12} voice stops, [0-9]{1,12} steals, rate=(0|44100) samples=(0|512) channels=(0|2)$'
   cnt="$(grep -cE "$re" "$log")" || true
   [ "$cnt" = 1 ] || grammar_die "app log $log has $cnt lines matching the pinned audio-summary grammar (want 1)"
@@ -536,8 +640,10 @@ parse_audio_summary() { # <log>
   fi
 }
 parse_music_summary() { # <log>
-  local log="$1" re cnt line
+  local log="$1" re cnt line pcnt
   unset mu_out mu_starves mu_refills
+  pcnt="$(grep -c '^foh_dev music:' "$log")" || true
+  [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt 'foh_dev music:' lines (want exactly 1 — resemblance is corruption)"
   re='^foh_dev music: [0-9]{1,19} out frames, [0-9]{1,12} starves, [0-9]{1,12} refills, ring=32768 chunk=16384$'
   cnt="$(grep -cE "$re" "$log")" || true
   [ "$cnt" = 1 ] || grammar_die "app log $log has $cnt lines matching the pinned music-summary grammar (want 1)"
@@ -873,6 +979,7 @@ echo "   deadman armed (${DEADMAN_S}s window) + frontend parked for the device p
 # --- [7] device flow legs (the M3-binding legs) ----------------------------------
 echo "== [7/9] device flow legs: fk_input -> uinput -> SDL keysyms -> platform_poll =="
 DEV_STARTS=""
+FBWIT_TOTAL=0
 for k in 0 1 2 3 4; do
   id="${FLOW_IDS[$k]}"
   mode="${FLOW_BRIDGE[$k]}"
@@ -886,6 +993,7 @@ for k in 0 1 2 3 4; do
   args="--flow $DTMP/$id.flow --input poll --flow-out $DTMP/$id.trace.txt"
   args="$args --shots-dir $DTMP/$id-shots --ready-file $DTMP/$id.ready"
   args="$args --foh-max $fohmax --pace 1 --budget-ns $BUDGET_NS"
+  args="$args --fb-witness $DTMP/$id.fbwit.txt"
   args="$args --sndpack $DSD/sndpack.bin --music-manifest $DTMP/foh-music-dev.txt"
   case "$mode" in
     verify)
@@ -993,6 +1101,12 @@ EOF
   norm "$FLOWS/$id.expect" "$BUILD/$id.norm.expect"
   cmp "$BUILD/$id.dev-trace.norm" "$BUILD/$id.norm.expect" \
     || fail "leg $id: DEVICE trace (normalized) != frozen $FLOWS/$id.expect (normalized) — the real keysym path diverged from the committed flow"
+  # BOUNDED-DELTA judgment (iter 95, review-93 M1): per-event device
+  # ticks vs the flow's injection cadence, measured-then-frozen bounds
+  # — a multi-second mid-run stall no longer normalizes away
+  node "$FOH/normalize-foh-trace.js" --bounded "$FLOWS/$id.expect" \
+    "$BUILD/$id.dev-trace.txt" "$FLOWS/$id.flow" "$fohmax" \
+    || fail "leg $id: BOUNDED-DELTA judgment failed (mid-run stall or injection-cadence defect)"
   # shots: exact count + byte-exact vs the twin references
   nshots_want="$(printf '%s\n' ${FLOW_SHOTS[$k]} | wc -l | tr -d ' ')"
   ndev="$(dsh "ls $DTMP/$id-shots | wc -l")" || fail "leg $id: cannot enumerate device shots"
@@ -1005,6 +1119,12 @@ EOF
     judge_dev_shot "$id/$sname" "$BUILD/$id.dev-shot-$sname.ppm" \
       "$BUILD/twin-$id-a/shots/$sname.ppm"
   done
+  # present witness (iter 95, review-93 H1): the app died in-app on any
+  # displayed-page mismatch; re-judge the pulled rows fail-closed
+  pullv "$DTMP/$id.fbwit.txt" "$BUILD/$id.fbwit.txt"
+  # shellcheck disable=SC2086 — FLOW_SHOTS is a space-joined name list
+  judge_fbwit "$BUILD/$id.fbwit.txt" "$id" ${FLOW_SHOTS[$k]}
+  FBWIT_TOTAL=$((FBWIT_TOTAL + nshots_want))
   # summaries: skips==0, presentFails==0 on the paced FOH phase; audio
   # underruns/badlen==0; starts/stops == the twin's; music starves==0
   parse_foh_summary "$BUILD/$id.dev-applog.txt" "${FLOW_LAUNCH[$k]}" "$nshots_want"
@@ -1051,25 +1171,41 @@ node "$GFX/judge-render-timing.js" "$BUILD/f01-vs-g01.dev-tim.txt" "$frames" \
   > "$BUILD/timjudge-out.txt" || fail "timing judgment failed"
 made "$BUILD/timjudge-out.txt"
 timing_judge_bytes_assert "$BUILD/timjudge-out.txt"
-jout="$(cat "$BUILD/timjudge-out.txt")"
-dup="$(printf '%s\n' "$jout" | awk -F= '{print $1}' | sort | uniq -d)"
-[ -z "$dup" ] || fail "timing judge output carries duplicate key(s): $dup"
+# ORDERED FULL WHITELIST (iter 95, review-93 M4 — the iter-86 class):
+# exactly the pinned judge-render-timing.js emission — every key in
+# order, each exactly once, every value grammar-validated; any extra,
+# missing, reordered, or malformed line is death, never silence.
+TIMING_KEYS=(full_p50_ns full_p50_ms full_p99_ns full_p99_ms
+  full_max_ns full_max_ms sim_p50_ns sim_p50_ms sim_p99_ns sim_p99_ms
+  render_p50_ns render_p50_ms render_p99_ns render_p99_ms
+  render_max_ns render_max_ms present_p50_ns present_p50_ms
+  present_p99_ns present_p99_ms skips rendered judge_complete)
 unset full_p99_ns full_p99_ms skips rendered
-while IFS='=' read -r jk jv; do
+ji=0
+while IFS= read -r jline; do
+  [ "$ji" -lt "${#TIMING_KEYS[@]}" ] \
+    || fail "timing judge output has more than ${#TIMING_KEYS[@]} lines"
+  jk="${TIMING_KEYS[$ji]}"
+  case "$jline" in
+    "$jk="*) : ;;
+    *) fail "timing judge line $((ji + 1)) is '$jline' (want key '$jk' — ordered whitelist)" ;;
+  esac
+  jv="${jline#"$jk="}"
   case "$jk" in
-    full_p99_ns|skips|rendered)
-      [[ "$jv" =~ ^[0-9]{1,12}$ ]] || fail "timing judge $jk grammar ('$jv')"
-      printf -v "$jk" '%s' "$jv" ;;
-    full_p99_ms)
-      [[ "$jv" =~ ^[0-9]{1,9}\.[0-9]{3}$ ]] || fail "timing judge $jk grammar ('$jv')"
-      full_p99_ms="$jv" ;;
     judge_complete)
       [ "$jv" = 1 ] || fail "judge_complete value ('$jv')" ;;
-    full_p50_ns|full_p50_ms|full_max_ns|full_max_ms|sim_p50_ns|sim_p50_ms|sim_p99_ns|sim_p99_ms|render_p50_ns|render_p50_ms|render_p99_ns|render_p99_ms|render_max_ns|render_max_ms|present_p50_ns|present_p50_ms|present_p99_ns|present_p99_ms)
-      : ;;
-    *) fail "unexpected timing judge line '$jk=$jv'" ;;
+    *_ms)
+      [[ "$jv" =~ ^[0-9]{1,9}\.[0-9]{3}$ ]] || fail "timing judge $jk grammar ('$jv')" ;;
+    *)
+      [[ "$jv" =~ ^[0-9]{1,12}$ ]] || fail "timing judge $jk grammar ('$jv')" ;;
   esac
-done <<< "$jout"
+  case "$jk" in
+    full_p99_ns|full_p99_ms|skips|rendered) printf -v "$jk" '%s' "$jv" ;;
+  esac
+  ji=$((ji + 1))
+done < "$BUILD/timjudge-out.txt"
+[ "$ji" = "${#TIMING_KEYS[@]}" ] \
+  || fail "timing judge output has $ji lines (want ${#TIMING_KEYS[@]})"
 for jk in full_p99_ns full_p99_ms skips rendered; do
   [ -n "${!jk:-}" ] || fail "timing judge output missing '$jk'"
 done
@@ -1126,7 +1262,7 @@ dsum="$(rig_dev_sha256 "$DEVAPPS/$OPK_NAME")" || exit 1
 # pinned evidence args: a bounded NO-INPUT FOH run (startup -> title,
 # 500 ticks, two tick shots) — proves the OPK launcher enters the FOH.
 rm -f "$BUILD/foh-args"
-printf '%s' "--flow $DTMP/opkmnt/f01-vs-g01.flow --input poll --flow-out /tmp/mlfk/opkfoh/foh-trace.txt --shots-dir /tmp/mlfk/opkfoh/shots --foh-max 500 --pace 1 --budget-ns $BUDGET_NS" > "$BUILD/foh-args"
+printf '%s' "--flow $DTMP/opkmnt/f01-vs-g01.flow --input poll --flow-out /tmp/mlfk/opkfoh/foh-trace.txt --shots-dir /tmp/mlfk/opkfoh/shots --foh-max 500 --pace 1 --budget-ns $BUDGET_NS --fb-witness /tmp/mlfk/opkfoh/fbwit.txt" > "$BUILD/foh-args"
 made "$BUILD/foh-args"
 adb -s "$DEV" push "$BUILD/foh-args" "$DSD/" >/dev/null
 hsum="$(rig_host_sha256 "$BUILD/foh-args")" || exit 1
@@ -1166,12 +1302,122 @@ for sname in startup title; do
   judge_dev_shot "opk/$sname" "$BUILD/opk.dev-shot-$sname.ppm" \
     "$BUILD/twin-f01-vs-g01-a/shots/$sname.ppm"
 done
+# present witness on the OPK evidence shots too (both tick-indexed)
+pullv /tmp/mlfk/opkfoh/fbwit.txt "$BUILD/opk.fbwit.txt"
+judge_fbwit "$BUILD/opk.fbwit.txt" f01-vs-g01 startup title
+FBWIT_TOTAL=$((FBWIT_TOTAL + 2))
 dsh "umount $DTMP/opkmnt"
 OPK_MOUNTED=0
 dsh "rm -f $DEVAPPS/$OPK_NAME"
 dsh "test ! -f $DEVAPPS/$OPK_NAME"
 OPK_INSTALLED=0
-echo "   OPK OK (mounted from $DEVAPPS, launcher entered the FOH, boot marker bin==stamp, in-app shots byte-exact; evidence OPK removed)"
+# evidence-mode sentinel removal + absence verify (iter 95, review-93
+# M2): $DSD/foh-args flips mlfk-foh.sh into the evidence branch by mere
+# presence — it must NOT outlive this check (a later launch off
+# /mnt/mlfk-scratch would silently run the bounded evidence branch
+# instead of live play). RC-verified BEFORE the verdict; trap-covered.
+dsh "rm -f $DSD/foh-args"
+dsh "test ! -e $DSD/foh-args" \
+  || fail "evidence-mode sentinel $DSD/foh-args could not be verified gone"
+echo "   OPK OK (mounted from $DEVAPPS, launcher entered the FOH, boot marker bin==stamp, in-app shots byte-exact + fb-witnessed; evidence OPK + foh-args sentinel removed)"
+
+# --- [8b] DEVICE tooth: swapped injector mapping through the REAL chain ----------
+# (iter 95, review-93 H2 part 2 — permanent, runs every check): a
+# deliberately A<->B-swapped INJECTOR mapping (generated keymap COPY —
+# committed bytes never edited) drives the f01 flow through the REAL
+# fk_input -> uinput -> SDL keysyms -> platform_poll chain; the judge
+# MUST DIE on the resulting device trace (normalized cmp rc exactly 1).
+# A clean pass here would mean the comparator/chain is BLIND — fatal.
+echo "== [8b] device tooth: A<->B-swapped injector mapping must die at the judge =="
+rm -rf "$BUILD/tooth-devswap"
+mkdir -p "$BUILD/tooth-devswap"
+node -e '
+  const fs = require("fs");
+  const [src, dst] = process.argv.slice(1);
+  const raw = fs.readFileSync(src, "utf8");
+  const out = raw.split("\n").map((ln) => {
+    if (ln === "map a A a") return "map a A b";
+    if (ln === "map b B b") return "map b B a";
+    return ln;
+  }).join("\n");
+  if (out === raw) { console.error("swap was a no-op"); process.exit(1); }
+  fs.writeFileSync(dst, out);
+' "$FOH/keymap-frozen.txt" "$BUILD/tooth-devswap/keymap.txt" \
+  || fail "T-devswap: could not derive the swapped keymap copy"
+made "$BUILD/tooth-devswap/keymap.txt"
+cmp -s "$BUILD/tooth-devswap/keymap.txt" "$FOH/keymap-frozen.txt" && \
+  fail "T-devswap: swapped keymap copy is byte-identical to the frozen file (dead tooth)"
+node "$FOH/flow-to-fkscript.js" "$FLOWS/f01-vs-g01.flow" \
+  "$BUILD/tooth-devswap/f01.fks" "$BUILD/tooth-devswap/keymap.txt" >/dev/null \
+  || fail "T-devswap: tooth fk-script derivation failed"
+made "$BUILD/tooth-devswap/f01.fks"
+cmp -s "$BUILD/tooth-devswap/f01.fks" "$BUILD/f01-vs-g01.fks" && \
+  fail "T-devswap: tooth fks is byte-identical to the real fks (dead tooth)"
+adb -s "$DEV" push "$BUILD/tooth-devswap/f01.fks" "$DTMP/toothswap.fks" >/dev/null
+hsum="$(rig_host_sha256 "$BUILD/tooth-devswap/f01.fks")" || exit 1
+dsum="$(rig_dev_sha256 "$DTMP/toothswap.fks")" || exit 1
+[ "$dsum" = "$hsum" ] || fail "T-devswap: pushed tooth fks sha mismatch"
+tswap_end="$(grep -E '^END [0-9]+$' "$FLOWS/f01-vs-g01.flow" | awk '{print $2}')"
+[[ "$tswap_end" =~ ^[0-9]{1,6}$ ]] || fail "T-devswap: f01 END grammar"
+tswap_max=$(( (8200 + (tswap_end - 370) * 50) * 3 / 50 + 600 ))
+rm -f "$BUILD/toothswap-launch.sh"
+cat > "$BUILD/toothswap-launch.sh" << EOF
+#!/bin/sh
+# generated by check-device-foh.sh — device-tooth leg launcher
+cd $DTMP || exit 9
+rm -rf toothswap.apprc toothswap.ready toothswap-shots foh.pid.$DM_NONCE
+mkdir -p toothswap-shots
+setsid sh -c './foh_device --flow $DTMP/f01-vs-g01.flow --input poll \\
+  --flow-out $DTMP/toothswap.trace.txt --shots-dir $DTMP/toothswap-shots \\
+  --ready-file $DTMP/toothswap.ready --foh-max $tswap_max --pace 1 \\
+  --budget-ns $BUDGET_NS \\
+  2> $DTMP/toothswap.applog.txt & \\
+  echo \$! > $DTMP/foh.pid.$DM_NONCE; \\
+  wait \$!; arc=\$?; \\
+  echo "RC=\$arc" > $DTMP/toothswap.apprc' \\
+  </dev/null >/dev/null 2>&1 &
+sleep 2
+EOF
+made "$BUILD/toothswap-launch.sh"
+adb -s "$DEV" push "$BUILD/toothswap-launch.sh" "$DTMP/" >/dev/null
+hsum="$(rig_host_sha256 "$BUILD/toothswap-launch.sh")" || exit 1
+dsum="$(rig_dev_sha256 "$DTMP/toothswap-launch.sh")" || exit 1
+[ "$dsum" = "$hsum" ] || fail "T-devswap: pushed launcher sha mismatch"
+dsh "chmod +x $DTMP/toothswap-launch.sh"
+dsh "sh -lc $DTMP/toothswap-launch.sh"
+ready=0
+for _ in $(seq 1 "$READY_TRIES"); do
+  if dsh "test -f $DTMP/toothswap.ready" >/dev/null 2>&1; then ready=1; break; fi
+  sleep 1
+done
+if [ "$ready" != 1 ]; then
+  dsh "cat $DTMP/toothswap.applog.txt" >&2 || true
+  fail "T-devswap: app ready marker never appeared (${READY_TRIES}s)"
+fi
+dsh "sh -lc 'cd $DTMP && ./fk_input toothswap.fks'" \
+  || fail "T-devswap: fk_input injector failed"
+sleep 15 # the swapped run cannot LAUNCH and runs to foh-max (~21 s)
+tswap_done=0
+for _ in $(seq 1 30); do
+  if dsh "test -f $DTMP/toothswap.apprc" >/dev/null 2>&1; then tswap_done=1; break; fi
+  sleep 2
+done
+if [ "$tswap_done" != 1 ]; then
+  dsh "cat $DTMP/toothswap.applog.txt" >&2 || true
+  fail "T-devswap: app rc file never appeared"
+fi
+pullv "$DTMP/toothswap.apprc" "$BUILD/toothswap.apprc"
+if ! cmp -s "$BUILD/toothswap.apprc" <(printf 'RC=0\n'); then
+  dsh "cat $DTMP/toothswap.applog.txt" >&2 || true
+  fail "T-devswap: tooth app rc is not EXACTLY 'RC=0<newline>' (want a clean run with a DIVERGENT trace)"
+fi
+pullv "$DTMP/toothswap.trace.txt" "$BUILD/toothswap.dev-trace.txt"
+norm "$BUILD/toothswap.dev-trace.txt" "$BUILD/toothswap.dev-trace.norm"
+rc=0
+cmp -s "$BUILD/toothswap.dev-trace.norm" "$BUILD/f01.norm.expect" || rc=$?
+[ "$rc" = 1 ] || fail "T-devswap: normalized swapped-chain DEVICE trace cmp rc $rc vs frozen f01 (want exactly 1 — rc 0 means the injector/backend chain is BLIND to an A/B swap)"
+teeth=$((teeth + 1))
+echo "    T-devswap OK: A<->B-swapped injector mapping DIES at the judge on the REAL uinput->SDL->platform_poll chain"
 
 # --- park restore + deadman cancel ------------------------------------------------
 dsh "rm -f /mnt/disable_frontend"
@@ -1231,7 +1477,59 @@ cmp -s "$BUILD/tooth-marker" "$BUILD/opk-boot-want" || rc=$?
 [ "$rc" = 1 ] || fail "T-marker: perturbed boot-marker copy cmp rc $rc (want 1)"
 teeth=$((teeth + 1))
 echo "    T9 OK: perturbed boot-marker copy dies against the constructed expectation"
+# T10: fb-witness rows (COPY): eq flipped + a resembling row -> the
+# production witness judge dies (iter 95, review-93 H1)
+sed 's/ eq=1$/ eq=0/' "$BUILD/f01-vs-g01.fbwit.txt" > "$BUILD/tooth-fbwit.txt"
+cmp -s "$BUILD/tooth-fbwit.txt" "$BUILD/f01-vs-g01.fbwit.txt" && \
+  fail "T-fbwit: eq substitution was a no-op (dead tooth)"
+rc=0
+# shellcheck disable=SC2086
+( judge_fbwit "$BUILD/tooth-fbwit.txt" f01-vs-g01 ${FLOW_SHOTS[0]} ) 2>/dev/null || rc=$?
+[ "$rc" != 0 ] || fail "T-fbwit: witness judge accepted eq=0 rows"
+{ head -n 1 "$BUILD/f01-vs-g01.fbwit.txt"; echo "W 1 startup yoff=999 eq=1"; \
+  tail -n +2 "$BUILD/f01-vs-g01.fbwit.txt"; } > "$BUILD/tooth-fbwit2.txt"
+rc=0
+# shellcheck disable=SC2086
+( judge_fbwit "$BUILD/tooth-fbwit2.txt" f01-vs-g01 ${FLOW_SHOTS[0]} ) 2>/dev/null || rc=$?
+[ "$rc" != 0 ] || fail "T-fbwit: witness judge accepted a resembling extra row"
+teeth=$((teeth + 1))
+echo "    T10 OK: perturbed fb-witness copies die in the production witness judge"
+# T11: bounded-delta teeth (COPIES of the fresh f01 device trace; the
+# review-93 M1 scenario — a mid-run stall the elision normalizes away)
+f01_end="$(grep -E '^END [0-9]+$' "$FLOWS/f01-vs-g01.flow" | awk '{print $2}')"
+f01_max=$(( (8200 + (f01_end - 370) * 50) * 3 / 50 + 600 ))
+node -e '
+  const fs = require("fs");
+  const [src, dst, cutS, shiftS] = process.argv.slice(1);
+  const cut = Number(cutS), shift = Number(shiftS);
+  const lines = fs.readFileSync(src, "utf8").slice(0, -1).split("\n");
+  const out = lines.map((ln) => {
+    const m = /^(T|S|SHOT|LAUNCH|END) ([0-9]+) (.*)$/.exec(ln);
+    if (!m) return ln;
+    const t = Number(m[2]);
+    return t >= cut ? m[1] + " " + (t + shift) + " " + m[3] : ln;
+  });
+  fs.writeFileSync(dst, out.join("\n") + "\n");
+' "$BUILD/f01-vs-g01.dev-trace.txt" "$BUILD/tooth-stall.trace" 600 200 \
+  || fail "T-bounded: could not derive the stall variant"
+made "$BUILD/tooth-stall.trace"
+cmp -s "$BUILD/tooth-stall.trace" "$BUILD/f01-vs-g01.dev-trace.txt" && \
+  fail "T-bounded: stall variant is byte-identical (dead tooth)"
+norm "$BUILD/tooth-stall.trace" "$BUILD/tooth-stall.norm"
+cmp -s "$BUILD/tooth-stall.norm" "$BUILD/f01.norm.expect" \
+  || fail "T-bounded: the stall variant should still PASS elision (it must be the bounded judge that kills it)"
+rc=0
+node "$FOH/normalize-foh-trace.js" --bounded "$FLOWS/f01-vs-g01.expect" \
+  "$BUILD/tooth-stall.trace" "$FLOWS/f01-vs-g01.flow" "$f01_max" \
+  >/dev/null 2>&1 || rc=$?
+[ "$rc" = 2 ] || [ "$rc" = 3 ] || fail "T-bounded: mid-run +200-tick stall rc $rc (want 3, or 2 if structure broke)"
+[ "$rc" = 3 ] || fail "T-bounded: stall variant died rc 2 (structural), want the BOUND arm rc 3"
+teeth=$((teeth + 1))
+echo "    T11 OK: mid-run +200-tick stall passes elision but DIES in the bounded judge (rc 3)"
 
 rig_no_commit_guard "$BUILD" "$DEVB" "$TABLES" "$AUDIO_OUT"
 
-echo "DEVICE FOH OK (flows=5 shots=13 bridge=1 states=3 opk=1 p99=${full_p99_ms}ms skips=0 underruns=0 starves=0 starts${DEV_STARTS} teeth=$teeth)"
+# opk=evidence (iter 95, review-93 M3): the OPK leg proves the
+# mount-and-run EVIDENCE path only — frontend-nav launch + the live
+# branch are task 14's gate leg, deliberately NOT claimed here.
+echo "DEVICE FOH OK (flows=5 shots=13 bridge=1 states=3 opk=evidence fbwit=$FBWIT_TOTAL p99=${full_p99_ms}ms skips=0 underruns=0 starves=0 starts${DEV_STARTS} teeth=$teeth)"

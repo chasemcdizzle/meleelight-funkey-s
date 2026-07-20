@@ -13,8 +13,15 @@
 // bhold counter reads as >= 30 held frames; the FOH machine is
 // edge-driven, so longer presses never double-step).
 //
-// Keys map 1:1 onto the FunKey letter keysyms (CLAUDE.md "Device
-// access"): U/D/L/R/A/B/X/Y/S/K/N/Q -> u/d/l/r/a/b/x/y/s/k/n/q.
+// Keys map onto the FunKey letter keysyms through the FROZEN KEYMAP
+// SSOT (iter 95, review-93 H2): port/foh/keymap-frozen.txt is THE
+// single source of truth for logical button -> letter keysym; this
+// generator consumes it at runtime (strict KEYMAP1 grammar below),
+// foh_dev's --dump-keymap emits its compiled copy byte-exactly, and
+// the device check cross-asserts both plus platform_sdl1.c's poll
+// table. An optional third argv overrides the keymap PATH — used ONLY
+// by the check's swapped-mapping device tooth on a generated COPY;
+// the committed file is the default.
 //
 // SHOT rows at/after the first non-neutral input row become Q-MARKER
 // injections (`d q` / 40 ms / `u q`) at the SHOT row's time — the
@@ -28,30 +35,66 @@
 // that would violate the fk_input grammar (sleep > 60000 ms per row is
 // split) dies loudly BEFORE emitting a single line.
 //
-// Usage: node flow-to-fkscript.js <flow> <out.fks>
+// Usage: node flow-to-fkscript.js <flow> <out.fks> [keymap]
 "use strict";
 
 const fs = require("fs");
+const path = require("path");
 
 function die(msg) {
   console.error("flow-to-fkscript: " + msg);
   process.exit(2);
 }
 
-if (process.argv.length !== 4) {
-  console.error("usage: node flow-to-fkscript.js <flow> <out.fks>");
+if (process.argv.length !== 4 && process.argv.length !== 5) {
+  console.error("usage: node flow-to-fkscript.js <flow> <out.fks> [keymap]");
   process.exit(1);
 }
 const [, , flowPath, outPath] = process.argv;
+const keymapPath =
+  process.argv.length === 5
+    ? process.argv[4]
+    : path.join(__dirname, "keymap-frozen.txt");
 
 const LEAD_MS = 8200;
 const STEP_MS = 50;
 const Q_PRESS_MS = 40;
 
-const LETTER = {
-  U: "u", D: "d", L: "l", R: "r", A: "a", B: "b", X: "x", Y: "y",
-  S: "s", K: "k", N: "n", Q: "q",
-};
+// KEYMAP1 (the frozen SSOT): header + exactly 12 `map <logical>
+// <FLOWLETTER> <keysym>` rows in the pinned logical order; anything
+// that merely resembles a row is corruption — loud death, exit 2.
+const KEYMAP_LOGICAL = [
+  "up", "down", "left", "right", "a", "b", "x", "y", "start", "l", "r",
+  "menu",
+];
+const KEYMAP_FLOW_LETTERS = "UDLRABXYSKNQ";
+const LETTER = (() => {
+  const raw = fs.readFileSync(keymapPath, "utf8");
+  if (!raw.endsWith("\n")) die("keymap missing trailing newline (torn write)");
+  const lines = raw.slice(0, -1).split("\n");
+  if (lines.length !== 1 + KEYMAP_LOGICAL.length) {
+    die("keymap must be exactly " + (1 + KEYMAP_LOGICAL.length) + " lines");
+  }
+  if (lines[0] !== "KEYMAP1") die("keymap header must be exactly KEYMAP1");
+  const map = {};
+  const seenSym = new Set();
+  for (let k = 0; k < KEYMAP_LOGICAL.length; k++) {
+    const m = /^map ([a-z]+) ([A-Z]) ([a-z])$/.exec(lines[k + 1]);
+    if (m === null) die("keymap line " + (k + 2) + " matches no KEYMAP1 form");
+    if (m[1] !== KEYMAP_LOGICAL[k]) {
+      die("keymap line " + (k + 2) + " logical '" + m[1] +
+          "' != pinned '" + KEYMAP_LOGICAL[k] + "'");
+    }
+    if (m[2] !== KEYMAP_FLOW_LETTERS[k]) {
+      die("keymap line " + (k + 2) + " flow letter '" + m[2] +
+          "' != pinned '" + KEYMAP_FLOW_LETTERS[k] + "'");
+    }
+    if (seenSym.has(m[3])) die("keymap keysym '" + m[3] + "' duplicated");
+    seenSym.add(m[3]);
+    map[m[2]] = m[3];
+  }
+  return map;
+})();
 
 const raw = fs.readFileSync(flowPath, "utf8");
 if (!raw.endsWith("\n")) die("flow missing trailing newline (torn write)");

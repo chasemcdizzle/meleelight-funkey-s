@@ -68,13 +68,21 @@ A new device = write one new backend TU (+ audio open params).
 - FOH device-flow injection timing (`port/foh/flow-to-fkscript.js`,
   iter 93): LEAD 8200 ms + 50 ms per flow frame (3x the 60 fps tick) —
   tuned to THIS device's fk_input/uinput launch latency and SDL poll
-  cadence; re-measure per target input path.
+  cadence; re-measure per target input path. The BOUNDED-DELTA trace
+  judgment (`normalize-foh-trace.js --bounded`, iter 95) freezes
+  measured bounds over the SAME model (anchor offset 40..240 ticks,
+  in-run deviation -90..+30) — re-measure + re-freeze per target.
 - Input: the S1 chord table (PLAN §6) maps the FunKey's EXACT control
   set (d-pad + 8 buttons, letter keysyms u/d/l/r/a/b/x/y/s/k/n/q).
   A device with real analog or more buttons gets a NEW mapping table
   (data-driven by design — `port/gfx/s1_input.h`); the S1 semantics
   (SOCD, tap-jump-off, digital shield) are Chase-ratified for THIS
-  hardware.
+  hardware. The logical-button → letter-keysym mapping itself is the
+  frozen SSOT `port/foh/keymap-frozen.txt` (iter 95): ONE file
+  consumed by the flow-script generator, compiled into foh_dev
+  (`--dump-keymap`), and asserted against the platform backend's poll
+  table — a new target re-freezes THIS file (+ its check pins), never
+  scattered per-tool tables.
 
 ## Layer 3 — device-bound machinery (rewrite per target)
 
@@ -91,6 +99,18 @@ A new device = write one new backend TU (+ audio open params).
   adbd, riglib stamp/pullv/lock/deadman/park, the gmenu2x frontend
   nav, `low_bat_check` quiesce): ~all FunKey-OS-specific. The PATTERNS
   (identity pins, freshness, fail-closed) transfer; the bytes don't.
+  `port/foh/check-device-foh.sh` (iter 93/95) is the same class: its
+  leg/hygiene plumbing, fk_input handshake, and OPK evidence leg are
+  FunKey-OS layout; the JUDGES it composes (frozen-trace + bounded
+  cadence + byte-exact shots + fb witness + summary grammars) are the
+  portable pattern.
+- **Present witness fb pins** (`foh_dev.c` FBWIT_*, iter 95 —
+  kernel-specific, MEASURED on this kernel): fb 240x720 declared (3
+  pages) but FBIOPAN_DISPLAY rejected, yoffset always 0, read() exposes
+  ONLY the visible 240x240 page, content == submitted RGB565 under the
+  IDENTITY transform. A new target re-runs the `--fb-witness-raw`
+  probe and re-pins FBWIT_VYRES/FBWIT_LL/FBWIT_XFORM (+ the check's
+  FBWIT_*_PIN copies); the instrument is the port tool.
 - **OPK packaging** (mksquashfs 4.4 pin, .desktop, /mnt layout,
   launcher data-dir chain): OPK is the FunKey/gmenu2x format; another
   device has its own packaging. The FOH-generation launcher

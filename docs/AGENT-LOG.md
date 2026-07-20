@@ -15435,3 +15435,305 @@ typed. Music-surface arc round 2 reviews this commit's bytes.
   conventions.
 - **PORTABILITY**: N/A — host-only task, zero FunKey-specific code; no
   docs/PORTABILITY.md rows.
+
+## iter 95 — 2026-07-20 — M4 hardening PRE-REGISTRATION: device-FOH round-1 closure (review-93 triage, ALL dispositions; frozen before any run/edit; PROCESS §2)
+
+- **Task**: close ALL dispositions in `.loop/review-93-triage.md` (Tier-A
+  round 1 over iter-93/ead9903, VERDICT: NO-GO — findings H1 H2 M1 M2 M3
+  M4 L; detail `.loop/review-93-1.log`). Surfaces ONLY:
+  port/foh/{check-device-foh.sh,foh_dev.c,flow-to-fkscript.js,
+  normalize-foh-trace.js}, port/gfx/opk/mlfk-foh.sh (touched only if
+  needed), docs/PORTABILITY.md, + the NEW frozen keymap file
+  port/foh/keymap-frozen.txt. NO edits to check-device-render.sh or
+  riglib.sh (inheritance registered instead). Frozen goldens/flows
+  byte-untouched; no flow re-freezes. Done-check: cold
+  `bash port/foh/check-device-foh.sh` → the NEW honest verdict shape
+  `DEVICE FOH OK (... opk=evidence ...)`, exit 0. Host regression
+  check-foh-flows.sh: mechanical skip-proof expected (grep shows it
+  references NONE of this iteration's surfaces); cold re-run only if
+  the skip-proof fails.
+- **H1 method (present witness, form (a) preferred)**: in-app
+  post-present kernel-fb PAGE-CORRECT readback per sampled shot.
+  foh_dev.c gains `--fb-witness <path>` (poll mode + shots only;
+  linux-only implementation, loud refusal elsewhere) + a
+  `--fb-witness-raw <dir>` measurement instrument: at every shot
+  capture (which forces render+present), read FBIOGET_VSCREENINFO/
+  FSCREENINFO from /dev/fb0, derive the DISPLAYED page from yoffset
+  (kernel fb 240x720 = 3 pages; CLAUDE.md envelope), read that page and
+  byte-compare against the SUBMITTED Raster.fb under a
+  MEASURED-then-pinned pixel transform (the FunKey libSDL flip does a
+  rotation blit; FBIOPAN_DISPLAY is rejected on this kernel —
+  .loop/m3-task4r52-probe-sdlflip.log — so yoffset behavior and the
+  transform must be MEASURED, not assumed). Mismatch = in-app
+  sim_fatal (rc != 0 → leg death) after dumping the page + submitted
+  buffer for diagnosis; witness rows (strict FBWIT1 grammar) flushed
+  post-loop and ALSO judged host-side (row-per-shot, names in order,
+  eq=1, count pinned). MEASUREMENT FIRST: one short device probe (the
+  budget's spare): f01 flow, no input, --foh-max 500, 2 tick shots,
+  raw dumps pulled; host analysis picks the (page-policy, transform)
+  pair from the 8 dihedral candidates. PASS = both shots byte-exact
+  under exactly one stable (policy, transform); then the pins land in
+  foh_dev.c and the witness arms in the check (5 legs + OPK evidence
+  leg, `--fb-witness` in the pinned foh-args). Coverage honest note
+  goes in the RESULT + check header: the witness sees the KERNEL FB
+  page, not the panel; match-phase (bridge verify) presents and live
+  mode stay unwitnessed this iteration (task-14 note). If (a) lands,
+  REGISTER (do not implement): the task-3/74 render rung's shot is the
+  same in-app-dump class — check-device-render.sh inherits at task 14.
+- **H1 refutation shapes**: (r1) probe shows NO (page, transform) pair
+  matching on both shots → form (a) REFUTED by measurement (recorded
+  verbatim) → form (b) per the triage: per-run witness comparing the
+  sampled frames' checksums across ALL 3 pages (submitted buffer must
+  equal ≥1 page under the measured transform), pinned N = the shot
+  count, failure = death; RAM-buffer byte-exact compare stays the
+  content oracle. (r2) no transform matches ANY page → forms (a) AND
+  (b) both unreliable → STOP after this one bounded evidence round and
+  report (no improvisation). (r3) witness green on the probe but eq=0
+  on a healthy cold-run leg → one diagnostic round from the raw dumps,
+  then STOP.
+- **H2 method (keymap SSOT + real-chain tooth)**: (1) NEW frozen file
+  `port/foh/keymap-frozen.txt` (KEYMAP1: header + exactly 12
+  `map <logical> <FLOWLETTER> <keysym>` rows) = THE single source of
+  truth for logical button → letter keysym. Consumed at RUNTIME by
+  flow-to-fkscript.js (its hardcoded LETTER table is DELETED; strict
+  whitelist parse of the keymap, optional path arg for tooth copies,
+  default = the committed file); compiled INTO foh_dev.c as the one
+  kKeymap table (parse_buttons now table-driven) and emitted verbatim
+  by a NEW `--dump-keymap` arm; check compares the dump BYTE-EXACTLY
+  (cmp) to the committed file, sha-pins the file in PRODUCER_PINS
+  (N_PINS_WANT 6→7), and additionally asserts each row against
+  platform_sdl1.c's poll-table SOURCE lines (exact-line grep -cF == 1
+  per row + total k[SDLK_ count == 12 — platform_sdl1.c is read, never
+  edited; its bytes already flow into the arm-build stamp, so source
+  == shipped binary). (2) ONE real device tooth IN THE CHECK
+  (permanent): a swapped-keymap COPY (A<->B keysym column) generates a
+  tooth fks for the f01 flow (the shortest END=420); dead-tooth guards
+  cmp keymap-copy != frozen AND tooth fks != real fks; the tooth leg
+  runs foh_device --input poll (no bridge, no audio) on the device
+  with the REAL fk_input → uinput → SDL → platform_poll chain; PASS =
+  app rc file exactly RC=0 AND normalized(elide) device trace vs
+  normalized frozen f01 .expect cmp rc EXACTLY 1 (the judge DIES on
+  the device trace). Refutation: cmp rc 0 (swapped chain reproduces
+  the frozen trace) = the comparator/chain is BLIND — HALT the
+  iteration and report; never ship around it.
+- **M1 method (bounded-delta normalization)**: normalize-foh-trace.js
+  keeps elide mode byte-for-byte (teeth + OPK constructed compare) and
+  gains `--bounded <frozen.expect> <dev-trace> <flow> <end-max>`:
+  strict-grammar parse of both traces + the flow (FLOW1 subset),
+  structural pairing re-verified line-by-line, then per-event tick
+  bounds vs the injection model T̂(F) = 3F - 618 (= LEAD 8200 ms +
+  50 ms/flow-frame at 60 Hz — flow-to-fkscript's pinned constants):
+  pre-first-input events are tick-indexed → |T - F| <= 2; the first
+  input-driven event anchors the run's injection offset delta1 = T -
+  T̂(F), required in [40, 240]; every later event's delta must sit in
+  [delta1 - 90, delta1 + 30]; a LAUNCH trace's END tick must EQUAL the
+  LAUNCH tick; a no-launch trace's END must equal end-max (the leg's
+  foh-max). Violation = rc 3, corruption/structural = rc 2, loud. The
+  600-tick total allowance in foh-max stays. MEASURED TODAY from the
+  iter-93 archived green device traces (scratchpad measure-m1.js over
+  build/device-foh/*.dev-trace.txt vs flows/*.expect): identity-phase
+  |d| = 0 everywhere; anchors {75, 86, 87, 93, 134}; in-run deviation
+  min/max = -57 (f04's 30-tick bhold counter — device counters run
+  1:1, systematic) / +1; END==LAUNCH tick on all 4 launch legs;
+  f04 END == 3*endf-618+600 exactly. FROZEN bounds (measured + margin):
+  ID_SLACK=2, OFS_LO=40, OFS_HI=240, DEV_NEG=90, DEV_POS=30 —
+  a mid-run stall > 0.5 s beyond the anchored cadence now DIES (the
+  old elision accepted ANY latency inside the 600-tick total). The
+  check runs bounded mode on all 5 device legs after the elide cmp.
+  Corpus validation BEFORE shipping: bounded mode over all 5 archived
+  green traces = zero false rejections. Refutation shape: a HEALTHY
+  fresh cold-run leg violating a bound (e.g. anchor outside [40,240]
+  on a slow-handshake day) = measurement refutation → exactly ONE
+  re-measure + re-freeze round recorded with the new values and WHY;
+  a second violation → STOP and report. Teeth (host, on COPIES of the
+  fresh device trace): mid-run +200-tick shift of a suffix (old
+  normalizer PASSES it — the finding's exact scenario) → rc 3;
+  anchor shifted past OFS_HI → rc 3.
+- **M2 method (evidence sentinel)**: explicit `rm -f $DSD/foh-args` +
+  RC-verified absence (`test ! -e`) on the SUCCESS path BEFORE the
+  verdict line, and a best-effort rig_dsh_retry removal added to the
+  cleanup() trap (rig_cleanup's $DSD wipe stays the backstop but is
+  best-effort — the trap-level explicit rm closes the abort window).
+  No other evidence sentinel exists (audited: foh-args is the only
+  $DSD file mlfk-foh.sh mode-switches on).
+- **M3 method (honest verdict token)**: `opk=1` → `opk=evidence` in
+  the DEVICE FOH OK line; check header names the task-14 deferral
+  (frontend-nav launch + mlfk-foh.sh live branch) next to the token.
+  The verdict shape change is this check's own output (no external
+  consumer parses it yet — verify_m4.sh is task 14); fix_plan/STATE
+  historical quotes stay as history, the STATE.md new entry carries
+  the new shape.
+- **M4 method (whitelist grammars, the iter-86 class)**: (1) timing
+  judge output: the permissive 18-key ignore arm is REPLACED by an
+  ORDERED full whitelist — exactly 23 lines, keys in the pinned
+  judge-render-timing.js order each EXACTLY once, `*_ns`/`skips`/
+  `rendered` = ^[0-9]{1,12}$, `*_ms` = ^[0-9]{1,9}\.[0-9]{3}$,
+  judge_complete=1, byte-exact line reconstruction; (2) all FOUR
+  foh_dev summary parsers (foh/match/audio/music) additionally require
+  the PREFIX-resemblance count (`^foh_dev <kind>:`) == 1, so a foreign
+  or malformed same-prefix line is death, not silence. Corpus
+  validation BEFORE shipping: the archived genuine artifacts —
+  build/device-foh/timjudge-out.txt + all 5 archived dev-applogs +
+  twin logs — zero false rejections; the fresh cold run is the second
+  corpus pass.
+- **L method (PORTABILITY rows, same commit)**: add rows for
+  check-device-foh.sh (Layer 3, device-rig class), the fb
+  present-witness (Layer 3 — kernel-specific: 240x720 3-page fb,
+  rejected FBIOPAN_DISPLAY, measured transform/yoffset policy), and
+  the keymap SSOT file (Layer 2 input row extension: per-target
+  letter-keysym mapping now lives in ONE frozen file). foh_dev.c /
+  flow timing / mlfk-foh.sh rows from iter 93 stand.
+- **RUN BUDGET (paced device runs, hard cap 3)**: (1) the H1
+  measurement probe (short: 500 ticks + injection lead — the spare
+  slot, spent deliberately BEFORE pinning); (2) ONE full cold
+  done-check re-run (now INCLUDING the permanent H2 device tooth leg,
+  so the tooth costs no separate dispatch); (3) one remaining spare
+  for exactly one pre-registered refutation round (M1 re-measure or a
+  second cold attempt after a host-side death). Arm docker rebuilds
+  <= 2 (foh_dev.c edit forces one). Browser runs 0. Logs:
+  .loop/m4-foh95-*.log; command output NEVER into the conversation.
+- **PASS CRITERIA (all required)**: cold check prints the new verdict
+  `DEVICE FOH OK (flows=5 shots=13 bridge=1 states=3 opk=evidence
+  p99=<x>ms skips=0 underruns=0 starves=0 starts... fbwit=15
+  teeth=<n>)` exit 0 with: witness rows 13 (5 legs) + 2 (OPK) all
+  eq=1; keymap dump cmp + sha pin + platform_sdl1 source asserts
+  green; device tooth cmp rc 1; bounded mode green on all 5 legs;
+  strict parsers green on genuine logs; sentinel absent pre-verdict;
+  teeth (old 9 + new: witness-grammar, bounded-stall, bounded-anchor,
+  keymap-grammar, device swapped-chain) all proven on
+  copies/variants; ONE atomic commit; frozen flows/goldens
+  byte-identical to HEAD.
+- **Default refutation posture**: one bounded evidence round per
+  refutation shape above, then STOP and report — never loosen a
+  judge, never improvise outside the triage.
+
+## iter 95 — 2026-07-20 — M4 hardening RESULT: device-FOH round-1 closure — ALL review-93 dispositions shipped; cold check green FIRST attempt
+
+- **DONE-CHECK (cold, first attempt): `bash port/foh/check-device-foh.sh`
+  → `DEVICE FOH OK (flows=5 shots=13 bridge=1 states=3 opk=evidence
+  fbwit=15 p99=13.754ms skips=0 underruns=0 starves=0 starts
+  f01-vs-g01=281 f02-cpu-m01=16 f03-options=23 f04-nav=39
+  f05-vs-g03=14 teeth=12)` exit 0**
+  (.loop/m4-foh95-donecheck.log). All seven review-93 dispositions
+  closed per the pre-registration above. Device left clean (verified
+  post-run: no /tmp/mlfk, no /mnt/mlfk-scratch, frontend marker clear,
+  lbc running, gmenu2x live).
+- **H1 CLOSED — form (a) LANDED (present witness)**: foh_dev
+  `--fb-witness` reads the displayed kernel-fb page post-present at
+  every sampled shot and byte-compares it against the submitted
+  Raster.fb; mismatch = in-app death; rows re-judged host-side
+  (strict FBWIT1). MEASUREMENT (probe, 2 dispatches,
+  .loop/m4-foh95-probe{,2}.log + raw dumps in
+  .loop/m4-foh95-probe-raw/): fb envelope 240x240 vyres=720 bpp=16
+  ll=480; yoffset ALWAYS 0 (FBIOPAN rejected — no panning);
+  **read() exposes ONLY the visible 240x240 page** (offsets >=115200
+  fail — measured, documented in PORTABILITY); visible-page bytes ==
+  the submitted RGB565 buffer under the **IDENTITY transform,
+  uniquely** among the 8 dihedral candidates (byte-exact vs the
+  archived iter-93 startup frame — which also re-confirms device
+  render determinism). Pins: FBWIT_XFORM=0, FBWIT_LL=480,
+  FBWIT_VYRES=720 (foh_dev.c + the check's FBWIT_*_PIN copies).
+  Probe attempt 1 aborted 3.4 s in by an INSTRUMENT defect (this
+  kernel's fb driver returns PARTIAL reads on large requests — fixed
+  with a loop-read; recorded, not a measurement refutation). Fresh
+  cold run: **fbwit=15/15 eq=1** (13 leg shots + 2 OPK shots).
+  Witness tooth T10 (eq-flip + resembling-row copies die in the
+  production judge) proven.
+  **HONEST COVERAGE (PROCESS §8)**: the witness sees the KERNEL FB
+  page, not the physical panel (panel truth stays with Chase's human
+  gate); it samples FOH-phase SHOT presents only — match-phase
+  (bridge verify) and live-mode presents are UNWITNESSED this
+  iteration; between-shot FOH presents are unwitnessed. A presenter
+  that blits the fb correctly but fails downstream (panel DMA) is
+  invisible to it. REGISTERED for task 14 (per the triage — no edit
+  to check-device-render.sh this iteration): the task-3/74 render
+  rung's device shot is the same in-app-dump class and inherits the
+  witness; consider a match-phase sampled witness there too.
+- **H2 CLOSED — keymap SSOT + real-chain tooth**: NEW frozen
+  `port/foh/keymap-frozen.txt` (sha
+  2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e,
+  pinned in PRODUCER_PINS 6→7) consumed at runtime by
+  flow-to-fkscript.js (hardcoded table DELETED; strict KEYMAP1 parse;
+  regenerated fks for all 5 flows byte-identical to the iter-93
+  archives — zero behavior drift), compiled into foh_dev (kKeymap +
+  table-driven parse_buttons; twin f04 trace re-verified == frozen
+  expect) and emitted by the new `--dump-keymap` arm (check cmp's it
+  byte-exactly every run); platform_sdl1.c poll-table SOURCE lines
+  asserted row-by-row + total-count 12 (read-only — its bytes already
+  feed the arm-build stamp, so source == shipped binary). DEVICE
+  tooth T-devswap (permanent, in-check): A<->B-swapped keymap COPY →
+  tooth fks (differs from real fks — guard proven) → REAL
+  fk_input→uinput→SDL→platform_poll run on device → app RC=0, trace
+  diverged structurally (title→menu-top fired via START; every A
+  press became b = no-op; no menu-battle/css/launch edges) →
+  normalized cmp rc 1: **the judge DIES on the device trace**.
+- **M1 CLOSED — bounded-delta normalization**:
+  normalize-foh-trace.js `--bounded` mode (elide mode byte-identical
+  — corpus-proven vs all archived .norm outputs). Frozen bounds (from
+  the measured archive, pre-registration): ID_SLACK=2, OFS 40..240,
+  DEV -90..+30 over T^(F)=3F-618; END==LAUNCH tick (launch) /
+  ==foh-max (no-launch). Corpus: all 5 archived green traces PASS
+  (anchors 75/134/87/93/86); fresh cold-run anchors 76/90/88/91/91 —
+  well inside the frozen window, NO refutation fired. Teeth: T11
+  in-check (a +200-tick mid-run suffix shift PASSES elision — the
+  finding's exact scenario — and dies rc 3 in the bounded judge);
+  dev-time probes also proved the anchor arm (rc 3) and rc-2
+  corruption separation. All 5 device legs now run the bounded judge
+  after the elide cmp.
+- **M2 CLOSED**: `$DSD/foh-args` explicitly removed + RC-verified
+  absent on the success path BEFORE the verdict line; trap-level
+  best-effort removal added to cleanup(); rig_cleanup's $DSD wipe
+  stays the backstop. Audited: foh-args is the ONLY evidence
+  sentinel mlfk-foh.sh mode-switches on.
+- **M3 CLOSED**: verdict token `opk=1` → **`opk=evidence`**; the
+  check header names the task-14 deferral (frontend-nav
+  discovery/launch + the mlfk-foh.sh live branch) next to the token.
+  No external consumer parses the verdict line yet (verify_m4.sh is
+  task 14); historical quotes in fix_plan/STATE stay history.
+- **M4 CLOSED — whitelist grammars (the iter-86 class)**: timing
+  judge output now parsed by an ORDERED FULL whitelist (exactly 23
+  lines, pinned key order, per-class value grammars) replacing the
+  18-key ignore arm; ALL FOUR foh_dev summary parsers
+  (foh/match/audio/music — class-level fix, not just the flagged
+  audio one) additionally require prefix-resemblance count == 1.
+  Corpus validation: archived timjudge-out.txt + all 5 archived
+  dev-applogs + twin logs = ZERO false rejections (harness run
+  recorded); negatives (reordered timing line, resembling extra
+  audio line) die. Fresh cold run = second corpus pass, green.
+- **L CLOSED**: PORTABILITY.md rows added same commit —
+  check-device-foh.sh (Layer 3 rig class), the fb present-witness
+  pins + probe recipe (Layer 3, kernel-specific), keymap SSOT (Layer
+  2 input row extension), bounded-cadence frozen constants (Layer 2
+  timing row extension).
+- **Host regression**: check-foh-flows.sh mechanical SKIP-PROOF
+  recorded (.loop/m4-foh95-fohflows-skip.txt): zero references from
+  check-foh-flows.sh to any changed surface; its consumed surfaces
+  (foh.c/foh_app.c/foh_render.c/foh_font.c/judge-foh-trace.js/flows/
+  port/gfx/port/sim) byte-untouched vs HEAD (empty diff).
+- **RUN LEDGER vs the pre-registered budget (3 paced device
+  dispatches)**: (1) H1 probe attempt 1 — aborted at t≈3.4 s
+  (instrument partial-read defect; park/quiesce cycled cleanly);
+  (2) H1 probe attempt 2 — measurement COMPLETE; (3) cold done-check
+  incl. the T-devswap device tooth leg — GREEN first attempt. Spare
+  consumed by the probe re-run; no refutation rounds needed.
+  **OVERRUN (recorded honestly)**: arm docker rebuilds = 3 vs the
+  pre-registered ≤2 — the probe's instrument fix (foh_dev.c
+  loop-read) forced one extra stamp-miss rebuild; cause mechanical,
+  no scope creep. Browser runs 0. check-foh-flows cold runs 0
+  (skip-proof above).
+- **ZOOM-OUT (HARD RULE 8)**: (a) H1 is an INSTRUMENT-level closure
+  of the class "in-app artifact dump presented as display truth" —
+  one more instance is REGISTERED (check-device-render.sh shot leg,
+  task 14) rather than silently fixed here per the triage's surface
+  bound; (b) M4's prefix-resemblance fix was applied to the WHOLE
+  parser family (4 parsers), not the single flagged instance; (c) H2
+  replaced scattered per-tool key tables with ONE frozen SSOT file —
+  the class fix over the one-off (a per-tool assert would have left
+  the common-mode hole); (d) new registered one-off: this kernel's
+  fb read() short-read + visible-page-only behavior is documented in
+  PORTABILITY as a Layer-3 quirk with the probe as the standing
+  re-measurement instrument.
+- **Driver next**: review-93 ROUND 2 over this commit's diff (the
+  triage's arc plan); task-14 notes registered above (render-rung
+  witness inheritance, match-phase witness, frontend-nav + live
+  branch exercise).
