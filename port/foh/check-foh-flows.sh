@@ -1358,6 +1358,36 @@ teeth=$((teeth + 1))
 # that symbol UNRESOLVED — no atlas linked here — a LINK FAILURE, so the
 # FONT choice is guarded, not merely the strings).
 echo "=== [5b] finish-banner glyph witness (iter 103)"
+# PRODUCER GRAMMAR (PROCESS §3 whitelist rule; iter 105 — close
+# review-103 round-3 M "permissive decision-output parsing"). MEASURED
+# empirically, NOT from memory: the success line from the archived
+# genuine runs .loop/m4-ban103-{fohflows,driver}-cold.log:138 (both
+# byte-identical) + a fresh witness run (.loop/m4-ban105-measure.log);
+# the tooth diagnostic + exit code from a manual relink of the SAME
+# witness .o against a COMPLETE?-perturbed copy (rc=3 measured). The ink
+# counts are DETERMINISTIC pins — foh_text blits a 5x7 BITMAP font at
+# integer scale 4 / fixed centre, so lit-pixel count is pure integer, no
+# FP, platform-independent. Anchored FULL-LINE + resemblance-death only,
+# never a bare prefix/substring.
+BANNER_OK_LINE='BANNER WITNESS OK (complete_ink=2016 failure_ink=1680 distinct=yes)'
+BANNER_OK_NEEDLE='BANNER WITNESS OK'
+BANNER_TOOTH_LINE='foh_banner_witness: gfx_fatal: foh_font: no glyph for requested character'
+BANNER_TOOTH_NEEDLE='foh_font: no glyph for requested character'
+BANNER_TOOTH_RC=3
+# Anchored full-line verdict parse: the file must carry the EXACT success
+# line exactly ONCE (count_xl = grep -cxF, full line) AND the OK needle
+# must appear ONLY on that anchored line (needle count == full-line
+# count) — a garbled/truncated success line (prefix kept, tail corrupt)
+# or an extra resembling line = corruption. Returns 0 iff genuine; the
+# caller fails closed on nonzero.
+banner_verdict_ok() { # <out-file>
+  local f="$1" full needle
+  full="$(count_xl "$f" "$BANNER_OK_LINE")"
+  needle="$(count_x "$f" "$BANNER_OK_NEEDLE")"
+  [ "$full" = 1 ] || return 1
+  [ "$needle" = "$full" ] || return 1
+  return 0
+}
 banner=0
 rm -f "$B/gfx_target.o" "$B/foh_banner_witness.o" "$B/foh_banner_witness"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/gfx_target.c" -o "$B/gfx_target.o"
@@ -1371,8 +1401,7 @@ if ! "$B/foh_banner_witness" --shot-dir "$B/banner-shots" > "$B/banner.out" 2>&1
   fail "banner witness exited non-zero (a reachable banner string hit the missing-glyph fatal?)"
 fi
 relay_lines < "$B/banner.out"
-c="$(count_x "$B/banner.out" "BANNER WITNESS OK")"
-[ "$c" = 1 ] || fail "banner witness — 'BANNER WITNESS OK' verdict line absent (got $c)"
+banner_verdict_ok "$B/banner.out" || fail "banner witness — success output is not the exact anchored line '$BANNER_OK_LINE' exactly once, with no other 'BANNER WITNESS OK' resemblance (permissive-parse guard, PROCESS §3) — see relayed output above"
 made "$B/banner-shots/banner-complete.pgm" "$B/banner-shots/banner-failure.pgm"
 if cmp -s "$B/banner-shots/banner-complete.pgm" "$B/banner-shots/banner-failure.pgm"; then
   fail "banner witness — COMPLETE! and FAILURE rendered identical shots (a blank/stubbed draw)"
@@ -1394,16 +1423,39 @@ cc -O2 -Wl,-dead_strip -o "$B/foh_banner_witness_tooth" \
   "$B/foh_banner_witness.o" "$B/gt-banner-tooth.o" "$B/raster.o" "$B/foh_font.o"
 rc=0
 "$B/foh_banner_witness_tooth" > "$B/banner-tooth.out" 2>&1 || rc=$?
-[ "$rc" != 0 ] || fail "banner tooth — a missing-glyph banner string did NOT die (the loud-fatal guard is gone)"
-c="$(count_x "$B/banner-tooth.out" "foh_font: no glyph for requested character")"
-[ "$c" = 1 ] || fail "banner tooth — died but not at the foh_font missing-glyph guard (got: $(cat "$B/banner-tooth.out"))"
-c="$(count_x "$B/banner-tooth.out" "BANNER WITNESS OK")"
-[ "$c" = 0 ] || fail "banner tooth — printed the OK verdict despite a missing glyph"
+# EXACT measured missing-glyph class: rc 3 (foh_font gfx_fatal via the
+# witness override's exit(3)); any other exit — including a mere nonzero
+# — is the wrong death and dies here.
+[ "$rc" = "$BANNER_TOOTH_RC" ] || fail "banner tooth — a missing-glyph banner string exited rc $rc, want the measured missing-glyph fatal class $BANNER_TOOTH_RC (got: $(cat "$B/banner-tooth.out"))"
+tfull="$(count_xl "$B/banner-tooth.out" "$BANNER_TOOTH_LINE")"
+tneedle="$(count_x "$B/banner-tooth.out" "$BANNER_TOOTH_NEEDLE")"
+[ "$tfull" = 1 ] || fail "banner tooth — died but not at the EXACT foh_font missing-glyph diagnostic line (anchored full-line match $tfull; got: $(cat "$B/banner-tooth.out"))"
+[ "$tneedle" = "$tfull" ] || fail "banner tooth — the missing-glyph needle appears on $tneedle lines but the anchored diagnostic once (garbled/extra output; got: $(cat "$B/banner-tooth.out"))"
+[ "$(count_x "$B/banner-tooth.out" "$BANNER_OK_NEEDLE")" = 0 ] || fail "banner tooth — printed the OK verdict despite a missing glyph"
 rm -f "$B/gt-banner-tooth.c" "$B/gt-banner-tooth.o" "$B/foh_banner_witness_tooth"
-echo "    banner tooth OK: COMPLETE? (missing glyph) dies loud at the foh_font guard; no false OK"
+echo "    banner tooth OK: COMPLETE? (missing glyph) dies loud (rc $BANNER_TOOTH_RC) at the exact foh_font guard line; no false OK"
 teeth=$((teeth + 1))
 
-[ "$teeth" = 19 ] || fail "teeth ledger — $teeth/19 fired"
+# PARSER TEETH (PROCESS §3 grammar fail-closed proof; iter 105). Prove
+# banner_verdict_ok — the anchored success-line parser — REJECTS the two
+# permissive holes the round-3 M named: (a) a garbled success line (the
+# exact line + trailing corruption; prefix intact), and (b) a
+# substring-resemblance line (the OK needle on an extra line that is not
+# the anchored success line). Synthetic verdict outputs on COPIES,
+# removed after; the committed producer output is never touched.
+printf '%sCORRUPTED\n' "$BANNER_OK_LINE" > "$B/banner-garble.out"
+if banner_verdict_ok "$B/banner-garble.out"; then
+  fail "parser tooth — a garbled success line (exact line + trailing corruption) was ACCEPTED (permissive prefix parse survives)"
+fi
+printf '%s\n%s but garbled\n' "$BANNER_OK_LINE" "$BANNER_OK_NEEDLE" > "$B/banner-resemble.out"
+if banner_verdict_ok "$B/banner-resemble.out"; then
+  fail "parser tooth — an extra 'BANNER WITNESS OK' resemblance line was ACCEPTED (needle-vs-full resemblance guard is dead)"
+fi
+rm -f "$B/banner-garble.out" "$B/banner-resemble.out"
+echo "    parser teeth OK: garbled-success + substring-resemblance verdict outputs both rejected by the anchored full-line parser"
+teeth=$((teeth + 2))
+
+[ "$teeth" = 21 ] || fail "teeth ledger — $teeth/21 fired"
 [ "$banner" = 1 ] || fail "banner ledger — the finish-banner witness leg did not complete"
 
 # --- [6] hygiene ----------------------------------------------------------------

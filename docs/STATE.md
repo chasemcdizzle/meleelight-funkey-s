@@ -3,7 +3,42 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-20, iter 104 — M4 hardening DONE: persist-arc round-2 closure, review-102 ALL 7 dispositions, PERSIST OK cold)
+## Live right now (updated: 2026-07-20, iter 105 — M4 micro DONE: task-12-arc round-3 M closed, [5b] banner-witness grammar anchored, FOH FLOWS OK cold teeth=21)
+
+- **Iter 105 DONE (M4 micro; review-103 round-3 NO-GO — the sole
+  Medium, PROCESS §3 whitelist-grammar rule).** The NEW [5b]
+  banner-witness leg parsed its OWN decision output PERMISSIVELY:
+  :1374 accepted the `BANNER WITNESS OK` PREFIX (producer emits a
+  longer metrics line), :1398 searched a bare missing-glyph SUBSTRING
+  for the tooth, :1397 accepted ANY nonzero exit. **FIX (anchored
+  full-line whitelist):** MEASURED the producer grammar empirically
+  (.loop/m4-ban105-measure.log — success line `BANNER WITNESS OK
+  (complete_ink=2016 failure_ink=1680 distinct=yes)` byte-identical in
+  both archived runs + fresh; tooth exit code **3** + exact foh_font
+  diagnostic line confirmed by manual relink), then a `banner_verdict_ok`
+  helper anchors the FULL success line (count_xl = grep -cxF, exactly 1)
+  with a needle==full resemblance guard, and the tooth now requires the
+  EXACT rc 3 + EXACT full-line diagnostic + resemblance reconciliation.
+  Ink counts pinned (deterministic 5x7 integer blit). CORPUS: both
+  archived genuine [5b] outputs accept 1/1 (zero false rejections).
+- **Done-check (cold):** `FOH FLOWS OK (flows=7 shots=17 bridges=3
+  tbridges=2 states=4 tstates=2 diverge=1 control=1 banner=1 teeth=21)`
+  exit 0 (.loop/m4-ban105-fohflows-cold.log). teeth 19→21 — TWO NEW
+  parser teeth joined the ledger (garbled-success + substring-resemblance
+  verdict outputs both rejected). ONE atomic commit. Full trail:
+  AGENT-LOG iter-105 pre-reg + result.
+- **Surface:** port/foh/check-foh-flows.sh ONLY. Frozen artifacts +
+  gfx_target.c / foh_banner_witness.c / foh_font.c BYTE-UNTOUCHED
+  (grammar measured FROM them). Refutations R1/R2/R3 all recorded
+  NEGATIVE with evidence.
+- **Run ledger:** cold host checks 1/2 (spare unused; measurement reused
+  iter-104 .o's); paced device 0, arm 0, browser 0.
+- **Queue:** task-12-arc **round 4 = closure-or-cap on THIS iter-105
+  diff** (the anchored [5b] parser); persist-arc round-3 GO status →
+  task 14 (verify_m4.sh assembly) → M4 GATE → provision → LOOP STOP:
+  m4-complete.
+
+## [superseded by iter-105] (updated: 2026-07-20, iter 104 — M4 hardening DONE: persist-arc round-2 closure, review-102 ALL 7 dispositions, PERSIST OK cold)
 
 - **Iter 104 DONE (M4 hardening; review-102 round-2 NO-GO — all 7
   dispositions closed).** COLD done-check: **`PERSIST OK (sessions=2

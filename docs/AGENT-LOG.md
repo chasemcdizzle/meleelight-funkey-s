@@ -18643,3 +18643,147 @@ integration covered by the clean step-0/cleanup reaps; their host
 consumers (rig_orphan_parse reconciliation) are directly unit-toothed.
 L-b binds the derived string to HOST-twin pixels; device pixels are
 connected transitively through the existing byte-identical cmp.
+
+---
+
+iter 105 · 2026-07-20 · phase M4 · task-12-arc round-3 micro (PRE-REGISTRATION) · [5b] banner-witness grammar anchored — close review-103 round-3 Medium (permissive decision-output parsing)
+
+**Finding (review-103-1.log, codex over 7bb4ec6; triage
+.loop/review-103-triage.md).** ONE Medium, PROCESS §3 whitelist-grammar
+rule: the NEW [5b] banner-witness leg parses its own decision output
+PERMISSIVELY — check-foh-flows.sh:1374 accepts the `BANNER WITNESS OK`
+PREFIX while the producer emits a longer metrics line; :1398 searches a
+bare missing-glyph SUBSTRING for the tooth, and :1397 accepts ANY nonzero
+exit (`!= 0`) rather than the measured missing-glyph class. New
+permissive-output-grammar instance (not a capped-class variant) → one fix
+round, then round 4 = closure-or-cap.
+
+**Surface (ONLY):** port/foh/check-foh-flows.sh. Frozen artifacts
+byte-untouched. gfx_target.c / foh_banner_witness.c / foh_font.c NOT
+touched (grammar is measured FROM them, not changed).
+
+**Method (frozen before first run/edit):**
+1. MEASURE the producer's exact grammar EMPIRICALLY.
+   - Success line: from the archived genuine runs
+     .loop/m4-ban103-{fohflows,driver}-cold.log:138 (BOTH byte-identical,
+     relayed `  | `-prefixed): `BANNER WITNESS OK (complete_ink=2016
+     failure_ink=1680 distinct=yes)`. The ink counts are DETERMINISTIC
+     pins — foh_text blits a 5x7 BITMAP font at integer scale 4 / fixed
+     centre, lit-pixel count is pure integer (no FP), platform-
+     independent — so they are pinned. (Refutation R2 below covers the
+     case they are not stable.)
+   - Tooth diagnostic: foh_font.c:77 `gfx_fatal("foh_font: no glyph for
+     requested character")` routed through the witness gfx_fatal override
+     (foh_banner_witness.c:39-42 `foh_banner_witness: gfx_fatal: %s\n`,
+     `exit(3)`) → exact line `foh_banner_witness: gfx_fatal: foh_font: no
+     glyph for requested character`, exit code 3. CONFIRM the exit code +
+     exact bytes empirically by a manual tooth relink+run
+     (.loop/m4-ban105-measure.log) — do NOT assume.
+2. ANCHOR full lines (drop leniency). Factor a `banner_verdict_ok
+   <file>` helper: the file must carry the EXACT success line exactly
+   once (`count_xl`, grep -cxF, full-line) AND the `BANNER WITNESS OK`
+   needle must appear ONLY on that anchored line (needle count ==
+   full-line count) — else corruption → return nonzero → live call
+   `|| fail`. Tooth: require the exact measured exit code (== 3, not
+   `!= 0`), the exact full-line diagnostic (`count_xl` == 1), the needle
+   only on that line (resemblance reconciliation), and OK-needle == 0.
+3. CORPUS-validate the tightened parser against ALL archived genuine [5b]
+   outputs (both m4-ban103 logs, prefix-stripped) — zero false
+   rejections, recorded.
+4. TEETH (join the ledger, in-script, on synthetic COPIES removed after):
+   a garbled-success probe (exact line + trailing corruption) → full-line
+   miss → rejected; a substring-resemblance probe (needle on an extra
+   non-matching line) → needle>full → rejected. teeth 19 → 21;
+   `[ "$teeth" = 21 ]` + FOH-FLOWS-OK `teeth=` value flow through.
+
+**Pass criteria:** cold `bash port/foh/check-foh-flows.sh` → `FOH FLOWS OK
+(… banner=1 … teeth=21)` exit 0; the genuine success line still matches
+the anchored pin (ink 2016/1680); corpus zero false rejections; both
+parser teeth fire.
+
+**Refutation shapes (frozen; default = one bounded evidence round, then
+STOP + report):**
+- R1: the measured tooth exit code is NOT 3 → PIN the measured code, do
+  not ship an assumed 3.
+- R2: the fresh cold ink counts DIFFER from 2016/1680, or the two
+  archived logs disagree → the counts are NOT deterministic pins; fall
+  back to an anchored full-line REGEX (`^BANNER WITNESS OK
+  \(complete_ink=[0-9]+ failure_ink=[0-9]+ distinct=yes\)$` via a
+  grep -cxE helper) rather than pinning wrong values. Do NOT retry blind
+  with a wrong pin.
+- R3: corpus validation shows ANY false rejection on genuine data → the
+  measured grammar is wrong → STOP + remeasure, do not loosen the parser
+  to make it pass.
+
+**Budgets:** cold host checks ≤2 (1 = the done-check; +1 spare); paced
+device 0; arm rebuilds 0; browser 0. Command output → .loop/m4-ban105-*
+only; teeth on COPIES, restored by reverse-edit.
+
+---
+
+iter 105 · 2026-07-20 · phase M4 · task-12-arc round-3 micro (RESULT — DONE) · [5b] banner-witness grammar anchored (review-103 round-3 M CLOSED)
+
+**done-check:** cold `bash port/foh/check-foh-flows.sh` → `FOH FLOWS OK
+(flows=7 shots=17 bridges=3 tbridges=2 states=4 tstates=2 diverge=1
+control=1 banner=1 teeth=21)` **exit 0**
+(.loop/m4-ban105-fohflows-cold.log:142). teeth 19 → 21.
+
+**MEASUREMENT (.loop/m4-ban105-measure.log — frozen, all refutations
+NEGATIVE):**
+- Genuine success line (fresh witness run, od-exact): `BANNER WITNESS OK
+  (complete_ink=2016 failure_ink=1680 distinct=yes)\n` — byte-identical
+  to BOTH archived logs. Ink pins 2016/1680 CONFIRMED deterministic
+  (R2 did NOT fire).
+- Tooth: manual relink of the SAME witness .o against a
+  COMPLETE?-perturbed copy → **EXIT CODE 3** (R1 did NOT fire); stderr
+  exactly `foh_banner_witness: gfx_fatal: foh_font: no glyph for
+  requested character\n`, single line, no trailing corruption.
+- CORPUS: both archived genuine [5b] outputs
+  (m4-ban103-{fohflows,driver}-cold.log, `  | `-prefix stripped)
+  full-line-match the pin = 1/1 each → ZERO false rejections (R3 did NOT
+  fire).
+
+**SURFACE (port/foh/check-foh-flows.sh ONLY; +9/-… net, tracked diff =
+this file + AGENT-LOG):**
+- New pinned grammar consts (BANNER_OK_LINE / BANNER_OK_NEEDLE /
+  BANNER_TOOTH_LINE / BANNER_TOOTH_NEEDLE / BANNER_TOOTH_RC=3) + a
+  `banner_verdict_ok <file>` helper: anchored FULL-LINE success match
+  (count_xl = grep -cxF, exactly 1) AND OK-needle count == full-line
+  count (resemblance-death). Replaces the :1374 bare-prefix
+  `count_x "BANNER WITNESS OK" == 1`.
+- Tooth (was :1397/1398): now requires the EXACT measured exit code
+  (`= 3`, not `!= 0`), the EXACT full-line foh_font diagnostic
+  (count_xl == 1, not a bare substring), needle-vs-full resemblance
+  reconciliation, and OK-needle == 0.
+- Two NEW parser teeth (in-ledger, synthetic COPIES removed after):
+  (a) garbled-success (exact line + `CORRUPTED` tail) → full-line miss →
+  banner_verdict_ok returns nonzero → rejected; (b) substring-resemblance
+  (exact line + an extra `BANNER WITNESS OK but garbled` line) → needle
+  2 != full 1 → rejected. Both fired green in the cold run
+  (.loop/m4-ban105-fohflows-cold.log:141). teeth 19→21;
+  `[ "$teeth" = 21 ]` gate + FOH-FLOWS-OK `teeth=21`.
+
+**Frozen artifacts:** byte-untouched. gfx_target.c / foh_banner_witness.c
+/ foh_font.c NOT touched (grammar measured FROM them). Hygiene [6] leg
+(build git-ignored) still green.
+
+**Run ledger vs caps:** cold host checks **1/2** (the done-check; spare
+unused — measurement used the already-built iter-104 .o's, no full check
+run). paced device 0/0; arm rebuilds 0/0; browser 0/0.
+
+**ZOOM-OUT.** This is the permissive-decision-output-parse CLASS (PROCESS
+§3 whitelist rule; prior instances RC-marker r1-2, manifest-eval r1-3,
+timing-grammar task-4 r1, persist-file M-b iter-104). The [5b] leg was a
+fresh instance because it was authored a round BEFORE the anchored parse
+was applied to it. The class-level instrument is the anchored full-line +
+resemblance-reconciliation pattern (count_xl for the pin, needle==full
+for resemblance) now also carried by `banner_verdict_ok`; every future
+verdict-parse leg should reach for count_xl + a needle-reconciliation
+rather than count_x on a prefix/substring. No new one-off introduced.
+Refutation shapes R1/R2/R3 all recorded NEGATIVE with evidence — do NOT
+re-litigate the ink pins or the rc-3 class without new device/build
+evidence.
+
+**next:** task-12-arc **round 4 = closure-or-cap** on THIS iter-105 diff
+(review the anchored [5b] parser); then persist-arc round-3 GO status,
+task 14 (verify_m4.sh assembly), M4 GATE.
