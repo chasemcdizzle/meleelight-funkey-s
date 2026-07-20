@@ -16355,3 +16355,294 @@ typed. Music-surface arc round 2 reviews this commit's bytes.
   THIRD check script grows these parsers (two sites today:
   check-device-foh.sh, check-foh-flows.sh's own forms) — registered,
   not built (YAGNI at n=2).
+
+## iter 98 — 2026-07-20 — M4 hardening PRE-REGISTRATION: target-rig round-2 closure (review-96 triage, ALL dispositions; frozen before any run/edit; PROCESS §2)
+
+- **Task**: close ALL dispositions in `.loop/review-96-triage.md`
+  (codex round-2 `.loop/review-96-2.log` VERDICT: NO-GO — 0 High,
+  3 Medium, 2 Low, all remaining whitelist-input-trust /
+  tooth-coverage variants; grok Tier A+ `.loop/review-96-aplus-1.log`
+  VERDICT: GO with 1 Medium + 1 Low driver-adopted). HOST-ONLY.
+  Surfaces ONLY: port/goldens-m4/{validate-target-manifest.js,
+  verify-target-stream.js,wrap-target.js,freeze-target.js} + ONE NEW
+  shared scanner lib port/goldens-m4/json-dup-key-scan.js +
+  port/sim/target/check-target-sim.sh. BYTE-UNTOUCHED: oracle/,
+  check-sim.sh, run-target.js, record-target.sh, manifest-target.json,
+  ALL frozen *.sha256.json + traces. Every fix judges the EXISTING
+  frozen artifacts green — NO re-record, NO re-freeze, NO spec bump.
+  Any fix that seems to need a byte-untouched surface = refutation
+  shape — STOP and report.
+- **Budgets (hard caps)**: browser runs 0. Cold done-check
+  check-target-sim.sh x2 max (plan: 1 + 1 spare); check-sim.sh 0 —
+  mechanical skip-proof instead (no consumed surface of check-sim.sh
+  is edited; grep evidence logged), escalate to 1 cold run ONLY if
+  the skip-proof finds a consumption edge. Component/corpus node
+  invocations unlimited but logged. Logs -> `.loop/m4-tgt98-*.log`.
+- **C-M1 method (ONE shared string-aware duplicate-JSON-key
+  scanner)**: NEW port/goldens-m4/json-dup-key-scan.js — a proper
+  tokenizer walk of the RAW bytes (string-literal aware incl. escape
+  decoding \" \\ \/ \b \f \n \r \t \uXXXX; JSON-whitespace tolerant,
+  so the LIVE-CONFIRMED probe spelling `"id" : "t02"` is seen as the
+  same key; structural mini-parser with per-OBJECT-scope key sets and
+  a scope path for the error message). ANY duplicate key at ANY scope
+  = throw naming the key + scope (JSON.parse last-wins = corruption,
+  refuse); structural anomalies the walker cannot attribute = throw
+  (fail closed; JSON.parse remains the syntax authority behind it).
+  NO regex spellings anywhere. Consumers (every JSON-parsing decision
+  consumer in the target rig): validate-target-manifest.js (scanner
+  REPLACES the byte-literal `"key":` token-count guard — the refuted
+  regex form is deleted), verify-target-stream.js (frozen + sibling +
+  run raw bytes before parse), freeze-target.js (runA + runB raw +
+  the existing-frozen raw on the --refreeze read path),
+  wrap-target.js (its ONLY JSON-parsing decision input is the
+  manifest, consumed through the shared validator which now scans —
+  recorded honestly; sim.out is line-protocol text, not JSON).
+  CORPUS VALIDATION (mandatory, zero false rejections): scanner over
+  EVERY committed + archived genuine JSON the rig consumes —
+  manifest-target.json, all 4 frozen target-rig streams (t01/t02
+  .sha256.json + .target.sha256.json), t01/t02 traces, goldens-m4
+  manifest.json + m01/m02 frozen streams, the M0 reference corpus
+  (oracle/goldens/*.sha256.json + manifest.json), archived browser
+  runs oracle/harness/out/target-t0{1,2}-{a,b}.json, archived wraps
+  port/sim/target/build/t0{1,2}.{player,target}.json +
+  tgt96-*.json. REFUTATION SHAPES: (r1) scanner false-rejects a
+  genuine corpus file -> tokenizer bug, one bounded fix round against
+  the file's bytes; (r2) a COMMITTED artifact genuinely carries a
+  duplicate key -> that is corruption evidence about the artifact —
+  STOP and report (never special-case the scanner around it).
+- **C-M2 method (judge scans + sibling/run exact schemas)**:
+  verify-target-stream.js runs the C-M1 scanner on all three parsed
+  files; the SIBLING gets the SAME exact-whitelist treatment the
+  target frozen file got in iter-96 — top-level key ORDER {golden,
+  specVersion,params,rngCalls,rngCallsOutsideStep,streamSha256,
+  frames} and params key ORDER {trace,traceSha256,frames,seed,p1,p2,
+  stage,cpu,difficulty,fdlibm,seedRandom,mode,tstage} (MEASURED from
+  the frozen t01 sibling bytes + freeze-target.js's literal order,
+  read this session), frame rows exactly {f,h}; RUN target rows
+  keysExact {f,h} (unknown keys = death; run TOP level stays
+  union-shaped across the two genuine producers wrap-target.js /
+  run-target.js — rows are the codex finding, pinned). The codex
+  probe `{"f":999,"f":1,"h":...}` dies at the scanner before any
+  parse. REFUTATION: an EXISTING frozen sibling fails the pinned
+  order (t02 differs from t01) -> measure both, pin the measured
+  common form; if the two frozen siblings genuinely disagree ->
+  STOP (artifact inconsistency finding).
+- **C-M3 method (T12 -> true integration tooth, copied-tree form)**:
+  $BUILD/itooth-tree mirrors the consumer geometry (port/goldens-m4/
+  {the 4 rig js + scanner + frozen t01 pair + trace + manifest},
+  oracle/harness/streamlib.js, oracle/CHECKSUM.md) with EVERY copied
+  js byte-identity-proven via cmp against production (so the
+  exercised path IS the production consumer bytes). CONTROL: with the
+  pristine manifest copy, the tree verify-target-stream.js judges the
+  REAL run json green. TOOTH: overwrite ONLY the tree manifest with
+  the duplicate-id COPY (row 0 cloned over row 1), then (a) the tree
+  wrap-target.js invocation (the done-check's first manifest
+  consumer) must die naming `duplicate golden id`, (b) the tree
+  verify-target-stream.js must die naming it, (c) the done-check's
+  own IDS-pull command form against the tree validator must die
+  naming it. NO direct validator-CLI invocation counts as the tooth.
+  REFUTATION: the tree control cannot pass (hidden absolute-path
+  dependency in a consumer) -> one bounded evidence round; if
+  irreducible, STOP (a tooth without a green control proves nothing).
+- **G-M4 method (run-meta pins to M0 discipline)**:
+  verify-target-stream.js adds typed EXPLICIT pins — run.meta.fdlibm
+  === true, run.meta.seedRandom === true, run.meta.p2 === null,
+  run.meta.stage === null, run.meta.cpu === false,
+  run.meta.difficulty === null (an ABSENT field is undefined and
+  undefined !== null/true/false — undefined-equals-undefined is
+  impossible by construction); the sibling params get the same
+  target-mode value pins (fdlibm/seedRandom true, p2/stage/difficulty
+  null, cpu false) on top of the C-M2 schema. MEASURED: both genuine
+  run producers already emit every pinned field (run-target.js:342-348,
+  wrap-target.js baseMeta), both frozen siblings carry them.
+  REFUTATION: an ARCHIVED genuine run json lacks a pinned field ->
+  pin only the fields present in ALL genuine runs, record the delta
+  (corpus regression decides, not memory).
+- **C-L5 method (wrap-target numeric bounds)**: every numeric token
+  already regex-anchored to canonical text gains
+  Number.isSafeInteger + String(n)===token round-trip + domain
+  bounds: RNG rngCalls/rngCallsOutsideStep 0..4294967295 (producer
+  %u), TFIN targetsDestroyed 0..20 (the frozen-side
+  finalTargetsDestroyed domain). `RNG 9007199254740993 1` dies (both
+  by round-trip and safe-integer). Corpus: archived t01/t02 sim.out
+  re-wraps must be BYTE-IDENTICAL (cmp) to the archived wraps.
+  REFUTATION: a genuine archived token falls outside a bound ->
+  widen to the MEASURED domain and record (measured: rngCalls=5).
+- **C-L6 + G-L7 method (frozen-side per-class teeth; finals
+  binding)**: G-L7 derivability DETERMINED BEFORE EDIT: the finals
+  (finalTargetsDestroyed/finalEndTargetGame) are NOT derivable from
+  the sealed frame content — frozen frames are SHA-256 hashes of the
+  target envelope; the envelope itself is not stored; hashes are
+  one-way (pre-registered refutation of the "re-derive" arm ->
+  assertion-only form, recorded here, do NOT retry blind). Assertion
+  form shipped: the judge additionally asserts the frozen
+  finalTargetsDestroyed >= the VALIDATED MANIFEST row's minTargets
+  directly (manifest-anchored quality, belt over the frozen-params
+  path) and keeps run-finals == frozen-finals (step 9); the residual
+  — a COORDINATED frozen+run dual edit inside the domain bounds —
+  is the same unsealed-secondary class as M0's rngCalls (grok L1
+  itself marks it disposition-preferred; sealing it requires a
+  re-freeze, forbidden). Teeth (all on COPIES, all dying in the
+  PRODUCTION judge, pristine-copy restores): T13 manifest dup-key
+  probe `"id" : "t02"` (the live-confirmed spelling) dies naming the
+  dup key; T14 manifest TOP-LEVEL dup key dies; T15 frozen-row
+  dup-key `{"f":999,"f":1800,...}` dies at the scanner; T16 sibling
+  extra top-level key dies at the sibling schema; T17 frozen
+  params.tstage perturb dies at the manifest binding (the
+  beyond-minTargets manifest-bound field); T18 playerStream name
+  perturb dies at the name binding; T19 sibling rngCalls perturb
+  dies at the run cross-pin; T20 finalTargetsDestroyed 2->1 dies at
+  the QUALITY comparison; T21 finalTargetsDestroyed 2->3 dies at the
+  run-finals binding (G-L7 tooth); T22 sim.out `RNG 9007199254740993`
+  copy dies in wrap-target (C-L5 tooth); T23 run-copy meta.fdlibm
+  false dies; T24 run-copy meta.p2 DELETED (undefined) dies (G-M4
+  teeth). Teeth counter 12 -> 24 (honest change; T1-T11 stay, T12
+  becomes the integration form).
+- **Pass criteria (all required)**: cold
+  `bash port/sim/target/check-target-sim.sh` -> `TARGET SIM CONFORMS
+  (2 goldens: t01 t02; leaves=718 probe=ok teeth=24)` exit 0
+  (.loop/m4-tgt98-donecheck.log); corpus scanner sweep zero false
+  rejections + judge regression (new verify bytes MATCH on the
+  archived run jsons vs the frozen artifacts) + freeze regression
+  (archived a/b pairs re-freeze `unchanged (byte-identical
+  re-freeze)` x4) + wrap regression (archived sim.out re-wraps cmp
+  byte-identical) in .loop/m4-tgt98-corpus.log; check-sim mechanical
+  skip-proof logged; frozen artifacts byte-untouched (git status);
+  ONE atomic commit; budgets respected.
+- **Refutation catch-all**: any NEW guard failing against an EXISTING
+  frozen/archived genuine artifact beyond the pre-measured facts
+  above is a finding about the guard — one bounded evidence round,
+  then STOP and report; never weaken, never re-freeze, never touch a
+  byte-untouched surface.
+
+## iter 98 — 2026-07-20 — M4 hardening RESULT: target-rig round-2 closure — ALL review-96 dispositions shipped; cold checks green FIRST attempt
+
+- **COLD verdicts**: `TARGET SIM CONFORMS (2 goldens: t01 t02;
+  leaves=718 probe=ok teeth=24)` exit 0 — TWICE (first attempt
+  .loop/m4-tgt98-donecheck.log; second cold run on the final bytes
+  after an echo-label-only honesty fix in T20/T21,
+  .loop/m4-tgt98-donecheck-2.log). check-sim.sh: NOT run — mechanical
+  skip-proof .loop/m4-tgt98-checksim-skip.txt (check-sim.sh
+  byte-untouched vs HEAD; zero references to ANY edited surface; its
+  full node/bash call-site inventory listed). FROZEN
+  streams/traces/manifest + oracle/ + run-target.js +
+  record-target.sh byte-untouched (git status + git diff empty over
+  those paths). Zero divergence rounds.
+- **C-M1 SHIPPED**: NEW port/goldens-m4/json-dup-key-scan.js — ONE
+  shared string-aware duplicate-JSON-key scanner: proper tokenizer
+  over the raw bytes (string literals with full escape DECODING incl.
+  \uXXXX, JSON-whitespace tolerant, structural mini-parser with
+  per-OBJECT-scope key sets + scope-path error messages; structural
+  anomalies fail closed). Duplicate key at ANY scope = death naming
+  key + scope. Consumers: validate-target-manifest.js (the refuted
+  byte-literal '"key":' token-count guard DELETED — no regex
+  spellings), verify-target-stream.js (frozen + sibling + run raw),
+  freeze-target.js (runA/runB + existing-frozen refreeze read path);
+  wrap-target.js's only JSON decision input (the manifest) goes
+  through the shared validator which scans. Smoke witnesses: the
+  LIVE-CONFIRMED `"id" : "t02"` spelling, nested `{"f":999,"f":1}`,
+  top-level dup, id-escaped dup all die; strings containing
+  colons/braces and value-position strings equal to keys pass.
+- **C-M2 SHIPPED**: verify-target-stream.js scans all three parsed
+  files (step 0) and gives the SIBLING the same exact-whitelist
+  treatment the target frozen file got in iter 96 — top-level key
+  ORDER {golden,specVersion,params,rngCalls,rngCallsOutsideStep,
+  streamSha256,frames}, params key ORDER {trace,traceSha256,frames,
+  seed,p1,p2,stage,cpu,difficulty,fdlibm,seedRandom,mode,tstage}
+  (measured from the frozen siblings == freeze-target's emission
+  order), frame rows exactly {f,h}; RUN target rows keysExact {f,h}
+  (unknown keys = death; run TOP level stays union-shaped across the
+  two genuine producers — pre-registered). The codex probe
+  `{"f":999,"f":1,"h":...}` dies at the scanner (T15).
+- **C-M3 SHIPPED**: T12 is now a TRUE integration tooth —
+  $BUILD/itooth-tree mirrors the consumer geometry with cmp-proven
+  byte-identical PRODUCTION consumer bytes (validate/verify/wrap +
+  scanner, streamlib.js, CHECKSUM.md, frozen t01 pair + trace +
+  manifest); CONTROL: tree verify judges the real run green on the
+  pristine manifest; then the dup-id manifest COPY goes IN the tree
+  and wrap-target.js, verify-target-stream.js, AND the done-check's
+  IDS-pull command form each die naming `duplicate golden id`. No
+  direct validator-CLI invocation counts toward the tooth.
+- **G-M4 SHIPPED**: run-meta pins at M0 discipline — fdlibm === true,
+  seedRandom === true, p2 === null, stage === null, cpu === false,
+  difficulty === null, all EXPLICIT typed comparisons (absent field =
+  undefined, never equal); the sibling params carry the same
+  target-mode value pins on top of the C-M2 schema. Teeth: T23
+  (fdlibm:false dies), T24 (DELETED meta.p2 dies — the
+  undefined-equals-undefined witness).
+- **C-L5 SHIPPED**: wrap-target.js canonInt — every accepted integer
+  token (already regex-anchored canonical text) must survive
+  Number.isSafeInteger + String(n)===token round-trip + producer
+  domain (RNG counts 0..2^32-1 = printf %u; TFIN targetsDestroyed
+  0..20 = the frozen finalTargetsDestroyed domain).
+  `RNG 9007199254740993 1` dies (T22). Wrap regression: archived
+  t01/t02 sim.out re-wraps BYTE-IDENTICAL to the archived wraps.
+- **C-L6 SHIPPED**: per-class frozen-side teeth on COPIES, each dying
+  in the PRODUCTION judge with named-death greps + pristine-copy
+  restores: T17 manifest-bound field beyond minTargets (tstage ->
+  metadata-binding death), T18 playerStream name binding (repoint ->
+  sibling name-binding death), T19 cross-pin (sibling rngCalls
+  perturb -> run-vs-sibling equality death), T20 quality comparison
+  (finalTargetsDestroyed -> minTargets-1 -> mechanical-quality
+  death). Plus T13 (the live-confirmed whitespace-colon dup-key probe
+  dies naming the key), T14 (top-level dup key dies), T16 (sibling
+  extra key -> exact-schema death). Teeth counter 12 -> 24 (honest;
+  T1-T11 unchanged, T12 reshaped, T13-T24 new).
+- **G-L7 SHIPPED (assertion form; pre-registered refutation FIRED as
+  predicted)**: the finals are NOT re-derivable from sealed frame
+  content — frozen frames are SHA-256 hashes of a target envelope
+  that is not stored (one-way); recorded in the pre-registration, do
+  NOT retry blind. Shipped the assertion form: the judge asserts
+  frozen finalTargetsDestroyed >= the VALIDATED manifest row's
+  minTargets DIRECTLY (manifest-anchored finals binding, belt over
+  the frozen-params path) and keeps run-finals == frozen-finals;
+  teeth T20/T21 prove both directions bite (quality floor + the
+  +1-within-domain run-finals death).
+- **CORPUS (mandatory, .loop/m4-tgt98-corpus.log)**: [a] scanner over
+  45 genuine JSONs — every port/goldens-m4/*.json (manifest-target,
+  manifests, all frozen streams, traces), the M0 reference corpus
+  (oracle/goldens/*.json), the 4 archived browser runs
+  (oracle/harness/out/target-t0*-{a,b}.json), all archived build
+  wraps — ZERO false rejections; [b] committed manifest -> TARGET
+  MANIFEST OK; [c] judge regression: NEW verify bytes MATCH on all 8
+  archived run JSONs vs the frozen artifacts; [d] freeze regression:
+  archived a/b pairs re-freeze `unchanged (byte-identical re-freeze)`
+  x4; [e] wrap regression cmp-identical x2.
+- **Run ledger vs budgets**: browser 0/0; cold check-target-sim 2/2
+  (both green — the second spent deliberately on the final bytes
+  after the echo-label fix); check-sim 0 (skip-proof); component/
+  corpus node invocations logged. Logs: .loop/m4-tgt98-{donecheck,
+  donecheck-2,corpus}.log + m4-tgt98-checksim-skip.txt.
+- **Refutation shapes**: G-L7 derivability refuted exactly as
+  pre-registered (assertion-only form shipped). No other shape fired
+  — no false rejection, both frozen siblings share the pinned format,
+  the tree control passed first try, no archived run lacked a pinned
+  meta field.
+- **Honest coverage (PROCESS §8) — residuals**: (1) a COORDINATED
+  frozen+run dual edit of the finals INSIDE the 0..20 domain and
+  above the quality floor remains representable — the finals are
+  outside streamSha256 and sealing them requires a re-freeze
+  (forbidden); same unsealed-secondary class as M0's rngCalls, which
+  the Tier A+ reviewer itself marked disposition-preferred. (2) The
+  run TOP level/meta is pinned-field + rows-exact, not whole-object
+  whitelisted — two genuine producers (browser run-target.js with
+  wallMs/browser/version/captured, C wrap-target.js) legitimately
+  differ; every DECISION field is individually pinned typed. (3) The
+  scanner is structure-strict but value-permissive (numbers/literals
+  unvalidated) — JSON.parse behind it remains the syntax authority;
+  its job is solely the last-wins dup class. (4) wantArticles
+  coverage unchanged from iter 96 (manifest<->frozen pin; no
+  stream-derivable witness).
+- **ZOOM OUT (HARD RULE 8)**: the round-2 findings were all instances
+  of ONE class PROCESS §3 already names — permissive acceptance at a
+  decision edge (dup keys, unknown keys, unbounded integers, subset
+  identity pins) — and the shipped fix is instrument-shaped, not
+  spot-shaped: ONE shared raw-bytes scanner used by every JSON
+  decision consumer in the rig kills the whole duplicate-key spelling
+  space (the refuted regex form is deleted, not patched), and the
+  copied-tree integration tooth pattern (cmp-proven production bytes
+  + control + named death) is reusable for any future
+  consumer-bypass concern. Candidate future instrument if a THIRD
+  rig grows its own JSON-decision consumers outside port/goldens-m4:
+  promote json-dup-key-scan.js to a shared lib home (registered, not
+  done — YAGNI at n=1 rig).

@@ -4,11 +4,17 @@
 // convention; Tier A+ — it is a judge path). The spec-v1 PLAYER stream is
 // judged SEPARATELY by the UNCHANGED oracle/harness/verify-stream.js; this
 // verifier owns the target plane + the full target metadata binding
-// (review-94 H2/M1 hardened, iter 96).
+// (review-94 H2/M1 hardened, iter 96; review-96 C-M2/G-M4/G-L7
+// hardened, iter 98).
 //
 // Usage: node verify-target-stream.js <run.json> <frozen.target.sha256.json>
 //
 // PASS ("TARGET STREAM MATCH …", exit 0) requires ALL of:
+//   0. DUP-KEY SCAN (review-96 C-M2): the SHARED string-aware
+//      duplicate-JSON-key scanner (json-dup-key-scan.js) over the RAW
+//      bytes of ALL THREE parsed files (run, frozen, sibling) BEFORE
+//      any JSON.parse — a duplicate key at ANY scope (e.g. a frozen
+//      row {"f":999,"f":1,...}) is last-wins corruption, death.
 //   1. frozen-file EXACT SCHEMA (whitelist, fail closed — review-94 M1):
 //      top-level key ORDER {golden,stream,specVersion,playerStream,
 //      params,streamSha256,frames}; params key ORDER {trace,traceSha256,
@@ -28,23 +34,41 @@
 //   3. MANIFEST BINDING (review-94 H2): the COMMITTED manifest-target
 //      passes the SHARED strict validator and carries a row named
 //      frozen.golden whose {trace,frames,seed,char,tstage,minTargets,
-//      wantArticles} equal the frozen params exactly.
-//   4. SIBLING BINDING (review-94 H2): frozen.playerStream ==
-//      golden + ".sha256.json"; the sibling next to the frozen target
-//      file exists, its OWN streamSha256 seal verifies over its frames
-//      (numbering 1..N), specVersion matches, and its params cross-pin
-//      the target params (trace/traceSha256/frames/seed/p1==char/mode/
-//      tstage); its rngCallsOutsideStep == 1.
+//      wantArticles} equal the frozen params exactly. FINALS BINDING
+//      (review-96 G-L7, assertion form): finalTargetsDestroyed >= the
+//      VALIDATED manifest row's minTargets directly (the finals are NOT
+//      re-derivable from sealed content — frozen frames are SHA-256
+//      hashes of an envelope that is not stored; pre-registered
+//      determination, iter 98 — so the binding asserts what IS frozen:
+//      quality vs the manifest row here + run-finals equality in 9).
+//   4. SIBLING BINDING (review-94 H2; review-96 C-M2 exact schema):
+//      frozen.playerStream == golden + ".sha256.json"; the sibling next
+//      to the frozen target file exists and gets the SAME whitelist
+//      treatment as the frozen target file — top-level key ORDER
+//      {golden,specVersion,params,rngCalls,rngCallsOutsideStep,
+//      streamSha256,frames}, params key ORDER {trace,traceSha256,
+//      frames,seed,p1,p2,stage,cpu,difficulty,fdlibm,seedRandom,mode,
+//      tstage}, frame rows exactly {f,h} — its OWN streamSha256 seal
+//      verifies over its frames (numbering 1..N), specVersion matches,
+//      its params cross-pin the target params (trace/traceSha256/
+//      frames/seed/p1==char/mode/tstage) AND carry the target-mode
+//      value pins (fdlibm/seedRandom true, p2/stage/difficulty null,
+//      cpu false); its rngCallsOutsideStep == 1.
 //   5. spec pin: frozen specVersion == oracle/CHECKSUM.md's current.
 //   6. trace pin: the golden trace (next to the frozen file) hashes to
 //      params.traceSha256, and the run consumed that trace.
 //   7. run pins (required fields, TYPED — undefined never compares
-//      equal): meta {frames,seed,tstage,p1 ints; mode "target"};
+//      equal): meta {frames,seed,tstage,p1 ints; mode "target"} + the
+//      M0-discipline pins (review-96 G-M4): fdlibm === true, seedRandom
+//      === true, and the target-mode null/false EXPLICIT expectations
+//      p2 === null, stage === null, cpu === false, difficulty === null
+//      (an absent field is undefined and never compares equal);
 //      coverage {rngCalls,rngCallsOutsideStep} == the SIBLING's frozen
 //      values; coverage.target {targetsDestroyed int, endTargetGame
 //      bool}.
 //   8. the target-plane stream: EXACT per-frame {f,h} equality, FULL
-//      length (never epsilon/prefix); run rows strictly typed, f == i+1.
+//      length (never epsilon/prefix); run rows exactly {f,h} (review-96
+//      C-M2 — unknown keys = death), f == i+1, 64-lowercase-hex.
 //   9. finals: run targetsDestroyed/endTargetGame == the frozen
 //      finalTargetsDestroyed/finalEndTargetGame.
 // Any failure prints the reason and exits nonzero (divergence exits 2).
@@ -54,6 +78,7 @@ const path = require("path");
 const { streamDigest, sha256File, specVersion } =
   require("../../oracle/harness/streamlib");
 const { loadValidatedManifest } = require("./validate-target-manifest");
+const { assertNoDuplicateKeys } = require("./json-dup-key-scan");
 
 function die(msg, code) {
   console.error("TARGET STREAM MISMATCH: " + msg);
@@ -66,10 +91,18 @@ if (!runPath || !frozenPath) {
   process.exit(1);
 }
 let run, frozen;
-try { run = JSON.parse(fs.readFileSync(runPath, "utf8")); } catch (e) {
+try {
+  const rawRun = fs.readFileSync(runPath, "utf8");
+  assertNoDuplicateKeys(rawRun, "run JSON"); // review-96 C-M2
+  run = JSON.parse(rawRun);
+} catch (e) {
   die("run JSON unreadable/unparseable: " + e.message);
 }
-try { frozen = JSON.parse(fs.readFileSync(frozenPath, "utf8")); } catch (e) {
+try {
+  const rawFrozen = fs.readFileSync(frozenPath, "utf8");
+  assertNoDuplicateKeys(rawFrozen, "frozen file"); // review-96 C-M2
+  frozen = JSON.parse(rawFrozen);
+} catch (e) {
   die("frozen file unreadable/unparseable: " + e.message);
 }
 
@@ -195,22 +228,41 @@ for (const k of ["trace", "frames", "seed", "char", "tstage",
         `row's ${JSON.stringify(row[k])} (metadata binding)`);
   }
 }
+// FINALS BINDING (review-96 G-L7, assertion form — the finals are not
+// re-derivable from the sealed hashes, pre-registered iter 98): the
+// frozen finalTargetsDestroyed must satisfy the VALIDATED manifest
+// row's quality floor DIRECTLY (belt over the frozen-params path; the
+// run-side equality lives in step 9).
+if (P.finalTargetsDestroyed < row.minTargets) {
+  die(`frozen finalTargetsDestroyed ${P.finalTargetsDestroyed} < the ` +
+      `committed manifest row's minTargets ${row.minTargets} ` +
+      "(manifest-anchored finals binding)");
+}
 
 // 4. player-stream sibling binding (review-94 H2) ----------------------------
 const sibPath = path.join(path.dirname(frozenPath), frozen.playerStream);
 if (!fs.existsSync(sibPath)) die("player-stream sibling missing: " + sibPath);
 let sib;
-try { sib = JSON.parse(fs.readFileSync(sibPath, "utf8")); } catch (e) {
+try {
+  const rawSib = fs.readFileSync(sibPath, "utf8");
+  assertNoDuplicateKeys(rawSib, "player-stream sibling"); // review-96 C-M2
+  sib = JSON.parse(rawSib);
+} catch (e) {
   die("player-stream sibling unparseable: " + e.message);
 }
+// Sibling EXACT SCHEMA (review-96 C-M2 — the same whitelist treatment
+// the frozen target file got in iter-96; key ORDER measured from the
+// frozen siblings == freeze-target.js's literal emission order).
+keysExact(sib, ["golden", "specVersion", "params", "rngCalls",
+  "rngCallsOutsideStep", "streamSha256", "frames"], "sibling top level");
+keysExact(sib.params, ["trace", "traceSha256", "frames", "seed", "p1", "p2",
+  "stage", "cpu", "difficulty", "fdlibm", "seedRandom", "mode", "tstage"],
+  "sibling params");
 if (sib.golden !== frozen.golden) {
   die(`sibling golden ${JSON.stringify(sib.golden)} != ${frozen.golden}`);
 }
 if (sib.specVersion !== frozen.specVersion) {
   die(`sibling specVersion ${sib.specVersion} != frozen ${frozen.specVersion}`);
-}
-if (typeof sib.params !== "object" || sib.params === null) {
-  die("sibling has no params object");
 }
 for (const [sk, fv, what] of [
   ["trace", P.trace, "trace"],
@@ -220,6 +272,14 @@ for (const [sk, fv, what] of [
   ["p1", P.char, "p1==char"],
   ["mode", "target", "mode"],
   ["tstage", P.tstage, "tstage"],
+  // target-mode value pins (review-96 G-M4 — explicit, typed; an
+  // absent field is undefined and never compares equal):
+  ["fdlibm", true, "fdlibm"],
+  ["seedRandom", true, "seedRandom"],
+  ["p2", null, "target-mode p2"],
+  ["stage", null, "target-mode stage"],
+  ["cpu", false, "target-mode cpu"],
+  ["difficulty", null, "target-mode difficulty"],
 ]) {
   if (sib.params[sk] !== fv) {
     die(`sibling params.${sk} = ${JSON.stringify(sib.params[sk])} != target ` +
@@ -231,7 +291,8 @@ if (!Array.isArray(sib.frames) || sib.frames.length !== P.frames) {
       `want ${P.frames}`);
 }
 for (let i = 0; i < sib.frames.length; i++) {
-  if (!sib.frames[i] || sib.frames[i].f !== i + 1 ||
+  keysExact(sib.frames[i], ["f", "h"], "sibling frames[" + i + "]");
+  if (sib.frames[i].f !== i + 1 ||
       typeof sib.frames[i].h !== "string" || !HEX64.test(sib.frames[i].h)) {
     die(`sibling frame row ${i} malformed/misnumbered`);
   }
@@ -290,6 +351,35 @@ if (!isInt(run.meta.tstage) || run.meta.tstage !== P.tstage) {
 if (!isInt(run.meta.p1) || run.meta.p1 !== P.char) {
   die(`run char (meta.p1) = ${JSON.stringify(run.meta.p1)}, frozen ${P.char}`);
 }
+// M0-discipline run identity pins (review-96 G-M4): fdlibm/seedRandom
+// must be EXPLICIT true, and the target-mode null/false expectations
+// are asserted EXPLICITLY — an absent field is undefined and undefined
+// never equals null/true/false, so undefined-equals-undefined is
+// impossible by construction.
+if (run.meta.fdlibm !== true) {
+  die(`run meta.fdlibm = ${JSON.stringify(run.meta.fdlibm)}, want true ` +
+      "(a native-libm run can never be judged against a frozen golden)");
+}
+if (run.meta.seedRandom !== true) {
+  die(`run meta.seedRandom = ${JSON.stringify(run.meta.seedRandom)}, want ` +
+      "true (an unseeded run can never be judged against a frozen golden)");
+}
+if (run.meta.p2 !== null) {
+  die(`run meta.p2 = ${JSON.stringify(run.meta.p2)}, target mode requires ` +
+      "explicit null (absent/undefined never passes)");
+}
+if (run.meta.stage !== null) {
+  die(`run meta.stage = ${JSON.stringify(run.meta.stage)}, target mode ` +
+      "requires explicit null (absent/undefined never passes)");
+}
+if (run.meta.cpu !== false) {
+  die(`run meta.cpu = ${JSON.stringify(run.meta.cpu)}, target mode ` +
+      "requires explicit false (absent/undefined never passes)");
+}
+if (run.meta.difficulty !== null) {
+  die(`run meta.difficulty = ${JSON.stringify(run.meta.difficulty)}, target ` +
+      "mode requires explicit null (absent/undefined never passes)");
+}
 if (typeof run.coverage !== "object" || run.coverage === null) {
   die("run JSON has no coverage object");
 }
@@ -324,7 +414,9 @@ if (rf.length !== frozen.frames.length) {
 }
 for (let i = 0; i < frozen.frames.length; i++) {
   const rrow = rf[i];
-  if (!rrow || typeof rrow !== "object" || rrow.f !== i + 1 ||
+  // exactly {f,h} (review-96 C-M2): unknown keys on a run row = death.
+  keysExact(rrow, ["f", "h"], "run target frames[" + i + "]");
+  if (rrow.f !== i + 1 ||
       typeof rrow.h !== "string" || !HEX64.test(rrow.h)) {
     die(`run target frame row ${i} malformed/misnumbered (want f=${i + 1}, ` +
         "64-lowercase-hex h)");

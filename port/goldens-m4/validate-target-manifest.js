@@ -13,9 +13,13 @@
 // name+".trace.json" (bare basename, resolved-path containment in the
 // golden home), frames int 1..999999, seed int 0..2^32-1, char 0-4,
 // tstage 0-9, minTargets 1-10, wantArticles boolean; duplicate
-// id/name/trace rejection; a RAW duplicate-JSON-key token guard (a
-// duplicated key inside one row is silently last-wins under JSON.parse
-// — counted in the raw bytes and refused).
+// id/name/trace rejection; the SHARED string-aware duplicate-JSON-key
+// scanner (json-dup-key-scan.js, review-96 C-M1, iter 98) over the raw
+// bytes BEFORE JSON.parse — a duplicated key at ANY scope is silently
+// last-wins under JSON.parse and is refused (the old byte-literal
+// '"key":' token count was blind to legal whitespace spellings like
+// `"id" : "t02"` — live-confirmed by the round-2 probe — and is
+// DELETED, not kept alongside).
 //
 // Module: loadValidatedManifest([manifestPath]) -> the parsed manifest;
 // THROWS Error("manifest grammar — ...") naming the violation.
@@ -27,6 +31,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
+const { assertNoDuplicateKeys } = require("./json-dup-key-scan");
 
 const GOLDENS_DIR = __dirname; // port/goldens-m4
 
@@ -38,6 +43,12 @@ function loadValidatedManifest(manifestPath) {
     path.join(GOLDENS_DIR, "manifest-target.json");
   function vdie(msg) { throw new Error("manifest grammar — " + msg); }
   const raw = fs.readFileSync(mPath, "utf8");
+  // Duplicate-key scan of the RAW bytes BEFORE JSON.parse (review-96
+  // C-M1): a duplicate at ANY scope — row, top level, anywhere — is
+  // last-wins corruption and dies here naming the key + scope.
+  try { assertNoDuplicateKeys(raw, path.basename(mPath)); } catch (e) {
+    vdie(e.message);
+  }
   let m;
   try { m = JSON.parse(raw); } catch (e) {
     vdie(path.basename(mPath) + " is not valid JSON: " + e.message);
@@ -52,16 +63,6 @@ function loadValidatedManifest(manifestPath) {
   if (typeof m.comment !== "string") vdie("comment is not a string");
   if (!Array.isArray(m.goldens) || m.goldens.length < 1) {
     vdie("goldens is not a nonempty array");
-  }
-  for (const k of GOLDEN_KEYS) {
-    const tok = JSON.stringify(k) + ":";
-    let cnt = 0, i = -1;
-    while ((i = raw.indexOf(tok, i + 1)) !== -1) cnt++;
-    if (cnt !== m.goldens.length) {
-      vdie("raw token " + tok + " occurs " + cnt + " times, want exactly " +
-        m.goldens.length + " (one per golden; a duplicated JSON key is " +
-        "silently last-wins — corruption, refuse)");
-    }
   }
   const dir = path.resolve(GOLDENS_DIR);
   const ids = new Set(), names = new Set(), traces = new Set();

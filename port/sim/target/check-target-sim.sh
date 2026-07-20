@@ -24,9 +24,12 @@
 #   [4] target_hq_probe (the stage-damage CONSUME-path probe) + its --drop
 #       negative arm.
 #   [5] TEETH — run-side T1-T6 (nibble/drop perturbations on generated
-#       COPIES) + frozen-side T7-T12 (review-94 L2/H1: perturbed COPIES
-#       of the FROZEN files judged by the PRODUCTION judge, after an
-#       untouched-copy PASS control; committed bytes never edited).
+#       COPIES) + frozen-side T7-T24 (review-94 L2/H1 + review-96
+#       C-M3/C-L6/G-L7/G-M4/C-L5/C-M1/C-M2: perturbed COPIES of the
+#       FROZEN/manifest/run files judged by the PRODUCTION judges after
+#       untouched-copy PASS controls; T12 is the copied-tree INTEGRATION
+#       dup-id tooth — the production consumer bytes, cmp-proven, die on
+#       a duplicate-id manifest; committed bytes never edited).
 #   [6] no-commit guard over the build + goldens dirs; a no-reclaim run
 #       lock; made()/rm-before-produce throughout.
 # Prints TARGET SIM CONFORMS and exits 0 on success.
@@ -210,10 +213,11 @@ echo "    probe OK; --drop arm bites"
 # --- [5] TEETH (generated copies; committed bytes never edited) ----------------
 echo "[5] teeth"
 TID="$(echo $IDS | awk '{print $1}')" # the first golden (t01)
-read -r tname ttrace tframes tseed tchar ttstage <<< "$(node -e '
+read -r tname ttrace tframes tseed tchar ttstage tmin <<< "$(node -e '
   const v=require("./port/goldens-m4/validate-target-manifest");
   const g=v.goldenByIdOrName(v.loadValidatedManifest(),process.argv[1]);
-  process.stdout.write([g.name,g.trace,g.frames,g.seed,g.char,g.tstage].join(" "));
+  process.stdout.write([g.name,g.trace,g.frames,g.seed,g.char,g.tstage,
+    g.minTargets].join(" "));
 ' "$TID")"
 
 # T1 — PLAYER-stream nibble: flip one hex char of a mid-frame F line in a
@@ -301,8 +305,9 @@ if node "$M4G/wrap-target.js" "$TID" "$BUILD/tooth6.sim.out" \
 fi
 echo "    T6 wrap-target grammar -> malformed line rejected"
 
-# --- T7-T12 — FROZEN-SIDE teeth (review-94 L2/H1): perturb COPIES of the
-# frozen files with the PRODUCTION judge pointed at the copy; committed
+# --- T7-T24 — FROZEN-SIDE teeth (review-94 L2/H1 + review-96 C-M3/
+# C-M1/C-M2/C-L5/C-L6/G-M4/G-L7): perturb COPIES of the frozen/manifest/
+# run files with the PRODUCTION judges pointed at the copies; committed
 # bytes never edited; every perturbed aspect restored by re-copy from the
 # pristine set. CONTROL first: the untouched copy set must PASS (a copy
 # rig that cannot pass proves nothing about the perturbations).
@@ -411,24 +416,271 @@ fi
 ftooth_reset
 echo "    T11 player-sibling seal perturb -> sibling binding death"
 
-# T12 — DUPLICATE-ID manifest COPY (review-94 H1): clone row 0 over row 1
-# (passes every per-golden check, hits the dup gate) -> the shared
-# validator must die NAMING the duplicate id, never report its goldens.
+# T12 — DUPLICATE-ID manifest, TRUE INTEGRATION tooth (review-96 C-M3;
+# replaces the direct validator-CLI form): a copied TREE mirrors the
+# consumer geometry with the PRODUCTION consumer bytes (cmp-proven
+# byte-identical), CONTROL-passes on the pristine manifest copy, then
+# the dup-id manifest COPY (row 0 cloned over row 1) is put IN the tree
+# and the done-check's own manifest-consuming paths — wrap-target.js,
+# verify-target-stream.js, and the IDS-pull command form — must each
+# die NAMING the duplicate id. No direct validator invocation counts.
+IT="$BUILD/itooth-tree"
+rm -rf "$IT"
+mkdir -p "$IT/port/goldens-m4" "$IT/oracle/harness"
+for f in validate-target-manifest.js verify-target-stream.js wrap-target.js \
+         json-dup-key-scan.js; do
+  cp "$M4G/$f" "$IT/port/goldens-m4/$f"
+  cmp -s "$M4G/$f" "$IT/port/goldens-m4/$f" \
+    || fail "T12 tree copy of $f is not byte-identical to production"
+done
+cp "$HARNESS/streamlib.js" "$IT/oracle/harness/streamlib.js"
+cp oracle/CHECKSUM.md "$IT/oracle/CHECKSUM.md"
+cp "$M4G/$tname.target.sha256.json" "$M4G/$tname.sha256.json" \
+   "$M4G/$ttrace" "$M4G/manifest-target.json" "$IT/port/goldens-m4/"
+node "$IT/port/goldens-m4/verify-target-stream.js" "$BUILD/$TID.target.json" \
+    "$IT/port/goldens-m4/$tname.target.sha256.json" >/dev/null 2>&1 \
+  || fail "T12 CONTROL failed: the tree production judge rejects the untouched copy set"
 node -e '
   const fs=require("fs");
   const m=JSON.parse(fs.readFileSync("port/goldens-m4/manifest-target.json","utf8"));
   if (m.goldens.length < 2) { console.error("T12 needs >= 2 goldens"); process.exit(1); }
   m.goldens[1]=JSON.parse(JSON.stringify(m.goldens[0]));
   fs.writeFileSync(process.argv[1], JSON.stringify(m));
-' "$FT/manifest-dup.json"
-if T12_OUT="$(node "$M4G/validate-target-manifest.js" "$FT/manifest-dup.json" 2>&1)"; then
-  fail "T12 duplicate-id manifest COPY did NOT fail the shared validator"
+' "$IT/port/goldens-m4/manifest-target.json"
+if T12A="$(node "$IT/port/goldens-m4/wrap-target.js" "$TID" "$BUILD/$TID.sim.out" \
+    "$IT/t12.player.json" "$IT/t12.target.json" 2>&1)"; then
+  fail "T12 wrap-target consumer did NOT die on the duplicate-id manifest"
 fi
-grep -q "duplicate golden id" <<< "$T12_OUT" \
-  || fail "T12 validator died but did not name the duplicate id (got: $T12_OUT)"
-echo "    T12 duplicate-id manifest copy -> validator dies naming the dup"
+grep -q "duplicate golden id" <<< "$T12A" \
+  || fail "T12 wrap-target died but did not name the duplicate id (got: $T12A)"
+if T12B="$(node "$IT/port/goldens-m4/verify-target-stream.js" "$BUILD/$TID.target.json" \
+    "$IT/port/goldens-m4/$tname.target.sha256.json" 2>&1)"; then
+  fail "T12 verify-target-stream consumer did NOT die on the duplicate-id manifest"
+fi
+grep -q "duplicate golden id" <<< "$T12B" \
+  || fail "T12 verify-target died but did not name the duplicate id (got: $T12B)"
+if T12C="$(node -e '
+  const path=require("path");
+  const m=require(path.resolve(process.argv[1])).loadValidatedManifest();
+  process.stdout.write(m.goldens.map(g=>g.id).join(" "));
+' "$IT/port/goldens-m4/validate-target-manifest.js" 2>&1)"; then
+  fail "T12 IDS-pull consumer form did NOT die on the duplicate-id manifest"
+fi
+grep -q "duplicate golden id" <<< "$T12C" \
+  || fail "T12 IDS pull died but did not name the duplicate id (got: $T12C)"
+rm -rf "$IT"
+echo "    T12 duplicate-id manifest -> production consumers (wrap/verify/IDS pull) die naming the dup (tree control passed)"
 
-rm -rf "$FT"
+# T13 — DUP-KEY manifest COPY, the LIVE-CONFIRMED whitespace spelling
+# (review-96 C-M1): insert '"id" : "t02"' (legal whitespace before the
+# colon) as a duplicate key inside the t02 row of a COPY of the RAW
+# committed bytes -> the shared scanner must die naming the key (the
+# refuted byte-literal token count was blind to this exact probe).
+python3 - "$M4G/manifest-target.json" "$FT/manifest-dupkey.json" <<'PY'
+import sys
+s=open(sys.argv[1]).read()
+needle='"id": "t02",'
+if s.count(needle) != 1: sys.exit("T13: t02 id line not unique")
+open(sys.argv[2],'w').write(s.replace(needle, needle+'\n      "id" : "t02",'))
+PY
+if T13_OUT="$(node "$M4G/validate-target-manifest.js" "$FT/manifest-dupkey.json" 2>&1)"; then
+  fail "T13 whitespace-colon duplicate-key manifest COPY did NOT fail the validator"
+fi
+grep -q 'duplicate JSON key "id"' <<< "$T13_OUT" \
+  || fail "T13 validator died but did not name the duplicate key (got: $T13_OUT)"
+echo "    T13 dup-key probe ('\"id\" : \"t02\"') -> scanner dies naming the key"
+
+# T14 — TOP-LEVEL dup-key manifest COPY (review-96 C-M1): a duplicate
+# "comment" key at the TOP scope (wholly unguarded before iter 98).
+python3 - "$M4G/manifest-target.json" "$FT/manifest-topdup.json" <<'PY'
+import sys
+s=open(sys.argv[1]).read()
+needle='"goldens": ['
+if s.count(needle) != 1: sys.exit("T14: goldens open token not unique")
+open(sys.argv[2],'w').write(s.replace(needle, '"comment": "dup",\n  '+needle))
+PY
+if T14_OUT="$(node "$M4G/validate-target-manifest.js" "$FT/manifest-topdup.json" 2>&1)"; then
+  fail "T14 top-level duplicate-key manifest COPY did NOT fail the validator"
+fi
+grep -q 'duplicate JSON key "comment"' <<< "$T14_OUT" \
+  || fail "T14 validator died but did not name the duplicate key (got: $T14_OUT)"
+echo "    T14 top-level dup-key manifest copy -> scanner dies naming the key"
+
+# T15 — FROZEN-row dup-key COPY (review-96 C-M2, the codex probe
+# {"f":999,"f":1800,...}): the parsed value is last-wins so the seal
+# still verifies — ONLY the raw scanner can kill it.
+python3 - "$FTGT" <<'PY'
+import sys
+p=sys.argv[1]; s=open(p).read()
+if s.count('{"f":1800,') != 1: sys.exit("T15: frame 1800 row not unique")
+open(p,'w').write(s.replace('{"f":1800,', '{"f":999,"f":1800,'))
+PY
+if T15_OUT="$(node "$M4G/verify-target-stream.js" "$BUILD/$TID.target.json" "$FTGT" 2>&1)"; then
+  fail "T15 frozen-row dup-key COPY did NOT die in the production judge"
+fi
+grep -q 'duplicate JSON key "f"' <<< "$T15_OUT" \
+  || fail "T15 judge died but not at the dup-key scanner (got: $T15_OUT)"
+ftooth_reset
+echo "    T15 frozen-row dup-key ({\"f\":999,\"f\":1800,...}) -> scanner death"
+
+# T16 — SIBLING extra-key COPY (review-96 C-M2): an unknown top-level
+# key on the player sibling must die at the sibling exact schema.
+python3 - "$FSIB" "$tname" <<'PY'
+import sys
+p=sys.argv[1]; s=open(p).read()
+needle='"golden": "%s",' % sys.argv[2]
+if s.count(needle) != 1: sys.exit("T16: sibling golden line not unique")
+open(p,'w').write(s.replace(needle, needle+'\n"extra": 1,'))
+PY
+if T16_OUT="$(node "$M4G/verify-target-stream.js" "$BUILD/$TID.target.json" "$FTGT" 2>&1)"; then
+  fail "T16 sibling extra-key COPY did NOT die in the production judge"
+fi
+grep -q "sibling top level" <<< "$T16_OUT" \
+  || fail "T16 judge died but not at the sibling exact schema (got: $T16_OUT)"
+ftooth_reset
+echo "    T16 sibling extra key -> sibling exact-schema death"
+
+# T17 — FROZEN manifest-bound field BEYOND minTargets (review-96 C-L6):
+# params.tstage perturb in the COPY -> the manifest binding must kill it.
+python3 - "$FTGT" "$ttstage" <<'PY'
+import sys
+p=sys.argv[1]; t=int(sys.argv[2]); s=open(p).read()
+needle='"tstage":%d' % t
+if s.count(needle) != 1: sys.exit("T17: tstage token not unique")
+open(p,'w').write(s.replace(needle, '"tstage":%d' % ((t+1)%10)))
+PY
+if T17_OUT="$(node "$M4G/verify-target-stream.js" "$BUILD/$TID.target.json" "$FTGT" 2>&1)"; then
+  fail "T17 frozen tstage perturb did NOT die in the production judge"
+fi
+grep -q "metadata binding" <<< "$T17_OUT" \
+  || fail "T17 judge died but not at the metadata binding (got: $T17_OUT)"
+ftooth_reset
+echo "    T17 frozen tstage perturb -> manifest metadata-binding death"
+
+# T18 — playerStream NAME binding (review-96 C-L6): repoint the COPY's
+# playerStream at the other golden's sibling -> name-derivation death.
+python3 - "$FTGT" "$tname" <<'PY'
+import sys
+p=sys.argv[1]; s=open(p).read()
+needle='"playerStream": "%s.sha256.json",' % sys.argv[2]
+if s.count(needle) != 1: sys.exit("T18: playerStream line not unique")
+open(p,'w').write(s.replace(needle,
+    '"playerStream": "t99-not-the-sibling.sha256.json",'))
+PY
+if T18_OUT="$(node "$M4G/verify-target-stream.js" "$BUILD/$TID.target.json" "$FTGT" 2>&1)"; then
+  fail "T18 playerStream repoint did NOT die in the production judge"
+fi
+grep -q "sibling binding" <<< "$T18_OUT" \
+  || fail "T18 judge died but not at the playerStream name binding (got: $T18_OUT)"
+ftooth_reset
+echo "    T18 playerStream repoint -> sibling name-binding death"
+
+# T19 — SIBLING cross-pin (review-96 C-L6): perturb the sibling COPY's
+# rngCalls (outside its seal) -> the run-vs-sibling equality must die.
+python3 - "$FSIB" <<'PY'
+import sys, re
+p=sys.argv[1]; s=open(p).read()
+m=re.findall(r'^"rngCalls": (\d+),$', s, re.M)
+if len(m) != 1: sys.exit("T19: rngCalls line not unique")
+open(p,'w').write(re.sub(r'^"rngCalls": \d+,$',
+    '"rngCalls": %d,' % (int(m[0])+1), s, flags=re.M))
+PY
+if T19_OUT="$(node "$M4G/verify-target-stream.js" "$BUILD/$TID.target.json" "$FTGT" 2>&1)"; then
+  fail "T19 sibling rngCalls perturb did NOT die in the production judge"
+fi
+grep -q "frozen player sibling" <<< "$T19_OUT" \
+  || fail "T19 judge died but not at the rngCalls cross-pin (got: $T19_OUT)"
+ftooth_reset
+echo "    T19 sibling rngCalls perturb -> run-vs-sibling cross-pin death"
+
+# T20 — QUALITY comparison (review-96 C-L6): frozen COPY's
+# finalTargetsDestroyed -> minTargets-1 (below the floor) -> quality death.
+python3 - "$FTGT" "$tmin" <<'PY'
+import sys, re
+p=sys.argv[1]; tmin=int(sys.argv[2]); s=open(p).read()
+m=re.findall(r'"finalTargetsDestroyed":(\d+)', s)
+if len(m) != 1: sys.exit("T20: finalTargetsDestroyed token not unique")
+open(p,'w').write(s.replace('"finalTargetsDestroyed":'+m[0],
+    '"finalTargetsDestroyed":%d' % (tmin-1)))
+PY
+if T20_OUT="$(node "$M4G/verify-target-stream.js" "$BUILD/$TID.target.json" "$FTGT" 2>&1)"; then
+  fail "T20 finalTargetsDestroyed quality perturb did NOT die in the production judge"
+fi
+grep -q "mechanical quality" <<< "$T20_OUT" \
+  || fail "T20 judge died but not at the quality comparison (got: $T20_OUT)"
+ftooth_reset
+echo "    T20 finalTargetsDestroyed -> minTargets-1 -> mechanical-quality death"
+
+# T21 — FINALS binding (review-96 G-L7): frozen COPY's
+# finalTargetsDestroyed +1 (quality still passes, domain still legal) ->
+# the run-finals equality must kill it (the assertion form of the
+# finals binding; the seal does not cover the finals).
+python3 - "$FTGT" <<'PY'
+import sys, re
+p=sys.argv[1]; s=open(p).read()
+m=re.findall(r'"finalTargetsDestroyed":(\d+)', s)
+if len(m) != 1: sys.exit("T21: finalTargetsDestroyed token not unique")
+n=int(m[0])+1
+if n > 20: sys.exit("T21: +1 leaves the 0..20 domain — pick another perturb")
+open(p,'w').write(s.replace('"finalTargetsDestroyed":'+m[0],
+    '"finalTargetsDestroyed":%d' % n))
+PY
+if T21_OUT="$(node "$M4G/verify-target-stream.js" "$BUILD/$TID.target.json" "$FTGT" 2>&1)"; then
+  fail "T21 finalTargetsDestroyed finals perturb did NOT die in the production judge"
+fi
+grep -q "final targetsDestroyed" <<< "$T21_OUT" \
+  || fail "T21 judge died but not at the run-finals binding (got: $T21_OUT)"
+ftooth_reset
+echo "    T21 finalTargetsDestroyed +1 -> run-finals binding death"
+
+# T22 — wrap-target NUMERIC DOMAIN (review-96 C-L5): an unsafe integer
+# the producer cannot emit ('RNG 9007199254740993 1', Number() rounds
+# it) in a sim.out COPY -> wrap-target must die, never wrap.
+cp "$BUILD/$TID.sim.out" "$BUILD/tooth22.sim.out"
+sed -i.bak -E 's/^RNG [0-9]+ /RNG 9007199254740993 /' "$BUILD/tooth22.sim.out"
+rm -f "$BUILD/tooth22.sim.out.bak"
+if T22_OUT="$(node "$M4G/wrap-target.js" "$TID" "$BUILD/tooth22.sim.out" \
+    "$BUILD/tooth22.player.json" "$BUILD/tooth22.target.json" 2>&1)"; then
+  fail "T22 unsafe-integer RNG token did NOT fail wrap-target"
+fi
+grep -q "producer domain" <<< "$T22_OUT" \
+  || fail "T22 wrap died but not at the numeric-domain check (got: $T22_OUT)"
+echo "    T22 RNG 9007199254740993 -> wrap-target numeric-domain death"
+
+# T23 — run-meta fdlibm pin (review-96 G-M4): a run COPY claiming
+# fdlibm:false must die in the production judge.
+node -e '
+  const fs=require("fs");
+  const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+  r.meta.fdlibm=false;
+  fs.writeFileSync(process.argv[2], JSON.stringify(r));
+' "$BUILD/$TID.target.json" "$BUILD/tooth23.target.json"
+if T23_OUT="$(node "$M4G/verify-target-stream.js" "$BUILD/tooth23.target.json" \
+    "$M4G/$tname.target.sha256.json" 2>&1)"; then
+  fail "T23 run fdlibm:false did NOT die in the production judge"
+fi
+grep -q "meta.fdlibm" <<< "$T23_OUT" \
+  || fail "T23 judge died but not at the fdlibm pin (got: $T23_OUT)"
+echo "    T23 run fdlibm:false -> run-identity pin death"
+
+# T24 — run-meta ABSENT field (review-96 G-M4): DELETE meta.p2 in a run
+# COPY (undefined) -> the explicit-null expectation must die (an
+# undefined-equals-undefined judge would pass this).
+node -e '
+  const fs=require("fs");
+  const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+  delete r.meta.p2;
+  fs.writeFileSync(process.argv[2], JSON.stringify(r));
+' "$BUILD/$TID.target.json" "$BUILD/tooth24.target.json"
+if T24_OUT="$(node "$M4G/verify-target-stream.js" "$BUILD/tooth24.target.json" \
+    "$M4G/$tname.target.sha256.json" 2>&1)"; then
+  fail "T24 absent meta.p2 did NOT die in the production judge"
+fi
+grep -q "meta.p2" <<< "$T24_OUT" \
+  || fail "T24 judge died but not at the p2 explicit-null pin (got: $T24_OUT)"
+echo "    T24 absent meta.p2 -> explicit-null pin death"
+
+rm -rf "$FT" "$IT"
 rm -f "$BUILD"/tooth*.sim.out "$BUILD"/tooth*.player.json "$BUILD"/tooth*.target.json \
   "$BUILD"/tooth*.bak "$BUILD/tooth-targets.c" "$BUILD/tooth_targets_check" \
   "$BUILD/tooth-c.dump" "$BUILD/tooth-js.dump" "$BUILD"/*.regen.trace.json
@@ -442,4 +694,4 @@ TRACKED="$(git status --porcelain -- "$BUILD" "$TABLES")"
   || { echo "$TRACKED"; fail "files under the build dir are tracked/staged"; }
 echo "    build output gitignored, nothing tracked"
 
-echo "TARGET SIM CONFORMS ($(echo $IDS | wc -w | tr -d ' ') goldens: $IDS; leaves=718 probe=ok teeth=12)"
+echo "TARGET SIM CONFORMS ($(echo $IDS | wc -w | tr -d ' ') goldens: $IDS; leaves=718 probe=ok teeth=24)"

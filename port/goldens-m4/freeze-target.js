@@ -26,6 +26,13 @@
 // into the SHARED validate-target-manifest.js (review-94 H1, iter 96)
 // so every done-check consumer runs the same validator.
 //
+// DUP-KEY SCAN (review-96 C-M1, iter 98): every JSON this freezer
+// parses for a decision — runA, runB, and an existing frozen file on
+// the --refreeze read path — goes through the SHARED string-aware
+// duplicate-key scanner (json-dup-key-scan.js) on the RAW bytes before
+// JSON.parse; a duplicate key at ANY scope is last-wins corruption and
+// refuses (the manifest is scanned inside the shared validator).
+//
 // x2 BROWSER IDENTITY (review-94 L1, iter 96): the two fresh runs must
 // record the SAME browser name + version — a channel-Chrome run A paired
 // with a bundled-Chromium fallback run B is NOT same-browser
@@ -37,6 +44,7 @@ const { streamDigest, sha256File, specVersion } =
   require("../../oracle/harness/streamlib");
 const { loadValidatedManifest, goldenByIdOrName } =
   require("./validate-target-manifest");
+const { assertNoDuplicateKeys } = require("./json-dup-key-scan");
 
 const GOLDENS_DIR = __dirname; // port/goldens-m4
 
@@ -80,8 +88,15 @@ if (path.resolve(fileA) === path.resolve(fileB)) {
 }
 
 const g = goldenById(id);
-const a = JSON.parse(fs.readFileSync(fileA, "utf8"));
-const b = JSON.parse(fs.readFileSync(fileB, "utf8"));
+function loadRun(fp, label) {
+  const raw = fs.readFileSync(fp, "utf8");
+  try { assertNoDuplicateKeys(raw, "run " + label); } catch (e) {
+    die(e.message); // review-96 C-M1: dup key at any scope = corruption
+  }
+  return JSON.parse(raw);
+}
+const a = loadRun(fileA, "A");
+const b = loadRun(fileB, "B");
 
 // --- both fresh runs must agree on EVERY conformance channel -----------------
 function frameArraysEqual(fa, fb, label) {
@@ -161,7 +176,10 @@ function writeFrozen(outPath, text) {
           "requires --refreeze and is only legitimate with a spec version bump.");
     }
     let oldParsed = null;
-    try { oldParsed = JSON.parse(old); } catch (e) {
+    try {
+      assertNoDuplicateKeys(old, "existing frozen " + path.basename(outPath));
+      oldParsed = JSON.parse(old);
+    } catch (e) {
       die(`${outPath} exists but is not parseable JSON (${e.message}) — refusing`);
     }
     const oldSpec = checkSpec(oldParsed.specVersion, "existing frozen " + outPath);

@@ -27,7 +27,13 @@
 //   then exactly:  "SIM OK"             (the final line; nothing after)
 // ANY deviation = corruption = HARD FAIL exit 3 naming the line
 // (resembles-but-doesn't-match = death; no partial parses, no silent
-// skips, no normalization).
+// skips, no normalization). NUMERIC DOMAIN (review-96 C-L5, iter 98):
+// every accepted integer token must survive Number.isSafeInteger + a
+// String(n) === token round-trip AND its producer domain — RNG counts
+// are printf %u (0..2^32-1), TFIN targetsDestroyed is the frozen-side
+// finalTargetsDestroyed domain 0..20 — so a token the producer cannot
+// emit (e.g. `RNG 9007199254740993 1`, which Number() silently rounds)
+// dies here, never wraps.
 //
 // The target run JSON reuses the player meta shape and carries
 // coverage.target finals from the REQUIRED TFIN line (the C sim's own
@@ -100,6 +106,19 @@ for (let f = 1; f <= g.frames; f++) {
   targetFrames.push({ f: f, h: m[2] });
   li++;
 }
+// canonInt (review-96 C-L5): the token is already anchored canonical
+// decimal text by the line regex; additionally require the safe-integer
+// round trip (Number() must not round) and the producer's domain.
+function canonInt(tok, min, max, what, lineNo) {
+  const v = Number(tok);
+  if (!Number.isSafeInteger(v) || String(v) !== tok || v < min || v > max) {
+    die("line " + lineNo + ": " + what + " token '" + tok + "' outside the " +
+        "producer domain " + min + ".." + max + " / not a safe integer " +
+        "(the C producer cannot emit it — corruption)");
+  }
+  return v;
+}
+
 const rngLine = rawLines[li];
 const rngM = RNG_RE.exec(rngLine);
 if (rngM === null) {
@@ -107,8 +126,11 @@ if (rngM === null) {
       "(canonical integer text, after all " + g.frames + " frame pairs); " +
       "got " + JSON.stringify(rngLine));
 }
-const rng = { rngCalls: Number(rngM[1]),
-              rngCallsOutsideStep: Number(rngM[2]) };
+const rng = {
+  rngCalls: canonInt(rngM[1], 0, 4294967295, "RNG rngCalls", li + 1),
+  rngCallsOutsideStep:
+    canonInt(rngM[2], 0, 4294967295, "RNG rngCallsOutsideStep", li + 1),
+};
 li++;
 const tfinLine = rawLines[li];
 const tfinM = TFIN_RE.exec(tfinLine);
@@ -116,8 +138,10 @@ if (tfinM === null) {
   die("line " + (li + 1) + ": expected exactly 'TFIN <int> <T|F>' " +
       "(after the RNG line); got " + JSON.stringify(tfinLine));
 }
-const tfin = { targetsDestroyed: Number(tfinM[1]),
-               endTargetGame: tfinM[2] === "T" };
+const tfin = {
+  targetsDestroyed: canonInt(tfinM[1], 0, 20, "TFIN targetsDestroyed", li + 1),
+  endTargetGame: tfinM[2] === "T",
+};
 li++;
 if (rawLines[li] !== "SIM OK") {
   die("line " + (li + 1) + ": expected exactly 'SIM OK' as the final " +

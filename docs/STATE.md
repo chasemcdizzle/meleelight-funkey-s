@@ -3,7 +3,59 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-20, iter 97 — M4 hardening DONE: device-FOH round-2 residuals, all review-95 dispositions shipped; cold check green first attempt)
+## Live right now (updated: 2026-07-20, iter 98 — M4 hardening DONE: target-rig round-2 closure, all review-96 dispositions shipped; cold check green first attempt)
+
+- **Iter 98 (M4 hardening — target-rig round-2 closure, review-96
+  triage C-M1/C-M2/C-M3/G-M4/C-L5/C-L6/G-L7 ALL closed) DONE** (full
+  entry: AGENT-LOG iter 98 pre-registration + result; latest
+  AGENT-LOG id: iter 98). COLD, FIRST attempt: **`TARGET SIM CONFORMS
+  (2 goldens: t01 t02; leaves=718 probe=ok teeth=24)`** exit 0 —
+  TWICE (.loop/m4-tgt98-donecheck.log + -2.log; teeth 12→24 honest
+  change); check-sim NOT consumed — mechanical skip-proof
+  (.loop/m4-tgt98-checksim-skip.txt). FROZEN streams/traces/manifest
+  + oracle/ + run-target.js + record-target.sh byte-untouched.
+  **C-M1**: NEW SHARED port/goldens-m4/json-dup-key-scan.js — ONE
+  string-aware duplicate-JSON-key scanner (raw-bytes tokenizer,
+  escape-decoding, per-object-scope key sets, dup at ANY scope =
+  death naming key+scope); used by validate-target-manifest.js (the
+  refuted byte-literal '"key":' count DELETED), verify (frozen +
+  sibling + run raw), freeze (runA/runB + refreeze read); the
+  live-confirmed `"id" : "t02"` probe and top-level dups die (T13/
+  T14). **C-M2**: sibling gets the full exact-whitelist schema
+  (top-level + params key ORDER + {f,h} rows + target-mode value
+  pins); run target rows keysExact {f,h}; the codex
+  `{"f":999,"f":1,...}` probe dies at the scanner (T15/T16). **C-M3**:
+  T12 = TRUE integration tooth — copied tree with cmp-proven
+  PRODUCTION consumer bytes, pristine-manifest CONTROL pass, then
+  wrap + verify + IDS-pull each die naming `duplicate golden id` on
+  the dup COPY (no direct validator CLI counts). **G-M4**: run-meta
+  pins at M0 discipline — fdlibm/seedRandom === true + EXPLICIT
+  p2/stage/difficulty null, cpu false (absent = undefined = death;
+  T23/T24). **C-L5**: wrap-target canonInt (safe-integer + round-trip
+  + producer domains %u / 0..20); `RNG 9007199254740993 1` dies
+  (T22). **C-L6**: per-class frozen-side teeth — tstage
+  metadata-binding, playerStream name-binding, sibling-rngCalls
+  cross-pin, finalTargetsDestroyed quality deaths (T17-T20). **G-L7**
+  (pre-registered refutation FIRED as predicted): finals NOT
+  derivable from sealed hashes → assertion form — judge asserts
+  frozen finalTargetsDestroyed >= the VALIDATED manifest row's
+  minTargets directly + run-finals equality; T21 proves the
+  +1-within-domain death. CORPUS: 45 genuine JSONs scanned zero false
+  rejections + 8 judge regressions MATCH + freeze `unchanged` x4 +
+  wrap cmp-identical x2 (.loop/m4-tgt98-corpus.log). Run ledger:
+  browser 0/0, cold check-target-sim 2/2 (both green), check-sim 0
+  (skip-proof). **Driver next: review-96 ROUND 3 — closure-or-cap
+  naming the class (per the triage header; remaining objection
+  classes were whitelist-input-trust + tooth-coverage variants, both
+  now closed at instrument level) over the iter-98 diff
+  (validate-target-manifest.js, verify-target-stream.js,
+  wrap-target.js, freeze-target.js, json-dup-key-scan.js NEW,
+  check-target-sim.sh). Then task 12 (target test FOH + device).**
+- **Remaining to gate**: 12 (target test FOH+device), 13 (SD persist),
+  14 (verify_m4.sh) -> M4 GATE -> provision device -> LOOP STOP:
+  m4-complete -> Chase acceptance playthrough.
+
+## [superseded by iter 98] (2026-07-20, iter 97 — M4 hardening DONE: device-FOH round-2 residuals, all review-95 dispositions shipped; cold check green first attempt)
 
 - **Iter 97 (M4 hardening — device-FOH round-2 residuals, review-95
   triage M-a/M-b/M-c/M-d/M-e/L-a/L-b ALL closed) DONE** (full entry:
