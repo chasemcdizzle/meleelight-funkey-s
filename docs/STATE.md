@@ -3,7 +3,47 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-20, iter 103 — M4 micro DONE: finish-banner glyph fix, review-101 round-2 M closed, FOH FLOWS OK cold)
+## Live right now (updated: 2026-07-20, iter 104 — M4 hardening DONE: persist-arc round-2 closure, review-102 ALL 7 dispositions, PERSIST OK cold)
+
+- **Iter 104 DONE (M4 hardening; review-102 round-2 NO-GO — all 7
+  dispositions closed).** COLD done-check: **`PERSIST OK (sessions=2
+  powercycle=reboot bootid=bootid:PRE!=POST bootwait=12s legs=5 pulls=4
+  roundtrip=byte-exact record=00:14.50 resets missing=1 loud-corrupt=2
+  dirsync=plain-saved+degraded-tooth teeth=17)`** exit 0
+  (.loop/m4-per104-donecheck.log; teeth 12→17). Real reboot judged
+  (PRE 4e3cd631 != POST f05cf035, uptime 7s<12s). Device left clean.
+  ONE atomic commit. Full trail: AGENT-LOG iter-104 pre-reg + result.
+- **Closures**: **H (DATA-LOSS)** — trap three-state model
+  (UNPROBED/ABSENT/PRESENT via a pure `persist_residue_decide`); the
+  only delete arm is ABSENT, UNPROBED/unknown KEEP the user file
+  (observed in vivo: 3 pre-[5] aborts left $DFILE untouched).
+  **M-a** raw freshness-token grammars (boot_id/btime/uptime validated
+  as bytes-on-disk incl. newline shape, no squeeze; live-verified).
+  **M-b** persist-file byte-exactness (od final-LF, wc-c==1366
+  reconciliation, complete SUM-line grammar; corpus 5 PASS/4 REJECT).
+  **M-c** orphan-scan reconciliation (VANISHED vs UNREADABLE; pure
+  `rig_orphan_parse` reconciles rows==found, fails closed). **M-d**
+  teardown reap-failure PRESERVES $DTMP. **L-a** relative-cwd orphan
+  predicate (comm + /proc/<pid>/cwd). **L-b** NEW decode-pb-glyphs.js
+  reads the FOH font AS DATA + decodes the PB shot region == the
+  derived string (twin 00:14.50 / control --:--:--).
+- **Surfaces**: check-device-persist.sh, riglib.sh, NEW
+  decode-pb-glyphs.js, m3-freeze-manifest.txt (riglib re-pin) +
+  verify_m3.sh anchor. foh_persist.{c,h} BYTE-UNCHANGED (constraint).
+  Manifest self-check ALL 23 ROWS GREEN + ANCHOR GREEN
+  (.loop/m4-per104-manifest-selfcheck.log). The riglib row stays
+  `arc-pending` — persist-arc **review round 3 (closure-or-cap)** over
+  THIS iter-104 diff owns the GO.
+- **Regressions**: check-foh-flows mechanical skip-proof
+  (.loop/m4-per104-fohflows-skip.txt — zero shared surfaces:
+  foh_persist/render/font/gfx/sim untouched); other device checks
+  skip-proof (riglib deltas scan/teardown-only;
+  check-device-target's next cold run stays the task-14 ritual).
+- **Queue**: persist-arc round 3 (closure-or-cap on iter-104) →
+  task-12-arc round 3 → task 14 (verify_m4.sh assembly) → M4 GATE →
+  provision → LOOP STOP: m4-complete.
+
+## [superseded by iter-104] (updated: 2026-07-20, iter 103 — M4 micro DONE: finish-banner glyph fix, review-101 round-2 M closed, FOH FLOWS OK cold)
 
 - **Iter 103 DONE (M4 micro; review-101 round-2 M — the sole
   outstanding finding).** The authored-unreachable finish path was a

@@ -96,6 +96,14 @@ REC_BITS=402d000000000000
 REC_DISPLAY="00:14.50"
 WORSE_BITS=4030000000000000
 
+# review-102 M-b: a genuine MLFKPERSIST1 file is EXACTLY this many bytes
+# (MEASURED across every archived genuine file; line-derived: header 13 +
+# turbo 8 + lcancel 10 + tapjump 16 + 50 rec rows x25 + SUM 69). A
+# dropped/added byte — including an embedded NUL that command
+# substitution silently swallows through the per-line sed reads — breaks
+# this reconciliation.
+PERSIST_BYTES=1366
+
 DEADMAN_S="${MLFK_DEADMAN_S:-900}"
 READY_TRIES=60
 
@@ -146,18 +154,45 @@ derive_pb() { # <hex16> -> the spec display string on stdout
 # source is MEASURED at runtime and recorded; the SAME source must be
 # used on both sides (bootid_judge enforces it). Emits "<src> <id>".
 BOOTID_SRC=""
+# raw_single_line <rawfile> — review-102 M-a: enforce the EXACT producer
+# newline shape on a captured raw device stream. Command substitution
+# ($(...)) silently DROPS trailing LFs (and NULs — the M-b byte-drop
+# class), so freshness tokens MUST be validated as bytes on disk, not
+# through $(). De-CRs the measured adb pty artifact IN PLACE, then
+# requires the file to be EXACTLY one LF-terminated line: final byte ==
+# 0x0a AND exactly one line total. Echoes the content WITHOUT the
+# trailing LF (the CALLER applies the producer's exact-token grammar).
+# Returns 1 on any newline-shape violation (empty, no final LF,
+# multi-line). Pure host logic (reads a local file) — teeth invoke it.
+raw_single_line() {
+  local f="$1" nl last
+  tr -d '\r' < "$f" > "$f.dc" 2>/dev/null && mv "$f.dc" "$f" || { rm -f "$f.dc"; return 1; }
+  [ -s "$f" ] || return 1
+  last="$(tail -c1 "$f" | od -An -tx1 | tr -d ' \n')"
+  [ "$last" = 0a ] || return 1        # final byte MUST be exactly LF
+  nl="$(grep -c "" "$f")" || return 1 # exactly one LF-terminated line
+  [ "$nl" = 1 ] || return 1
+  printf '%s' "$(cat "$f")"           # content sans the (single) trailing LF
+}
 capture_bootid() {
-  local raw
-  raw="$(adb -s "$DEV" shell 'cat /proc/sys/kernel/random/boot_id 2>/dev/null' 2>/dev/null || true)"
-  raw="${raw//$'\r'/}"; raw="${raw//[[:space:]]/}"
-  if [[ "$raw" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
-    printf 'bootid %s' "$raw"; return 0
+  local rawf s
+  rawf="$BUILD/.bootid.raw.$$"; rm -f "$rawf"
+  adb -s "$DEV" shell 'cat /proc/sys/kernel/random/boot_id 2>/dev/null' > "$rawf" 2>/dev/null || true
+  # RAW-byte grammar FIRST (M-a): validate the exact producer shape (36-char
+  # canonical UUID + a single trailing LF) BEFORE extraction — never a
+  # whitespace squeeze that would launder junk into a match.
+  if s="$(raw_single_line "$rawf")" \
+     && [[ "$s" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+    rm -f "$rawf"; printf 'bootid %s' "$s"; return 0
   fi
-  raw="$(adb -s "$DEV" shell 'grep ^btime /proc/stat 2>/dev/null' 2>/dev/null || true)"
-  raw="${raw//$'\r'/}"; raw="${raw%$'\n'}"
-  if [[ "$raw" =~ ^btime\ ([1-9][0-9]{5,12})$ ]]; then
-    printf 'btime %s' "${BASH_REMATCH[1]}"; return 0
+  rm -f "$rawf"
+  rawf="$BUILD/.btime.raw.$$"; rm -f "$rawf"
+  adb -s "$DEV" shell 'grep ^btime /proc/stat 2>/dev/null' > "$rawf" 2>/dev/null || true
+  if s="$(raw_single_line "$rawf")" \
+     && [[ "$s" =~ ^btime\ ([1-9][0-9]{5,12})$ ]]; then
+    rm -f "$rawf"; printf 'btime %s' "${BASH_REMATCH[1]}"; return 0
   fi
+  rm -f "$rawf"
   fail "boot-identity: NEITHER /proc/sys/kernel/random/boot_id (canonical UUID) NOR /proc/stat btime is available on this kernel — no identity-grade reboot witness exists (H1-a refutation: STOP)"
 }
 # bootid_judge <pre-src> <pre-id> <post-src> <post-id> <post-uptime-s> <gap-s>
@@ -201,28 +236,64 @@ DEADMAN_ARMED=0
 DM_NONCE=""
 PREEXIST=0
 PREEXIST_RESTORED=0
+# review-102 H (DATA-LOSS): a three-state model for the user's product
+# file. The EXIT trap installed here runs at PERSIST_STATE=UNPROBED,
+# BEFORE the device file is probed in [5]; an early [0]-[4] failure must
+# NEVER delete $DFILE (the user's only copy). The state advances ONLY at
+# the [5] probe: prc=1 -> ABSENT (genuinely absent; any bytes there now
+# are OUR residue); prc=0 AND backup pulled+hash-verified -> PRESENT
+# (restore, never delete). A backup pull/hash failure leaves the state
+# UNPROBED, so the `fail` abort fires BEFORE any $DFILE device write.
+PERSIST_STATE=UNPROBED
+
+# persist_residue_decide <state> <restored> <backup-present> -> action
+# PURE (no I/O) — the trap dispatches device ops on the returned action;
+# a host tooth invokes THIS body directly. The ONLY arm that may DELETE
+# the device file is ABSENT. UNPROBED and any UNKNOWN state KEEP
+# (fail-safe: never delete the user's only copy on an early/unknown
+# path). PRESENT restores from the verified backup (never deletes); a
+# missing backup KEEPS the file untouched, loudly.
+persist_residue_decide() {
+  local state="$1" restored="$2" backup="$3"
+  case "$state" in
+    PRESENT)
+      if [ "$restored" = 1 ]; then printf 'noop'
+      elif [ "$backup" = 1 ]; then printf 'restore'
+      else printf 'keep-nobackup'; fi ;;
+    ABSENT)   printf 'delete' ;;
+    UNPROBED) printf 'keep' ;;
+    *)        printf 'keep' ;;
+  esac
+}
 cleanup() {
   rig_dsh_retry "pkill foh_device; true" \
     || echo "WARN: could not pkill foh_device on the device" >&2
-  # product-surface residue: our test bytes leave; a pre-existing user
-  # file returns (pulled aside in [5]). M4 (review-100): this trap is a
-  # BACKSTOP for the failure/death paths — the success path restores +
-  # byte-verifies in [10] BEFORE the verdict (PREEXIST_RESTORED guards
-  # the redundant re-push). The gate is -f, not -s: a zero-byte
-  # pre-existing user file is real bytes to restore, not "absent".
-  if [ "$PREEXIST" = 1 ] && [ "$PREEXIST_RESTORED" != 1 ] \
-     && [ -f "$BUILD/preexisting-mlfk-persist.dat" ]; then
-    if adb -s "$DEV" push "$BUILD/preexisting-mlfk-persist.dat" "$DFILE" >/dev/null 2>&1; then
-      echo "   pre-existing $DFILE restored (trap backstop)" >&2
-    else
-      echo "WARN: could not restore the pre-existing $DFILE (copy kept at $BUILD/preexisting-mlfk-persist.dat)" >&2
-    fi
-  elif [ "$PREEXIST" = 1 ] && [ "$PREEXIST_RESTORED" = 1 ]; then
-    : # already restored + verified in [10]
-  else
-    rig_dsh_retry "rm -f $DFILE $DDATA/mlfk-persist.tmp" \
-      || echo "WARN: could not wipe the persist test residue in $DDATA" >&2
-  fi
+  # product-surface residue — THREE-STATE (review-102 H, data-loss):
+  # dispatch on persist_residue_decide (the security-critical decision
+  # lives in ONE pure function, toothed host-side). The success path
+  # restores + byte-verifies in [10] BEFORE the verdict
+  # (PREEXIST_RESTORED then makes PRESENT a noop).
+  local resid_backup=0
+  [ -f "$BUILD/preexisting-mlfk-persist.dat" ] && resid_backup=1
+  local resid_act
+  resid_act="$(persist_residue_decide "$PERSIST_STATE" "$PREEXIST_RESTORED" "$resid_backup")"
+  case "$resid_act" in
+    noop)
+      : ;; # PRESENT already restored + byte-verified in [10]
+    restore)
+      if adb -s "$DEV" push "$BUILD/preexisting-mlfk-persist.dat" "$DFILE" >/dev/null 2>&1; then
+        echo "   pre-existing $DFILE restored (trap backstop)" >&2
+      else
+        echo "WARN: could not restore the pre-existing $DFILE (copy kept at $BUILD/preexisting-mlfk-persist.dat)" >&2
+      fi ;;
+    keep-nobackup)
+      echo "WARN: PRESENT state but the backup copy is missing — leaving $DFILE UNTOUCHED (never delete without a verified backup)" >&2 ;;
+    delete)
+      rig_dsh_retry "rm -f $DFILE $DDATA/mlfk-persist.tmp" \
+        || echo "WARN: could not wipe the persist test residue in $DDATA" >&2 ;;
+    keep|*)
+      echo "   persist file state=$PERSIST_STATE — leaving $DFILE UNTOUCHED (no completed probe / unknown state; the user's only copy is never deleted on an early-failure path)" >&2 ;;
+  esac
   restore_verified=0
   if [ "$PARKED" = 1 ]; then
     rig_dsh_retry "rm -f /mnt/disable_frontend" \
@@ -493,8 +564,17 @@ hex_lt() ( LC_ALL=C; [[ "$1" < "$2" ]]; ) # fixed 16-hex: byte order == numeric 
 verify_persist_file() { # <file> <ctx>
   local f="$1" ctx="$2" nl L sum want ln c s bits
   made "$f"
-  # final byte MUST be LF (a torn last line is corruption, not a record)
-  [ -z "$(tail -c 1 "$f")" ] || grammar_die "$ctx: file does not end in a final LF"
+  # review-102 M-b: byte-level final-LF check. `$(tail -c1)` DROPS a
+  # trailing NUL (command substitution), so a NUL-terminated torn write
+  # passes a `-z` test as if it ended in LF — compare the raw byte hex.
+  local lastbyte nbytes
+  lastbyte="$(tail -c1 "$f" | od -An -tx1 | tr -d ' \n')"
+  [ "$lastbyte" = 0a ] || grammar_die "$ctx: final byte is 0x$lastbyte, not 0x0a (a clean final LF) — torn/NUL-terminated write"
+  # byte-count reconciliation: the whole-file size must equal the exact
+  # line-derived expectation. Catches any dropped/added byte (embedded
+  # NUL, stray CR, truncation) the per-line $(sed) reads would launder.
+  nbytes="$(wc -c < "$f" | tr -d ' ')"
+  [ "$nbytes" = "$PERSIST_BYTES" ] || grammar_die "$ctx: file is $nbytes bytes != $PERSIST_BYTES (MLFKPERSIST1 fixed size; byte-count reconciliation failed — dropped/added/NUL byte)"
   nl="$(grep -c "" "$f")" || grammar_die "$ctx: cannot count lines"
   [ "$nl" = 55 ] || grammar_die "$ctx: $nl lines != 55 (MLFKPERSIST1 is exactly 55 LF lines)"
   L="$(sed -n 1p "$f")"; [ "$L" = "MLFKPERSIST1" ] || grammar_die "$ctx: line 1 is not the exact header ('$L')"
@@ -523,7 +603,13 @@ verify_persist_file() { # <file> <ctx>
   L="$(sed -n 55p "$f")"
   [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 55 is not the SUM line ('$L')"
   sum="${BASH_REMATCH[1]}"
-  want="$(head -n 54 "$f" | shasum -a 256 | cut -d' ' -f1)" || fail "$ctx: shasum failed"
+  # review-102 M-b: validate the COMPLETE recomputed shasum line grammar
+  # (`<64hex>  -` on stdin), never a `cut -d' ' -f1` first-field scrape —
+  # a truncated line with a plausible first field is corruption.
+  local sumline
+  sumline="$(head -n 54 "$f" | shasum -a 256)" || fail "$ctx: shasum failed"
+  [[ "$sumline" =~ ^([0-9a-f]{64})\ \ -$ ]] || grammar_die "$ctx: recomputed shasum line is not exactly '<64hex>  -' ('$sumline')"
+  want="${BASH_REMATCH[1]}"
   [ "$want" = "$sum" ] || grammar_die "$ctx: SUM seal $sum != recomputed $want (torn/corrupt file passed as evidence)"
 }
 
@@ -644,6 +730,50 @@ L1_DEF="$(derive_pb bff0000000000000)" || fail "L1: defaults derivation failed"
 L1_PERT="$(derive_pb 402e000000000000)" || fail "L1: perturbed derivation failed"
 [ "$L1_PERT" != "$REC_DISPLAY" ] || fail "L1: dead-tooth — perturbed bits derived the same display as REC_BITS"
 echo "   L1 OK: PERSONAL BEST '$REC_DISPLAY' derived independently from the record bits (spec rule); defaults '--:--:--'; dead-tooth guarded"
+
+# L-b (review-102): CONNECT the independently-derived display string to
+# the SHOT PIXELS. decode-pb-glyphs.js reads the FOH 5x7 font tables from
+# foh_font.c AS DATA and decodes the PERSONAL BEST region of the shot
+# back into a string — NOT the C renderer — so the display is bound to
+# actual pixels, not a renderer-vs-renderer echo. Pinned like the judge
+# twin (artifact identity, PROCESS §4). Region: text_center line at
+# y=194, scale 1, 22 glyphs ("PERSONAL BEST " + the 8-char PB display).
+DECODE_SHA=595286ce8de9f3dde056cb7a03706aa109b69ca1cc556df951e9029fdff4766d
+have="$(rig_host_sha256 "$FOH/decode-pb-glyphs.js")" || exit 1
+[ "$have" = "$DECODE_SHA" ] || fail "decode-pb-glyphs.js sha $have != pinned $DECODE_SHA (reviewed pin update in the same commit)"
+decode_pb_line() { # <shot.ppm> -> the decoded 22-char PERSONAL BEST line
+  node "$FOH/decode-pb-glyphs.js" "$FOH/foh_font.c" "$1" 194 1 22
+}
+L1_PB_LINE="PERSONAL BEST $L1_PB"    # persisted-twin expectation
+L1_DEF_LINE="PERSONAL BEST $L1_DEF"  # defaults-control expectation
+dec_twin="$(decode_pb_line "$HP/p02twin/shots/tss-record.ppm")" \
+  || fail "L-b: glyph decode of the persisted-twin tss-record shot failed"
+[ "$dec_twin" = "$L1_PB_LINE" ] \
+  || fail "L-b: persisted-twin shot decodes to '$dec_twin' != derived '$L1_PB_LINE' — the PB display string is NOT the pixels that were rendered"
+dec_ctrl="$(decode_pb_line "$HP/p02ctrl/shots/tss-record.ppm")" \
+  || fail "L-b: glyph decode of the defaults-control tss-record shot failed"
+[ "$dec_ctrl" = "$L1_DEF_LINE" ] \
+  || fail "L-b: defaults-control shot decodes to '$dec_ctrl' != '$L1_DEF_LINE'"
+[ "$dec_twin" != "$dec_ctrl" ] \
+  || fail "L-b: dead-tooth — twin and control shots decoded to the SAME string ('$dec_twin')"
+# dead-tooth: a one-pixel-perturbed COPY of the twin shot must NOT decode
+# the same string (proves the decoder reads pixels, not a constant).
+LBPERT="$HP/lb-pert.ppm"
+rm -f "$LBPERT"
+node -e '
+  const fs=require("fs"); const b=fs.readFileSync(process.argv[1]);
+  // flip a pixel inside the PB glyph band (x=54.., y=194..200) to bg-ish
+  let i=2, tok=()=>{while(i<b.length){const c=b[i];if(c===0x23){while(i<b.length&&b[i]!==0x0a)i++;}else if(c===0x20||c===9||c===10||c===13)i++;else break;}let s="";while(i<b.length){const c=b[i];if(c===0x20||c===9||c===10||c===13)break;s+=String.fromCharCode(c);i++;}return s;};
+  const w=+tok(),h=+tok(),mx=+tok(); i++;
+  // find an ON pixel in the band and clear it (guarantees a decode change)
+  for(let yy=194; yy<201; yy++){ for(let xx=54; xx<186; xx++){ const o=i+(yy*w+xx)*3; if(b[o]>=128){ b[o]=12;b[o+1]=12;b[o+2]=28; fs.writeFileSync(process.argv[2],b); process.exit(0);} } }
+  process.stderr.write("no ON pixel found to perturb\n"); process.exit(9);
+' "$HP/p02twin/shots/tss-record.ppm" "$LBPERT" || fail "L-b: could not build the perturbed shot"
+rc=0; dec_pert="$(decode_pb_line "$LBPERT")" || rc=$?
+[ "$rc" != 0 ] || [ "$dec_pert" != "$L1_PB_LINE" ] \
+  || fail "L-b: dead-tooth — a perturbed shot still decoded the same string (the decoder is not reading pixels)"
+teeth=$((teeth + 1))
+echo "   L-b OK: twin shot decodes to '$dec_twin' == derived; control '$dec_ctrl'; distinct; perturb-tooth fired"
 
 # M1 witness (review-100 PRODUCT BUG: same-process stale PB render). The
 # p02-persist-verify flow over a dir seeded with the PRE-record file
@@ -779,6 +909,138 @@ bootid_tooth "valid cycle guard"       pass bootid AAAA bootid BBBB 5 60
 teeth=$((teeth + 1))
 echo "    H1 standing teeth OK: bootid_judge rejects non-cycle/stale/source-flip, accepts a valid cycle"
 
+# H standing tooth (review-102 DATA-LOSS): the trap's residue decision
+# must NEVER delete the user's file on an UNPROBED (early-failure) path.
+# Prove it with a planted COPY 'user file' + the REAL
+# persist_residue_decide, applying the decided action to the local copy.
+apply_resid() { # <action> <file> : the trap's device dispatch, mirrored
+  case "$1" in
+    delete) rm -f "$2" ;;                 # ABSENT only
+    keep|keep-nobackup|noop|restore) : ;; # never removes the user's bytes
+    *) echo "H tooth: unknown action '$1'" >&2; return 9 ;;
+  esac
+}
+HT="$HP/htooth"
+rm -rf "$HT"; mkdir -p "$HT"
+USERF="$HT/user-persist.dat"
+cp "$FILE_REC" "$USERF"          # a planted user file (byte-known)
+usersha="$(rig_host_sha256 "$USERF")" || exit 1
+# UNPROBED (the hazard): decision must be keep; applying it must leave the
+# planted file byte-identical (this is the literal triage tooth: a COPY
+# run "killed at step [1]" -> file survives byte-identical).
+act="$(persist_residue_decide UNPROBED 0 0)"
+[ "$act" = keep ] || fail "H tooth: UNPROBED decided '$act' != keep (an unprobed file could be deleted — the data-loss hazard)"
+apply_resid "$act" "$USERF"
+[ -f "$USERF" ] || fail "H tooth: UNPROBED action DELETED the planted user file (data loss)"
+now="$(rig_host_sha256 "$USERF")" || exit 1
+[ "$now" = "$usersha" ] || fail "H tooth: UNPROBED action altered the planted user file ($now != $usersha)"
+# ABSENT: the only delete arm (probe completed, genuinely absent)
+[ "$(persist_residue_decide ABSENT 0 0)" = delete ] || fail "H tooth: ABSENT must decide delete"
+# PRESENT with a verified backup -> restore; already-restored -> noop;
+# a MISSING backup -> keep (never delete without a backup)
+[ "$(persist_residue_decide PRESENT 0 1)" = restore ] || fail "H tooth: PRESENT+backup must decide restore"
+[ "$(persist_residue_decide PRESENT 1 1)" = noop ] || fail "H tooth: PRESENT+restored must decide noop"
+[ "$(persist_residue_decide PRESENT 0 0)" = keep-nobackup ] || fail "H tooth: PRESENT with no backup must decide keep-nobackup (never delete)"
+# UNKNOWN state -> keep (fail-safe): a corrupted state var never deletes
+cp "$FILE_REC" "$USERF"
+act="$(persist_residue_decide WHATEVER 0 0)"
+[ "$act" = keep ] || fail "H tooth: an unknown state decided '$act' != keep (fail-safe violated)"
+apply_resid "$act" "$USERF"
+[ -f "$USERF" ] || fail "H tooth: an unknown state DELETED the planted user file"
+teeth=$((teeth + 1))
+echo "    H trap tooth OK: UNPROBED/unknown keep the user file byte-identical; delete only on ABSENT; PRESENT restores/never-deletes"
+
+# M-a standing teeth (review-102): the RAW freshness-token grammars reject
+# resemblance. raw_single_line enforces the newline shape; the caller
+# regexes reject squeezed junk. Feed crafted raw files.
+mat="$HP/matooth"; rm -rf "$mat"; mkdir -p "$mat"
+# ma_run <file> : set globals MA_OUT (raw_single_line content) + MA_RC (its
+# rc; nonzero = newline-shape rejection), run in the CURRENT shell (never
+# a $() subshell — globals must propagate) with set -e neutralized.
+MA_OUT=""; MA_RC=0
+ma_run() { MA_OUT=""; MA_RC=0; MA_OUT="$(raw_single_line "$1" 2>/dev/null)" || MA_RC=$?; }
+BID_RE='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+BT_RE='^btime ([1-9][0-9]{5,12})$'
+UP_RE='^([0-9]+)\.[0-9]+ [0-9]+\.[0-9]+$'
+# boot_id: genuine passes; double-LF / no-LF die on the NEWLINE SHAPE (rc!=0)
+printf '5b9b339e-1234-4abc-8def-0011223344ff\n' > "$mat/bid-ok"
+ma_run "$mat/bid-ok"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $BID_RE ]]; } || fail "M-a tooth: genuine boot_id rejected (rc=$MA_RC)"
+printf '5b9b339e-1234-4abc-8def-0011223344ff\n\n' > "$mat/bid-2lf"
+ma_run "$mat/bid-2lf"; [ "$MA_RC" != 0 ] || fail "M-a tooth: double-LF boot_id accepted the newline shape (rc0, raw='$MA_OUT')"
+printf '5b9b339e-1234-4abc-8def-0011223344ff' > "$mat/bid-nolf"
+ma_run "$mat/bid-nolf"; [ "$MA_RC" != 0 ] || fail "M-a tooth: no-final-LF boot_id accepted (rc0, raw='$MA_OUT')"
+# btime: 'btime 7 garbage' must die on the GRAMMAR (no whitespace squeeze)
+printf 'btime 19283746\n' > "$mat/bt-ok"
+ma_run "$mat/bt-ok"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $BT_RE ]]; } || fail "M-a tooth: genuine btime rejected (rc=$MA_RC)"
+printf 'btime 7 garbage\n' > "$mat/bt-junk"
+ma_run "$mat/bt-junk"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $BT_RE ]]; } && fail "M-a tooth: 'btime 7 garbage' laundered into a match" || true
+# uptime: exact two-field decimal; single field / trailing junk die
+printf '1234.56 2345.67\n' > "$mat/up-ok"
+ma_run "$mat/up-ok"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $UP_RE ]]; } || fail "M-a tooth: genuine uptime rejected (rc=$MA_RC)"
+printf '7 garbage\n' > "$mat/up-junk"
+ma_run "$mat/up-junk"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $UP_RE ]]; } && fail "M-a tooth: '7 garbage' accepted as uptime" || true
+printf '1234.56 garbage\n' > "$mat/up-junk2"
+ma_run "$mat/up-junk2"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $UP_RE ]]; } && fail "M-a tooth: '1234.56 garbage' accepted as uptime" || true
+teeth=$((teeth + 1))
+echo "    M-a teeth OK: raw freshness-token grammars reject double-LF/no-LF/squeezed-junk, accept genuine shapes"
+
+# M-c standing teeth (review-102): the PURE device-scan validator
+# rig_orphan_parse (from riglib) reconciles MLFKPROC rows == reaped
+# count and fails closed on unreadable/junk/absent-summary. The
+# device-side scan (mlfk_scan's unreadable detection + L-a relative-cwd
+# predicate) is integration-covered by the cold done-check's step-0 +
+# cleanup reaps; this toothes the host reconciliation logic directly.
+mc_ok()   { [[ "$(rig_orphan_parse "$1")" =~ ^OK\  ]] || fail "M-c tooth: '$1' should parse OK"; }
+# `|| true`: rig_orphan_parse returns 1 on its FAIL verdict by design —
+# neutralize the check's set -e so we can inspect the prefix.
+mc_fail() { local r; r="$(rig_orphan_parse "$1")" || true; [ "${r%% *}" = FAIL ] || fail "M-c tooth: '$2' should FAIL closed (got '$r')"; }
+mc_ok "MLFKSCAN 0 0"                                              # clean
+mc_ok "$(printf 'MLFKPROC 123 sh /tmp/mlfk/deadman.sh\nMLFKSCAN 1 0')" # reconciled 1-found
+mc_ok "$(printf 'MLFKPROC 9 z\nMLFKSCAN 1 1')"                    # left>0 still parses (caller judges left)
+mc_fail "$(printf 'MLFKPROC 1 x\nMLFKPROC 2 y\nMLFKSCAN 1 0')" "reconciliation mismatch (2 rows, found 1)"
+mc_fail "$(printf 'MLFKUNREADABLE 55\nMLFKSCAN 0 0')" "live unreadable proc"
+mc_fail "$(printf 'GARBAGE\nMLFKSCAN 0 0')" "non-whitelisted line"
+mc_fail "MLFKPROC 1 x" "absent MLFKSCAN summary"
+teeth=$((teeth + 1))
+echo "    M-c teeth OK: rig_orphan_parse reconciles rows==found; fails on unreadable/mismatch/junk/absent-summary"
+
+# M-b corpus (review-102, mandatory): every genuine reference passes;
+# byte-drop / trailing-NUL / embedded-NUL / bad-SUM-line variants reject.
+mbc="$HP/mbcorpus"; rm -rf "$mbc"; mkdir -p "$mbc"
+mb_pass=0; mb_rej=0
+for gf in "$FILE_P01" "$FILE_REC" "$FILE_DEFAULTS" \
+          "$HP/twin-persist/mlfk-persist.dat" "$HP/m1-persist/mlfk-persist.dat"; do
+  ( verify_persist_file "$gf" "M-b corpus genuine $(basename "$(dirname "$gf")")/$(basename "$gf")" ) >/dev/null 2>&1 \
+    || fail "M-b corpus: genuine file $gf was REJECTED (false rejection — remeasure, never loosen)"
+  mb_pass=$((mb_pass + 1))
+done
+mb_reject() { # <name> : build a corrupt variant, assert verify_persist_file REJECTS
+  local nm="$1"
+  local v="$mbc/$nm.dat" rc=0
+  ( verify_persist_file "$v" "M-b corpus corrupt $nm" ) >/dev/null 2>&1 || rc=$?
+  [ "$rc" != 0 ] || fail "M-b corpus: corrupt variant $nm was ACCEPTED (byte-exactness hole)"
+  mb_rej=$((mb_rej + 1))
+}
+# trailing-NUL replacing the final LF (the exact $(tail -c1) hole)
+head -c $((PERSIST_BYTES - 1)) "$FILE_REC" > "$mbc/nul.dat"; printf '\000' >> "$mbc/nul.dat"
+mb_reject nul
+# one embedded NUL inside a rec line (byte-count grows; $() would drop it)
+{ head -c 900 "$FILE_REC"; printf '\000'; tail -c +901 "$FILE_REC"; } > "$mbc/embed.dat"
+mb_reject embed
+# one byte dropped (byte-count short)
+head -c $((PERSIST_BYTES - 1)) "$FILE_REC" > "$mbc/short1.dat"
+mb_reject short1
+# SUM seal mismatch at the EXACT byte length (a nibble flip in a rec row,
+# SUM left stale): 1366 bytes, final LF intact -> must reject at the seal
+# recompute, not slip through a permissive field parse.
+sed "s/^rec $REC_CHAR $REC_TSTAGE $REC_BITS\$/rec $REC_CHAR $REC_TSTAGE 402e000000000000/" \
+  "$FILE_REC" > "$mbc/sealmiss.dat"
+[ "$(wc -c < "$mbc/sealmiss.dat" | tr -d ' ')" = "$PERSIST_BYTES" ] \
+  || fail "M-b corpus: sealmiss variant byte count drifted (test-fixture bug)"
+mb_reject sealmiss
+teeth=$((teeth + 1))
+echo "    M-b corpus OK: $mb_pass genuine PASS / $mb_rej corrupt REJECT (byte-exactness: NUL/embed/short/seal-mismatch)"
+
 # --- [5] arm build + push + pre-existing product state ------------------------
 echo "== [5/10] armv7 build (shared rig stamp) + push + provenance =="
 rig_arm_build
@@ -805,14 +1067,23 @@ prc=0
 dsh "test -f $DFILE" >/dev/null || prc=$?
 case "$prc" in
   0)
+    # review-102 H: PRESENT only AFTER the backup is pulled + hash-verified.
+    # pull_bytes fails closed -> the state stays UNPROBED and this `fail`
+    # aborts BEFORE the `rm` below (the only $DFILE device write), so a
+    # backup failure never touches the user's file.
     pull_bytes "$DFILE" "$BUILD/preexisting-mlfk-persist.dat" \
-      || fail "could not pull aside the pre-existing $DFILE (M4: the user's data must be preserved)"
+      || fail "could not pull aside the pre-existing $DFILE (M4: the user's data must be preserved; state stays UNPROBED — file untouched)"
+    PERSIST_STATE=PRESENT
     PREEXIST=1
     dsh "rm -f $DFILE $DDATA/mlfk-persist.tmp"
-    echo "   pre-existing $DFILE pulled aside (zero-byte-safe; verdict-bound restore in [10])"
+    echo "   pre-existing $DFILE pulled aside (zero-byte-safe; state=PRESENT; verdict-bound restore in [10])"
     ;;
-  1) dsh "rm -f $DDATA/mlfk-persist.tmp" ;;
-  *) fail "cannot probe for a pre-existing $DFILE (rc $prc)" ;;
+  1)
+    PERSIST_STATE=ABSENT
+    dsh "rm -f $DDATA/mlfk-persist.tmp"
+    echo "   no pre-existing $DFILE (state=ABSENT; test residue is ours to wipe)"
+    ;;
+  *) fail "cannot probe for a pre-existing $DFILE (rc $prc; state stays UNPROBED — file untouched)" ;;
 esac
 echo "   pushed + sha-verified; product dir clean"
 
@@ -1033,11 +1304,18 @@ rig_devsha_selftest
 BOOTID_POST="$(capture_bootid)"
 BOOTID_POST_SRC="${BOOTID_POST%% *}"
 BOOTID_POST_ID="${BOOTID_POST#* }"
-POST_UPTIME="$(adb -s "$DEV" shell 'cat /proc/uptime 2>/dev/null' 2>/dev/null || true)"
-POST_UPTIME="${POST_UPTIME//$'\r'/}"
-POST_UPTIME="${POST_UPTIME%% *}"   # "<sec>.<frac> <idle>" -> "<sec>.<frac>"
-POST_UPTIME="${POST_UPTIME%%.*}"   # -> integer seconds
-[[ "$POST_UPTIME" =~ ^(0|[1-9][0-9]{0,7})$ ]] || fail "boot-identity: POST /proc/uptime unreadable ('$POST_UPTIME')"
+# M-a: validate the RAW /proc/uptime bytes against the exact producer
+# line shape FIRST (two space-separated decimals + a single trailing LF),
+# then extract integer seconds of field 1 — never a permissive split.
+UPT_RAW="$BUILD/.uptime.raw.$$"; rm -f "$UPT_RAW"
+adb -s "$DEV" shell 'cat /proc/uptime 2>/dev/null' > "$UPT_RAW" 2>/dev/null || true
+UPT_LINE="$(raw_single_line "$UPT_RAW")" \
+  || fail "boot-identity: POST /proc/uptime newline shape invalid (not exactly one LF-terminated line)"
+rm -f "$UPT_RAW"
+[[ "$UPT_LINE" =~ ^([0-9]+)\.[0-9]+\ [0-9]+\.[0-9]+$ ]] \
+  || fail "boot-identity: POST /proc/uptime line does not match the exact '<up>.<frac> <idle>.<frac>' shape ('$UPT_LINE')"
+POST_UPTIME="${BASH_REMATCH[1]}"   # integer seconds of field 1
+[[ "$POST_UPTIME" =~ ^(0|[1-9][0-9]{0,7})$ ]] || fail "boot-identity: POST uptime integer seconds '$POST_UPTIME' not canonical"
 BOOT_GAP=$(( $(date +%s) - BOOT_T0 ))
 bootid_judge "$BOOTID_SRC" "$BOOTID_PRE_ID" "$BOOTID_POST_SRC" "$BOOTID_POST_ID" "$POST_UPTIME" "$BOOT_GAP"
 echo "   boot-identity JUDGED ($BOOTID_SRC): PRE=$BOOTID_PRE_ID != POST=$BOOTID_POST_ID; POST uptime ${POST_UPTIME}s < dispatch->read gap ${BOOT_GAP}s (a real fresh cycle)"

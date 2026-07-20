@@ -75,8 +75,43 @@ ARMBINS="sim_device csweep_arm fmt_diff_arm mathsweep_arm gfx_device fk_input sk
 #             the PRESERVE arm keeps the deadman armed ON PURPOSE,
 #             the review-52 backstop design). Best-effort +
 #             WARN-visible: cleanup never masks the run's rc.
+# rig_orphan_parse <out> — PURE host validator of the device scan output
+# (review-102 M-c; factored out so the failure paths are host-unit-
+# toothable). Whitelist grammar: every line is MLFKPROC/MLFKSCAN/
+# MLFKUNREADABLE; EXACTLY one MLFKSCAN (the last line) matching
+# `MLFKSCAN <found> <left>`; MLFKPROC row count == <found> (the
+# reconciliation the reap previously skipped); ANY MLFKUNREADABLE row is
+# a live-unreadable proc we could not classify = fail closed. Echoes
+# `OK <found> <left>` and returns 0 on success, or `FAIL <reason>` and
+# returns 1. Never touches the device.
+rig_orphan_parse() {
+  local out="$1" line last nscan nproc nunread nfound nleft
+  out="${out%$'\n'}"
+  last="${out##*$'\n'}"
+  nscan=0; nproc=0; nunread=0
+  while IFS= read -r line; do
+    case "$line" in
+      MLFKSCAN\ *)       nscan=$((nscan + 1)) ;;
+      MLFKPROC\ *)       nproc=$((nproc + 1)) ;;
+      MLFKUNREADABLE\ *) nunread=$((nunread + 1)) ;;
+      *) printf 'FAIL non-whitelisted scan line: %s' "$line"; return 1 ;;
+    esac
+  done <<< "$out"
+  if [ "$nscan" != 1 ] || ! [[ "$last" =~ ^MLFKSCAN\ ([0-9]{1,4})\ ([0-9]{1,4})$ ]]; then
+    printf 'FAIL malformed/absent MLFKSCAN summary (nscan=%s last=%s)' "$nscan" "$last"; return 1
+  fi
+  nfound="${BASH_REMATCH[1]}"; nleft="${BASH_REMATCH[2]}"
+  if [ "$nunread" != 0 ]; then
+    printf 'FAIL %s live UNREADABLE /proc entr(ies) during the scan (cannot classify - fail closed)' "$nunread"; return 1
+  fi
+  if [ "$nproc" != "$nfound" ]; then
+    printf 'FAIL MLFKPROC rows (%s) != reaped count (%s) - reconciliation mismatch' "$nproc" "$nfound"; return 1
+  fi
+  printf 'OK %s %s' "$nfound" "$nleft"; return 0
+}
+
 rig_orphan_reap() {
-  local mode out rc line last nfound nleft nscan bad
+  local mode out rc line last nfound nleft presult
   mode="$1"
   rc=0
   out="$(dsh '
@@ -91,22 +126,65 @@ mlfk_scan() {
     # adb merges into the captured output and breaks the whitelist
     # grammar. cat swallows the vanish; an empty cl simply never matches.
     cl="$(cat "$p/cmdline" 2>/dev/null | tr "\0" " ")"
+    if [ -z "$cl" ]; then
+      # M-c (review-102): an empty read is NOT automatically clean.
+      # Distinguish a VANISHED proc (dir gone -> benign, skip) from a
+      # LIVE UNREADABLE one (dir + cmdline present but not readable ->
+      # a stale mlfk process we cannot inspect -> LOUD). Kernel threads
+      # / zombies have a readable-but-empty cmdline and never match the
+      # rig dirs, so they fall through here harmlessly.
+      if [ -d "$p" ] && [ -e "$p/cmdline" ] && [ ! -r "$p/cmdline" ]; then
+        echo "MLFKUNREADABLE $pid"
+      fi
+      continue
+    fi
+    cm=""
+    matched=0
     case "$cl" in
-      *"/tmp/m""lfk"*|*"/mnt/m""lfk-scratch"*)
-        cm="$(cat "$p/comm" 2>/dev/null)"
-        echo "$pid ${cm:-?} $cl"
-        ;;
+      *"/tmp/m""lfk"*|*"/mnt/m""lfk-scratch"*) matched=1 ;;
     esac
+    if [ "$matched" = 0 ]; then
+      # L-a (review-102): the relative-cwd spelling (cd into a rig scratch
+      # dir, then ./deadman.sh) carries NO dir literal in cmdline. Also
+      # match when comm is a rig shell/app AND the process CWD resolves
+      # under a rig dir. NOTE: the rig-dir paths below are SPLIT literals
+      # ("/tmp/m""lfk") so the scanning shell OWN cmdline can never match
+      # itself; never write the contiguous path anywhere in this dsh
+      # block (a comment counts: it is part of the device cmdline). No
+      # apostrophes here either: this whole block is a single-quoted dsh
+      # string and one stray quote would close it early.
+      cm="$(cat "$p/comm" 2>/dev/null)"
+      case "$cm" in
+        sh|ash|busybox|deadman.sh|foh_device)
+          cwd="$(readlink "$p/cwd" 2>/dev/null)"
+          case "$cwd" in
+            "/tmp/m""lfk"|"/tmp/m""lfk/"*|"/mnt/m""lfk-scratch"|"/mnt/m""lfk-scratch/"*) matched=1 ;;
+          esac
+          ;;
+      esac
+    fi
+    if [ "$matched" = 1 ]; then
+      [ -n "$cm" ] || cm="$(cat "$p/comm" 2>/dev/null)"
+      echo "$pid ${cm:-?} $cl"
+    fi
   done
 }
 n=0
 pids=""
 OUT="$(mlfk_scan)"
 if [ -n "$OUT" ]; then
+  # match rows (`<pid> <comm> <cmdline>`) -> MLFKPROC; a live-unreadable
+  # row (`MLFKUNREADABLE <pid>`) is passed through verbatim for the host
+  # parser to fail on. Only match rows are killed + counted in n.
   printf "%s\n" "$OUT" | while IFS= read -r row; do
-    echo "MLFKPROC $row"
+    case "$row" in
+      MLFKUNREADABLE\ *) echo "$row" ;;
+      *) echo "MLFKPROC $row" ;;
+    esac
   done
-  for pid in $(printf "%s\n" "$OUT" | while IFS= read -r row; do echo "${row%% *}"; done); do
+  for pid in $(printf "%s\n" "$OUT" | while IFS= read -r row; do
+      case "$row" in MLFKUNREADABLE\ *) : ;; *) echo "${row%% *}" ;; esac
+    done); do
     kill "$pid" 2>/dev/null
     pids="$pids $pid"
     n=$((n+1))
@@ -130,31 +208,37 @@ echo "MLFKSCAN $n $left"')" || rc=$?
     echo "WARN: cleanup mlfk orphan reap could not run (dsh rc $rc) — stale processes may remain on the device" >&2
     return 1
   fi
-  out="${out%$'\n'}"
-  last="${out##*$'\n'}"
-  nscan=0
-  bad=0
+  # LOUD-log each reaped/unreadable row (intent unchanged), then validate
+  # + reconcile via the PURE host parser (review-102 M-c: MLFKUNREADABLE
+  # = fail closed; MLFKPROC row count reconciled == reaped count).
   while IFS= read -r line; do
     case "$line" in
-      MLFKSCAN\ *) nscan=$((nscan + 1)) ;;
       MLFKPROC\ *)
-        echo "WARN: stale mlfk process found + reaped [$mode]: ${line#MLFKPROC }" >&2
-        ;;
-      *) bad=1 ;;
+        echo "WARN: stale mlfk process found + reaped [$mode]: ${line#MLFKPROC }" >&2 ;;
+      MLFKUNREADABLE\ *)
+        echo "WARN: LIVE UNREADABLE /proc entry during mlfk scan [$mode]: pid ${line#MLFKUNREADABLE } (cannot classify — failing the scan closed)" >&2 ;;
     esac
-  done <<< "$out"
-  if [ "$nscan" != 1 ] || [ "$bad" != 0 ] ||
-     ! [[ "$last" =~ ^MLFKSCAN\ ([0-9]{1,4})\ ([0-9]{1,4})$ ]]; then
+  done <<< "${out%$'\n'}"
+  # `|| true`: rig_orphan_parse returns 1 on a FAIL verdict BY DESIGN, and
+  # we inspect the OK/FAIL prefix below — never let a caller's `set -e`
+  # exit here before the loud death + explicit lock release run.
+  presult="$(rig_orphan_parse "$out")" || true
+  if [ "${presult%% *}" != OK ]; then
     if [ "$mode" = step0 ]; then
-      echo "DEVICE FAIL: step-0 mlfk orphan reap output failed the whitelist grammar:" >&2
+      echo "DEVICE FAIL: step-0 mlfk orphan reap output failed validation: ${presult#FAIL }" >&2
       printf '%s\n' "$out" >&2
       [ -n "${LOCK:-}" ] && rm -rf "$LOCK"
       exit 1
     fi
-    echo "WARN: cleanup mlfk orphan reap output failed the whitelist grammar (stale processes may remain):" >&2
+    echo "WARN: cleanup mlfk orphan reap output failed validation (stale processes may remain): ${presult#FAIL }" >&2
     printf '%s\n' "$out" >&2
     return 1
   fi
+  [[ "$presult" =~ ^OK\ ([0-9]+)\ ([0-9]+)$ ]] || {
+    echo "DEVICE FAIL: rig_orphan_parse returned an unparseable OK line ('$presult')" >&2
+    [ "$mode" = step0 ] && { [ -n "${LOCK:-}" ] && rm -rf "$LOCK"; exit 1; }
+    return 1
+  }
   nfound="${BASH_REMATCH[1]}"
   nleft="${BASH_REMATCH[2]}"
   if [ "$nleft" != 0 ]; then
@@ -257,9 +341,21 @@ rig_cleanup() {
     # consumer's EXIT trap routes through this function, so teardown
     # now covers ALL exit paths by construction. Best-effort +
     # WARN-visible (cleanup never masks the run's real exit code).
-    rig_orphan_reap cleanup || true
-    dsh "rm -rf $DTMP $DSD" >/dev/null 2>&1 \
-      || echo "WARN: device scratch cleanup failed — $DTMP $DSD may remain on the device" >&2
+    # review-102 M-d (reap-failure race): if the reap FAILS, a still-live
+    # deadman may be polling its cancel/nonce in $DTMP — wiping $DTMP now
+    # would strand the comb (the very leak this reap exists to prevent).
+    # So on reap failure PRESERVE $DTMP (wipe only $DSD, log loud, leave
+    # the cancel marker for the deadman to self-terminate on); the next
+    # check's step-0 scan reaps the residual. Never wipe the signal a
+    # live process depends on.
+    if rig_orphan_reap cleanup; then
+      dsh "rm -rf $DTMP $DSD" >/dev/null 2>&1 \
+        || echo "WARN: device scratch cleanup failed — $DTMP $DSD may remain on the device" >&2
+    else
+      echo "WARN: cleanup orphan reap FAILED — PRESERVING $DTMP (a surviving deadman may still be polling its cancel/nonce there; wiping now would strand the comb). Only $DSD is wiped; the next check's step-0 scan reaps the residual." >&2
+      dsh "rm -rf $DSD" >/dev/null 2>&1 \
+        || echo "WARN: device scratch cleanup failed — $DSD may remain on the device" >&2
+    fi
   fi
   rm -rf "$LOCK" 2>/dev/null \
     || echo "WARN: could not release rig lock $LOCK — remove manually: rm -rf '$LOCK'" >&2

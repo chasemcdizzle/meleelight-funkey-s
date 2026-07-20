@@ -18354,3 +18354,292 @@ workable); witness-null (heavy full-render) — did NOT fire (dead-strip
 light witness green); font-revert link-guard — fired as designed in the
 recorded scratchpad probe (confirms the guard). None left the STOP
 condition standing. ONE atomic commit.
+
+## iter 104 — 2026-07-20 — M4 hardening PRE-REGISTRATION: persist-arc round-2 closure (review-102 triage, ALL dispositions; frozen before any run/edit; PROCESS §2)
+
+**Task**: close ALL dispositions in .loop/review-102-triage.md (codex
+round 2 over 70089b7, NO-GO — .loop/review-102-1.log): one High
+(data-loss trap hazard), four Medium (M-a raw freshness-token grammar,
+M-b persist-file byte-exactness, M-c orphan-scan reconciliation, M-d
+teardown reap-failure race), two Low (L-a relative-cwd orphan spelling,
+L-b PB string-to-pixels). ONE atomic commit. Round 3 = closure-or-cap.
+
+**Surfaces (frozen)**: port/foh/check-device-persist.sh,
+port/sim/device/riglib.sh, NEW port/foh/decode-pb-glyphs.js (the L-b
+decoder — the glyph-decode form wins, see L-b), port/sim/device/m3-freeze-manifest.txt (riglib row re-pin, SAME commit) +
+port/sim/device/verify_m3.sh (MANIFEST_SHA256 anchor line ONLY — its
+normalized self-row excludes that line). foh_persist.c NOT expected to
+change (CONFIRM by skip; if a finding genuinely forces it that is a
+refutation shape — record + proceed minimally). Frozen
+flows/goldens/streams/artifacts byte-untouched; zero re-freezes.
+
+**Method per finding (frozen)**:
+- **H (DATA-LOSS trap three-state)**: the EXIT trap's delete arm ran
+  whenever PREEXIST != 1, including UNPROBED (before the step-[5]
+  device-file probe) — an early [0]-[4] failure would delete $DFILE,
+  the user's only copy. FIX: an explicit `PERSIST_STATE`
+  (UNPROBED/ABSENT/PRESENT), initialised UNPROBED, transitioned ONLY at
+  the step-[5] probe (prc=1 -> ABSENT; prc=0 AND backup pulled+hash-
+  verified -> PRESENT). A PURE decision helper
+  `persist_residue_decide <state> <restored> <backup>` returns the
+  action; the trap dispatches device ops on it. The ONLY delete arm is
+  ABSENT (probe completed, genuinely absent -> bytes there are OUR
+  residue). UNPROBED and any UNKNOWN state KEEP (fail-safe: never delete
+  on an early/unknown path). PRESENT restores from the verified backup,
+  never deletes; a missing backup KEEPS (untouched) loudly. Backup
+  pull/hash failure keeps state UNPROBED, so the `fail` abort fires
+  BEFORE the only device write to $DFILE (the setup `rm`), file
+  untouched. TOOTH (host-only, no paced run): a planted COPY "user
+  file" + the REAL `persist_residue_decide` — UNPROBED -> keep, apply
+  the keep action to the planted copy -> survives byte-identical;
+  ABSENT -> delete; PRESENT+backup -> restore; PRESENT+restored ->
+  noop; PRESENT-no-backup -> keep; GARBAGE state -> keep (fail-safe).
+- **M-a (raw freshness-token grammar FIRST)**: capture_bootid squeezed
+  ALL whitespace before validating (`7 garbage` -> `7garbage`). FIX:
+  capture the producer's raw bytes to a FILE (command substitution
+  drops the trailing LF — the M-b class), de-CR the measured adb pty
+  artifact ONLY, then a shared `raw_single_line` enforces the exact
+  newline shape (final byte 0x0a, exactly one LF-terminated line), and
+  the caller applies the EXACT producer grammar on the content:
+  boot_id `^[0-9a-f]{8}-...-[0-9a-f]{12}$`; btime `^btime <digits>$`;
+  /proc/uptime the exact two-field decimal line
+  `^[0-9]+\.[0-9]+ [0-9]+\.[0-9]+$` before extracting integer seconds
+  of field 1. No whitespace squeeze anywhere. TOOTH (host): crafted raw
+  files through raw_single_line + the three grammars — good passes,
+  `7 garbage`/double-LF/no-LF/`1234.56 garbage` die.
+- **M-b (persist-file byte-exactness)**: verify_persist_file's final-LF
+  test `[ -z "$(tail -c1 "$f")" ]` passes for BOTH a trailing LF and a
+  trailing NUL (command substitution drops NULs). FIX: byte-level final
+  byte via `od -An -tx1` == `0a` exactly; byte-count reconciliation
+  `wc -c` == 1366 (MEASURED: every genuine MLFKPERSIST1 file is exactly
+  1366 bytes — header 13 + turbo 8 + lcancel 10 + tapjump 16 + 50 rec
+  rows x25 + SUM 69; a dropped/added byte, incl. an embedded NUL that
+  $() would silently swallow through the per-line sed reads, fails
+  here); and the SUM recompute validates the COMPLETE shasum line
+  grammar `^<64hex>  -$` (no `cut -d' ' -f1` first-field acceptance).
+  CORPUS re-run (mandatory): every archived genuine file
+  (host/*-want.dat, pull1..4, corrupt.dat as the negative) + crafted
+  byte-drop/NUL variants -> zero false rejections, all corrupt reject.
+- **M-c (orphan-scan reconciliation)**: rig_orphan_reap's device
+  mlfk_scan swallowed cat-cmdline failures to "" (a LIVE unreadable
+  process scanned clean) and the host side never reconciled MLFKPROC
+  row count against the reaped `nfound`. FIX (device scan): on an empty
+  cmdline read, distinguish VANISHED (/proc/<pid> gone -> benign, skip)
+  from UNREADABLE (dir present, cmdline present-but-not-readable ->
+  emit `MLFKUNREADABLE <pid>`); the cat-swallow of the vanish stays
+  (the iter-102 stderr-grammar fix). FIX (host parse, factored into a
+  PURE `rig_orphan_parse <mode> <out>` so it can be unit-toothed):
+  MLFKUNREADABLE rows = loud scan failure (fail closed); MLFKPROC row
+  count reconciled == nfound exactly; grammar whitelist unchanged
+  (unknown line -> fail closed). TOOTH (host): crafted `$out` strings
+  through rig_orphan_parse — clean scan passes; MLFKUNREADABLE ->
+  failure; nproc != nfound -> failure; junk line -> failure.
+- **M-d (teardown reap-failure race)**: rig_cleanup wiped $DTMP
+  unconditionally after the cleanup reap, even when the reap FAILED
+  (a still-live deadman then loses its cancel/nonce inside its 2 s poll
+  window — the original leak on ordinary EXIT). FIX: on reap failure,
+  PRESERVE $DTMP (skip the $DTMP wipe, wipe only $DSD, log loud, leave
+  the cancel marker for the deadman to self-terminate on); the next
+  check's step-0 scan reaps the residual. Never wipe the signal a live
+  process depends on.
+- **L-a (relative-cwd orphan spelling)**: `cd /tmp/mlfk; ./deadman.sh`
+  carries no dir literal in cmdline and escapes the predicate. FIX:
+  predicate = cmdline-directory-literal OR (comm in a rig-shell
+  allowlist {sh,ash,busybox,deadman.sh,foh_device} AND
+  readlink /proc/<pid>/cwd resolves UNDER a rig dir /tmp/mlfk or
+  /mnt/mlfk-scratch). Device-side in mlfk_scan.
+- **L-b (PB string -> PIXELS)**: derive_pb's string is checked
+  separately from the shot; the shot judge is renderer-vs-renderer
+  only. MEASURE-then-PICK: the glyph-decode form is PRACTICAL (the PB
+  region is scale-1 kAccent (255,200,60) on kBg (12,12,28), fully
+  opaque, clean background at y=194; layout is text_center over
+  RAST_W=240, 6px advance, 5x7 glyphs) — PICKED. NEW check-owned
+  `decode-pb-glyphs.js` reads the FOH 5x7 font tables from
+  port/foh/foh_font.c AS DATA (parses kGlyphs), reads the PPM shot,
+  samples the PB region into per-glyph 7-row bitmaps (on = accent), and
+  matches each against the font to reconstruct the string — NOT via the
+  C renderer. The check asserts the decode of the persisted-twin
+  tss-record shot == "PERSONAL BEST " + the derived L1_PB, and the
+  defaults-control shot == "PERSONAL BEST --:--:--"; the device shots
+  are already cmp-byte-identical to these host twins (existing chain),
+  so the derived string is connected to device pixels transitively.
+  The decoder is sha-pinned in the check (the judge-twin-pin
+  precedent). TOOTH: decoding the twin != decoding the control
+  (distinct); a one-pixel-perturbed COPY shot fails to decode the same
+  string (dead-tooth).
+- **Manifest re-pin ceremony**: the riglib.sh diff invalidates the
+  m3-freeze-manifest riglib row. Re-pin the row to the NEW bytes,
+  status stays `arc-pending` (cite: this iter-104 entry; the
+  persist-arc round-3 review owns the GO — reviewed-go would be a false
+  claim). Anchor recomputed with `openssl dgst -sha256`. Inline
+  self-check must print ALL ROWS GREEN + ANCHOR GREEN (MEASURED
+  pre-edit baseline .loop/m4-per104-manifest-precheck.log: all 23 rows
+  GREEN incl. wrap-run.js — already re-pinned by 8bf15ba, the STATE
+  staleness note is resolved — + verify_m3 via the normalized self-row
+  + ANCHOR GREEN). check-device-persist.sh is a RIG_SCRIPT too, so both
+  edits change the arm stamp -> exactly ONE rebuild.
+
+**Run plan + caps (frozen)**: [R0] host smoke — `bash -n` on both
+edited scripts + `node --check` on the decoder; the H/M-a/M-b/M-c host
+teeth + corpus (offline, free). [R1] measurement probe: boot_id/btime/
+uptime live grammar on the device (<= 4 dsh). [R2] the cold done-check
+`bash port/foh/check-device-persist.sh` = the ONE full paced run incl.
+its reboot. Paced budget 2 (R2 + one spare). Arm rebuilds 1 (the
+riglib/check byte changes force exactly one). Cold host checks 3
+(check-foh-flows.sh is NOT required — foh_persist.c/foh_render.c/font
+UNCHANGED this iter; skip-proof it; the 3 slots are the done-check +
+repair). Other device checks: mechanical skip-proofs (no sim TU
+touched; riglib deltas are additive scan/teardown;
+check-device-target.sh's next cold run stays the task-14 ritual).
+Early-stop: any cap breach or refutation -> STOP, report, no commit.
+
+**Pass criteria (frozen)**: `PERSIST OK (...)` exit 0 cold, honest
+counters; all standing teeth pass with dead-tooth guards; corpus zero
+false rejections + corrupt negatives; the H trap tooth proves the
+UNPROBED copy survives byte-identical; the L-b decode == derived string
+on twin + control; manifest self-check ALL ROWS GREEN + ANCHOR GREEN;
+tree -> ONE atomic commit.
+
+**Refutation shapes (frozen)**:
+- H: the trap tooth deletes/loses the UNPROBED planted copy -> the
+  three-state model is refuted -> STOP and report (do NOT ship a trap
+  that can delete unprobed data).
+- M-a: a live-device boot_id/btime/uptime capture is REJECTED by the
+  new strict grammar (a genuine producer shape I mismeasured) -> one
+  bounded evidence round (dump the raw bytes od -c), fix the grammar
+  against the measured bytes, NEVER loosen to a squeeze; if the device
+  offers NEITHER boot_id NOR btime the existing H1-a STOP stands.
+- M-b: ANY archived genuine persist file rejected (byte count != 1366
+  or final-byte != 0a on a real file) -> my byte pin is wrong -> remeasure
+  the corpus, fix the constant; a genuine file that truly violates =
+  format drift = STOP (corruption evidence, not a parser bug). Do NOT
+  loosen to a permissive parse.
+- M-c/M-d/L-a: the cold done-check's step-0 + cleanup reaps (happy
+  path) fail on the real device under the new code -> STOP and report
+  the measured device behavior; do NOT weaken the fail-closed arms.
+  (These failure-path branches are host-unit-toothed via
+  rig_orphan_parse; the device-side scan/predicate is integration- and
+  logic-review-covered — recorded honestly, not silently.)
+- L-b: the decoder cannot reconstruct the PB string from a genuine shot
+  -> one evidence round (dump the sampled region), fix the layout
+  constants against the measured pixels; if the glyph decode proves
+  impractical fall back to the per-glyph reference-bitmap pin (the
+  triage's registered alternative) with a fresh note — never drop the
+  string-to-pixel connection.
+- foh_persist.c: if any finding genuinely requires a C edit, that is a
+  refutation of "check/rig-side only" -> record it + proceed with the
+  minimal C change (NOT expected).
+- Any refutation is recorded here with a do-NOT-retry-blind line.
+
+## iter 104 — 2026-07-20 — M4 hardening RESULT: persist-arc round-2 closure (review-102 ALL dispositions) — PERSIST OK
+
+**COLD done-check GREEN**: `PERSIST OK (sessions=2 powercycle=reboot
+bootid=bootid:PRE!=POST bootwait=12s legs=5 pulls=4
+roundtrip=byte-exact record=00:14.50 resets missing=1 loud-corrupt=2
+dirsync=plain-saved+degraded-tooth teeth=17)` exit 0
+(.loop/m4-per104-donecheck.log). Real reboot judged: PRE
+4e3cd631-… != POST f05cf035-…, POST uptime 7s < dispatch->read gap
+12s. Teeth 12→17 (H trap + M-a + M-c + M-b corpus + L-b decode).
+Device left CLEAN (no persist file — ABSENT path; no marker; scratch
+wiped; gmenu2x live; lock released). foh_persist.{c,h} BYTE-UNCHANGED
+(constraint confirmed). ONE atomic commit.
+
+**All 7 dispositions closed**:
+- **H (DATA-LOSS)**: three-state `PERSIST_STATE`
+  (UNPROBED/ABSENT/PRESENT) initialised UNPROBED, advanced ONLY at the
+  step-[5] probe; trap dispatches on the PURE `persist_residue_decide`
+  whose only delete arm is ABSENT — UNPROBED/unknown KEEP, PRESENT
+  restores/never-deletes. Backup pull/hash failure keeps state
+  UNPROBED so the abort fires before any $DFILE device write.
+  Host tooth: a planted COPY user file survives byte-identical under
+  the UNPROBED/unknown decisions; delete only on ABSENT; restore/noop/
+  keep-nobackup on PRESENT. Observed IN VIVO: three pre-[5] failures
+  this session all left $DFILE UNTOUCHED (state=UNPROBED) — the fix
+  working under real early-failure conditions.
+- **M-a**: freshness tokens validated as RAW bytes on disk (command
+  substitution drops the trailing LF/NULs) via a shared
+  `raw_single_line` (de-CR only, exact single-LF newline shape), then
+  the exact producer grammar (boot_id UUID; btime; /proc/uptime exact
+  two-field decimal) — no whitespace squeeze. Verified on LIVE device
+  bytes (boot_id/btime/uptime all captured + parsed). Teeth:
+  double-LF/no-LF die on the newline shape; `btime 7 garbage` /
+  `7 garbage` / `1234.56 garbage` die on the grammar.
+- **M-b**: verify_persist_file byte-exactness — final byte via
+  `od -An -tx1` == 0a (a trailing NUL no longer passes `$(tail -c1)`);
+  byte-count reconciliation `wc -c` == 1366 (MEASURED across every
+  genuine file; catches dropped/added/embedded-NUL bytes); complete
+  recomputed-shasum line grammar `<64hex>  -` (no `cut -f1`). CORPUS
+  re-run: 5 genuine PASS / 4 corrupt REJECT (trailing-NUL, embedded-
+  NUL, byte-drop, seal-mismatch-at-exact-length).
+- **M-c**: rig_orphan_reap — device mlfk_scan distinguishes a VANISHED
+  proc (skip) from a LIVE UNREADABLE one (`MLFKUNREADABLE` -> fail
+  closed); host parse factored into the PURE `rig_orphan_parse`
+  (unit-toothable) which reconciles MLFKPROC row count == reaped count
+  and fails closed on unreadable/mismatch/junk/absent-summary. Teeth
+  (host): 7 cases. Integration-covered by the cold step-0 + cleanup
+  reaps (both ran clean).
+- **M-d**: rig_cleanup — on a FAILED cleanup reap, PRESERVE $DTMP (wipe
+  only $DSD, log loud), leaving the cancel marker for a surviving
+  deadman to self-terminate on; the next step-0 scan reaps the
+  residual. Never wipe the signal a live process depends on.
+- **L-a**: mlfk_scan predicate gains the relative-cwd spelling —
+  cmdline-dir-literal OR (comm in a rig-shell allowlist AND
+  readlink /proc/<pid>/cwd under a rig dir).
+- **L-b**: NEW port/foh/decode-pb-glyphs.js reads the FOH 5x7 font
+  tables from foh_font.c AS DATA and decodes the PERSONAL BEST shot
+  region back into a string (NOT the C renderer). The check asserts
+  the persisted-twin shot decodes to "PERSONAL BEST " + the derived
+  L1_PB (00:14.50) and the control to "…--:--:--"; device shots are
+  cmp-byte-identical to these host twins (existing chain), so the
+  derived string is bound to device pixels. Glyph-decode form MEASURED
+  practical + PICKED (not the reference-bitmap fallback). Decoder
+  sha-pinned in the check. Tooth: twin != control; a one-pixel-
+  perturbed COPY fails to decode the same string.
+
+**Manifest re-pin**: riglib row re-pinned to the new bytes
+(949f233b…), status arc-pending (cite iter-104; review round-3 owns
+the GO). Anchor recomputed with `openssl dgst -sha256` (87056f2b…,
+shasum-cross-verified) into verify_m3.sh MANIFEST_SHA256. Self-check:
+ALL 23 ROWS GREEN + ANCHOR GREEN
+(.loop/m4-per104-manifest-selfcheck.log). wrap-run.js is GREEN (the
+STATE iter-89 staleness note was resolved by 8bf15ba — recorded, not
+touched).
+
+**Run ledger vs caps**: paced device runs 1/2 (the one full cold
+done-check incl. its reboot; spare unused — the three earlier pre-[5]
+aborts were host/tooth bugs + one external process-group kill, NONE
+consumed a reboot or an arm build). Arm rebuilds 1/1 (stamp
+018f8565…). Cold host checks 1/3 (the done-check; check-foh-flows
+mechanical skip-proof .loop/m4-per104-fohflows-skip.txt — ZERO shared
+surfaces: foh_persist/foh_render/foh_font/gfx/sim untouched). Corpus
+re-validation for M-b: DONE (5 PASS / 4 REJECT). Other device checks:
+mechanical skip-proofs (no sim TU touched; riglib deltas are
+scan/teardown; check-device-target's next cold run stays the task-14
+ritual).
+
+**Refutation shapes fired**: none of the FROZEN refutation shapes
+(H/M-a/M-b/M-c/M-d/L-a/L-b) fired — all fixes held. TWO SELF-INFLICTED
+bugs found + fixed pre-commit (not frozen refutations, recorded for
+honesty): (1) my L-a comment inside the device `dsh` heredoc contained
+a contiguous `/tmp/mlfk` literal + an apostrophe — the split-literal
+self-exclusion and the single-quote were both broken; the check's OWN
+step-0 self-scan caught the path issue at step-0 (no reboot consumed).
+LESSON (do NOT retry blind): NEVER write a contiguous rig-dir path OR
+an apostrophe anywhere inside the single-quoted device scan heredoc — a
+comment is part of the device cmdline. (2) `presult="$(rig_orphan_parse
+…)"` and `mc_fail`/`ma_get`/`mb_reject` tripped the check's set -e /
+set -u (a FAIL-returning capture, a subshell global, a same-statement
+`local` cross-ref); all guarded with `|| true` / split-local / current-
+shell helper. All host logic re-validated 26/26 under set -euo before
+the paced run.
+
+**Honest coverage**: the PRESENT (pre-existing-user-file restore) trap
+arm was NOT exercised on-device this run (the device had no
+pre-existing persist file -> ABSENT path); it is host-toothed
+(persist_residue_decide) + integration-covered on runs where a file
+pre-exists (iter-102). The device-side mlfk_scan changes
+(MLFKUNREADABLE emission, relative-cwd predicate) are logic-review +
+integration covered by the clean step-0/cleanup reaps; their host
+consumers (rig_orphan_parse reconciliation) are directly unit-toothed.
+L-b binds the derived string to HOST-twin pixels; device pixels are
+connected transitively through the existing byte-identical cmp.
