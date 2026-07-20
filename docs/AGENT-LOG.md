@@ -14120,3 +14120,251 @@ hard-coded-verdict-literal class (H1b) now has its second computed
 instance (the first: iter-84 exposure counters) — any future verdict
 field that summarizes evidence must be computed-then-asserted, never
 typed. Music-surface arc round 2 reviews this commit's bytes.
+
+## iter 90 — 2026-07-19 — M4 hardening PRE-REGISTRATION: FOH-arc round-1 closure — divergence witness, f05 bridge, exact grammars (frozen before any edit; PROCESS §2)
+
+- **Task**: REVIEW-HARDENING — close the review-88 round-1 NO-GO
+  (.loop/review-88-1.log; driver triage .loop/review-88-triage.md)
+  on the iter-88 FOH surfaces. Dispositions to FIX: H1, M1, M2, M4,
+  M5, M6, L1. M3 is DEFER-BOUND to task 10 (recorded, NOT attempted
+  here). Surfaces: port/foh/{check-foh-flows.sh,flows/} — foh_app.c /
+  foh.c / foh.h / judge-foh-trace.js are expected BYTE-UNCHANGED
+  (reasoning per finding below; if any needs an edit after all, the
+  judge pin is updated in the same commit). No sim TUs, no gfx TUs,
+  no riglib; frozen goldens read-only. Host-only; ZERO device runs.
+  Command output → .loop/m4-foh90-*.log.
+- **H1 (honest counts + DIVERGENCE WITNESS)**: (a) the verdict's
+  counts become honest: `FOH FLOWS OK (flows=5 shots=13 bridges=3
+  states=4 diverge=1 teeth=10)` — bridges counts ONLY full-stream-
+  judged launches (f01→g01, f02→m01, f05→g03), states counts the four
+  BRIDGE-STATE witnesses (f01/f02/f03/f05), f03 stays a state witness
+  (kept per triage). (b) NEW divergence-witness leg: the check writes
+  a SYNTHETIC, check-owned flow (heredoc → $B/wit/wit-lcancel-g01.flow
+  — deliberately NOT a committed flow; the committed-flow inventory
+  pin stays 5) that selects lcancel=1 through options-gameplay
+  (gameplaymenu.js:44-48 cycle, ONE A press) and then g01's exact
+  chars/stage (fox/marth/battlefield, defaults otherwise), replays
+  g01's trace/seed through --bridge verify, and judges: emitted trace
+  grammar (pinned judge), LAUNCH line EXACT (g01 cross-bound params +
+  lcancel=1), BRIDGE-STATE EXACT (lcancel=1 reached GameState), then
+  verify-stream vs the FROZEN g01 stream MUST exit rc==2 with the
+  whole witness log matching the exact 3-line divergence grammar
+  (`STREAM MISMATCH: first divergence at frame <F> of 3600` + the
+  frozen:/run: hash pair, hashes asserted DIFFERENT, final newline
+  asserted) where F is MEASURED-THEN-FROZEN at the dev probe.
+  FAIL-CLOSED ARMS: verify-stream rc==0 (STREAM MATCH) = DEATH
+  ("witness UNSOUND — the FOH-fed settings plane did not reach
+  ticking"); rc==1 (meta/integrity class) = DEATH (wrong failure
+  class); wrong first-divergence frame = DEATH (drift). Mechanism
+  expectation (read from port/sim/physics.c:962-965): lCancelType==1
+  sets phys.lCancel=true every frame for every player — a checksummed-
+  plane effect from the first frames, no dispatch/trap risk (turbo's
+  interrupt arms have zero live coverage and could trap; lcancel is
+  the triage's sanctioned alternative). WITNESS SETTING CHOICE:
+  lcancel=1 primary; turbo NOT used.
+- **M1 (15th edge sss→css(b))**: f04-nav.flow extended — after the
+  css entry at 540: START 545 → sss, B 550 → css (THE edge), B held
+  555-584 → the bhold back-edge, END 590. f04-nav.expect RE-FROZEN
+  through the designed channel (run foh_app once, hand-review the
+  emitted tail against the pre-registered graph — expected tail:
+  `T 545 css sss start` · `T 550 sss css b` · `T 584 css menu-battle
+  bhold` · `END 590 transitions=13` — then commit; citation: triage
+  M1, structural trace change). Judge byte-unchanged (the edge is
+  already in its pinned 15-edge set — that was the finding).
+- **M2 (p2Char load-bearing) — BRIEF AMENDMENT (evidence-backed,
+  the iter-88 amendment class, 2nd instance)**: the triage's literal
+  f05 target (CSS selects d9 → STREAM MATCH m02) is IMPOSSIBLE
+  through the faithful UI: the upstream CSS difficulty slider domain
+  is 1..4 (css.js:326-327, `Math.round((x-off)*3/166)+1` over a
+  166px-clamped travel — RE-GROUND-TRUTHED this session from the
+  built clone), so d9 is unreachable in UPSTREAM'S OWN UI; m02 (d9)
+  was recordable only because the HARNESS sets difficulty directly.
+  Extending the FOH domain to 9 would be exactly the flow-graph
+  semantic change the same triage forbids. REGISTERED RESOLUTION:
+  f05-vs-g03 — CSS selects p1=falcon (4 RIGHTs), P2 row p2=fox
+  (2 RIGHTs — **p2Char ≠ 0, the finding's core, now stream-load-
+  bearing**), SSS pstadium (stage 2 — a third stage) → full 3600-
+  frame bridge vs the FROZEN g03 oracle stream. LAUNCH cross-bind
+  extended to g03 manifest params. m02 stays frozen and consumed
+  where it is already load-bearing (check-ai-live live-d9 leg; the
+  mixer/music corpora). The "difficulty-9 load-bearing IN A FLOW"
+  fragment of the triage is structurally unsatisfiable for any
+  UI-faithful flow and is recorded here as REFUSED WITH CITATION,
+  not silently dropped; non-default difficulty stays covered by
+  f02 (d1) + tooth T6 (d2).
+- **M4 (bridge-leg whole-log whitelist)**: judge_bridge's grammar
+  block is replaced by BYTE-EXACT whole-log equality: the expected
+  verdict line is CONSTRUCTED from the frozen golden's own
+  rngCalls/frames (`STREAM MATCH <name>: <N>/<N> frames exact,
+  rngCalls=<frozen.rngCalls>, rngCallsOutsideStep=1, specVersion=1`
+  + final newline) and the captured verify-stream stdout log must
+  equal those exact bytes (cmp) — foreign STREAM MATCH lines, torn
+  lines, and missing final newline are all structurally dead (the
+  iter-86 exact-token class, strongest form). Corpus validation:
+  the constructed lines for f01/f02 must equal the archived
+  .loop/m4-task9-donecheck.log lines (rngCalls 134/59) — zero false
+  rejections, checked mechanically at dev time and by the cold runs.
+- **M5 (shot structural validation)**: every shot, BOTH runs, through
+  the production judge: exact header bytes `P6\n240 240\n255\n`
+  (foh_app write_shot_ppm's exact fprintf output), total file size ==
+  15 + 240*240*3, i.e. payload exact with NO trailing bytes, plus the
+  existing non-blank + A==B + pairwise-distinct arms.
+- **M6 (T5 exercises the PRODUCTION comparator)**: the leg-[3]
+  per-shot judgment is extracted into `judge_shot_pair` (structural
+  validation of both files + cmp A/B) and leg [3] calls it — then T5
+  perturbs COPIES and runs THE SAME FUNCTION: (a) appended byte on
+  the B copy → cmp arm death; (b) truncated payload → structural
+  death; (c) doctored header dims → structural death. No hard-coded
+  twin comparison remains.
+- **L1 (T1 divergence not by metadata)**: the T1 variant is written
+  as $B/t1/f01-vs-g01.flow (SAME basename ⇒ SAME `FOHTRACE1
+  flow=f01-vs-g01` header; foh_app derives the id from the basename)
+  so ONLY the injected DOWN differs; the tooth asserts (i) the two
+  headers are IDENTICAL and (ii) the FIRST DIVERGENT LINE PAIR is
+  exactly frozen `T 380 menu-top menu-battle a` vs variant
+  `S 380 refused targettest` (the injected DOWN moved the cursor to
+  Target Test — divergence at the first divergent TRANSITION line,
+  input-attributable by construction).
+- **TEETH LEDGER (10, all in-check on generated variants/copies)**:
+  T1 (L1 rework, exact first-divergent pair) · T2 (p1 variant,
+  unchanged) · T3 (run-JSON nibble → verify-stream rc!=0, unchanged) ·
+  T4 (judge malformed + resembling, unchanged) · T5 (M5+M6: three
+  death arms through the production judge_shot_pair) · T6 (d2
+  variant, unchanged) · T7 (H1 fail-closed: the witness judge fn fed
+  a synthesized rc=0 + exact STREAM MATCH log → MUST die naming the
+  unsound-witness class) · T8 (M1: f04 variant with the 550 B pair
+  deleted → cmp rc 1 + first divergent frozen line exactly
+  `T 550 sss css b`) · T9 (M2: extra RIGHT on the f05 P2 row →
+  LAUNCH p2=3 + cmp rc 1) · T10 (M4: doctored verdict-log copies —
+  foreign STREAM MATCH line appended; final newline stripped — both
+  die in the extracted byte-equality assert).
+- **RUN CAPS (frozen)**: cold full check runs ≤4 (target 2: one
+  pre-commit official + one post-commit); dev component runs: 1 build
+  + ≤3 witness bridge probes (measure F; lcancel→turbo fallback needs
+  a 2nd probe; both-match = STOP) + ≤2 expect-regeneration runs (f04,
+  f05) + judge/corpus validations (logged .loop/m4-foh90-dev.log).
+  Browser runs 0; device runs 0; docker 0 fresh expected (extractor
+  stamp).
+- **REFUTATION SHAPES**: (a) H1 witness probe MATCHES frozen g01
+  under lcancel=1 → that IS the reviewer's hole made real (settings
+  not reaching ticking) — investigate as a BUG (bounded: 1 evidence
+  round vs the bstate witness + physics.c read), NOT a witness
+  re-design; if the plumbing is proven correct AND turbo also
+  matches, STOP — record and register the browser-recorded settings
+  golden as the follow-up (the triage's named alternative), ship the
+  rest, report FAIL-partial honestly. (b) f05 bridge diverges from
+  frozen g03 → the FOH launch seam has a p2-dependent bug (iter-88
+  refutation class (a); ≤3 divergence rounds then STOP). (c) M4
+  byte-exact log rejects a GENUINE archived line → the construction
+  is wrong (measure the producer again; never loosen to regex).
+  (d) f04 re-freeze tail differs from the pre-registered expected
+  tail → hand-review STOPS the freeze; re-derive from foh.c
+  semantics before committing anything.
+- **DONE**: cold `bash port/foh/check-foh-flows.sh` → `FOH FLOWS OK
+  (flows=5 shots=13 bridges=3 states=4 diverge=1 teeth=10)` exit 0,
+  ×1 more post-commit; teeth fired in-run; regression skip-proofs
+  (port/sim + port/gfx diffs EMPTY); result entry + STATE.md top;
+  ONE atomic commit `M4 hardening: FOH-arc round-1 findings —
+  divergence witness, f05/m02 bridge, exact grammars (iter 90)`.
+
+## iter 90 — 2026-07-19 — M4 hardening RESULT: FOH-arc round 1 CLOSED — divergence witness, f05/g03 bridge, exact grammars; cold check green first attempt
+
+- **DONE-CHECK (cold, first attempt): `bash port/foh/check-foh-flows.sh`
+  → `FOH FLOWS OK (flows=5 shots=13 bridges=3 states=4 diverge=1
+  teeth=10)`, exit 0** (.loop/m4-foh90-donecheck.log; teeth section
+  .loop/m4-foh90-teeth.log; dev probes .loop/m4-foh90-dev.log). All 7
+  triage FIX dispositions (.loop/review-88-triage.md) shipped as
+  pre-registered (entry above); M3 remains DEFER-BOUND to task 10
+  (untouched here — the binding task-10 brief note stands). Surfaces
+  changed: port/foh/check-foh-flows.sh + port/foh/flows/ ONLY —
+  foh.c/foh.h/foh_app.c/judge-foh-trace.js BYTE-UNCHANGED (no driver
+  hook was needed: the witness reuses --bridge verify, f05 reuses the
+  f01 path, and M1's edge was already in the judge's pinned graph),
+  so the committed judge sha pin stays valid with zero re-pin.
+- **H1 CLOSED**: verdict counts are HONEST and computed-then-asserted
+  (bridges=3 counts only full-stream-judged launches f01/f02/f05;
+  states=4 counts the BRIDGE-STATE witnesses incl. f03, which stays a
+  state witness per triage; diverge/teeth computed). NEW [4w]
+  DIVERGENCE WITNESS: a check-owned synthetic flow (heredoc, not in
+  the committed inventory) selects lcancel=1 through options-gameplay
+  then g01's exact chars/stage; LAUNCH + BRIDGE-STATE asserted exact
+  (full-line grammar; bstate == frozen-f01-bytes-with-lcancel=1);
+  verify-stream vs the frozen g01 stream MUST exit rc==2 with the
+  exact 3-line report `STREAM MISMATCH: first divergence at frame 1
+  of 3600` + frozen/run hashes asserted different + final newline —
+  **MEASURED: lcancel=1 diverges at frame 1** (phys.lCancel is on the
+  checksum surface — port/sim/physics.c:962-965 sets it every frame),
+  pinned as WIT_DIV_FRAME=1, measured-then-frozen. rc==0 (MATCH) =
+  DEATH naming the unsound-witness class; rc==1 (meta class) = DEATH.
+  The FOH-fed settings plane now DEMONSTRABLY reaches ticking; the
+  registered alternative (browser settings golden) was NOT needed.
+- **M1 CLOSED**: f04-nav traverses css→sss(start)→css(B — the 15th
+  edge)→bhold; f04-nav.expect re-frozen through the designed channel
+  (dev run, tail hand-reviewed == the pre-registered expected tail
+  VERBATIM: `T 545 css sss start · T 550 sss css b · T 584 css
+  menu-battle bhold · END 590 transitions=13`). All 15 pinned edges
+  are now exercised by frozen traces.
+- **M2 CLOSED (with the pre-registered BRIEF AMENDMENT)**: NEW
+  committed flow f05-vs-g03 (falcon via 4 RIGHTs, **P2 fox via 2
+  RIGHTs on the P2 row — p2Char != 0 stream-load-bearing for the
+  first time**, pstadium via 2 RIGHTs in SSS) → full 3600-frame
+  bridge, FIRST-CONTACT `STREAM MATCH g03-falcon-fox-pstadium`
+  (rngCalls=119), LAUNCH cross-bound to the g03 manifest params +
+  an in-check `g03.p2 != 0` guard. The triage's literal d9/m02 form
+  was REFUSED WITH CITATION (pre-registered): the upstream CSS slider
+  domain is 1..4 (css.js:326-327, re-ground-truthed from the built
+  clone) — d9 is unreachable in UPSTREAM'S OWN UI, so no UI-faithful
+  flow can stream-match m02; extending the FOH domain would be the
+  flow-graph semantic change the same triage forbids. m02 stays
+  frozen and load-bearing where it already is (check-ai-live live-d9
+  leg, mixer/music corpora).
+- **M4 CLOSED**: judge_bridge's verify log is now judged by WHOLE-LOG
+  BYTE-EQUALITY against a verdict line CONSTRUCTED from the frozen
+  file's own rngCalls/frames (assert_stream_verdict; cmp rc
+  case-split) — foreign STREAM MATCH lines, torn lines, and missing
+  final newline are structurally dead. Corpus-validated: constructed
+  lines for f01/f02 are verbatim present in the archived iter-88 log
+  (rngCalls 134/59; zero false rejections — .loop/m4-foh90-dev.log).
+- **M5 CLOSED**: judge_shot_pair validates EVERY shot BOTH runs
+  structurally — exact header bytes `P6\n240 240\n255\n` (the
+  write_shot_ppm fprintf grammar), total length == 15 + 240*240*3
+  (no trailing bytes), non-blank — before the A/B cmp.
+- **M6 CLOSED**: leg [3] and tooth T5 run the SAME production
+  judge_shot_pair; the hard-coded twin comparison is deleted.
+- **L1 CLOSED**: T1's variant lives at $B/t1/f01-vs-g01.flow (same
+  basename ⇒ byte-identical header); the tooth asserts headers
+  identical AND the first divergent pair is exactly frozen
+  `T 380 menu-top menu-battle a` vs variant `S 380 refused
+  targettest`.
+- **TEETH 10/10 fired** (.loop/m4-foh90-teeth.log): T1 exact-pair ·
+  T2 p1=3 · T3 verify-stream nibble rc 2 · T4 judge malformed +
+  resembling rc 2 · T5 flip/truncate/dims all die in the PRODUCTION
+  judge_shot_pair · T6 difficulty=2 · T7 synthesized MATCH dies with
+  the UNSOUND class · T8 first divergent frozen line == `T 550 sss
+  css b` · T9 p2=3 · T10 foreign-line + torn-newline verdict logs die
+  in assert_stream_verdict.
+- **REGRESSIONS**: check-sim.sh / check-render.sh / mixer+music checks
+  SKIPPED, justified mechanically — `git diff HEAD --stat` EMPTY for
+  BOTH port/sim/ and port/gfx/ (.loop/m4-foh90-checksim-skip.txt);
+  the three FOH-launched frozen streams (g01/m01/g03) green in-check
+  are the sim-linkage regression.
+- **RUN-CAP LEDGER**: cold full check runs 2/4 (pre-commit official +
+  post-commit); witness probes 1/3 (lcancel diverged on the first —
+  turbo fallback unused); expect-regeneration runs 2/2 (f04, f05);
+  browser 0; device 0; docker 0 fresh (extractor stamp hit).
+- **SURPRISES**: none material — the witness diverged at frame 1
+  (stronger than expected: lCancel is directly on the checksum
+  surface, making the pin maximally stable); the witness trace has
+  transitions=10 (the pre-reg's prose miscounted 9 — no pinned value
+  involved, the judge's own count is authoritative and frozen nowhere).
+- **ZOOM OUT (HARD RULE 8)**: two class artifacts: (a) the divergence
+  witness is the reusable template for "does plane X reach ticking"
+  questions — a synthetic FOH flow + expected-DIVERGENT verify with a
+  pinned first-divergence frame (fail-closed both directions), the
+  natural instrument for any future settings surface (task 13
+  persistence should reuse it); (b) constructed-verdict byte-equality
+  (assert_stream_verdict) supersedes count_aff-style affinity counting
+  wherever the expected line is fully derivable from frozen data — the
+  strongest form of the iter-86 exact-token class; candidates for the
+  same upgrade exist in older checks when their arcs next open. FOH
+  arc round 2 reviews this commit's bytes.

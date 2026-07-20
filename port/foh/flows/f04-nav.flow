@@ -4,7 +4,11 @@ FLOW1
 # targetbuilder (menu-top), audio/credits (menu-options), controller/
 # keyboard (menu-controls). Every menu B-back edge fires (battle->top,
 # controls->options, options->top), plus the CSS hold-B-30 back edge
-# (css.js:186-191) and the U/D cursor wrap witnesses.
+# (css.js:186-191) and the U/D cursor wrap witnesses. Iter-90 (review-88
+# M1): the flow now also traverses css -> sss (START, css.js:446-451)
+# and sss -> css on B (stageselect.js:79 — the 15th pinned edge) before
+# the bhold back-edge, so every edge of the judge's pinned flow graph
+# is exercised by a frozen trace.
 I 1 -
 I 375 S
 I 376 -
@@ -73,6 +77,10 @@ I 535 A
 I 536 -
 I 540 A
 I 541 -
-I 545 B
-I 575 -
-END 580
+I 545 S
+I 546 -
+I 550 B
+I 551 -
+I 555 B
+I 585 -
+END 590

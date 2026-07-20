@@ -3,7 +3,44 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 89 — M4 hardening DONE: music-arc round-1 findings closed, both cold checks green)
+## Live right now (updated: 2026-07-19, iter 90 — M4 hardening DONE: FOH-arc round-1 findings closed, cold check green first attempt)
+
+- **Iter 90 (M4 hardening — FOH-arc round-1 closure: divergence
+  witness, f05/g03 bridge, exact grammars) DONE** (full entry:
+  AGENT-LOG iter 90 pre-registration + result; latest AGENT-LOG id:
+  iter 90). All 7 review-88 FIX dispositions
+  (.loop/review-88-triage.md, review-88 NO-GO) shipped: H1 honest
+  computed verdict counts + the NEW [4w] DIVERGENCE WITNESS (check-
+  owned synthetic flow: lcancel=1 + g01 params → verify-stream vs
+  frozen g01 MUST report `first divergence at frame 1 of 3600`, rc 2,
+  exact 3-line grammar; MATCH = death — the FOH-fed settings plane
+  demonstrably reaches ticking; f03 state witness kept); M1 f04 now
+  traverses sss→css(B) (15/15 pinned edges frozen; .expect re-frozen
+  via the designed channel); M2 NEW flow f05-vs-g03 (p2Char=2
+  stream-load-bearing, pstadium; FIRST-CONTACT STREAM MATCH
+  rngCalls=119) — **BRIEF AMENDMENT registered: the triage's d9/m02
+  form is UI-unreachable (css.js:326-327 slider domain 1..4, 2nd
+  instance of the iter-88 amendment class); m02 stays load-bearing in
+  check-ai-live**; M4 whole-log BYTE-EXACT verdict construction from
+  frozen rngCalls (corpus-validated vs archived iter-88 logs); M5
+  exact P6 structural validation per shot both runs; M6 T5 runs the
+  PRODUCTION judge_shot_pair; L1 T1 same-header variant + exact
+  first-divergent-pair assert. M3 remains DEFER-BOUND to task 10
+  (binding note in the triage must appear in the task-10 brief).
+  foh.c/foh.h/foh_app.c/judge-foh-trace.js BYTE-UNCHANGED (judge pin
+  valid, no re-pin). COLD: `bash port/foh/check-foh-flows.sh` →
+  **FOH FLOWS OK (flows=5 shots=13 bridges=3 states=4 diverge=1
+  teeth=10)** first attempt (.loop/m4-foh90-donecheck.log; teeth
+  10/10 .loop/m4-foh90-teeth.log; post-commit rerun logged
+  .loop/m4-foh90-donecheck2.log). Regression skip-proofs: port/sim +
+  port/gfx diffs EMPTY (.loop/m4-foh90-checksim-skip.txt). Run caps
+  held: cold 2/4, witness probes 1/3. **Driver next: (1) FOH arc
+  ROUND 2 on this commit's bytes (review the hardening diff:
+  check-foh-flows.sh + flows/); (2) music-arc round 2 + the
+  wrap-run.js re-pin verify (iter-89 notes) unchanged; (3) task 10
+  (device FOH) MUST carry the M3 binding note verbatim.**
+
+## [superseded by iter 90] (updated: 2026-07-19, iter 89 — M4 hardening DONE: music-arc round-1 findings closed, both cold checks green)
 
 - **Iter 89 (M4 hardening — music-arc round-1 closure: metadata pins,
   atomics, exact grammars) DONE** (full entry: AGENT-LOG iter 89

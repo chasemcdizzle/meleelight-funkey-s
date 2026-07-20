@@ -1,0 +1,17 @@
+FOHTRACE1 flow=f05-vs-g03
+T 370 startup title timer
+T 375 title menu-top start
+T 380 menu-top menu-battle a
+T 385 menu-battle css a
+S 390 p1char 1
+S 395 p1char 2
+S 400 p1char 3
+S 405 p1char 4
+S 415 p2char 1
+S 420 p2char 2
+SHOT 425 css-p2
+T 430 css sss start
+SHOT 445 sss-pstadium
+T 450 sss match launch
+LAUNCH 450 p1=4 p2=2 p2type=0 difficulty=3 stage=2 turbo=0 lcancel=0 tapjump=0,0,0,0 versus=0
+END 455 transitions=6

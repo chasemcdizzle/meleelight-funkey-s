@@ -1,0 +1,44 @@
+FLOW1
+# f05: the p2Char-load-bearing VS path -> g03 params (falcon / fox /
+# pstadium; iter 90, review-88 M2). P1 row: four RIGHTs (marth ->
+# falcon). DOWN to the P2 CHAR row, two RIGHTs (marth -> puff -> fox
+# — p2 != 0 makes foh.p2Char stream-load-bearing for the first time).
+# START -> sss, two RIGHTs (battlefield -> ystory -> pstadium), A ->
+# LAUNCH. Full-stream bridge vs the frozen g03 oracle stream.
+# NOTE (registered brief amendment, AGENT-LOG iter 90): the triage's
+# literal target (CPU d9 -> m02) is unreachable through the faithful
+# UI — the upstream CSS slider domain is 1..4 (css.js:326-327), so d9
+# cannot be expressed in upstream's own CSS either; g03 carries the
+# finding's core (p2Char != 0) with a frozen full-stream oracle.
+I 1 -
+I 375 S
+I 376 -
+I 380 A
+I 381 -
+I 385 A
+I 386 -
+I 390 R
+I 391 -
+I 395 R
+I 396 -
+I 400 R
+I 401 -
+I 405 R
+I 406 -
+I 410 D
+I 411 -
+I 415 R
+I 416 -
+I 420 R
+I 421 -
+SHOT 425 css-p2
+I 430 S
+I 431 -
+I 435 R
+I 436 -
+I 440 R
+I 441 -
+SHOT 445 sss-pstadium
+I 450 A
+I 451 -
+END 455
