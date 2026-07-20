@@ -1,0 +1,23 @@
+FOHTRACE1 flow=f04-nav
+T 370 startup title timer
+T 375 title menu-top start
+T 380 menu-top menu-battle a
+S 390 refused spectate
+S 400 refused p2p
+S 410 refused server
+T 415 menu-battle menu-top b
+S 425 refused targettest
+S 435 refused targetbuilder
+T 445 menu-top menu-options a
+S 450 refused audio
+T 465 menu-options menu-controls a
+SHOT 470 menu-controls
+S 475 refused controller
+S 485 refused keyboard
+T 490 menu-controls menu-options b
+S 510 refused credits
+T 515 menu-options menu-top b
+T 535 menu-top menu-battle a
+T 540 menu-battle css a
+T 574 css menu-battle bhold
+END 580 transitions=11

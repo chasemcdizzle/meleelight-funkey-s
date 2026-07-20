@@ -3,7 +3,42 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 87 — M4 task 7 DONE: music streaming, DEVICE MUSIC OK)
+## Live right now (updated: 2026-07-19, iter 88 — M4 task 9 DONE: FOH core + menu flows host, FOH FLOWS OK)
+
+- **Iter 88 (M4 task 9 — FOH core + menu flows, host) DONE** (full
+  entry: AGENT-LOG iter 88 pre-registration + result; latest AGENT-LOG
+  id: iter 88): NEW `port/foh/` — the REWRITTEN screen machine
+  (startup→title→menu(top/battle/options/controls)→css→sss→match +
+  options-gameplay; every edge cited from upstream in foh.h; menu
+  entries for excluded/deferred screens stay visible and REFUSE with
+  structural events), self-authored 5x7 font, FLOW1 scripts ×4 +
+  frozen FOHTRACE1 traces + BRIDGE-STATE witnesses
+  (port/foh/flows/*.expect). Cold done-check
+  `bash port/foh/check-foh-flows.sh` → **FOH FLOWS OK (flows=4
+  shots=11 bridges=3 streams=MATCH teeth=6)** exit 0
+  (.loop/m4-task9-donecheck.log). MATCH-LAUNCH BRIDGES first-contact,
+  ZERO divergence rounds: FOH-selected params (never CLI) →
+  sim_setup_match → full 3600-frame streams judged by the UNCHANGED
+  wrap-run.js/verify-stream.js — f01 == frozen g01 (rngCalls=134),
+  f02 == frozen m01 on LIVE C AI (rngCalls=59); f03 BRIDGE-STATE
+  proves options edits reach the GameState slice. Judge:
+  judge-foh-trace.js (whitelist grammar + the 15-edge PINNED flow
+  graph + T-chain continuity; corpus-validated, zero false
+  rejections). BRIEF AMENDMENT (evidence): upstream difficulty slider
+  domain is 1-4 (css.js:316-329), not 1-9 — CPU bridge golden is m01
+  (d1), g08's d5 is unreachable through the faithful UI. Teeth 6/6
+  (.loop/m4-task9-teeth.log). check-sim/check-render SKIPPED justified
+  (port/sim AND port/gfx diffs EMPTY,
+  .loop/m4-task9-checksim-skip.txt). Registered deferrals: SSS RANDOM
+  slot (seeded-draw ruling), menu SFX/music selection + device FOH →
+  task 10, persistence → task 13, palettes/tags/versusMode. **Driver
+  next: (1) Tier-A arc for the new FOH surfaces (check-foh-flows.sh /
+  judge-foh-trace.js / foh_app.c / foh.c — every FOH surface is
+  Tier A per the §M4 conventions); (2) the iter-87 music-surface
+  Tier-A arc + RIG_SCRIPTS residual still queued; (3) task 10 (device
+  FOH) is unblocked — handoff notes in the AGENT-LOG result entry.**
+
+## [superseded by iter 88] (updated: 2026-07-19, iter 87 — M4 task 7 DONE: music streaming, DEVICE MUSIC OK)
 
 - **Iter 87 (M4 task 7 — music streaming: mixer music channel + SD
   double-buffer reader) DONE** (full entry: AGENT-LOG iter 87

@@ -19,6 +19,10 @@ the port cost for a new target is the DEVICE-BOUND column, not the sim.
   consumption): draws into a 240x240 RGB565 buffer in memory. The SIZE
   and FORMAT are FunKey-tuned constants (see Layer 2).
 - The AI (`port/sim/ai.c`), audio MIXER math, input INTERPRETATION.
+- The FOH screen machine + font + flow rig (`port/foh/`): pure
+  (state, PlatformInput) step over the platform seam + raster — the
+  input FEEDER is the only per-target piece (committed flow scripts on
+  host/CI, `platform_poll` on device; foh.h "INPUT SEAM" note).
 
 ## Layer 1 — the platform seam (per-target TU, by design)
 

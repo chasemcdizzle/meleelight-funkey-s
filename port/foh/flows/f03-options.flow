@@ -1,0 +1,60 @@
+FLOW1
+# f03: the options path. menu-top: three DOWNs to OPTIONS, A ->
+# menu-options. A on AUDIO = refused (registered deferral). DOWN to
+# GAMEPLAY, A -> options-gameplay. Edits: turbo ON, L-cancel 0->1->2,
+# tap-jump-off P1 then P2. B backs to menu-options (cursor GAMEPLAY),
+# B to menu-top (cursor OPTIONS), DOWN wraps 3->0 (VS. MELEE — the
+# wrap witness), then the default-chars launch: battle -> css ->
+# START -> sss -> A (battlefield, marth vs marth, edited settings).
+# Bridge mode `state`: BRIDGE-STATE proves the edited settings reached
+# the GameState slice.
+I 1 -
+I 375 S
+I 376 -
+I 380 D
+I 381 -
+I 385 D
+I 386 -
+I 390 D
+I 391 -
+I 395 A
+I 396 -
+I 400 A
+I 401 -
+I 405 D
+I 406 -
+I 410 A
+I 411 -
+SHOT 415 options-gameplay
+I 420 A
+I 421 -
+I 425 D
+I 426 -
+I 430 A
+I 431 -
+I 435 A
+I 436 -
+I 440 D
+I 441 -
+I 445 A
+I 446 -
+I 450 R
+I 451 -
+I 455 A
+I 456 -
+SHOT 460 options-edited
+I 465 B
+I 466 -
+I 470 B
+I 471 -
+I 480 D
+I 481 -
+I 485 A
+I 486 -
+I 490 A
+I 491 -
+I 495 S
+I 496 -
+I 500 A
+I 501 -
+END 505

@@ -1,0 +1,78 @@
+FLOW1
+# f04: navigation + refusal coverage (no launch). ALL NINE refused
+# entries fire: spectate/p2p/server (menu-battle), targettest/
+# targetbuilder (menu-top), audio/credits (menu-options), controller/
+# keyboard (menu-controls). Every menu B-back edge fires (battle->top,
+# controls->options, options->top), plus the CSS hold-B-30 back edge
+# (css.js:186-191) and the U/D cursor wrap witnesses.
+I 1 -
+I 375 S
+I 376 -
+I 380 A
+I 381 -
+I 385 D
+I 386 -
+I 390 A
+I 391 -
+I 395 D
+I 396 -
+I 400 A
+I 401 -
+I 405 D
+I 406 -
+I 410 A
+I 411 -
+I 415 B
+I 416 -
+I 420 D
+I 421 -
+I 425 A
+I 426 -
+I 430 D
+I 431 -
+I 435 A
+I 436 -
+I 440 D
+I 441 -
+I 445 A
+I 446 -
+I 450 A
+I 451 -
+I 455 D
+I 456 -
+I 460 D
+I 461 -
+I 465 A
+I 466 -
+SHOT 470 menu-controls
+I 475 A
+I 476 -
+I 480 D
+I 481 -
+I 485 A
+I 486 -
+I 490 B
+I 491 -
+I 495 D
+I 496 -
+I 500 D
+I 501 -
+I 505 D
+I 506 -
+I 510 A
+I 511 -
+I 515 B
+I 516 -
+I 520 U
+I 521 -
+I 525 U
+I 526 -
+I 530 U
+I 531 -
+I 535 A
+I 536 -
+I 540 A
+I 541 -
+I 545 B
+I 575 -
+END 580

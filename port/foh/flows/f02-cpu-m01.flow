@@ -1,0 +1,45 @@
+FLOW1
+# f02: the CPU path -> m01 params (falcon / CPU marth d1 / ystory).
+# P1 row: four RIGHTs (marth -> ... -> falcon). Down to the P2 TYPE
+# row, A toggles HMN -> CPU. Down to the CPU LEVEL row, two LEFTs
+# (3 -> 2 -> 1) plus a THIRD left at the floor = the clamp witness
+# (no S event may appear for it; the frozen trace proves the clamp).
+# Then START -> sss, one RIGHT (battlefield -> ystory), A -> LAUNCH.
+I 1 -
+I 375 S
+I 376 -
+I 380 A
+I 381 -
+I 385 A
+I 386 -
+I 390 R
+I 391 -
+I 395 R
+I 396 -
+I 400 R
+I 401 -
+I 405 R
+I 406 -
+I 410 D
+I 411 -
+I 415 D
+I 416 -
+I 420 A
+I 421 -
+I 425 D
+I 426 -
+I 430 L
+I 431 -
+I 435 L
+I 436 -
+I 440 L
+I 441 -
+SHOT 445 css-cpu
+I 450 S
+I 451 -
+I 455 R
+I 456 -
+SHOT 460 sss-ystory
+I 465 A
+I 466 -
+END 470

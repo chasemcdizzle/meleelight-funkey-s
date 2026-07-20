@@ -1,0 +1,21 @@
+FOHTRACE1 flow=f03-options
+T 370 startup title timer
+T 375 title menu-top start
+T 395 menu-top menu-options a
+S 400 refused audio
+T 410 menu-options options-gameplay a
+SHOT 415 options-gameplay
+S 420 turbo 1
+S 430 lcancel 1
+S 435 lcancel 2
+S 445 tapjump1 1
+S 455 tapjump2 1
+SHOT 460 options-edited
+T 465 options-gameplay menu-options b
+T 470 menu-options menu-top b
+T 485 menu-top menu-battle a
+T 490 menu-battle css a
+T 495 css sss start
+T 500 sss match launch
+LAUNCH 500 p1=0 p2=0 p2type=0 difficulty=3 stage=0 turbo=1 lcancel=2 tapjump=1,1,0,0 versus=0
+END 505 transitions=10

@@ -13547,3 +13547,316 @@ round 3 = final confirm on this commit's bytes.
   locals from the start. The RIG_SCRIPTS residual above is the one
   instance deliberately left for the class-level fix (add-the-row)
   when the frozen surface thaws.
+
+## iter 88 — 2026-07-19 — M4 task 9 PRE-REGISTRATION: FOH core + menu flows, host (frozen before any implementation; PROCESS §2)
+
+- **Task**: fix_plan §M4 task 9 — port/foh/ screen machine (start screen
+  → main menu → CSS → stage select → match launch; options screens for
+  the sim-consumed gameSettings), REWRITTEN per the §M4 conventions
+  (faithful FLOW GRAPH, never a DOM port; menus NOT checksummed, the
+  launch bridge IS). Done-check: `bash port/foh/check-foh-flows.sh` →
+  `FOH FLOWS OK`, exit 0. Host-only: 0 browser runs, 0 device runs.
+- **FLOW GRAPH (frozen; every fact read from the upstream primary
+  source this session, file:line cited)**. Upstream dispatch: gameMode
+  set ONLY via changeGamemode(N) (main.js:554-629); values
+  main.js:537-552. FOH screen tokens ↔ upstream modes:
+  startup=20 · title=0 · menu-top/menu-battle/menu-options/
+  menu-controls=1 (menuMode 0/2/1/3, menu.js:44-47) · css=2 · sss=6 ·
+  options-gameplay=11 · match=3. Transitions implemented:
+  startup→title at startUpTimer==370 (startup.js:50, cause `timer`);
+  title→menu-top on START edge (findPlayers main.js:385, cause
+  `start`); menu-top: VSMODE→menu-battle (menu.js:73-75),
+  OPTIONS→menu-options (menu.js:92-97); menu-battle: LOCALVS→css
+  (menu.js:105); menu-options: GAMEPLAY→options-gameplay
+  (menu.js:135), KEYBOARD→menu-controls (menu.js:138-141); B backs:
+  controls→options, options→top, battle→top (menu.js:164+),
+  options-gameplay→menu-options (gameplaymenu.js:25-36; cookie save =
+  task-13 persistence, registered); css→menu-battle on B held 30
+  consecutive frames (css.js:186-191, cause `bhold`); css→sss on START
+  when readyToFight (css.js:446-451, cause `start`); sss→css on B
+  (stageselect.js:79); sss→match on A = setStageSelect + startGame
+  (stageselect.js:80-88 + main.js:1320-1370, cause `launch`).
+  Menu nav: U/D cursor with wrap over menuCount [4,4,4,2]
+  (menu.js:31,192-242); A confirm, B back. REWRITE deltas (registered,
+  each honest): stick 0.7-threshold + 10-frame autorepeat → d-pad
+  EDGES (digital FunKey pad, one step per press); CSS hand-cursor/token
+  drag (css.js:64-310) → row cursor over {p1 char, p2 char, p2 type,
+  p2 difficulty} with L/R value steps (CLAMP at ends, no wrap); SSS
+  pointer drag → 3x2 grid cursor, stage ids 0-5 == oracle --stage ids
+  (stageselect.js:13-29 order verified == manifest legend).
+- **SELECTION SEMANTICS (frozen)**: 5 chars, ids 0 marth · 1 puff ·
+  2 fox · 3 falco · 4 falcon (characters.js:2-8 == the oracle legend);
+  defaults characterSelections [0,0,0,0] (main.js:59). P1 = human
+  always (solo-parity; the M3 live-session model). P2 type toggle
+  HMN(0)↔CPU(1) on A (togglePort main.js:510-526 cycles
+  -1→0→1→2(network)→-1; the network arm is scope-EXCLUDED
+  (conventions block) and -1 would break readyToFight≥2 on a
+  one-device port — toggle domain narrowed to {0,1}, registered).
+  CPU difficulty: **upstream slider domain is 1..4, default 3**
+  (css.js:316-329: Math.round((x-off)*3/166)+1 over a 166px-clamped
+  travel; cpuDifficulty default [3,3,3,3] main.js:109) — **BRIEF
+  AMENDMENT (evidence-backed)**: the brief said "difficulty slider
+  (1-9)"; 1-9 is the HARNESS domain, the faithful UI domain is 1-4.
+  Consequence: the CPU bridge golden is **m01 (d1 — in-domain)**, NOT
+  g08 (d5 — unreachable through the faithful slider). FOH difficulty
+  row: L/R steps within [1,4], active only while P2 is CPU.
+  gameSettings surface = the SIM-CONSUMED intersection with upstream's
+  gameplay menu (gameplaymenu.js:37-59): turbo toggle, lCancelType
+  cycle 0→1→2→0, tapJumpOffp1..4 grid toggles. Defaults
+  settings.js:44-56 (all 0). NOT included, each measured/registered:
+  flashOnLCancel (render-plane — GfxData already carries it),
+  everyCharWallJump (ZERO sim consumers — grep upstream physics.js and
+  port/sim: only settings.js:51 defines it), phantomThreshold (sim-
+  consumed but NO upstream menu UI — stays 0.01), audio menu
+  (masterVolume = mixer plane, task 10/13), keyboard/controller
+  calibration screens (S1 mapping is Chase-ratified hardware surface),
+  credits + target builder (conventions scope exclusions), SSS RANDOM
+  slot (stageselect.js:82 consumes a Math.random — a seeded-draw
+  domain ruling is needed before FOH may draw; registered deferral),
+  CSS palettes/tags/versusMode toggle (render-plane / zero-golden
+  domain; versusMode pinned 0 in the launch record). Menu entries for
+  excluded/deferred screens STAY VISIBLE (faithful menu.js:19-24
+  labels) and selecting one emits a structural `S <f> refused <entry>`
+  event — loud, frozen in the f04 trace, never silence (target test
+  entry: task 12 owns its screen).
+- **STRUCTURAL TRACE FORMAT (FOHTRACE1) + freeze procedure**: foh_app
+  emits to --flow-out, one grammar (whitelist, full-line):
+  `FOHTRACE1 flow=<name>` header · `T <frame> <from> <to> <cause>` ·
+  `S <frame> <field> <value>` · `SHOT <frame> <name>` ·
+  `LAUNCH <frame> p1=<0-4> p2=<0-4> p2type=<0|1> difficulty=<1-4>
+  stage=<0-5> turbo=<0|1> lcancel=<0-2> tapjump=<b>,<b>,<b>,<b>
+  versus=0` · `END <frames> transitions=<n>`. Frozen expectations:
+  each committed flow (port/foh/flows/*.flow, FLOW1 grammar: `I
+  <frame> <held-buttons>` run-length rows + `SHOT` + `END`) is run
+  ONCE at build time, the emitted trace HAND-REVIEWED against this
+  frozen graph, committed as flows/<id>.expect; the check thereafter
+  judges by (1) judge-foh-trace.js whitelist-grammar parse (fail
+  closed, corpus = the 4 genuine traces, zero false rejections) AND
+  (2) cmp byte-exact vs the frozen .expect, runs ×2 byte-stable.
+  BRIDGE-STATE goes to a SEPARATE file (own grammar + committed
+  .bstate.expect) so run A (bridge) and run B (no bridge) emit
+  byte-identical flow traces.
+- **MATCH-LAUNCH BRIDGE (conventions (b)+(c), frozen form)**: foh_app
+  links the full sim + ai.c + sim_ai_live.c (live pointer seam;
+  check-sim.sh untouched). At LAUNCH the FOH state (chars/type/
+  difficulty/stage/settings) — never CLI params — feeds
+  sim_setup_match; FOH settings applied AFTER setup (the
+  --tapjump-off-p1 precedent: setup writes the defaults). RNG is
+  seeded + 465 boot draws burned only AT the launch seam (the FOH
+  machine has no RNG by construction — menus draw nothing; the
+  launched stream's rngCalls therefore matches the harness domain).
+  f01 (VS flow, params = g01: fox/marth/battlefield, seed 1337) and
+  f02 (CPU flow, params = m01: falcon/CPU-marth d1/ystory, seed 8114)
+  replay the golden's trace FULL 3600 frames and are judged by the
+  PINNED-UNCHANGED wrap-run.js + verify-stream.js vs the frozen
+  streams — full-stream equality EXCEEDS the conventions' prefix
+  requirement, reusing the unchanged judge instead of writing a new
+  prefix comparator (Tier A+ judge-path avoidance by construction).
+  f03 (options flow, non-default settings turbo=1 lcancel=2
+  tapjump=1,1,0,0) launches in --bridge state mode: BRIDGE-STATE line
+  printed FROM GameState after setup+apply (the mechanical witness
+  that FOH settings reach the sim slice), cmp vs frozen
+  .bstate.expect; its stream is NOT judged (no golden carries those
+  settings — honest-coverage note: the sim-side BEHAVIOR of
+  non-default settings is M2's verified surface, FOH only proves the
+  plumbing). f01/f02 also emit BRIDGE-STATE (same chokepoint, pinned).
+- **FLOWS (4, committed)**: f01-vs-g01 (full VS path, 6 shots:
+  startup/title/menu-top/menu-battle/css/sss); f02-cpu-m01 (CPU
+  toggle + difficulty 3→1 with a clamp witness press at 1, ystory;
+  shots css-cpu/sss-ystory); f03-options (options edits + defaults-
+  chars launch, state-mode bridge; shots options-gameplay before/
+  after edits); f04-nav (refused entries: targettest, targetbuilder,
+  audio, credits, controller, keyboard, spectate, server; every B
+  back-edge; css bhold; no launch; shot menu-controls). Shots =
+  240x240 PPM dumps of the FOH raster; judged byte-stable ×2 +
+  pairwise-DISTINCT within each flow + non-blank (≥2 distinct pixel
+  values). NO browser IoU for menus (conventions: rewritten look;
+  visual authority = Chase's acceptance playthrough).
+- **NEW SURFACES**: port/foh/{foh.h,foh.c,foh_render.c,foh_font.c,
+  foh_app.c,judge-foh-trace.js,check-foh-flows.sh,flows/*}. Font =
+  self-authored 5x7 bitmap (A-Z 0-9 minimal punctuation; no
+  third-party font bytes — no NOTICES entry needed). foh_app links
+  platform_headless.c (the check's backend; present() each FOH frame)
+  — input comes from the FLOW script on host, from platform_poll on
+  device (task 10's seam, documented in foh.h). NO edits to: any
+  port/sim TU, port/gfx TUs, riglib.sh, check-mixer-fidelity.sh,
+  check-device-music.sh, check-device-render.sh, check-sim.sh, any
+  frozen golden/stream/manifest, oracle/. Menu music/SFX SELECTION:
+  registered for task 10 (the conventions block does not bind it to
+  task 9; fidelity windows already covered per iter 87).
+- **CHECK (aggregator classes, stolen from check-music-fidelity.sh /
+  check-vfx-seam.sh)**: [0] no-reclaim mkdir lock
+  (port/foh/build/foh-flows.lock) + producer byte pins (wrap-run.js /
+  verify-stream.js / trace-to-txt.js) + both-manifest inventory pins
+  (8 oracle + 4 m4, both directions) + flow inventory pin (FLOWS
+  array == flows/*.flow globs both directions) + bridge params parsed
+  from the manifests (no independent literals); [1] fresh tables
+  (pipeline/build/foh-tables) + simdata ×2 byte-identical; [2] build
+  foh_app (cc -O2, raster TU -O3, -ffp-contract=off -Wall -Wextra
+  -Werror everywhere); [3] per flow: run ×2 → grammar parse + cmp vs
+  .expect + A==B + shot judgments; [4] bridges f01/f02 → wrap-run +
+  verify-stream vs frozen (STREAM MATCH grammar count = exact 1 +
+  affine 1 + final line, the ai-live shape) + f03 state witness; [5]
+  teeth (below); [6] no-commit guard (git status on flows/ +
+  goldens dirs, rc case-split); verdict `FOH FLOWS OK (flows=4 ...)`
+  printed ONCE, relayed sub-output `  | `-prefixed, resemblance
+  counters on the verdict + evidence literals, rc case-split in every
+  count helper. Command output → .loop/m4-task9-*.log.
+- **TEETH (frozen list; each names its death class)**: T1 nav-perturb
+  — generated f01 variant with one extra DOWN in menu-top → emitted
+  trace cmp-DIFFERS from frozen (transition trace is input-driven,
+  not replayed constants); T2 char variant — extra RIGHT on the P1
+  row → LAUNCH line p1=3 ≠ frozen (cmp differs; launch record is
+  selection-driven); T3 judge tooth — flip one hex nibble in a COPY
+  of the wrapped f01 run JSON → verify-stream rc != 0 (the stream
+  judge really judges; perturb the RUN side, never the frozen file —
+  iter-84 lesson); T4 grammar teeth — inject (a) a malformed line and
+  (b) a resembling-but-wrong variant (`LAUNCH` with a 5th char id
+  p1=5) into a COPY of a genuine trace → judge-foh-trace.js dies
+  nonzero, resemblance counted; T5 shot-stability tooth — append one
+  byte to a COPY of a shot → the byte-stability cmp arm dies; T6
+  difficulty variant — one FEWER left-press (d2 instead of d1) →
+  f02 LAUNCH cmp-differs (slider steps are load-bearing). All teeth
+  operate on generated variants/copies — committed files never
+  edited; positive controls = the cold flows themselves.
+- **RUN CAPS**: ≤4 cold done-check attempts; ≤3 divergence-driven fix
+  rounds on either bridge, then STOP and report the class; browser
+  runs 0; device runs 0; docker: only the standard build-extractor
+  (stamp-cached, likely 0 fresh builds).
+- **REFUTATION SHAPES**: (a) f01 bridge diverges from frozen g01 →
+  the FOH launch seam does not reproduce harnessSetupMatch (boot-draw
+  or order bug); localize via sim_frame_envelope diff at the first
+  divergent frame; ≤3 rounds then STOP (a persistent divergence
+  refutes the launch-seam design, NOT the frozen stream). (b) shots
+  or traces not byte-stable ×2 → nondeterminism in the FOH machine
+  (forbidden by construction: no RNG, no wall-clock); one bounded
+  evidence round to attribute; irreducible → STOP + report. (c) f02
+  live-AI divergence with f01 green → FOH CPU param plumbing
+  (difficulty/type wiring), same ≤3-round bound. (d)
+  judge-foh-trace.js false-rejects a genuine trace → grammar
+  re-measured from the actual producer corpus and re-validated (the
+  whitelist rule's step 4), never silently loosened. Do NOT retry
+  blind past any cap.
+- **PORTABILITY**: no device-bound code (Layer 0 consumer of the
+  platform seam + raster); a Layer-0 inventory line added in the same
+  commit.
+
+## iter 88 — 2026-07-19 — M4 task 9 RESULT: FOH core + menu flows host — FOH FLOWS OK (zero divergence rounds)
+
+- **DONE-CHECK (cold): `bash port/foh/check-foh-flows.sh` →
+  `FOH FLOWS OK (flows=4 shots=11 bridges=3 streams=MATCH teeth=6)`,
+  exit 0** (.loop/m4-task9-donecheck.log; teeth section extracted to
+  .loop/m4-task9-teeth.log; first full run archived as
+  .loop/m4-task9-check-run1.log). Pre-registration followed (frozen
+  entry above); the design shipped as frozen: port/foh/{foh.h,foh.c,
+  foh_render.c,foh_font.c,foh_app.c,judge-foh-trace.js,
+  check-foh-flows.sh,flows/} — the REWRITTEN screen machine (10 screen
+  tokens ↔ upstream gameMode/menuMode map in foh.h, every edge cited),
+  self-authored 5x7 font (no third-party bytes), FLOW1 scripts,
+  FOHTRACE1 structural traces frozen as flows/*.expect
+  (hand-reviewed against the pre-registered graph before freezing),
+  BRIDGE-STATE witnesses frozen as flows/*.bstate.expect.
+- **MATCH-LAUNCH BRIDGES (conventions (b)+(c)) — FIRST-CONTACT
+  MATCHES, zero divergence-driven fix rounds of the ≤3 budget**: f01
+  (FOH-selected fox/marth/battlefield, defaults) replayed g01's trace
+  through the FOH-launched sim → `STREAM MATCH
+  g01-fox-marth-battlefield: 3600/3600 frames exact, rngCalls=134,
+  rngCallsOutsideStep=1, specVersion=1` vs the frozen oracle stream
+  (UNCHANGED wrap-run.js + verify-stream.js — full-stream equality
+  exceeds the conventions' prefix bar); f02 (FOH-selected
+  falcon/CPU-marth d1/ystory via the CSS type toggle + slider) on the
+  LIVE C AI (no AIBRIDGE1) → `STREAM MATCH m01-falcon-marth-d1-ystory:
+  3600/3600, rngCalls=59`. f03's BRIDGE-STATE proves the edited
+  settings reached the GameState slice (turbo=1 lcancel=2
+  tapjump=1,1,0,0; phantom bits 3f847ae147ae147b untouched). The FOH
+  machine consumes no RNG; seeding happens at the launch seam only —
+  rngCalls landed exactly on the harness domain with no adjustment.
+- **CHECK (aggregator classes per the registered templates)**:
+  no-reclaim mkdir lock; 5-producer sha256 pin table (wrap-run /
+  verify-stream / trace-to-txt / dump-sim-data / judge-foh-trace);
+  both-manifest inventory pins (8+4, both directions); flow inventory
+  pin (array == globs both directions); LAUNCH CROSS-BIND — the frozen
+  .expect LAUNCH params are asserted equal to the g01/m01 MANIFEST
+  params (no independent parameter literals; the (b) assertion is
+  mechanical); fresh tables + simdata ×2 byte-identical; build with
+  -ffp-contract=off -Wall -Wextra -Werror (raster TU -O3); flows run
+  ×2 (run A bridge, run B plain — traces byte-identical by the
+  separate-bstate-file design), judged by whitelist grammar
+  (judge-foh-trace.js: full-line REs + T-chain continuity + the PINNED
+  15-edge flow graph + S-value domains + LAUNCH adjacency + END
+  transition-count binding; corpus-validated on all 4 genuine traces,
+  zero false rejections) AND cmp vs frozen; shots: pinned inventory
+  both directions, A==B byte-stable, non-blank witness, pairwise
+  distinct; rc case-split count helpers; `  | ` relay prefix (verdict
+  is the only possible unprefixed anchored line); git-ignore hygiene
+  guard.
+- **TEETH 6/6** (.loop/m4-task9-teeth.log; all on generated
+  variants/copies, committed bytes untouched): T1 extra-DOWN → cmp rc
+  1 exactly; T2 extra-RIGHT → LAUNCH p1=3 + divergence; T3 nibble-
+  flipped RUN JSON (never the frozen file — iter-84 lesson) →
+  verify-stream rc 2; T4 malformed + resembling (LAUNCH p1=5) → judge
+  corruption death rc 2 with counted classes; T5 corrupted shot copy →
+  cmp rc 1; T6 fewer LEFTs → LAUNCH difficulty=2 + divergence.
+- **AMENDMENTS (recorded, with evidence)**: (1) the BRIEF's
+  "difficulty slider (1-9)" was REFUTED by the primary source during
+  the pre-reg survey (css.js:316-329 → domain 1..4); the CPU bridge
+  golden is m01 (d1), not g08 (d5 unreachable through the faithful
+  slider) — frozen in the pre-reg before implementation. (2) The first
+  f04 draft fired `refused audio` only via f03; the flow was amended
+  BEFORE freezing so f04 carries all nine refusals as pre-registered.
+  (3) T6's "one fewer left-press" is absorbed by the deliberate clamp
+  press (measured: dropping only the 440 clamp press leaves the trace
+  byte-identical — which is precisely the clamp witness's meaning);
+  T6 drops both the 435 and 440 pairs to land d2. (4) f01/f03
+  bridge-vs-plain trace byte-identity verified explicitly before
+  freezing (the separate-bstate-file design invariant).
+- **HONEST COVERAGE (PROCESS §8)**: the frozen traces prove the
+  rewritten machine's FLOW GRAPH + selection semantics against the
+  pre-registered upstream mapping — a shared misreading of upstream
+  menu code is invisible to them (mitigation: every edge/value carries
+  a file:line citation ground-truthed this session, incl. the 1-4
+  slider domain, togglePort's cycle, startUpTimer==370, menu tables,
+  B-back cursor values, bhold-30). Menu LOOK is not judged (rewritten
+  surface; shots reviewed by the writer, authority = Chase's
+  playthrough; screenshots attached to the session record). f03 proves
+  settings PLUMBING to the GameState slice; non-default-settings sim
+  BEHAVIOR is M2's verified surface. Registered deferrals/exclusions:
+  SSS RANDOM slot (seeded-draw domain ruling needed), network
+  playerType arm, audio menu (tasks 10/13), keyboard/controller
+  calibration, credits, target builder, CSS palettes/tags + versusMode
+  toggle (versus=0 pinned in every LAUNCH), menu music/SFX SELECTION →
+  task 10 (windows covered by the iter-87 fidelity legs), cookie
+  persistence → task 13, startup screen is tick-driven (upstream's is
+  render-driven — equivalent at 60 Hz, documented).
+- **REGRESSIONS**: check-sim.sh SKIPPED — `git diff HEAD --stat --
+  port/sim/` EMPTY; check-render.sh SKIPPED — same proof for
+  port/gfx/ (zero bytes changed; raster.c/platform_headless.c only
+  COMPILED into foh_app) — .loop/m4-task9-checksim-skip.txt. The
+  frozen g01/m01 streams judging the bridges are themselves the
+  strongest regression on the sim linkage.
+- **RUN-CAP LEDGER**: cold check executions 2/4 (run1 + the official
+  donecheck); bridge divergence rounds 0/3; browser runs 0; device
+  runs 0; docker builds 0 fresh (extractor stamp hit).
+- **TASK-10 HANDOFF (device FOH)**: foh_tick consumes PlatformInput —
+  the device app feeds platform_poll rows instead of flow rows (the
+  seam is documented in foh.h); foh_render draws into the same Raster
+  the device present path already ships; the device flow driver wants
+  the fk_input uinput injector + the committed flows replayed through
+  the REAL keysym path; menu SFX/music selection lands there (windows
+  pre-proven); OPK launcher must enter the FOH, not the direct-match
+  path; the FOH match launch on device should reuse gfx_app's render
+  loop after LAUNCH (foh_app's bridge is host-headless by design).
+  NOTE: check-foh-flows.sh pins judge-foh-trace.js by sha — any
+  task-10 judge edit re-pins in the same commit.
+- **ZOOM OUT (HARD RULE 8)**: three class artifacts shipped rather
+  than one-offs: (a) the flow graph lives AS DATA in the judge (15
+  pinned edges + T-chain continuity) — any future screen-machine drift
+  is an off-graph corruption death, not a silent behavior change;
+  (b) the LAUNCH cross-bind kills the independent-parameter-literal
+  class for every future flow (params flow manifest → expect → sim);
+  (c) mkvariant is a fixed-op generator (insert-after/delete by exact
+  anchor) — the manifest-eval class stays dead in a place a reviewer
+  would probe. Tier-A arc for the new FOH surfaces
+  (check-foh-flows.sh, judge-foh-trace.js, foh_app.c and the machine
+  TUs) is driver-queued per the §M4 conventions (every FOH surface is
+  Tier A).

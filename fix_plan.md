@@ -1647,6 +1647,31 @@ overruns):
   (conventions block (a)-(c)); host screenshots byte-stable ×2.
   done-check: `bash port/foh/check-foh-flows.sh` → prints
   `FOH FLOWS OK`, exit 0.
+  **DONE (iter 88, 2026-07-19) — committed form**: cold done-check
+  `FOH FLOWS OK (flows=4 shots=11 bridges=3 streams=MATCH teeth=6)`
+  exit 0 (.loop/m4-task9-donecheck.log). port/foh/{foh.h,foh.c,
+  foh_render.c,foh_font.c,foh_app.c,judge-foh-trace.js,
+  check-foh-flows.sh,flows/} — rewritten machine over the platform
+  seam + raster (headless backend = the check's backend; foh_tick
+  consumes PlatformInput, device task 10 swaps the feeder to
+  platform_poll); flow graph + selection semantics cited per edge
+  from upstream (foh.h); excluded/deferred menu entries visible +
+  REFUSED with structural events (9 registered tokens). Flows:
+  f01-vs-g01 (VS path → FULL 3600-frame stream == frozen g01, via
+  UNCHANGED wrap-run/verify-stream — exceeds the (c) prefix bar),
+  f02-cpu-m01 (CSS CPU toggle + slider d1 → LIVE C-AI stream ==
+  frozen m01), f03-options (sim-consumed settings edits →
+  BRIDGE-STATE GameState witness), f04-nav (all refusals + back
+  edges + bhold). Frozen: flows/*.expect + *.bstate.expect
+  (hand-reviewed then frozen; judge = whitelist grammar with the
+  PINNED 15-edge flow graph + T-chain continuity + LAUNCH↔manifest
+  cross-bind). MEASURED brief amendment: upstream CPU slider domain
+  is 1-4 (css.js:316-329) — d5/d9 goldens are unreachable through
+  the faithful UI (m01/d1 is the CPU bridge). Deferrals registered:
+  SSS RANDOM slot, menu SFX/music selection + device FOH (task 10),
+  persistence (task 13), palettes/tags/versusMode toggle. Teeth 6/6;
+  zero divergence rounds; sim/gfx TU bytes untouched (skip proofs on
+  record).
 - task 10 — **FOH on device**: menus rendered at 240×240 through the
   platform seam, navigated by fk_input scripts on the FunKey;
   per-screen screenshots structurally judged; a full flow boots a live

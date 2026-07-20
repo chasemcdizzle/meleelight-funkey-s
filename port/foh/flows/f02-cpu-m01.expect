@@ -1,0 +1,18 @@
+FOHTRACE1 flow=f02-cpu-m01
+T 370 startup title timer
+T 375 title menu-top start
+T 380 menu-top menu-battle a
+T 385 menu-battle css a
+S 390 p1char 1
+S 395 p1char 2
+S 400 p1char 3
+S 405 p1char 4
+S 420 p2type 1
+S 430 difficulty 2
+S 435 difficulty 1
+SHOT 445 css-cpu
+T 450 css sss start
+SHOT 460 sss-ystory
+T 465 sss match launch
+LAUNCH 465 p1=4 p2=0 p2type=1 difficulty=1 stage=1 turbo=0 lcancel=0 tapjump=0,0,0,0 versus=0
+END 470 transitions=6

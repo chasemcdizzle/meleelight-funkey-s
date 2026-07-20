@@ -1,0 +1,29 @@
+FLOW1
+# f01: the full VS path -> g01 params (fox / marth / battlefield,
+# default settings; pre-registration AGENT-LOG iter 88).
+# startup runs frames 1-370 (timer transition), then: title -> START ->
+# menu-top -> A on VS. MELEE -> menu-battle -> A on LOCAL VS -> css ->
+# two RIGHTs on the P1 row (marth -> puff -> fox) -> START -> sss ->
+# A on battlefield (cursor default 0) -> LAUNCH.
+I 1 -
+SHOT 200 startup
+SHOT 373 title
+I 375 S
+I 376 -
+SHOT 378 menu-top
+I 380 A
+I 381 -
+SHOT 383 menu-battle
+I 385 A
+I 386 -
+I 390 R
+I 391 -
+I 395 R
+I 396 -
+SHOT 400 css
+I 405 S
+I 406 -
+SHOT 410 sss
+I 415 A
+I 416 -
+END 420

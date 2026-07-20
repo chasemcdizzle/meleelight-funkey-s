@@ -1,0 +1,192 @@
+// port/foh/foh_render.c — FOH screen rendering (fix_plan §M4 task 9).
+// REWRITTEN look at 240x240 over the raster prims (never a DOM port);
+// menus are NOT checksummed — visual authority is Chase's acceptance
+// playthrough (task 10 owns the device look pass). Deterministic by
+// construction: pure function of FohState, no RNG, no clock — the
+// check's shot byte-stability x2 depends on it.
+#include "foh.h"
+
+// Labels: faithful strings from the upstream tables (cited), uppercased
+// for the 5x7 font. These are UI text of a rewritten non-checksummed
+// surface, not engine values (HARD RULE 5 concerns data planes).
+static const char *kMenuTitle[4] = {
+    // menuTitle (menu.js:32)
+    "MAIN MENU", "OPTIONS", "BATTLE MODE", "CONTROLS"};
+static const char *kMenuText[4][4] = {
+    // menuText (menu.js:19-24)
+    {"VS. MELEE", "TARGET TEST", "TARGET BUILDER", "OPTIONS"},
+    {"AUDIO", "GAMEPLAY", "KEYBOARD CONTROLS", "CREDITS"},
+    {"LOCAL VS", "SPECTATE", "P2P", "SERVER"},
+    {"CONTROLLER", "KEYBOARD"},
+};
+static const char *kCharNames[5] = {
+    // characters.js:2-8 order == the oracle char ids
+    "MARTH", "JIGGLYPUFF", "FOX", "FALCO", "CAPTAIN FALCON"};
+static const char *kStageNames[6] = {
+    // stageselect.js:13-29 order == the oracle stage ids
+    "BATTLEFIELD",  "YOSHI'S STORY",     "POKEMON STADIUM",
+    "DREAMLAND",    "FINAL DESTINATION", "FOUNTAIN OF DREAMS"};
+static const char *kLCancelNames[3] = {
+    // settings.js:46 comment: 0 normal | 1 auto | 2 smash64
+    "NORMAL", "AUTO", "SMASH64"};
+
+static const RastCol kBg = {12, 12, 28, 256};
+static const RastCol kPanel = {30, 30, 60, 256};
+static const RastCol kText = {220, 220, 230, 256};
+static const RastCol kDim = {120, 120, 140, 256};
+static const RastCol kAccent = {255, 200, 60, 256};
+static const RastCol kCursor = {90, 160, 255, 256};
+
+static void fill_rect(Raster *rz, int x, int y, int w, int h, RastCol c) {
+  for (int yy = y; yy < y + h; yy++) {
+    for (int xx = x; xx < x + w; xx++) {
+      rast_blend_px(rz, xx, yy, c, c.a256);
+    }
+  }
+}
+
+static void text_center(Raster *rz, int y, int scale, const char *s,
+                        RastCol c) {
+  const int w = foh_text_width(s, scale);
+  foh_text(rz, (RAST_W - w) / 2, y, scale, s, c);
+}
+
+static void header(Raster *rz, const char *title) {
+  fill_rect(rz, 0, 0, RAST_W, 24, kPanel);
+  text_center(rz, 6, 2, title, kAccent);
+}
+
+static void render_startup(const FohState *s, Raster *rz) {
+  text_center(rz, 90, 3, "MELEELIGHT", kText);
+  text_center(rz, 130, 1, "FUNKEY-S PORT", kDim);
+  // deterministic progress bar over the 370-frame startup window
+  const int w = (RAST_W - 40) * s->startupTimer / 370;
+  fill_rect(rz, 20, 170, RAST_W - 40, 6, kPanel);
+  fill_rect(rz, 20, 170, w, 6, kAccent);
+}
+
+static void render_title(Raster *rz) {
+  text_center(rz, 80, 3, "MELEELIGHT", kText);
+  text_center(rz, 150, 1, "PRESS START", kAccent);
+}
+
+static void render_menu(const FohState *s, Raster *rz) {
+  // screen -> upstream menuMode table index (menu.js:44-47)
+  int mm;
+  switch (s->screen) {
+    case FOH_MENU_TOP: mm = 0; break;
+    case FOH_MENU_OPTIONS: mm = 1; break;
+    case FOH_MENU_BATTLE: mm = 2; break;
+    case FOH_MENU_CONTROLS: mm = 3; break;
+    default: gfx_fatal("foh_render: menu render on a non-menu screen");
+  }
+  const int count = mm == 3 ? 2 : 4;
+  header(rz, kMenuTitle[mm]);
+  for (int k = 0; k < count; k++) {
+    const int y = 60 + 30 * k;
+    if (k == s->menuSelected) {
+      fill_rect(rz, 16, y - 6, RAST_W - 32, 22, kPanel);
+      foh_text(rz, 22, y - 2, 1, ">", kCursor);
+    }
+    foh_text(rz, 34, y - 2, 1, kMenuText[mm][k],
+             k == s->menuSelected ? kText : kDim);
+  }
+}
+
+static void row_label(Raster *rz, int y, int row, int curRow,
+                      const char *label) {
+  if (row == curRow) {
+    fill_rect(rz, 8, y - 4, RAST_W - 16, 18, kPanel);
+    foh_text(rz, 12, y, 1, ">", kCursor);
+  }
+  foh_text(rz, 24, y, 1, label, row == curRow ? kText : kDim);
+}
+
+static void render_css(const FohState *s, Raster *rz) {
+  header(rz, "CHARACTER SELECT");
+  const int ys[4] = {50, 90, 130, 160};
+  row_label(rz, ys[0], 0, s->cssRow, "P1");
+  foh_text(rz, 60, ys[0], 1, kCharNames[s->p1Char], kAccent);
+  row_label(rz, ys[1], 1, s->cssRow, "P2");
+  foh_text(rz, 60, ys[1], 1, kCharNames[s->p2Char], kAccent);
+  row_label(rz, ys[2], 2, s->cssRow, "P2 TYPE");
+  foh_text(rz, 100, ys[2], 1, s->p2Type == 0 ? "HMN" : "CPU", kAccent);
+  row_label(rz, ys[3], 3, s->cssRow, "CPU LEVEL");
+  // slider look: 4 ticks (the upstream slider's 1..4 domain), current
+  // level filled; dimmed entirely while P2 is human.
+  for (int k = 0; k < 4; k++) {
+    const RastCol c = (s->p2Type == 1 && k < s->difficulty) ? kAccent : kPanel;
+    fill_rect(rz, 100 + k * 18, ys[3], 12, 8, c);
+  }
+  {
+    const char lvl[2] = {(char)('0' + s->difficulty), 0};
+    foh_text(rz, 180, ys[3], 1, lvl, s->p2Type == 1 ? kText : kDim);
+  }
+  text_center(rz, 200, 1, "START: STAGE SELECT", kDim);
+  text_center(rz, 215, 1, "HOLD B: BACK", kDim);
+}
+
+static void render_sss(const FohState *s, Raster *rz) {
+  header(rz, "STAGE SELECT");
+  // 3x2 grid of stage tiles, ids 0..5
+  for (int k = 0; k < 6; k++) {
+    const int col = k % 3, row = k / 3;
+    const int x = 10 + col * 75, y = 50 + row * 60;
+    fill_rect(rz, x, y, 65, 44, kPanel);
+    if (k == s->sssCursor) {
+      // cursor frame (4 edges)
+      fill_rect(rz, x - 2, y - 2, 69, 2, kCursor);
+      fill_rect(rz, x - 2, y + 44, 69, 2, kCursor);
+      fill_rect(rz, x - 2, y, 2, 44, kCursor);
+      fill_rect(rz, x + 65, y, 2, 44, kCursor);
+    }
+    const char num[2] = {(char)('0' + k), 0};
+    foh_text(rz, x + 4, y + 4, 1, num, kDim);
+  }
+  text_center(rz, 180, 1, kStageNames[s->sssCursor], kAccent);
+  text_center(rz, 205, 1, "A: FIGHT   B: BACK", kDim);
+}
+
+static void render_opt_gameplay(const FohState *s, Raster *rz) {
+  header(rz, "GAMEPLAY");
+  const int ys[3] = {60, 95, 130};
+  row_label(rz, ys[0], 0, s->optRow, "TURBO");
+  foh_text(rz, 120, ys[0], 1, s->turbo ? "ON" : "OFF", kAccent);
+  row_label(rz, ys[1], 1, s->optRow, "L-CANCEL");
+  foh_text(rz, 120, ys[1], 1, kLCancelNames[s->lCancelType], kAccent);
+  row_label(rz, ys[2], 2, s->optRow, "TAP JUMP OFF");
+  for (int k = 0; k < 4; k++) {
+    const int x = 40 + k * 42;
+    const int y = ys[2] + 18;
+    if (s->optRow == 2 && s->optCol == k) {
+      fill_rect(rz, x - 3, y - 3, 38, 16, kPanel);
+    }
+    const char pn[3] = {'P', (char)('1' + k), 0};
+    foh_text(rz, x, y, 1, pn, kDim);
+    foh_text(rz, x + 14, y, 1, s->tapJumpOff[k] ? "X" : "-",
+             s->tapJumpOff[k] ? kAccent : kDim);
+  }
+  text_center(rz, 205, 1, "A: CHANGE   B: BACK", kDim);
+}
+
+static void render_match(Raster *rz) {
+  // The FOH machine is terminal here; the driver owns the sim/renderer.
+  text_center(rz, 110, 2, "LAUNCHING", kText);
+}
+
+void foh_render(const FohState *s, Raster *rz) {
+  rast_clear(rz, kBg.r, kBg.g, kBg.b, 0, RAST_H);
+  switch (s->screen) {
+    case FOH_STARTUP: render_startup(s, rz); break;
+    case FOH_TITLE: render_title(rz); break;
+    case FOH_MENU_TOP:
+    case FOH_MENU_OPTIONS:
+    case FOH_MENU_BATTLE:
+    case FOH_MENU_CONTROLS: render_menu(s, rz); break;
+    case FOH_CSS: render_css(s, rz); break;
+    case FOH_SSS: render_sss(s, rz); break;
+    case FOH_OPT_GAMEPLAY: render_opt_gameplay(s, rz); break;
+    case FOH_MATCH: render_match(rz); break;
+    default: gfx_fatal("foh_render: invalid screen");
+  }
+}
