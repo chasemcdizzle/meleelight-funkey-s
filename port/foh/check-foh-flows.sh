@@ -172,7 +172,7 @@ b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wr
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-5c4ecd881338afcf961eb207d1acfbf67618eb899c6067b531935b1fd4314f91 port/foh/judge-foh-trace.js"
+453f49a250358d77ca9846909e5a20eba75ca9ed159ff5ce877bef802985a344 port/foh/judge-foh-trace.js"
 N_PINS_WANT=5
 n_pins=0
 while IFS= read -r pline; do
@@ -978,10 +978,12 @@ c="$(count_x "$B/t7.out" "divergence witness UNSOUND")"
 echo "    T7 OK: a MATCH fed to the witness judge dies with the UNSOUND class"
 teeth=$((teeth + 1))
 # T8 (review-88 M1): delete the f04 sss->css B press -> the frozen
-# 15th-edge line 'T 550 sss css b' is the first divergent frozen line.
+# 15th-edge line 'T 565 sss css b' is the first divergent frozen line.
+# (Anchors moved iter 93: the f04 sss segment gained the RANDOM-slot
+# traversal — designed re-freeze channel, AGENT-LOG iter 93.)
 mkdir -p "$B/t8"
 mkvariant "$FLOWS/f04-nav.flow" "$B/t8/f04-nav.flow" delete \
-  "I 550 B" "I 551 -"
+  "I 565 B" "I 566 -"
 run_variant "$B/t8/f04-nav.flow" "$B/t8.trace.txt"
 rc=0; cmp -s "$B/t8.trace.txt" "$FLOWS/f04-nav.expect" || rc=$?
 [ "$rc" = 1 ] || fail "T8 — sss->css edge variant trace cmp rc $rc, want exactly 1"
@@ -992,13 +994,13 @@ node -e '
   if (a[0] !== b[0]) { console.error("headers differ (L1 class)"); process.exit(1); }
   let i = 0;
   while (i < a.length && i < b.length && a[i] === b[i]) i++;
-  if (a[i] !== "T 550 sss css b") {
+  if (a[i] !== "T 565 sss css b") {
     console.error("first divergent frozen line is not the 15th edge: " +
                   JSON.stringify(a[i]));
     process.exit(1);
   }
 ' "$FLOWS/f04-nav.expect" "$B/t8.trace.txt" || fail "T8 — first-divergent-line witness failed"
-echo "    T8 OK: dropping the B press diverges exactly at the frozen 'T 550 sss css b' edge"
+echo "    T8 OK: dropping the B press diverges exactly at the frozen 'T 565 sss css b' edge"
 teeth=$((teeth + 1))
 # T9 (review-88 M2): extra RIGHT on the f05 P2 row -> p2=3 in LAUNCH
 mkdir -p "$B/t9"

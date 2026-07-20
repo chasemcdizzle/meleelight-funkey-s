@@ -50,6 +50,22 @@ static void ev_push(FohState *s, FohEvent e) {
   s->ev[s->nev++] = e;
 }
 
+// Menu SFX token (M4 task 10; foh.h note). Upstream mapping, cited per
+// emission site below: menuSelect = cursor/value steps + option
+// toggles (menu.js:236, css.js:226-class, stageselect.js:64/73,
+// gameplaymenu.js:38/152); menuForward = confirm transitions + title
+// START + css->sss + sss launch (menu.js:70, main.js:388, css.js:448,
+// stageselect.js:81); menuBack = every B back incl. bhold
+// (menu.js:170-190, css.js:189, stageselect.js:78, gameplaymenu.js:26);
+// deny = refused entries (keyboardmenu.js:170 refusal class).
+// REGISTERED REWRITE DELTA (AGENT-LOG iter 93): the CSS announcer
+// names (token DROP, css.js:233+) are excluded — the rewritten
+// row-cursor CSS has no drop gesture.
+static void snd_push(FohState *s, const char *name) {
+  if (s->nsnd >= FOH_EV_CAP) gfx_fatal("foh: sound buffer overflow");
+  s->snd[s->nsnd++] = name;
+}
+
 static void ev_trans(FohState *s, FohScreen from, FohScreen to,
                      const char *cause) {
   FohEvent e;
@@ -110,13 +126,17 @@ static void step_menu(FohState *s, const PlatformInput *in,
         // "Options"] (menu.js:19-24); routing menu.js:66-100.
         if (s->menuSelected == 0) {
           s->menuSelected = 0; // LOCALVS (menu.js:74)
+          snd_push(s, "menuForward"); // menu.js:70
           ev_trans(s, sc, FOH_MENU_BATTLE, "a");
         } else if (s->menuSelected == 1) {
+          snd_push(s, "deny");
           ev_refused(s, "targettest"); // task 12 owns gameMode 7
         } else if (s->menuSelected == 2) {
+          snd_push(s, "deny");
           ev_refused(s, "targetbuilder"); // conventions scope exclusion
         } else {
           s->menuSelected = 0; // AUDIOOPTIONS (menu.js:96)
+          snd_push(s, "menuForward"); // menu.js:70
           ev_trans(s, sc, FOH_MENU_OPTIONS, "a");
         }
         break;
@@ -124,33 +144,42 @@ static void step_menu(FohState *s, const PlatformInput *in,
         // ["Local VS","Spectate","P2P","Server"]; only Local VS is
         // in-scope (multiplayer excluded; P2P dead upstream).
         if (s->menuSelected == 0) {
+          snd_push(s, "menuForward"); // menu.js:70
           ev_trans(s, sc, FOH_CSS, "a"); // menu.js:105
         } else if (s->menuSelected == 1) {
+          snd_push(s, "deny");
           ev_refused(s, "spectate");
         } else if (s->menuSelected == 2) {
+          snd_push(s, "deny");
           ev_refused(s, "p2p");
         } else {
+          snd_push(s, "deny");
           ev_refused(s, "server");
         }
         break;
       case FOH_MENU_OPTIONS:
         // ["Audio","Gameplay","Keyboard Controls","Credits"]
         if (s->menuSelected == 0) {
+          snd_push(s, "deny");
           ev_refused(s, "audio"); // mixer volume surface, tasks 10/13
         } else if (s->menuSelected == 1) {
           s->optRow = 0;
           s->optCol = 0;
+          snd_push(s, "menuForward"); // menu.js:70
           ev_trans(s, sc, FOH_OPT_GAMEPLAY, "a"); // menu.js:135
         } else if (s->menuSelected == 2) {
           s->menuSelected = 0;
+          snd_push(s, "menuForward"); // menu.js:70
           ev_trans(s, sc, FOH_MENU_CONTROLS, "a"); // menu.js:138-141
         } else {
+          snd_push(s, "deny");
           ev_refused(s, "credits"); // conventions scope exclusion
         }
         break;
       case FOH_MENU_CONTROLS:
         // ["Controller","Keyboard"] — both are calibration screens; the
         // S1 mapping is Chase-ratified hardware surface (registered).
+        snd_push(s, "deny");
         ev_refused(s, s->menuSelected == 0 ? "controller" : "keyboard");
         break;
       default: gfx_fatal("foh: step_menu on a non-menu screen");
@@ -161,20 +190,29 @@ static void step_menu(FohState *s, const PlatformInput *in,
     // menu.js:164-190 verbatim back edges (cursor values included).
     if (sc == FOH_MENU_CONTROLS) {
       s->menuSelected = 0; // AUDIOOPTIONS
+      snd_push(s, "menuBack"); // menu.js:170-190
       ev_trans(s, sc, FOH_MENU_OPTIONS, "b");
     } else if (sc == FOH_MENU_OPTIONS) {
       s->menuSelected = 3; // OPTIONS
+      snd_push(s, "menuBack"); // menu.js:170-190
       ev_trans(s, sc, FOH_MENU_TOP, "b");
     } else if (sc == FOH_MENU_BATTLE) {
       s->menuSelected = 0; // VSMODE
+      snd_push(s, "menuBack"); // menu.js:170-190
       ev_trans(s, sc, FOH_MENU_TOP, "b");
     }
     // top level: B does nothing (no upstream arm)
     return;
   }
   // cursor with wrap (menu.js:192-242 wraps via menuCount)
-  if (uE) s->menuSelected = (s->menuSelected + count - 1) % count;
-  if (dE) s->menuSelected = (s->menuSelected + 1) % count;
+  if (uE) {
+    s->menuSelected = (s->menuSelected + count - 1) % count;
+    snd_push(s, "menuSelect"); // menu.js:236
+  }
+  if (dE) {
+    s->menuSelected = (s->menuSelected + 1) % count;
+    snd_push(s, "menuSelect"); // menu.js:236
+  }
 }
 
 static void step_css(FohState *s, const PlatformInput *in,
@@ -186,6 +224,7 @@ static void step_css(FohState *s, const PlatformInput *in,
     if (s->bHold == 30) {
       s->bHold = 0;
       s->menuSelected = 0; // LOCALVS — cursor where VS entry left it
+      snd_push(s, "menuBack"); // css.js:189
       ev_trans(s, FOH_CSS, FOH_MENU_BATTLE, "bhold");
       return;
     }
@@ -196,6 +235,7 @@ static void step_css(FohState *s, const PlatformInput *in,
   // readyToFight is structurally true here: both ports are active by
   // construction (P2 type domain {0,1}; css.js:1167-1181).
   if (in->start && !pv->start) {
+    snd_push(s, "menuForward"); // css.js:448
     ev_trans(s, FOH_CSS, FOH_SSS, "start");
     return;
   }
@@ -204,20 +244,28 @@ static void step_css(FohState *s, const PlatformInput *in,
   const bool dE = in->down && !pv->down;
   const bool lE = in->left && !pv->left;
   const bool rE = in->right && !pv->right;
-  if (uE) s->cssRow = clampi(s->cssRow - 1, 0, 3);
-  if (dE) s->cssRow = clampi(s->cssRow + 1, 0, 3);
+  if (uE && s->cssRow > 0) {
+    s->cssRow--;
+    snd_push(s, "menuSelect"); // nav class (menu.js:236)
+  }
+  if (dE && s->cssRow < 3) {
+    s->cssRow++;
+    snd_push(s, "menuSelect");
+  }
   if (lE || rE) {
     const int d = rE ? 1 : -1;
     if (s->cssRow == 0) {
       const int v = clampi(s->p1Char + d, 0, 4);
       if (v != s->p1Char) {
         s->p1Char = v;
+        snd_push(s, "menuSelect"); // css.js:226 hover-change class
         ev_sel(s, "p1char", v);
       }
     } else if (s->cssRow == 1) {
       const int v = clampi(s->p2Char + d, 0, 4);
       if (v != s->p2Char) {
         s->p2Char = v;
+        snd_push(s, "menuSelect"); // css.js:226 hover-change class
         ev_sel(s, "p2char", v);
       }
     } else if (s->cssRow == 3 && s->p2Type == 1) {
@@ -225,6 +273,7 @@ static void step_css(FohState *s, const PlatformInput *in,
       const int v = clampi(s->difficulty + d, 1, 4);
       if (v != s->difficulty) {
         s->difficulty = v;
+        snd_push(s, "menuSelect");
         ev_sel(s, "difficulty", v);
       }
     }
@@ -232,6 +281,7 @@ static void step_css(FohState *s, const PlatformInput *in,
   if (aE && s->cssRow == 2) {
     // togglePort narrowed to HMN <-> CPU (header note).
     s->p2Type ^= 1;
+    snd_push(s, "menuSelect"); // css.js:175 class
     ev_sel(s, "p2type", s->p2Type);
   }
 }
@@ -241,28 +291,53 @@ static void step_sss(FohState *s, const PlatformInput *in,
   const bool aE = in->a && !pv->a;
   const bool bE = in->b && !pv->b;
   if (bE) {
+    snd_push(s, "menuBack"); // stageselect.js:78
     ev_trans(s, FOH_SSS, FOH_CSS, "b"); // stageselect.js:79
     return;
   }
   if (aE) {
+    if (s->sssCursor == 6) {
+      // The RANDOM slot REFUSES (registered exclusion, MEASURED:
+      // upstream's arm draws from the seeded Math.random stream,
+      // stageselect.js:80-84 — a live draw would desync
+      // live-vs-replay stream prefixes; foh.h header note).
+      snd_push(s, "deny");
+      ev_refused(s, "random");
+      return;
+    }
     // setStageSelect + startGame (stageselect.js:80-88); the launch
     // record freezes here, the driver (foh_app / device app) owns the
     // actual sim boot.
+    snd_push(s, "menuForward"); // stageselect.js:81
     s->stageSel = s->sssCursor;
     s->launched = true;
     ev_trans(s, FOH_SSS, FOH_MATCH, "launch");
     ev_launch(s);
     return;
   }
-  // 3x2 grid cursor over stage ids 0..5 (== oracle --stage ids).
+  // 3x2 grid cursor over stage ids 0..5 (== oracle --stage ids) plus
+  // the RANDOM slot at 6 (below the grid): D from the bottom row
+  // enters it, U returns to the middle bottom tile (4); L/R are
+  // no-ops on it (CLAMP semantics, the rewritten-nav class).
   const bool uE = in->up && !pv->up;
   const bool dE = in->down && !pv->down;
   const bool lE = in->left && !pv->left;
   const bool rE = in->right && !pv->right;
-  if (lE) s->sssCursor = clampi(s->sssCursor - 1, 0, 5);
-  if (rE) s->sssCursor = clampi(s->sssCursor + 1, 0, 5);
-  if (uE && s->sssCursor >= 3) s->sssCursor -= 3;
-  if (dE && s->sssCursor <= 2) s->sssCursor += 3;
+  const int before = s->sssCursor;
+  if (s->sssCursor == 6) {
+    if (uE) s->sssCursor = 4;
+  } else {
+    if (lE) s->sssCursor = clampi(s->sssCursor - 1, 0, 5);
+    if (rE) s->sssCursor = clampi(s->sssCursor + 1, 0, 5);
+    if (uE && s->sssCursor >= 3) s->sssCursor -= 3;
+    if (dE) {
+      if (s->sssCursor <= 2) s->sssCursor += 3;
+      else s->sssCursor = 6;
+    }
+  }
+  if (s->sssCursor != before) {
+    snd_push(s, "menuSelect"); // stageselect.js:64/73 change class
+  }
 }
 
 static void step_opt_gameplay(FohState *s, const PlatformInput *in,
@@ -273,6 +348,7 @@ static void step_opt_gameplay(FohState *s, const PlatformInput *in,
     // gameplaymenu.js:25-36 (cookie save = task-13 persistence,
     // registered); cursor returns to the Gameplay entry.
     s->menuSelected = 1;
+    snd_push(s, "menuBack"); // gameplaymenu.js:26
     ev_trans(s, FOH_OPT_GAMEPLAY, FOH_MENU_OPTIONS, "b");
     return;
   }
@@ -280,21 +356,30 @@ static void step_opt_gameplay(FohState *s, const PlatformInput *in,
   const bool dE = in->down && !pv->down;
   const bool lE = in->left && !pv->left;
   const bool rE = in->right && !pv->right;
-  if (uE) s->optRow = clampi(s->optRow - 1, 0, 2);
-  if (dE) s->optRow = clampi(s->optRow + 1, 0, 2);
-  if (s->optRow == 2) {
-    if (lE) s->optCol = clampi(s->optCol - 1, 0, 3);
-    if (rE) s->optCol = clampi(s->optCol + 1, 0, 3);
+  {
+    const int rowBefore = s->optRow, colBefore = s->optCol;
+    if (uE) s->optRow = clampi(s->optRow - 1, 0, 2);
+    if (dE) s->optRow = clampi(s->optRow + 1, 0, 2);
+    if (s->optRow == 2) {
+      if (lE) s->optCol = clampi(s->optCol - 1, 0, 3);
+      if (rE) s->optCol = clampi(s->optCol + 1, 0, 3);
+    }
+    if (s->optRow != rowBefore || s->optCol != colBefore) {
+      snd_push(s, "menuSelect"); // nav class (menu.js:236)
+    }
   }
   if (aE) {
     if (s->optRow == 0) {
       s->turbo ^= 1; // gameplaymenu.js:40 (turbo ^= true)
+      snd_push(s, "menuSelect"); // gameplaymenu.js:38
       ev_sel(s, "turbo", s->turbo);
     } else if (s->optRow == 1) {
       s->lCancelType = (s->lCancelType + 1) % 3; // 0->1->2->0 (:44-48)
+      snd_push(s, "menuSelect"); // gameplaymenu.js:38
       ev_sel(s, "lcancel", s->lCancelType);
     } else {
       s->tapJumpOff[s->optCol] ^= 1; // tapJumpOffp{1..4} (:53-58)
+      snd_push(s, "menuSelect"); // gameplaymenu.js:152
       // field token carries the 1-based port like the upstream key
       ev_sel(s,
              s->optCol == 0   ? "tapjump1"
@@ -308,6 +393,7 @@ static void step_opt_gameplay(FohState *s, const PlatformInput *in,
 
 void foh_tick(FohState *s, const PlatformInput *in) {
   s->nev = 0;
+  s->nsnd = 0;
   const PlatformInput pv = s->prev;
   switch (s->screen) {
     case FOH_STARTUP:
@@ -317,7 +403,12 @@ void foh_tick(FohState *s, const PlatformInput *in) {
       break;
     case FOH_TITLE:
       // findPlayers (main.js:385): Start joins P1 and enters the menu
-      if (in->start && !pv.start) ev_trans(s, FOH_TITLE, FOH_MENU_TOP, "start");
+      // (sounds.menuForward, main.js:388; the device app also starts
+      // the MENU MUSIC on this transition — main.js:390 playMenuLoop).
+      if (in->start && !pv.start) {
+        snd_push(s, "menuForward");
+        ev_trans(s, FOH_TITLE, FOH_MENU_TOP, "start");
+      }
       break;
     case FOH_MENU_TOP:
     case FOH_MENU_OPTIONS:

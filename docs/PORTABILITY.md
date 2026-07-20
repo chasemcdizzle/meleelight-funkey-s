@@ -23,6 +23,12 @@ the port cost for a new target is the DEVICE-BOUND column, not the sim.
   (state, PlatformInput) step over the platform seam + raster — the
   input FEEDER is the only per-target piece (committed flow scripts on
   host/CI, `platform_poll` on device; foh.h "INPUT SEAM" note).
+- The FOH device app driver (`port/foh/foh_dev.c`): links whichever
+  platform backend the target provides; its poll arm consumes ONLY the
+  `PlatformInput` seam (iter 93). The menu/stage MUSIC TRACK MAP
+  (menu at title->menu-top, main.js:388-390; stage->track at LAUNCH,
+  main.js:1341-1360) and the menu SFX mapping are upstream-faithful
+  data — device-agnostic.
 
 ## Layer 1 — the platform seam (per-target TU, by design)
 
@@ -58,7 +64,11 @@ A new device = write one new backend TU (+ audio open params).
 - Music reader-thread poll cadence: 25 ms (gfx_app.c mus_reader_main
   — >= 29 refill opportunities per half-ring drain at 22050 Hz).
   Re-derive if the ring, source rate, or storage latency class
-  changes on a new target.
+  changes on a new target. foh_dev.c carries the same reader (iter 93).
+- FOH device-flow injection timing (`port/foh/flow-to-fkscript.js`,
+  iter 93): LEAD 8200 ms + 50 ms per flow frame (3x the 60 fps tick) —
+  tuned to THIS device's fk_input/uinput launch latency and SDL poll
+  cadence; re-measure per target input path.
 - Input: the S1 chord table (PLAN §6) maps the FunKey's EXACT control
   set (d-pad + 8 buttons, letter keysyms u/d/l/r/a/b/x/y/s/k/n/q).
   A device with real analog or more buttons gets a NEW mapping table
@@ -83,7 +93,10 @@ A new device = write one new backend TU (+ audio open params).
   (identity pins, freshness, fail-closed) transfer; the bytes don't.
 - **OPK packaging** (mksquashfs 4.4 pin, .desktop, /mnt layout,
   launcher data-dir chain): OPK is the FunKey/gmenu2x format; another
-  device has its own packaging.
+  device has its own packaging. The FOH-generation launcher
+  (`port/gfx/opk/mlfk-foh.sh` + `meleelight-foh.funkey-s.desktop`,
+  iter 93) is the same class — its data-dir chain, boot-marker, and
+  tmpfs conventions are FunKey OS layout.
 - **PMIC stall mitigation**: `low_bat_check` is FunKey OS's daemon;
   the skip-attribution INSTRUMENT (`skip-attrib/`) is the portable
   part — run it on any new device to find ITS stall sources.

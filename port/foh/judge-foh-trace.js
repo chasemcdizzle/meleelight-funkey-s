@@ -64,6 +64,10 @@ const EDGES = new Set([
 const REFUSED = new Set([
   "targettest", "targetbuilder", "audio", "credits", "controller",
   "keyboard", "spectate", "p2p", "server",
+  // iter 93 (M4 task 10): the SSS RANDOM slot — visible but refusing
+  // (registered exclusion; upstream's arm draws from the SEEDED stream,
+  // stageselect.js:80-84 — measured, AGENT-LOG iter 93).
+  "random",
 ]);
 
 const RE_T = /^T ([0-9]+) ([a-z-]+) ([a-z-]+) (timer|start|a|b|bhold|launch)$/;

@@ -27,6 +27,7 @@ port/gfx/check-device-render.sh port/gfx/check-device-input.sh \
 port/gfx/check-device-audio.sh port/gfx/check-device-opk.sh \
 port/gfx/check-device-music.sh \
 port/sim/device/check-skip-attrib.sh \
+port/foh/check-device-foh.sh \
 port/sim/device/verify_m3.sh"
 
 # The armv7 binaries the shared build produces (one docker run).
@@ -38,7 +39,10 @@ port/sim/device/verify_m3.sh"
 # (port/tools/fk_input.c — the ssb64 pattern; no SDL, no sim).
 # sk_sampler (M4 task 8) is the static fork-free kernel-counter sampler
 # (port/sim/device/skip-attrib/sk_sampler.c — diagnostic instrument).
-ARMBINS="sim_device csweep_arm fmt_diff_arm mathsweep_arm gfx_device fk_input sk_sampler"
+# foh_device (M4 task 10) is the SDL1.2 FOH app (menus + launch bridge
+# + match render): DYNAMIC SDL link like gfx_device (LGPL rule), the
+# same raster -O3 TU, fdlibm strong overrides asserted.
+ARMBINS="sim_device csweep_arm fmt_diff_arm mathsweep_arm gfx_device fk_input sk_sampler foh_device"
 
 # rig_lock_acquire — exclusive rig lock (iter 41, review rounds 1-3
 # recurring — the class is closed by REMOVING the cleverness): ONE
@@ -673,7 +677,7 @@ rig_srchash() {
   local listf brokenf n h hline
   listf="$DEVB/.srclist.$$"
   brokenf="$DEVB/.srcbroken.$$"
-  find -L port/sim port/gfx port/tools port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
+  find -L port/sim port/gfx port/tools port/foh port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
     -type l -print0 > "$brokenf" || {
     echo "DEVICE FAIL: srchash: broken-link scan failed" >&2
     rm -f "$brokenf"
@@ -686,7 +690,7 @@ rig_srchash() {
     return 1
   fi
   rm -f "$brokenf"
-  find -L port/sim port/gfx port/tools port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
+  find -L port/sim port/gfx port/tools port/foh port/fdlibm port/ryu oracle/qjs "$FDC/csweep.c" \
     -type f \( -name '*.c' -o -name '*.h' \) -print0 \
     > "$listf" || {
     echo "DEVICE FAIL: srchash: find failed" >&2
@@ -996,6 +1000,50 @@ rig_arm_build() {
         "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" \
         oracle/qjs/sha256.c port/fdlibm/fdlibm.c \
         $($SDLCFG --libs) -lm
+      # foh_device (M4 task 10): the SDL1.2 FOH app — the same sim +
+      # render TU set as gfx_device with the FOH machine TUs and
+      # foh_dev.c as the driver (gfx_app.c stays byte-untouched).
+      # DYNAMIC SDL link (LGPL — asserted below like gfx_device).
+      $CC -O2 -ffp-contract=off -Wall -Wextra -Werror -no-pie \
+        -I"$TABLES" -Iport/ryu -Iport/sim -Ioracle/qjs \
+        $($SDLCFG --cflags) \
+        -o "$DEVB/foh_device" \
+        "$DEVB/raster_arm.o" \
+        port/foh/foh_dev.c port/foh/foh.c port/foh/foh_font.c \
+        port/foh/foh_render.c \
+        "$GFX/platform_sdl1.c" \
+        "$GFX/anim1.c" "$GFX/gfx_render.c" \
+        "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
+        "$SIM/sim_boot.c" "$SIM/sim_tick.c" "$SIM/sim_ser.c" \
+        "$SIM/sim_data.c" "$SIM/sim_ai_live.c" \
+        "$CAL/canon.c" "$CAL/player_canon.c" \
+        port/sim/ai.c \
+        port/sim/physics.c port/sim/interpolated_collision.c \
+        port/sim/environmental_collision.c port/sim/hit_detection.c \
+        port/sim/article.c port/sim/action_state_shortcuts.c \
+        port/sim/ml_events.c port/sim/ml_fmt.c port/sim/ml_ser.c \
+        port/sim/ai_bridge.c port/sim/input/interpret_inputs.c \
+        port/sim/stages/moving_platforms.c port/sim/stages/ystory.c \
+        port/sim/stages/fountain.c \
+        port/sim/characters/shared/moves_index.c \
+        port/sim/characters/shared/moves/*.c \
+        port/sim/characters/fox/moves_index.c \
+        port/sim/characters/fox/moves/*.c \
+        port/sim/characters/falco/moves_index.c \
+        port/sim/characters/falco/moves/*.c \
+        port/sim/characters/falcon/moves_index.c \
+        port/sim/characters/falcon/moves/*.c \
+        port/sim/characters/marth/moves_index.c \
+        port/sim/characters/marth/dancing_blade_combo.c \
+        port/sim/characters/marth/dancing_blade_air_mobility.c \
+        port/sim/characters/marth/moves/*.c \
+        port/sim/characters/puff/moves_index.c \
+        port/sim/characters/puff/puff_multi_jump_drift.c \
+        port/sim/characters/puff/puff_next_jump.c \
+        port/sim/characters/puff/moves/*.c \
+        "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" \
+        oracle/qjs/sha256.c port/fdlibm/fdlibm.c \
+        $($SDLCFG --libs) -lm -lpthread
     '
     for f in $ARMBINS; do
       made "$DEVB/$f"
@@ -1013,7 +1061,7 @@ rig_arm_build() {
     # be its linked definitions too (dynamic libm.so is only consulted
     # for symbols the binary does not define — these it defines).
     local nmout s cnt b
-    for b in sim_device gfx_device; do
+    for b in sim_device gfx_device foh_device; do
       nmout="$DEVB/.nm-$b.$$"
       if ! nm "$DEVB/$b" > "$nmout"; then
         rm -f "$nmout"
@@ -1040,6 +1088,15 @@ rig_arm_build() {
     fi
     if ! grep -q "libSDL-1.2.so.0" "$DEVB/gfx_device"; then
       echo "DEVICE FAIL: gfx_device carries no libSDL-1.2.so.0 NEEDED entry — SDL not dynamically linked" >&2
+      exit 1
+    fi
+    # M4 task 10: foh_device under the same LGPL dynamic-link asserts
+    if ! file "$DEVB/foh_device" | grep -q "dynamically linked"; then
+      echo "DEVICE FAIL: foh_device is not dynamically linked (SDL 1.2 is LGPL — dynamic only)" >&2
+      exit 1
+    fi
+    if ! grep -q "libSDL-1.2.so.0" "$DEVB/foh_device"; then
+      echo "DEVICE FAIL: foh_device carries no libSDL-1.2.so.0 NEEDED entry — SDL not dynamically linked" >&2
       exit 1
     fi
     # iter 56 (review-55 M): full-line host grammar at the stamp WRITE —

@@ -14722,3 +14722,308 @@ typed. Music-surface arc round 2 reviews this commit's bytes.
 - Every iter driver-cold-verified (FOH FLOWS OK final form: flows=5
   shots=13 bridges=3 states=4 diverge=1 control=1 teeth=16).
 - next: task 10 (FOH device — DEVICE FOH OK).
+
+## iter 93 — 2026-07-19 — M4 task 10 PRE-REGISTRATION: FOH on device (frozen before any implementation; PROCESS §2)
+
+- **Task**: fix_plan §M4 task 10 — menus at 240x240 through the platform
+  seam ON the FunKey-S, navigated by fk_input scripts; per-screen
+  screenshots judged; a full flow boots a live match (stream vs frozen
+  g01); OPK launcher enters the FOH. Done-check:
+  `bash port/foh/check-device-foh.sh` → `DEVICE FOH OK`, exit 0.
+  Regression: `bash port/foh/check-foh-flows.sh` stays green.
+  BINDING (review-88 triage M3, DEFER-BOUND, honored verbatim): the
+  device check drives the COMMITTED flows through the REAL
+  platform_poll/keysym path — fk_input (uinput) injecting the letter
+  keysyms u/d/l/r/a/b/x/y/s/k/n/q through SDL1.2 — judged against the
+  SAME frozen flow traces, so a backend key-translation swap DIES
+  against them. The host feeder's PlatformInput construction is NOT
+  the device path (host twin = flow-fed, device = platform_poll ONLY;
+  the check pins the device argv to `--input poll`).
+- **SSS RANDOM MEASUREMENT (driver ruling applied; frozen)**: upstream
+  stageselect.js:80-84 — the A-on-RANDOM arm computes
+  `Math.floor(Math.random() * (smallBoxStageNames.length - 0.01))`.
+  Math.random IS the seeded stream in the oracle domain (the harness/
+  qjs shim replaces Math.random with the seeded mulberry32; CHECKSUM.md
+  counts every draw as rngCalls — startGame's background draw is the
+  same plane). Therefore RANDOM **does** consume a seeded draw
+  pre-match → a live RANDOM selection would desync live-vs-replay
+  stream prefixes. Per the ruling: sub-surface STOPPED; **registered
+  exclusion** with the RANDOM slot VISIBLE-but-REFUSING (`S <f>
+  refused random`, deny SFX) like the other deferred entries. FOH sss
+  gains cursor slot 6 (D from the bottom row; U returns to 4; A =
+  refusal, LAUNCH impossible); judge-foh-trace.js gains the `random`
+  refused token (sha re-pinned in check-foh-flows.sh SAME commit);
+  f04-nav is EXTENDED to traverse slot 6 + fire the refusal, its
+  .expect re-frozen via the designed channel (run → hand-review vs
+  this plan → freeze). No committed flow presses D/U/L/R in sss on the
+  bottom row today (verified by reading all five flows + the wit-g01
+  check-owned flow), so no other frozen trace changes.
+- **MENU SFX / MUSIC SELECTION WIRING (measured this session, cited;
+  windows pre-proven iter 87 — selection only, no new DSP)**: SND1
+  names menuSelect/menuForward/menuBack/deny all exist in sounds.json
+  (checked). Mapping (upstream sites): cursor moves + value steps +
+  option toggles → menuSelect (menu.js:236, css.js:226-class,
+  stageselect.js:64/73, gameplaymenu.js:38/152); confirm transitions +
+  title START + css→sss + sss launch → menuForward (menu.js:70,
+  main.js:388, css.js:448, stageselect.js:81); B-backs incl. bhold →
+  menuBack (menu.js:170-190, css.js:189, stageselect.js:78,
+  gameplaymenu.js:26); refusals → deny (keyboardmenu.js:170
+  refusal-class; RANDOM refusal included). REGISTERED REWRITE DELTA:
+  the CSS announcer names (sounds.marth/jigglypuff/... on token DROP,
+  css.js:233+) are EXCLUDED — the rewritten row-cursor CSS has no drop
+  gesture. MUSIC: menu track starts at title→menu-top (main.js:388-390,
+  ports==0 playMenuLoop; startup/title silent, faithful); at LAUNCH the
+  stage track per main.js:1341-1360 (stage 0→battlefield, 1→yStory,
+  2→pStadium, 3→dreamland, 4→finald, 5→fod), Start-once→Loop-repeat
+  windows from sounds.json VERBATIM (the task-7 channel). foh_dev
+  consumes a strict-grammar music manifest (`track <token> <pcm>
+  <volbits16> <so> <sd> <lo> <ld>`); menu channel cfg'd+prefilled at
+  boot with on=0, flipped on at the title→menu-top event; at LAUNCH:
+  reader stopped (bounded join), stage track cfg+prefill (between the
+  menu and match loops — never inside a paced loop), reader restarted.
+  Sound events reach the mixer via snd_event under platform_audio_lock
+  (menu plane) + the ml_snd_sink/ml_snd_stop_id_sink chokepoints
+  (match plane, gfx_app verbatim).
+- **NEW SURFACES**: port/foh/foh_dev.c (the device/twin FOH app: FOH
+  phase → bridge → gfx_app-shape match loop; input modes `--input
+  flow` (host twin) / `--input poll` (device: platform_poll ONLY));
+  port/foh/flow-to-fkscript.js (mechanical .flow → fk_input script);
+  port/foh/normalize-foh-trace.js (whitelist frame-field elision);
+  port/foh/check-device-foh.sh (the composed device check);
+  port/gfx/opk/mlfk-foh.sh + meleelight-foh.funkey-s.desktop (the FOH
+  OPK launcher + unique evidence title "MeleeLight FOH" — the iter-73
+  stale-nav class avoided; the play install /mnt/Applications/
+  meleelight.opk is NOT touched). EDITED: foh.h/foh.c (RANDOM slot +
+  the per-tick sound-token plane — no event/trace changes),
+  foh_render.c (RANDOM tile), judge-foh-trace.js (+`random`; sha
+  re-pinned in check-foh-flows.sh same commit), flows/f04-nav.flow +
+  re-frozen f04-nav.expect (designed channel), riglib.sh (ARMBINS +=
+  foh_device, heredoc build arm + nm/dynlink asserts, RIG_SCRIPTS +=
+  check-device-foh.sh — the designed "new device check" channel).
+  NO edits to: check-sim.sh, check-ai-live.sh, gfx_app.c, snd_mixer.h,
+  any oracle/goldens file, mlfk.sh, verify-stream.js, wrap-run.js.
+- **DEVICE FLOW PLAN (screen-by-screen)**: all FIVE committed flows
+  driven on device, bytes = the committed flows/*.flow (sha-verified on
+  push). fk scripts derived mechanically: t(F) = 8200 + (F-370)*50 ms
+  (fixed 8.2 s startup lead ≥ tick 373 title shot + fk launch latency
+  is strictly ADDITIVE (ready-file handshake), 50 ms per flow frame =
+  SCALE 3 — presses span ≥3 device frames, gaps ≥200 ms, the f04
+  30-frame B-hold becomes 1.5 s ≥ 30 held frames); keys mapped 1:1 to
+  the letter keysyms. SHOTS: rows with frame < the flow's first
+  non-neutral input are TICK-INDEXED (f01 startup@200, title@373 — the
+  startup progress bar is tick-deterministic, input-independent); all
+  others are Q-MARKER shots (the script injects a `q` press at the SHOT
+  row's time; `q`/MENU is consumed by NO FOH arm — the app captures on
+  the q edge with the state settled; a q edge with no pending marker =
+  loud death). Bridges on device: f01 = verify (FULL 3600-frame match,
+  live render + SFX + music, paced, stream judged vs frozen g01 by the
+  UNCHANGED wrap-run/verify-stream — exceeds the (c) prefix bar);
+  f02/f03/f05 = state (BRIDGE-STATE byte-exact vs the frozen
+  .bstate.expect — CPU toggle/difficulty, settings, p2char/stage
+  plumbing through the REAL keysym path); f04 = none. Per-leg
+  low_bat_check quiesce (marker→stop→stamp→launch→detect→restore, the
+  riglib bracket assert per leg), ONE frontend park + deadman (window
+  sized to the whole device phase) around all legs, §7#1 foreground
+  polls with a quiet window over the f01 match span.
+- **JUDGMENT FORMS (registered)**: (1) device traces: judge-foh-trace.js
+  grammar (frame-agnostic by construction) + NORMALIZED-SEQUENCE
+  byte-exact vs the frozen committed .expect — normalization =
+  frame-field elision ONLY (whitelist normalizer, both sides run
+  through it; frozen bytes untouched; wall-clock injection cannot be
+  frame-exact, every structural fact — edges, causes, S values, LAUNCH
+  params, shot names/order, transitions count — is preserved and
+  byte-compared). (2) device shots: **BYTE-EXACT** vs host twin
+  references (the task-3/iter-74 device-render bit-identity class;
+  foh_render is integer-only, pure state) — tick shots at identical
+  ticks, marker shots at settled identical state; no structural-only
+  fallback. (3) f01 stream: FULL == frozen g01 (UNCHANGED judges).
+  (4) bstates byte-exact vs frozen. (5) f01 perf: p99 < 16.67 ms via
+  the pinned judge-render-timing.js, skips==0, presentFails==0,
+  underruns==0, badlen==0, starves==0; menu-phase skips==0 (quiesced).
+  (6) SFX wiring: device f01 voice starts/stops == host twin's
+  (headless mixer bookkeeping is main-thread — the twin measures the
+  deterministic expected counts each run; x2 twin runs must agree).
+  (7) OPK: packaged ONLY with the SDK container's mksquashfs 4.4;
+  squashfs-mounted on device; mlfk-foh.sh runs foh_device from the
+  MOUNT (boot marker carries the mounted binary's sha == the arm-build
+  stamp record); no-input evidence run (startup→title, 500 ticks) —
+  trace judged vs a constructed 4-line expectation, startup/title
+  shots byte-exact vs the twin refs, rc file exactly RC=0. FRONTEND-NAV
+  launch stays task 14's gate leg (iter-73 registered stale-nav note:
+  re-measured nav is a dedicated surface; THIS leg proves the OPK
+  image mounts and its launcher enters the FOH, not the direct-match
+  path — the evidence OPK is removed at cleanup, the play install
+  untouched).
+- **TEETH (frozen list)**: T1 A/B-swap flow variant (host twin, flow
+  mode) → normalized cmp vs frozen DIES (the M3 binding's kill chain,
+  judge side); T2 direction-reverse variant (R→L) → LAUNCH p1 differs →
+  dies; T3 START-drop variant → missing transitions → dies; T4
+  normalizer grammar — malformed + resembling line in a COPY → rc 2;
+  T5 device-shot corruption (byte appended to a COPY) → cmp dies; T6
+  f01 device run JSON nibble (COPY) → verify-stream rc 2; T7 bstate
+  lcancel substitution (COPY) → cmp dies; T8 boot-marker perturbation
+  (COPY) → marker parse dies; T9 fkscript generator fed a non-monotone
+  flow → rc 2 before emitting. All on generated variants/copies;
+  committed bytes never edited; positive controls = the real legs.
+- **RUN CAPS (hard)**: cold full-check attempts ≤3; device leg matrix
+  per attempt = 5 flow legs + 1 OPK leg; extra diagnostic device runs
+  ≤6 total; arm docker rebuilds ≤4; browser runs 0. check-foh-flows.sh
+  regression runs ≤2 cold.
+- **REFUTATION SHAPES**: (a) device normalized trace != frozen while
+  the host twin passes → injection-timing or keysym-path defect: ONE
+  bounded round (re-derive at 66 ms/frame + diff signature); a
+  non-timing signature (wrong edge/param) = the platform-seam defect
+  class the binding hunts — STOP and report, NEVER loosen the judge.
+  (b) device shots != twin refs with traces green → device-render
+  determinism regression (iter-38/74 round/trunc class): one
+  attribution round (pixel diff + nm override check), then STOP.
+  (c) f01 device stream != frozen g01 → launch-seam defect; compare
+  device vs twin stream first; twin==frozen with device-only drift →
+  STOP after one round (device math class would contradict the
+  standing 8/8 conformance — needs driver eyes). (d) underruns/
+  starves/skips > 0 on a quiesced leg → exactly ONE cold retry; still
+  nonzero → STOP + report with timing rows (gates never weakened).
+  (e) missing q-marker shots → injection defect: one evidence round
+  (fk log + trace), then STOP. (f) OPK mount failure → probe the OS
+  opkrun channel once, else STOP + report. Do NOT retry blind past any
+  cap.
+- **PORTABILITY**: rows added same commit — foh_dev device app (Layer
+  0/1 consumer; poll-mode input = the per-target feeder), fk-script
+  timing constants (8.2 s lead / 50 ms per flow frame — FunKey
+  injection-latency-tuned, Layer 2), FOH OPK launcher + desktop
+  (Layer 3, OPK = FunKey packaging), menu/stage music track map (Layer
+  0 — upstream-faithful, device-agnostic).
+
+## iter 93 — 2026-07-19 — M4 task 10 RESULT: FOH on device — DEVICE FOH OK (first full device attempt green)
+
+- **DONE-CHECK (cold): `bash port/foh/check-device-foh.sh` →
+  `DEVICE FOH OK (flows=5 shots=13 bridge=1 states=3 opk=1
+  p99=13.585ms skips=0 underruns=0 starves=0 starts f01-vs-g01=281
+  f02-cpu-m01=16 f03-options=23 f04-nav=39 f05-vs-g03=14 teeth=9)`,
+  exit 0** (.loop/m4-task10-donecheck.log; teeth extract
+  .loop/m4-task10-teeth.log). Attempt ledger: attempt 1 died HOST-side
+  at the twin-pin grep before any device work (the sibling pin line
+  carries its quoted-block closing quote — grep anchored-EOL false
+  negative; fixed to an exact-substring count), attempt 2 = the full
+  cold pass, FIRST device attempt green end to end. REGRESSION:
+  `bash port/foh/check-foh-flows.sh` → `FOH FLOWS OK (flows=5 shots=13
+  bridges=3 states=4 diverge=1 control=1 teeth=16)`, exit 0
+  (.loop/m4-task10-fohflows-run2.log; run 1 caught the T8 anchor
+  moved by the f04 re-freeze — anchors updated in the same edit).
+- **THE M3 DEFER-BOUND BINDING HONORED (review-88 triage M3)**: all
+  FIVE committed flows drove the FunKey through fk_input → uinput →
+  kernel input core → SDL1.2 letter keysyms → platform_poll (the
+  device argv is pinned to `--input poll`; the host twin's flow-fed
+  PlatformInput never runs on device), judged against the SAME frozen
+  flows/*.expect via judge-foh-trace.js (grammar) + NORMALIZED-SEQUENCE
+  byte-equality (normalize-foh-trace.js — frame-field elision ONLY;
+  frozen bytes untouched). The swap KILL CHAIN is proven at the judge:
+  T1 A/B-swap, T2 direction-reversal, T3 START-drop variants each die
+  against the frozen f01 trace through the production normalize+cmp
+  path; the real legs are the positive controls.
+- **RESULTS per scope item**: (1) DEVICE TRACES: 5/5
+  normalized-match vs frozen (f01/f02/f03/f04/f05). (2) SHOTS:
+  judgment form = BYTE-EXACT vs host twin references (pre-registered;
+  the task-3/iter-74 bit-identity class held) — 13/13 device shots
+  byte-identical (tick-indexed startup/title at exact ticks; q-marker
+  shots at settled state via the MENU keysym, consumed by no FOH arm).
+  (3) MATCH LAUNCH: f01's FOH-launched match replayed g01's trace ON
+  DEVICE with live render + SFX + MUSIC → STREAM MATCH 3600/3600 vs
+  the frozen g01 stream (UNCHANGED wrap-run/verify-stream — exceeds
+  the prefix bar), p99 13.585 ms < 16.67, skips 0/3600, presentFails
+  0, underruns 0, badlen 0, music starves 0, wall 60000 ms. (4)
+  BRIDGE-STATEs: f02 (CPU d1 ystory) / f03 (turbo+lcancel2+tapjump) /
+  f05 (p2=fox pstadium) byte-exact vs the frozen .bstate.expect
+  through the real keysym path. (5) MENU SFX/MUSIC WIRING: FohState
+  snd tokens (menuSelect/menuForward/menuBack/deny — upstream sites
+  cited in foh.c) through the mixer; device voice starts/stops ==
+  host-twin expectation PER FLOW (281/16/23/39/14, stops 0); menu
+  track ON at title→menu-top (main.js:388-390), stage track at LAUNCH
+  (main.js:1341-1360) via the strict-grammar music manifest; menu +
+  battlefield PCM sha-pinned (menu.pcm NEW pin bbf52720…4856,
+  battlefield twin-pinned vs check-device-music.sh; sndpack twin-
+  pinned vs the sibling checks; meta pins volbits/windows verified vs
+  the fresh sounds.json). (6) OPK: packaged ONLY with the SDK
+  container's mksquashfs 4.4, 5 files verified through unsquashfs,
+  pushed under the UNIQUE title "MeleeLight FOH"
+  (meleelight-foh-evidence.opk), squashfs-mounted ON DEVICE,
+  mlfk-foh.sh (NEW FOH launcher; mlfk.sh byte-untouched) ran
+  foh_device FROM THE MOUNT — boot marker bin sha == the arm-build
+  stamp record, mode=evidence, rc file exactly RC=0, no-input
+  startup→title trace == the constructed expectation, startup/title
+  shots byte-exact; OPK removed at cleanup; the play install
+  /mnt/Applications/meleelight.opk untouched. (7) SSS RANDOM (driver
+  ruling applied): MEASURED — stageselect.js:80-84's A-on-RANDOM arm
+  draws `Math.floor(Math.random()*…)` and Math.random IS the seeded
+  oracle stream (the CHECKSUM.md rngCalls plane; startGame's off-step
+  draw is the same plane) → sub-surface STOPPED, registered
+  exclusion; the RANDOM slot is VISIBLE-but-REFUSING (sss cursor 6,
+  `S <f> refused random`, deny SFX), exercised host-side by the
+  EXTENDED f04 (re-frozen via the designed channel; hand-review
+  matched the pre-registered plan first run) and by the pinned
+  `random` token in judge-foh-trace.js (sha re-pinned in
+  check-foh-flows.sh SAME commit).
+- **NEW/EDITED SURFACES**: port/foh/foh_dev.c (device/twin app; flow
+  vs poll input modes; state/verify/live bridges; the task-7 music
+  channel driven through a per-track program/switch seam; summary
+  grammars foh/match/audio/music — all whitelist-parsed by the check);
+  port/foh/flow-to-fkscript.js (mechanical .flow→fk script; LEAD 8200
+  ms + 50 ms/frame, pre-registered); port/foh/normalize-foh-trace.js
+  (whitelist frame-elision); port/foh/check-device-foh.sh (composed
+  check; riglib inheritance whole — lock, qd-normalize, deadman +
+  park spanning the device phase, per-leg lbc quiesce with the
+  coupled-stamp bracket assert (5/5 brackets green, stop→start 0 s),
+  pullv/push provenance, no-commit guard); riglib.sh (ARMBINS +
+  foh_device build + nm/dynlink asserts + RIG_SCRIPTS +=
+  check-device-foh.sh + srchash roots += port/foh — the designed
+  new-check channel); foh.h/foh.c (RANDOM slot + the snd token plane —
+  events/traces unchanged except f04's new refusal);
+  foh_render.c (RANDOM tile; sss label/hint rows moved 194/208);
+  port/gfx/opk/{mlfk-foh.sh,meleelight-foh.funkey-s.desktop} (the
+  FOH-generation launcher; live mode = FOH → live S1 match with the
+  --tapjump-off-p1 S1-contract preset). foh_dev's `--bridge live` arm
+  is REGISTERED as structurally-reviewed-only this iteration (no
+  mechanical live-session leg; the acceptance playthrough + task-14
+  gate own it). check-sim.sh / check-ai-live.sh / gfx_app.c /
+  snd_mixer.h / verify-stream.js / wrap-run.js / oracle/ all
+  BYTE-UNTOUCHED.
+- **TEETH 14 total**: host regression 16/16 (check-foh-flows, incl.
+  the re-anchored T8) + device check 9/9 — T1 A/B swap, T2 direction
+  reversal, T3 START drop (all die at the frozen-trace judge), T4
+  normalizer resemblance rc 2, T5 generator non-monotone rc 2 (no
+  output emitted), T6 corrupted device shot dies in the production
+  judge, T7 nibble-flipped run JSON dies in verify-stream rc 2, T8
+  perturbed bstate dies vs the frozen witness, T9 perturbed boot
+  marker dies vs the constructed expectation. All on generated
+  variants/copies; committed bytes untouched.
+- **RUN-CAP LEDGER**: cold device-check attempts 2/3 (attempt 1 =
+  host-side pin-grep death, zero device runs consumed); paced device
+  legs 6 of the 18 cap (5 flows + 1 OPK, one full matrix); diagnostic
+  device runs 0/6; arm docker rebuilds 1/4; browser runs 0;
+  check-foh-flows cold runs 2/2 (run 1 caught the stale T8 anchor).
+  No pre-registered cap exceeded; no refutation shape fired.
+- **HONEST COVERAGE (PROCESS §8)**: the normalized-trace judgment
+  proves structure (edges/causes/values/params/shot order), not tick
+  timing — tick equality is unprovable under wall-clock injection BY
+  CONSTRUCTION (registered judgment form); the injection SCHEDULE
+  constants are FunKey-latency-tuned (PORTABILITY row). Menu SFX
+  wiring is proven by exact voice-start/stop equality vs the
+  deterministic twin, not by audio-output capture (no golden audio
+  stream exists — the iter-57 basis); audible authority stays with
+  Chase. The FOH-phase skips==0 gate ran with lbc quiesced on all
+  five legs (bracket-asserted). foh_dev --bridge live + mlfk-foh.sh
+  live mode are unexercised-by-machine this iteration (registered
+  above). The OPK leg proves launcher→FOH entry from a kernel-mounted
+  OPK; the FRONTEND-NAV launch (gmenu2x) remains task 14's gate leg
+  per the iter-73 registered stale-nav note.
+- **ZOOM OUT (HARD RULE 8)**: class artifacts over one-offs — (a) the
+  normalize+frozen-trace judge kills the ENTIRE key-translation-swap
+  class for every current and future flow (T1-T3 prove three faces of
+  it mechanically); (b) the per-flow twin-vs-device voice-start
+  equality is a standing SFX-wiring differential that any future menu
+  sound edit must re-satisfy flow-by-flow; (c) the music manifest +
+  track-program seam makes track SELECTION data-driven (the task-13/14
+  provisioning writes rows, never code). Tier-A arc for the new
+  surfaces (check-device-foh.sh, foh_dev.c, the two node tools,
+  mlfk-foh.sh, riglib delta, foh.c/render delta) is driver-queued per
+  the §M4 conventions.

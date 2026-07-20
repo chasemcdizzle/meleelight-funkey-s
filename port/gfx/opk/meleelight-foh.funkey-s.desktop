@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=MeleeLight FOH
+Comment=MeleeLight FOH port (private build)
+Exec=mlfk-foh.sh
+Terminal=false
+Type=Application
+StartupNotify=true
+Icon=icon32
+Categories=games;

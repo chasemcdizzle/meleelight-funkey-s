@@ -22,10 +22,12 @@ static const char *kMenuText[4][4] = {
 static const char *kCharNames[5] = {
     // characters.js:2-8 order == the oracle char ids
     "MARTH", "JIGGLYPUFF", "FOX", "FALCO", "CAPTAIN FALCON"};
-static const char *kStageNames[6] = {
-    // stageselect.js:13-29 order == the oracle stage ids
+static const char *kStageNames[7] = {
+    // stageselect.js:13-29 order == the oracle stage ids; slot 6 = the
+    // visible-but-refusing RANDOM slot (registered exclusion, foh.h)
     "BATTLEFIELD",  "YOSHI'S STORY",     "POKEMON STADIUM",
-    "DREAMLAND",    "FINAL DESTINATION", "FOUNTAIN OF DREAMS"};
+    "DREAMLAND",    "FINAL DESTINATION", "FOUNTAIN OF DREAMS",
+    "RANDOM"};
 static const char *kLCancelNames[3] = {
     // settings.js:46 comment: 0 normal | 1 auto | 2 smash64
     "NORMAL", "AUTO", "SMASH64"};
@@ -143,8 +145,23 @@ static void render_sss(const FohState *s, Raster *rz) {
     const char num[2] = {(char)('0' + k), 0};
     foh_text(rz, x + 4, y + 4, 1, num, kDim);
   }
-  text_center(rz, 180, 1, kStageNames[s->sssCursor], kAccent);
-  text_center(rz, 205, 1, "A: FIGHT   B: BACK", kDim);
+  // The RANDOM slot (cursor 6): visible but REFUSING (registered
+  // exclusion — upstream's arm draws from the seeded stream,
+  // stageselect.js:80-84; foh.h header note). Rendered as a wide
+  // dimmed tile below the grid.
+  {
+    const int x = 60, y = 172, w = 120, h = 16;
+    fill_rect(rz, x, y, w, h, kPanel);
+    if (s->sssCursor == 6) {
+      fill_rect(rz, x - 2, y - 2, w + 4, 2, kCursor);
+      fill_rect(rz, x - 2, y + h, w + 4, 2, kCursor);
+      fill_rect(rz, x - 2, y, 2, h, kCursor);
+      fill_rect(rz, x + w, y, 2, h, kCursor);
+    }
+    foh_text(rz, x + 6, y + 4, 1, "RANDOM", kDim);
+  }
+  text_center(rz, 194, 1, kStageNames[s->sssCursor], kAccent);
+  text_center(rz, 208, 1, "A: FIGHT   B: BACK", kDim);
 }
 
 static void render_opt_gameplay(const FohState *s, Raster *rz) {

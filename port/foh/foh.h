@@ -39,9 +39,12 @@
 // press); CSS hand-cursor/token drag -> a row cursor over {P1 char,
 // P2 char, P2 type, P2 difficulty} with L/R value steps (CLAMP at the
 // ends); SSS pointer drag -> a 3x2 grid cursor over the 6 VS stages
-// (ids == oracle --stage ids; the RANDOM slot is a registered deferral
-// — it consumes a Math.random upstream, stageselect.js:82, and FOH may
-// not draw from the seeded stream without a domain ruling). P2 type
+// (ids == oracle --stage ids) plus the RANDOM slot at cursor 6 —
+// VISIBLE but REFUSING (registered exclusion, MEASURED iter 93:
+// upstream's A-on-RANDOM arm draws `Math.floor(Math.random() * ...)`,
+// stageselect.js:80-84, and Math.random IS the seeded oracle stream —
+// a live RANDOM draw would desync live-vs-replay stream prefixes; A on
+// slot 6 emits `S <f> refused random`, never a launch). P2 type
 // toggles HMN(0) <-> CPU(1) on A (togglePort main.js:510-526 cycles
 // -1 -> 0 -> 1 -> 2(network) -> -1; the network arm is scope-excluded
 // and -1 would break readyToFight>=2 on a one-input device — domain
@@ -115,7 +118,7 @@ typedef struct {
   int difficulty;     // 1..4 (slider domain), default 3
   int bHold;          // consecutive B frames in CSS (30 = back)
   // sss
-  int sssCursor; // 0..5 == oracle stage ids
+  int sssCursor; // 0..5 == oracle stage ids; 6 = the refusing RANDOM slot
   // options-gameplay (sim-consumed subset; settings.js:44-56 defaults)
   int optRow; // 0 turbo, 1 lCancelType, 2 tapJumpOff columns
   int optCol; // 0..3 (active on the tapJumpOff row)
@@ -130,6 +133,13 @@ typedef struct {
   // events emitted by the last tick
   FohEvent ev[FOH_EV_CAP];
   int nev;
+  // menu SFX tokens emitted by the last tick (M4 task 10; SND1 Howl
+  // names, upstream mapping cited at the emission sites in foh.c —
+  // menuSelect/menuForward/menuBack/deny). NOT part of the structural
+  // trace (frozen .expects unchanged); consumed by the device app's
+  // mixer seam and ignored by the host trace driver.
+  const char *snd[FOH_EV_CAP];
+  int nsnd;
 } FohState;
 
 void foh_init(FohState *s);

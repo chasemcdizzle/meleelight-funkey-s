@@ -1679,6 +1679,39 @@ overruns):
   (not the direct-match path).
   done-check: `bash port/foh/check-device-foh.sh` → prints
   `DEVICE FOH OK`, exit 0.
+  **DONE (iter 93, 2026-07-19) — committed form**: cold done-check
+  `DEVICE FOH OK (flows=5 shots=13 bridge=1 states=3 opk=1
+  p99=13.585ms skips=0 underruns=0 starves=0 starts f01-vs-g01=281
+  f02-cpu-m01=16 f03-options=23 f04-nav=39 f05-vs-g03=14 teeth=9)`
+  exit 0, FIRST full device attempt (.loop/m4-task10-donecheck.log).
+  The review-88 M3 DEFER-BOUND binding honored: all 5 committed flows
+  driven through fk_input → uinput → SDL keysyms → platform_poll
+  (device argv pinned `--input poll`), judged vs the SAME frozen
+  flows/*.expect by judge-foh-trace.js + NORMALIZED-SEQUENCE
+  byte-equality (normalize-foh-trace.js — frame elision only; swap
+  teeth prove the A/B-swap / direction-reversal / START-drop kill
+  chain at the judge). Shots = BYTE-EXACT vs host twin refs (13/13;
+  tick-indexed pre-input shots + q-marker settled-state shots).
+  f01 FOH-launched match: STREAM MATCH 3600/3600 vs frozen g01 ON
+  DEVICE with render+SFX+music (p99 13.585 ms, skips 0, underruns 0,
+  starves 0). f02/f03/f05 BRIDGE-STATE byte-exact vs frozen. Menu
+  SFX/music wired (foh.c snd tokens, cited; menu track at
+  title→menu-top, stage track at LAUNCH per main.js:1341-1360;
+  starts/stops == twin per flow; menu.pcm NEW pin, sndpack/bf twin-
+  pinned). SSS RANDOM measured SEEDED (stageselect.js:80-84 +
+  Math.random = the rngCalls plane) → registered exclusion, slot 6
+  visible-but-refusing (`refused random`; f04 extended + re-frozen
+  via the designed channel; judge sha re-pinned same commit). OPK:
+  mlfk-foh.sh + unique-title evidence OPK (mksquashfs 4.4 only,
+  unsquashfs-verified) mounted on device, launcher entered the FOH
+  from the mount (boot marker bin == stamp), removed at cleanup; play
+  install untouched; frontend-nav launch = task 14 (iter-73 note).
+  foh_device joined ARMBINS/riglib (srchash roots += port/foh).
+  Registered: foh_dev --bridge live + mlfk-foh.sh live mode are
+  review-only this iteration (task 14/acceptance own their exercise).
+  Regression: FOH FLOWS OK teeth=16 cold. Caps: device attempts 2/3
+  (one host-side pin death), paced legs 6/18, arm rebuilds 1/4,
+  browser 0.
 - task 11 — **target test, data + sim plane (host)**: NEW pipeline
   stage `targets` (executed-JS extraction of the 10 authored
   target-test stages — box/target/polygonMap machinery that M1 pinned

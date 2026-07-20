@@ -3,7 +3,40 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, driver post-iter-92 — BOTH task-7/9 arcs CLOSED; task 10 dispatching)
+## Live right now (updated: 2026-07-19, iter 93 — M4 task 10 DONE: FOH on device, first full device attempt green)
+
+- **Iter 93 (M4 task 10 — FOH on device) DONE** (full entry: AGENT-LOG
+  iter 93 pre-registration + result; latest AGENT-LOG id: iter 93).
+  COLD: **`DEVICE FOH OK (flows=5 shots=13 bridge=1 states=3 opk=1
+  p99=13.585ms skips=0 underruns=0 starves=0 starts f01=281 f02=16
+  f03=23 f04=39 f05=14 teeth=9)`** exit 0
+  (.loop/m4-task10-donecheck.log; attempt 1 died host-side at a pin
+  grep, zero device runs consumed). The M3 DEFER-BOUND binding is
+  HONORED: all 5 committed flows drove the device through fk_input →
+  uinput → SDL keysyms → platform_poll, judged vs the SAME frozen
+  traces (normalized frame-elision only); swap teeth T1-T3 prove the
+  kill chain. f01's FOH-launched match: STREAM MATCH 3600/3600 vs
+  frozen g01 ON DEVICE with render+SFX+music. 13/13 device shots
+  BYTE-EXACT vs host twin. SSS RANDOM measured seeded
+  (stageselect.js:80-84) → registered exclusion, slot
+  visible-but-refusing (f04 extended + re-frozen; judge re-pinned
+  same commit). OPK: FOH launcher (mlfk-foh.sh, unique evidence
+  title) mounted + entered the FOH, boot marker == stamp; play
+  install untouched; frontend-nav = task 14 per the iter-73 note.
+  REGRESSION: FOH FLOWS OK (flows=5 shots=13 bridges=3 states=4
+  diverge=1 control=1 teeth=16) cold
+  (.loop/m4-task10-fohflows-run2.log). Device left clean (lbc=1,
+  gmenu2x live, no markers, scratch wiped).
+  **Driver next: Tier-A arc over the iter-93 surfaces
+  (check-device-foh.sh, foh_dev.c, flow-to-fkscript.js,
+  normalize-foh-trace.js, mlfk-foh.sh, riglib delta, foh.c/foh_render
+  delta); registered-only surfaces: foh_dev --bridge live +
+  mlfk-foh.sh live mode (structural review only this iteration).**
+- **Remaining to gate**: 11-12 (target test), 13 (SD persist), 14
+  (verify_m4.sh) → M4 GATE → provision device → LOOP STOP:
+  m4-complete → Chase acceptance playthrough.
+
+## [superseded by iter 93] (2026-07-19, driver post-iter-92 — BOTH task-7/9 arcs CLOSED; task 10 dispatching)
 
 - **FOH ARC CLOSED (GO round 4, .loop/review-92-1.log)** after iters
   90/91/92 (7f42cc7, c37b47b, a7621d8 — all driver-cold-verified +
@@ -17,9 +50,6 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   selection wiring, OPK→FOH launcher, SSS RANDOM measurement ruling,
   riglib hygiene, paced-run caps. done-check:
   `bash port/foh/check-device-foh.sh` → DEVICE FOH OK.
-- **Remaining to gate**: 11-12 (target test), 13 (SD persist), 14
-  (verify_m4.sh) → M4 GATE → provision device → LOOP STOP:
-  m4-complete → Chase acceptance playthrough.
 
 ## [superseded by driver post-iter-92] (2026-07-19, iter 92 — M4 hardening DONE: FOH-arc round-3 residuals closed, cold check green first attempt)
 

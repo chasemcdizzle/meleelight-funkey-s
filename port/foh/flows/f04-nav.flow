@@ -1,14 +1,16 @@
 FLOW1
-# f04: navigation + refusal coverage (no launch). ALL NINE refused
+# f04: navigation + refusal coverage (no launch). ALL TEN refused
 # entries fire: spectate/p2p/server (menu-battle), targettest/
 # targetbuilder (menu-top), audio/credits (menu-options), controller/
-# keyboard (menu-controls). Every menu B-back edge fires (battle->top,
-# controls->options, options->top), plus the CSS hold-B-30 back edge
-# (css.js:186-191) and the U/D cursor wrap witnesses. Iter-90 (review-88
-# M1): the flow now also traverses css -> sss (START, css.js:446-451)
-# and sss -> css on B (stageselect.js:79 — the 15th pinned edge) before
-# the bhold back-edge, so every edge of the judge's pinned flow graph
-# is exercised by a frozen trace.
+# keyboard (menu-controls), random (sss — iter 93, the registered
+# seeded-draw exclusion: two DOWNs walk cursor 0 -> 3 -> 6, A refuses).
+# Every menu B-back edge fires (battle->top, controls->options,
+# options->top), plus the CSS hold-B-30 back edge (css.js:186-191) and
+# the U/D cursor wrap witnesses. Iter-90 (review-88 M1): the flow also
+# traverses css -> sss (START, css.js:446-451) and sss -> css on B
+# (stageselect.js:79 — the 15th pinned edge) before the bhold
+# back-edge, so every edge of the judge's pinned flow graph is
+# exercised by a frozen trace.
 I 1 -
 I 375 S
 I 376 -
@@ -79,8 +81,14 @@ I 540 A
 I 541 -
 I 545 S
 I 546 -
-I 550 B
+I 550 D
 I 551 -
-I 555 B
-I 585 -
-END 590
+I 555 D
+I 556 -
+I 560 A
+I 561 -
+I 565 B
+I 566 -
+I 570 B
+I 600 -
+END 605
