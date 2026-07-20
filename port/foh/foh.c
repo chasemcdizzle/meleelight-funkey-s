@@ -30,6 +30,8 @@ const char *foh_screen_token(FohScreen sc) {
     case FOH_SSS: return "sss";
     case FOH_OPT_GAMEPLAY: return "options-gameplay";
     case FOH_MATCH: return "match";
+    case FOH_TSS: return "target-select";
+    case FOH_TMATCH: return "target-match";
     default: gfx_fatal("foh: screen token for an invalid screen");
   }
 }
@@ -129,8 +131,16 @@ static void step_menu(FohState *s, const PlatformInput *in,
           snd_push(s, "menuForward"); // menu.js:70
           ev_trans(s, sc, FOH_MENU_BATTLE, "a");
         } else if (s->menuSelected == 1) {
-          snd_push(s, "deny");
-          ev_refused(s, "targettest"); // task 12 owns gameMode 7
+          // TARGETTEST (menu.js:77-84): setTargetPlayer(0) is implicit
+          // (slot 0 is the only port); targetPointerPos reset == the
+          // rewritten cursor reset; the device app switches the music
+          // to the targettest track at the TLAUNCH seam (REGISTERED
+          // rewrite delta, AGENT-LOG iter 99 — an SD ring prefill
+          // inside the paced FOH loop risks the skips==0 gate;
+          // upstream switches here, menu.js:82-83).
+          s->tssCursor = 0;
+          snd_push(s, "menuForward"); // menu.js:70
+          ev_trans(s, sc, FOH_TSS, "a"); // changeGamemode(7), menu.js:84
         } else if (s->menuSelected == 2) {
           snd_push(s, "deny");
           ev_refused(s, "targetbuilder"); // conventions scope exclusion
@@ -340,6 +350,76 @@ static void step_sss(FohState *s, const PlatformInput *in,
   }
 }
 
+// target-select (upstream stages/targetselect.js tssControls; the
+// rewrite deltas + per-edge citations live in foh.h).
+static void step_tss(FohState *s, const PlatformInput *in,
+                     const PlatformInput *pv) {
+  const bool aE = in->a && !pv->a;
+  const bool sE = in->start && !pv->start;
+  const bool bE = in->b && !pv->b;
+  if (bE) {
+    // targetselect.js:76-81: menuBack + playMenuLoop + changeGamemode(1);
+    // menuSelected UNTOUCHED (module state — still TARGETTEST).
+    snd_push(s, "menuBack");
+    ev_trans(s, FOH_TSS, FOH_MENU_TOP, "b");
+    return;
+  }
+  // char select — the upstream SHOULDER arms VERBATIM (targetselect.js:
+  // 60-74: input.l = char-1 WRAP, input.r = char+1 WRAP; setCS writes
+  // characterSelections[0] == p1Char, the SAME array the CSS edits).
+  if (in->l && !pv->l) {
+    s->p1Char = s->p1Char == 0 ? 4 : s->p1Char - 1; // :62-66 wrap
+    snd_push(s, "menuSelect"); // :67
+    ev_sel(s, "p1char", s->p1Char);
+  } else if (in->r && !pv->r) {
+    s->p1Char = s->p1Char == 4 ? 0 : s->p1Char + 1; // :68-73 wrap
+    snd_push(s, "menuSelect"); // :74
+    ev_sel(s, "p1char", s->p1Char);
+  }
+  if (aE || sE) { // targetselect.js:131 accepts START or A
+    if (s->tssCursor == 10) {
+      // "+ Add Code" — builder/share-code plane, scope-excluded
+      // (registered; foh.h note): visible but REFUSING.
+      snd_push(s, "deny");
+      ev_refused(s, "addcode");
+      return;
+    }
+    // targetselect.js:131-146: menuForward + setActiveStageTarget +
+    // setTargetStagePlaying + startTargetGame(0, false); the driver
+    // owns the actual target sim boot (the LAUNCH seam).
+    snd_push(s, "menuForward"); // :132
+    s->tssStage = s->tssCursor;
+    s->targetMode = true;
+    s->launched = true;
+    ev_trans(s, FOH_TSS, FOH_TMATCH, "launch");
+    ev_launch(s);
+    return;
+  }
+  // grid cursor (rewrite delta, foh.h): authored slots 0..9 at
+  // col = cursor/5 (upstream floor(j/5)), row = cursor%5; the addcode
+  // slot (10) below — D from a bottom row enters it, U returns to the
+  // left column's bottom tile (the SSS RANDOM-slot pattern); CLAMP.
+  const bool uE = in->up && !pv->up;
+  const bool dE = in->down && !pv->down;
+  const bool lE = in->left && !pv->left;
+  const bool rE = in->right && !pv->right;
+  const int before = s->tssCursor;
+  if (s->tssCursor == 10) {
+    if (uE) s->tssCursor = 4;
+  } else {
+    if (lE && s->tssCursor >= 5) s->tssCursor -= 5;
+    if (rE && s->tssCursor < 5) s->tssCursor += 5;
+    if (uE && s->tssCursor % 5 > 0) s->tssCursor -= 1;
+    if (dE) {
+      if (s->tssCursor % 5 < 4) s->tssCursor += 1;
+      else s->tssCursor = 10;
+    }
+  }
+  if (s->tssCursor != before) {
+    snd_push(s, "menuSelect"); // targetselect.js:51 change class
+  }
+}
+
 static void step_opt_gameplay(FohState *s, const PlatformInput *in,
                               const PlatformInput *pv) {
   const bool aE = in->a && !pv->a;
@@ -425,7 +505,11 @@ void foh_tick(FohState *s, const PlatformInput *in) {
     case FOH_OPT_GAMEPLAY:
       step_opt_gameplay(s, in, &pv);
       break;
+    case FOH_TSS:
+      step_tss(s, in, &pv);
+      break;
     case FOH_MATCH:
+    case FOH_TMATCH:
       // terminal for the FOH machine; the driver owns the sim from here
       break;
     default: gfx_fatal("foh: tick on an invalid screen");

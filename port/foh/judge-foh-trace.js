@@ -18,8 +18,10 @@
 //   - S field/value domains pinned (chars 0-4, p2type 0/1, difficulty
 //     1-4 = the upstream slider domain, lcancel 0-2, tapjump/turbo 0/1,
 //     refused entries = the 9 registered tokens);
-//   - LAUNCH at most once, required/forbidden per argv, and IMMEDIATELY
-//     preceded by its `T <f> sss match launch` line at the same frame;
+//   - LAUNCH-or-TLAUNCH at most once TOTAL, required/forbidden per
+//     argv, and IMMEDIATELY preceded by its own launch T line at the
+//     same frame (`T <f> sss match launch` for LAUNCH, `T <f>
+//     target-select target-match launch` for TLAUNCH — iter 99);
 //   - END transitions= count == the number of T lines.
 //
 // Usage: node judge-foh-trace.js <trace.txt> <flow-id> <launch: 0|1>
@@ -60,14 +62,23 @@ const EDGES = new Set([
   "css>menu-battle>bhold",
   "sss>css>b",
   "sss>match>launch",
+  // iter 99 (M4 task 12) — the target-test screen (upstream citations
+  // in foh.h): menu.js:77-84 / targetselect.js:76-81 / :131-146.
+  "menu-top>target-select>a",
+  "target-select>menu-top>b",
+  "target-select>target-match>launch",
 ]);
 const REFUSED = new Set([
-  "targettest", "targetbuilder", "audio", "credits", "controller",
+  "targetbuilder", "audio", "credits", "controller",
   "keyboard", "spectate", "p2p", "server",
   // iter 93 (M4 task 10): the SSS RANDOM slot — visible but refusing
   // (registered exclusion; upstream's arm draws from the SEEDED stream,
   // stageselect.js:80-84 — measured, AGENT-LOG iter 93).
   "random",
+  // iter 99 (M4 task 12): `targettest` RETIRED (target-select is real);
+  // the target-select "+ Add Code" slot refuses (builder/share-code
+  // plane, scope-excluded — foh.h note).
+  "addcode",
 ]);
 
 const RE_T = /^T ([0-9]+) ([a-z-]+) ([a-z-]+) (timer|start|a|b|bhold|launch)$/;
@@ -77,6 +88,9 @@ const RE_S_REF = /^S ([0-9]+) refused ([a-z0-9]+)$/;
 const RE_SHOT = /^SHOT ([0-9]+) ([a-z0-9-]{1,32})$/;
 const RE_LAUNCH =
     /^LAUNCH ([0-9]+) p1=([0-4]) p2=([0-4]) p2type=([01]) difficulty=([1-4]) stage=([0-5]) turbo=([01]) lcancel=([012]) tapjump=([01]),([01]),([01]),([01]) versus=0$/;
+// iter 99 (M4 task 12): the target-mode launch record (foh.h TLAUNCH
+// note; char domain 0-4, tstage domain 0-9 == targetStageMapping).
+const RE_TLAUNCH = /^TLAUNCH ([0-9]+) char=([0-4]) tstage=([0-9])$/;
 const RE_END = /^END ([0-9]+) transitions=([0-9]+)$/;
 
 const raw = fs.readFileSync(path, "utf8");
@@ -94,6 +108,7 @@ let tCount = 0;
 let sawEnd = false;
 let launches = 0;
 let prevWasLaunchT = false;
+let prevLaunchScreen = "";
 let prevLaunchFrame = -1;
 const shotNames = new Set();
 
@@ -120,19 +135,35 @@ for (let k = 1; k < lines.length; k++) {
     lastScreen = m[3];
     tCount++;
     prevWasLaunchT = m[4] === "launch";
+    prevLaunchScreen = m[3];
     prevLaunchFrame = f;
     continue;
   }
   if ((m = RE_LAUNCH.exec(ln)) !== null) {
     const f = Number(m[1]);
-    if (!prevWasLaunchT || f !== prevLaunchFrame) {
+    if (!prevWasLaunchT || prevLaunchScreen !== "match" ||
+        f !== prevLaunchFrame) {
       die("LAUNCH at line " + (k + 1) +
           " is not immediately preceded by its 'T <f> sss match launch'");
     }
     if (f < lastFrame) die("LAUNCH frame regressed at line " + (k + 1));
     lastFrame = f;
     launches++;
-    if (launches > 1) die("multiple LAUNCH lines");
+    if (launches > 1) die("multiple LAUNCH/TLAUNCH lines");
+    prevWasLaunchT = false;
+    continue;
+  }
+  if ((m = RE_TLAUNCH.exec(ln)) !== null) {
+    const f = Number(m[1]);
+    if (!prevWasLaunchT || prevLaunchScreen !== "target-match" ||
+        f !== prevLaunchFrame) {
+      die("TLAUNCH at line " + (k + 1) + " is not immediately preceded " +
+          "by its 'T <f> target-select target-match launch'");
+    }
+    if (f < lastFrame) die("TLAUNCH frame regressed at line " + (k + 1));
+    lastFrame = f;
+    launches++;
+    if (launches > 1) die("multiple LAUNCH/TLAUNCH lines");
     prevWasLaunchT = false;
     continue;
   }

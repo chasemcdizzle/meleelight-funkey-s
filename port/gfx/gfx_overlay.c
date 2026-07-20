@@ -246,11 +246,13 @@ void gfx_overlay_reset(void) {
 static float dev_x(double cx) { return (float)(cx * GFX_K); }
 static float dev_y(double cy) { return (float)(cy * GFX_K + GFX_DY); }
 
-void gfx_render_overlay(Gfx *g, const GameState *st) {
+// renderOverlay's TIMER block (render.js:395-411; the `!versusMode ||
+// gameMode == 5` arm) — extracted iter 99 (M4 task 12) so the target
+// compositor can call renderOverlay(false) semantics; the VS overlay
+// below calls THIS function (same bytes, behavioral identity).
+void gfx_render_overlay_timer(Gfx *g, const GameState *st) {
   const RastCol black = { 0, 0, 0, 256 };
   const RastCol white = { 255, 255, 255, 256 };
-
-  // --- timer (versusMode == 0 in the harness domain -> branch draws) ------
   {
     const double mt = st->matchTimer;
     const int min = (int)floor(mt / 60);
@@ -282,6 +284,14 @@ void gfx_render_overlay(Gfx *g, const GameState *st) {
     gfx_glyph_text(g, GFX_FONT_T25, centis, dev_x(670) - w2 / 2, dev_y(70),
                    white, black, 0);
   }
+}
+
+void gfx_render_overlay(Gfx *g, const GameState *st) {
+  const RastCol black = { 0, 0, 0, 256 };
+  const RastCol white = { 255, 255, 255, 256 };
+
+  // --- timer (versusMode == 0 in the harness domain -> branch draws) ------
+  gfx_render_overlay_timer(g, st);
 
   // --- percents (textAlign "end"; ui.scale(0.8,1) is baked into the p53
   // atlas, so the effective pen x is (450+i*145)*1.25*0.8 = (450+i*145))

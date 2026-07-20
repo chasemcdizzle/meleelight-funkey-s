@@ -116,6 +116,7 @@
 #include <time.h>
 
 #include "../gfx/gfx.h"
+#include "../gfx/gfx_target.h" // M4 task 12: the target-mode compositor
 #include "../gfx/gfx_vfx.h"
 #include "../gfx/platform.h"
 #include "../gfx/platform_keymap.h"
@@ -777,10 +778,13 @@ typedef struct {
 } MusTrack;
 
 // token order: menu + the main.js:1341-1360 stage switch (oracle ids)
-static const char *kMusTok[7] = {"menu",      "battlefield", "ystory",
+// + targettest (music.js:102-113 playTargetTestLoop — M4 task 12; the
+// device app switches to it at the TLAUNCH seam, the REGISTERED
+// rewrite delta in foh.c/AGENT-LOG iter 99)
+static const char *kMusTok[8] = {"menu",      "battlefield", "ystory",
                                  "pstadium",  "dreamland",   "fdest",
-                                 "fountain"};
-static MusTrack g_mus_tracks[7];
+                                 "fountain",  "targettest"};
+static MusTrack g_mus_tracks[8];
 static bool g_have_music;
 
 static void mus_die(const char *path, int lineNo, const char *what) {
@@ -829,7 +833,7 @@ static void load_music_manifest(const char *path) {
       mus_die(path, lineNo, "line fails the exact 8-field track grammar");
     }
     int idx = -1;
-    for (int k = 0; k < 7; k++) {
+    for (int k = 0; k < 8; k++) {
       if (strcmp(tok, kMusTok[k]) == 0) { idx = k; break; }
     }
     if (idx < 0) mus_die(path, lineNo, "unknown track token");
@@ -1028,6 +1032,23 @@ static void shot_capture(const char *name, const uint16_t *fb, long tick) {
   tr_line("SHOT %ld %s", tick, name);
 }
 
+// --- target finish hook (M4 task 12) ----------------------------------------------
+// Recorder for tp_finish_hook (target_play.c): fires ONLY through the
+// REAL finishGame seam. NO committed flow can reach it (the AGENT-LOG
+// iter-99 refutation: every all-broken run is authored-unreachable);
+// the mechanical coverage lives in target_finish_probe. When it fires
+// (live/acceptance play), the driver renders the end banner and emits
+// the `foh_dev tfinish:` stderr line — the device check asserts this
+// line is ABSENT on its green legs (count 0).
+static int g_tfin_fired;
+static int g_tfin_complete;
+static long g_tfin_frame;
+static void tdev_finish_hook(GameState *g, bool complete) {
+  g_tfin_fired++;
+  g_tfin_complete = complete ? 1 : 0;
+  g_tfin_frame = (long)g->frame;
+}
+
 // --- main --------------------------------------------------------------------------
 
 int main(int argc, char **argv) {
@@ -1102,8 +1123,14 @@ int main(int argc, char **argv) {
   const bool brState = bridge && strcmp(bridge, "state") == 0;
   const bool brVerify = bridge && strcmp(bridge, "verify") == 0;
   const bool brLive = bridge && strcmp(bridge, "live") == 0;
+  // M4 task 12: the target twins (foh_app.c note) — tverify renders the
+  // target-mode compositor live and emits BOTH streams in the exact
+  // target_main.c stdout grammar for wrap-target.js.
+  const bool brTState = bridge && strcmp(bridge, "tstate") == 0;
+  const bool brTVerify = bridge && strcmp(bridge, "tverify") == 0;
   if (!flowPath || !flowOut || !inputMode || (!inFlow && !inPoll) ||
-      (bridge && !brState && !brVerify && !brLive) ||
+      (bridge && !brState && !brVerify && !brLive && !brTState &&
+       !brTVerify) ||
       // poll mode is wall-clock by definition and needs its tick budget
       (inPoll && (pace != 1 || fohMax <= 0)) ||
       (inFlow && (fohMax > 0 || readyPath)) ||
@@ -1111,17 +1138,18 @@ int main(int argc, char **argv) {
       (bridge && (!simdataPath || seed < 0 || !bstateOut)) ||
       (!bridge && (simdataPath || seed >= 0 || bstateOut)) ||
       // verify needs the golden trace + stream/timing sinks + render data
-      (brVerify && (!tracePath || frames <= 0 || !outPath || !timingPath ||
-                    !gfxdataPath || !vfxdataPath || !glyphsPath || !animDir)) ||
+      ((brVerify || brTVerify) &&
+       (!tracePath || frames <= 0 || !outPath || !timingPath ||
+        !gfxdataPath || !vfxdataPath || !glyphsPath || !animDir)) ||
       // live needs render data + bounded frames + mandatory recording
       (brLive && (!recordPath || !keysPath || frames <= 0 || !gfxdataPath ||
                   !vfxdataPath || !glyphsPath || !animDir || pace != 1 ||
                   cpuLive || !inPoll)) ||
-      (!brVerify && !brLive &&
+      (!brVerify && !brLive && !brTVerify &&
        (tracePath || frames > 0 || outPath || timingPath || gfxdataPath ||
         vfxdataPath || glyphsPath || animDir || legible)) ||
       (!brLive && (recordPath || keysPath || tapJumpOffP1)) ||
-      (brVerify && !tracePath) || (cpuLive && !brVerify) ||
+      (cpuLive && !brVerify) ||
       (pace != 0 && pace != 1) || budgetNs == 0 ||
       (audioSamplesGiven && !sndpackPath) ||
       audioSamples <= 0 || audioSamples > 65535 ||
@@ -1291,11 +1319,17 @@ int main(int argc, char **argv) {
         else tr_line("S %ld %s %d", t, ev->field, ev->val);
       } else {
         launched = true;
-        tr_line("LAUNCH %ld p1=%d p2=%d p2type=%d difficulty=%d stage=%d "
-                "turbo=%d lcancel=%d tapjump=%d,%d,%d,%d versus=0",
-                t, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
-                foh.stageSel, foh.turbo, foh.lCancelType, foh.tapJumpOff[0],
-                foh.tapJumpOff[1], foh.tapJumpOff[2], foh.tapJumpOff[3]);
+        if (foh.targetMode) {
+          // the target launch record (foh.h TLAUNCH note; iter 99)
+          tr_line("TLAUNCH %ld char=%d tstage=%d", t, foh.p1Char,
+                  foh.tssStage);
+        } else {
+          tr_line("LAUNCH %ld p1=%d p2=%d p2type=%d difficulty=%d stage=%d "
+                  "turbo=%d lcancel=%d tapjump=%d,%d,%d,%d versus=0",
+                  t, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
+                  foh.stageSel, foh.turbo, foh.lCancelType, foh.tapJumpOff[0],
+                  foh.tapJumpOff[1], foh.tapJumpOff[2], foh.tapJumpOff[3]);
+        }
       }
     }
     for (int k = 0; k < foh.nsnd; k++) foh_snd(foh.snd[k]);
@@ -1392,12 +1426,168 @@ int main(int argc, char **argv) {
                       "launched\n");
       return 4;
     }
+    // launch-kind cross-guards (fail closed; the --cpu-live class)
+    if ((brState || brVerify || brLive) && foh.targetMode) {
+      fprintf(stderr, "foh_dev: --bridge %s but the flow performed a "
+                      "TARGET launch (cross-guard)\n", bridge);
+      return 4;
+    }
+    if ((brTState || brTVerify) && !foh.targetMode) {
+      fprintf(stderr, "foh_dev: --bridge %s but the flow performed a VS "
+                      "launch (cross-guard)\n", bridge);
+      return 4;
+    }
     if (brVerify && cpuLive != (foh.p2Type == 1)) {
       fprintf(stderr, "foh_dev: --cpu-live must match the FOH P2 type "
                       "(cross-guard)\n");
       return 4;
     }
-    if (brVerify) load_trace(tracePath);
+    if (brVerify || brTVerify) load_trace(tracePath);
+
+    if (brTState || brTVerify) {
+      // --- the TARGET launch bridge (target_main.c boot parity;
+      // foh_app.c tstate/tverify twin with the LIVE render plane) ------
+      ml_active_rng = &G.rng;
+      ml_rng_seed(&G.rng, (uint32_t)seed);
+      for (int k = 0; k < ML_BOOT_DRAWS; k++) (void)ml_rng_next(&G.rng);
+      G.rngStateAtReset = G.rng.a;
+      if (brTVerify) {
+        gfx_data_load(&g_gfx.data, gfxdataPath);
+        gfx_load_anim(&g_gfx, animDir, foh.p1Char);
+        gfx_vfx_load(vfxdataPath);
+        gfx_glyphs_load(glyphsPath);
+        // peek startTargetGame's background draw from a COPY (the
+        // gfx_app.c class; tp_setup_target consumes the real draw)
+        MlRng peek = G.rng;
+        const int backgroundType = (int)js_round(ml_rng_next(&peek));
+        gfx_target_init(&g_gfx, foh.tssStage, backgroundType);
+        g_gfx.legibility = legible ? 1 : 0;
+        gfx_vfx_install(&g_gfx); // BEFORE setup (boot entrance/start vfx)
+      }
+      tp_finish_hook = tdev_finish_hook;
+      // THE BRIDGE POINT: char + tstage from the FOH state, never CLI.
+      tp_setup_target(&G, foh.p1Char, foh.tssStage);
+      G.rngStateAtFrame1 = G.rng.a;
+      // TBRIDGE-STATE witness (read back from GameState + the target
+      // module — foh_app.c's exact emission; frozen-cmp'd by the check)
+      {
+        FILE *bf = fopen(bstateOut, "w");
+        if (!bf) sim_fatal("cannot open --bstate-out for writing");
+        if (fprintf(bf,
+                    "TBRIDGE-STATE char=%d tstage=%d gamemode=%d "
+                    "targets=%d playing=%d starting=%d stocks=%d\n",
+                    (int)G.sim.characterSelections[0],
+                    (int)TP.targetStagePlaying, (int)G.sim.gameMode,
+                    TP.targetCount, G.inp.playing ? 1 : 0,
+                    G.starting ? 1 : 0, (int)G.sim.player[0].stocks) < 0) {
+          sim_fatal("--bstate-out write failed");
+        }
+        if (fclose(bf) != 0) sim_fatal("--bstate-out close/flush failed");
+      }
+      if (brTVerify) {
+        // MUSIC SWITCH at the launch seam: the targettest track
+        // (music.js:102-113; the REGISTERED delta — upstream switches
+        // at the menu.js:82 entry, the device app at TLAUNCH so the SD
+        // ring prefill never runs inside the paced FOH loop).
+        if (g_have_music) {
+          mus_reader_stop();
+          mus_track_program(7, 1); // kMusTok[7] = targettest
+          mus_reader_start();
+        }
+        typedef struct { uint64_t sim, render, present; uint8_t skipped; } TFrameNs;
+        TFrameNs *tim = malloc((size_t)frames * sizeof *tim);
+        if (!tim) sim_fatal("oom (timing buffer)");
+        const size_t streamCap = (size_t)frames * 160 + 160;
+        char *stream = malloc(streamCap);
+        if (!stream) sim_fatal("oom (stream buffer)");
+        size_t streamLen = 0;
+        char hex[65], thex[65];
+        PlatformInput pin;
+        const uint64_t tStart = now_ns();
+        for (long f = 0; f < frames; f++) {
+          platform_poll(&pin); // pump the backend (input unused: trace-fed)
+          const uint64_t deadline = tStart + (uint64_t)(f + 1) * budgetNs;
+          const long idx = f < g_trace_len - 1 ? f : g_trace_len - 1;
+          const TraceRow *row = &g_trace[idx];
+          if (row->present[1] || row->present[2] || row->present[3]) {
+            sim_fatal("target trace with a non-null slot 1-3 row");
+          }
+          G.frame = f + 1;
+          const uint64_t t0 = now_ns();
+          tp_game_tick_target(&G, row->present[0] ? &row->in[0] : 0);
+          sim_frame_hash(&G, hex);
+          tp_target_frame_hash(&G, thex);
+          const uint64_t t1 = now_ns();
+          const bool skip = pace == 1 && t1 > deadline;
+          uint64_t t2 = t1, t3 = t1;
+          if (!skip) {
+            gfx_target_frame(&g_gfx, &G, &TP);
+            t2 = now_ns();
+            if (platform_present(g_gfx.rz.fb) != 0) matchPresentFails++;
+            t3 = now_ns();
+          } else {
+            matchSkips++;
+          }
+          tim[f].sim = t1 - t0;
+          tim[f].render = t2 - t1;
+          tim[f].present = t3 - t2;
+          tim[f].skipped = skip ? 1 : 0;
+          const int w = snprintf(stream + streamLen, streamCap - streamLen,
+                                 "F %ld %s\nT %ld %s\n", f + 1, hex, f + 1,
+                                 thex);
+          if (w < 0 || (size_t)w >= streamCap - streamLen) {
+            sim_fatal("stream buffer overflow");
+          }
+          streamLen += (size_t)w;
+          if (pace == 1) sleep_until_ns(deadline);
+        }
+        const uint64_t tEnd = now_ns();
+        matchWallMs = (tEnd - tStart) / 1000000ull;
+        ranMatch = true;
+        const uint32_t total = draws_between(G.rngStateAtReset, G.rng.a);
+        const uint32_t outside =
+            draws_between(G.rngStateAtReset, G.rngStateAtFrame1);
+        {
+          const int w = snprintf(stream + streamLen, streamCap - streamLen,
+                                 "RNG %" PRIu32 " %" PRIu32 "\nTFIN %d %s\n"
+                                 "SIM OK\n",
+                                 total, outside, (int)TP.targetsDestroyed,
+                                 TP.endTargetGame ? "T" : "F");
+          if (w < 0 || (size_t)w >= streamCap - streamLen) {
+            sim_fatal("stream buffer overflow (trailer)");
+          }
+          streamLen += (size_t)w;
+        }
+        FILE *of = fopen(outPath, "w");
+        if (!of) sim_fatal("cannot open --out for writing");
+        if (fwrite(stream, 1, streamLen, of) != streamLen) {
+          sim_fatal("--out write failed");
+        }
+        if (fclose(of) != 0) sim_fatal("--out close/flush failed");
+        FILE *tf2 = fopen(timingPath, "w");
+        if (!tf2) sim_fatal("cannot open --timing for writing");
+        for (long f = 0; f < frames; f++) {
+          if (fprintf(tf2, "%" PRIu64 " %" PRIu64 " %" PRIu64 " %u\n",
+                      tim[f].sim, tim[f].render, tim[f].present,
+                      (unsigned)tim[f].skipped) < 0) {
+            sim_fatal("--timing write failed");
+          }
+        }
+        if (fclose(tf2) != 0) sim_fatal("--timing close/flush failed");
+        free(tim);
+        free(stream);
+        if (g_tfin_fired) {
+          // the finish seam fired mid-replay (live/acceptance surface;
+          // never on the committed legs — header note): show the
+          // COMPLETE!/FAILURE banner + declare it on stderr.
+          gfx_target_banner(&g_gfx, &G, &TP, g_tfin_complete);
+          if (platform_present(g_gfx.rz.fb) != 0) matchPresentFails++;
+          fprintf(stderr, "foh_dev tfinish: complete=%d frame=%ld\n",
+                  g_tfin_complete, g_tfin_frame);
+        }
+      }
+      goto bridge_done;
+    }
 
     // seed + boot draws ONLY at the launch seam (foh_app.c verbatim)
     ml_active_rng = &G.rng;
@@ -1593,6 +1783,7 @@ int main(int argc, char **argv) {
       free(rawKeys);
       ml_sb_free(&rec);
     }
+  bridge_done:;
   }
 
   // audio teardown BEFORE platform_quit (gfx_app.c ordering)

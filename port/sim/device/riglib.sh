@@ -28,6 +28,7 @@ port/gfx/check-device-audio.sh port/gfx/check-device-opk.sh \
 port/gfx/check-device-music.sh \
 port/sim/device/check-skip-attrib.sh \
 port/foh/check-device-foh.sh \
+port/sim/target/check-device-target.sh \
 port/sim/device/verify_m3.sh"
 
 # The armv7 binaries the shared build produces (one docker run).
@@ -879,6 +880,24 @@ rig_arm_build() {
   want="$(rig_srchash)"
   local f
   if [ "${MLFK_FORCE_ARM:-0}" != 0 ] || ! rig_stamp_ok; then
+    # M4 task 12: the foh_device recipe consumes $TABLES/ml_targets.c
+    # (TTAB1). Callers historically generate animations/tables/stages
+    # only — the recipe's own input is produced HERE (class fix, iter
+    # 99): idempotent extractor build + the targets stage into the
+    # SHARED sim-tables dir, made-checked before docker ever runs.
+    bash pipeline/extractor/build-extractor.sh >/dev/null || {
+      echo "DEVICE FAIL: rig_arm_build: extractor build failed (targets stage input)" >&2
+      exit 1
+    }
+    node pipeline/run.js --only targets --out pipeline/build/sim-tables >/dev/null || {
+      echo "DEVICE FAIL: rig_arm_build: pipeline targets stage failed" >&2
+      exit 1
+    }
+    if ! [ -s pipeline/build/sim-tables/ml_targets.c ] || \
+       ! [ -s pipeline/build/sim-tables/ml_targets.h ]; then
+      echo "DEVICE FAIL: rig_arm_build: ml_targets.{c,h} missing after the targets stage" >&2
+      exit 1
+    fi
     rm -f "$STAMP"
     # freshness (round 4 class): remove the prior binaries before the
     # docker build — a build that exits 0 without compiling must never
@@ -1011,8 +1030,9 @@ rig_arm_build() {
         "$DEVB/raster_arm.o" \
         port/foh/foh_dev.c port/foh/foh.c port/foh/foh_font.c \
         port/foh/foh_render.c \
+        port/sim/target/target_play.c \
         "$GFX/platform_sdl1.c" \
-        "$GFX/anim1.c" "$GFX/gfx_render.c" \
+        "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_target.c" \
         "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
         "$SIM/sim_boot.c" "$SIM/sim_tick.c" "$SIM/sim_ser.c" \
         "$SIM/sim_data.c" "$SIM/sim_ai_live.c" \
@@ -1041,7 +1061,7 @@ rig_arm_build() {
         port/sim/characters/puff/puff_multi_jump_drift.c \
         port/sim/characters/puff/puff_next_jump.c \
         port/sim/characters/puff/moves/*.c \
-        "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" \
+        "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" "$TABLES/ml_targets.c" \
         oracle/qjs/sha256.c port/fdlibm/fdlibm.c \
         $($SDLCFG --libs) -lm -lpthread
     '

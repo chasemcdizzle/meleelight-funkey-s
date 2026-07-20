@@ -52,6 +52,9 @@ typedef struct {
   double targetsDestroyed;
   // main.js let endTargetGame (setEndTargetGame; read main.js:988)
   bool endTargetGame;
+  // main.js let gameEnd (:68; set true by finishGame :1422, reset ONLY
+  // by endGame :1373 — startTargetGame does NOT reset it, measured)
+  bool gameEnd;
   // activeStage.target for the ACTIVE target stage (TTAB1-decoded)
   Vec2D target[ML_MAX_TARGETS];
   int targetCount;
@@ -84,11 +87,30 @@ void tp_target_hit_detection(GameState *g, double p);
 // (+0.016667, capped < 6000; the jQuery HUD writes are render plane).
 void tp_target_timer_tick(GameState *g);
 
+// The target-mode finishGame (main.js:1420-1476, gameMode-5 arm) —
+// REAL since iter 99 (M4 task 12; the trap's domain gained coverage):
+// setEndTargetGame(false) (:1421), gameEnd = true (:1422), playing =
+// false (:1423). The banner/gradient plane (:1425-1460) is render;
+// medals/records/cookies are the task-13 persistence surface
+// (REGISTERED deferral); the finish sounds (newRecord/complete/
+// failure — sounds.js menu-plane Howls, zero seeded draws, measured)
+// belong to the FOH driver. All of those are reached via
+// tp_finish_hook (NULL default — sim-only replays perform exactly the
+// sim-observable finish; the FOH apps install it at boot). `complete`
+// = the :1431 STRICT equality activeStage.target.length ==
+// targetsDestroyed (the double-destroy quirk can overshoot the count
+// — then the upstream Failure arm is what runs, carried verbatim).
+extern void (*tp_finish_hook)(GameState *g, bool complete);
+void tp_finish_game(GameState *g);
+
 // main.js:987-1044 gameTick's gameMode == 5 arm under the harness step
-// semantics (the sim_game_tick twin): endTargetGame -> finishGame is a
-// LOUD TRAP (FOH plane + outside the golden quality domain), START-quit
-// endGame likewise. traceRow0 = the injected pollInputs result for slot
-// 0 (the only active slot).
+// semantics (the sim_game_tick twin): endTargetGame -> finishGame is
+// REAL (tp_finish_game above; iter 99); post-finish ticks mirror
+// :991/:1041-1044 exactly (playing false + gameEnd true -> the whole
+// body is skipped; playing false WITHOUT gameEnd stays a loud trap).
+// START-quit endGame stays TRAPPED (registered: no coverage —
+// acceptance/task-14 surface). traceRow0 = the injected pollInputs
+// result for slot 0 (the only active slot).
 void tp_game_tick_target(GameState *g, const MlInput *traceRow0);
 
 // The target-plane frame envelope (fix_plan §M4 iter-63 separate-stream

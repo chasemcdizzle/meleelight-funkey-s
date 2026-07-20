@@ -78,6 +78,9 @@ const RE_T = new RegExp("^T " + NUM + " ([a-z-]+ [a-z-]+ (?:timer|start|a|b|bhol
 const RE_S = new RegExp("^S " + NUM + " ((?:p1char|p2char|p2type|difficulty|turbo|lcancel|tapjump[1-4]) [0-9]|refused [a-z0-9]+)$");
 const RE_SHOT = new RegExp("^SHOT " + NUM + " ([a-z0-9-]{1,32})$");
 const RE_LAUNCH = new RegExp("^LAUNCH " + NUM + " (p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] tapjump=[01],[01],[01],[01] versus=0)$");
+// iter 99 (M4 task 12): the target-mode launch record — same
+// END==launch-tick semantics as LAUNCH in bounded mode.
+const RE_TLAUNCH = new RegExp("^TLAUNCH " + NUM + " (char=[0-4] tstage=[0-9])$");
 const RE_END = new RegExp("^END " + NUM + " (transitions=" + NUM + ")$");
 
 // strict parse -> {hdr, lines:[{kind, tick, rest}]}
@@ -107,6 +110,10 @@ function parseTrace(path) {
     }
     if ((m = RE_LAUNCH.exec(ln)) !== null) {
       out.lines.push({ kind: "LAUNCH", tick: Number(m[1]), rest: m[2] });
+      continue;
+    }
+    if ((m = RE_TLAUNCH.exec(ln)) !== null) {
+      out.lines.push({ kind: "TLAUNCH", tick: Number(m[1]), rest: m[2] });
       continue;
     }
     if ((m = RE_END.exec(ln)) !== null) {
@@ -195,7 +202,7 @@ if (process.argv[2] === "--bounded") {
       die("structural mismatch at event " + (i + 1) + ": '" + e.kind + " " +
           e.rest + "' vs '" + d.kind + " " + d.rest + "'");
     }
-    if (d.kind === "LAUNCH") launchTick = d.tick;
+    if (d.kind === "LAUNCH" || d.kind === "TLAUNCH") launchTick = d.tick;
     if (e.kind === "END") {
       if (launchTick !== null) {
         if (d.tick !== launchTick) {

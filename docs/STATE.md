@@ -3,7 +3,39 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-20, driver post-iter-98 — DEVICE-FOH ARC CLOSED (GO r3, capped); iters 97+98 pushed; target-arc round 3 + task 12 in flight)
+## Live right now (updated: 2026-07-20, iter 99 — M4 task 12 DONE: target test FOH + device, DEVICE TARGET CONFORMS cold)
+
+- **Iter 99 (M4 task 12 — target test FOH + device) DONE** (full
+  entry: AGENT-LOG iter 99 pre-registration + result; latest
+  AGENT-LOG id: iter 99). COLD: **`DEVICE TARGET CONFORMS (goldens=2
+  flows=2 shots=4 fbwit=4 p99=13.650ms skips=0 underruns=0 starves=0
+  starts f06-target-t01=15 f07-target-t02=31 teeth=6)`** exit 0
+  (.loop/m4-task12-devtarget-run4.log). Regressions cold on final
+  bytes: FOH FLOWS OK (flows=7 tbridges=2 teeth=18), TARGET SIM
+  CONFORMS (probes=2 teeth=24), SIM CONFORMS 8/8 (REQUIRED — shared
+  sim TUs: ML_MAX_LABELLED_SURFACES 96 capacity fix, targetstage9
+  concatenates 95), RENDER OK. Device verified clean post-run.
+- **t03 REFUTED (R1, stronger form)**: targetstage9's single target
+  is TOPOLOGICALLY UNREACHABLE in the authored geometry (sealed
+  region; the 14.18 s devRecord is stale data — do NOT re-litigate).
+  finishGame is REAL (tp_finish_game + tp_finish_hook seam) with
+  MECHANICAL coverage via the NEW target_finish_probe (Complete +
+  Failure arms + the DOUBLE-DESTROY QUIRK now live — both brief gaps
+  closed); the `foh_dev tfinish:` line is asserted ABSENT on all
+  committed legs; end banner + live finish = acceptance surface
+  (registered).
+- **Registered residuals for tasks 13/14**: records/medals/cookies +
+  records READ (task 13); check-device-foh.sh got paired pin updates
+  (judge sha, FLOW_INVENTORY 7 vs 5 driven legs) WITHOUT a cold
+  device rerun — task 14's gate + driver ritual own it; START-quit
+  endGame still trapped; match-phase presents still unwitnessed;
+  Tier A arcs for the iter-99 surfaces (check-device-target.sh NEW,
+  check-foh-flows.sh, judge/normalize extensions) = driver-run,
+  post-commit.
+- **Next: task 13 (SD persist), task 14 (verify_m4.sh) → M4 GATE →
+  provision device → LOOP STOP: m4-complete.**
+
+## [superseded by iter 99] (2026-07-20, driver post-iter-98 — DEVICE-FOH ARC CLOSED (GO r3, capped); iters 97+98 pushed; target-arc round 3 + task 12 in flight)
 
 - **DEVICE-FOH ARC CLOSED (GO round 3, .loop/review-97-1.log)** after
   iters 95/97 (cd99733, 2ee7577 — both driver-cold-verified + pushed).

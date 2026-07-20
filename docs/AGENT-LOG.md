@@ -16677,3 +16677,452 @@ typed. Music-surface arc round 2 reviews this commit's bytes.
   mode — retry once, then grok fallback).
 - **In flight: target-arc ROUND 3 (closure-or-cap) over a3fc74d;
   task-12 writer (target test FOH + device) dispatching.**
+
+## iter 99 — 2026-07-20 — M4 task 12 PRE-REGISTRATION: target test, FOH + device (frozen before any run/edit; PROCESS §2)
+
+**Task**: fix_plan §M4 task 12 — target-test select flow + timer/records
+HUD in the FOH; both target goldens replayed ON DEVICE with render +
+audio live, streams host-judged by BOTH verifiers (UNCHANGED
+oracle/harness/verify-stream.js for the player plane +
+port/goldens-m4/verify-target-stream.js for the target plane), p99 <
+16.67 ms. done-check: `bash port/sim/target/check-device-target.sh` →
+`DEVICE TARGET CONFORMS`, exit 0 (NEW script, house device-check
+conventions). Device 12c00003237f5528; branch agent/auto @ 9f43105.
+
+### Method (frozen)
+
+1. **Sim finish seam** (port/sim/target/target_play.{h,c}): the
+   tp_game_tick_target finishGame TRAP becomes the FAITHFUL
+   main.js:1420-1476 target-mode finish: setEndTargetGame(false)
+   (:1421), gameEnd=true, playing=false; the medal/records/cookie
+   writes are task-13 persistence surface (REGISTERED deferral); the
+   Complete!/Failure banner + finish sounds
+   (newRecord/complete/failure — sounds.js menu-plane Howls, NO seeded
+   draw, measured) are FOH/driver plane, reached through a NEW
+   `tp_finish_hook` pointer seam (NULL default; constructor-free —
+   assigned by the FOH drivers only; the sim-only replay performs the
+   sim-observable finish without it). Post-finish ticks mirror
+   main.js:991/1041-1044 exactly: endTargetGame false + playing false +
+   gameEnd true → the whole tick body is skipped (input = fresh nulls,
+   prevBuf chain kept); playing false WITHOUT gameEnd stays a loud
+   trap. START-quit endGame stays TRAPPED (registered: acceptance/task
+   14 surface). t01/t02 never reach any changed arm (endTargetGame
+   false + playing true throughout — frozen streams must stay
+   bit-exact; cold check-target-sim.sh is the regression).
+2. **t03 ADOPTION DECISION PATH** (the brief's coverage option,
+   measured-first): targetstage9 (tstage index 8) authors exactly ONE
+   target at (141.6, -4) (executed walk, decoded this session);
+   startingPoint (-170, -101.5); ground[18] spans x 31..123.2 at
+   y=-7.5, so a fox GROUND laser from it flies at y=-0.5 —
+   |dy|=3.5 < 8.172 (laser hb 1.172 + target radius 7): GEOMETRICALLY
+   FEASIBLE on the t01 precedent. Plan: craft gen-t03-trace.js
+   (deterministic, no RNG) navigating fox spawn→g3 floor→g8/g7
+   ledger→g18→laser right; tune host-side on the bit-exact C sim
+   (sim_host_target --pos-dump; host design iterations UNCAPPED —
+   they are not runs in the cap sense; ≤ 20 design rounds before the
+   refutation fires). The golden EXTENDS ~≥60 frames past the
+   endTargetGame frame so finishGame runs IN-TRACE and the FINAL
+   endTargetGame is false (finishGame resets it) —
+   verify-target-stream.js's frozen-quality rule (finalEndTargetGame
+   == false) passes UNCHANGED. Machinery extensions (designed
+   channel): manifest-target.json rows gain a REQUIRED `completes`
+   boolean key (validate-target-manifest.js GOLDEN_KEYS + domain;
+   record-target.sh 9-line param parse; check-target-quality.js gains
+   the completion arm — completes=true requires playing===false at
+   final + targetsDestroyed >= minTargets + final endTargetGame false;
+   completes=false keeps the existing arms byte-for-byte). t01/t02
+   rows gain `completes: false` (manifest is NOT byte-frozen; frozen
+   stream files untouched). Record via record-target.sh (browser
+   ×2-identity, quality contract) — 2 browser runs.
+   **Refutation shape R1**: if the single target cannot be broken
+   within 20 host design rounds OR the final trace fails browser
+   ×2-identity twice → record the measurement, DROP t03, keep
+   finishGame's FOH edge structurally evidenced (frozen TENDW
+   transition witness from a check-owned synthetic replay of a
+   crafted non-golden trace on the C sim only), register the live
+   occurrence for acceptance. Do NOT retry blind past the cap.
+3. **FOH extension (DESIGNED channel — flow graph + judge sha re-pin
+   same commit; iter-93 f04/SSS precedent)**: foh.h graph 15→18 edges:
+   `menu-top>target-select>a` (menu.js:77-84: setTargetPlayer,
+   stopWhatisPlaying+playTargetTestLoop, changeGamemode(7));
+   `target-select>menu-top>b` (targetselect.js:76-81: menuBack +
+   playMenuLoop + changeGamemode(1); menuSelected stays TARGETTEST=1
+   — module state untouched upstream); `target-select>target-match>
+   launch` (targetselect.js:131-146: menuForward +
+   setActiveStageTarget + setTargetStagePlaying + startTargetGame).
+   The `targettest` REFUSED token retires (real screen now); NEW
+   refused token `addcode` (the tss "+ Add Code" slot — builder plane,
+   scope-excluded; customTargetStages is EMPTY in the fresh domain so
+   slots = 10 authored + Add Code, targetselect.js:47/:133-140).
+   REWRITE DELTAS (pre-registered): tss pointer drag → 2-col × 5-row
+   grid cursor over authored slots 0-9 (upstream layout classes
+   Math.floor(j/5)/j%5) + the addcode slot; char select on SHOULDER
+   L/R edges with WRAP (targetselect.js:60-74 — upstream's du/l and
+   dd/r arms; the d-pad drives the grid); A or START launches
+   (targetselect.js:131 accepts either). Char state IS
+   characterSelections[0] == foh.p1Char (setCS on the same array —
+   S events keep the `p1char` token, wrap not clamp on THIS screen,
+   cited). Launch record = NEW `TLAUNCH <f> char=<0-4> tstage=<0-9>`
+   trace line (judge + normalizer grammars extended; at most one
+   LAUNCH-or-TLAUNCH per trace, TLAUNCH immediately preceded by its
+   launch T line). Records HUD on target-select: "PERSONAL BEST
+   --:--:--" honestly sourced (targetRecords fresh-boot literal ≡ -1,
+   targetplay.js:40 → the "--:--:--" arm, targetselect.js:411-412);
+   records READ/persistence = task 13 REGISTERED deferral;
+   medalTimes/devRecords display DEFERRED (HARD RULE 5: those are
+   authored data values — displaying them requires a pipeline
+   extension, never hand-retyping; registered onward). In-match
+   timer HUD = renderOverlay(false) (render.js renderTick mode-5 arm:
+   clearScreen→drawBackground→drawStage→renderPlayer(0)→
+   renderArticles→renderVfx→renderOverlay(false); overlay timer arm
+   `!versusMode || gameMode == 5` — the EXISTING gfx_overlay timer
+   block, extracted as a showStock=false entry point). Target-end
+   screen (finish): Complete! banner + final time (finishGame
+   :1430-1460 arms; the newRecord sound arm is deterministic in the
+   fresh-records domain — records==-1 → always new record — cited).
+4. **Render plane**: NEW port/gfx/gfx_target.c — target-stage arm:
+   camera from TTAB1 scale/offset; stage draw per stagerender.js
+   (drawStageInit surface strokes + ledge ticks over the TTAB1 lists;
+   per-frame boxFill fillRect per box, stagerender.js:285-289; NO
+   polygon/damage arms — pinned absent on authored target data, iter
+   94); targets = 5 concentric fill circles r (25-j*5)*(scale/4.5)
+   alternating red/white for undestroyed targets
+   (stagerender.js:365-390, holiday 0). gfx_render.c/gfx_overlay.c
+   changes are VISIBILITY/extraction only (extern pass wrappers +
+   the overlay timer extraction) — cold check-render.sh (`RENDER OK`)
+   is the regression. Background pass: target arm reuses the
+   gfx_bg boxFill plane; any stab-dependent bg piece gets a
+   target-safe branch (registered if simplified).
+5. **Apps**: foh_app.c + foh_dev.c gain `--bridge tstate|tverify`
+   (target twins of state/verify): boot+data+seed+465 draws at the
+   launch seam, then tp_setup_target(G, foh.p1Char, foh.tssStage) —
+   BRIDGE POINT: params from FOH state, never CLI; TBRIDGE-STATE
+   witness reads back GameState+TP (char/tstage/gameMode/targetCount/
+   startTimer domain); tverify replays the golden trace emitting the
+   EXACT target_main.c stdout grammar (F/T interleave + RNG + TFIN +
+   SIM OK) into --out for wrap-target.js. foh_dev tverify renders
+   gfx_target frames paced with --timing; finish hook (t03 leg) →
+   FOH_TEND transition recorded in a SEPARATE strict TENDW1 witness
+   file (the FOHTRACE1 END-is-last grammar is not disturbed; grammar:
+   header + `FINISH <frame> targetsDestroyed=<n> timer=<hex16bits>` +
+   `END`) + a post-match `target-end` shot (byte-exact vs host twin,
+   fb-witnessed). MUSIC (measured): target mode carries the
+   `targettest` track (music.js:102-113; playTargetTestLoop at the
+   menu.js:82 entry; sprite windows targettestStart/Loop from
+   sounds.json; NO track change at startTargetGame or finishGame —
+   measured absent). REGISTERED REWRITE DELTA: the device app starts
+   the targettest track at the TLAUNCH seam (between the FOH and
+   match loops — the f01 stage-track precedent) instead of mid-FOH at
+   the menu-top→target-select transition: an SD ring prefill inside
+   the paced FOH loop risks the skips==0 gate; upstream timing cited,
+   acceptance playthrough is the visual/audio authority.
+6. **Flows** (committed + frozen via the freeze channel; judge sha
+   re-pinned SAME commit in check-foh-flows.sh + check-device-foh.sh):
+   f06-target-t01 (menu path → tss → fox already char 0? char=2 via
+   shoulder-R steps → cursor to slot 0 → A; TLAUNCH char=2 tstage=0),
+   f07-target-t02 (char=4, slot 1), f08-target-t03 (char=2, slot 8;
+   only if t03 adopted). Each: .flow + .expect + .bstate.expect
+   (TBRIDGE-STATE) + shots (target-select screen states; ×2
+   byte-stable host). check-foh-flows.sh extends: inventory 5→7(8),
+   target legs judged (trace grammar + frozen cmp + shots + tstate
+   witness) AND the (c) bridge bar EXCEEDED: f06/f07 tverify full
+   streams == frozen t01/t02 via wrap-target → BOTH verifiers
+   (+f08→t03). check-device-foh.sh gets the PAIRED MECHANICAL pin
+   updates only (flow inventory split into inventory-pin vs
+   driven-legs arrays + judge sha) — NOT cold-rerun this iteration
+   (device cost; REGISTERED residual: task-14 gate + driver rerun
+   own it; its 5 driven legs are untouched).
+7. **Device check** (NEW port/sim/target/check-device-target.sh,
+   composed per check-device-foh.sh/check-device-conform.sh):
+   riglib hygiene chokepoints (lock, qd-normalize, deadman+park,
+   lbc quiesce bracket per paced leg — the skip class is CLOSED via
+   quiesce, iter 74), producer byte pins + twin pins (judge sha,
+   sndpack, menu.pcm, battlefield-class targettest.pcm NEW
+   measured-then-frozen sha), manifest-target via the SHARED
+   validator, per-golden committed-generator regen guard, host twin
+   legs (foh_dev_headless, pace 0) → references + twin streams judged
+   by BOTH verifiers, fk scripts ×2, shared arm build (riglib recipe
+   += target_play.c + gfx_target.c + ml_targets.c; rig_arm_build
+   gains a targets-stage tables guarantee — CLASS fix so every
+   caller's sim-tables carries ml_targets.c), push + sha provenance,
+   DEVICE legs f06/f07(+f08) through fk_input→uinput→SDL→
+   platform_poll (`--input poll` pinned): trace normalized+bounded vs
+   frozen, shots byte-exact + fb-witness, TBRIDGE-STATE cmp, BOTH
+   streams pulled + host-judged, p99 < 16.67 ms (judge-render-timing
+   ordered whitelist), skips==0, presentFails==0, underruns==0,
+   badlen==0, starts/stops==twin, music starves==0 + refills!=0,
+   TENDW + target-end shot (t03 leg). Teeth (COPIES only): T1
+   T-line nibble in a device sim-out copy → verify-target-stream
+   dies; T2 TFIN perturb → finals pin dies; T3 corrupted device-shot
+   copy → shot judge dies; T4 tbstate perturb → cmp dies; T5 A/B-swap
+   flow variant (host twin) → normalized cmp rc 1; T6 TENDW perturb →
+   witness grammar dies (t03 leg; else registered absent). Verdict:
+   `DEVICE TARGET CONFORMS (goldens=.. flows=.. shots=.. fbwit=..
+   p99=..ms skips=0 underruns=0 starves=0 teeth=..)`.
+
+### Run caps (frozen)
+
+- browser runs ≤ 6 (t03 record ×2 + one spare re-record round ×2 +
+  2 contingency);
+- paced device legs ≤ 5 (f06, f07, f08, + 2 retries — a retry ONLY
+  after measurement attributes the failure; the lbc skip class is
+  CLOSED, a skip-caused failure without a new attribution = STOP);
+- arm rebuilds ≤ 3 (recipe change forces 1; + 2 for source fixes);
+- cold host checks ≤ 4 each (check-foh-flows, check-target-sim,
+  check-render, done-check host phase).
+
+### Pass criteria
+
+`bash port/sim/target/check-device-target.sh` → `DEVICE TARGET
+CONFORMS (...)` exit 0 COLD with honest counters; regressions:
+check-foh-flows.sh cold `FOH FLOWS OK`, check-target-sim.sh cold
+`TARGET SIM CONFORMS`, check-render.sh cold `RENDER OK`,
+check-sim.sh = mechanical skip-proof (no consumed TU changes — the
+target TUs are outside its frozen list) else cold run.
+
+### Refutation shapes
+
+- **R1 (t03 infeasible)** — above; drop + structural evidence path.
+- **R2 (fb-witness on target screens)**: a fbwit mismatch on a
+  target-select/target-end shot = the presenter class resurfacing →
+  STOP, pull --fb-witness-raw evidence, report; no blind retry.
+- **R3 (p99 overrun / skips != 0)**: measure + attribute BEFORE any
+  retry (timing artifact + applog + skip frames); the lbc quiesce
+  class is CLOSED — a quiesced-leg skip is NEW evidence, never a
+  reroll; if attribution lands on gfx_target cost → optimize
+  bit-identically (batch prims precedent) or STOP and report.
+- **R4 (t01/t02 frozen-stream divergence after the finish-seam
+  edit)**: the seam changed checksummed behavior — REVERT the tick
+  restructure, re-derive (the frozen goldens are never re-frozen);
+  one bounded evidence round then STOP.
+- **R5 (browser t03 ×2 non-identity)**: counts as R1 evidence.
+
+### Zoom-out (pre-commitment)
+
+The finish seam is a CLASS instance: "terminal-arm traps become real
+seams when their domain gains coverage" — record whether other traps
+(START-quit endGame, REBIRTH on target stages) should follow (they
+should NOT this iteration: no coverage; keep trapped + registered).
+
+## iter 99 — 2026-07-20 — M4 task 12 RESULT: target test FOH + device — DEVICE TARGET CONFORMS
+
+**Done-check (cold, logged)**: `bash port/sim/target/check-device-target.sh`
+→ **`DEVICE TARGET CONFORMS (goldens=2 flows=2 shots=4 fbwit=4
+p99=13.650ms skips=0 underruns=0 starves=0 starts f06-target-t01=15
+f07-target-t02=31 teeth=6)`** exit 0
+(.loop/m4-task12-devtarget-run4.log). Per-leg p99: f06 12.499 ms,
+f07 13.650 ms — both < 16.67; skips 0/3600 ×2 (lbc quiesce bracket,
+the closed class); underruns/badlen/starves 0; voice starts/stops ==
+the twins'. Regressions, all COLD on final bytes:
+`FOH FLOWS OK (flows=7 shots=17 bridges=3 tbridges=2 states=4
+tstates=2 diverge=1 control=1 teeth=18)`
+(.loop/m4-task12-fohflows-dev2.log), `TARGET SIM CONFORMS (2 goldens:
+t01 t02; leaves=718 probes=2 teeth=24)`
+(.loop/m4-task12-targetsim-cold.log), `SIM CONFORMS` 8/8
+(.loop/m4-task12-checksim-cold.log — REQUIRED cold: shared sim TUs
+changed, below), `RENDER OK` (.loop/m4-task12-render-cold.log).
+Device left clean (verified post-run: no marker, gmenu2x live, lbc=1,
+scratch wiped).
+
+### t03 DECISION — REFUTED (R1 fired, stronger form than pre-registered)
+
+targetstage9's single target (141.6, -4) is **topologically
+unreachable** in the authored geometry — not a movement-tuning
+failure but a sealed-region defect of the upstream stage data:
+- the g7/g18/room/chamber system containing the target is bounded by
+  solid boxes on every side (measured from the executed TTAB1 walk +
+  probed on the bit-exact C sim over ~12 design iterations,
+  .loop-external scratch; key measurements: box4 wall x -144.7..-137
+  spans y -130..68.8 sealing the spawn column at floor level; the g14
+  pocket's exits are box19 (hop-over proven — dead-ends at g19/the
+  right shaft) and 0.2-0.5-unit slits; the g12 pillar (top -5, 106
+  units above the floor, ceiling'd at 15.3) is unjumpable and blocks
+  the only floor route to the p4-p8 shaft; rising into the hole
+  column STOPCEILs at ceiling7 (-57.8) — box7's own underside — and
+  its top is sealed by box14||box19 overlap at x 129.1..129.3);
+- fox's laser dies at walls (wallDetection over all five surface
+  lists — measured in-sim: a p2-ladder laser at the same height as
+  the target never breaks it, TFIN 0);
+- the authored devRecord for targetstage9 (14.18 s) is therefore
+  data, not evidence of reachability (upstream targetplay.js:41 —
+  aspirational/stale; do NOT re-litigate without new evidence).
+A 10-target completion golden on targetstage1 was considered and
+declined: outside the pre-registered budget (~15-40 further design
+rounds incl. a risky pit-recovery phase). **Fallback (as
+pre-registered)**: finishGame's coverage is MECHANICAL via the NEW
+standing `target_finish_probe` (below); the FOH end presentation is
+implemented + registered for the acceptance playthrough; the
+`foh_dev tfinish:` stderr line is asserted ABSENT on every committed
+leg (a firing on a committed leg = outside the measured domain =
+loud fail). gen-t03-trace.js was deleted with the refutation (its
+analysis lives here).
+
+### Shipped surfaces
+
+- **Finish seam REAL** (port/sim/target/target_play.{h,c}):
+  tp_finish_game = main.js:1420-1423 verbatim (endTargetGame reset /
+  gameEnd / playing false; the :1431 STRICT equality decides
+  Complete-vs-Failure — the double-destroy overshoot takes the
+  upstream Failure arm); `tp_finish_hook` pointer seam (NULL default;
+  records/medals/cookies = task-13 REGISTERED deferral; finish sounds
+  are menu-plane Howls, zero seeded draws — driver surface).
+  Post-finish ticks mirror :991/:1041-1044 (body skipped; playing
+  false without gameEnd stays a trap). t01/t02 replay BYTE-IDENTICAL
+  sim.out before/after the restructure (verified pre-freeze this
+  session + the cold check).
+- **NEW target_finish_probe.c** (the target_hq_probe class; in
+  check-target-sim.sh [4b] with a --drop bite tooth): scenario A =
+  the COMPLETE arm through FULL REAL ticks on tstage 8 (in-flight
+  laser -> the article arm destroys the single target ->
+  endTargetGame -> the REAL finish tick -> hook complete=true ->
+  post-finish frozen state + envelope T->F hash change); scenario B =
+  the DOUBLE-DESTROY QUIRK LIVE (hitbox arm + article arm destroy
+  target 0 in ONE tp_target_hit_detection call -> targetsDestroyed=2)
+  + the strict-== overshoot -> hook complete=false (Failure arm) +
+  gameEnd-persists-across-relaunch (startTargetGame never resets it —
+  measured). **Closes the brief's second honest-coverage gap: the
+  quirk now has live mechanical occurrences.**
+- **ML_MAX_LABELLED_SURFACES 96** (stage_types.h + zip_labels.h +
+  environmental_collision.c concat bounds): the concatenated
+  labelled-surface list capped at 64 while targetstage9 concatenates
+  95 (measured; SIGBUS via ASAN at first tstage-8 run) — the iter-94
+  ML_MAX_LEDGES capacity class; loud bounds at every concat site;
+  behavioral identity proven by cold SIM CONFORMS 8/8 + bit-exact
+  t01/t02.
+- **FOH target-select** (foh.h graph 15→18 edges, all cited;
+  foh.c step_tss; foh_render.c render_tss/render_tmatch; foh_font
+  gains '+'): menu-top>target-select>a (menu.js:77-84),
+  target-select>menu-top>b (targetselect.js:76-81; menuSelected
+  untouched), target-select>target-match>launch (:131-146, A or
+  START). REWRITE DELTAS (registered): pointer-drag -> 2x5 grid
+  cursor (upstream floor(j/5)/j%5 layout) + the refusing `addcode`
+  slot; char select = the upstream SHOULDER arms VERBATIM (L/R wrap,
+  :60-74) on the SHARED characterSelections[0]==p1Char. `targettest`
+  refusal RETIRED; `addcode` joins the registered refusal set (f04
+  reworked accordingly: its targettest-refusal segment became the
+  targetbuilder path — designed re-freeze, diff = exactly the two
+  refusal lines -> one). Records HUD: "PERSONAL BEST --:--:--" =
+  honest fresh-boot (targetRecords ≡ -1, targetplay.js:40 +
+  targetselect.js:411-412); records READ = task 13 REGISTERED;
+  medalTimes/devRecords display DEFERRED (HARD RULE 5 — authored
+  data needs a pipeline extension; registered onward). In-match
+  timer HUD = renderOverlay(false) == the extracted
+  gfx_render_overlay_timer (render.js:392-411 arm).
+- **TLAUNCH plumbing**: judge-foh-trace.js (3 edges, TLAUNCH grammar,
+  launch-T screen binding, one-launch-total; sha re-pinned SAME
+  commit in check-foh-flows.sh + check-device-foh.sh ×2 +
+  check-device-target.sh) + normalize-foh-trace.js (TLAUNCH parse/
+  elide/bounded END==launch-tick).
+- **Flows f06/f07** (+ .expect/.bstate.expect frozen via the freeze
+  channel, hand-reviewed): f06 = fox via 2 shoulder-R wraps, slot 0,
+  TLAUNCH char=2 tstage=0; f07 = back-edge + re-enter + ONE
+  shoulder-L wrap (marth->falcon), grid walk to addcode (refusal) +
+  back up to slot 1, TLAUNCH char=4 tstage=1. TBRIDGE-STATE witness
+  (read back from GameState+TP: char/tstage/gamemode=5/targets/
+  playing/starting/stocks).
+- **Target bridges** (foh_app.c + foh_dev.c `--bridge
+  tstate|tverify` + launch-kind cross-guards both directions):
+  boot parity with target_main.c (465 draws; tp_setup_target consumes
+  the ONE off-step draw); tverify emits the EXACT wrap-target
+  producer grammar (F/T interleave + RNG + TFIN + SIM OK). The
+  FOH-launched f06/f07 streams are BIT-IDENTICAL to the frozen
+  t01/t02 sim outputs (cmp-proven at build time; judged by BOTH
+  verifiers everywhere) — the conventions' (c) bar exceeded with
+  FULL streams on host AND device.
+- **gfx_target.{h,c}** (the mode-5 renderTick sequence over TTAB1:
+  background -> stage strokes/boxFill -> concentric-circle targets ->
+  the SAME player/article passes via new visibility wrappers
+  gfx_render_player_pass/articles_pass -> vfx -> timer overlay;
+  gfx_target_banner = the COMPLETE!/FAILURE end presentation).
+  REGISTERED render delta: target-stage ledge fg1 ticks omitted
+  (AI-only surface, cosmetic; acceptance authority). gfx_render.c/
+  gfx_overlay.c changes are visibility/extraction only — cold
+  RENDER OK is the proof.
+- **check-foh-flows.sh** extended (pins 5→9 incl. the target judges;
+  target-manifest params via the SHARED validator; TLAUNCH
+  cross-bind vs manifest rows; [4t] both-verifier whole-log-exact
+  bridges; T1 re-aimed at the real entry; NEW T17 tstage-variant +
+  T18 target-plane-nibble teeth; totals 7/17/3+2/4+2/18).
+- **NEW check-device-target.sh** (the check-device-foh composition
+  scoped to the target legs; RIG_SCRIPTS member): 13 producer pins +
+  twin pins (judge sha ×2 siblings, sndpack, menu.pcm) +
+  **targettest.pcm NEW measured-then-frozen pin**
+  (0c922c6f7111e6d9…) + its sounds.json sprite/volume pins (start
+  [0,1], loop [0,224459], vol 0.3 — music.js:102-113); manifest
+  validation + committed-generator regen guard; host twins (f06 ×2
+  stability) judged by BOTH verifiers; fk scripts ×2; shared arm
+  build (riglib recipe += target_play.c + gfx_target.c +
+  ml_targets.c; rig_arm_build now OWNS its TTAB1 input — generates
+  the targets stage into sim-tables pre-docker, the class fix);
+  device legs under the leg-identical lbc quiesce bracket with
+  deadman/park; trace grammar + normalized + bounded judgments;
+  byte-exact shots + FBWIT1 re-judge; TBRIDGE-STATE cmp; BOTH
+  streams host-judged; ordered-whitelist timing (p99 gate) + strict
+  summaries + tfinish-ABSENT assert; 6 teeth on COPIES.
+- **Music**: foh_dev kMusTok += targettest (8 tokens). REGISTERED
+  REWRITE DELTA: the device app starts the targettest track at the
+  TLAUNCH seam (between loops — the f01 stage-switch precedent)
+  instead of upstream's menu-entry switch (menu.js:82-83): an SD
+  ring prefill inside the paced FOH loop risks the skips==0 gate.
+  Cited in foh.c; acceptance playthrough is the audio authority.
+
+### Run ledger vs caps
+
+- browser runs: **0/6** (t03 refuted before any recording);
+- paced device legs: **3/5** (run-3 f06 died at the quiesce-bracket
+  assert — post-slack overshoot from a too-long fixed wait, a rig
+  shape not a device fault, fixed by the sleep-55+poll pattern;
+  run-4 f06+f07 green);
+- arm rebuilds: **2/3** (run-3 + run-4; each check-script edit
+  invalidates the stamp by design — RIG_SCRIPTS membership);
+- cold host checks: check-foh-flows 2 (dev + final), check-target-sim
+  1, check-sim 1, check-render 1 — ≤ 4 each; done-check attempts 4
+  (runs 1-2 died pre-device on rig shapes: sibling-pin count, FDC
+  var; run 3 above; run 4 GREEN).
+
+### Refutation shapes fired
+
+- **R1** (t03): FIRED in the stronger topological form (above).
+- R2 (fb-witness): did not fire (4/4 rows eq=1 across both legs).
+- R3 (p99/skips): did not fire (12.499/13.650 ms, 0 skips ×2). The
+  run-3 bracket failure was a CHECK-shape defect (measured 16 s
+  post-gap from the fixed 75 s wait), not a stall — no retry against
+  a device theory was needed.
+- R4 (frozen-stream divergence): did not fire (t01/t02 byte-identical
+  through the finish-seam restructure + capacity fix).
+
+### Registered deferrals / honest coverage
+
+- finishGame's records/medals/cookie writes + records READ on the
+  target-select screen -> **task 13** (persistence); medal/dev-time
+  display needs a pipeline extension (registered, unscheduled).
+- The finish seam has NO browser-parity golden (authored game cannot
+  reach all-broken — the refutation): coverage is the mechanical
+  probe + per-line citation; the END banner + tfinish path are
+  exercised at the **acceptance playthrough** (registered). The
+  `foh_dev tfinish:` absence assert keeps committed legs honest.
+- START-quit endGame stays TRAPPED (no coverage; task-14/acceptance).
+- check-device-foh.sh received PAIRED MECHANICAL pin updates only
+  (judge sha, inventory 5→7 split into FLOW_INVENTORY vs driven
+  FLOW_IDS) and was NOT cold-rerun this iteration (device cost; its
+  5 driven legs are untouched) — **task 14's gate + the driver's
+  ritual own the rerun** (registered residual).
+- fb-witness honest coverage unchanged (kernel fb page, FOH-phase
+  shots only; match-phase presents unwitnessed — the task-14 note).
+
+### Zoom-out
+
+The pre-committed class question resolved: terminal-arm traps become
+real seams ONLY when their domain gains coverage — the finish arm
+gained probe-level coverage and became real; START-quit/REBIRTH
+gained none and stay trapped (registered, not silently). NEW CLASS
+INSTRUMENTED rather than one-off'd: `rig_arm_build` now produces its
+OWN recipe inputs (the targets stage) instead of each caller
+remembering — the "recipe consumes what callers happen to generate"
+hole is closed at the single site. Capacity caps (the
+ML_MAX_LABELLED_SURFACES instance, 2nd of its class after
+ML_MAX_LEDGES): the lesson stands that per-type caps do NOT bound
+CONCATENATIONS — any future list-concat gets its own measured cap +
+loud bounds at the concat site. Candidate future instrument: a
+one-shot "authored-domain capacity sweep" that walks every authored
+data plane against every C cap (registered, not built — n=2).

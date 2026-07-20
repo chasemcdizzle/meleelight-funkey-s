@@ -1782,6 +1782,41 @@ overruns):
   < 16.67 ms.
   done-check: `bash port/sim/target/check-device-target.sh` → prints
   `DEVICE TARGET CONFORMS`, exit 0.
+  **DONE (iter 99, 2026-07-20) — committed form**: cold done-check
+  `DEVICE TARGET CONFORMS (goldens=2 flows=2 shots=4 fbwit=4
+  p99=13.650ms skips=0 underruns=0 starves=0 starts
+  f06-target-t01=15 f07-target-t02=31 teeth=6)` exit 0
+  (.loop/m4-task12-devtarget-run4.log; per-leg p99 12.499/13.650 ms).
+  FOH grew the REAL target-select screen (foh.h graph 15→18 cited
+  edges; `targettest` refusal RETIRED, `addcode` refusal NEW; grid
+  cursor + upstream shoulder-wrap char select on the shared
+  characterSelections[0]; TLAUNCH record + judge/normalizer grammar,
+  judge sha re-pinned same commit ×3 checks) + the timer HUD
+  (extracted gfx_render_overlay_timer == renderOverlay(false)) +
+  the honest records line ("PERSONAL BEST --:--:--" ≡ fresh-boot -1;
+  READ = task 13 registered; medal/dev-time display needs a pipeline
+  extension, registered). Flows f06/f07 (frozen .expect +
+  TBRIDGE-STATE) drive fk_input→uinput→SDL→platform_poll on device;
+  foh_app/foh_dev `--bridge tstate|tverify` replay the FOH-launched
+  frozen t01/t02 BIT-IDENTICALLY (the (c) bar exceeded, full streams,
+  host AND device, judged by the UNCHANGED verify-stream.js +
+  verify-target-stream.js); gfx_target.c renders the mode-5 sequence
+  over TTAB1 reusing the IoU-checked player/article passes; music =
+  targettest track (NEW pcm pin 0c922c6f…; switch at the TLAUNCH
+  seam — registered delta). finishGame is REAL (tp_finish_game +
+  tp_finish_hook; post-finish ticks faithful) — **t03 REFUTED**:
+  targetstage9's single target is topologically unreachable in the
+  authored geometry (measured; sealed region; stale devRecord), so
+  the finish arms + the DOUBLE-DESTROY quirk went mechanically live
+  via the NEW target_finish_probe (check-target-sim [4b], probes=2)
+  instead of a golden; `foh_dev tfinish:` asserted ABSENT on
+  committed legs. Capacity class fix: ML_MAX_LABELLED_SURFACES 96
+  (targetstage9 concatenates 95 labelled surfaces; SIM CONFORMS 8/8
+  cold proves identity). rig_arm_build now produces its own TTAB1
+  recipe input (class fix); check-device-target.sh joined
+  RIG_SCRIPTS. Registered onward: records persistence (13),
+  check-device-foh paired-pin rerun + START-quit endGame + live
+  finish exercise (14/acceptance).
 - task 13 — **persistence to SD**: settings + target-test
   records/medals at /mnt/mlfk-data through ONE read/write chokepoint
   (atomic write-rename; corrupt/missing file = loud reset-to-defaults,

@@ -57,13 +57,23 @@ typedef struct {
 
 #define ML_MAX_SURFACES 64
 
+// The CONCATENATED labelled list (runCollisionRoutine builds walls ++
+// grounds ++ ceilings ++ platforms into ONE list) needs more than one
+// per-type list's worth: the measured authored maximum is targetstage9's
+// 95 total (20+20+20+20 walls/grounds/ceilings + 15 platforms —
+// executed walk, AGENT-LOG iter 99; every VS stage is far smaller).
+// Capacity-only change (the iter-94 ML_MAX_LEDGES 8->16 precedent):
+// behavioral identity on the frozen goldens is proven by the bit-exact
+// replays; the concat sites carry loud bounds checks.
+#define ML_MAX_LABELLED_SURFACES 96
+
 typedef struct {
   Surface items[ML_MAX_SURFACES];
   int count;
 } SurfaceList;
 
 typedef struct {
-  LabelledSurface items[ML_MAX_SURFACES];
+  LabelledSurface items[ML_MAX_LABELLED_SURFACES];
   int count;
 } LabelledSurfaceList;
 

@@ -138,7 +138,7 @@ b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wr
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-453f49a250358d77ca9846909e5a20eba75ca9ed159ff5ce877bef802985a344 port/foh/judge-foh-trace.js
+26a87209a5cd52ea24ccb232964ed6caa3594c88bd784f3474d0db8e295ced76 port/foh/judge-foh-trace.js
 e034539d69e1f55338e87f89c8c6573410c40a5bcd8dbc91066751f60c9c9fd4 port/gfx/judge-render-timing.js
 2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e port/foh/keymap-frozen.txt"
 N_PINS_WANT=7
@@ -310,7 +310,7 @@ done <<< "$PRODUCER_PINS"
 # (the sibling's pin line sits inside its PRODUCER_PINS quoted block, so
 # it may carry the block's closing quote — match the exact sha+path pair
 # and require EXACTLY one occurrence)
-c="$(grep -cF "453f49a250358d77ca9846909e5a20eba75ca9ed159ff5ce877bef802985a344 port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
+c="$(grep -cF "26a87209a5cd52ea24ccb232964ed6caa3594c88bd784f3474d0db8e295ced76 port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
 [ "$c" = 1 ] || fail "twin pin — check-foh-flows.sh does not carry the same judge-foh-trace.js sha exactly once (count $c; paired change rule)"
 rig_pin_assert_once "$GFX/check-device-music.sh" SNDPACK_SHA256 "$SNDPACK_SHA256" || exit 1
 rig_pin_assert_once "$GFX/check-device-music.sh" MUSIC_BF_SHA256 "$MUSIC_BF_SHA256" || exit 1
@@ -366,7 +366,11 @@ g03seed="$(node -e '
 ')" || fail "cannot parse g03 seed"
 [[ "$g03seed" =~ ^(0|[1-9][0-9]{0,11})$ ]] || fail "g03 seed grammar ('$g03seed')"
 
-# flow inventory pin (both directions; the check-foh-flows class)
+# flow inventory pin (both directions; the check-foh-flows class).
+# iter 99 (M4 task 12): the committed inventory grew f06/f07 (the
+# target flows — DRIVEN by port/sim/target/check-device-target.sh, the
+# paired device check); THIS check's driven legs stay the five below.
+FLOW_INVENTORY=(f01-vs-g01 f02-cpu-m01 f03-options f04-nav f05-vs-g03                 f06-target-t01 f07-target-t02)
 FLOW_IDS=(f01-vs-g01 f02-cpu-m01 f03-options f04-nav f05-vs-g03)
 FLOW_BRIDGE=(verify state state none state) # DEVICE bridge mode per flow
 FLOW_SEED=("$seed" "$m01seed" "$seed" "" "$g03seed")
@@ -377,7 +381,7 @@ FLOW_SHOTS=("startup title menu-top menu-battle css sss" \
             "css-p2 sss-pstadium")
 FLOW_LAUNCH=(1 1 1 0 1)
 globbed="$(ls "$FLOWS"/*.flow | sed 's|.*/||; s|\.flow$||' | sort | tr '\n' ' ' | sed 's/ $//')"
-pinned="$(printf '%s\n' "${FLOW_IDS[@]}" | sort | tr '\n' ' ' | sed 's/ $//')"
+pinned="$(printf '%s\n' "${FLOW_INVENTORY[@]}" | sort | tr '\n' ' ' | sed 's/ $//')"
 [ "$globbed" = "$pinned" ] || fail "flow inventory pin — flows/*.flow {$globbed} != pinned {$pinned}"
 for k in 0 1 2 3 4; do
   id="${FLOW_IDS[$k]}"

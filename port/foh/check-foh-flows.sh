@@ -84,9 +84,12 @@
 #       edited.
 #   [6] hygiene: build outputs are git-ignored (rc case-split).
 #
-# Prints `FOH FLOWS OK (flows=5 shots=13 bridges=3 states=4 diverge=1
-# control=1 teeth=16)`, exit 0; ANY divergence, off-graph transition,
-# pin mismatch, count disagreement, or missing artifact -> nonzero.
+# Prints `FOH FLOWS OK (flows=7 shots=17 bridges=3 tbridges=2 states=4
+# tstates=2 diverge=1 control=1 teeth=18)`, exit 0; ANY divergence,
+# off-graph transition, pin mismatch, count disagreement, or missing
+# artifact -> nonzero. (iter 99, M4 task 12: flows 5->7 — the
+# target-select screen + f06/f07 target bridges judged by BOTH
+# verifiers; the [4t] leg; teeth 16->18.)
 #
 # HONEST EXPOSURE (PROCESS §8): the frozen traces prove the REWRITTEN
 # machine's flow graph and selection semantics against the
@@ -172,8 +175,12 @@ b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wr
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-453f49a250358d77ca9846909e5a20eba75ca9ed159ff5ce877bef802985a344 port/foh/judge-foh-trace.js"
-N_PINS_WANT=5
+26a87209a5cd52ea24ccb232964ed6caa3594c88bd784f3474d0db8e295ced76 port/foh/judge-foh-trace.js
+2cf5c5a532207372b70c4cee57412c7ac65643ac4f4066c745d9eb7fe4aa0e9b port/goldens-m4/wrap-target.js
+415335239fcc04df97eba07298a1fa521602d5ea45b087aa8d7d40bd740c122a port/goldens-m4/verify-target-stream.js
+6b1b6b5be3700c51dfae8c0c4cb1f012e5b61239394ae4146c2e5e19cc4fcc47 port/goldens-m4/validate-target-manifest.js
+624956898890e749170a4768af0f8ef86e05ce4dd75046d084701747c9d9121f port/goldens-m4/json-dup-key-scan.js"
+N_PINS_WANT=9
 n_pins=0
 while IFS= read -r pline; do
   [ -n "$pline" ] || continue
@@ -237,30 +244,53 @@ if [ "$inv" != "${M4_IDS[*]}|${M4_NAMES[*]}" ]; then
 fi
 
 # --- [0c] flow inventory pin + frozen artifacts ------------------------------
-FLOW_IDS=(f01-vs-g01 f02-cpu-m01 f03-options f04-nav f05-vs-g03)
+FLOW_IDS=(f01-vs-g01 f02-cpu-m01 f03-options f04-nav f05-vs-g03 \
+          f06-target-t01 f07-target-t02)
 # bridge mode per flow (positional): verify=stream-judged launch,
-# state=GameState witness only, none=no launch
-FLOW_BRIDGE=(verify verify state none verify)
+# state=GameState witness only, none=no launch, tverify=target-launch
+# with BOTH streams judged (iter 99, M4 task 12)
+FLOW_BRIDGE=(verify verify state none verify tverify tverify)
 # pinned shot inventory per flow (space-joined; both directions below)
 FLOW_SHOTS=("startup title menu-top menu-battle css sss" \
             "css-cpu sss-ystory" \
             "options-gameplay options-edited" \
             "menu-controls" \
-            "css-p2 sss-pstadium")
-[ "${#FLOW_IDS[@]}" = 5 ] || fail "flow inventory — pinned array length off"
-[ "${#FLOW_BRIDGE[@]}" = 5 ] || fail "flow bridge array length off"
-[ "${#FLOW_SHOTS[@]}" = 5 ] || fail "flow shots array length off"
+            "css-p2 sss-pstadium" \
+            "menu-targettest tss-t01" \
+            "tss-addcode tss-t02")
+[ "${#FLOW_IDS[@]}" = 7 ] || fail "flow inventory — pinned array length off"
+[ "${#FLOW_BRIDGE[@]}" = 7 ] || fail "flow bridge array length off"
+[ "${#FLOW_SHOTS[@]}" = 7 ] || fail "flow shots array length off"
 globbed="$(ls "$FLOWS"/*.flow | sed 's|.*/||; s|\.flow$||' | sort | tr '\n' ' ' | sed 's/ $//')"
 pinned="$(printf '%s\n' "${FLOW_IDS[@]}" | sort | tr '\n' ' ' | sed 's/ $//')"
 if [ "$globbed" != "$pinned" ]; then
   fail "flow inventory pin — flows/*.flow {$globbed} != pinned {$pinned} (both directions; a new or dropped flow is a reviewed pin update)"
 fi
-for k in 0 1 2 3 4; do
+for k in 0 1 2 3 4 5 6; do
   id="${FLOW_IDS[$k]}"
   made "$FLOWS/$id.flow" "$FLOWS/$id.expect"
   if [ "${FLOW_BRIDGE[$k]}" != "none" ]; then
     made "$FLOWS/$id.bstate.expect"
   fi
+done
+# target-manifest params (iter 99): the SHARED strict validator FIRST,
+# then t01/t02 rows for the tverify legs (single param source).
+node "$M4G/validate-target-manifest.js" >/dev/null 2>&1 \
+  || fail "manifest-target.json failed the shared strict validator"
+tline="$(node -e '
+  const v = require("./port/goldens-m4/validate-target-manifest");
+  const m = v.loadValidatedManifest();
+  for (const id of ["t01", "t02"]) {
+    const g = v.goldenByIdOrName(m, id);
+    console.log([g.name, g.trace, g.frames, g.seed, g.char, g.tstage,
+      g.minTargets].join(" "));
+  }
+')" || fail "cannot pull t01/t02 params from the target manifest"
+read -r T01_NAME T01_TRACE T01_FRAMES T01_SEED T01_CHAR T01_TSTAGE T01_MIN <<< "$(sed -n 1p <<< "$tline")"
+read -r T02_NAME T02_TRACE T02_FRAMES T02_SEED T02_CHAR T02_TSTAGE T02_MIN <<< "$(sed -n 2p <<< "$tline")"
+for tv in "$T01_FRAMES" "$T01_SEED" "$T01_CHAR" "$T01_TSTAGE" "$T01_MIN" \
+          "$T02_FRAMES" "$T02_SEED" "$T02_CHAR" "$T02_TSTAGE" "$T02_MIN"; do
+  [[ "$tv" =~ ^(0|[1-9][0-9]{0,11})$ ]] || fail "target manifest param grammar ('$tv')"
 done
 
 # --- [0d] bridge param CROSS-BIND: frozen LAUNCH lines == manifest params ----
@@ -308,15 +338,29 @@ read -r G03_SEED G03_P1 G03_P2 G03_STAGE G03_FRAMES G03_TRACE <<< "$g03line"
 [ "$G03_P2" != 0 ] || fail "cross-bind — g03 manifest p2 is 0; f05 exists to make p2Char != 0 load-bearing"
 [ "$(get_launch_field "$FLOWS/f05-vs-g03.expect" stage)" = "$G03_STAGE" ] || fail "cross-bind — f05 LAUNCH stage != g03 manifest stage"
 [ "$(get_launch_field "$FLOWS/f05-vs-g03.expect" p2type)" = 0 ] || fail "cross-bind — f05 LAUNCH p2type != 0 (g03 is human/human)"
-echo "[0] pins OK: producers 5, manifests 8+4, flows 5, LAUNCH cross-bind g01/m01/g03"
+# TLAUNCH cross-bind (iter 99): the frozen target-flow launch records
+# must equal the target-manifest rows (no independent literals).
+TLAUNCH_RE='^TLAUNCH [0-9]+ char=[0-4] tstage=[0-9]$'
+for exf in "$FLOWS/f06-target-t01.expect" "$FLOWS/f07-target-t02.expect"; do
+  c="$(count_e "$exf" "$TLAUNCH_RE")"
+  [ "$c" = 1 ] || grammar_die "frozen $exf: $c TLAUNCH lines match the anchored grammar, want exactly 1"
+done
+get_tlaunch_field() { # <file> <key>
+  grep -E "$TLAUNCH_RE" "$1" | tr ' ' '\n' | grep -E "^$2=" | cut -d= -f2
+}
+[ "$(get_tlaunch_field "$FLOWS/f06-target-t01.expect" char)" = "$T01_CHAR" ] || fail "cross-bind — f06 TLAUNCH char != t01 manifest char"
+[ "$(get_tlaunch_field "$FLOWS/f06-target-t01.expect" tstage)" = "$T01_TSTAGE" ] || fail "cross-bind — f06 TLAUNCH tstage != t01 manifest tstage"
+[ "$(get_tlaunch_field "$FLOWS/f07-target-t02.expect" char)" = "$T02_CHAR" ] || fail "cross-bind — f07 TLAUNCH char != t02 manifest char"
+[ "$(get_tlaunch_field "$FLOWS/f07-target-t02.expect" tstage)" = "$T02_TSTAGE" ] || fail "cross-bind — f07 TLAUNCH tstage != t02 manifest tstage"
+echo "[0] pins OK: producers 9, manifests 8+4+target, flows 7, LAUNCH cross-bind g01/m01/g03 + TLAUNCH t01/t02"
 
 # --- [1] fresh data planes ---------------------------------------------------
 echo "=== [1] data planes (fresh tables + simdata x2)"
 rm -rf "$TABLES"
 { bash pipeline/extractor/build-extractor.sh; } 2>&1 | relay_lines
-{ node pipeline/run.js --only animations,tables,stages --out "$TABLES"; } 2>&1 | relay_lines
+{ node pipeline/run.js --only animations,tables,stages,targets --out "$TABLES"; } 2>&1 | relay_lines
 made "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" "$TABLES/ml_tables.h" \
-     "$TABLES/ml_stages.h"
+     "$TABLES/ml_stages.h" "$TABLES/ml_targets.c" "$TABLES/ml_targets.h"
 rm -rf "$B"
 mkdir -p "$B"
 node "$CAL/dump-sim-data.js" --out "$B/simdata.txt" 2>&1 | relay_lines
@@ -363,17 +407,22 @@ cc -O2 "${CFLAGS_COMMON[@]}" -o "$B/foh_app" \
   port/sim/characters/puff/puff_multi_jump_drift.c \
   port/sim/characters/puff/puff_next_jump.c \
   port/sim/characters/puff/moves/*.c \
-  "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" \
+  port/sim/target/target_play.c \
+  "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" "$TABLES/ml_targets.c" \
   oracle/qjs/sha256.c port/fdlibm/fdlibm.c -lm
 made "$B/foh_app"
 echo "build OK: $B/foh_app (raster TU -O3, all else -O2; -ffp-contract=off everywhere)"
 
 # golden traces -> text (pinned trace-to-txt.js)
-rm -f "$B/g01.trace.txt" "$B/m01.trace.txt" "$B/g03.trace.txt"
+rm -f "$B/g01.trace.txt" "$B/m01.trace.txt" "$B/g03.trace.txt" \
+      "$B/t01.trace.txt" "$B/t02.trace.txt"
 node "$SIM/trace-to-txt.js" "oracle/goldens/$G01_TRACE" "$B/g01.trace.txt" 2>&1 | relay_lines
 node "$SIM/trace-to-txt.js" "$M4G/$M01_TRACE" "$B/m01.trace.txt" 2>&1 | relay_lines
 node "$SIM/trace-to-txt.js" "oracle/goldens/$G03_TRACE" "$B/g03.trace.txt" 2>&1 | relay_lines
-made "$B/g01.trace.txt" "$B/m01.trace.txt" "$B/g03.trace.txt"
+node "$SIM/trace-to-txt.js" "$M4G/$T01_TRACE" "$B/t01.trace.txt" 2>&1 | relay_lines
+node "$SIM/trace-to-txt.js" "$M4G/$T02_TRACE" "$B/t02.trace.txt" 2>&1 | relay_lines
+made "$B/g01.trace.txt" "$B/m01.trace.txt" "$B/g03.trace.txt" \
+     "$B/t01.trace.txt" "$B/t02.trace.txt"
 
 # PRODUCTION shot judge (review-88 M5/M6): structural validation of
 # BOTH files (exact P6 header bytes as write_shot_ppm emits them, exact
@@ -431,7 +480,8 @@ judge_shot_inventory() { # <ctx> <dir> <want-sorted>
 echo "=== [3] flow runs (x2 each) + frozen-trace + shot judgments"
 total_shots=0
 states=0
-for k in 0 1 2 3 4; do
+tstates=0
+for k in 0 1 2 3 4 5 6; do
   id="${FLOW_IDS[$k]}"
   mode="${FLOW_BRIDGE[$k]}"
   echo "== flow $id (bridge=$mode) run A"
@@ -452,6 +502,22 @@ for k in 0 1 2 3 4; do
         --bridge verify --simdata "$B/simdata.txt" --seed "$seed" \
         --trace "$tracef" --frames "$frames" --out "$B/$id/stream.txt" \
         --bstate-out "$B/$id/bstate.txt" ${extra[@]+"${extra[@]}"} \
+        2>&1 | relay_lines
+      made "$B/$id/stream.txt" "$B/$id/bstate.txt"
+      ;;
+    tverify)
+      # iter 99: the target-launch bridge — BOTH streams out in the
+      # target_main.c producer grammar (wrap-target judges in [4]).
+      case "$id" in
+        f06-target-t01) seed=$T01_SEED; tracef=$B/t01.trace.txt; frames=$T01_FRAMES ;;
+        f07-target-t02) seed=$T02_SEED; tracef=$B/t02.trace.txt; frames=$T02_FRAMES ;;
+        *) fail "flow $id: tverify bridge with no registered golden params" ;;
+      esac
+      "$B/foh_app" --flow "$FLOWS/$id.flow" --flow-out "$B/$id/trace-a.txt" \
+        --shots-dir "$B/$id/shots-a" \
+        --bridge tverify --simdata "$B/simdata.txt" --seed "$seed" \
+        --trace "$tracef" --frames "$frames" --out "$B/$id/stream.txt" \
+        --bstate-out "$B/$id/bstate.txt" \
         2>&1 | relay_lines
       made "$B/$id/stream.txt" "$B/$id/bstate.txt"
       ;;
@@ -479,7 +545,12 @@ for k in 0 1 2 3 4; do
   # frozen comparison + byte-stability (cmp rc case-split via set -e)
   cmp "$B/$id/trace-a.txt" "$FLOWS/$id.expect" || fail "flow $id: emitted trace differs from the frozen $FLOWS/$id.expect"
   cmp "$B/$id/trace-a.txt" "$B/$id/trace-b.txt" || fail "flow $id: runs A/B traces not byte-identical"
-  if [ "$mode" != "none" ]; then
+  if [ "$mode" = "tverify" ]; then
+    c="$(count_e "$B/$id/bstate.txt" '^TBRIDGE-STATE char=[0-4] tstage=[0-9] gamemode=5 targets=(0|[1-9][0-9]?) playing=1 starting=1 stocks=1$')"
+    [ "$c" = 1 ] || grammar_die "flow $id: TBRIDGE-STATE grammar count $c/1"
+    cmp "$B/$id/bstate.txt" "$FLOWS/$id.bstate.expect" || fail "flow $id: TBRIDGE-STATE differs from the frozen witness"
+    tstates=$((tstates + 1))
+  elif [ "$mode" != "none" ]; then
     c="$(count_e "$B/$id/bstate.txt" '^BRIDGE-STATE p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] tapjump=[01],[01],[01],[01] phantom=[0-9a-f]{16}$')"
     [ "$c" = 1 ] || grammar_die "flow $id: bstate grammar count $c/1"
     cmp "$B/$id/bstate.txt" "$FLOWS/$id.bstate.expect" || fail "flow $id: BRIDGE-STATE differs from the frozen witness"
@@ -501,8 +572,9 @@ for k in 0 1 2 3 4; do
   [ "$ndistinct" = "$nfiles" ] || fail "flow $id: shots not pairwise distinct ($ndistinct unique of $nfiles) — a stuck screen machine renders duplicates"
   echo "    -> flow $id OK (trace frozen-match, x2 stable, shots $nfiles)"
 done
-[ "$total_shots" = 13 ] || fail "shot total $total_shots != pinned 13"
+[ "$total_shots" = 17 ] || fail "shot total $total_shots != pinned 17"
 [ "$states" = 4 ] || fail "BRIDGE-STATE witness total $states != pinned 4"
+[ "$tstates" = 2 ] || fail "TBRIDGE-STATE witness total $tstates != pinned 2"
 
 # --- [4] match-launch bridges vs the frozen streams -----------------------------
 echo "=== [4] launch bridges: f01 -> g01, f02 -> m01, f05 -> g03 (UNCHANGED verify-stream.js)"
@@ -603,6 +675,63 @@ judge_bridge f02-cpu-m01 m01 "${M4_NAMES[0]}" "$M01_FRAMES" \
 judge_bridge f05-vs-g03 g03 "${ORACLE_NAMES[2]}" "$G03_FRAMES" \
   "oracle/goldens/${ORACLE_NAMES[2]}.sha256.json"
 [ "$bridges" = 3 ] || fail "bridge ledger — $bridges/3 full-stream bridges judged"
+
+# --- [4t] TARGET launch bridges (iter 99, M4 task 12): f06 -> t01,
+# f07 -> t02 — the conventions' (c) bar EXCEEDED: FULL both-stream
+# equality via wrap-target.js -> the UNCHANGED verify-stream.js (player
+# plane) + verify-target-stream.js (target plane), each verdict log
+# whole-log BYTE-EXACT against a verdict constructed from the frozen
+# files' own counts (the [4] discipline).
+tbridges=0
+judge_tbridge() { # <flowId> <goldenId> <goldenName> <frames>
+  local id="$1" gid="$2" name="$3" frames="$4"
+  test -f "$M4G/$name.sha256.json" || fail "tbridge $id: frozen player stream missing"
+  test -f "$M4G/$name.target.sha256.json" || fail "tbridge $id: frozen target stream missing"
+  rm -f "$B/$id.player.json" "$B/$id.target.json"
+  { node "$M4G/wrap-target.js" "$gid" "$B/$id/stream.txt" \
+      "$B/$id.player.json" "$B/$id.target.json"; } 2>&1 | relay_lines
+  made "$B/$id.player.json" "$B/$id.target.json"
+  validate_run_shape "$B/$id.player.json" "$frames" "tbridge $id"
+  local vlog="$B/$id.verify.log"
+  if ! verify_capture "$vlog" node oracle/harness/verify-stream.js \
+      "$B/$id.player.json" "$M4G/$name.sha256.json"; then
+    fail "verify-stream rc != 0 for tbridge $id (log: $vlog)"
+  fi
+  made "$vlog"
+  local rng
+  rng="$(node -e '
+    const j = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    console.log(String(j.rngCalls));
+  ' "$M4G/$name.sha256.json")" || fail "tbridge $id — cannot read rngCalls"
+  [[ "$rng" =~ ^[0-9]{1,6}$ ]] || fail "tbridge $id — frozen rngCalls grammar ('$rng')"
+  printf 'STREAM MATCH %s: %s/%s frames exact, rngCalls=%s, rngCallsOutsideStep=1, specVersion=1\n' \
+    "$name" "$frames" "$frames" "$rng" > "$B/$id.verdict-want.txt"
+  assert_stream_verdict "$vlog" "$B/$id.verdict-want.txt" "$id"
+  # the TARGET plane (the SEPARATE stream + its own frozen file)
+  local tvlog="$B/$id.tverify.log"
+  if ! verify_capture "$tvlog" node "$M4G/verify-target-stream.js" \
+      "$B/$id.target.json" "$M4G/$name.target.sha256.json"; then
+    fail "verify-target-stream rc != 0 for tbridge $id (log: $tvlog)"
+  fi
+  made "$tvlog"
+  local tfin tmin tetg
+  read -r tfin tmin tetg <<< "$(node -e '
+    const j = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    console.log([j.params.finalTargetsDestroyed, j.params.minTargets,
+      j.params.finalEndTargetGame].join(" "));
+  ' "$M4G/$name.target.sha256.json")" || fail "tbridge $id — frozen target metadata read failed"
+  [[ "$tfin" =~ ^(0|[1-9][0-9]?)$ ]] || fail "tbridge $id — finalTargetsDestroyed grammar ('$tfin')"
+  [[ "$tmin" =~ ^([1-9]|10)$ ]] || fail "tbridge $id — minTargets grammar ('$tmin')"
+  [ "$tetg" = false ] || fail "tbridge $id — frozen finalEndTargetGame is not false"
+  printf 'TARGET STREAM MATCH %s: %s/%s target frames exact, targetsDestroyed=%s (>= minTargets %s), endTargetGame=false, sibling seal OK, manifest bound, specVersion=1\n' \
+    "$name" "$frames" "$frames" "$tfin" "$tmin" > "$B/$id.tverdict-want.txt"
+  assert_stream_verdict "$tvlog" "$B/$id.tverdict-want.txt" "$id-target"
+  tbridges=$((tbridges + 1))
+  echo "    -> TARGET STREAM MATCH $name (FOH-launched, BOTH streams, $frames frames, whole-log byte-exact x2)"
+}
+judge_tbridge f06-target-t01 t01 "$T01_NAME" "$T01_FRAMES"
+judge_tbridge f07-target-t02 t02 "$T02_NAME" "$T02_FRAMES"
+[ "$tbridges" = 2 ] || fail "tbridge ledger — $tbridges/2 target bridges judged"
 
 # Variant generator (NO eval — the manifest-eval class stays dead):
 # fixed operations over flow bytes, anchors must match exactly or the
@@ -856,14 +985,14 @@ node -e '
   let i = 0;
   while (i < a.length && i < b.length && a[i] === b[i]) i++;
   if (a[i] !== "T 380 menu-top menu-battle a" ||
-      b[i] !== "S 380 refused targettest") {
+      b[i] !== "T 380 menu-top target-select a") {
     console.error("first divergent pair is not the injected-DOWN transition: " +
                   "frozen=" + JSON.stringify(a[i]) + " variant=" +
                   JSON.stringify(b[i]));
     process.exit(1);
   }
 ' "$FLOWS/f01-vs-g01.expect" "$B/t1.trace.txt" || fail "T1 — first-divergent-line witness failed"
-echo "    T1 OK: same header, first divergent pair = injected-DOWN transition (T 380 vs refused targettest)"
+echo "    T1 OK: same header, first divergent pair = injected-DOWN transition (T 380 menu-battle vs target-select — the iter-99 real entry)"
 teeth=$((teeth + 1))
 # T2 char variant: a third RIGHT on the P1 row -> p1=3 in LAUNCH
 mkdir -p "$B/t2"
@@ -1161,7 +1290,37 @@ c="$(count_x "$B/t16.out" "shot inventory")"
 [ "$c" = 1 ] || fail "T16 — inventory death message class missing"
 echo "    T16 OK: a planted dotfile dies in the production judge_shot_inventory"
 teeth=$((teeth + 1))
-[ "$teeth" = 16 ] || fail "teeth ledger — $teeth/16 fired"
+# T17 (iter 99): tstage variant — an injected grid DOWN in a COPY of
+# the f06 flow moves the cursor to slot 1: TLAUNCH must carry tstage=1
+# and the trace must diverge from the frozen f06 expectation.
+mkdir -p "$B/t17"
+mkvariant "$FLOWS/f06-target-t01.flow" "$B/t17/f06-target-t01.flow" insert-after \
+  "I 396 -" "I 397 D" "I 398 -"
+run_variant "$B/t17/f06-target-t01.flow" "$B/t17.trace.txt"
+rc=0; cmp -s "$B/t17.trace.txt" "$FLOWS/f06-target-t01.expect" || rc=$?
+[ "$rc" = 1 ] || fail "T17 — tstage-variant trace cmp rc $rc, want exactly 1"
+c="$(count_x "$B/t17.trace.txt" "tstage=1")"
+[ "$c" = 1 ] || fail "T17 — variant TLAUNCH does not carry tstage=1 (the grid cursor must be load-bearing)"
+echo "    T17 OK: injected grid DOWN lands tstage=1 in TLAUNCH and diverges the trace"
+teeth=$((teeth + 1))
+# T18 (iter 99): target-plane nibble — flip one target-frame hash in a
+# COPY of the f06 target run JSON -> verify-target-stream must diverge
+# (rc 2; the target plane is judged, not decorative).
+node -e '
+  const fs = require("fs");
+  const j = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const h = j.target.frames[1799].h;
+  j.target.frames[1799].h = (h[0] === "0" ? "1" : "0") + h.slice(1);
+  fs.writeFileSync(process.argv[2], JSON.stringify(j));
+' "$B/f06-target-t01.target.json" "$B/t18.target.json"
+made "$B/t18.target.json"
+rc=0
+node "$M4G/verify-target-stream.js" "$B/t18.target.json" \
+  "$M4G/$T01_NAME.target.sha256.json" > "$B/t18.log" 2>&1 || rc=$?
+[ "$rc" = 2 ] || fail "T18 — verify-target-stream rc $rc on a nibble-flipped target-plane copy (want the divergence class 2)"
+echo "    T18 OK: nibble-flipped target-plane run copy dies in verify-target-stream (rc 2)"
+teeth=$((teeth + 1))
+[ "$teeth" = 18 ] || fail "teeth ledger — $teeth/18 fired"
 
 # --- [6] hygiene ----------------------------------------------------------------
 rc=0
@@ -1174,4 +1333,4 @@ fi
 
 [ "$diverge" = 1 ] || fail "divergence-witness ledger — witness leg did not complete"
 [ "$control" = 1 ] || fail "control ledger — the lcancel=0 control leg did not complete"
-echo "FOH FLOWS OK (flows=5 shots=$total_shots bridges=$bridges states=$states diverge=$diverge control=$control teeth=$teeth)"
+echo "FOH FLOWS OK (flows=7 shots=$total_shots bridges=$bridges tbridges=$tbridges states=$states tstates=$tstates diverge=$diverge control=$control teeth=$teeth)"

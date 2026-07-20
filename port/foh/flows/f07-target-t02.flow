@@ -1,0 +1,50 @@
+FLOW1
+# f07: the TARGET-TEST path -> t02 params (falcon / tstage 1), plus the
+# back edge and the addcode refusal:
+#   - enter target-select, B back to menu-top (targetselect.js:76-81;
+#     menuSelected stays TARGETTEST), A re-enter (cursor reset);
+#   - ONE shoulder-L press wraps marth -> falcon (targetselect.js:62-66
+#     — the wrap witness);
+#   - grid DOWN x5 walks slot 0 -> 4 -> the addcode slot (10); A there
+#     is the registered refusal (builder plane, foh.h); U returns to
+#     slot 4, U x3 up to slot 1 (tstage 1);
+#   - A -> TLAUNCH char=4 tstage=1; the driver replays the frozen t02
+#     trace through the launch seam (both streams judged).
+I 1 -
+I 375 S
+I 376 -
+I 380 D
+I 381 -
+I 385 A
+I 386 -
+I 390 B
+I 391 -
+I 395 A
+I 396 -
+I 400 K
+I 401 -
+I 405 D
+I 406 -
+I 410 D
+I 411 -
+I 415 D
+I 416 -
+I 420 D
+I 421 -
+I 425 D
+I 426 -
+SHOT 430 tss-addcode
+I 435 A
+I 436 -
+I 440 U
+I 441 -
+I 445 U
+I 446 -
+I 450 U
+I 451 -
+I 455 U
+I 456 -
+SHOT 460 tss-t02
+I 465 A
+I 466 -
+END 470

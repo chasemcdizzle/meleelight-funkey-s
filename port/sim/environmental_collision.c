@@ -1473,12 +1473,16 @@ CollisionRoutineResult runCollisionRoutine(ECB ecb1, ECB ecbp, Vec2D position,
   }
 
   // allSurfacesMinusPlatforms = walls ++ grounds ++ ceilings
+  // (ML_MAX_LABELLED_SURFACES covers the measured authored max — the
+  // stage_types.h note, iter 99; overflow is a loud death, never UB)
   LabelledSurfaceList allSurfacesMinusPlatforms = stageWalls;
   for (int i = 0; i < stageGrounds.count; i++) {
+    assert(allSurfacesMinusPlatforms.count < ML_MAX_LABELLED_SURFACES);
     allSurfacesMinusPlatforms.items[allSurfacesMinusPlatforms.count++] =
         stageGrounds.items[i];
   }
   for (int i = 0; i < stageCeilings.count; i++) {
+    assert(allSurfacesMinusPlatforms.count < ML_MAX_LABELLED_SURFACES);
     allSurfacesMinusPlatforms.items[allSurfacesMinusPlatforms.count++] =
         stageCeilings.items[i];
   }
@@ -1493,6 +1497,7 @@ CollisionRoutineResult runCollisionRoutine(ECB ecb1, ECB ecbp, Vec2D position,
     default:
       relevantSurfaces = allSurfacesMinusPlatforms;
       for (int i = 0; i < stagePlatforms.count; i++) {
+        assert(relevantSurfaces.count < ML_MAX_LABELLED_SURFACES);
         relevantSurfaces.items[relevantSurfaces.count++] =
             stagePlatforms.items[i];
       }

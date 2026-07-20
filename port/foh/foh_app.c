@@ -32,6 +32,7 @@
 
 #include "../sim/ml_events.h"
 #include "../sim/sim/sim.h"
+#include "../sim/target/target_play.h" // M4 task 12: target bridges
 #include "foh.h"
 
 #define ML_BOOT_DRAWS 465 // the qjs boot pin (oracle/qjs/replay.sh)
@@ -332,7 +333,7 @@ static Raster g_rz; // 240x240 fb + ink (static: large)
 
 int main(int argc, char **argv) {
   const char *flowPath = 0, *flowOut = 0, *shotsDir = 0;
-  const char *bridge = 0; // "state" | "verify"
+  const char *bridge = 0; // "state" | "verify" | "tstate" | "tverify"
   const char *simdataPath = 0, *tracePath = 0, *outPath = 0, *bstateOut = 0;
   long seed = -1, frames = -1;
   bool cpuLive = false;
@@ -357,19 +358,29 @@ int main(int argc, char **argv) {
   }
   const bool wantState = bridge && strcmp(bridge, "state") == 0;
   const bool wantVerify = bridge && strcmp(bridge, "verify") == 0;
-  if (!flowPath || !flowOut || (bridge && !wantState && !wantVerify) ||
+  // M4 task 12: the TARGET twins — tstate = TBRIDGE-STATE witness only;
+  // tverify = full trace-fed target replay emitting BOTH streams in the
+  // EXACT target_main.c stdout grammar (wrap-target.js's producer
+  // contract: F/T interleave + RNG + TFIN + SIM OK).
+  const bool wantTState = bridge && strcmp(bridge, "tstate") == 0;
+  const bool wantTVerify = bridge && strcmp(bridge, "tverify") == 0;
+  const bool anyVerify = wantVerify || wantTVerify;
+  if (!flowPath || !flowOut ||
+      (bridge && !wantState && !wantVerify && !wantTState && !wantTVerify) ||
       // bridge modes need simdata + seed + the state witness sink
       (bridge && (!simdataPath || seed < 0 || !bstateOut)) ||
-      // verify additionally needs the golden trace/frames/stream sink
-      (wantVerify && (!tracePath || frames <= 0 || !outPath)) ||
-      (!wantVerify && (tracePath || frames > 0 || outPath || cpuLive)) ||
+      // verify modes additionally need the golden trace/frames/stream sink
+      (anyVerify && (!tracePath || frames <= 0 || !outPath)) ||
+      (!anyVerify && (tracePath || frames > 0 || outPath)) ||
+      (!wantVerify && cpuLive) ||
       (!bridge && (simdataPath || seed >= 0 || bstateOut))) {
     fprintf(stderr,
             "usage: foh_app --flow f.flow --flow-out trace.txt "
             "[--shots-dir D] [--bridge state --simdata s.txt --seed N "
             "--bstate-out b.txt] [--bridge verify --simdata s.txt --seed N "
             "--trace t.txt --frames N --out stream.txt --bstate-out b.txt "
-            "[--cpu-live]]\n");
+            "[--cpu-live]] [--bridge tstate|tverify (target twins; same "
+            "params as state/verify)]\n");
     return 1;
   }
   if (frames > 1000000L) sim_fatal("foh_app: --frames exceeds the buffer cap");
@@ -439,16 +450,22 @@ int main(int argc, char **argv) {
         if (w < 0) sim_fatal("--flow-out write failed");
       } else {
         launchFrame = f;
-        if (fprintf(tf,
-                    "LAUNCH %ld p1=%d p2=%d p2type=%d difficulty=%d "
-                    "stage=%d turbo=%d lcancel=%d tapjump=%d,%d,%d,%d "
-                    "versus=0\n",
-                    f, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
-                    foh.stageSel, foh.turbo, foh.lCancelType,
-                    foh.tapJumpOff[0], foh.tapJumpOff[1], foh.tapJumpOff[2],
-                    foh.tapJumpOff[3]) < 0) {
-          sim_fatal("--flow-out write failed");
+        int w;
+        if (foh.targetMode) {
+          // the target launch record (foh.h TLAUNCH note; iter 99)
+          w = fprintf(tf, "TLAUNCH %ld char=%d tstage=%d\n", f, foh.p1Char,
+                      foh.tssStage);
+        } else {
+          w = fprintf(tf,
+                      "LAUNCH %ld p1=%d p2=%d p2type=%d difficulty=%d "
+                      "stage=%d turbo=%d lcancel=%d tapjump=%d,%d,%d,%d "
+                      "versus=0\n",
+                      f, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
+                      foh.stageSel, foh.turbo, foh.lCancelType,
+                      foh.tapJumpOff[0], foh.tapJumpOff[1],
+                      foh.tapJumpOff[2], foh.tapJumpOff[3]);
         }
+        if (w < 0) sim_fatal("--flow-out write failed");
       }
     }
     foh_render(&foh, &g_rz);
@@ -485,6 +502,19 @@ int main(int argc, char **argv) {
     return 4;
   }
   (void)launchFrame;
+  // launch-kind cross-guards (fail closed; the --cpu-live class): a VS
+  // bridge fed a target launch — or a target bridge fed a VS launch —
+  // is a flow/bridge mismatch, never a silent re-route.
+  if ((wantState || wantVerify) && foh.targetMode) {
+    fprintf(stderr, "foh_app: --bridge %s but the flow performed a TARGET "
+                    "launch (cross-guard)\n", bridge);
+    return 4;
+  }
+  if ((wantTState || wantTVerify) && !foh.targetMode) {
+    fprintf(stderr, "foh_app: --bridge %s but the flow performed a VS "
+                    "launch (cross-guard)\n", bridge);
+    return 4;
+  }
   if (wantVerify && cpuLive != (foh.p2Type == 1)) {
     fprintf(stderr, "foh_app: --cpu-live must match the FOH P2 type "
                     "(cross-guard)\n");
@@ -494,7 +524,84 @@ int main(int argc, char **argv) {
   sim_boot_page(&G);
   sim_data_load(simdataPath);
   sim_data_register();
-  if (wantVerify) load_trace(tracePath);
+  if (anyVerify) load_trace(tracePath);
+
+  if (wantTState || wantTVerify) {
+    // --- the TARGET launch bridge (target_main.c boot parity) --------------
+    ml_active_rng = &G.rng;
+    ml_rng_seed(&G.rng, (uint32_t)seed);
+    for (int k = 0; k < ML_BOOT_DRAWS; k++) (void)ml_rng_next(&G.rng);
+    G.rngStateAtReset = G.rng.a;
+    // THE BRIDGE POINT: char + tstage from the FOH state, never CLI
+    // (tp_setup_target consumes the ONE off-step background draw).
+    tp_setup_target(&G, foh.p1Char, foh.tssStage);
+    G.rngStateAtFrame1 = G.rng.a;
+    // TBRIDGE-STATE witness: read back from GameState + the target
+    // module (never from the FOH struct) — proves the launch plumbing
+    // reached the target sim slice.
+    {
+      FILE *bf = fopen(bstateOut, "w");
+      if (!bf) sim_fatal("cannot open --bstate-out for writing");
+      if (fprintf(bf,
+                  "TBRIDGE-STATE char=%d tstage=%d gamemode=%d targets=%d "
+                  "playing=%d starting=%d stocks=%d\n",
+                  (int)G.sim.characterSelections[0],
+                  (int)TP.targetStagePlaying, (int)G.sim.gameMode,
+                  TP.targetCount, G.inp.playing ? 1 : 0,
+                  G.starting ? 1 : 0, (int)G.sim.player[0].stocks) < 0) {
+        sim_fatal("--bstate-out write failed");
+      }
+      if (fclose(bf) != 0) sim_fatal("--bstate-out close/flush failed");
+    }
+    if (!wantTVerify) return 0;
+
+    // Full target replay (target_main.c loop shape; stream file only —
+    // the EXACT wrap-target.js producer grammar).
+    const size_t streamCap = (size_t)frames * 160 + 160;
+    char *stream = malloc(streamCap);
+    if (!stream) sim_fatal("oom (stream buffer)");
+    size_t streamLen = 0;
+    char hex[65], thex[65];
+    for (long f = 0; f < frames; f++) {
+      const long idx = f < g_trace_len - 1 ? f : g_trace_len - 1;
+      const TraceRow *row = &g_trace[idx];
+      if (row->present[1] || row->present[2] || row->present[3]) {
+        sim_fatal("target trace with a non-null slot 1-3 row");
+      }
+      G.frame = f + 1;
+      tp_game_tick_target(&G, row->present[0] ? &row->in[0] : 0);
+      sim_frame_hash(&G, hex);
+      tp_target_frame_hash(&G, thex);
+      const int w = snprintf(stream + streamLen, streamCap - streamLen,
+                             "F %ld %s\nT %ld %s\n", f + 1, hex, f + 1, thex);
+      if (w < 0 || (size_t)w >= streamCap - streamLen) {
+        sim_fatal("stream buffer overflow");
+      }
+      streamLen += (size_t)w;
+    }
+    const uint32_t total = draws_between(G.rngStateAtReset, G.rng.a);
+    const uint32_t outside =
+        draws_between(G.rngStateAtReset, G.rngStateAtFrame1);
+    {
+      const int w = snprintf(stream + streamLen, streamCap - streamLen,
+                             "RNG %" PRIu32 " %" PRIu32 "\nTFIN %d %s\n"
+                             "SIM OK\n",
+                             total, outside, (int)TP.targetsDestroyed,
+                             TP.endTargetGame ? "T" : "F");
+      if (w < 0 || (size_t)w >= streamCap - streamLen) {
+        sim_fatal("stream buffer overflow (trailer)");
+      }
+      streamLen += (size_t)w;
+    }
+    FILE *of = fopen(outPath, "w");
+    if (!of) sim_fatal("cannot open --out for writing");
+    if (fwrite(stream, 1, streamLen, of) != streamLen) {
+      sim_fatal("--out write failed");
+    }
+    if (fclose(of) != 0) sim_fatal("--out close/flush failed");
+    free(stream);
+    return 0;
+  }
 
   // Seed + boot draws only NOW (the FOH machine drew nothing; header
   // note): the launched stream's rng domain == the harness domain.

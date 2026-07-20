@@ -1,0 +1,11 @@
+FOHTRACE1 flow=f06-target-t01
+T 370 startup title timer
+T 375 title menu-top start
+SHOT 383 menu-targettest
+T 385 menu-top target-select a
+S 390 p1char 1
+S 395 p1char 2
+SHOT 400 tss-t01
+T 405 target-select target-match launch
+TLAUNCH 405 char=2 tstage=0
+END 410 transitions=4

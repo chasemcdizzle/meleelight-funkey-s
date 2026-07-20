@@ -331,75 +331,102 @@ void tp_setup_target(GameState *g, int charId, int tstageId) {
   g->frame = 0;
 }
 
+// --- finishGame, target arm (main.js:1420-1476) — REAL since iter 99 ------------
+
+void (*tp_finish_hook)(GameState *g, bool complete) = 0;
+
+void tp_finish_game(GameState *g) {
+  TP.endTargetGame = false; // :1421 setEndTargetGame(false)
+  TP.gameEnd = true;        // :1422 gameEnd = true
+  g->inp.playing = false;   // :1423 playing = false
+  // :1425-1429 fg2 banner state = render plane. :1431 STRICT equality
+  // (the double-destroy quirk can step PAST the count -> Failure arm,
+  // carried verbatim, never "fixed").
+  const bool complete = TP.targetsDestroyed == (double)TP.targetCount;
+  // :1432-1449 medals/targetRecords/cookies = task-13 persistence
+  // (REGISTERED deferral); the newRecord/complete/failure sounds are
+  // menu-plane Howls (sounds.js — zero seeded draws, measured); the
+  // Complete!/Failure banner is render. All FOH-driver surface:
+  if (tp_finish_hook) tp_finish_hook(g, complete);
+}
+
 // --- the mode-5 gameTick arm (main.js:987-1044) ----------------------------------
 
 void tp_game_tick_target(GameState *g, const MlInput *traceRow0) {
   ml_ev_reset();
-  // if (endTargetGame) finishGame(input) (:988-990): records/cookies/menu
-  // plane AND outside the golden quality domain (all-broken never happens
-  // in-trace) — loud trap, never silent.
+  // if (endTargetGame) finishGame(input) (:988-990) — REAL (iter 99;
+  // t01/t02 never reach it: endTargetGame stays false in their domain).
+  // finishGame reads nothing from `input` in the target arm (measured).
   if (TP.endTargetGame) {
-    sim_fatal("finishGame — endTargetGame fired (outside the target-golden "
-              "quality domain)");
+    tp_finish_game(g);
   }
-  // if (playing || frameByFrame) (:991): playing is true for the whole
-  // golden domain (the recorder never pauses).
-  if (!g->inp.playing) sim_fatal("target tick with playing false");
-  // let input = [nullInputs() x4] (main.js:919)
+  // if (playing || frameByFrame) (:991): playing is true for the live
+  // golden domain; false ONLY post-finish (gameEnd, :1041-1044 — the
+  // else arm's `if (!gameEnd) interpretInputs(...)` does nothing when
+  // gameEnd is true). playing false WITHOUT gameEnd stays a loud trap.
+  if (!g->inp.playing && !TP.gameEnd) {
+    sim_fatal("target tick with playing false outside gameEnd");
+  }
+  // let input = [nullInputs() x4] (main.js:919 — created before the arms)
   for (int i = 0; i < 4; i++) {
     nullInputs(&g->curBuf[i]);
     ai_null_inputs(&g->curBufAi[i]);
   }
-  const int tb = 0; // targetBuilder (targetbuilder.js:25) — slot 0
-  hd_resetHitQueue(&g->hq);               // :996
-  art_destroyArticles(&g->arts);          // :997
-  art_executeArticles(&g->sim, &g->arts); // :998
-  ml_ev_reset();
-  if (!g->starting) {                     // :999-1001
-    // input[tb] = interpretInputs(tb, true, playerType[tb], old[tb])
-    if (traceRow0 == 0) sim_fatal("trace row missing for the target player");
-    const MlInput polled = ml_poll_inputs(traceRow0);
-    ml_interpret_inputs(&g->inp, tb, true, g->sim.playerType[tb],
-                        &g->prevBuf[tb], &polled, &g->curBuf[tb]);
-  }
-  // update(tb, input) (:1002; main.js:894-908): playerType 0 human — the
-  // runAI arm's playerType==1 condition is false; physics(tb, input).
-  {
-    MlInput in4[4];
-    for (int k = 0; k < 4; k++) in4[k] = g->curBuf[tb].slot[k];
-    ml_physics(&g->sim, (double)tb, in4);
-    if (g->sim.hqCount != 0) {
-      // dealWithDamagingStageCollision rows: measured IMPOSSIBLE on the
-      // authored target stages (zero damageType surfaces, iter 94) — the
-      // VS-trap twin. The consume path stays covered by target_hq_probe.
-      sim_fatal("physics pushed stage-damage hq rows on an authored target "
-                "stage (measured impossible: no damageType surfaces)");
+  if (g->inp.playing) {
+    const int tb = 0; // targetBuilder (targetbuilder.js:25) — slot 0
+    hd_resetHitQueue(&g->hq);               // :996
+    art_destroyArticles(&g->arts);          // :997
+    art_executeArticles(&g->sim, &g->arts); // :998
+    ml_ev_reset();
+    if (!g->starting) {                     // :999-1001
+      // input[tb] = interpretInputs(tb, true, playerType[tb], old[tb])
+      if (traceRow0 == 0) sim_fatal("trace row missing for the target player");
+      const MlInput polled = ml_poll_inputs(traceRow0);
+      ml_interpret_inputs(&g->inp, tb, true, g->sim.playerType[tb],
+                          &g->prevBuf[tb], &polled, &g->curBuf[tb]);
     }
-  }
-  ml_ev_reset();
-  hd_executeHits(&g->sim, &g->hq);        // :1003
-  tp_target_hit_detection(g, (double)tb); // :1004
-  if (!g->starting) {                     // :1005-1011
-    tp_target_timer_tick(g);
-  } else {
-    g->startTimer -= 0.01666667;
-    if (g->startTimer < 0) {
-      g->starting = false;
+    // update(tb, input) (:1002; main.js:894-908): playerType 0 human — the
+    // runAI arm's playerType==1 condition is false; physics(tb, input).
+    {
+      MlInput in4[4];
+      for (int k = 0; k < 4; k++) in4[k] = g->curBuf[tb].slot[k];
+      ml_physics(&g->sim, (double)tb, in4);
+      if (g->sim.hqCount != 0) {
+        // dealWithDamagingStageCollision rows: measured IMPOSSIBLE on the
+        // authored target stages (zero damageType surfaces, iter 94) — the
+        // VS-trap twin. The consume path stays covered by target_hq_probe.
+        sim_fatal("physics pushed stage-damage hq rows on an authored target "
+                  "stage (measured impossible: no damageType surfaces)");
+      }
     }
+    ml_ev_reset();
+    hd_executeHits(&g->sim, &g->hq);        // :1003
+    tp_target_hit_detection(g, (double)tb); // :1004
+    if (!g->starting) {                     // :1005-1011
+      tp_target_timer_tick(g);
+    } else {
+      g->startTimer -= 0.01666667;
+      if (g->startTimer < 0) {
+        g->starting = false;
+      }
+    }
+    // if (input[tb][0].s && !input[tb][1].s) endGame(input) (:1013-1015):
+    // the quit path is menu plane AND outside the golden quality domain
+    // (generators never press START) — loud trap (registered: no
+    // coverage; acceptance/task-14 surface).
+    if (g->curBuf[tb].slot[0].s && !g->curBuf[tb].slot[1].s) {
+      sim_fatal("endGame — START pressed in target mode (outside the "
+                "target-golden quality domain)");
+    }
+    // frameByFrame bookkeeping (:1016-1021) — the input cluster's
+    // end-of-tick contract (the VS arm's twin block).
+    ml_input_end_of_tick(&g->inp);
   }
-  // if (input[tb][0].s && !input[tb][1].s) endGame(input) (:1013-1015):
-  // the quit path is menu plane AND outside the golden quality domain
-  // (generators never press START) — loud trap.
-  if (g->curBuf[tb].slot[0].s && !g->curBuf[tb].slot[1].s) {
-    sim_fatal("endGame — START pressed in target mode (outside the "
-              "target-golden quality domain)");
-  }
-  // frameByFrame bookkeeping (:1016-1021) — the input cluster's
-  // end-of-tick contract (the VS arm's twin block).
-  ml_input_end_of_tick(&g->inp);
   // window.__nextInputBuffers = input (patch:49-53): this tick's buffers
   // are next tick's oldInputBuffers — including the starting window's
-  // fresh null buffers (slot-0 history does NOT chain through starting).
+  // fresh null buffers (slot-0 history does NOT chain through starting)
+  // AND the post-finish ticks' untouched nulls (the patch runs per
+  // gameTick call regardless of arm).
   for (int i = 0; i < 4; i++) {
     g->prevBuf[i] = g->curBuf[i];
     g->prevBufAi[i] = g->curBufAi[i];

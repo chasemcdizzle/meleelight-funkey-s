@@ -688,6 +688,19 @@ void gfx_render_frame(Gfx *g, const GameState *st) {
 #endif
 }
 
+// --- pass exports (M4 task 12: the target compositor gfx_target.c reuses
+// the player/article passes VERBATIM — visibility-only wrappers, the
+// iter-94 static->extern class; bodies untouched, RENDER OK + the shot
+// bit-compare are the regressions) ------------------------------------------------
+
+void gfx_render_player_pass(Gfx *g, const GameState *st, int i) {
+  render_player(g, st, i);
+}
+
+void gfx_render_articles_pass(Gfx *g, const GameState *st) {
+  render_articles(g, st);
+}
+
 // --- dumps -------------------------------------------------------------------------
 
 void gfx_dump_ppm(const Gfx *g, const char *path) {

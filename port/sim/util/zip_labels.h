@@ -13,7 +13,7 @@
 static inline void zipLabelsInto(LabelledSurfaceList *out,
                                  const SurfaceList *list, char label) {
   for (int i = 0; i < list->count; i++) {
-    assert(out->count < ML_MAX_SURFACES);
+    assert(out->count < ML_MAX_LABELLED_SURFACES);
     out->items[out->count].surface = list->items[i];
     out->items[out->count].type = label;
     out->items[out->count].index = (double)i; // start = 0

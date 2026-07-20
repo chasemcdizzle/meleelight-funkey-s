@@ -1,0 +1,24 @@
+FLOW1
+# f06: the TARGET-TEST path -> t01 params (fox / tstage 0). Menu-top
+# cursor DOWN to "Target Test", A -> target-select (menu.js:77-84).
+# Char via the upstream SHOULDER arm (targetselect.js:68-74): two R
+# shoulder presses wrap marth -> puff -> fox. The grid cursor is
+# already on slot 0 (tstage 0). A -> TLAUNCH char=2 tstage=0
+# (targetselect.js:131-146); the driver replays the frozen t01 trace
+# through the launch seam (both streams judged).
+I 1 -
+I 375 S
+I 376 -
+I 380 D
+I 381 -
+SHOT 383 menu-targettest
+I 385 A
+I 386 -
+I 390 N
+I 391 -
+I 395 N
+I 396 -
+SHOT 400 tss-t01
+I 405 A
+I 406 -
+END 410

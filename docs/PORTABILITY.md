@@ -27,8 +27,14 @@ the port cost for a new target is the DEVICE-BOUND column, not the sim.
   platform backend the target provides; its poll arm consumes ONLY the
   `PlatformInput` seam (iter 93). The menu/stage MUSIC TRACK MAP
   (menu at title->menu-top, main.js:388-390; stage->track at LAUNCH,
-  main.js:1341-1360) and the menu SFX mapping are upstream-faithful
+  main.js:1341-1360; targettest at the target LAUNCH seam, iter 99 —
+  music.js:102-113) and the menu SFX mapping are upstream-faithful
   data — device-agnostic.
+- The target-mode compositor (`port/gfx/gfx_target.c`) + the target
+  sim plane (`port/sim/target/`): pure TTAB1-data-driven rendering/
+  sim over the same raster + camera constants — device-agnostic
+  (iter 99); the Layer-2 letterbox/legibility constants apply as for
+  the VS renderer.
 
 ## Layer 1 — the platform seam (per-target TU, by design)
 
@@ -103,7 +109,10 @@ A new device = write one new backend TU (+ audio open params).
   leg/hygiene plumbing, fk_input handshake, and OPK evidence leg are
   FunKey-OS layout; the JUDGES it composes (frozen-trace + bounded
   cadence + byte-exact shots + fb witness + summary grammars) are the
-  portable pattern.
+  portable pattern. `port/sim/target/check-device-target.sh` (iter
+  99) is the same class again — its target-leg plumbing is FunKey-OS
+  layout; its both-verifier stream judgment + TBRIDGE-STATE witness
+  are portable patterns.
 - **Present witness fb pins** (`foh_dev.c` FBWIT_*, iter 95 —
   kernel-specific, MEASURED on this kernel): fb 240x720 declared (3
   pages) but FBIOPAN_DISPLAY rejected, yoffset always 0, read() exposes

@@ -28,6 +28,34 @@
 //   match             gameMode 3         A in SSS = setStageSelect +
 //                                        startGame (stageselect.js:80-88,
 //                                        main.js:1320-1370)
+//   target-select     gameMode 7         A on "Target Test" (menu.js:
+//                                        77-84: setTargetPlayer +
+//                                        pointer reset + stop menu music
+//                                        + playTargetTestLoop +
+//                                        changeGamemode(7)); B backs to
+//                                        menu-top with menuSelected
+//                                        UNTOUCHED (still TARGETTEST=1
+//                                        — module state, measured) +
+//                                        playMenuLoop (targetselect.js:
+//                                        76-81)
+//   target-match      gameMode 5         A or START on an authored slot
+//                                        (targetselect.js:131-146:
+//                                        menuForward +
+//                                        setActiveStageTarget +
+//                                        setTargetStagePlaying +
+//                                        startTargetGame(i, false));
+//                                        terminal like `match` — the
+//                                        driver owns the target sim.
+//                                        The finishGame seam
+//                                        (main.js:988-990 -> 1420-1423)
+//                                        is SIM-plane (target_play.c
+//                                        tp_finish_hook); the driver's
+//                                        end banner is render-plane
+//                                        presentation, NOT a flow edge
+//                                        (no committed flow can reach
+//                                        all-broken: measured, AGENT-LOG
+//                                        iter 99 — the finish probe owns
+//                                        mechanical coverage).
 // Menu B-backs verbatim (menu.js:164-190): controls -> options cursor 0
 // (AUDIOOPTIONS), options -> top cursor 3 (OPTIONS), battle -> top
 // cursor 0 (VSMODE); B at top level does nothing. options-gameplay B ->
@@ -56,11 +84,35 @@
 // Menu entries whose screens are excluded/deferred stay VISIBLE with
 // their faithful labels (menu.js:19-24) and selecting one emits a
 // structural `refused` event — loud and frozen in the flow traces,
-// never silence: targettest (task 12 owns its screen), targetbuilder /
-// credits (conventions scope exclusions), audio (mixer volume surface,
-// tasks 10/13), controller/keyboard (the S1 mapping is Chase-ratified
-// hardware surface), spectate/p2p/server (multiplayer excluded; P2P is
-// dead upstream, menu.js:113-116).
+// never silence: targetbuilder / credits (conventions scope
+// exclusions), audio (mixer volume surface, tasks 10/13),
+// controller/keyboard (the S1 mapping is Chase-ratified hardware
+// surface), spectate/p2p/server (multiplayer excluded; P2P is dead
+// upstream, menu.js:113-116), addcode (the target-select "+ Add Code"
+// slot — builder/share-code plane, scope-excluded; customTargetStages
+// is EMPTY in the fresh domain so the authored 10 slots + Add Code are
+// exactly what upstream shows, targetselect.js:47/:133-140). The
+// `targettest` refusal RETIRED in iter 99 — target-select is real.
+//
+// TARGET-SELECT REWRITE DELTAS (iter 99, task 12): the upstream
+// pointer-drag slot picker (targetselect.js:45-57, 250x50 boxes at
+// col = floor(j/5), row = j%5) becomes a d-pad GRID CURSOR over the 10
+// authored slots (2 cols x 5 rows, same col/row mapping) with the
+// addcode slot below (D from a bottom row enters it, U returns —
+// the SSS RANDOM-slot pattern); char select keeps the upstream SHOULDER
+// arms verbatim (targetselect.js:60-74: L = char-1 WRAP, R = char+1
+// WRAP — the du/dd d-pad arms are the same actions and the d-pad drives
+// the grid here) writing characterSelections[0] == p1Char (setCS on the
+// SAME array — S events keep the p1char token; WRAP on this screen,
+// cited, vs the CSS rewrite's clamp). A or START launches
+// (targetselect.js:131 accepts either). The trace records
+// `TLAUNCH <f> char=<0-4> tstage=<0-9>`. Records HUD: "PERSONAL BEST
+// --:--:--" is the honest fresh-boot value (targetRecords ≡ -1,
+// targetplay.js:40 -> the "--:--:--" arm, targetselect.js:411-412);
+// records READ/persistence = task 13 (REGISTERED deferral);
+// medalTimes/devRecords display DEFERRED (authored data values — HARD
+// RULE 5 forbids hand-retyping; needs a pipeline extension; registered
+// AGENT-LOG iter 99).
 //
 // INPUT SEAM: foh_tick consumes PlatformInput. On the host check the
 // rows come from a committed FLOW script (foh_app.c); on device (task
@@ -87,6 +139,8 @@ typedef enum {
   FOH_SSS,
   FOH_OPT_GAMEPLAY,
   FOH_MATCH,
+  FOH_TSS,    // target-select (upstream gameMode 7, targetselect.js)
+  FOH_TMATCH, // target-match (terminal; the driver owns the target sim)
   FOH_SCREEN_COUNT
 } FohScreen;
 
@@ -119,14 +173,23 @@ typedef struct {
   int bHold;          // consecutive B frames in CSS (30 = back)
   // sss
   int sssCursor; // 0..5 == oracle stage ids; 6 = the refusing RANDOM slot
+  // target-select (upstream targetselect.js; header notes): cursor
+  // 0..9 == tstage ids (targetStageMapping order), 10 = the refusing
+  // addcode slot; the char plane is the SHARED p1Char
+  // (characterSelections[0] — setCS writes the same array upstream)
+  int tssCursor;
   // options-gameplay (sim-consumed subset; settings.js:44-56 defaults)
   int optRow; // 0 turbo, 1 lCancelType, 2 tapJumpOff columns
   int optCol; // 0..3 (active on the tapJumpOff row)
   int turbo;
   int lCancelType;
   int tapJumpOff[4];
-  // launch record (frozen once screen == FOH_MATCH)
+  // launch record (frozen once screen == FOH_MATCH / FOH_TMATCH):
+  // targetMode false -> VS launch (stageSel); true -> target launch
+  // (tssStage; char == p1Char)
   int stageSel;
+  int tssStage;
+  bool targetMode;
   bool launched;
   // edge detection
   PlatformInput prev;

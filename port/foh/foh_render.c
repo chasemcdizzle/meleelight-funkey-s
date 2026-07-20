@@ -191,6 +191,58 @@ static void render_match(Raster *rz) {
   text_center(rz, 110, 2, "LAUNCHING", kText);
 }
 
+// target-select (upstream drawTSS/drawTSSInit, stages/targetselect.js:
+// 231-420, rewritten at 240x240 — foh.h rewrite deltas). Slots are the
+// upstream 2-col x 5-row authored layout (col = floor(j/5), row = j%5)
+// plus the refusing "+ ADD CODE" slot; the records line is the honest
+// fresh-boot value (targetRecords ≡ -1 -> "--:--:--", targetplay.js:40 +
+// targetselect.js:411-412; READ/persistence = task 13, medal/dev times
+// deferred — foh.h note).
+static void render_tss(const FohState *s, Raster *rz) {
+  header(rz, "TARGET TEST");
+  // char row (shoulder-driven; targetselect.js:60-74)
+  foh_text(rz, 12, 32, 1, "L/R:", kDim);
+  foh_text(rz, 44, 32, 1, kCharNames[s->p1Char], kAccent);
+  // 2x5 grid of authored target stages (ids 0..9 == tstage ids)
+  for (int k = 0; k < 10; k++) {
+    const int col = k / 5, row = k % 5; // upstream floor(j/5) / j%5
+    const int x = 16 + col * 108, y = 48 + row * 24;
+    fill_rect(rz, x, y, 96, 18, kPanel);
+    if (k == s->tssCursor) {
+      fill_rect(rz, x - 2, y - 2, 100, 2, kCursor);
+      fill_rect(rz, x - 2, y + 18, 100, 2, kCursor);
+      fill_rect(rz, x - 2, y, 2, 18, kCursor);
+      fill_rect(rz, x + 96, y, 2, 18, kCursor);
+    }
+    // "Target "+(i+1) (targetselect.js:93 label class)
+    char label[10] = "TARGET ";
+    if (k == 9) { label[7] = '1'; label[8] = '0'; label[9] = 0; }
+    else { label[7] = (char)('1' + k); label[8] = 0; }
+    foh_text(rz, x + 6, y + 5, 1, label,
+             k == s->tssCursor ? kText : kDim);
+  }
+  // the refusing "+ Add Code" slot (builder plane; foh.h note)
+  {
+    const int x = 60, y = 172, w = 120, h = 14;
+    fill_rect(rz, x, y, w, h, kPanel);
+    if (s->tssCursor == 10) {
+      fill_rect(rz, x - 2, y - 2, w + 4, 2, kCursor);
+      fill_rect(rz, x - 2, y + h, w + 4, 2, kCursor);
+      fill_rect(rz, x - 2, y, 2, h, kCursor);
+      fill_rect(rz, x + w, y, 2, h, kCursor);
+    }
+    foh_text(rz, x + 6, y + 4, 1, "+ ADD CODE", kDim);
+  }
+  // records line (honest fresh-boot; header note)
+  text_center(rz, 194, 1, "PERSONAL BEST --:--:--", kAccent);
+  text_center(rz, 208, 1, "A: GO   B: BACK", kDim);
+}
+
+static void render_tmatch(Raster *rz) {
+  // Terminal like `match`; the driver owns the target sim/renderer.
+  text_center(rz, 110, 2, "LAUNCHING", kText);
+}
+
 void foh_render(const FohState *s, Raster *rz) {
   rast_clear(rz, kBg.r, kBg.g, kBg.b, 0, RAST_H);
   switch (s->screen) {
@@ -204,6 +256,8 @@ void foh_render(const FohState *s, Raster *rz) {
     case FOH_SSS: render_sss(s, rz); break;
     case FOH_OPT_GAMEPLAY: render_opt_gameplay(s, rz); break;
     case FOH_MATCH: render_match(rz); break;
+    case FOH_TSS: render_tss(s, rz); break;
+    case FOH_TMATCH: render_tmatch(rz); break;
     default: gfx_fatal("foh_render: invalid screen");
   }
 }

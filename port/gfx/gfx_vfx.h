@@ -69,6 +69,15 @@ void gfx_vfx_inject_fire(long frame); // spawn table configs when frame matches
 void gfx_render_background(Gfx *g);                        // ink-suppressed
 void gfx_render_vfx(Gfx *g, const GameState *st);          // renderVfx()
 void gfx_render_overlay(Gfx *g, const GameState *st);      // renderOverlay(true)
+// renderOverlay(false) — the TIMER block only (the `!versusMode ||
+// gameMode == 5` arm; render.js:392-411): target mode's HUD (M4 task
+// 12). Extracted from gfx_render_overlay — the VS path calls the same
+// bytes (behavioral identity; RENDER OK is the regression).
+void gfx_render_overlay_timer(Gfx *g, const GameState *st);
+// M4 task 12 (gfx_target.c consumes; visibility-only wrappers around
+// gfx_render.c's static passes — bodies untouched):
+void gfx_render_player_pass(Gfx *g, const GameState *st, int i);
+void gfx_render_articles_pass(Gfx *g, const GameState *st);
 
 // --- glyph atlas (gfx_overlay.c; VFXGLYPHS1) ------------------------------
 // Fonts, in the exact upstream draw forms (renderOverlay/start.js):

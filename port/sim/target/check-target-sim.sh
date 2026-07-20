@@ -150,12 +150,16 @@ CLUSTER_TUS=(
 CFLAGS=(-O2 -ffp-contract=off -Wall -Wextra -Werror
         -I"$TABLES" -Iport/ryu -Iport/sim -Ioracle/qjs)
 
-rm -f "$BUILD/sim_host_target" "$BUILD/target_hq_probe"
+rm -f "$BUILD/sim_host_target" "$BUILD/target_hq_probe" \
+  "$BUILD/target_finish_probe"
 cc "${CFLAGS[@]}" -o "$BUILD/sim_host_target" \
   "$TGT/target_main.c" "$TGT/target_play.c" "${CLUSTER_TUS[@]}" -lm
 cc "${CFLAGS[@]}" -o "$BUILD/target_hq_probe" \
   "$TGT/target_hq_probe.c" "$TGT/target_play.c" "${CLUSTER_TUS[@]}" -lm
-made "$BUILD/sim_host_target" "$BUILD/target_hq_probe"
+cc "${CFLAGS[@]}" -o "$BUILD/target_finish_probe" \
+  "$TGT/target_finish_probe.c" "$TGT/target_play.c" "${CLUSTER_TUS[@]}" -lm
+made "$BUILD/sim_host_target" "$BUILD/target_hq_probe" \
+  "$BUILD/target_finish_probe"
 echo "    build OK (cc -O2 -ffp-contract=off -Wall -Wextra -Werror)"
 
 # --- [3] per target golden: C replay vs BOTH frozen streams -------------------
@@ -202,13 +206,24 @@ for id in $IDS; do
     "$M4G/$name.target.sha256.json" | relay_lines
 done
 
-# --- [4] the stage-damage CONSUME-path probe ----------------------------------
+# --- [4] the standing probes --------------------------------------------------
 echo "[4] target_hq_probe (stage-damage consume path)"
 "$BUILD/target_hq_probe" --simdata "$BUILD/simdata.txt" | relay_lines
 if "$BUILD/target_hq_probe" --simdata "$BUILD/simdata.txt" --drop >/dev/null 2>&1; then
   fail "target_hq_probe --drop did NOT fail (the probe does not bite)"
 fi
 echo "    probe OK; --drop arm bites"
+# [4b] the FINISH-SEAM probe (M4 task 12; AGENT-LOG iter 99): the
+# endTargetGame -> finishGame arm + the post-finish skip ticks + the
+# double-destroy quirk's Failure arm, MECHANICALLY live (the authored
+# game cannot reach all-broken — targetstage9's single target is
+# topologically sealed, measured; no golden can carry the finish).
+echo "[4b] target_finish_probe (finishGame seam + double-destroy quirk)"
+"$BUILD/target_finish_probe" --simdata "$BUILD/simdata.txt" | relay_lines
+if "$BUILD/target_finish_probe" --simdata "$BUILD/simdata.txt" --drop >/dev/null 2>&1; then
+  fail "target_finish_probe --drop did NOT fail (the probe does not bite)"
+fi
+echo "    finish probe OK; --drop arm bites"
 
 # --- [5] TEETH (generated copies; committed bytes never edited) ----------------
 echo "[5] teeth"
@@ -694,4 +709,4 @@ TRACKED="$(git status --porcelain -- "$BUILD" "$TABLES")"
   || { echo "$TRACKED"; fail "files under the build dir are tracked/staged"; }
 echo "    build output gitignored, nothing tracked"
 
-echo "TARGET SIM CONFORMS ($(echo $IDS | wc -w | tr -d ' ') goldens: $IDS; leaves=718 probe=ok teeth=24)"
+echo "TARGET SIM CONFORMS ($(echo $IDS | wc -w | tr -d ' ') goldens: $IDS; leaves=718 probes=2 teeth=24)"
