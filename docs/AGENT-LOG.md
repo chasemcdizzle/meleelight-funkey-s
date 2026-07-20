@@ -18787,3 +18787,24 @@ evidence.
 **next:** task-12-arc **round 4 = closure-or-cap** on THIS iter-105 diff
 (review the anchored [5b] parser); then persist-arc round-3 GO status,
 task 14 (verify_m4.sh assembly), M4 GATE.
+
+## driver — 2026-07-20 — TASK-12 ARC CLOSED (GO round 4); persist-arc round 3 NO-GO → iter-106
+
+- **TASK-12 ARC CLOSED — VERDICT: GO, round 4**
+  (.loop/review-105-1.log over d73131a; rounds: review-99 r1 NO-GO →
+  iter 101 (driver-adjudicated) → review-101 r2 NO-GO (1 Medium, the
+  banner glyph latent bug; capacity fix structurally CLEAN) → iter 103
+  → review-103 r3 NO-GO (1 Medium, [5b] grammar) → iter 105 → r4 GO:
+  full-line anchored success judge + exact-rc-3 tooth + provenance
+  pins verified; no new vacuous-pass path; remaining objections only
+  capped-class variants). Iter-105 (d73131a) driver-cold-verified
+  (FOH FLOWS OK teeth=21, RC=0, .loop/m4-ban105-driver-cold.log) +
+  PUSHED.
+- **Persist-arc ROUND 3 = NO-GO** (.loop/review-104-1.log over
+  ebe62a1): no High, no new class, but 4 Mediums + 2 Lows are DIRECT
+  failures of the round-2 closure predicates (M-a/M-c/L-b refinements)
+  — closure-or-cap does NOT apply per the reviewer's own ruling.
+  Confirmed sound: the H three-state decision table (race-safe, only
+  ABSENT deletes), M-b's byte-exact persist-file grammar, M-d's
+  explicit failure arm, the L-b pixel connection, the manifest re-pin.
+  Triage → .loop/review-104-triage.md; iter-106 dispatching.
