@@ -58,7 +58,7 @@ db18c54edee8dba770884f421483ba0a8f087806de6323ede4a86ab51c9479b9 port/gfx/check-
 0ae1b56107d83b14bde941eaddfae0bd029cd7d6a7ceeb1f9fe0d380384b097b port/gfx/opk/mlfk.sh arc-pending iter73-AGENT-LOG-m4-task3
 8b24efb23d678ce3f1a2acfed29c3b5f5ec66224fffe84daa004569cc90d0a9d port/gfx/opk/meleelight.funkey-s.desktop reviewed-go .loop/review-58-1.log+r2-.loop/review-60-1.log
 efea406086050d51b3894692c6030afef1b0cc7ed06de442b728ef2e6072fe99 port/gfx/opk/icon32.png reviewed-go .loop/review-58-1.log+r2-.loop/review-60-1.log
-fc6aa569d4efc731509a9ebc9c5b7857bb00896d41aeaeb82c9ee7de1d0592e5 port/sim/sim/wrap-run.js grandfathered-m2 M2-exit-gate-SIM-CONFORMS
+b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wrap-run.js reviewed-go .loop/review-86-1.log
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js grandfathered-m2 M2-exit-gate-SIM-CONFORMS
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js oracle-frozen M0-task5-HARD-RULE-3
 160a5bec5091095c2647ee9655396e95f1911f7aa37443a2322951e0b394b677 port/sim/device/verify_m3.sh reviewed-go .loop/review-60-1.log+.loop/review-62-grok-go.log-NORMALIZED-see-header
