@@ -3,7 +3,25 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 92 — M4 hardening DONE: FOH-arc round-3 residuals closed, cold check green first attempt)
+## Live right now (updated: 2026-07-19, driver post-iter-92 — BOTH task-7/9 arcs CLOSED; task 10 dispatching)
+
+- **FOH ARC CLOSED (GO round 4, .loop/review-92-1.log)** after iters
+  90/91/92 (7f42cc7, c37b47b, a7621d8 — all driver-cold-verified +
+  pushed; final form: FOH FLOWS OK flows=5 shots=13 bridges=3
+  states=4 diverge=1 control=1 teeth=16; one capped Low recorded:
+  exotic-filename enumeration class). MUSIC ARC CLOSED (GO r2)
+  earlier this session. M4 rig backlog clear.
+- **In flight: iter-93 = M4 task 10 (FOH on device)** — brief carries
+  the DEFER-BOUND M3 binding (real platform_poll/keysym path via
+  fk_input, same frozen traces), judge sha re-pin rule, menu SFX/music
+  selection wiring, OPK→FOH launcher, SSS RANDOM measurement ruling,
+  riglib hygiene, paced-run caps. done-check:
+  `bash port/foh/check-device-foh.sh` → DEVICE FOH OK.
+- **Remaining to gate**: 11-12 (target test), 13 (SD persist), 14
+  (verify_m4.sh) → M4 GATE → provision device → LOOP STOP:
+  m4-complete → Chase acceptance playthrough.
+
+## [superseded by driver post-iter-92] (2026-07-19, iter 92 — M4 hardening DONE: FOH-arc round-3 residuals closed, cold check green first attempt)
 
 - **Iter 92 (M4 hardening MICRO — FOH-arc round-3 closure: control
   flow-ID confound + dotfile enumeration) DONE** (full entry:

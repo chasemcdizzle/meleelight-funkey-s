@@ -14703,3 +14703,22 @@ typed. Music-surface arc round 2 reviews this commit's bytes.
   (find, not ls) — second instance of the "claimed exact, actually
   filtered" family (first: the shots-b run-B gap, review-90 M2).
   FOH arc round 4 (closure round) reviews this commit's diff.
+
+## driver — 2026-07-19 — FOH ARC CLOSED (GO round 4); task 10 dispatched
+
+- FOH-surface Tier-A arc (iter 88 surfaces): r1 NO-GO (1H/6M/1L,
+  .loop/review-88-1.log + triage) → iter-90 hardening (7f42cc7) →
+  r2 NO-GO (3 findings on the new code, .loop/review-90-1.log +
+  triage) → iter-91 (c37b47b: lcancel=0 control, frame-1 pin, stderr
+  capture, shots-b inventory) → r3 NO-GO (1 residual High: control
+  flow-ID confound; 1 capped Low) → iter-92 (a7621d8: same-ID
+  sibling-dir control, normalization deleted, standing T15
+  ID-independence measurement, dotfile-inclusive enumeration) →
+  **ROUND 4 GO** (.loop/review-92-1.log; one capped Low recorded:
+  grammar-variant/enumeration-tool-variant — newline-in-filename
+  serialization collision, exotic-filename class, non-verdict-
+  driving). Arc = 4 rounds, within the ~8 bound; M3 finding stays
+  DEFER-BOUND to task 10 (binding carried in the task-10 brief).
+- Every iter driver-cold-verified (FOH FLOWS OK final form: flows=5
+  shots=13 bridges=3 states=4 diverge=1 control=1 teeth=16).
+- next: task 10 (FOH device — DEVICE FOH OK).
