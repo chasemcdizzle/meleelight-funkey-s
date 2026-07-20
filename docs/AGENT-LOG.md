@@ -16646,3 +16646,34 @@ typed. Music-surface arc round 2 reviews this commit's bytes.
   rig grows its own JSON-decision consumers outside port/goldens-m4:
   promote json-dup-key-scan.js to a shared lib home (registered, not
   done — YAGNI at n=1 rig).
+
+## driver — 2026-07-20 — DEVICE-FOH ARC CLOSED (GO round 3, capped); iter-98 pushed; target-arc round 3 + task 12 dispatched
+
+- **DEVICE-FOH ARC CLOSED — VERDICT: GO, round 3**
+  (.loop/review-97-1.log over 2ee7577; rounds: review-93 r1 NO-GO →
+  iter 95 → review-95 r2 NO-GO (incomplete closures, no new class) →
+  iter 97 → r3 GO). CAPPED per the closure-or-cap ruling, reviewer's
+  own words, two named recurring classes: (1) whitelist-input-trust
+  spelling refinements (case/TAB-variant resemblance needles, fbwit
+  tick-order semantics — check-device-foh.sh:707/726/744/763, :672);
+  (2) compiled-keymap projection/tooth coverage (platform_keymap.h:41
+  logical↔fieldOff pairing not bound by the _Static_assert;
+  T12 cmp-form vs production-branch). Both recorded here as capped
+  residuals; the keymap projection note is REGISTERED for task 14's
+  m4-freeze-manifest round (the platform_sdl1.c re-pin already
+  registered there). Reviewer confirmed: OPK bounded judgment sound,
+  canonical decimals complete, anchor-null fatal both directions,
+  yoffset pinned, 15 teeth live, no new vacuous-pass path.
+- Iter-97 (2ee7577) and iter-98 (a3fc74d) both driver-cold-verified
+  (DEVICE FOH OK teeth=15 RC=0, .loop/m4-foh97-driver-cold.log;
+  TARGET SIM CONFORMS teeth=24 RC=0, .loop/m4-tgt98-driver-cold.log)
+  and PUSHED.
+- Tier A+ NOTE on record: grok second review of verify-target-stream.js
+  = VERDICT: GO (.loop/review-96-aplus-1.log); its Medium/Low were
+  driver-adopted into review-96-triage and shipped in iter 98. The
+  codex review-96-1 attempt died on a provider content flag AFTER
+  live-confirming the dup-key finding; the -2 retry delivered the
+  verdict (process note: provider flags are a new reviewer-outage
+  mode — retry once, then grok fallback).
+- **In flight: target-arc ROUND 3 (closure-or-cap) over a3fc74d;
+  task-12 writer (target test FOH + device) dispatching.**

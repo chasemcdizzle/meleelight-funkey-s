@@ -3,7 +3,31 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-20, iter 98 — M4 hardening DONE: target-rig round-2 closure, all review-96 dispositions shipped; cold check green first attempt)
+## Live right now (updated: 2026-07-20, driver post-iter-98 — DEVICE-FOH ARC CLOSED (GO r3, capped); iters 97+98 pushed; target-arc round 3 + task 12 in flight)
+
+- **DEVICE-FOH ARC CLOSED (GO round 3, .loop/review-97-1.log)** after
+  iters 95/97 (cd99733, 2ee7577 — both driver-cold-verified + pushed).
+  CAPPED naming two recurring classes (reviewer's own closure-or-cap
+  call): whitelist-input-trust spelling refinements + compiled-keymap
+  projection/tooth coverage (the platform_keymap.h logical↔fieldOff
+  binding note REGISTERED for task 14's manifest round alongside the
+  platform_sdl1.c re-pin). Final form: DEVICE FOH OK opk=evidence
+  fbwit=15 teeth=15.
+- **Iter 98 (a3fc74d) driver-cold-verified (TARGET SIM CONFORMS
+  teeth=24, RC=0) + PUSHED.** Tier A+ second review of
+  verify-target-stream.js: grok VERDICT: GO (its Medium/Low adopted +
+  shipped in iter 98). Codex process note: review-96-1 died on a
+  provider content flag mid-review (after live-confirming the dup-key
+  finding); the -2 retry delivered — new reviewer-outage mode: retry
+  once, then grok fallback.
+- **In flight: (1) target-arc ROUND 3 = closure-or-cap over a3fc74d
+  (.loop/review-98-1.log when it lands); (2) iter-99 = M4 task 12
+  (target test FOH + device) writer** — done-check
+  `bash port/sim/target/check-device-target.sh` → DEVICE TARGET
+  CONFORMS. Then: task 13 (SD persist), task 14 (verify_m4.sh) →
+  M4 GATE → provision device → LOOP STOP: m4-complete.
+
+## [superseded by driver post-iter-98] (updated: 2026-07-20, iter 98 — M4 hardening DONE: target-rig round-2 closure, all review-96 dispositions shipped; cold check green first attempt)
 
 - **Iter 98 (M4 hardening — target-rig round-2 closure, review-96
   triage C-M1/C-M2/C-M3/G-M4/C-L5/C-L6/G-L7 ALL closed) DONE** (full
