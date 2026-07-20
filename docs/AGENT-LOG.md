@@ -13272,3 +13272,161 @@ round 3 = final confirm on this commit's bytes.
   the corpus is now 12 goldens.
 - next: task 7 (music streaming — the last audio task), then FOH 9-10,
   target 11-12, persistence 13, gate 14.
+
+## iter 87 — 2026-07-19 — M4 task 7 PRE-REGISTRATION: music streaming — mixer music voice + SD double-buffer streamer (frozen before any run/edit; PROCESS §2)
+
+- **Task**: fix_plan §M4 task 7 — music streaming. (1) HOST FIDELITY:
+  the mixer plane gains a MUSIC channel (snd_mixer.h shared math;
+  snd_render.c offline + snd_reference.js independent reference), the
+  12-golden bit-diff re-runs WITH music mixed in; (2) DEVICE: the
+  selected track's PCM staged on SD, streamed through a 2x64 KB
+  double-buffer into the audio callback's music channel, starve counter
+  gated == 0. Done-check: `bash port/gfx/check-device-music.sh` →
+  `DEVICE MUSIC OK`, exit 0.
+- **MUSIC-SELECTION SEAM SURVEY (the pre-registered reading, verdict
+  frozen here)**: upstream `src/main/music.js` (MusicManager: 8 static
+  Howls with `<name>Start`/`<name>Loop` sprites, `html5: true`) +
+  `src/main/main.js` — `startGame()` (main.js:1320) calls
+  `MusicManager.stopWhatisPlaying()` then a `switch (stageSelect)`
+  (main.js:1342-1360): stage 0→battlefield, 1→yStory, 2→pStadium,
+  3→dreamland, 4→finald, 5→fod — a DETERMINISTIC stage→track map with
+  ZERO seeded-RNG involvement (the `Math.round(Math.random())` at
+  main.js:1322 is `setBackgroundType`, the already-pinned single
+  off-step draw; `Howl.play()` consumes no Math.random — verified in
+  the vendored howler 2.0.12 source). **VERDICT: music selection is
+  RENDER-PLANE** — no checksum surface, no sim writes, no draws. The
+  goldens' streams carry NO music events; the differential therefore
+  feeds the SAME deterministic per-stage track selection to both sides
+  (the map pinned in the check from main.js:1342, documented — the
+  honest seam statement). Two adjacent upstream surfaces measured OUT
+  of this task's domain and registered: pause ducking
+  (main.js:853-856, masterVolume*0.3 — no golden pauses) and
+  endGame/menu-transition stops (main.js:1377+, post-match — goldens
+  end mid-match by the M0 quality contract); menu/targettest tracks
+  have no match-plane caller (FOH tasks 9-12 own their selection —
+  they get synthetic-leg fidelity coverage here, selection coverage
+  there). Howler global-counter note: in the BROWSER, music `play()`
+  bumps the same `Howler._counter` the SFX ids come from; that plane
+  is OFF the checksum surface (iter-82 record) and the C id derivation
+  stays SFX-only — no interaction, documented.
+- **Sprite semantics pinned from primary sources** (vendored howler
+  2.0.12, read not remembered): `play(sprite)` seeks to
+  `sprite[0]/1000` s and arms a DURATION timer (`timeout = duration
+  ms`; core.js:705/797 — html5+sprite always uses the timer, never the
+  node's 'ended' event); at expiry `_ended` emits 'end' and the
+  authored `onend` handlers `play("<name>Loop")` — i.e. Start window
+  once, then the Loop window REPEATING. The timer counts SPRITE
+  duration regardless of the underlying file length, so a loop window
+  that extends past the decoded track (fod: loopEnd 332,102 ms vs
+  304,000 ms of PCM — measured from the pipeline blob) plays SILENCE
+  for the overhang, then re-enters the loop window — the quirk is
+  carried verbatim (window-past-EOF = silence, never a wrap-early
+  "fix"). Sounds.json sprite windows (ms) are the data (FORMATS.md
+  §5.3); music volume 0.3 effective → gainQ8 = round(0.3*256) = 77.
+- **Documented device adaptations (shared BY DOCUMENTATION, the task-6
+  exposure class — both differential sides implement these from this
+  spec, never from each other's code)**: (a) ms→source-frame
+  quantization `frames = floor(ms*441/20)` (22050/1000 = 441/20;
+  browser html5 seeks float seconds — not sample-exact by nature);
+  window boundaries computed as [floor(off), floor(off+dur)) so
+  adjacent windows stay gapless; (b) zero-order-hold 2x upsample
+  (22050 stereo → 44100), source frame = outFrame>>1, L/R kept
+  separate (SFX stay mono-on-both); (c) Q8 gain per channel
+  ((s*gainQ8)>>8), music summed with the SFX accumulator BEFORE the
+  single S16 clamp (per channel); (d) event-free: music starts at
+  output frame 0 (match start — upstream starts it in startGame);
+  (e) music is a DEDICATED channel, not an SFX voice (does not consume
+  the 8-voice pool, matching the browser where music is a separate
+  Howl). No-music path must remain BYTE-IDENTICAL (accL==accR==old
+  mono sum) — proven by the cold check-mixer-fidelity.sh regression.
+- **Double-buffer design (frozen)**: ring of 32,768 source frames
+  (131,072 B) = PLAN §7's 2x64 KB halves; refill unit ONE 16,384-frame
+  chunk (64 KB) whenever free space >= chunk; consumption 88,200 B/s →
+  a full half buys ~0.743 s; on device a dedicated READER THREAD
+  (pthread; SDL1.2's audio callback already makes the app
+  multithreaded) does ALL file I/O — ZERO music I/O on the frame loop
+  (the frame path and its 4-column timing grammar are untouched), ring
+  publication under platform_audio_lock (the existing reviewed
+  discipline; the callback runs with SDL's audio mutex held, so wr
+  reads/writes are never torn), 25 ms poll cadence (>=29 refill
+  opportunities per half-drain). PRE-FILL: the full ring is filled
+  SYNCHRONOUSLY before platform_audio_start (no first-callback race).
+  Starve = the callback needs a source frame not yet published →
+  silence for that output frame + starves++ (time advances — a starve
+  is a dropped window, never a stretch); gate starves == 0. The
+  offline renderer (snd_render) drives the SAME ring/refill code
+  synchronously (eager chunk refills, asserts starves==0) — the
+  differential exercises the shipped fill path. SD-vs-tmpfs
+  reconciliation: CLAUDE.md's "SD streaming = stalls" gotcha is about
+  WRITES (logging) on the frame path; PLAN §7 designed bounded READS
+  off the frame path — the reader thread makes even a pathological
+  read invisible to the frame loop (up to ~0.7 s of stall absorbed);
+  the music PCM is staged on $DSD (real SD), page cache dropped before
+  the paced run so the gate measures genuine SD reads.
+- **Method / run caps**: host — cold `check-music-fidelity.sh` (NEW,
+  composes nothing; 12 golden replays tap+STREAM-MATCH + music
+  differential + 3 synthetic legs: menu@10900 frames = the earliest
+  loop WRAP, fod@20000 = EOF-silence + wrap, targettest@600 =
+  short-intro chaining; all 8 tracks covered) ≤ 4 cold attempts;
+  device — ≤ 3 PACED runs total (1 donecheck + 1 render regression +
+  1 spare for a failed first attempt); SD latency measured BEFORE
+  gating via (a) a drop-caches + dd 64 KB-chunk full-file read probe
+  (throughput sanity, not gated) and (b) the --music-lat sidecar (per
+  refill: start ns, read ns, frames — RAM-buffered on the reader
+  thread, written post-run; p50/p99/max reported in the result entry +
+  PORTABILITY row). Browser runs: 0.
+- **Pass criteria**: MUSIC FIDELITY OK (12/12 bit-identical C-vs-ref
+  with music + 3 synthetic legs + teeth); DEVICE MUSIC OK — full g01
+  paced ON DEVICE with render+SFX+music live: STREAM MATCH (unchanged
+  verify-stream.js), full p99 < 16.67 ms, render p99 <= 8 ms,
+  skips == 0, rendered == 3600, underruns == 0, badlen == 0,
+  starves == 0, wall in [58,66] s, granted spec 44100/512/2 pinned,
+  musout == cbs*512 cross-bind, refills == sidecar rows; cold
+  check-mixer-fidelity.sh still MIXER FIDELITY OK (no-music byte
+  identity); cold check-device-render.sh still DEVICE RENDER OK
+  (gfx_app.c shared-TU change). check-sim.sh: SKIPPED with
+  justification iff `git diff --stat port/sim/` is empty (survey
+  verdict: render-plane; no sim TU changes planned).
+- **Teeth (pre-registered)**: T1 music gain nibble (gainQ8+1, g01 leg)
+  → differential diverges; T2 loop-BEG skew (+1 frame, g01 leg) →
+  diverges (window math load-bearing where the intro→loop chain lands
+  in-match); T3 loop-DUR skew (+1, menu WRAP leg) → diverges (wrap
+  arithmetic); T4 underfill probe (refills withheld after prefill) →
+  starves > 0 reported AND output diverges (starve accounting is
+  load-bearing); T5 music PCM corruption on device (append a byte to
+  the staged SD copy) → the sha verify dies; restored by re-push +
+  re-verify; T6 gate-parse teeth: a crafted music summary with
+  starves=1 (and a duplicate-summary variant) → the check's parser
+  dies; T-grammar: malformed --music args / volbits → loud death both
+  renderers. Positive controls throughout.
+- **Refutation shapes**: (a) p99 over budget WITH music → measure the
+  callback cost split (mixer callback is ~2 ops/frame heavier + reader
+  preemption on the single core): one bounded evidence round — attrib
+  the overage via the timing artifact + --music-lat + (if needed) one
+  --attrib run, then STOP and report (never widen the budget);
+  (b) SD-latency spikes starving the ring → the sidecar distribution
+  says whether 2x64 KB absorbs the measured p-max (0.743 s tolerance);
+  if not, buffer sizing is re-derived measured-then-frozen (a
+  PORTABILITY row change, documented) — one resize round, then STOP;
+  (c) differential divergence C-vs-ref → localize by first differing
+  byte offset (out-frame = offset/4 → sim frame + in-frame index),
+  fix, re-run; >= 3 divergence-driven fix rounds → STOP and report the
+  class; (d) drop_caches unavailable on this kernel → the probe runs
+  without it and the result entry records the page-cache exposure
+  honestly (cold-boot coverage deferred to the M4 gate's fresh-boot
+  discipline). Do NOT retry blind past any cap.
+- **Surfaces**: port/gfx/{snd_mixer.h, snd_render.c, snd_reference.js,
+  gfx_app.c} edits; NEW port/gfx/check-music-fidelity.sh +
+  port/gfx/check-device-music.sh. NO edits to: check-mixer-fidelity.sh
+  / check-device-render.sh / check-device-audio.sh / riglib.sh /
+  sim TUs / any frozen golden (the under-review arc surfaces stay
+  byte-frozen; the new gfx_app music summary is a SEPARATE stderr line
+  so every existing pinned grammar parses unchanged). Music channel =
+  header code in snd_mixer.h + gfx_app.c glue (the s1_input.h/
+  snd_mixer.h header-only precedent) so rig_arm_build's TU list is
+  unchanged (its srchash covers port/gfx bytes — stamp auto-misses).
+  Tier-A arc for the new check scripts + mixer/streamer surfaces:
+  driver-queued post-task (M4 conventions).
+- **PROVENANCE**: music PCM is Nintendo-derived — build output +
+  device scratch/SD only, NEVER committed (no-commit guards in both
+  new checks; per-track sha256 pins are hashes, not bytes).

@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, all M4 arcs clear; task 7 next)
+## Live right now (updated: 2026-07-19, session handoff — iter-87 task-7 writer was in flight at handoff; ground-truth its state from disk per the ccebc9b precedent)
 
 - **Iter 86 (M4 hardening — BOTH arcs' round-2 residuals: review-83
   1 Medium + review-84 5 Mediums/2 Lows) DONE** (full entry: AGENT-LOG
