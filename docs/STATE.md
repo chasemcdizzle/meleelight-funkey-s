@@ -3,7 +3,36 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 91 — M4 hardening DONE: FOH-arc round-2 residuals closed, cold check green first attempt)
+## Live right now (updated: 2026-07-19, iter 92 — M4 hardening DONE: FOH-arc round-3 residuals closed, cold check green first attempt)
+
+- **Iter 92 (M4 hardening MICRO — FOH-arc round-3 closure: control
+  flow-ID confound + dotfile enumeration) DONE** (full entry:
+  AGENT-LOG iter 92 pre-registration + result; latest AGENT-LOG id:
+  iter 92). Both review-91 round-3 findings (.loop/review-91-1.log,
+  NO-GO: one High + one capped Low) shipped: **H** — the [4w]
+  treatment and control now share ONE flow id (`wit-g01`, sibling
+  dirs build/check/wit/ vs ctrl/); the control-trace derivation's
+  header-substitution normalization is DELETED (want = witness trace
+  minus `S 415 lcancel 1` + LAUNCH lcancel 1→0, byte-exact cmp header
+  included). ID-independence proven by MEASUREMENT: dev probe on the
+  iter-91 residue + standing tooth T15 — same flow bytes under a
+  renamed basename change ONLY the trace header, sim stream +
+  BRIDGE-STATE byte-identical; the treatment pin 9cd2843d…ecb7f is
+  rename-invariant, NOT re-frozen. **L** — judge_shot_inventory is
+  dotfile-inclusive (find, rc case-split); tooth T16 plants
+  `.unexpected.ppm` and dies in the production judge. Teeth 14→16.
+  check-foh-flows.sh ONLY surface touched; flows/ +
+  judge-foh-trace.js BYTE-UNCHANGED (pin valid). COLD: **FOH FLOWS OK
+  (flows=5 shots=13 bridges=3 states=4 diverge=1 control=1
+  teeth=16)** first attempt (.loop/m4-foh92-donecheck.log;
+  post-commit .loop/m4-foh92-donecheck2.log; skip-proofs
+  .loop/m4-foh92-checksim-skip.txt). Caps held: cold 2/2, dev 1/2.
+  **Driver next: FOH arc ROUND 4 reviews this commit's diff (closure
+  round — if it raises only variants of the closed classes, the arc
+  CAPS naming the class, per the triage header); then task-10
+  dispatch (device FOH; M3 defer-bound binding verbatim).**
+
+## [superseded by iter 92] (2026-07-19, iter 91 — M4 hardening DONE: FOH-arc round-2 residuals closed, cold check green first attempt)
 
 - **Iter 91 (M4 hardening — FOH-arc round-2 closure: witness control +
   hash pins, stderr capture, shots-b inventory) DONE** (full entry:

@@ -14561,3 +14561,145 @@ typed. Music-surface arc round 2 reviews this commit's bytes.
   "does plane X reach ticking" instrument (task-13 persistence) should
   copy the triad, not the bare witness. FOH arc round 3 reviews this
   commit's diff.
+
+## iter 92 — 2026-07-19 — M4 hardening PRE-REGISTRATION: FOH-arc round-3 residuals — control flow-ID confound + dotfile enumeration (frozen before any run/edit; PROCESS §2)
+
+- **Task**: REVIEW-HARDENING (MICRO) — close the review-91 round-3
+  NO-GO (.loop/review-91-1.log tail): exactly ONE substantive High +
+  one capped Low. Surfaces: port/foh/check-foh-flows.sh ONLY (flows/
+  untouched — the witness/control flows are check-owned, basenames
+  live under build/; judge-foh-trace.js BYTE-UNCHANGED, pin valid).
+  No sim TUs, no gfx TUs. Host-only, ZERO device runs. Command
+  output -> .loop/m4-foh92-*.log.
+- **H fix (control flow-ID confound)**: the treatment used flow id
+  `wit-lcancel-g01`, the control `wit-control-g01`, and the [4w]
+  trace derivation NORMALIZED the header-id difference (sed header
+  substitution) — so a bridge/sim path that accidentally keyed on the
+  observable flow id could produce the pinned treatment hash while
+  the control still matched. FIX: ONE shared basename `wit-g01.flow`
+  for both legs, disambiguated by the existing sibling dirs only
+  (build/check/wit/wit-g01.flow vs build/check/ctrl/wit-g01.flow —
+  the script's WIT/CTRL convention kept); both judge-foh-trace.js
+  calls expect the SAME id `wit-g01`; the header-substitution line is
+  DELETED from the control-trace derivation (want = witness trace
+  with EXACTLY the `S 415 lcancel 1` line dropped + the LAUNCH
+  lcancel field 1->0 — byte-exact cmp, header now identical by
+  construction). The frozen treatment pin WIT_RUN_HASH_F1 =
+  9cd2843d…ecb7f STAYS: the sim stream must be flow-id-independent,
+  so the pin must hold under the renamed id.
+- **L fix (dotfile enumeration)**: judge_shot_inventory's plain `ls`
+  omits dotfiles — a planted `shots-b/.unexpected.ppm` escapes the
+  claimed exact-set check. FIX: dotfile-inclusive exact-set
+  enumeration (`find . -mindepth 1 -maxdepth 1`, basename-stripped,
+  rc case-split — an enumeration failure is grammar death, never an
+  empty set).
+- **TEETH (2 new, T15-T16, generated copies only; T11-T14 unchanged
+  and re-fired under the new naming — T12's control-diverged probe
+  runs against the renamed legs by construction)**: T15 — STREAM
+  FLOW-ID INDEPENDENCE: the witness flow BYTES copied to a DIFFERENT
+  basename (`wit-idprobe-g01.flow`), run through the same verify
+  bridge; the emitted traces MUST differ in EXACTLY the header line
+  (proves the id is observable) while the sim stream bytes MUST be
+  byte-identical to the witness stream (proves nothing in the
+  bridge/sim path keys on the flow id — kills the reviewer's
+  scenario directly and proves the treatment pin is rename-invariant
+  every run). T16 — plant a DOTFILE `.unexpected.ppm` in a COPY of
+  f01's shots-b inventory -> the production judge_shot_inventory
+  MUST die (plain `ls` would have passed it).
+- **COUNTS (honest)**: verdict becomes `FOH FLOWS OK (flows=5
+  shots=13 bridges=3 states=4 diverge=1 control=1 teeth=16)` — only
+  the teeth count moves (14->16); every substantive count unchanged.
+- **RUN CAPS (frozen)**: cold full check runs <=2 (one pre-commit
+  official + one post-commit); dev component runs <=2 (1 planned:
+  the ID-independence probe on the iter-91 residue binary —
+  foh_app sources untouched this iter, so the residue binary is the
+  same build the cold run reproduces). Browser 0; device 0; docker 0
+  fresh expected (extractor stamp).
+- **REFUTATION SHAPES**: (a) the dev probe or cold run shows the
+  treatment stream/pin CHANGES when ONLY the flow id changed -> that
+  is the reviewer's confound FIRING (the bridge/sim path keys on the
+  flow id): STOP, report FAIL honestly with the divergence evidence;
+  do NOT re-freeze the pin, do NOT revert to distinct ids to make it
+  pass. (b) the control under the shared id does NOT byte-match the
+  derived want -> the two legs did not share the machine path:
+  STOP, report (never re-add a normalization to make cmp pass).
+  (c) T16's dotfile survives the new enumeration -> the fix is wrong;
+  fix the enumeration, never the tooth.
+- **DONE**: cold `bash port/foh/check-foh-flows.sh` -> the new
+  verdict line, exit 0, pre- AND post-commit
+  (.loop/m4-foh92-donecheck{,2}.log; teeth excerpt
+  .loop/m4-foh92-teeth.log; dev probe .loop/m4-foh92-dev.log);
+  skip-proofs (port/sim + port/gfx diffs EMPTY,
+  .loop/m4-foh92-checksim-skip.txt); result entry + STATE.md top; ONE
+  atomic commit `M4 hardening: FOH control ID-confound + dotfile
+  enumeration (iter 92)`; clean tree.
+
+## iter 92 — 2026-07-19 — M4 hardening RESULT: FOH-arc round-3 residuals CLOSED — control flow-ID confound killed (shared id, no normalization, ID-independence tooth) + dotfile-inclusive inventory; cold check green first attempt
+
+- **DONE-CHECK (cold, first attempt): `bash port/foh/check-foh-flows.sh`
+  → `FOH FLOWS OK (flows=5 shots=13 bridges=3 states=4 diverge=1
+  control=1 teeth=16)`, exit 0** (.loop/m4-foh92-donecheck.log; teeth
+  excerpt .loop/m4-foh92-teeth.log, 16/16 OK; dev probe
+  .loop/m4-foh92-dev.log; post-commit rerun
+  .loop/m4-foh92-donecheck2.log). Both review-91 round-3 findings
+  (.loop/review-91-1.log) shipped exactly as pre-registered (entry
+  above). Surfaces: check-foh-flows.sh ONLY — flows/ untouched (the
+  witness/control flows are check-owned under build/),
+  judge-foh-trace.js BYTE-UNCHANGED (pin valid); every substantive
+  count unchanged (only teeth 14→16).
+- **H CLOSED (control flow-ID confound)**: treatment and control now
+  share ONE flow basename/id — `wit-g01.flow` in the sibling dirs
+  build/check/wit/ vs build/check/ctrl/ (the script's existing
+  WIT/CTRL convention); both judge-foh-trace.js calls expect the SAME
+  id `wit-g01`; the header-substitution normalization is DELETED from
+  the control-trace derivation — the derived want is now the witness
+  trace with EXACTLY `S 415 lcancel 1` dropped + LAUNCH lcancel 1→0,
+  cmp'd byte-exact header included. All-else-identical now INCLUDES
+  the observable flow id: a bridge/sim path keying on the id can no
+  longer fake the treatment divergence while the control matches.
+- **ID-INDEPENDENCE PROBE (the reviewer's scenario, killed by
+  measurement)**: dev probe 1 (.loop/m4-foh92-dev.log, iter-91
+  residue binary — foh_app sources untouched, same build): the
+  witness flow BYTES under the renamed basename produced a sim stream
+  AND BRIDGE-STATE byte-identical to the iter-91 residue witness run
+  (`cmp` clean both), trace body identical, ONLY the header id line
+  differs. The frozen treatment pin WIT_RUN_HASH_F1 = 9cd2843d…ecb7f
+  is rename-invariant — refutation shape (a) NOT triggered; the pin
+  was NOT re-frozen (both cold runs re-confirm it under the new id).
+  Made STANDING as tooth T15: same-bytes flow under basename
+  `wit-idprobe-g01` each run must differ in EXACTLY the trace header
+  (id observable — probe not vacuous) with stream + bstate
+  byte-identical to the witness's.
+- **L CLOSED (dotfile enumeration)**: judge_shot_inventory now
+  enumerates via `find . -mindepth 1 -maxdepth 1` (dotfiles and
+  subdirs included), rc case-split (enumeration failure =
+  grammar_die, never an empty set); death message says "dotfiles
+  included".
+- **TEETH 16/16 fired** (T15-T16 new): T15 flow-id independence
+  (header-only trace delta + byte-identical stream/bstate) · T16 a
+  planted DOTFILE `.unexpected.ppm` in a shots-b copy dies in the
+  PRODUCTION judge_shot_inventory (plain `ls` would have passed it).
+  T11-T14 re-fired under the new naming — T12's control-diverged
+  probe ran against the renamed legs by construction.
+- **REGRESSIONS**: check-sim.sh / check-render.sh / mixer+music
+  checks SKIPPED, justified mechanically — git diff HEAD --stat EMPTY
+  for port/sim/ AND port/gfx/ (.loop/m4-foh92-checksim-skip.txt); the
+  six FOH-launched full-stream judgments green in-check (g01 ×2 + m01
+  + g03 + witness pinned divergence + T15 rename run) are the
+  sim-linkage regression.
+- **RUN-CAP LEDGER**: cold full check runs 2/2 (pre-commit official +
+  post-commit); dev component runs 1/2 (the ID-independence probe —
+  byte-identical on first contact); browser 0; device 0; docker 0
+  fresh (stamps hit).
+- **ZOOM OUT (HARD RULE 8)**: class lesson — a derived-want
+  NORMALIZATION is a confound admission: every substitution in a
+  derivation is a variable the experiment no longer controls. The
+  triad template (iter-91 zoom-out) is amended: treatment/control
+  flows must share EVERY observable identity (id included), deriving
+  wants with ONLY the treatment variable substituted; where an
+  identity CANNOT be shared, add a standing independence tooth (T15's
+  shape) proving the judged surface ignores it. Enumeration class:
+  any exact-set claim over a directory must enumerate dotfiles
+  (find, not ls) — second instance of the "claimed exact, actually
+  filtered" family (first: the shots-b run-B gap, review-90 M2).
+  FOH arc round 4 (closure round) reviews this commit's diff.

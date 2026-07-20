@@ -3,8 +3,9 @@
 # (fix_plan §M4 task 9; pre-registration AGENT-LOG iter 88; hardened
 # iter 90 per the review-88 round-1 triage — .loop/review-88-triage.md;
 # hardened iter 91 per the review-90 round-2 triage —
-# .loop/review-90-triage.md; §M4 conventions' menu verification
-# approach (a)-(c) host-side).
+# .loop/review-90-triage.md; hardened iter 92 per the review-91
+# round-3 findings — .loop/review-91-1.log; §M4 conventions' menu
+# verification approach (a)-(c) host-side).
 #
 # Composes, in order:
 #   [0] no-reclaim run lock + PRODUCER BYTE PINS (wrap-run.js /
@@ -30,7 +31,8 @@
 #       P6 header bytes, payload == 240*240*3 with no trailing bytes,
 #       non-blank, A==B) + pairwise distinctness (the pinned shot
 #       inventory EXACT-SET on BOTH runs' dirs — review-90 M2: an extra
-#       run-B file is death, judge_shot_inventory).
+#       run-B file is death; dotfile-inclusive, review-91 L —
+#       judge_shot_inventory).
 #   [4] MATCH-LAUNCH BRIDGES (full-stream-judged: the HONEST bridge
 #       count, review-88 H1): f01 -> frozen g01, f02 (live C AI, no
 #       AIBRIDGE1) -> frozen m01, f05 -> frozen g03 (p2Char != 0
@@ -58,8 +60,13 @@
 #       fully MATCH frozen g01 (rc 0, whole-log byte-exact) — an
 #       options-path boot/serialization defect breaks the control, so
 #       the witness divergence is attributable to lcancel itself.
+#       review-91 H: BOTH legs share ONE flow id (wit-g01, sibling
+#       dirs wit/ vs ctrl/); the control-trace derivation carries NO
+#       header normalization — all-else-identical includes the
+#       observable flow id, and tooth T15 proves the stream is
+#       flow-id-independent every run.
 #   [5] TEETH (standing, pre-registered T1-T10 AGENT-LOG iter 90 +
-#       T11-T14 iter 91):
+#       T11-T14 iter 91 + T15-T16 iter 92):
 #       nav-perturb under the SAME flow header with an exact
 #       first-divergent-line pair (L1), char variant, stream-judge
 #       nibble (run-JSON side), trace grammar malformed + resembling,
@@ -69,12 +76,16 @@
 #       corruption x2 (M4), witness treatment-pin corruption (r90 H),
 #       control fed a divergence (r90 H), stderr-injection wrapper
 #       through the production capture (r90 M1), unexpected.ppm planted
-#       in a shots-b copy (r90 M2). All operate on GENERATED
-#       variants/copies — committed bytes are never edited.
+#       in a shots-b copy (r90 M2), stream flow-id independence — the
+#       witness flow bytes under a renamed basename change ONLY the
+#       trace header, stream + bstate byte-identical (r91 H), dotfile
+#       .unexpected.ppm planted in a shots-b copy (r91 L). All operate
+#       on GENERATED variants/copies — committed bytes are never
+#       edited.
 #   [6] hygiene: build outputs are git-ignored (rc case-split).
 #
 # Prints `FOH FLOWS OK (flows=5 shots=13 bridges=3 states=4 diverge=1
-# control=1 teeth=14)`, exit 0; ANY divergence, off-graph transition,
+# control=1 teeth=16)`, exit 0; ANY divergence, off-graph transition,
 # pin mismatch, count disagreement, or missing artifact -> nonzero.
 #
 # HONEST EXPOSURE (PROCESS §8): the frozen traces prove the REWRITTEN
@@ -402,14 +413,18 @@ judge_shot_pair() { # <ctx> <fileA> <fileB>
   cmp "$fa" "$fb" || fail "shot $ctx: runs A/B not byte-identical"
 }
 
-# PRODUCTION shot-inventory judge (review-90 M2): EXACT-SET enumeration
-# of a shots dir vs the pinned inventory, both directions — an extra,
-# missing, or renamed file is death. Applied to BOTH runs' dirs in
-# leg [3]; tooth T14 plants unexpected.ppm and runs THIS function.
+# PRODUCTION shot-inventory judge (review-90 M2; review-91 L): EXACT-SET
+# enumeration of a shots dir vs the pinned inventory, both directions —
+# an extra, missing, or renamed file is death. DOTFILE-INCLUSIVE
+# (review-91 L: plain `ls` omits dotfiles — a planted .unexpected.ppm
+# escaped the claimed exact set); enumeration failure is grammar death,
+# never an empty set. Applied to BOTH runs' dirs in leg [3]; teeth T14
+# (unexpected.ppm) and T16 (.unexpected.ppm) run THIS function.
 judge_shot_inventory() { # <ctx> <dir> <want-sorted>
-  local got
-  got="$(ls "$2" | sed 's/\.ppm$//' | sort | tr '\n' ' ' | sed 's/ $//')"
-  [ "$got" = "$3" ] || fail "shot inventory $1: {$got} != pinned {$3} (both directions)"
+  local got rc=0
+  got="$(cd "$2" && find . -mindepth 1 -maxdepth 1 | sed -e 's|^\./||' -e 's/\.ppm$//' | sort | tr '\n' ' ' | sed 's/ $//')" || rc=$?
+  [ "$rc" = 0 ] || grammar_die "shot inventory $1: enumeration failed (rc $rc) — corrupt evidence, never a pass"
+  [ "$got" = "$3" ] || fail "shot inventory $1: {$got} != pinned {$3} (both directions, dotfiles included)"
 }
 
 # --- [3] flow runs x2 + trace/shot judgments -----------------------------------
@@ -650,7 +665,11 @@ mkdir -p "$WIT"
 # pin stays 5): options detour turns lcancel 0->1 (ONE A press on the
 # lcancel row, gameplaymenu.js:44-48), then g01's exact selections
 # (fox via two RIGHTs, P2 default marth, battlefield default).
-cat > "$WIT/wit-lcancel-g01.flow" << 'WEOF'
+# review-91 H: the treatment and control share ONE basename (wit-g01),
+# disambiguated by the sibling dirs wit/ vs ctrl/ only — the observable
+# flow id is identical between the legs, so no bridge/sim path keying
+# on the id can fake the treatment divergence while the control matches.
+cat > "$WIT/wit-g01.flow" << 'WEOF'
 FLOW1
 # check-owned witness flow (iter 90, review-88 H1): lcancel=1 + g01
 # params; the launched stream MUST diverge from the frozen g01 stream.
@@ -693,12 +712,12 @@ I 460 A
 I 461 -
 END 465
 WEOF
-"$B/foh_app" --flow "$WIT/wit-lcancel-g01.flow" --flow-out "$WIT/trace.txt" \
+"$B/foh_app" --flow "$WIT/wit-g01.flow" --flow-out "$WIT/trace.txt" \
   --bridge verify --simdata "$B/simdata.txt" --seed "$G01_SEED" \
   --trace "$B/g01.trace.txt" --frames "$G01_FRAMES" --out "$WIT/stream.txt" \
   --bstate-out "$WIT/bstate.txt" 2>&1 | relay_lines
 made "$WIT/trace.txt" "$WIT/stream.txt" "$WIT/bstate.txt"
-{ node "$FOH/judge-foh-trace.js" "$WIT/trace.txt" wit-lcancel-g01 1; } 2>&1 | relay_lines
+{ node "$FOH/judge-foh-trace.js" "$WIT/trace.txt" wit-g01 1; } 2>&1 | relay_lines
 # LAUNCH line EXACT: g01 cross-bound params + lcancel=1 (nothing else).
 witlaunch="LAUNCH 460 p1=$G01_P1 p2=$G01_P2 p2type=0 difficulty=3 stage=$G01_STAGE turbo=0 lcancel=1 tapjump=0,0,0,0 versus=0"
 c="$(count_xl "$WIT/trace.txt" "$witlaunch")"
@@ -766,20 +785,20 @@ echo "    -> DIVERGENCE WITNESS OK: lcancel=1 diverges frozen g01 at frame $WIT_
 CTRL=$B/ctrl
 rm -rf "$CTRL"
 mkdir -p "$CTRL"
-mkvariant "$WIT/wit-lcancel-g01.flow" "$CTRL/wit-control-g01.flow" delete \
+mkvariant "$WIT/wit-g01.flow" "$CTRL/wit-g01.flow" delete \
   "I 415 A" "I 416 -"
-"$B/foh_app" --flow "$CTRL/wit-control-g01.flow" --flow-out "$CTRL/trace.txt" \
+"$B/foh_app" --flow "$CTRL/wit-g01.flow" --flow-out "$CTRL/trace.txt" \
   --bridge verify --simdata "$B/simdata.txt" --seed "$G01_SEED" \
   --trace "$B/g01.trace.txt" --frames "$G01_FRAMES" --out "$CTRL/stream.txt" \
   --bstate-out "$CTRL/bstate.txt" 2>&1 | relay_lines
 made "$CTRL/trace.txt" "$CTRL/stream.txt" "$CTRL/bstate.txt"
-{ node "$FOH/judge-foh-trace.js" "$CTRL/trace.txt" wit-control-g01 1; } 2>&1 | relay_lines
-# Behavioral same-path binding: the control trace must equal the
-# witness trace with EXACTLY the header id substituted, the lcancel
-# settings-edit line dropped, and the LAUNCH lcancel field 1->0 —
-# nothing else may differ between the two runs' emitted machines.
-sed -e 's/^FOHTRACE1 flow=wit-lcancel-g01$/FOHTRACE1 flow=wit-control-g01/' \
-    -e '/^S 415 lcancel 1$/d' \
+{ node "$FOH/judge-foh-trace.js" "$CTRL/trace.txt" wit-g01 1; } 2>&1 | relay_lines
+# Behavioral same-path binding (review-91 H: the header id is SHARED —
+# no normalization): the control trace must equal the witness trace
+# with EXACTLY the lcancel settings-edit line dropped and the LAUNCH
+# lcancel field 1->0 — nothing else, header included, may differ
+# between the two runs' emitted machines.
+sed -e '/^S 415 lcancel 1$/d' \
     -e '/^LAUNCH 460 /s/ lcancel=1 / lcancel=0 /' \
   "$WIT/trace.txt" > "$CTRL/trace-want.txt"
 made "$CTRL/trace-want.txt"
@@ -809,7 +828,7 @@ control=1
 echo "    -> CONTROL OK: the same options path with lcancel=0 fully MATCHES frozen g01 (whole-log byte-exact)"
 
 # --- [5] TEETH (standing; generated variants/copies only) ----------------------
-echo "=== [5] teeth (pre-registered T1-T10 AGENT-LOG iter 90; T11-T14 iter 91)"
+echo "=== [5] teeth (pre-registered T1-T10 AGENT-LOG iter 90; T11-T14 iter 91; T15-T16 iter 92)"
 teeth=0
 run_variant() { # <flow-file> <out-trace>
   rm -f "$2"
@@ -1083,7 +1102,64 @@ c="$(count_x "$B/t14.out" "shot inventory")"
 [ "$c" = 1 ] || fail "T14 — inventory death message class missing"
 echo "    T14 OK: a planted unexpected.ppm dies in the production judge_shot_inventory"
 teeth=$((teeth + 1))
-[ "$teeth" = 14 ] || fail "teeth ledger — $teeth/14 fired"
+# T15 (review-91 H): STREAM FLOW-ID INDEPENDENCE — the witness flow
+# BYTES under a DIFFERENT basename must (a) emit a trace differing in
+# EXACTLY the header line (the id IS observable — the probe is not
+# vacuous) and (b) produce a byte-identical sim stream + BRIDGE-STATE,
+# so nothing in the bridge/sim path keys on the observable flow id:
+# the [4w] treatment pin is rename-invariant and the shared-id control
+# is all-else-identical by MEASUREMENT, not assumption.
+mkdir -p "$B/t15"
+cp "$WIT/wit-g01.flow" "$B/t15/wit-idprobe-g01.flow"
+"$B/foh_app" --flow "$B/t15/wit-idprobe-g01.flow" --flow-out "$B/t15/trace.txt" \
+  --bridge verify --simdata "$B/simdata.txt" --seed "$G01_SEED" \
+  --trace "$B/g01.trace.txt" --frames "$G01_FRAMES" --out "$B/t15/stream.txt" \
+  --bstate-out "$B/t15/bstate.txt" 2>&1 | relay_lines
+made "$B/t15/trace.txt" "$B/t15/stream.txt" "$B/t15/bstate.txt"
+node -e '
+  const fs = require("fs");
+  const a = fs.readFileSync(process.argv[1], "utf8").split("\n"); // witness
+  const b = fs.readFileSync(process.argv[2], "utf8").split("\n"); // idprobe
+  if (a[0] !== "FOHTRACE1 flow=wit-g01" ||
+      b[0] !== "FOHTRACE1 flow=wit-idprobe-g01") {
+    console.error("headers not the expected pair: " + JSON.stringify(a[0]) +
+                  " / " + JSON.stringify(b[0]) +
+                  " — the flow id is not observable where expected");
+    process.exit(1);
+  }
+  if (a.length !== b.length) {
+    console.error("trace line counts differ beyond the header");
+    process.exit(1);
+  }
+  for (let i = 1; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      console.error("non-header divergence at line " + (i + 1) + ": " +
+                    JSON.stringify(a[i]) + " != " + JSON.stringify(b[i]));
+      process.exit(1);
+    }
+  }
+' "$WIT/trace.txt" "$B/t15/trace.txt" || fail "T15 — renamed-flow trace does not differ in exactly the header line"
+cmp "$B/t15/stream.txt" "$WIT/stream.txt" || fail "T15 — the sim stream DEPENDS on the flow id (renamed flow produced different stream bytes; the review-91 H confound is REAL — STOP, do not re-pin)"
+cmp "$B/t15/bstate.txt" "$WIT/bstate.txt" || fail "T15 — BRIDGE-STATE depends on the flow id"
+echo "    T15 OK: renamed flow id changes ONLY the trace header — stream + BRIDGE-STATE byte-identical (flow-id independence)"
+teeth=$((teeth + 1))
+# T16 (review-91 L): plant a DOTFILE .unexpected.ppm in a COPY of
+# f01's shots-b inventory -> the dotfile-inclusive production
+# judge_shot_inventory MUST die (plain ls would have passed it).
+rm -rf "$B/t16-shots"
+mkdir -p "$B/t16-shots"
+cp "$B/f01-vs-g01/shots-b/"*.ppm "$B/t16-shots/"
+printf 'P6\n1 1\n255\nxyz' > "$B/t16-shots/.unexpected.ppm"
+made "$B/t16-shots/.unexpected.ppm"
+rc=0
+( judge_shot_inventory "t16 (f01 shots-b copy + dotfile)" "$B/t16-shots" "$t14want" ) \
+  > "$B/t16.out" 2>&1 || rc=$?
+[ "$rc" != 0 ] || fail "T16 — a planted DOTFILE .unexpected.ppm PASSED the exact-set shot inventory (enumeration is not dotfile-inclusive)"
+c="$(count_x "$B/t16.out" "shot inventory")"
+[ "$c" = 1 ] || fail "T16 — inventory death message class missing"
+echo "    T16 OK: a planted dotfile dies in the production judge_shot_inventory"
+teeth=$((teeth + 1))
+[ "$teeth" = 16 ] || fail "teeth ledger — $teeth/16 fired"
 
 # --- [6] hygiene ----------------------------------------------------------------
 rc=0
