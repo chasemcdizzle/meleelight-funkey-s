@@ -17126,3 +17126,30 @@ CONCATENATIONS — any future list-concat gets its own measured cap +
 loud bounds at the concat site. Candidate future instrument: a
 one-shot "authored-domain capacity sweep" that walks every authored
 data plane against every C cap (registered, not built — n=2).
+
+## driver — 2026-07-20 — TARGET-RIG ARC CLOSED (GO round 3, ZERO findings); iter-99 (task 12) verified + pushed; task-12 arc + task 13 dispatched
+
+- **TARGET-RIG ARC CLOSED — VERDICT: GO, round 3, zero findings**
+  (.loop/review-98-1.log over a3fc74d; rounds: review-94 r1 NO-GO →
+  iter 96 → review-96 r2 NO-GO (retry after a provider content flag
+  killed -1 mid-review) → iter 98 → r3 GO clean: scanner scope-correct
+  escape-aware fail-closed, all consumers scan raw bytes, T12
+  integration tooth real, pins at M0 discipline, teeth counter 24
+  accurate, no new class). Pro-forma caps named by the reviewer:
+  whitelist-input-trust refinements / tooth-coverage extensions /
+  the registered unsealed-secondary class. Tier A+ (grok, GO) already
+  on record — the task-11 arc queue item is fully resolved.
+  Recorded here late (was deferred one turn: the iter-99 writer held
+  the tree when the verdict landed).
+- **Iter 99 (task 12, 5441d59) driver-ground-truthed**: tree clean,
+  frozen confinement verified (oracle/, check-sim.sh, manifest +
+  frozen streams zero-diff), all 4 regression verdicts present, and
+  the done-check driver-cold-verified: `DEVICE TARGET CONFORMS
+  (goldens=2 flows=2 shots=4 fbwit=4 p99=13.330ms skips=0 underruns=0
+  starves=0 starts f06-target-t01=15 f07-target-t02=31 teeth=6)` RC=0
+  (.loop/m4-task12-driver-cold.log). PUSHED with this note.
+- **In flight next: task-12 Tier-A arc round 1** (codex over
+  5441d59's non-checksummed surfaces: check-device-target.sh,
+  check-foh-flows.sh + judge/normalizer extensions, foh.c/foh.h
+  target screens, target_finish_probe, the capacity class fix) and
+  **iter-100 = M4 task 13 (SD persistence)** writer.
