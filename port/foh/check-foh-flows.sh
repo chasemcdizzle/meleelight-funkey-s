@@ -2,7 +2,9 @@
 # check-foh-flows.sh — M4 task 9 done-check: FOH core + menu flows, HOST
 # (fix_plan §M4 task 9; pre-registration AGENT-LOG iter 88; hardened
 # iter 90 per the review-88 round-1 triage — .loop/review-88-triage.md;
-# §M4 conventions' menu verification approach (a)-(c) host-side).
+# hardened iter 91 per the review-90 round-2 triage —
+# .loop/review-90-triage.md; §M4 conventions' menu verification
+# approach (a)-(c) host-side).
 #
 # Composes, in order:
 #   [0] no-reclaim run lock + PRODUCER BYTE PINS (wrap-run.js /
@@ -27,38 +29,53 @@
 #       through the PRODUCTION judge_shot_pair (review-88 M5/M6: exact
 #       P6 header bytes, payload == 240*240*3 with no trailing bytes,
 #       non-blank, A==B) + pairwise distinctness (the pinned shot
-#       inventory, both directions).
+#       inventory EXACT-SET on BOTH runs' dirs — review-90 M2: an extra
+#       run-B file is death, judge_shot_inventory).
 #   [4] MATCH-LAUNCH BRIDGES (full-stream-judged: the HONEST bridge
 #       count, review-88 H1): f01 -> frozen g01, f02 (live C AI, no
 #       AIBRIDGE1) -> frozen m01, f05 -> frozen g03 (p2Char != 0
 #       stream-load-bearing, review-88 M2) — FULL 3600-frame equality
-#       via wrap-run.js -> UNCHANGED verify-stream.js, each verify log
-#       judged BYTE-EXACT against a verdict line constructed from the
-#       frozen file's own counts (whole-log whitelist, review-88 M4);
+#       via wrap-run.js -> UNCHANGED verify-stream.js, each wrapped run
+#       re-validated structurally (validate_run_shape, review-90 H(b)),
+#       each verify log captured stdout+stderr (verify_capture,
+#       review-90 M1) and judged BYTE-EXACT against a verdict line
+#       constructed from the frozen file's own counts (whole-log
+#       whitelist, review-88 M4);
 #       f01/f02/f03/f05 BRIDGE-STATE witnesses cmp'd vs their frozen
 #       .bstate.expect (settings/params read back FROM GameState —
 #       f03 stays the STATE witness for the edited-settings plane).
-#   [4w] DIVERGENCE WITNESS (review-88 H1): a check-owned synthetic
-#       flow selects lcancel=1 through options-gameplay then g01's
-#       exact chars/stage and replays g01's trace through the FOH-fed
-#       settings plane; verify-stream vs the frozen g01 stream MUST
-#       report a first divergence at the PINNED frame (rc 2, 3-line
-#       exact grammar). A MATCH = DEATH — settings demonstrably reach
-#       ticking, or the check dies.
-#   [5] TEETH (standing, pre-registered T1-T10; AGENT-LOG iter 90):
+#   [4w] DIVERGENCE WITNESS + CONTROL (review-88 H1; review-90 H): a
+#       check-owned synthetic flow selects lcancel=1 through
+#       options-gameplay then g01's exact chars/stage and replays g01's
+#       trace through the FOH-fed settings plane; verify-stream vs the
+#       frozen g01 stream MUST report a first divergence at the PINNED
+#       frame (rc 2, 3-line exact grammar) whose frozen hash == the
+#       frozen file's own frame entry and whose run hash == the
+#       measured-then-frozen lcancel=1 TREATMENT PIN (review-90 H(c) —
+#       arbitrary unequal hashes can no longer masquerade). A MATCH =
+#       DEATH. Then the CONTROL (review-90 H(a)): the SAME flow with
+#       ONLY the lcancel press deleted (derived mechanically) MUST
+#       fully MATCH frozen g01 (rc 0, whole-log byte-exact) — an
+#       options-path boot/serialization defect breaks the control, so
+#       the witness divergence is attributable to lcancel itself.
+#   [5] TEETH (standing, pre-registered T1-T10 AGENT-LOG iter 90 +
+#       T11-T14 iter 91):
 #       nav-perturb under the SAME flow header with an exact
 #       first-divergent-line pair (L1), char variant, stream-judge
 #       nibble (run-JSON side), trace grammar malformed + resembling,
 #       shot corruption x3 through the production judge_shot_pair
 #       (M5/M6), difficulty variant, witness fail-closed (H1), f04
 #       sss->css edge variant (M1), f05 p2 variant (M2), verdict-log
-#       corruption x2 (M4). All operate on GENERATED variants/copies —
-#       committed bytes are never edited.
+#       corruption x2 (M4), witness treatment-pin corruption (r90 H),
+#       control fed a divergence (r90 H), stderr-injection wrapper
+#       through the production capture (r90 M1), unexpected.ppm planted
+#       in a shots-b copy (r90 M2). All operate on GENERATED
+#       variants/copies — committed bytes are never edited.
 #   [6] hygiene: build outputs are git-ignored (rc case-split).
 #
 # Prints `FOH FLOWS OK (flows=5 shots=13 bridges=3 states=4 diverge=1
-# teeth=10)`, exit 0; ANY divergence, off-graph transition, pin
-# mismatch, count disagreement, or missing artifact -> nonzero.
+# control=1 teeth=14)`, exit 0; ANY divergence, off-graph transition,
+# pin mismatch, count disagreement, or missing artifact -> nonzero.
 #
 # HONEST EXPOSURE (PROCESS §8): the frozen traces prove the REWRITTEN
 # machine's flow graph and selection semantics against the
@@ -385,6 +402,16 @@ judge_shot_pair() { # <ctx> <fileA> <fileB>
   cmp "$fa" "$fb" || fail "shot $ctx: runs A/B not byte-identical"
 }
 
+# PRODUCTION shot-inventory judge (review-90 M2): EXACT-SET enumeration
+# of a shots dir vs the pinned inventory, both directions — an extra,
+# missing, or renamed file is death. Applied to BOTH runs' dirs in
+# leg [3]; tooth T14 plants unexpected.ppm and runs THIS function.
+judge_shot_inventory() { # <ctx> <dir> <want-sorted>
+  local got
+  got="$(ls "$2" | sed 's/\.ppm$//' | sort | tr '\n' ' ' | sed 's/ $//')"
+  [ "$got" = "$3" ] || fail "shot inventory $1: {$got} != pinned {$3} (both directions)"
+}
+
 # --- [3] flow runs x2 + trace/shot judgments -----------------------------------
 echo "=== [3] flow runs (x2 each) + frozen-trace + shot judgments"
 total_shots=0
@@ -443,11 +470,12 @@ for k in 0 1 2 3 4; do
     cmp "$B/$id/bstate.txt" "$FLOWS/$id.bstate.expect" || fail "flow $id: BRIDGE-STATE differs from the frozen witness"
     states=$((states + 1))
   fi
-  # shots: pinned inventory both directions, A==B, non-blank, distinct
+  # shots: pinned inventory EXACT-SET on BOTH runs' dirs (review-90
+  # M2), A==B, non-blank, distinct
   want_shots="${FLOW_SHOTS[$k]}"
-  got_a="$(ls "$B/$id/shots-a" | sed 's/\.ppm$//' | sort | tr '\n' ' ' | sed 's/ $//')"
   want_sorted="$(printf '%s\n' $want_shots | sort | tr '\n' ' ' | sed 's/ $//')"
-  [ "$got_a" = "$want_sorted" ] || fail "flow $id: shot inventory {$got_a} != pinned {$want_sorted} (both directions)"
+  judge_shot_inventory "flow $id run A" "$B/$id/shots-a" "$want_sorted"
+  judge_shot_inventory "flow $id run B" "$B/$id/shots-b" "$want_sorted"
   for sname in $want_shots; do
     judge_shot_pair "flow $id shot $sname" \
       "$B/$id/shots-a/$sname.ppm" "$B/$id/shots-b/$sname.ppm"
@@ -479,6 +507,50 @@ assert_stream_verdict() { # <vlog> <want-file> <ctx>
     grammar_die "bridge $3 — cmp rc $rc reading the verify log (corrupt evidence, never a pass)"
   fi
 }
+# review-90 M1: the judged verify log captures stdout AND stderr — a
+# foreign stderr diagnostic lands in the byte-judged log and kills the
+# whole-log equality (tooth T13 proves it through THIS function; the
+# green corpus is stderr-quiet — validated vs the archived iter-90
+# logs, zero false rejections, .loop/m4-foh91-dev.log).
+verify_capture() { # <vlog> <cmd...>  (rc = the command's rc, pipefail)
+  local vlog="$1"
+  shift
+  rm -f "$vlog"
+  { "$@" 2>&1 | tee "$vlog"; } | relay_lines
+}
+# review-90 H(b): explicit full-run structural validation of EVERY
+# wrapped run this check judges (bridges, control, AND the divergence
+# witness — the witness gets the SAME validation as bridge runs):
+# frames contiguous 1..N with N == the golden's count, every hash
+# 64-lowercase-hex, integer coverage counters.
+validate_run_shape() { # <run.json> <frames> <ctx>
+  node -e '
+    const fs = require("fs");
+    const j = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const want = Number(process.argv[2]);
+    if (!Number.isInteger(want) || want <= 0) {
+      console.error("bad frames arg: " + process.argv[2]); process.exit(1);
+    }
+    if (!Array.isArray(j.frames) || j.frames.length !== want) {
+      console.error("run has " +
+        (Array.isArray(j.frames) ? j.frames.length : "no") +
+        " frames, want exactly " + want); process.exit(1);
+    }
+    for (let i = 0; i < j.frames.length; i++) {
+      const fr = j.frames[i];
+      if (!fr || fr.f !== i + 1 || typeof fr.h !== "string" ||
+          !/^[0-9a-f]{64}$/.test(fr.h)) {
+        console.error("frame record " + (i + 1) +
+          " malformed (want contiguous f + 64-hex h)"); process.exit(1);
+      }
+    }
+    if (!j.coverage || !Number.isInteger(j.coverage.rngCalls) ||
+        !Number.isInteger(j.coverage.rngCallsOutsideStep)) {
+      console.error("coverage counters missing/non-integer");
+      process.exit(1);
+    }
+  ' "$1" "$2" || fail "run shape $3: wrapped run JSON failed the full-run structural validation (review-90 H(b))"
+}
 bridges=0
 judge_bridge() { # <flowId> <goldenId> <goldenName> <frames> <frozen> [<wrapman>]
   local id="$1" gid="$2" name="$3" frames="$4" frozen="$5" wrapman="${6:-}"
@@ -490,9 +562,10 @@ judge_bridge() { # <flowId> <goldenId> <goldenName> <frames> <frozen> [<wrapman>
     { node "$SIM/wrap-run.js" "$gid" "$B/$id/stream.txt" "$B/$id.run.json"; } 2>&1 | relay_lines
   fi
   made "$B/$id.run.json"
+  validate_run_shape "$B/$id.run.json" "$frames" "bridge $id"
   local vlog="$B/$id.verify.log"
-  rm -f "$vlog"
-  if ! { node oracle/harness/verify-stream.js "$B/$id.run.json" "$frozen" | tee "$vlog"; } 2>&1 | relay_lines; then
+  if ! verify_capture "$vlog" node oracle/harness/verify-stream.js \
+      "$B/$id.run.json" "$frozen"; then
     fail "verify-stream rc != 0 for bridge $id (log: $vlog)"
   fi
   made "$vlog"
@@ -516,14 +589,60 @@ judge_bridge f05-vs-g03 g03 "${ORACLE_NAMES[2]}" "$G03_FRAMES" \
   "oracle/goldens/${ORACLE_NAMES[2]}.sha256.json"
 [ "$bridges" = 3 ] || fail "bridge ledger — $bridges/3 full-stream bridges judged"
 
-# --- [4w] divergence witness: FOH-fed settings REACH TICKING (review-88 H1) ------
-echo "=== [4w] divergence witness: lcancel=1 through the FOH plane vs frozen g01"
+# Variant generator (NO eval — the manifest-eval class stays dead):
+# fixed operations over flow bytes, anchors must match exactly or the
+# caller dies. Used by the [4w] control derivation and the [5] teeth.
+mkvariant() { # <src> <dst> <insert-after|delete> <anchor/lines...>
+  node -e '
+    const fs = require("fs");
+    const [src, dst, op, ...args] = process.argv.slice(1);
+    const ls = fs.readFileSync(src, "utf8").split("\n");
+    if (op === "insert-after") {
+      const [anchor, ...ins] = args;
+      const i = ls.indexOf(anchor);
+      if (i < 0) { console.error("anchor missing: " + anchor); process.exit(1); }
+      ls.splice(i + 1, 0, ...ins);
+    } else if (op === "delete") {
+      for (const drop of args) {
+        const i = ls.indexOf(drop);
+        if (i < 0) { console.error("anchor missing: " + drop); process.exit(1); }
+        ls.splice(i, 1);
+      }
+    } else { console.error("bad op"); process.exit(1); }
+    fs.writeFileSync(dst, ls.join("\n"));
+  ' "$1" "$2" "$3" "${@:4}"
+  made "$2"
+}
+
+# --- [4w] divergence witness + lcancel=0 control (review-88 H1; review-90 H) -----
+echo "=== [4w] divergence witness (lcancel=1) + control (lcancel=0) vs frozen g01"
 # Measured-then-frozen (AGENT-LOG iter 90 dev probe): lCancelType=1
 # sets phys.lCancel=true for every player every frame
 # (port/sim/physics.c:962-965) — first divergence from the frozen g01
 # stream at this exact frame. Drift in this pin = a settings-plane or
 # spec change = reviewed pin update, never a silent re-measure.
 WIT_DIV_FRAME=1
+# review-90 H(c): the lcancel=1 TREATMENT frame-1 hash,
+# measured-then-frozen (iter-90 committed-check cold-run residue,
+# re-confirmed by every run of this check; AGENT-LOG iter 91). The
+# witness report's run hash MUST equal this pin — "some divergence at
+# frame 1" (an options-path serialization defect, a corrupted stream)
+# can no longer masquerade as the lcancel effect. REVIEWED RE-FREEZE
+# required if oracle/CHECKSUM.md ever bumps specVersion or the
+# settings plane changes — never a silent re-measure.
+WIT_RUN_HASH_F1=9cd2843dd70fcef4cf29cb3a4c53d8fd29d70c6f3b02c5b633e3ff757e0ecb7f
+[[ "$WIT_RUN_HASH_F1" =~ ^[0-9a-f]{64}$ ]] || fail "witness — treatment pin malformed"
+# The report's frozen-side hash binds to the frozen g01 file's OWN
+# frame entry, read mechanically (no independent literal).
+WIT_FROZEN_HASH_F1="$(node -e '
+  const j = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  const n = Number(process.argv[2]);
+  const fr = j.frames[n - 1];
+  if (!fr || fr.f !== n) { console.error("bad frozen frame " + n); process.exit(1); }
+  console.log(fr.h);
+' "oracle/goldens/${ORACLE_NAMES[0]}.sha256.json" "$WIT_DIV_FRAME")" || fail "witness — cannot read the frozen frame-$WIT_DIV_FRAME hash from the g01 sha256.json"
+[[ "$WIT_FROZEN_HASH_F1" =~ ^[0-9a-f]{64}$ ]] || fail "witness — frozen frame-$WIT_DIV_FRAME hash read malformed"
+[ "$WIT_FROZEN_HASH_F1" != "$WIT_RUN_HASH_F1" ] || fail "witness — treatment pin EQUALS the frozen hash (a pin that cannot diverge is no pin)"
 WIT=$B/wit
 rm -rf "$WIT"
 mkdir -p "$WIT"
@@ -584,6 +703,10 @@ made "$WIT/trace.txt" "$WIT/stream.txt" "$WIT/bstate.txt"
 witlaunch="LAUNCH 460 p1=$G01_P1 p2=$G01_P2 p2type=0 difficulty=3 stage=$G01_STAGE turbo=0 lcancel=1 tapjump=0,0,0,0 versus=0"
 c="$(count_xl "$WIT/trace.txt" "$witlaunch")"
 [ "$c" = 1 ] || fail "witness — LAUNCH line != g01-params-plus-lcancel=1 (count $c/1)"
+# The settings-edit line itself (the control derivation below deletes
+# exactly this edit; assert it is real in the treatment first).
+c="$(count_xl "$WIT/trace.txt" "S 415 lcancel 1")"
+[ "$c" = 1 ] || fail "witness — trace does not carry exactly one 'S 415 lcancel 1' settings edit (count $c/1)"
 # BRIDGE-STATE EXACT: byte-equal to the FROZEN f01 witness with ONLY
 # lcancel substituted (binds every other field to the frozen bytes).
 sed 's/lcancel=0/lcancel=1/' "$FLOWS/f01-vs-g01.bstate.expect" > "$WIT/bstate-want.txt"
@@ -592,6 +715,9 @@ rc=0; cmp -s "$WIT/bstate-want.txt" "$FLOWS/f01-vs-g01.bstate.expect" || rc=$?
 cmp "$WIT/bstate.txt" "$WIT/bstate-want.txt" || fail "witness — BRIDGE-STATE differs from frozen-f01-with-lcancel=1 (settings did not reach the GameState slice)"
 { node "$SIM/wrap-run.js" g01 "$WIT/stream.txt" "$WIT/run.json"; } 2>&1 | relay_lines
 made "$WIT/run.json"
+# review-90 H(b): the witness run passes the SAME full-run structural
+# validation as the bridge runs.
+validate_run_shape "$WIT/run.json" "$G01_FRAMES" witness
 # The witness judgment: verify-stream vs frozen g01 MUST report a
 # per-frame divergence (rc 2) at the PINNED frame; a MATCH = DEATH.
 witness_judge() { # <wlog> <rc>
@@ -616,6 +742,9 @@ witness_judge() { # <wlog> <rc>
   hf="$(sed -n '2s/^  frozen: //p' "$wlog")"
   hr="$(sed -n '3s/^  run:    //p' "$wlog")"
   [ "$hf" != "$hr" ] || grammar_die "witness — frozen and run hashes are EQUAL in a divergence report (corrupt report)"
+  # review-90 H(c): both hashes are BOUND, not merely unequal.
+  [ "$hf" = "$WIT_FROZEN_HASH_F1" ] || grammar_die "witness — reported frozen hash != the frozen g01 frame-$WIT_DIV_FRAME entry (the report is not derived from the pinned golden)"
+  [ "$hr" = "$WIT_RUN_HASH_F1" ] || grammar_die "witness — reported run hash != the pinned lcancel=1 treatment hash (the frame-$WIT_DIV_FRAME divergence is NOT the pinned lcancel effect; reviewed re-freeze only with a spec/settings-plane change)"
 }
 diverge=0
 wrc=0
@@ -624,35 +753,64 @@ node oracle/harness/verify-stream.js "$WIT/run.json" \
 made "$WIT/verify.log"
 witness_judge "$WIT/verify.log" "$wrc"
 diverge=1
-echo "    -> DIVERGENCE WITNESS OK: lcancel=1 diverges frozen g01 at frame $WIT_DIV_FRAME (rc 2, exact 3-line report)"
+echo "    -> DIVERGENCE WITNESS OK: lcancel=1 diverges frozen g01 at frame $WIT_DIV_FRAME (rc 2, exact 3-line report, both hashes pinned)"
+
+# CONTROL (review-90 H(a)): the SAME options-path flow with ONLY the
+# lcancel press pair deleted — derived MECHANICALLY from the witness
+# flow bytes (mkvariant delete), so "all other steps identical" holds
+# by construction. lcancel stays 0; the launched stream MUST fully
+# MATCH the frozen g01 stream (rc 0 + the same whole-log byte-exact
+# constructed verdict as the f01 bridge). An options-path
+# boot/serialization defect would break THIS leg, so the witness
+# divergence above is attributable to the lcancel setting itself.
+CTRL=$B/ctrl
+rm -rf "$CTRL"
+mkdir -p "$CTRL"
+mkvariant "$WIT/wit-lcancel-g01.flow" "$CTRL/wit-control-g01.flow" delete \
+  "I 415 A" "I 416 -"
+"$B/foh_app" --flow "$CTRL/wit-control-g01.flow" --flow-out "$CTRL/trace.txt" \
+  --bridge verify --simdata "$B/simdata.txt" --seed "$G01_SEED" \
+  --trace "$B/g01.trace.txt" --frames "$G01_FRAMES" --out "$CTRL/stream.txt" \
+  --bstate-out "$CTRL/bstate.txt" 2>&1 | relay_lines
+made "$CTRL/trace.txt" "$CTRL/stream.txt" "$CTRL/bstate.txt"
+{ node "$FOH/judge-foh-trace.js" "$CTRL/trace.txt" wit-control-g01 1; } 2>&1 | relay_lines
+# Behavioral same-path binding: the control trace must equal the
+# witness trace with EXACTLY the header id substituted, the lcancel
+# settings-edit line dropped, and the LAUNCH lcancel field 1->0 —
+# nothing else may differ between the two runs' emitted machines.
+sed -e 's/^FOHTRACE1 flow=wit-lcancel-g01$/FOHTRACE1 flow=wit-control-g01/' \
+    -e '/^S 415 lcancel 1$/d' \
+    -e '/^LAUNCH 460 /s/ lcancel=1 / lcancel=0 /' \
+  "$WIT/trace.txt" > "$CTRL/trace-want.txt"
+made "$CTRL/trace-want.txt"
+cmp "$CTRL/trace.txt" "$CTRL/trace-want.txt" || fail "control — trace != witness-trace-minus-the-lcancel-edit (the treatment and control did NOT share the options path)"
+ctrllaunch="LAUNCH 460 p1=$G01_P1 p2=$G01_P2 p2type=0 difficulty=3 stage=$G01_STAGE turbo=0 lcancel=0 tapjump=0,0,0,0 versus=0"
+c="$(count_xl "$CTRL/trace.txt" "$ctrllaunch")"
+[ "$c" = 1 ] || fail "control — LAUNCH line != g01-params-with-lcancel=0 (count $c/1)"
+# Pure-defaults GameState: byte-equal to the FROZEN f01 witness.
+cmp "$CTRL/bstate.txt" "$FLOWS/f01-vs-g01.bstate.expect" || fail "control — BRIDGE-STATE differs from the frozen f01 witness (the control must reach GameState with pure defaults)"
+{ node "$SIM/wrap-run.js" g01 "$CTRL/stream.txt" "$CTRL/run.json"; } 2>&1 | relay_lines
+made "$CTRL/run.json"
+validate_run_shape "$CTRL/run.json" "$G01_FRAMES" control
+control_judge() { # <vlog> <rc>
+  local vlog="$1" rc="$2"
+  if [ "$rc" != 0 ]; then
+    fail "lcancel=0 CONTROL DIVERGED from frozen g01 (verify-stream rc $rc) — the options path itself is NOT stream-clean; the [4w] witness divergence can no longer be attributed to lcancel (review-90 H refutation arm: STOP, this is a real options-path bug)"
+  fi
+  assert_stream_verdict "$vlog" "$B/f01-vs-g01.verdict-want.txt" control
+}
+control=0
+crc=0
+verify_capture "$CTRL/verify.log" node oracle/harness/verify-stream.js \
+  "$CTRL/run.json" "oracle/goldens/${ORACLE_NAMES[0]}.sha256.json" || crc=$?
+made "$CTRL/verify.log"
+control_judge "$CTRL/verify.log" "$crc"
+control=1
+echo "    -> CONTROL OK: the same options path with lcancel=0 fully MATCHES frozen g01 (whole-log byte-exact)"
 
 # --- [5] TEETH (standing; generated variants/copies only) ----------------------
-echo "=== [5] teeth (pre-registered T1-T10; AGENT-LOG iter 90)"
+echo "=== [5] teeth (pre-registered T1-T10 AGENT-LOG iter 90; T11-T14 iter 91)"
 teeth=0
-# Variant generators (NO eval — the manifest-eval class stays dead):
-# fixed operations over the committed flow bytes, anchors must match
-# exactly or the tooth itself dies.
-mkvariant() { # <src> <dst> <insert-after|delete> <anchor/lines...>
-  node -e '
-    const fs = require("fs");
-    const [src, dst, op, ...args] = process.argv.slice(1);
-    const ls = fs.readFileSync(src, "utf8").split("\n");
-    if (op === "insert-after") {
-      const [anchor, ...ins] = args;
-      const i = ls.indexOf(anchor);
-      if (i < 0) { console.error("anchor missing: " + anchor); process.exit(1); }
-      ls.splice(i + 1, 0, ...ins);
-    } else if (op === "delete") {
-      for (const drop of args) {
-        const i = ls.indexOf(drop);
-        if (i < 0) { console.error("anchor missing: " + drop); process.exit(1); }
-        ls.splice(i, 1);
-      }
-    } else { console.error("bad op"); process.exit(1); }
-    fs.writeFileSync(dst, ls.join("\n"));
-  ' "$1" "$2" "$3" "${@:4}"
-  made "$2"
-}
 run_variant() { # <flow-file> <out-trace>
   rm -f "$2"
   "$B/foh_app" --flow "$1" --flow-out "$2" 2>&1 | relay_lines
@@ -854,7 +1012,78 @@ c="$(count_x "$B/t10b.out" "not BYTE-IDENTICAL")"
 [ "$c" = 1 ] || fail "T10b — byte-equality death message class missing"
 echo "    T10 OK: foreign-line and torn-newline verdict logs die in assert_stream_verdict"
 teeth=$((teeth + 1))
-[ "$teeth" = 10 ] || fail "teeth ledger — $teeth/10 fired"
+# T11 (review-90 H(c)): flip the leading nibble of the run-hash line in
+# a COPY of the witness report -> witness_judge MUST die on the
+# treatment pin (grammar otherwise intact: rc 2, 3 lines, pinned frame).
+node -e '
+  const fs = require("fs");
+  const lines = fs.readFileSync(process.argv[1], "utf8").split("\n");
+  const m = /^  run:    ([0-9a-f]{64})$/.exec(lines[2]);
+  if (!m) { console.error("no run-hash line in the witness report"); process.exit(1); }
+  const h = m[1];
+  lines[2] = "  run:    " + (h[0] === "0" ? "1" : "0") + h.slice(1);
+  fs.writeFileSync(process.argv[2], lines.join("\n"));
+' "$WIT/verify.log" "$B/t11.log" || fail "T11 — variant generation failed"
+made "$B/t11.log"
+rc=0
+( witness_judge "$B/t11.log" 2 ) > "$B/t11.out" 2>&1 || rc=$?
+[ "$rc" != 0 ] || fail "T11 — witness_judge ACCEPTED a corrupted frame-1 run hash (the treatment pin is dead)"
+c="$(count_x "$B/t11.out" "pinned lcancel=1 treatment hash")"
+[ "$c" = 1 ] || fail "T11 — treatment-pin death message class missing"
+echo "    T11 OK: a nibble-flipped run hash dies on the treatment pin"
+teeth=$((teeth + 1))
+# T12 (review-90 H(a)): the control judge fed the witness's own
+# DIVERGENCE report + rc 2 MUST die naming the CONTROL-DIVERGED class
+# (the H refutation arm has teeth).
+rc=0
+( control_judge "$WIT/verify.log" 2 ) > "$B/t12.out" 2>&1 || rc=$?
+[ "$rc" != 0 ] || fail "T12 — control_judge ACCEPTED a diverging control (the H refutation arm is dead)"
+c="$(count_x "$B/t12.out" "CONTROL DIVERGED")"
+[ "$c" = 1 ] || fail "T12 — control-diverged death message class missing"
+echo "    T12 OK: a divergence fed to the control judge dies with the CONTROL DIVERGED class"
+teeth=$((teeth + 1))
+# T13 (review-90 M1): a wrapper injecting ONE stderr line around the
+# REAL verify-stream, run through the PRODUCTION verify_capture on the
+# green f01 run: the underlying verify passes (rc 0), the injected line
+# MUST land in the judged vlog, and the byte-equality MUST die.
+cat > "$B/t13-wrap.sh" << 'TEOF'
+#!/usr/bin/env bash
+echo "WARN: foreign stderr diagnostic (T13)" >&2
+exec node oracle/harness/verify-stream.js "$@"
+TEOF
+chmod +x "$B/t13-wrap.sh"
+rc=0
+verify_capture "$B/t13.vlog" "$B/t13-wrap.sh" "$B/f01-vs-g01.run.json" \
+  "oracle/goldens/${ORACLE_NAMES[0]}.sha256.json" || rc=$?
+[ "$rc" = 0 ] || fail "T13 — the wrapped verify run rc $rc (the underlying verify must PASS; only stderr is foreign)"
+made "$B/t13.vlog"
+c="$(count_x "$B/t13.vlog" "foreign stderr diagnostic (T13)")"
+[ "$c" = 1 ] || fail "T13 — the injected stderr line did NOT land in the judged log (the M1 capture fix is dead)"
+rc=0
+( assert_stream_verdict "$B/t13.vlog" "$B/f01-vs-g01.verdict-want.txt" t13 ) \
+  > "$B/t13.out" 2>&1 || rc=$?
+[ "$rc" != 0 ] || fail "T13 — a stderr-polluted verify log PASSED the whole-log byte-equality"
+c="$(count_x "$B/t13.out" "not BYTE-IDENTICAL")"
+[ "$c" = 1 ] || fail "T13 — byte-equality death message class missing"
+echo "    T13 OK: an injected stderr line lands in the judged log and kills the byte-equality"
+teeth=$((teeth + 1))
+# T14 (review-90 M2): plant unexpected.ppm in a COPY of f01's shots-b
+# inventory -> the PRODUCTION judge_shot_inventory MUST die.
+rm -rf "$B/t14-shots"
+mkdir -p "$B/t14-shots"
+cp "$B/f01-vs-g01/shots-b/"*.ppm "$B/t14-shots/"
+printf 'P6\n1 1\n255\nxyz' > "$B/t14-shots/unexpected.ppm"
+made "$B/t14-shots/unexpected.ppm"
+t14want="$(printf '%s\n' ${FLOW_SHOTS[0]} | sort | tr '\n' ' ' | sed 's/ $//')"
+rc=0
+( judge_shot_inventory "t14 (f01 shots-b copy)" "$B/t14-shots" "$t14want" ) \
+  > "$B/t14.out" 2>&1 || rc=$?
+[ "$rc" != 0 ] || fail "T14 — a planted unexpected.ppm PASSED the exact-set shot inventory"
+c="$(count_x "$B/t14.out" "shot inventory")"
+[ "$c" = 1 ] || fail "T14 — inventory death message class missing"
+echo "    T14 OK: a planted unexpected.ppm dies in the production judge_shot_inventory"
+teeth=$((teeth + 1))
+[ "$teeth" = 14 ] || fail "teeth ledger — $teeth/14 fired"
 
 # --- [6] hygiene ----------------------------------------------------------------
 rc=0
@@ -866,4 +1095,5 @@ elif [ "$rc" -ge 2 ]; then
 fi
 
 [ "$diverge" = 1 ] || fail "divergence-witness ledger — witness leg did not complete"
-echo "FOH FLOWS OK (flows=5 shots=$total_shots bridges=$bridges states=$states diverge=$diverge teeth=$teeth)"
+[ "$control" = 1 ] || fail "control ledger — the lcancel=0 control leg did not complete"
+echo "FOH FLOWS OK (flows=5 shots=$total_shots bridges=$bridges states=$states diverge=$diverge control=$control teeth=$teeth)"

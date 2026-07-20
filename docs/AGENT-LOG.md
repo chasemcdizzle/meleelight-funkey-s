@@ -14386,3 +14386,178 @@ typed. Music-surface arc round 2 reviews this commit's bytes.
   driver-cold-verified FOH FLOWS OK flows=5 diverge=1) — FOH arc
   round 2 reviews its diff next. Driver re-pin 8bf15ba closed the
   iter-89 writer's stale wrap-run.js manifest find.
+
+## iter 91 — 2026-07-19 — M4 hardening PRE-REGISTRATION: FOH-arc round-2 residuals — witness control, stderr capture, shots-b inventory (frozen before any run/edit; PROCESS §2)
+
+- **Task**: REVIEW-HARDENING — close the review-90 round-2 NO-GO
+  (.loop/review-90-1.log; driver triage .loop/review-90-triage.md) on
+  the iter-90 FOH check. Dispositions to FIX: H (divergence-witness
+  false-positive direction), M1 (verifier stderr excluded from the
+  judged log), M2 (run-B shot inventory unchecked). Surfaces:
+  port/foh/check-foh-flows.sh ONLY (no flows/ edit expected — the
+  control leg is check-owned and derived, no committed .expect;
+  judge-foh-trace.js expected BYTE-UNCHANGED, pin untouched). No sim
+  TUs, no gfx TUs, no riglib; frozen goldens read-only. Host-only,
+  ZERO device runs. Command output -> .loop/m4-foh91-*.log.
+- **H fix (three parts, per triage)**: (a) CONTROL LEG — a check-owned
+  control flow DERIVED MECHANICALLY from the witness flow (mkvariant
+  delete of exactly the lcancel press pair `I 415 A` / `I 416 -`;
+  basename wit-control-g01 so the header is honest), so "all other
+  options-path steps identical" holds by construction; it traverses
+  the SAME options detour (menu-options -> options-gameplay -> lcancel
+  row -> back) with lcancel left 0 and MUST fully MATCH the frozen g01
+  stream: verify-stream rc 0 + whole-log byte-equality vs the SAME
+  constructed verdict bytes as the f01 bridge (assert_stream_verdict).
+  Bindings: control LAUNCH exact-line (g01 cross-bound params +
+  lcancel=0), control BRIDGE-STATE cmp == the FROZEN
+  f01-vs-g01.bstate.expect (pure defaults), and control trace cmp ==
+  witness-trace-with-header-substituted-minus-`S 415 lcancel 1` (the
+  two runs shared the path BEHAVIORALLY, not just by input bytes;
+  `S 415 lcancel 1` asserted present in the witness trace first).
+  (b) FULL-RUN SHAPE VALIDATION — new validate_run_shape(): frames
+  contiguous 1..N with N == the golden's count, every hash 64-hex,
+  integer coverage counters; applied to EVERY wrapped run this check
+  judges (f01/f02/f05 bridges + control + witness — the witness gets
+  the SAME structural validation as bridge runs). (c) TREATMENT-HASH
+  PIN — measured-then-frozen: the witness report's run hash at the
+  pinned frame MUST equal WIT_RUN_HASH_F1 =
+  9cd2843dd70fcef4cf29cb3a4c53d8fd29d70c6f3b02c5b633e3ff757e0ecb7f
+  (MEASURED from the iter-90 committed-check cold-run residue
+  port/foh/build/check/wit/verify.log, produced by the driver's cold
+  verify of 7f42cc7; re-confirmed by this iteration's own cold runs);
+  the report's frozen hash MUST equal the frozen g01 file's own
+  frame-1 entry, read MECHANICALLY from the sha256.json (no literal).
+  Pin comment: reviewed re-freeze required if CHECKSUM.md ever bumps
+  or the settings plane changes — never a silent re-measure.
+- **M1 fix**: the judged verify log captures stdout AND stderr — the
+  capture is extracted into verify_capture() (`{ cmd 2>&1 | tee $vlog; }
+  | relay_lines`, pipefail rc preserved) and BOTH the bridge legs and
+  the control leg run through it; byte-equality then covers foreign
+  stderr lines. Corpus expectation: the verifier is stderr-quiet on
+  green runs (archived iter-90 logs + a dev re-run of the residue
+  run.json prove zero false rejections BEFORE the cold run).
+- **M2 fix**: exact-set shot inventory extracted into
+  judge_shot_inventory() and applied to BOTH shots-a AND shots-b for
+  every flow (extra/missing/dup = death), mirroring the shots-a
+  binding.
+- **TEETH (4 new, T11-T14, all on generated copies)**: T11 — flip the
+  leading nibble of the run-hash line in a COPY of the witness report,
+  feed witness_judge rc 2 -> MUST die naming the treatment-pin class.
+  T12 — feed control_judge the witness's own DIVERGENCE log + rc 2 ->
+  MUST die naming the CONTROL-DIVERGED class (the H refutation arm has
+  teeth). T13 — a wrapper script injecting one stderr line around the
+  real verify-stream, run through the PRODUCTION verify_capture on the
+  green f01 run.json: underlying verify MUST pass (rc 0), the injected
+  line MUST land in the judged vlog, and assert_stream_verdict on that
+  vlog MUST die (byte-equality). T14 — plant unexpected.ppm in a COPY
+  of f01's shots-b inventory, run the PRODUCTION judge_shot_inventory
+  -> MUST die on the exact-set binding.
+- **COUNTS (honest)**: verdict becomes `FOH FLOWS OK (flows=5 shots=13
+  bridges=3 states=4 diverge=1 control=1 teeth=14)`; control ledger
+  asserted like the diverge ledger.
+- **RUN CAPS (frozen)**: cold full check runs <=3 (target 2: one
+  pre-commit official + one post-commit); dev component runs <=3
+  (1 control probe on the iter-90 residue binary; anchor/derivation
+  re-probes within the remaining 2); corpus greps/validations
+  unlimited (read-only). Browser 0; device 0; docker 0 fresh expected
+  (extractor stamp).
+- **REFUTATION SHAPES**: (a) the lcancel=0 control does NOT match
+  frozen g01 (probe or cold run) -> that REFUTES the options-path-
+  clean assumption — the reviewer's hole is a real bug: STOP, report
+  FAIL honestly with the divergence evidence, do NOT adjust the
+  control, the pins, or the witness to make it pass. (b) the cold
+  run's witness run-hash != the residue-measured pin -> witness
+  nondeterminism or stale-residue class: STOP after one bounded
+  evidence round (re-read residue + one fresh witness probe), report;
+  never silently re-freeze. (c) a constructed grammar rejects an
+  archived GREEN corpus line -> the construction is wrong; fix the
+  construction, never loosen to regex. (d) stderr capture kills a
+  green bridge leg -> the verifier is NOT stderr-quiet: measure what
+  it prints, report; do not quietly re-exclude stderr.
+- **DONE**: cold `bash port/foh/check-foh-flows.sh` -> the new verdict
+  line, exit 0, pre- AND post-commit; teeth 14/14 fired in-run
+  (.loop/m4-foh91-donecheck*.log; teeth excerpt
+  .loop/m4-foh91-teeth.log); skip-proofs for untouched planes
+  (port/sim + port/gfx diffs EMPTY); result entry + STATE.md top; ONE
+  atomic commit `M4 hardening: FOH witness control + stderr capture +
+  shots-b inventory (iter 91)`; clean tree.
+
+## iter 91 — 2026-07-19 — M4 hardening RESULT: FOH-arc round-2 residuals CLOSED — witness control + hash pins, stderr capture, shots-b inventory; cold check green first attempt
+
+- **DONE-CHECK (cold, first attempt): `bash port/foh/check-foh-flows.sh`
+  → `FOH FLOWS OK (flows=5 shots=13 bridges=3 states=4 diverge=1
+  control=1 teeth=14)`, exit 0** (.loop/m4-foh91-donecheck.log; teeth
+  section .loop/m4-foh91-teeth.log; dev probes .loop/m4-foh91-dev.log;
+  post-commit rerun .loop/m4-foh91-donecheck2.log). All three review-90
+  round-2 dispositions (.loop/review-90-triage.md) shipped exactly as
+  pre-registered (entry above). Surfaces: check-foh-flows.sh ONLY —
+  flows/ untouched (the control is check-owned + derived, no committed
+  .expect; the [0c] inventory pin stays 5), judge-foh-trace.js
+  BYTE-UNCHANGED (pin valid, zero re-pin).
+- **H CLOSED (three parts)**: (a) CONTROL LEG — wit-control-g01 derived
+  MECHANICALLY from the witness flow (mkvariant delete of exactly
+  `I 415 A`/`I 416 -`; mkvariant moved above [4w], byte-identical
+  function); it fully MATCHED frozen g01 (rc 0 + whole-log byte-exact
+  vs the f01 constructed verdict) — the options path is stream-clean,
+  the witness divergence is attributable to lcancel. Bindings landed:
+  control trace == witness-trace-with-3-substitution-derivation
+  (header id, `S 415 lcancel 1` dropped, LAUNCH lcancel 1->0 — the
+  dev probe caught that the LAUNCH field needs substituting too),
+  LAUNCH exact-line lcancel=0, BRIDGE-STATE cmp == frozen f01 bstate.
+  (b) validate_run_shape() on ALL 5 wrapped runs (f01/f02/f05 bridges
+  + control + witness): frames contiguous 1..N == golden count, 64-hex
+  hashes, integer coverage counters. (c) witness hashes BOUND:
+  reported frozen hash == the frozen g01 frame-1 entry (read
+  mechanically from the sha256.json) AND reported run hash ==
+  WIT_RUN_HASH_F1 = 9cd2843d…ecb7f (measured-then-frozen from the
+  iter-90 committed-check cold-run residue, re-confirmed by both cold
+  runs; pin comment binds a reviewed re-freeze to any CHECKSUM.md/
+  settings-plane change). Arbitrary unequal hashes can no longer
+  satisfy the witness.
+- **M1 CLOSED**: verify_capture() — `{ cmd 2>&1 | tee $vlog; } |
+  relay_lines` — the judged log now captures stdout AND stderr; used
+  by all 3 bridge legs + the control. Corpus-validated BEFORE the cold
+  run (dev-3: verify-stream re-run on the archived f01 run.json with
+  2>&1 byte-equals the archived verdict — stderr-quiet, zero false
+  rejections).
+- **M2 CLOSED**: judge_shot_inventory() — exact-set enumeration, both
+  directions — applied to BOTH shots-a AND shots-b for every flow
+  (was: shots-a only; run-B extras were invisible).
+- **TEETH 14/14 fired** (T11-T14 new): T11 nibble-flipped run hash in
+  a witness-report copy dies ON THE TREATMENT PIN · T12 the control
+  judge fed the witness's own divergence report dies with the CONTROL
+  DIVERGED class · T13 a stderr-injecting wrapper around the REAL
+  verify-stream, through the PRODUCTION verify_capture: underlying
+  verify rc 0, injected line lands in the judged vlog, byte-equality
+  dies · T14 unexpected.ppm planted in a shots-b copy dies in the
+  PRODUCTION judge_shot_inventory.
+- **REGRESSIONS**: check-sim.sh / check-render.sh / mixer+music checks
+  SKIPPED, justified mechanically — git diff HEAD --stat EMPTY for
+  port/sim/ AND port/gfx/ (.loop/m4-foh91-checksim-skip.txt); the five
+  FOH-launched full-stream judgments green in-check (g01 x2 + m01 +
+  g03 + the witness's pinned divergence) are the sim-linkage
+  regression.
+- **RUN-CAP LEDGER**: cold full check runs 2/3 (pre-commit official +
+  post-commit); dev component runs 1/3 (the control probe on the
+  iter-90 residue binary — MATCH on first contact, refutation shape
+  (a) not triggered); corpus validations dev-1..dev-5b all green;
+  browser 0; device 0; docker 0 fresh (extractor stamp hit).
+- **SURPRISES**: (1) the pre-registered control-trace derivation was
+  incomplete — the witness LAUNCH line carries lcancel=1, so the
+  derived want needs a third substitution (`/^LAUNCH 460 /s/
+  lcancel=1 / lcancel=0 /`); caught by dev probe 5/5b BEFORE any cold
+  run, derivation corrected and recorded (not a silent grammar
+  loosen — the derivation is strictly mechanical). (2) witness
+  rngCalls=161 vs control/frozen 134 — lcancel=1 changes in-match RNG
+  consumption; irrelevant to the judgment (the witness is judged on
+  divergence + pinned hashes, never on its rng line) but worth a note:
+  the wrap of a DIVERGENT run still passes shape validation by design.
+- **ZOOM OUT (HARD RULE 8)**: class artifact — the witness template
+  (iter-90 zoom-out (a)) is now the full TREATMENT+CONTROL+PIN triad:
+  synthetic flow pair derived from ONE byte source (all-else-identical
+  by construction), expected-DIVERGENT treatment with BOTH report
+  hashes bound (frozen side mechanical, run side measured-then-frozen),
+  expected-MATCH control through the same judge bytes. Any future
+  "does plane X reach ticking" instrument (task-13 persistence) should
+  copy the triad, not the bare witness. FOH arc round 3 reviews this
+  commit's diff.

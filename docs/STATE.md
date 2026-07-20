@@ -3,7 +3,37 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, driver post-iter-90 — MUSIC ARC CLOSED at GO r2; FOH arc round 2 in flight)
+## Live right now (updated: 2026-07-19, iter 91 — M4 hardening DONE: FOH-arc round-2 residuals closed, cold check green first attempt)
+
+- **Iter 91 (M4 hardening — FOH-arc round-2 closure: witness control +
+  hash pins, stderr capture, shots-b inventory) DONE** (full entry:
+  AGENT-LOG iter 91 pre-registration + result; latest AGENT-LOG id:
+  iter 91). All three review-90 round-2 FIX dispositions
+  (.loop/review-90-triage.md, review-90 NO-GO .loop/review-90-1.log)
+  shipped: **H** — [4w] now runs a TREATMENT+CONTROL+PIN triad: the
+  lcancel=0 CONTROL (derived mechanically from the witness flow, only
+  the `I 415 A` press pair deleted) fully MATCHES frozen g01
+  (whole-log byte-exact), the witness report's hashes are BOUND
+  (frozen side == the g01 frame-1 entry read mechanically; run side ==
+  the measured-then-frozen treatment pin 9cd2843d…ecb7f), and
+  validate_run_shape() re-validates all 5 wrapped runs; **M1** —
+  verify_capture() puts stderr INTO the byte-judged verify log
+  (corpus-validated stderr-quiet, zero false rejections); **M2** —
+  judge_shot_inventory() exact-set on BOTH shots-a and shots-b. Teeth
+  10→14 (T11 pin death · T12 control-diverged death · T13 stderr
+  wrapper through the production capture · T14 shots-b plant).
+  check-foh-flows.sh ONLY surface touched; flows/ + judge-foh-trace.js
+  BYTE-UNCHANGED (pin valid). COLD: **FOH FLOWS OK (flows=5 shots=13
+  bridges=3 states=4 diverge=1 control=1 teeth=14)** first attempt
+  (.loop/m4-foh91-donecheck.log; post-commit
+  .loop/m4-foh91-donecheck2.log; skip-proofs
+  .loop/m4-foh91-checksim-skip.txt). Caps held: cold 2/3, dev 1/3.
+  **Driver next: FOH arc ROUND 3 reviews this commit's diff (closure
+  round — if it raises only variants of the closed classes, the arc
+  CAPS naming the class, per the triage header); then task-10
+  dispatch (device FOH; M3 defer-bound binding verbatim).**
+
+## [superseded by iter 91] (2026-07-19, driver post-iter-90 — MUSIC ARC CLOSED at GO r2; FOH arc round 2 in flight)
 
 - **MUSIC ARC CLOSED (GO round 2, zero findings —
   .loop/review-89-1.log)**: iters 87+89 surfaces fully reviewed;
