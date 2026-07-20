@@ -3,7 +3,7 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 86 — M4 hardening DONE: dual-arc round-2 residuals closed, both cold checks green)
+## Live right now (updated: 2026-07-19, all M4 arcs clear; task 7 next)
 
 - **Iter 86 (M4 hardening — BOTH arcs' round-2 residuals: review-83
   1 Medium + review-84 5 Mediums/2 Lows) DONE** (full entry: AGENT-LOG

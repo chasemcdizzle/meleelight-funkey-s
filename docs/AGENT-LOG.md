@@ -13258,3 +13258,17 @@ vfx-seam (cap: 0), teeth = refuse/die-fast invocations only. No device,
 no pushes, no contract-artifact drift (manifest + s02 frozen stream
 perturbed-and-restored cmp-identical, logged). Both arcs now enter
 round 3 = final confirm on this commit's bytes.
+
+## driver — 2026-07-19 — ai-live + mixer arcs CLOSED (GO round 3); rig backlog clear
+
+- Both arcs closed at VERDICT: GO round 3 (.loop/review-86-1.log —
+  all eight round-2 residuals verified closed; shared-lock ordering
+  deadlock-free; helper dedup producer-pin neutral).
+- M4 arc ledger to date: vfx-rig 4r GO · renderer 4r GO · device-rig
+  4r GO · ai-rig 3r GO · ai-live 3r GO · mixer 3r GO. Cumulative M4
+  hardening: ~85 findings fixed with teeth over 13 hardening
+  iterations; 2 real gameplay bugs found+fixed by coverage goldens
+  (GUARD iter 82, GUARDON iter 85 — class closed by 460-site sweep);
+  the corpus is now 12 goldens.
+- next: task 7 (music streaming — the last audio task), then FOH 9-10,
+  target 11-12, persistence 13, gate 14.
