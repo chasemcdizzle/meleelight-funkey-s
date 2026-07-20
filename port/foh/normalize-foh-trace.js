@@ -14,7 +14,7 @@
 // bytes are never edited).
 //
 // MODE 2 (bounded): `node normalize-foh-trace.js --bounded
-// <frozen.expect> <device-trace> <flow> <end-max>`
+// <frozen.expect> <device-trace> <flow> <end-max> [input-free]`
 // Elision alone erases UNBOUNDED latency (review-93 M1): a multi-second
 // mid-run uinput/SDL stall shifted every event and still normalized
 // clean inside the leg's 600-tick total allowance. This mode judges the
@@ -39,10 +39,24 @@
 // or grammar violation is rc 2. A mid-run stall > DEV_POS ticks beyond
 // the anchored cadence now DIES instead of normalizing away.
 //
+// ANCHOR-NULL POSTURE (iter 97, review-95 L-a): a run whose events all
+// precede the flow's first input receives NO anchored cadence
+// judgment — that absence is FATAL (rc 3) unless the invocation is
+// EXPLICITLY declared input-free: either the trailing literal arg
+// `input-free` (the OPK evidence leg — no injector runs there, a
+// structural fact of that leg) or the flow id sitting on the frozen
+// INPUT_FREE_FLOWS whitelist below (EMPTY today — all 5 committed
+// flows have measured anchors 76-91). The declaration binds BOTH
+// directions: declared input-free + an anchored event = rc 2 (stale
+// declaration). Never inferred.
+//
 // Whitelist posture (PROCESS §3): every line must match one of the
 // exact FOHTRACE1 forms (the judge-foh-trace.js patterns); anything
 // that merely resembles one — or any unknown line — is corruption:
-// loud death, exit 2, no partial output.
+// loud death, exit 2, no partial output. Numerals are CANONICAL
+// decimals ((0|[1-9][0-9]*) — iter 97, review-95 M-e): a leading-zero
+// tick like `007` is corruption, matching the C producer's %ld
+// emission exactly.
 "use strict";
 
 const fs = require("fs");
@@ -57,12 +71,14 @@ function boundDie(msg) {
   process.exit(3);
 }
 
+// canonical decimal (iter 97, review-95 M-e): 0 or no-leading-zero
+const NUM = "(0|[1-9][0-9]*)";
 const RE_HDR = /^FOHTRACE1 flow=([a-z0-9-]+)$/;
-const RE_T = /^T ([0-9]+) ([a-z-]+ [a-z-]+ (?:timer|start|a|b|bhold|launch))$/;
-const RE_S = /^S ([0-9]+) ((?:p1char|p2char|p2type|difficulty|turbo|lcancel|tapjump[1-4]) [0-9]|refused [a-z0-9]+)$/;
-const RE_SHOT = /^SHOT ([0-9]+) ([a-z0-9-]{1,32})$/;
-const RE_LAUNCH = /^LAUNCH ([0-9]+) (p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] tapjump=[01],[01],[01],[01] versus=0)$/;
-const RE_END = /^END ([0-9]+) (transitions=[0-9]+)$/;
+const RE_T = new RegExp("^T " + NUM + " ([a-z-]+ [a-z-]+ (?:timer|start|a|b|bhold|launch))$");
+const RE_S = new RegExp("^S " + NUM + " ((?:p1char|p2char|p2type|difficulty|turbo|lcancel|tapjump[1-4]) [0-9]|refused [a-z0-9]+)$");
+const RE_SHOT = new RegExp("^SHOT " + NUM + " ([a-z0-9-]{1,32})$");
+const RE_LAUNCH = new RegExp("^LAUNCH " + NUM + " (p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] tapjump=[01],[01],[01],[01] versus=0)$");
+const RE_END = new RegExp("^END " + NUM + " (transitions=" + NUM + ")$");
 
 // strict parse -> {hdr, lines:[{kind, tick, rest}]}
 function parseTrace(path) {
@@ -105,15 +121,26 @@ function parseTrace(path) {
   return out;
 }
 
+// frozen per-flow input-free whitelist (iter 97, review-95 L-a):
+// flows declared to have NO post-input observable event. EMPTY today —
+// all 5 committed flows have measured anchors (76-91). Additions are
+// reviewed changes, never inferred.
+const INPUT_FREE_FLOWS = new Set([]);
+
 if (process.argv[2] === "--bounded") {
   // ---- MODE 2: bounded-delta judgment ------------------------------------
-  if (process.argv.length !== 7) {
+  if (process.argv.length !== 7 &&
+      !(process.argv.length === 8 && process.argv[7] === "input-free")) {
     console.error("usage: node normalize-foh-trace.js --bounded " +
-                  "<frozen.expect> <device-trace> <flow> <end-max>");
+                  "<frozen.expect> <device-trace> <flow> <end-max> " +
+                  "[input-free]");
     process.exit(1);
   }
   const [, , , expPath, devPath, flowPath, endMaxArg] = process.argv;
-  if (!/^[0-9]{1,7}$/.test(endMaxArg)) die("end-max grammar: '" + endMaxArg + "'");
+  const declaredInputFree = process.argv.length === 8;
+  if (!/^(0|[1-9][0-9]{0,6})$/.test(endMaxArg)) {
+    die("end-max grammar: '" + endMaxArg + "'");
+  }
   const endMax = Number(endMaxArg);
 
   // frozen bounds (measured iter 95 — header block; never loosen)
@@ -141,12 +168,12 @@ if (process.argv[2] === "--bounded") {
       if (ln.length === 0) die("empty flow line at " + (k + 1));
       if (ln[0] === "#") continue;
       let m;
-      if ((m = /^I ([0-9]+) (-|[A-Z]+)$/.exec(ln)) !== null) {
+      if ((m = new RegExp("^I " + NUM + " (-|[A-Z]+)$").exec(ln)) !== null) {
         if (m[2] !== "-" && firstInput === 0) firstInput = Number(m[1]);
         continue;
       }
-      if (/^SHOT ([0-9]+) ([a-z0-9-]{1,32})$/.test(ln)) continue;
-      if (/^END ([0-9]+)$/.test(ln)) continue;
+      if (new RegExp("^SHOT " + NUM + " ([a-z0-9-]{1,32})$").test(ln)) continue;
+      if (new RegExp("^END " + NUM + "$").test(ln)) continue;
       die("flow line " + (k + 1) + " matches no FLOW1 form: '" + ln + "'");
     }
     if (firstInput === 0) die("flow has no non-neutral input row");
@@ -206,8 +233,23 @@ if (process.argv[2] === "--bounded") {
                "or schedule defect");
     }
   }
+  // anchor-null posture (iter 97, review-95 L-a): both directions bind
+  const flowIdM = RE_HDR.exec(dev.hdr);
+  const flowId = flowIdM ? flowIdM[1] : "";
+  const inputFree = declaredInputFree || INPUT_FREE_FLOWS.has(flowId);
+  if (anchor === null && !inputFree) {
+    boundDie("no post-input observable event — anchored cadence " +
+             "judgment is impossible and flow '" + flowId + "' is not " +
+             "declared input-free (explicit whitelist/arg required)");
+  }
+  if (anchor !== null && inputFree) {
+    die("declared input-free but event(s) anchored the cadence " +
+        "(anchor=" + anchor + ") — stale declaration for flow '" +
+        flowId + "'");
+  }
   console.log("bounded OK " + devPath + " (events=" + exp.lines.length +
-              ", anchor=" + (anchor === null ? "none" : anchor) + ")");
+              ", anchor=" + (anchor === null ? "none(declared)" : anchor) +
+              ")");
   process.exit(0);
 }
 

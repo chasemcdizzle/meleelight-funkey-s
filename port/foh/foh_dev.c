@@ -80,15 +80,18 @@
 //    ring=32768 chunk=16384   (counters SUMMED across the menu and
 //    match tracks — the channel restarts at the LAUNCH switch)
 //
-// KEYMAP SSOT (iter 95, review-93 H2): the logical-button → FLOW1
-// letter → device letter-keysym mapping is compiled ONCE here
-// (kKeymap) and emitted verbatim by `--dump-keymap`; the committed
+// KEYMAP SSOT (iter 95 H2; hardened iter 97, review-95 M-b): the
+// logical-button → FLOW1 letter → device letter-keysym mapping lives
+// at ONE compiled definition site — port/gfx/platform_keymap.h —
+// consumed by platform_sdl1.c's platform_poll TRANSLATION ARM (the
+// device input path) AND by this TU (`--dump-keymap` emits it
+// verbatim; parse_buttons drives FLOW1 letters from it); the committed
 // frozen copy is port/foh/keymap-frozen.txt. The device check cmp's
-// the dump against the frozen file, sha-pins the file, asserts each
-// row against platform_sdl1.c's poll-table source lines, and
-// flow-to-fkscript.js consumes the SAME file at runtime — a
+// the dump against the frozen file, sha-pins the file, proves the
+// compiled table with a perturbed-COPY-build tooth (T12), and
+// flow-to-fkscript.js consumes the SAME frozen file at runtime — a
 // common-mode injector/backend swap now requires editing the pinned
-// frozen mapping.
+// frozen mapping, and a poll-arm refactor cannot drift from the dump.
 //
 // PRESENT WITNESS (iter 95, review-93 H1): `--fb-witness <path>`
 // (poll mode + shots only; linux/device builds) reads the KERNEL fb
@@ -115,6 +118,7 @@
 #include "../gfx/gfx.h"
 #include "../gfx/gfx_vfx.h"
 #include "../gfx/platform.h"
+#include "../gfx/platform_keymap.h"
 #include "../gfx/s1_input.h"
 #include "../gfx/snd_mixer.h"
 #include "../sim/ml_events.h"
@@ -127,41 +131,11 @@
 
 void gfx_fatal(const char *what) { sim_fatal(what); }
 
-// --- keymap SSOT (iter 95, review-93 H2) --------------------------------------
-// THE compiled logical-button table: logical name (the PlatformInput
-// field), FLOW1 letter, device letter keysym. Emitted verbatim by
-// --dump-keymap; frozen committed copy: port/foh/keymap-frozen.txt.
-typedef struct {
-  const char *logical;
-  char flowLetter;
-  char keysym;
-} KeymapRow;
-
-#define KEYMAP_ROWS 12
-static const KeymapRow kKeymap[KEYMAP_ROWS] = {
-    {"up", 'U', 'u'},    {"down", 'D', 'd'}, {"left", 'L', 'l'},
-    {"right", 'R', 'r'}, {"a", 'A', 'a'},    {"b", 'B', 'b'},
-    {"x", 'X', 'x'},     {"y", 'Y', 'y'},    {"start", 'S', 's'},
-    {"l", 'K', 'k'},     {"r", 'N', 'n'},    {"menu", 'Q', 'q'},
-};
-
-static bool *keymap_field(PlatformInput *in, int idx) {
-  switch (idx) {
-    case 0: return &in->up;
-    case 1: return &in->down;
-    case 2: return &in->left;
-    case 3: return &in->right;
-    case 4: return &in->a;
-    case 5: return &in->b;
-    case 6: return &in->x;
-    case 7: return &in->y;
-    case 8: return &in->start;
-    case 9: return &in->l;
-    case 10: return &in->r;
-    case 11: return &in->menu;
-    default: sim_fatal("keymap_field: bad index"); return 0;
-  }
-}
+// --- keymap SSOT (iter 95 H2; single definition site iter 97, M-b) -----------
+// The compiled logical-button table is port/gfx/platform_keymap.h's
+// kPlatformKeymap — the SAME array platform_sdl1.c's platform_poll
+// indexes at runtime. Emitted verbatim by --dump-keymap; frozen
+// committed copy: port/foh/keymap-frozen.txt.
 
 // --- flow script (FLOW1; foh_app.c loader duplicated verbatim) --------------
 
@@ -203,13 +177,13 @@ static PlatformInput parse_buttons(const char *path, int lineNo,
     }
     seen[c - 'A'] = true;
     int idx = -1;
-    for (int k = 0; k < KEYMAP_ROWS; k++) {
-      if (kKeymap[k].flowLetter == c) { idx = k; break; }
+    for (int k = 0; k < PLATFORM_KEYMAP_ROWS; k++) {
+      if (kPlatformKeymap[k].flowLetter == c) { idx = k; break; }
     }
     if (idx < 0) {
       flow_die(path, lineNo, "bad button letter (UDLRABXYSKNQ only)");
     }
-    *keymap_field(&in, idx) = true;
+    *platform_keymap_field(&in, idx) = true;
   }
   return in;
 }
@@ -632,8 +606,19 @@ static void fbwit_sample(const char *name, const uint16_t *sub, long tick) {
       fi.line_length != FBWIT_LL) {
     sim_fatal("fb witness: fb envelope differs from the measured pins");
   }
-  if (vi.yoffset % (uint32_t)RAST_H != 0 || vi.yoffset >= FBWIT_VYRES) {
-    sim_fatal("fb witness: yoffset is not a page boundary");
+  // MEASURED PAN-REJECT POLICY PIN (iter 97, review-95 L-b): the
+  // iter-95 probe measured yoffset ALWAYS 0 (FBIOPAN_DISPLAY rejected
+  // — no panning ever happens on this kernel). Any other value is the
+  // H1 wrong-page hazard resurfacing: die naming the drift. If the
+  // kernel policy ever changes, re-measure with --fb-witness-raw and
+  // re-pin via the reviewed channel.
+  if (vi.yoffset != 0) {
+    fprintf(stderr,
+            "foh_dev: fb witness yoffset=%u != 0 — the measured "
+            "pan-reject page policy drifted (re-measure with "
+            "--fb-witness-raw, reviewed re-pin)\n",
+            vi.yoffset);
+    sim_fatal("fb witness: yoffset policy drift");
   }
   fbwit_read_page(vi.yoffset, FBWIT_LL, page);
   for (int y = 0; y < RAST_H; y++) {
@@ -1046,13 +1031,14 @@ static void shot_capture(const char *name, const uint16_t *fb, long tick) {
 // --- main --------------------------------------------------------------------------
 
 int main(int argc, char **argv) {
-  // keymap SSOT dump arm (iter 95, review-93 H2): byte-exact against
-  // port/foh/keymap-frozen.txt (the check cmp's it every run).
+  // keymap SSOT dump arm (iter 95 H2; iter 97 M-b): emits THE compiled
+  // platform_keymap.h table — the array the device poll arm indexes —
+  // byte-exact against port/foh/keymap-frozen.txt (cmp'd every run).
   if (argc == 2 && strcmp(argv[1], "--dump-keymap") == 0) {
     printf("KEYMAP1\n");
-    for (int k = 0; k < KEYMAP_ROWS; k++) {
-      printf("map %s %c %c\n", kKeymap[k].logical, kKeymap[k].flowLetter,
-             kKeymap[k].keysym);
+    for (int k = 0; k < PLATFORM_KEYMAP_ROWS; k++) {
+      printf("map %s %c %c\n", kPlatformKeymap[k].logical,
+             kPlatformKeymap[k].flowLetter, kPlatformKeymap[k].keysym);
     }
     if (fflush(stdout) != 0) sim_fatal("--dump-keymap flush failed");
     return 0;

@@ -16048,3 +16048,310 @@ typed. Music-surface arc round 2 reviews this commit's bytes.
   bash-side param grammar and the validator overlap (two dialects of
   one grammar — acceptable: one is line-protocol hygiene, one is the
   registry authority; noted for the reviewer).
+
+## iter 97 — 2026-07-20 — M4 hardening PRE-REGISTRATION: device-FOH round-2 residuals (review-95 triage, ALL dispositions; frozen before any run/edit; PROCESS §2)
+
+- **Task**: close ALL dispositions in `.loop/review-95-triage.md`
+  (Tier-A round 2 over iter-95/cd99733, VERDICT: NO-GO — 5 Medium +
+  2 Low, all incomplete closures of the round-1 classes; detail
+  `.loop/review-95-1.log`). Reviewer-confirmed CLOSED (not reworked):
+  M2 sentinel, M3 opk=evidence, L PORTABILITY, keymap sha pin, device
+  A<->B tooth, 23-key timing whitelist, witness accounting 15.
+  Surfaces: port/foh/{check-device-foh.sh,foh_dev.c,
+  normalize-foh-trace.js} + (M-b, judged unavoidable below)
+  port/gfx/platform_sdl1.c minimal diff + ONE NEW shared header
+  port/gfx/platform_keymap.h. flow-to-fkscript.js NOT needed (its
+  runtime consumer side already reads keymap-frozen.txt; M-b changes
+  only the compiled-side proof). keymap-frozen.txt bytes UNCHANGED.
+  riglib.sh, check-device-render.sh, mlfk-foh.sh, flows/, frozen
+  traces/goldens: BYTE-UNTOUCHED. Done-check: cold
+  `bash port/foh/check-device-foh.sh` → `DEVICE FOH OK (...)` exit 0
+  (counters may honestly change: teeth count grows, fbwit stays 15).
+  Host regression check-foh-flows.sh: mechanical skip-proof expected
+  (grep: it references NONE of this iteration's surfaces —
+  normalize-foh-trace.js/foh_dev.c/platform_* absent from it); cold
+  re-run only if the skip-proof fails.
+- **M-a method (FBWIT torn trailer)**: judge_fbwit becomes a single
+  strict reader: (1) non-empty file; (2) the LAST BYTE must be `\n`
+  (torn-write death — `read` skips an unterminated final record, the
+  round-2 hole); (3) `grep -c ""` line count == pinned nw+2; (4) every
+  line iterated through the exact-position whitelist (header pinned
+  envelope / W rows canonical-tick + name-in-order / `END shots=nw`
+  terminator at the last position, sawEnd flag, content-after-END
+  dead); (5) post-loop reader-iterations == grep-count == nw+2 AND
+  sawEnd==1. The producer's explicit FBWIT1 terminator (`END shots=N`)
+  already ships (iter 95); this round BINDS it (position + count +
+  trailing-newline). T10 extended with the reviewer's exact torn shape:
+  header + all rows + UNTERMINATED `END shots=6` fragment (old reader
+  PASSED it — grep counts the fragment, read drops it) → new reader
+  dies. Refutation shape: any archived genuine fbwit file (6 on disk)
+  rejected by the new reader = grammar wrong → fix the reader, never
+  the producer; two failures → STOP.
+- **M-b method (compiled keymap proof)**: PREFERRED single-LINK-SYMBOL
+  form (one non-static table TU consumed by platform_sdl1.c and
+  foh_dev.c) is REFUTED by construction BEFORE any edit: (a) the
+  frozen rig_arm_build heredoc compiles a FIXED TU list — a new TU
+  cannot be linked into foh_device/gfx_device without editing frozen
+  riglib.sh; (b) the check's --dump-keymap consumer is the HOST
+  foh_dev_headless, which links platform_headless.c NOT
+  platform_sdl1.c — a symbol defined in platform_sdl1.c cannot be
+  dumped by the host binary. Recorded; do NOT retry blind. FALL to the
+  triage's sanctioned by-construction form: ONE SOURCE DEFINITION SITE
+  — NEW header port/gfx/platform_keymap.h defining the 12-row
+  {logical, flowLetter, keysym, offsetof(PlatformInput,field)} table +
+  field accessor; platform_sdl1.c's platform_poll translation arm
+  becomes a LOOP over that table (k[keysym] via SDL1.2
+  keysym==ASCII, _Static_assert'd) — its 12 hand-written lines
+  DELETED (minimal diff; platform_sdl1.c IS touched: judged
+  unavoidable because the poll arm must consume the shared site;
+  m4-freeze-manifest note registered for task 14); foh_dev.c's local
+  kKeymap/keymap_field DELETED, parse_buttons + --dump-keymap consume
+  the header table. The global source-substring scan (comment-blind,
+  the round-2 objection) is DELETED from the check; keymap-frozen.txt
+  keeps its own strict whitelist-grammar validation + sha pin. NEW
+  permanent tooth T12 (host, COPY build): copy foh_dev.c to
+  $BUILD/tooth-kmcopy/foh/ + a PERTURBED copy of platform_keymap.h
+  (a<->b keysym cells swapped by exact-line match, hard-fail if
+  unmatched) to $BUILD/tooth-kmcopy/gfx/ — quoted-include resolution
+  makes the copy TU consume the perturbed header while every other
+  header resolves to the real tree (-Iport/foh -Iport/gfx fallback);
+  build the copy headless binary with the production flags; its
+  --dump-keymap MUST diverge from keymap-frozen.txt (cmp rc exactly 1)
+  AND equal the constructed perturbed expectation (proves the dump
+  reads the COMPILED table, not a file). Dead-tooth guards: header
+  copy != original; dump != frozen. srchash covers port/gfx/*.h →
+  the new header + platform_sdl1.c edit bust the arm stamp (1 arm
+  rebuild). The existing device tooth T-devswap keeps proving the REAL
+  uinput→SDL→platform_poll chain end-to-end. Refutation shape: copy
+  build's dump cmp rc 0 (dump blind to the compiled table) → HALT and
+  report, never ship around it.
+- **M-c method (substring-anywhere resemblance)**: all FOUR summary
+  parsers' resemblance precondition changes from anchored
+  `grep -c '^foh_dev <kind>:'` to unanchored fixed-string
+  `grep -cF 'foh_dev <kind>:'` == 1 (the iter-86 needle-freedom form):
+  the needle appearing ANYWHERE on ANY line that is not the one
+  exact-grammar line (damaged duplicate `Xfoh_dev audio: ...`) is now
+  corruption death. Corpus (archived 5 dev-applogs + twin logs +
+  mlfk-foh.log shape): each needle occurs exactly once per genuine
+  log; the launcher's own `mlfk-foh.sh:` line carries no needle.
+- **M-d method (OPK bounded judge + strict skip parse)**: BOUNDS
+  MEASURED FROM ARCHIVES FIRST — the retained green iter-95 cold-run
+  artifact build/device-foh/opk.dev-trace.txt measures: SHOT 200 /
+  T 370 / SHOT 373 ticks EXACTLY == the frozen f01.expect frames
+  (identity-phase |T-F| = 0, consistent with the iter-95 5-leg
+  measurement), END == 500 == the pinned foh-max exactly. NO new
+  measurement run needed → the spare paced run stays unspent. FROZEN
+  form: constructed bounded expectation = the frozen
+  f01-vs-g01.expect's own pre-input prefix (header + SHOT 200 startup
+  + T 370 startup title timer + SHOT 373 title, extracted by exact
+  line count) + `END 500 transitions=1`; the OPK leg then runs the
+  SAME normalize-foh-trace.js --bounded judge (ID_SLACK=2 pre-input
+  arm + END==end-max exact — the identical frozen bounds) with the
+  explicit `input-free` declaration (no fk_input runs in the evidence
+  leg — a structural fact of that leg, declared, never inferred), and
+  parse_foh_summary runs on the pulled mlfk-foh.log (launched=0,
+  shots=2) with foh_skips==0 AND foh_fails==0 — the flow-leg posture
+  verbatim. The OPK evidence run gains the SAME low_bat_check quiesce
+  bracket as the flow legs (rig_daemon_stop/restore-first + deadman qd
+  marker + rig_quiesce_bracket_assert over device-clock stamps
+  bracketing the dispatch/rc window) so skips==0 is judged under the
+  same conditions. T13 wires T11's stall shape at copy level: +200
+  ticks on the >=300 suffix of an opk.dev-trace COPY still PASSES
+  elision (asserted) but DIES in the bounded judge rc 3. Refutation
+  shape: a healthy fresh cold OPK run violating ID_SLACK/END-exact or
+  skips==0 → exactly ONE re-measure round recorded with values + why
+  (quiesce now equalizes the conditions); a second → STOP.
+- **M-e method (canonical-decimal class sweep)**: every numeric
+  acceptance site in check-device-foh.sh moves to the canonical
+  grammar (0|[1-9][0-9]{0,K}) — `00`/leading zeros = corruption death:
+  the four summary regexes (grep re + bash re-extraction, BASH_REMATCH
+  indices re-audited where canonicalization adds capture groups),
+  fbwit W-row tick, pack-snd dataBytes/fileBytes, manifest
+  seed/p1/p2/stage/frames + m01/g03 seeds, deadman pid, flow END
+  extraction (x3 sites), device shot count, timing-judge *_ns/skips/
+  rendered + the *_ms integer part. SAME class in
+  normalize-foh-trace.js (a changed decision-bearing surface this
+  iteration): RE_T/RE_S/RE_SHOT/RE_LAUNCH/RE_END tick fields,
+  transitions=, flow I/SHOT/END rows, end-max arg → (0|[1-9][0-9]*).
+  judge-foh-trace.js is OUT OF SCOPE (sha-pinned producer, not a
+  surface this round; its leniency is backstopped by the normalizer
+  running on every judged trace — registered, not silent). Corpus
+  validation BEFORE the cold run: all archived genuine artifacts
+  (5 dev-applogs, twin logs, timjudge-out.txt, pack-out, 6 fbwit
+  files, 5 frozen .expects, 5 archived dev-traces + opk trace through
+  the tightened normalizer both modes) = zero false rejections,
+  recorded in .loop/m4-foh97-corpus.log.
+- **L-a method (anchor=null fatal)**: bounded mode gains a frozen
+  in-file INPUT_FREE_FLOWS whitelist (EMPTY — all 5 flows have
+  measured anchors 76-91) + the strict optional 6th arg literal
+  `input-free` (the OPK evidence leg's explicit declaration). After
+  the event loop: anchor==null WITHOUT a declaration → rc 3 loud
+  death (cadence judgment impossible, flow not declared input-free);
+  anchor!=null WITH a declaration → rc 2 (stale declaration — both
+  directions bind). T14 (host, on archived copies): (a) opk trace
+  bounded WITHOUT input-free → rc 3; (b) WITH → rc 0; (c) f01 device
+  trace bounded WITH input-free → rc 2.
+- **L-b method (yoffset==0 pinned)**: foh_dev.c's judged witness arm
+  replaces the page-boundary acceptance (0/240/480) with yoffset==0
+  EXACTLY — any other value = in-app death naming the measured
+  pan-reject policy drift + pointing at --fb-witness-raw as the
+  re-measurement instrument (re-pin via reviewed change); check-side
+  W-row grammar pins yoff=0 (T10 gains a yoff=240 substitution row
+  death). Corpus: all 6 archived fbwit files carry yoff=0 only.
+- **RUN BUDGET**: paced device runs hard cap 2 — (1) ONE full cold
+  done-check (includes the permanent device tooth + the now-quiesced
+  OPK leg); (2) ONE spare reserved for the single pre-registered M-d
+  re-measure round (unspent if the archives' bounds hold, expected).
+  Arm docker rebuilds <= 3 (foh_dev.c + platform_sdl1.c + the new
+  header force exactly 1; 2 spare for compile-error turnarounds).
+  Host builds unbounded-cheap (production + T12 copy per check run).
+  Logs: .loop/m4-foh97-*.log; command output NEVER into the
+  conversation.
+- **PASS CRITERIA (all required)**: cold check prints
+  `DEVICE FOH OK (flows=5 shots=13 bridge=1 states=3 opk=evidence
+  fbwit=15 p99=<x>ms skips=0 underruns=0 starves=0 starts...
+  teeth=15)` exit 0 with: strict fbwit reader green on all 6 fresh
+  witness files; keymap dump==frozen via the ONE definition site +
+  T12 copy-build death; four parsers needle-anywhere==1; OPK leg
+  bounded-judged (input-free declared) + skip-summary parsed
+  (skips==0, fails==0) under the leg-identical quiesce bracket;
+  canonical numerals everywhere swept; anchor-null fatal both
+  directions (T14 trio); yoff=0 pinned in-app + in-check; corpus zero
+  false rejections; ONE atomic commit; frozen
+  flows/goldens/keymap-frozen.txt byte-identical to HEAD; device left
+  clean (lbc==1, gmenu2x live, no markers, scratch wiped).
+- **Default refutation posture**: one bounded evidence round per shape
+  above, then STOP and report — never loosen a judge, never improvise
+  outside the triage.
+
+## iter 97 — 2026-07-20 — M4 hardening RESULT: device-FOH round-2 residuals — ALL review-95 dispositions shipped; cold check green FIRST attempt
+
+- **DONE-CHECK (cold, first attempt): `bash port/foh/check-device-foh.sh`
+  → `DEVICE FOH OK (flows=5 shots=13 bridge=1 states=3 opk=evidence
+  fbwit=15 p99=13.774ms skips=0 underruns=0 starves=0 starts
+  f01-vs-g01=281 f02-cpu-m01=16 f03-options=23 f04-nav=39
+  f05-vs-g03=14 teeth=15)` exit 0** (.loop/m4-foh97-donecheck.log,
+  RC-MARKER=0). Honest counter change: teeth 12→15 (T12/T13/T14 new;
+  T10 widened in place). fbwit stays 15. Frozen flows/goldens/
+  keymap-frozen.txt byte-untouched.
+- **M-a (torn trailer) SHIPPED**: judge_fbwit is now a single strict
+  reader — trailing-newline mandatory (torn write = death), grep-count
+  == pinned nw+2, every line exact-position whitelisted, END
+  terminator bound to the LAST position (sawEnd + post-loop
+  reader-iterations == grep-count). The producer's FBWIT1 `END
+  shots=N` terminator (shipped iter 95) is now BOUND, not just
+  emitted. T10 extended with the reviewer's exact torn shape
+  (unterminated `END shots=6` fragment — the old reader PASSED it,
+  rehearsal-proven) + yoff=240 row death.
+- **M-b (compiled keymap proof) SHIPPED — with the PRE-REGISTERED
+  REFUTATION**: the strict single-LINK-SYMBOL form is REFUTED by
+  construction (frozen rig_arm_build heredoc = fixed TU list, no new
+  TU linkable; host --dump-keymap binary links platform_headless.c,
+  not platform_sdl1.c — recorded in the pre-registration, do NOT
+  retry blind). Shipped the triage-sanctioned by-construction form:
+  NEW `port/gfx/platform_keymap.h` = ONE source definition site
+  ({logical, flowLetter, keysym, offsetof} rows + field accessor);
+  platform_sdl1.c's platform_poll translation arm is now a LOOP over
+  that table (12 hand lines deleted; `_Static_assert(SDLK_a=='a')`
+  guards the keysym==ASCII assumption; MINIMAL DIFF — platform_sdl1.c
+  touched as judged unavoidable, m4-freeze-manifest note REGISTERED
+  for task 14: its reviewed pin must be re-taken with this arc's GO);
+  foh_dev.c's local kKeymap/keymap_field deleted, parse_buttons +
+  --dump-keymap consume the header. The global source-substring scan
+  is DELETED from the check (keymap-frozen.txt keeps its own strict
+  grammar + sha pin). NEW permanent T12: COPY build from a perturbed
+  header copy (a<->b keysyms; quoted-include resolution feeds the
+  copy TU the perturbed header, -Iport/foh -Iport/gfx fallback for
+  the rest) → dump diverges from frozen (cmp rc 1) AND equals the
+  constructed perturbed expectation. rig_srchash covers port/gfx/*.h
+  → header edits bust the arm stamp. T-devswap (device chain tooth)
+  unchanged and green. flow-to-fkscript.js NOT needed (runtime
+  consumer already reads the frozen file).
+- **M-c (substring-anywhere) SHIPPED**: all four parsers' resemblance
+  precondition is now unanchored `grep -cF 'foh_dev <kind>:'` == 1
+  (iter-86 needle-freedom form); `Xfoh_dev audio: ...` duplicate
+  death rehearsal-proven (rc 2).
+- **M-d (OPK bounded + strict skip parse) SHIPPED — bounds from
+  ARCHIVES, spare run UNSPENT**: the retained green iter-95 artifact
+  build/device-foh/opk.dev-trace.txt measured |T-F| = 0 on all three
+  pre-input events + END == 500 exact, so the constructed bounded
+  expectation = frozen f01.expect's own pre-input prefix (head -4) +
+  `END 500 transitions=1`, judged by the SAME normalize-foh-trace.js
+  --bounded (ID_SLACK=2 / END-exact frozen arms) with the explicit
+  `input-free` declaration; fresh cold run: `bounded OK ...
+  anchor=none(declared)`. mlfk-foh.log now PULLED and parsed by the
+  REAL parse_foh_summary (launched=0 shots=2): fresh line `foh_dev
+  foh: 500 ticks, 1 transitions, 2 shots, 0 render skips, 0 failed
+  presents, launched=0` — skips==0, fails==0, transitions==1 gated.
+  The OPK evidence run now sits inside a LEG-IDENTICAL low_bat_check
+  quiesce bracket (deadman qd marker + stop, restore-FIRST,
+  rig_quiesce_bracket_assert over device-clock stamps: fresh bracket
+  `stop->start 0 s, app 12 s, end->restore 2 s`). T13 wires T11's
+  stall shape at copy level (+200 ticks ≥300: passes elision —
+  asserted — dies bounded rc 3).
+- **M-e (canonical decimals) SHIPPED as a class sweep**: NUM12/NUM19
+  = (0|[1-9][0-9]{0,K}) at EVERY numeric acceptance site in
+  check-device-foh.sh (4 summary grammars incl. re-extractions with
+  BASH_REMATCH indices re-audited — canonicalization adds capture
+  groups; fbwit tick; pack-snd; manifest seeds/params; deadman pid;
+  flow END extraction ×4; shot count; timing *_ns/skips/rendered +
+  *_ms integer part) AND in normalize-foh-trace.js (RE_T/RE_S/
+  RE_SHOT/RE_LAUNCH/RE_END + transitions= + flow rows + end-max).
+  `00`/`007` deaths rehearsal-proven (music refills `06` → rc 2;
+  fbwit tick `0200` → rc 2). judge-foh-trace.js registered OUT of
+  scope (sha-pinned producer; normalizer strictness backstops every
+  judged trace).
+- **L-a (anchor-null fatal) SHIPPED**: frozen empty INPUT_FREE_FLOWS
+  whitelist + strict `input-free` literal arg; anchor==null undeclared
+  → rc 3; declared-but-anchored → rc 2 (both directions bind). T14
+  proves both on the fresh artifacts.
+- **L-b (yoffset==0 pinned) SHIPPED**: foh_dev.c judged-witness arm
+  now dies on ANY yoffset != 0 naming the pan-reject policy drift
+  (--fb-witness-raw stays the re-measurement instrument); check-side
+  W-row grammar pins `yoff=0`; corpus: all 6 archived fbwit files
+  carry yoff=0 only; T10's yoff=240 arm proves the death.
+- **CORPUS VALIDATION (zero false rejections)**:
+  .loop/m4-foh97-corpus.log — 61 checks over ALL archived genuine
+  artifacts using the REAL extracted function bytes (5 frozen
+  .expects + 5 archived dev-traces + opk trace through elide AND
+  bounded; 5 dev-applogs + twin logs through all four parsers; 6
+  fbwit files through judge_fbwit; timjudge-out.txt; pack-out ×2;
+  keymap-frozen grammar). The fresh cold run is the second corpus
+  pass (all fresh artifacts parsed by the shipped strict forms).
+  Harness note: an initial glob accident swept .bstate.expect files
+  into the normalizer corpus — harness bug (BRIDGE-STATE files are
+  cmp'd, never normalized), fixed in the harness, not the grammar.
+- **RUN LEDGER vs budgets**: paced device runs 1/2 (the cold
+  done-check; the M-d spare UNSPENT — archives held). Arm rebuilds
+  1/3 (single stamp-miss rebuild; T12 rehearsal + shakeout host
+  builds were host-side, logs .loop/m4-foh97-hostbuild.log +
+  .loop/m4-foh97-t12rehearsal.log). Host regression:
+  check-foh-flows.sh mechanical SKIP-PROOF
+  (.loop/m4-foh97-fohflows-skip.txt — zero changed shared surfaces;
+  it links platform_headless.c, untouched).
+- **Device left clean (verified post-run)**: lbc==1, gmenu2x live,
+  /mnt/disable_frontend absent, /tmp/mlfk + /mnt/mlfk-scratch wiped,
+  foh-args sentinel absent, evidence OPK removed.
+- **HONEST COVERAGE / registered residuals**: (1) the witness still
+  sees the kernel fb page, not the panel; match-phase presents stay
+  unwitnessed (task-14 inheritance note stands). (2) platform_sdl2.c
+  (host-dev backend) keeps its own letter mapping — NOT a shipping
+  surface, registered, not unified. (3) the OPK skip gate's aend
+  stamp is the rc-DETECTION time (the frozen launcher writes no
+  app-exit stamp), so the bracket is conservative by ≤ one 2 s poll.
+  (4) judge-foh-trace.js leading-zero leniency registered (pinned
+  producer; normalizer backstops).
+- **ZOOM OUT (HARD RULE 8)**: all seven findings were instances of
+  two classes already named by PROCESS §3 — permissive acceptance at
+  a decision edge (M-a torn trailer, M-c anchored-only needles, M-e
+  leading zeros, L-a silent-skip, L-b unpinned measured value) and
+  proof-by-source-resemblance instead of proof-by-compiled-artifact
+  (M-b, M-d elision-only). The class fixes shipped are the strongest
+  local forms (single strict reader; needle-anywhere; canonical
+  numerals everywhere in the changed files; declaration-bound
+  absence; measured-value pins; one compiled definition site +
+  perturbed-copy-build tooth). Instrument-level residue: a REUSABLE
+  strict-reader/canonical-numeral shell library is a candidate if a
+  THIRD check script grows these parsers (two sites today:
+  check-device-foh.sh, check-foh-flows.sh's own forms) — registered,
+  not built (YAGNI at n=2).

@@ -25,6 +25,7 @@
 #include <string.h>
 
 #include "platform.h"
+#include "platform_keymap.h"
 #include "raster.h"
 
 // Audio seam (M3 task 6): the SDL implementation is shared with the
@@ -119,19 +120,18 @@ void platform_poll(PlatformInput *in) {
     if (e.type == SDL_QUIT) in->quit = true;
   }
   const Uint8 *k = SDL_GetKeyState(0);
-  // FunKey letter keysyms (measured mapping — CLAUDE.md "Device access")
-  in->up = k[SDLK_u] != 0;
-  in->down = k[SDLK_d] != 0;
-  in->left = k[SDLK_l] != 0;
-  in->right = k[SDLK_r] != 0;
-  in->a = k[SDLK_a] != 0;
-  in->b = k[SDLK_b] != 0;
-  in->x = k[SDLK_x] != 0;
-  in->y = k[SDLK_y] != 0;
-  in->start = k[SDLK_s] != 0;
-  in->l = k[SDLK_k] != 0;
-  in->r = k[SDLK_n] != 0;
-  in->menu = k[SDLK_q] != 0;
+  // FunKey letter keysyms (measured mapping — CLAUDE.md "Device
+  // access"). Keymap SSOT (iter 97, review-95 M-b): the translation
+  // arm consumes platform_keymap.h's SINGLE definition site — the
+  // same compiled table foh_dev --dump-keymap emits (cmp'd against
+  // the frozen keymap-frozen.txt by check-device-foh.sh). SDL1.2
+  // letter keysyms are their ASCII codes (asserted at compile time).
+  _Static_assert(SDLK_a == 'a' && SDLK_z == 'z',
+                 "SDL1.2 letter keysyms must equal ASCII");
+  for (int i = 0; i < PLATFORM_KEYMAP_ROWS; i++) {
+    *platform_keymap_field(in, i) =
+        k[(unsigned char)kPlatformKeymap[i].keysym] != 0;
+  }
 }
 
 void platform_quit(void) {

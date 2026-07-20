@@ -37,14 +37,20 @@
 #    kernel fb page, not the physical panel, and samples FOH-phase
 #    shot presents only — match-phase presents stay unwitnessed
 #    (task-14 note; the render rung inherits the class at task 14);
-#  - keymap SSOT (iter 95, review-93 H2): port/foh/keymap-frozen.txt
-#    (sha-pinned) is THE logical-button→letter-keysym source of truth —
-#    flow-to-fkscript.js consumes it at runtime, foh_dev --dump-keymap
-#    must emit it byte-exactly, platform_sdl1.c's poll-table source
-#    lines are asserted against it row-by-row, and ONE permanent
-#    DEVICE tooth drives an A<->B-swapped injector mapping through the
-#    REAL uinput→SDL→platform_poll chain and requires the judge to DIE
-#    on the device trace;
+#  - keymap SSOT (iter 95 H2; COMPILED-TABLE proof iter 97, review-95
+#    M-b): port/foh/keymap-frozen.txt (sha-pinned) is THE frozen
+#    logical-button→letter-keysym truth; the COMPILED mapping lives at
+#    ONE definition site — port/gfx/platform_keymap.h — consumed by
+#    BOTH platform_sdl1.c's platform_poll translation arm and foh_dev
+#    --dump-keymap, whose emission must cmp byte-exactly against the
+#    frozen file. The old global source-substring scan is DELETED
+#    (comments could satisfy it; it proved nothing about compiled
+#    behavior). Proof teeth: T12 builds a COPY foh_dev from a
+#    PERTURBED copy of the header — its dump must DIVERGE from the
+#    frozen file (a blind dump = fatal); the permanent DEVICE tooth
+#    drives an A<->B-swapped injector mapping through the REAL
+#    uinput→SDL→platform_poll chain and requires the judge to DIE on
+#    the device trace;
 #  - f01 launch bridge: the FOH-launched match replays g01's trace on
 #    device with LIVE render + SFX + MUSIC, FULL 3600-frame stream
 #    judged by the UNCHANGED wrap-run.js + verify-stream.js vs the
@@ -62,7 +68,13 @@
 #    the arm-build stamp record — the launcher enters the FOH, not the
 #    direct-match path), bounded no-input evidence run judged vs a
 #    constructed startup->title expectation + tick shots byte-exact +
-#    the present witness on both shots. The verdict token is
+#    the present witness on both shots, PLUS (iter 97, review-95 M-d)
+#    the SAME bounded-delta judgment as the flow legs (constructed
+#    expectation = the frozen f01.expect's own pre-input prefix +
+#    END==foh-max exact; explicit input-free declaration — no injector
+#    runs in the evidence leg) and the SAME strict skip-summary parse
+#    (mlfk-foh.log pulled; skips==0, failed presents==0) under the
+#    SAME low_bat_check quiesce bracket. The verdict token is
 #    `opk=evidence` (iter 95, review-93 M3): this leg proves ONLY the
 #    mount-and-run evidence path — FRONTEND-NAV discovery/launch AND
 #    the mlfk-foh.sh live branch are task 14's gate leg (iter-73
@@ -150,6 +162,13 @@ MUSIC_BF_LOOP='12366,184256'
 
 fail() { echo "DEVICE FOH FAIL: $1" >&2; exit 1; }
 grammar_die() { echo "DEVICE FOH FAIL: $1" >&2; exit 2; }
+
+# canonical-decimal grammars (iter 97, review-95 M-e — class fix at
+# EVERY numeric acceptance site in this file): 0 or no-leading-zero
+# bounded decimal; '00' and '007' are corruption, matching the C/node
+# producers' canonical integer emission exactly.
+NUM12='(0|[1-9][0-9]{0,11})'
+NUM19='(0|[1-9][0-9]{0,18})'
 
 source port/sim/device/adbsh.sh
 require_device
@@ -253,7 +272,7 @@ if [ "$stale_marker" = 1 ] || [ "$stale_deadman" = 1 ]; then
     if [ "$sdm_gone" != 1 ]; then
       sdm_pid="$(dsh "cat $DTMP/deadman.pid")" || fail "could not read the stale deadman pid file"
       sdm_pid="${sdm_pid%$'\n'}"
-      [[ "$sdm_pid" =~ ^[0-9]{1,7}$ ]] || fail "stale deadman.pid is not a bounded decimal pid ('$sdm_pid')"
+      [[ "$sdm_pid" =~ ^(0|[1-9][0-9]{0,6})$ ]] || fail "stale deadman.pid is not a canonical bounded decimal pid ('$sdm_pid')"
       nrc=0
       dsh "test -d /proc/$sdm_pid" >/dev/null || nrc=$?
       case "$nrc" in
@@ -320,7 +339,7 @@ while IFS='=' read -r gk gv; do
       [[ "$gv" =~ ^[a-z0-9][a-z0-9-]*\.trace\.json$ ]] || fail "manifest g01.trace fails validation ('$gv')"
       trace=$gv ;;
     seed|p1|p2|stage|frames)
-      [[ "$gv" =~ ^[0-9]{1,12}$ ]] || fail "manifest g01.$gk not a bounded decimal ('$gv')"
+      [[ "$gv" =~ ^(0|[1-9][0-9]{0,11})$ ]] || fail "manifest g01.$gk not a canonical bounded decimal ('$gv')"
       printf -v "$gk" '%s' "$gv" ;;
     *) fail "unexpected manifest extraction line '$gk=$gv'" ;;
   esac
@@ -338,14 +357,14 @@ m01seed="$(node -e '
   if (!g || g.cpu !== true) { console.error("m01 shape"); process.exit(1); }
   console.log(String(g.seed));
 ')" || fail "cannot parse m01 seed"
-[[ "$m01seed" =~ ^[0-9]{1,12}$ ]] || fail "m01 seed grammar ('$m01seed')"
+[[ "$m01seed" =~ ^(0|[1-9][0-9]{0,11})$ ]] || fail "m01 seed grammar ('$m01seed')"
 g03seed="$(node -e '
   const m = JSON.parse(require("fs").readFileSync("oracle/goldens/manifest.json", "utf8"));
   const g = m.goldens.find((x) => x.id === "g03");
   if (!g || g.cpu !== false) { console.error("g03 shape"); process.exit(1); }
   console.log(String(g.seed));
 ')" || fail "cannot parse g03 seed"
-[[ "$g03seed" =~ ^[0-9]{1,12}$ ]] || fail "g03 seed grammar ('$g03seed')"
+[[ "$g03seed" =~ ^(0|[1-9][0-9]{0,11})$ ]] || fail "g03 seed grammar ('$g03seed')"
 
 # flow inventory pin (both directions; the check-foh-flows class)
 FLOW_IDS=(f01-vs-g01 f02-cpu-m01 f03-options f04-nav f05-vs-g03)
@@ -412,7 +431,7 @@ msum="$(rig_host_sha256 "$AUDIO_OUT/audio/music/menu.pcm")" || exit 1
 [ "$msum" = "$MUSIC_MENU_SHA256" ] || fail "menu.pcm sha256 $msum != pinned $MUSIC_MENU_SHA256 (pipeline/ffmpeg drift — reviewed re-freeze)"
 bsum="$(rig_host_sha256 "$AUDIO_OUT/audio/music/battlefield.pcm")" || exit 1
 [ "$bsum" = "$MUSIC_BF_SHA256" ] || fail "battlefield.pcm sha256 $bsum != pinned $MUSIC_BF_SHA256"
-pack_re='^pack-snd OK count=180 dataBytes=[0-9]{1,12} fileBytes=[0-9]{1,12}$'
+pack_re="^pack-snd OK count=180 dataBytes=${NUM12} fileBytes=${NUM12}\$"
 for side in a b; do
   rm -f "$BUILD/sndpack-$side.bin" "$BUILD/pack-out-$side.txt"
   node "$GFX/pack-snd.js" "$AUDIO_OUT" "$BUILD/sndpack-$side.bin" \
@@ -511,95 +530,192 @@ SIM_TUS=(
 )
 rm -f "$BUILD/raster.o" "$BUILD/foh_dev_headless"
 cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$BUILD/raster.o"
-cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/foh_dev_headless" \
-  "$BUILD/raster.o" "$FOH/foh_dev.c" "$FOH/foh.c" "$FOH/foh_font.c" \
-  "$FOH/foh_render.c" "$GFX/platform_headless.c" \
-  "$GFX/anim1.c" "$GFX/gfx_render.c" \
-  "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
-  "${SIM_TUS[@]}" \
-  port/sim/characters/shared/moves/*.c \
-  port/sim/characters/fox/moves/*.c \
-  port/sim/characters/falco/moves/*.c \
-  port/sim/characters/falcon/moves/*.c \
-  port/sim/characters/marth/moves/*.c \
-  port/sim/characters/puff/moves/*.c \
-  -lm -lpthread
+# host foh_dev build, factored (iter 97, review-95 M-b) so the T12
+# keymap copy-build tooth compiles with EXACTLY the production recipe
+# (only the foh_dev.c path + extra -I dirs differ).
+build_foh_headless() { # <foh_dev_src> <out> [extra cc args...]
+  local src="$1" out="$2"
+  shift 2
+  cc -O2 "${CFLAGS_COMMON[@]}" "$@" -o "$out" \
+    "$BUILD/raster.o" "$src" "$FOH/foh.c" "$FOH/foh_font.c" \
+    "$FOH/foh_render.c" "$GFX/platform_headless.c" \
+    "$GFX/anim1.c" "$GFX/gfx_render.c" \
+    "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
+    "${SIM_TUS[@]}" \
+    port/sim/characters/shared/moves/*.c \
+    port/sim/characters/fox/moves/*.c \
+    port/sim/characters/falco/moves/*.c \
+    port/sim/characters/falcon/moves/*.c \
+    port/sim/characters/marth/moves/*.c \
+    port/sim/characters/puff/moves/*.c \
+    -lm -lpthread
+}
+build_foh_headless "$FOH/foh_dev.c" "$BUILD/foh_dev_headless"
 made "$BUILD/foh_dev_headless"
 echo "   host twin built (raster -O3, all else -O2; -ffp-contract=off everywhere)"
 
-# --- keymap SSOT asserts (iter 95, review-93 H2) --------------------------------
-# (1) the COMPILED table == the frozen file, byte-exact
+# --- keymap SSOT asserts (iter 95 H2; compiled-table proof iter 97, M-b) --------
+teeth=0
+# (1) the COMPILED table == the frozen file, byte-exact. Since iter 97
+# the dumped table IS the table: platform_keymap.h is the ONE source
+# definition site, consumed by platform_sdl1.c's platform_poll
+# translation arm AND by --dump-keymap (no second copy anywhere). The
+# old global source-substring scan is DELETED — comments satisfied it,
+# and it proved nothing about compiled behavior; the compiled proof is
+# this cmp + the T12 perturbed-copy-build tooth + the T-devswap device
+# tooth on the real chain.
 rm -f "$BUILD/keymap-dump.txt"
 "$BUILD/foh_dev_headless" --dump-keymap > "$BUILD/keymap-dump.txt" \
   || fail "foh_dev --dump-keymap failed"
 made "$BUILD/keymap-dump.txt"
 cmp "$BUILD/keymap-dump.txt" "$FOH/keymap-frozen.txt" \
   || fail "foh_dev's compiled keymap != the frozen keymap-frozen.txt (SSOT drift)"
-# (2) platform_sdl1.c's poll table == the frozen file, row-by-row
-# (source-level assert; platform_sdl1.c is READ, never edited — its
-# bytes already feed the arm-build stamp, so source == shipped binary)
+# (2) the frozen file's own whitelist grammar (header + exactly 12
+# canonical map rows; PROCESS §3)
 n_kmap=0
+kline=0
 while IFS= read -r kln; do
-  [ "$kln" = "KEYMAP1" ] && continue
+  kline=$((kline + 1))
+  if [ "$kline" = 1 ]; then
+    [ "$kln" = "KEYMAP1" ] || fail "keymap-frozen.txt line 1 is not exactly 'KEYMAP1'"
+    continue
+  fi
   if ! [[ "$kln" =~ ^map\ ([a-z]+)\ [A-Z]\ ([a-z])$ ]]; then
     fail "keymap-frozen.txt line fails the KEYMAP1 grammar: '$kln'"
   fi
-  klogical="${BASH_REMATCH[1]}"
-  ksym="${BASH_REMATCH[2]}"
-  c="$(grep -cF "in->${klogical} = k[SDLK_${ksym}] != 0;" "$GFX/platform_sdl1.c")" || true
-  [ "$c" = 1 ] || fail "platform_sdl1.c poll table: 'in->${klogical} = k[SDLK_${ksym}]' occurs $c times (want exactly 1 — keymap SSOT drift)"
   n_kmap=$((n_kmap + 1))
 done < "$FOH/keymap-frozen.txt"
 [ "$n_kmap" = 12 ] || fail "keymap-frozen.txt carries $n_kmap map rows (want 12)"
-c="$(grep -c "k\[SDLK_" "$GFX/platform_sdl1.c")" || true
-[ "$c" = 12 ] || fail "platform_sdl1.c carries $c k[SDLK_...] poll lines (want exactly 12 — an extra mapping line would escape the row asserts)"
-echo "   keymap SSOT OK (dump == frozen file; platform_sdl1 poll table == frozen file, 12/12)"
+# (3) T12 — the COMPILED-table tooth (iter 97, review-95 M-b): build a
+# COPY foh_dev whose ONLY delta is a PERTURBED copy of
+# platform_keymap.h (a<->b keysym cells swapped); quoted-include
+# resolution makes the copied TU consume the perturbed header (its
+# "../gfx/platform_keymap.h" resolves beside the copy) while every
+# other header falls back to the real tree via -I. The copy's dump
+# MUST diverge from the frozen file (rc exactly 1) AND equal the
+# constructed perturbed expectation — proving --dump-keymap reads the
+# COMPILED table, not any file, and that the cmp gate has teeth.
+rm -rf "$BUILD/tooth-kmcopy"
+mkdir -p "$BUILD/tooth-kmcopy/foh" "$BUILD/tooth-kmcopy/gfx"
+cp "$FOH/foh_dev.c" "$BUILD/tooth-kmcopy/foh/foh_dev.c"
+node -e '
+  const fs = require("fs");
+  const [src, dst] = process.argv.slice(1);
+  const raw = fs.readFileSync(src, "utf8");
+  const rowA = "    {\"a\", '\''A'\'', '\''a'\'', offsetof(PlatformInput, a)},";
+  const rowB = "    {\"b\", '\''B'\'', '\''b'\'', offsetof(PlatformInput, b)},";
+  if (!raw.includes(rowA) || !raw.includes(rowB)) {
+    console.error("T12: exact a/b rows not found in platform_keymap.h");
+    process.exit(1);
+  }
+  const out = raw
+    .replace(rowA, "    {\"a\", '\''A'\'', '\''b'\'', offsetof(PlatformInput, a)},")
+    .replace(rowB, "    {\"b\", '\''B'\'', '\''a'\'', offsetof(PlatformInput, b)},");
+  if (out === raw) { console.error("T12: swap was a no-op"); process.exit(1); }
+  fs.writeFileSync(dst, out);
+' "$GFX/platform_keymap.h" "$BUILD/tooth-kmcopy/gfx/platform_keymap.h" \
+  || fail "T12: could not derive the perturbed platform_keymap.h copy"
+made "$BUILD/tooth-kmcopy/gfx/platform_keymap.h"
+cmp -s "$BUILD/tooth-kmcopy/gfx/platform_keymap.h" "$GFX/platform_keymap.h" && \
+  fail "T12: perturbed header copy is byte-identical to the real header (dead tooth)"
+build_foh_headless "$BUILD/tooth-kmcopy/foh/foh_dev.c" \
+  "$BUILD/tooth-kmcopy/foh_dev_headless" -Iport/foh -Iport/gfx \
+  || fail "T12: perturbed copy build failed outright"
+made "$BUILD/tooth-kmcopy/foh_dev_headless"
+rm -f "$BUILD/tooth-kmcopy/keymap-dump.txt"
+"$BUILD/tooth-kmcopy/foh_dev_headless" --dump-keymap \
+  > "$BUILD/tooth-kmcopy/keymap-dump.txt" \
+  || fail "T12: perturbed copy --dump-keymap failed"
+made "$BUILD/tooth-kmcopy/keymap-dump.txt"
+rc=0
+cmp -s "$BUILD/tooth-kmcopy/keymap-dump.txt" "$FOH/keymap-frozen.txt" || rc=$?
+[ "$rc" = 1 ] || fail "T12: perturbed-table dump vs frozen cmp rc $rc (want exactly 1 — rc 0 means --dump-keymap is BLIND to the compiled table)"
+node -e '
+  const fs = require("fs");
+  const [src, dst] = process.argv.slice(1);
+  const raw = fs.readFileSync(src, "utf8");
+  const out = raw.split("\n").map((ln) => {
+    if (ln === "map a A a") return "map a A b";
+    if (ln === "map b B b") return "map b B a";
+    return ln;
+  }).join("\n");
+  if (out === raw) { console.error("no-op"); process.exit(1); }
+  fs.writeFileSync(dst, out);
+' "$FOH/keymap-frozen.txt" "$BUILD/tooth-kmcopy/keymap-want.txt" \
+  || fail "T12: could not construct the perturbed dump expectation"
+cmp "$BUILD/tooth-kmcopy/keymap-dump.txt" "$BUILD/tooth-kmcopy/keymap-want.txt" \
+  || fail "T12: perturbed dump != the constructed perturbed expectation (the dump does not reflect the compiled table)"
+teeth=$((teeth + 1))
+echo "   keymap SSOT OK (dump == frozen; ONE compiled definition site platform_keymap.h; source scan deleted)"
+echo "    T12 OK: perturbed compiled-table COPY build dumps a diverging keymap and DIES at the frozen cmp"
 
 # device fb-witness judge (strict FBWIT1 grammar; foh_dev.c dies in-app
-# on any mismatch — this re-judges the pulled rows fail-closed)
+# on any mismatch — this re-judges the pulled rows fail-closed).
+# SINGLE STRICT READER (iter 97, review-95 M-a): the file must be
+# newline-terminated (a torn trailer is skipped by `read` — the
+# round-2 hole), EVERY line passes the exact-position whitelist, the
+# END terminator must be the LAST line, and reader-iterations ==
+# grep-count == pinned nw+2. Row grammar: canonical-decimal tick
+# (M-e) + yoff=0 EXACTLY (L-b — the measured pan-reject policy; any
+# other value names the H1 wrong-page hazard).
 judge_fbwit() { # <file> <flow-id> <shot-names...>
   local wf="$1" fid="$2"
   shift 2
-  local want=("$@") nw=${#want[@]} i=0 ln
+  local want=("$@") nw=${#want[@]} i=0 ln sawEnd=0
   made "$wf"
+  [ -s "$wf" ] || grammar_die "fbwit $fid: empty witness file"
+  [ -z "$(tail -c 1 "$wf")" ] \
+    || grammar_die "fbwit $fid: missing trailing newline (torn write)"
   local nlines
   nlines="$(grep -c "" "$wf")" || fail "fbwit $fid: cannot count lines"
   [ "$nlines" = "$((nw + 2))" ] || grammar_die "fbwit $fid: $nlines lines (want $((nw + 2)))"
   while IFS= read -r ln; do
+    [ "$sawEnd" = 0 ] || grammar_die "fbwit $fid: content after the END terminator"
     if [ "$i" = 0 ]; then
       [ "$ln" = "FBWIT1 flow=$fid xform=$FBWIT_XFORM_PIN ll=$FBWIT_LL_PIN vyres=$FBWIT_VYRES_PIN" ] \
         || grammar_die "fbwit $fid: header '$ln' != pinned envelope"
     elif [ "$i" -le "$nw" ]; then
-      if ! [[ "$ln" =~ ^W\ [0-9]{1,7}\ ([a-z0-9-]{1,32})\ yoff=(0|240|480)\ eq=1$ ]]; then
-        grammar_die "fbwit $fid: row $i fails the FBWIT1 grammar: '$ln'"
+      if ! [[ "$ln" =~ ^W\ (0|[1-9][0-9]{0,6})\ ([a-z0-9-]{1,32})\ yoff=0\ eq=1$ ]]; then
+        grammar_die "fbwit $fid: row $i fails the FBWIT1 grammar (canonical tick, yoff=0 pinned): '$ln'"
       fi
-      [ "${BASH_REMATCH[1]}" = "${want[$((i - 1))]}" ] \
-        || grammar_die "fbwit $fid: row $i shot '${BASH_REMATCH[1]}' != expected '${want[$((i - 1))]}'"
+      [ "${BASH_REMATCH[2]}" = "${want[$((i - 1))]}" ] \
+        || grammar_die "fbwit $fid: row $i shot '${BASH_REMATCH[2]}' != expected '${want[$((i - 1))]}'"
     else
       [ "$ln" = "END shots=$nw" ] \
         || grammar_die "fbwit $fid: trailer '$ln' != 'END shots=$nw'"
+      sawEnd=1
     fi
     i=$((i + 1))
   done < "$wf"
+  [ "$i" = "$nlines" ] \
+    || grammar_die "fbwit $fid: reader iterated $i of $nlines counted lines (torn trailer)"
+  [ "$sawEnd" = 1 ] \
+    || grammar_die "fbwit $fid: END terminator never seen at the final position"
 }
 
-# foh_dev summary parsers (whitelist grammars — foh_dev.c fprintf sites)
+# foh_dev summary parsers (whitelist grammars — foh_dev.c fprintf
+# sites). Resemblance = corruption SUBSTRING-ANYWHERE (iter 97,
+# review-95 M-c — the iter-86 needle-freedom form): the needle
+# 'foh_dev <kind>:' appearing ANYWHERE on ANY line (grep -F,
+# unanchored) must count exactly 1, so a damaged duplicate like
+# 'Xfoh_dev audio: ...' is death, never silence. Numerals are
+# CANONICAL decimals (iter 97, review-95 M-e: $NUM12/$NUM19 — '00' is
+# corruption; the C producer emits %ld/%PRIu64).
 parse_foh_summary() { # <log> <launched 0|1> <want-shots>
   local log="$1" launched="$2" wshots="$3" re cnt line pcnt
   unset foh_skips foh_fails foh_transitions
-  # resemblance = corruption (iter 95, review-93 M4 — the iter-86
-  # class): the PREFIX count must be exactly 1, so a foreign or
-  # malformed 'foh_dev foh:' line is death, never silence
-  pcnt="$(grep -c '^foh_dev foh:' "$log")" || true
-  [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt 'foh_dev foh:' lines (want exactly 1 — resemblance is corruption)"
-  re="^foh_dev foh: [0-9]{1,12} ticks, [0-9]{1,12} transitions, ${wshots} shots, [0-9]{1,12} render skips, [0-9]{1,12} failed presents, launched=${launched}\$"
+  pcnt="$(grep -cF 'foh_dev foh:' "$log")" || true
+  [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt lines containing 'foh_dev foh:' (want exactly 1 — resemblance ANYWHERE is corruption)"
+  re="^foh_dev foh: ${NUM12} ticks, ${NUM12} transitions, ${wshots} shots, ${NUM12} render skips, ${NUM12} failed presents, launched=${launched}\$"
   cnt="$(grep -cE "$re" "$log")" || true
   [ "$cnt" = 1 ] || grammar_die "app log $log has $cnt lines matching the pinned foh-summary grammar (want 1: shots=$wshots launched=$launched)"
   line="$(grep -E "$re" "$log")"
-  if [[ "$line" =~ ^foh_dev\ foh:\ [0-9]{1,12}\ ticks,\ ([0-9]{1,12})\ transitions,\ ${wshots}\ shots,\ ([0-9]{1,12})\ render\ skips,\ ([0-9]{1,12})\ failed\ presents,\ launched=${launched}$ ]]; then
-    foh_transitions="${BASH_REMATCH[1]}"
-    foh_skips="${BASH_REMATCH[2]}"
-    foh_fails="${BASH_REMATCH[3]}"
+  # groups: 1=ticks 2=transitions 3=skips 4=fails (canonical numerals
+  # are capture groups — indices audited iter 97)
+  if [[ "$line" =~ ^foh_dev\ foh:\ (0|[1-9][0-9]{0,11})\ ticks,\ (0|[1-9][0-9]{0,11})\ transitions,\ ${wshots}\ shots,\ (0|[1-9][0-9]{0,11})\ render\ skips,\ (0|[1-9][0-9]{0,11})\ failed\ presents,\ launched=${launched}$ ]]; then
+    foh_transitions="${BASH_REMATCH[2]}"
+    foh_skips="${BASH_REMATCH[3]}"
+    foh_fails="${BASH_REMATCH[4]}"
   else
     grammar_die "foh summary line failed re-extraction ('$line')"
   fi
@@ -607,13 +723,14 @@ parse_foh_summary() { # <log> <launched 0|1> <want-shots>
 parse_match_summary() { # <log> <frames> <pace>
   local log="$1" fr="$2" pace="$3" re cnt line pcnt
   unset match_skips match_fails match_wall_ms
-  pcnt="$(grep -c '^foh_dev match:' "$log")" || true
-  [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt 'foh_dev match:' lines (want exactly 1 — resemblance is corruption)"
-  re="^foh_dev match: ${fr} frames, [0-9]{1,12} render skips, [0-9]{1,12} failed presents, wall [0-9]{1,12} ms, pace=${pace} budget=${BUDGET_NS} ns\$"
+  pcnt="$(grep -cF 'foh_dev match:' "$log")" || true
+  [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt lines containing 'foh_dev match:' (want exactly 1 — resemblance ANYWHERE is corruption)"
+  re="^foh_dev match: ${fr} frames, ${NUM12} render skips, ${NUM12} failed presents, wall ${NUM12} ms, pace=${pace} budget=${BUDGET_NS} ns\$"
   cnt="$(grep -cE "$re" "$log")" || true
   [ "$cnt" = 1 ] || grammar_die "app log $log has $cnt lines matching the pinned match-summary grammar (want 1)"
   line="$(grep -E "$re" "$log")"
-  if [[ "$line" =~ ^foh_dev\ match:\ ${fr}\ frames,\ ([0-9]{1,12})\ render\ skips,\ ([0-9]{1,12})\ failed\ presents,\ wall\ ([0-9]{1,12})\ ms,\ pace=${pace}\ budget=${BUDGET_NS}\ ns$ ]]; then
+  # groups: 1=skips 2=fails 3=wall
+  if [[ "$line" =~ ^foh_dev\ match:\ ${fr}\ frames,\ (0|[1-9][0-9]{0,11})\ render\ skips,\ (0|[1-9][0-9]{0,11})\ failed\ presents,\ wall\ (0|[1-9][0-9]{0,11})\ ms,\ pace=${pace}\ budget=${BUDGET_NS}\ ns$ ]]; then
     match_skips="${BASH_REMATCH[1]}"
     match_fails="${BASH_REMATCH[2]}"
     match_wall_ms="${BASH_REMATCH[3]}"
@@ -624,17 +741,18 @@ parse_match_summary() { # <log> <frames> <pace>
 parse_audio_summary() { # <log>
   local log="$1" re cnt line pcnt
   unset au_underruns au_badlen au_starts au_stops
-  pcnt="$(grep -c '^foh_dev audio:' "$log")" || true
-  [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt 'foh_dev audio:' lines (want exactly 1 — resemblance is corruption)"
-  re='^foh_dev audio: [0-9]{1,12} callbacks, [0-9]{1,12} underruns, [0-9]{1,12} badlen, [0-9]{1,12} voice starts, [0-9]{1,12} voice stops, [0-9]{1,12} steals, rate=(0|44100) samples=(0|512) channels=(0|2)$'
+  pcnt="$(grep -cF 'foh_dev audio:' "$log")" || true
+  [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt lines containing 'foh_dev audio:' (want exactly 1 — resemblance ANYWHERE is corruption)"
+  re="^foh_dev audio: ${NUM12} callbacks, ${NUM12} underruns, ${NUM12} badlen, ${NUM12} voice starts, ${NUM12} voice stops, ${NUM12} steals, rate=(0|44100) samples=(0|512) channels=(0|2)\$"
   cnt="$(grep -cE "$re" "$log")" || true
   [ "$cnt" = 1 ] || grammar_die "app log $log has $cnt lines matching the pinned audio-summary grammar (want 1)"
   line="$(grep -E "$re" "$log")"
-  if [[ "$line" =~ ^foh_dev\ audio:\ [0-9]{1,12}\ callbacks,\ ([0-9]{1,12})\ underruns,\ ([0-9]{1,12})\ badlen,\ ([0-9]{1,12})\ voice\ starts,\ ([0-9]{1,12})\ voice\ stops,\ ([0-9]{1,12})\ steals, ]]; then
-    au_underruns="${BASH_REMATCH[1]}"
-    au_badlen="${BASH_REMATCH[2]}"
-    au_starts="${BASH_REMATCH[3]}"
-    au_stops="${BASH_REMATCH[4]}"
+  # groups: 1=callbacks 2=underruns 3=badlen 4=starts 5=stops
+  if [[ "$line" =~ ^foh_dev\ audio:\ (0|[1-9][0-9]{0,11})\ callbacks,\ (0|[1-9][0-9]{0,11})\ underruns,\ (0|[1-9][0-9]{0,11})\ badlen,\ (0|[1-9][0-9]{0,11})\ voice\ starts,\ (0|[1-9][0-9]{0,11})\ voice\ stops,\ (0|[1-9][0-9]{0,11})\ steals, ]]; then
+    au_underruns="${BASH_REMATCH[2]}"
+    au_badlen="${BASH_REMATCH[3]}"
+    au_starts="${BASH_REMATCH[4]}"
+    au_stops="${BASH_REMATCH[5]}"
   else
     grammar_die "audio summary line failed re-extraction ('$line')"
   fi
@@ -642,13 +760,14 @@ parse_audio_summary() { # <log>
 parse_music_summary() { # <log>
   local log="$1" re cnt line pcnt
   unset mu_out mu_starves mu_refills
-  pcnt="$(grep -c '^foh_dev music:' "$log")" || true
-  [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt 'foh_dev music:' lines (want exactly 1 — resemblance is corruption)"
-  re='^foh_dev music: [0-9]{1,19} out frames, [0-9]{1,12} starves, [0-9]{1,12} refills, ring=32768 chunk=16384$'
+  pcnt="$(grep -cF 'foh_dev music:' "$log")" || true
+  [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt lines containing 'foh_dev music:' (want exactly 1 — resemblance ANYWHERE is corruption)"
+  re="^foh_dev music: ${NUM19} out frames, ${NUM12} starves, ${NUM12} refills, ring=32768 chunk=16384\$"
   cnt="$(grep -cE "$re" "$log")" || true
   [ "$cnt" = 1 ] || grammar_die "app log $log has $cnt lines matching the pinned music-summary grammar (want 1)"
   line="$(grep -E "$re" "$log")"
-  if [[ "$line" =~ ^foh_dev\ music:\ ([0-9]{1,19})\ out\ frames,\ ([0-9]{1,12})\ starves,\ ([0-9]{1,12})\ refills, ]]; then
+  # groups: 1=out 2=starves 3=refills
+  if [[ "$line" =~ ^foh_dev\ music:\ (0|[1-9][0-9]{0,18})\ out\ frames,\ (0|[1-9][0-9]{0,11})\ starves,\ (0|[1-9][0-9]{0,11})\ refills, ]]; then
     mu_out="${BASH_REMATCH[1]}"
     mu_starves="${BASH_REMATCH[2]}"
     mu_refills="${BASH_REMATCH[3]}"
@@ -768,7 +887,7 @@ echo "   twin legs OK (5 traces == frozen; f01 x2 stable + STREAM MATCH; starts/
 
 # --- [4] host teeth: the key-translation-swap kill chain -------------------------
 echo "== [4/9] teeth (host side): swap variants + normalizer + generator =="
-teeth=0
+# (teeth counter initialized at the keymap block — T12 runs there)
 mkswap() { # <src> <dst> <sed-y-spec>  (letter transliteration on I rows only)
   node -e '
     const fs = require("fs");
@@ -985,8 +1104,8 @@ for k in 0 1 2 3 4; do
   mode="${FLOW_BRIDGE[$k]}"
   seedv="${FLOW_SEED[$k]}"
   # foh-max: LEAD + (END-370)*STEP ms -> ticks (x3/50) + 600 margin
-  endf="$(grep -E '^END [0-9]+$' "$FLOWS/$id.flow" | awk '{print $2}')"
-  [[ "$endf" =~ ^[0-9]{1,6}$ ]] || fail "leg $id: flow END frame grammar ('$endf')"
+  endf="$(grep -E '^END (0|[1-9][0-9]*)$' "$FLOWS/$id.flow" | awk '{print $2}')"
+  [[ "$endf" =~ ^(0|[1-9][0-9]{0,5})$ ]] || fail "leg $id: flow END frame grammar ('$endf')"
   fohmax=$(( (8200 + (endf - 370) * 50) * 3 / 50 + 600 ))
   # device argv (written to a region file so rig_argv_assert_once can
   # pin --input + poll and refuse duplicate overrides)
@@ -1112,7 +1231,7 @@ EOF
   ndev="$(dsh "ls $DTMP/$id-shots | wc -l")" || fail "leg $id: cannot enumerate device shots"
   ndev="${ndev%$'\n'}"
   ndev="$(printf '%s' "$ndev" | tr -d ' ')"
-  [[ "$ndev" =~ ^[0-9]{1,3}$ ]] || fail "leg $id: device shot count grammar ('$ndev')"
+  [[ "$ndev" =~ ^(0|[1-9][0-9]{0,2})$ ]] || fail "leg $id: device shot count grammar ('$ndev')"
   [ "$ndev" = "$nshots_want" ] || fail "leg $id: device shot count $ndev != pinned $nshots_want"
   for sname in ${FLOW_SHOTS[$k]}; do
     pullv "$DTMP/$id-shots/$sname.ppm" "$BUILD/$id.dev-shot-$sname.ppm"
@@ -1195,9 +1314,9 @@ while IFS= read -r jline; do
     judge_complete)
       [ "$jv" = 1 ] || fail "judge_complete value ('$jv')" ;;
     *_ms)
-      [[ "$jv" =~ ^[0-9]{1,9}\.[0-9]{3}$ ]] || fail "timing judge $jk grammar ('$jv')" ;;
+      [[ "$jv" =~ ^(0|[1-9][0-9]{0,8})\.[0-9]{3}$ ]] || fail "timing judge $jk grammar ('$jv')" ;;
     *)
-      [[ "$jv" =~ ^[0-9]{1,12}$ ]] || fail "timing judge $jk grammar ('$jv')" ;;
+      [[ "$jv" =~ ^(0|[1-9][0-9]{0,11})$ ]] || fail "timing judge $jk grammar ('$jv')" ;;
   esac
   case "$jk" in
     full_p99_ns|full_p99_ms|skips|rendered) printf -v "$jk" '%s' "$jv" ;;
@@ -1261,8 +1380,9 @@ dsum="$(rig_dev_sha256 "$DEVAPPS/$OPK_NAME")" || exit 1
 [ "$dsum" = "$OPK_SHA" ] || fail "device-side OPK sha ($dsum) != host ($OPK_SHA)"
 # pinned evidence args: a bounded NO-INPUT FOH run (startup -> title,
 # 500 ticks, two tick shots) — proves the OPK launcher enters the FOH.
+OPK_FOHMAX=500
 rm -f "$BUILD/foh-args"
-printf '%s' "--flow $DTMP/opkmnt/f01-vs-g01.flow --input poll --flow-out /tmp/mlfk/opkfoh/foh-trace.txt --shots-dir /tmp/mlfk/opkfoh/shots --foh-max 500 --pace 1 --budget-ns $BUDGET_NS --fb-witness /tmp/mlfk/opkfoh/fbwit.txt" > "$BUILD/foh-args"
+printf '%s' "--flow $DTMP/opkmnt/f01-vs-g01.flow --input poll --flow-out /tmp/mlfk/opkfoh/foh-trace.txt --shots-dir /tmp/mlfk/opkfoh/shots --foh-max $OPK_FOHMAX --pace 1 --budget-ns $BUDGET_NS --fb-witness /tmp/mlfk/opkfoh/fbwit.txt" > "$BUILD/foh-args"
 made "$BUILD/foh-args"
 adb -s "$DEV" push "$BUILD/foh-args" "$DSD/" >/dev/null
 hsum="$(rig_host_sha256 "$BUILD/foh-args")" || exit 1
@@ -1272,6 +1392,16 @@ dsh "mkdir -p $DTMP/opkmnt /tmp/mlfk/opkfoh/shots && rm -rf /tmp/mlfk/opkfoh/foh
 OPK_MOUNTED=1
 dsh "mount -t squashfs -o loop,ro $DEVAPPS/$OPK_NAME $DTMP/opkmnt"
 dsh "test -x $DTMP/opkmnt/mlfk-foh.sh"
+# low_bat_check quiesce bracket — LEG-IDENTICAL posture (iter 97,
+# review-95 M-d): the OPK evidence run's skips==0 gate is judged under
+# the same daemon-quiesced conditions as the flow legs (deadman qd
+# marker + stop, restore-FIRST after the rc, device-clock bracket
+# stamps around the dispatch/rc window).
+dsh "printf '' > $DTMP/qd.low_bat_check.$DM_NONCE"
+LBC_STOPPED=1
+lbc_pid="$(rig_daemon_stop low_bat_check)"
+dsh "date +%s > $DTMP/qstop.ts"
+dsh "date +%s > $DTMP/opk.start.ts"
 dsh "setsid sh -lc '$DTMP/opkmnt/mlfk-foh.sh' </dev/null >/dev/null 2>&1 & sleep 2"
 sleep 10 # 500 paced ticks ~ 8.4 s
 opk_done=0
@@ -1280,6 +1410,22 @@ for _ in $(seq 1 15); do
   sleep 2
 done
 [ "$opk_done" = 1 ] || fail "OPK evidence run never finished (opk.rc absent)"
+dsh "date +%s > $DTMP/opk.end.ts"
+# restore-FIRST (iter 78/80 discipline) before any pull/judge chores
+if rig_daemon_restore low_bat_check /etc/init.d/S12low-bat-check "$DTMP/qrestore.ts"; then
+  dsh "rm -f $DTMP/qd.low_bat_check.$DM_NONCE"
+  dsh "test ! -f $DTMP/qd.low_bat_check.$DM_NONCE"
+  LBC_STOPPED=0
+else
+  fail "OPK leg: low_bat_check did not verify as running after restart"
+fi
+qstop_ts="$(rig_dev_ts "$DTMP/qstop.ts")" || exit 1
+opkstart_ts="$(rig_dev_ts "$DTMP/opk.start.ts")" || exit 1
+opkend_ts="$(rig_dev_ts "$DTMP/opk.end.ts")" || exit 1
+qrestore_ts="$(rig_dev_ts "$DTMP/qrestore.ts")" || exit 1
+rig_quiesce_bracket_assert "foh opk-evidence low_bat_check" \
+  "$qstop_ts" "$opkstart_ts" "$opkend_ts" "$qrestore_ts" \
+  "$QW_PRE_SLACK_S" "$QW_POST_SLACK_S" || exit 1
 pullv /tmp/mlfk/opkfoh/opk.rc "$BUILD/opk.rc"
 cmp -s "$BUILD/opk.rc" <(printf 'RC=0\n') || {
   dsh "cat /tmp/mlfk/opkfoh/mlfk-foh.log" >&2 || true
@@ -1297,6 +1443,81 @@ rm -f "$BUILD/opk.norm-want"
 printf 'FOHTRACE1 flow=f01-vs-g01\nSHOT F startup\nT F startup title timer\nSHOT F title\nEND F transitions=1\n' > "$BUILD/opk.norm-want"
 cmp "$BUILD/opk.dev-trace.norm" "$BUILD/opk.norm-want" \
   || fail "OPK evidence trace (normalized) != the constructed startup->title expectation"
+# BOUNDED-DELTA judgment on the OPK verdict path (iter 97, review-95
+# M-d — the flow legs' judge, same frozen bounds): the constructed
+# expectation is the FROZEN f01.expect's own pre-input prefix (header
+# + SHOT 200 startup + T 370 timer transition + SHOT 373 title —
+# frozen bytes, measured-identical to the archived green OPK trace:
+# |T-F| = 0 everywhere, AGENT-LOG iter 97) + END == foh-max EXACT.
+# `input-free` is the leg's EXPLICIT declaration (no fk_input runs in
+# the evidence branch — a structural fact, never inferred); the
+# normalizer dies rc 3 without it and rc 2 if it ever anchors.
+rm -f "$BUILD/opk.bounded-want"
+head -n 4 "$FLOWS/f01-vs-g01.expect" > "$BUILD/opk.bounded-want"
+printf 'END %s transitions=1\n' "$OPK_FOHMAX" >> "$BUILD/opk.bounded-want"
+made "$BUILD/opk.bounded-want"
+node "$FOH/normalize-foh-trace.js" --bounded "$BUILD/opk.bounded-want" \
+  "$BUILD/opk.dev-trace.txt" "$FLOWS/f01-vs-g01.flow" "$OPK_FOHMAX" \
+  input-free \
+  || fail "OPK leg: BOUNDED-DELTA judgment failed (startup-phase stall or END != foh-max)"
+# strict skip-summary parse, flow-leg posture verbatim (iter 97, M-d):
+# mlfk-foh.log carries foh_device's stderr (the frozen launcher
+# appends it); launched=0, shots=2, skips==0, failed presents==0.
+pullv /tmp/mlfk/opkfoh/mlfk-foh.log "$BUILD/opk.mlfk-foh.log"
+parse_foh_summary "$BUILD/opk.mlfk-foh.log" 0 2
+[ "$foh_skips" = 0 ] || fail "OPK leg: $foh_skips FOH render skips (want 0; quiesced leg)"
+[ "$foh_fails" = 0 ] || fail "OPK leg: $foh_fails failed presents in the OPK FOH phase"
+[ "$foh_transitions" = 1 ] || fail "OPK leg: summary transitions $foh_transitions != 1"
+# T13 — T11's stall shape wired into the OPK leg at COPY level (iter
+# 97, M-d): +200 ticks on the >=300 suffix of an opk trace COPY still
+# PASSES elision (asserted — that is the hole) but DIES in the
+# bounded judge (rc exactly 3).
+node -e '
+  const fs = require("fs");
+  const [src, dst, cutS, shiftS] = process.argv.slice(1);
+  const cut = Number(cutS), shift = Number(shiftS);
+  const lines = fs.readFileSync(src, "utf8").slice(0, -1).split("\n");
+  const out = lines.map((ln) => {
+    const m = /^(T|S|SHOT|LAUNCH|END) ([0-9]+) (.*)$/.exec(ln);
+    if (!m) return ln;
+    const t = Number(m[2]);
+    return t >= cut ? m[1] + " " + (t + shift) + " " + m[3] : ln;
+  });
+  fs.writeFileSync(dst, out.join("\n") + "\n");
+' "$BUILD/opk.dev-trace.txt" "$BUILD/tooth-opkstall.trace" 300 200 \
+  || fail "T13: could not derive the OPK stall variant"
+made "$BUILD/tooth-opkstall.trace"
+cmp -s "$BUILD/tooth-opkstall.trace" "$BUILD/opk.dev-trace.txt" && \
+  fail "T13: OPK stall variant is byte-identical (dead tooth)"
+norm "$BUILD/tooth-opkstall.trace" "$BUILD/tooth-opkstall.norm"
+cmp -s "$BUILD/tooth-opkstall.norm" "$BUILD/opk.norm-want" \
+  || fail "T13: the OPK stall variant should still PASS elision (the bounded judge must be the killer)"
+rc=0
+node "$FOH/normalize-foh-trace.js" --bounded "$BUILD/opk.bounded-want" \
+  "$BUILD/tooth-opkstall.trace" "$FLOWS/f01-vs-g01.flow" "$OPK_FOHMAX" \
+  input-free >/dev/null 2>&1 || rc=$?
+[ "$rc" = 3 ] || fail "T13: OPK +200-tick stall bounded rc $rc (want exactly 3)"
+teeth=$((teeth + 1))
+echo "    T13 OK: OPK-leg stall copy passes elision but DIES in the bounded judge (rc 3)"
+# T14 — anchor-null posture binds BOTH directions (iter 97, review-95
+# L-a): (a) the OPK trace WITHOUT the input-free declaration dies rc 3
+# (silent cadence-skip is dead); (b) an anchored flow trace WITH the
+# declaration dies rc 2 (stale declaration).
+rc=0
+node "$FOH/normalize-foh-trace.js" --bounded "$BUILD/opk.bounded-want" \
+  "$BUILD/opk.dev-trace.txt" "$FLOWS/f01-vs-g01.flow" "$OPK_FOHMAX" \
+  >/dev/null 2>&1 || rc=$?
+[ "$rc" = 3 ] || fail "T14a: anchor-null WITHOUT input-free rc $rc (want exactly 3 — bounded mode must never succeed silently without cadence judgment)"
+t14_end="$(grep -E '^END (0|[1-9][0-9]*)$' "$FLOWS/f01-vs-g01.flow" | awk '{print $2}')"
+[[ "$t14_end" =~ ^(0|[1-9][0-9]{0,5})$ ]] || fail "T14: f01 END grammar ('$t14_end')"
+t14_max=$(( (8200 + (t14_end - 370) * 50) * 3 / 50 + 600 ))
+rc=0
+node "$FOH/normalize-foh-trace.js" --bounded "$FLOWS/f01-vs-g01.expect" \
+  "$BUILD/f01-vs-g01.dev-trace.txt" "$FLOWS/f01-vs-g01.flow" "$t14_max" \
+  input-free >/dev/null 2>&1 || rc=$?
+[ "$rc" = 2 ] || fail "T14b: anchored trace WITH input-free rc $rc (want exactly 2 — stale declaration must die)"
+teeth=$((teeth + 1))
+echo "    T14 OK: anchor-null is fatal undeclared (rc 3) and a stale input-free declaration is fatal (rc 2)"
 for sname in startup title; do
   pullv "/tmp/mlfk/opkfoh/shots/$sname.ppm" "$BUILD/opk.dev-shot-$sname.ppm"
   judge_dev_shot "opk/$sname" "$BUILD/opk.dev-shot-$sname.ppm" \
@@ -1357,8 +1578,8 @@ adb -s "$DEV" push "$BUILD/tooth-devswap/f01.fks" "$DTMP/toothswap.fks" >/dev/nu
 hsum="$(rig_host_sha256 "$BUILD/tooth-devswap/f01.fks")" || exit 1
 dsum="$(rig_dev_sha256 "$DTMP/toothswap.fks")" || exit 1
 [ "$dsum" = "$hsum" ] || fail "T-devswap: pushed tooth fks sha mismatch"
-tswap_end="$(grep -E '^END [0-9]+$' "$FLOWS/f01-vs-g01.flow" | awk '{print $2}')"
-[[ "$tswap_end" =~ ^[0-9]{1,6}$ ]] || fail "T-devswap: f01 END grammar"
+tswap_end="$(grep -E '^END (0|[1-9][0-9]*)$' "$FLOWS/f01-vs-g01.flow" | awk '{print $2}')"
+[[ "$tswap_end" =~ ^(0|[1-9][0-9]{0,5})$ ]] || fail "T-devswap: f01 END grammar"
 tswap_max=$(( (8200 + (tswap_end - 370) * 50) * 3 / 50 + 600 ))
 rm -f "$BUILD/toothswap-launch.sh"
 cat > "$BUILD/toothswap-launch.sh" << EOF
@@ -1492,11 +1713,34 @@ rc=0
 # shellcheck disable=SC2086
 ( judge_fbwit "$BUILD/tooth-fbwit2.txt" f01-vs-g01 ${FLOW_SHOTS[0]} ) 2>/dev/null || rc=$?
 [ "$rc" != 0 ] || fail "T-fbwit: witness judge accepted a resembling extra row"
+# TORN TRAILER (iter 97, review-95 M-a — the reviewer's exact shape):
+# header + all rows + an UNTERMINATED END fragment; grep counts the
+# fragment as a line while `read` drops it, so the round-1 reader
+# PASSED this file — the strict reader must die on the missing
+# trailing newline / reader-vs-count mismatch.
+n_f01_fbwit="$(grep -c "" "$BUILD/f01-vs-g01.fbwit.txt")" || fail "T-fbwit: count failed"
+{ head -n "$((n_f01_fbwit - 1))" "$BUILD/f01-vs-g01.fbwit.txt"; \
+  printf 'END shots=6'; } > "$BUILD/tooth-fbwit3.txt"
+[ -n "$(tail -c 1 "$BUILD/tooth-fbwit3.txt")" ] || fail "T-fbwit: torn variant unexpectedly newline-terminated (dead tooth)"
+rc=0
+# shellcheck disable=SC2086
+( judge_fbwit "$BUILD/tooth-fbwit3.txt" f01-vs-g01 ${FLOW_SHOTS[0]} ) 2>/dev/null || rc=$?
+[ "$rc" != 0 ] || fail "T-fbwit: witness judge accepted a TORN unterminated trailer"
+# yoff drift (iter 97, review-95 L-b): a back-page row (yoff=240) must
+# die — the measured pan-reject policy pins yoff=0 exactly.
+sed 's/^W \([0-9]*\) startup yoff=0/W \1 startup yoff=240/' \
+  "$BUILD/f01-vs-g01.fbwit.txt" > "$BUILD/tooth-fbwit4.txt"
+cmp -s "$BUILD/tooth-fbwit4.txt" "$BUILD/f01-vs-g01.fbwit.txt" && \
+  fail "T-fbwit: yoff substitution was a no-op (dead tooth)"
+rc=0
+# shellcheck disable=SC2086
+( judge_fbwit "$BUILD/tooth-fbwit4.txt" f01-vs-g01 ${FLOW_SHOTS[0]} ) 2>/dev/null || rc=$?
+[ "$rc" != 0 ] || fail "T-fbwit: witness judge accepted yoff=240 (the pan-reject pin must kill any non-zero page)"
 teeth=$((teeth + 1))
-echo "    T10 OK: perturbed fb-witness copies die in the production witness judge"
+echo "    T10 OK: perturbed fb-witness copies (eq=0, resembling row, TORN trailer, yoff=240) die in the production witness judge"
 # T11: bounded-delta teeth (COPIES of the fresh f01 device trace; the
 # review-93 M1 scenario — a mid-run stall the elision normalizes away)
-f01_end="$(grep -E '^END [0-9]+$' "$FLOWS/f01-vs-g01.flow" | awk '{print $2}')"
+f01_end="$(grep -E '^END (0|[1-9][0-9]*)$' "$FLOWS/f01-vs-g01.flow" | awk '{print $2}')"
 f01_max=$(( (8200 + (f01_end - 370) * 50) * 3 / 50 + 600 ))
 node -e '
   const fs = require("fs");

@@ -3,7 +3,61 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-20, iter 96 — M4 hardening DONE: target-rig round-1 closure, all review-94 dispositions shipped; cold checks green first attempt)
+## Live right now (updated: 2026-07-20, iter 97 — M4 hardening DONE: device-FOH round-2 residuals, all review-95 dispositions shipped; cold check green first attempt)
+
+- **Iter 97 (M4 hardening — device-FOH round-2 residuals, review-95
+  triage M-a/M-b/M-c/M-d/M-e/L-a/L-b ALL closed) DONE** (full entry:
+  AGENT-LOG iter 97 pre-registration + result; latest AGENT-LOG id:
+  iter 97). COLD, FIRST attempt: **`DEVICE FOH OK (flows=5 shots=13
+  bridge=1 states=3 opk=evidence fbwit=15 p99=13.774ms skips=0
+  underruns=0 starves=0 starts f01-vs-g01=281 f02-cpu-m01=16
+  f03-options=23 f04-nav=39 f05-vs-g03=14 teeth=15)`** exit 0
+  (.loop/m4-foh97-donecheck.log; teeth 12→15 honest change). **M-a**:
+  judge_fbwit = single strict reader (trailing-newline mandatory,
+  reader-iterations == grep-count == pinned, END terminator bound to
+  the last position); T10 gains the torn-trailer + yoff=240 shapes.
+  **M-b**: NEW port/gfx/platform_keymap.h = ONE compiled definition
+  site consumed by BOTH platform_sdl1.c's platform_poll loop (minimal
+  diff — touched as judged unavoidable; task-14 m4-freeze-manifest
+  note registered) and foh_dev --dump-keymap/parse_buttons; global
+  source-substring scan DELETED; T12 perturbed-COPY-build tooth (dump
+  diverges from frozen, rc 1) + T-devswap unchanged. Single-LINK-
+  SYMBOL form refuted by construction (frozen rig_arm_build TU list +
+  host dump links platform_headless) — recorded, do not re-litigate.
+  **M-c**: all four summary parsers needle-anywhere (`grep -cF`)==1 —
+  the iter-86 needle-freedom form. **M-d**: OPK verdict path now runs
+  the SAME bounded judge (constructed expect = frozen f01.expect
+  pre-input prefix + END==500 exact; explicit input-free declaration;
+  bounds from the ARCHIVED green opk trace — spare paced run unspent)
+  + strict skip-summary parse of the pulled mlfk-foh.log (skips==0,
+  fails==0, transitions==1) under a LEG-IDENTICAL low_bat_check
+  quiesce bracket; T13 = T11's stall shape at OPK copy level (rc 3).
+  **M-e**: canonical decimals (0|[1-9][0-9]{0,K}) at EVERY numeric
+  acceptance site in check-device-foh.sh AND normalize-foh-trace.js
+  (`00` = death; BASH_REMATCH indices re-audited). **L-a**:
+  anchor=null fatal rc 3 unless explicitly declared input-free
+  (frozen EMPTY whitelist or the OPK leg's literal arg);
+  declared-but-anchored = rc 2; T14 proves both. **L-b**: yoffset==0
+  pinned in-app (foh_dev dies naming pan-reject drift;
+  --fb-witness-raw stays the instrument) + in-check (W-row yoff=0).
+  Corpus: 61 checks over all archived genuine artifacts with the REAL
+  extracted function bytes, zero false rejections
+  (.loop/m4-foh97-corpus.log). Run ledger: paced 1/2, arm rebuilds
+  1/3; check-foh-flows mechanical skip-proof
+  (.loop/m4-foh97-fohflows-skip.txt). Device left clean (verified:
+  lbc==1, gmenu2x live, no markers, scratch wiped, sentinel absent).
+  **Driver next: review-95 ROUND 3 (closure-or-cap per the round-1
+  triage header) over the iter-97 diff (check-device-foh.sh,
+  foh_dev.c, normalize-foh-trace.js, platform_sdl1.c,
+  platform_keymap.h NEW); task-14 notes: m4-freeze-manifest must
+  re-pin platform_sdl1.c with this arc's GO; render-rung witness
+  inheritance + match-phase witness + frontend-nav/live-branch
+  exercise stand. Then task 12 (target test FOH + device).**
+- **Remaining to gate**: 12 (target test FOH+device), 13 (SD persist),
+  14 (verify_m4.sh) -> M4 GATE -> provision device -> LOOP STOP:
+  m4-complete -> Chase acceptance playthrough.
+
+## [superseded by iter 97] (2026-07-20, iter 96 — M4 hardening DONE: target-rig round-1 closure, all review-94 dispositions shipped; cold checks green first attempt)
 
 - **Iter 96 (M4 hardening — target-rig round-1 closure, review-94
   triage H1/H2/M1-M5/L1/L2 ALL closed) DONE** (full entry: AGENT-LOG
