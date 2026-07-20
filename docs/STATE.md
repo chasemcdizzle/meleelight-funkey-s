@@ -3,7 +3,34 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-20, iter 100 — M4 task 13 DONE: SD persistence, PERSIST OK cold)
+## Live right now (updated: 2026-07-20, driver post-iter-101 — task-12-arc round-1 closure ADJUDICATED GREEN + orphaned-deadman stall class found; iter-102 next)
+
+- **Iter 101 (task-12-arc round-1 closure) DONE via DRIVER
+  ADJUDICATION** (writer BLOCKED-HONEST at the skips gate 2/2; driver
+  found + killed TWO orphaned /tmp/mlfk/deadman.sh combs — leaked by
+  failed-run exit paths, skip counts doubled with orphan count — then
+  cold-verified on the clean device: **`DEVICE TARGET CONFORMS
+  (… skips=0 … sfxpin=15/31 music=menu>targettest:5/5 teeth=6)`**
+  exit 0, .loop/m4-tgt101-driver-cold.log; full trail: AGENT-LOG
+  iter-101 entries + the driver adjudication entry). All five
+  review-99 dispositions shipped: track-identified music (mustrack
+  producer line + 5/5 leg pairs), SFX_STARTS_PIN 15/31 exact,
+  TLAUNCH canonical decimal (judge sha 2267f8b7… re-pinned in all
+  four consumers), tfinish resemblance-death all legs, T3 semantic
+  exit + exact diagnostic. FOH FLOWS OK teeth=18 cold, zero
+  re-freezes.
+- **SELF-AMPLIFYING LEAK CLASS registered → iter-102**: device-check
+  failure paths leak the deadman; orphaned 2 s combs stall later runs
+  (the iter-74 low_bat_check mechanism). Riglib chokepoint fix
+  (orphan-scan step-0 + all-exit teardown) + manifest re-pin rides
+  with the review-100 persist closure.
+- **Queue**: iter-102 (review-100 persist triage H1/M1-M4/L1 + the
+  deadman class fix) → task-12-arc round 2 (iter-101 diff + the
+  COMPLETE task-12 packet, .loop/review-99-full-diff.txt) +
+  persist-arc round 2 → task 14 (verify_m4.sh assembly) → M4 GATE →
+  provision → LOOP STOP: m4-complete.
+
+## [superseded by driver post-iter-101] (updated: 2026-07-20, iter 100 — M4 task 13 DONE: SD persistence, PERSIST OK cold)
 
 - **Iter 100 (M4 task 13 — persistence to SD) DONE** (full entry:
   AGENT-LOG iter 100 pre-registration + result; latest AGENT-LOG id:

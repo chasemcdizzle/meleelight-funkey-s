@@ -90,7 +90,10 @@ const RE_LAUNCH =
     /^LAUNCH ([0-9]+) p1=([0-4]) p2=([0-4]) p2type=([01]) difficulty=([1-4]) stage=([0-5]) turbo=([01]) lcancel=([012]) tapjump=([01]),([01]),([01]),([01]) versus=0$/;
 // iter 99 (M4 task 12): the target-mode launch record (foh.h TLAUNCH
 // note; char domain 0-4, tstage domain 0-9 == targetStageMapping).
-const RE_TLAUNCH = /^TLAUNCH ([0-9]+) char=([0-4]) tstage=([0-9])$/;
+// iter 101 (review-99 L1): frame field is a CANONICAL decimal
+// (0|[1-9][0-9]*) in the judging layer itself — `TLAUNCH 0405` is
+// corruption here, never the normalizer backstop's problem.
+const RE_TLAUNCH = /^TLAUNCH (0|[1-9][0-9]*) char=([0-4]) tstage=([0-9])$/;
 const RE_END = /^END ([0-9]+) transitions=([0-9]+)$/;
 
 const raw = fs.readFileSync(path, "utf8");

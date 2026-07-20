@@ -17539,3 +17539,288 @@ for the task-14 rig round rather than expanded mid-task. (4)
 Hermeticity was fixed at CLASS level: every FOH-driving check got
 the fresh-persist-dir pattern in the same commit, not just the new
 check.
+
+## iter 101 — 2026-07-20 — M4 hardening PRE-REGISTRATION: task-12-arc round-1 closure (review-99 triage, ALL dispositions; frozen before any run/edit; PROCESS §2)
+
+**Task**: close ALL writer-owned dispositions in .loop/review-99-triage.md
+(codex Tier A round 1 over 5441d59, NO-GO, no High —
+.loop/review-99-1.log): M2 track-blind music evidence, M3 both-zero SFX
+hole, L1 TLAUNCH frame grammar, L2 finish-absence scan gaps, L3 T3
+bare-nonzero tooth. M1 (incomplete review packet) is a DRIVER round-2
+duty — not touched here.
+
+**Surfaces (frozen)**: port/sim/target/check-device-target.sh (building
+on the iter-100 persist-hermeticity bytes at 794a23b — no reverts),
+port/foh/judge-foh-trace.js (the TLAUNCH regex line ONLY), and the M2
+producer extension in port/foh/foh_dev.c (MEASURED first: the foh_dev
+music grammar does NOT name loads/switches — mus_track_program emits
+nothing; the triage's "or extend through the designed channel" branch
+applies — ONE new stderr event line, every existing summary grammar
+byte-unchanged). Judge sha re-pin via the designed channel in EVERY
+pinning consumer, same commit: check-device-target.sh (pin row + 2
+twin-grep literals), check-foh-flows.sh (pin row),
+check-device-foh.sh (pin row + twin-grep literal — PAIRED-PIN-ONLY
+edits per the iter-99/100 precedent, cold rerun registered to task 14),
+check-device-persist.sh (JUDGE_SHA literal — same paired-pin-only
+class, same registration). Frozen flows/goldens/streams byte-untouched.
+
+**Method per finding (frozen)**:
+- **M2 (track-identified music)**: foh_dev.c mus_track_program gains a
+  single NEW stderr event at its publish point —
+  `foh_dev mustrack: from=<tok|none> to=<tok> on=<0|1> pcm=<path>` —
+  one emission site covering all three program call sites (boot menu,
+  TLAUNCH targettest, VS stage switch). check-device-target.sh gains
+  assert_mustrack (exact FULL-LINE fixed-string greps, whitelist by
+  construction): every target leg (twin a ×2, twin b, device ×2) must
+  carry EXACTLY 2 mustrack lines — `from=none to=menu on=0
+  pcm=<dir>/menu.pcm` and `from=menu to=targettest on=1
+  pcm=<dir>/targettest.pcm` (the menu→targettest transition witness at
+  the TLAUNCH seam). Track identity binds to the PINNED bytes by path
+  join: the named pcm paths are exactly the paths the check already
+  sha-pins (host targettest.pcm == MUSIC_TT_SHA256 at [2]; device
+  $DSD/targettest.pcm sha == host at [5]). Aggregate out/refill/starve
+  counters stay as liveness gates but no longer carry track identity.
+- **M3 (pinned SFX counts)**: SFX_STARTS_PIN=(15 31)
+  measured-then-frozen from the COMMITTED cold evidence (verdict lines
+  `starts f06-target-t01=15 f07-target-t02=31` in
+  .loop/m4-task12-devtarget-run4.log AND
+  .loop/m4-task12-driver-cold.log). Twin starts must EQUAL the pin
+  (both-zero = death by construction) and device starts must equal the
+  pin AND the twin. Stops stay twin-equality (triage pins starts).
+  Re-freeze of the pin = reviewed change only.
+- **L1 (TLAUNCH canonical decimal)**: RE_TLAUNCH frame field
+  `[0-9]+` → `(0|[1-9][0-9]*)` in the judge itself (the house class;
+  group count/indexing unchanged). Consumers re-pinned as above.
+- **L2 (finish-absence)**: assert_no_tfinish gains the
+  malformed-resemblance arm — any 'tfinish' substring on a line that
+  is not the exact seam needle = death (PROCESS §3
+  resembles-but-doesn't-match) — and the scan now covers ALL legs
+  including the second f06 twin (twin-b log was unscanned).
+- **L3 (T3 semantic tooth)**: T3 asserts a no-op guard (perturbed copy
+  != original), frozen-tfin grammar + != 9 (dead-tooth guard), rc ==
+  2 EXACTLY (the verify-target-stream divergence class), and the EXACT
+  named finals-pin diagnostic full-line —
+  `TARGET STREAM MISMATCH: final targetsDestroyed 9 != frozen <tfin>`
+  — exactly once in the captured tooth log. Bare nonzero (crash/usage
+  rc 1) no longer passes.
+
+**Corpus validation (frozen; zero false rejections required)**:
+(1) tightened TLAUNCH grammar + judge re-run over the full genuine
+flow corpus via cold `bash port/foh/check-foh-flows.sh` (also the
+re-pin regression) — the frozen f06/f07 TLAUNCH lines (405/465) are
+canonical decimals; (2) 'tfinish' substring scan over ALL archived
+genuine logs .loop/m4-task12-* + .loop/m4-task13-* — ALREADY MEASURED
+this session: zero occurrences (grep -l rc 1); re-verified against the
+fresh twin/device applogs in the done-check itself; (3) mustrack
+asserts validated against fresh host twin logs (the producer is new —
+no archived corpus can carry the line; twin legs in the done-check ARE
+the genuine corpus) plus a pre-check host twin build+run smoke before
+spending the paced budget.
+
+**Run caps (frozen)**: paced done-check runs 2 (one full cold + one
+spare); arm rebuilds 2 (foh_dev.c + check-device-target.sh edits key
+one stamp MISS; 1 spare); cold host checks 3 (check-foh-flows cold ×1
++ done-check attempts count separately as paced; 1 spare margin for a
+host-twin smoke, which is a build+2 unpaced flow runs, not a check).
+Command output → .loop/m4-tgt101-*.log only.
+
+**Pass criteria**: cold `bash port/sim/target/check-device-target.sh`
+→ `DEVICE TARGET CONFORMS (...)` exit 0 with honest counters — the
+verdict line GAINS the sfxpin/music evidence tokens (that IS the
+honest change; no other verdict token semantics move). Cold
+`bash port/foh/check-foh-flows.sh` → `FOH FLOWS OK (...)` exit 0 with
+zero re-freezes. check-device-foh.sh + check-device-persist.sh:
+paired-pin-only edits, NOT cold-rerun (iter-99/100 precedent; task-14
+gate + driver ritual own them — REGISTERED). Device left clean.
+
+**Refutation shapes (frozen)**:
+(a) if closing M2 had required editing ANY existing pinned grammar
+    line (producer or parser) → STOP and report. Resolution measured
+    UP FRONT: it does not — the extension is one NEW line; if during
+    validation any existing check is found parsing foh_dev stderr
+    wholesale (not needle-counting) and dies on the new line → STOP
+    and report (measured: check-device-foh/persist parsers are
+    needle-count based; check-foh-flows drives foh_app, not foh_dev).
+(b) any tightened grammar false-rejects genuine corpus data (frozen
+    flows, archived logs, fresh twin logs) → STOP; the grammar is
+    wrong, not the corpus — never loosen a frozen artifact to fit.
+(c) twin voice starts != {15,31} on the host smoke → the frozen-count
+    theory is wrong (counts were run-dependent, not flow-determined)
+    → STOP and report with the measured values; do NOT ship a pin
+    that the twin cannot meet.
+(d) device leg diverges (trace/shots/streams) after the foh_dev.c
+    stderr addition → one bounded evidence round (the line is outside
+    every judged artifact: traces/streams/shots/timing come from
+    files, not stderr); if divergence persists → STOP and report.
+Default: one bounded evidence round, then STOP.
+
+**HONEST COVERAGE (stated up front)**: the mustrack event witnesses
+the PROGRAM/SWITCH of the SD-backed music channel (file open + ring
+prefill + publish), bound to pinned bytes by path — it does not prove
+audibility (no golden audio-output stream exists; iter-57 basis;
+audible authority = the acceptance playthrough). The SFX pin freezes
+the per-flow start COUNTS — it cannot distinguish which voices
+started; voice identity remains the offline-render differential's
+domain (check-device-music.sh precedent) and the acceptance surface.
+
+## iter 101 — 2026-07-20 — M4 hardening RESULT: task-12-arc round-1 closure — ALL five dispositions SHIPPED + validated; done-check NOT GREEN (a pre-existing transient device-stall class fails the skips==0 gate; paced budget exhausted; STOPPED per pre-registration — NO COMMIT, driver adjudication needed)
+
+**STATUS: BLOCKED-HONEST.** All five review-99 writer dispositions are
+implemented on the frozen surfaces and every NEW evidence gate went
+GREEN on host AND device in both paced attempts — but neither paced
+done-check run produced the full `DEVICE TARGET CONFORMS` verdict:
+each run lost ONE leg to the paced-match `skips == 0` gate on a
+transient mid-run stall that is NOT attributable to the iter-101 diff
+(evidence below). Paced budget 2/2 exhausted → STOP per the
+pre-registered default. Tree left UNCOMMITTED (commit is
+green-gated); the driver owns adjudication.
+
+**Shipped surfaces (on disk, uncommitted)**:
+- port/foh/foh_dev.c — M2: ONE new stderr event at the
+  mus_track_program publish point,
+  `foh_dev mustrack: from=<tok|none> to=<tok> on=<0|1> pcm=<path>`
+  (+ header grammar note). Every existing summary grammar
+  byte-unchanged (refutation shape (a) checked: all sibling parsers
+  are needle-count based — did not fire).
+- port/foh/judge-foh-trace.js — L1: RE_TLAUNCH frame field →
+  canonical decimal (0|[1-9][0-9]*). New sha
+  2267f8b796b1881d6ef749b5931a5fb08ae9f914b7a67a0e2608d4cada99616e
+  re-pinned in EVERY pinning consumer same tree:
+  check-device-target.sh (pin row + 2 twin-grep literals),
+  check-foh-flows.sh (pin row), check-device-foh.sh (pin row +
+  twin-grep — PAIRED-PIN-ONLY, iter-99/100 precedent, task-14
+  registration), check-device-persist.sh (JUDGE_SHA literal — same
+  class, same registration).
+- port/sim/target/check-device-target.sh — M2: assert_mustrack
+  (exact full-line fixed-string pair per leg — boot menu program +
+  menu→targettest switch at the TLAUNCH seam, pcm paths = the
+  sha-pinned bytes, identity by path join; counters gate liveness
+  only) on ALL 5 legs (twin a ×2, twin b, device ×2) + MUSTRACK_LEGS
+  == 5 coverage assert; M3: SFX_STARTS_PIN=(15 31)
+  measured-then-frozen from the committed iter-99 verdicts — twin
+  AND device starts must equal the pin exactly (both-zero = death);
+  L2: assert_no_tfinish gained the malformed-resemblance arm (ANY
+  'tfinish' substring = death) + now scans the second f06 twin; L3:
+  T3 requires no-op guard + rc == 2 EXACTLY + the exact
+  `TARGET STREAM MISMATCH: final targetsDestroyed 9 != frozen 2`
+  diagnostic exactly once; verdict line gains
+  `sfxpin=15/31 music=menu>targettest:5/5` tokens.
+
+**Corpus validation (zero false rejections — all green)**: tightened
+judge over ALL 7 frozen flow .expects → 7/7 GRAMMAR OK; negative
+probe `TLAUNCH 0405` → CORRUPT rc 2 (bites); 'tfinish' substring scan
+over ALL archived genuine logs (.loop/m4-task12-* + m4-task13-*) +
+the iter-99 device applogs + fresh twin logs → zero occurrences;
+host twin smoke (fresh headless build): mustrack pair EXACT on
+f06+f07, starts 15/31 == pins (refutation (c) did not fire), twin
+traces byte-identical to the frozen .expects; T3 dry-run on a COPY of
+the genuine iter-99 device-out → rc 2 + the exact diagnostic ×1.
+Cold regression: `bash port/foh/check-foh-flows.sh` → **FOH FLOWS OK
+(flows=7 shots=17 bridges=3 tbridges=2 states=4 tstates=2 diverge=1
+control=1 teeth=18)** exit 0, first attempt, zero re-freezes
+(.loop/m4-tgt101-fohflows.log).
+
+**Done-check attempts (.loop/m4-tgt101-donecheck-run{1,2}.log)**:
+- Run 1: [0]-[5] green (arm rebuild 1/2, stamp MISS from the source
+  edits); twins green incl. ALL new asserts; device f06 leg green
+  through trace/shots/fbwit/streams AND the new gates (mustrack pair
+  exact on device, starts=15==pin, music 0 starves/82 refills) —
+  DIED at the timing gate: 7 skips. Evidence: skips cluster at
+  frames 941-949, one 16.46 ms sim frame + catch-up skips — a single
+  transient stall ~15.7 s into the paced match.
+- Run 2 (non-blind retry: device healthy — battery 95, restored
+  clean; failure attributed to a one-off stall): stamp HIT; twins
+  green; **f06 device leg FULLY GREEN incl. every new gate (p99
+  12.244 ms, skips 0)**; f07 green through all content gates
+  (mustrack exact, starts=31==pin) — DIED at the timing gate:
+  14 skips, frames 1778-1791, sim time ballooning 18-34 ms across
+  ~10 frames (render/present near zero) ~29.7 s into the match.
+- Teeth [7] never reached in either run (they follow both legs); T3
+  logic is host-validated (above).
+
+**Attribution (bounded evidence rounds, both runs)**: the stall is in
+SIM WALL TIME inside the paced loop — a code path the iter-101 diff
+does not touch (the one new fprintf executes BEFORE the paced loop;
+run positions are random: 941 vs 1778; different legs each run; all
+new gates green). Shape = single-core CPU steal / SD read-latency
+burst (the music reader thread's 64 KB SD reads share the one core;
+the class the lbc quiesce bracket exists for — but lbc WAS quiesced,
+bracket asserted green both runs). The class PRE-EXISTS iter 101:
+identical binaries-modulo-one-fprintf, and iter-99's own ledger burned
+2 of 5 paced runs on rig/bracket shapes. What is NEW information: 2/4
+paced legs stalled TODAY vs 0/4 in iter-99 run-4 + driver-cold —
+possible device-side drift (SD wear/thermal) worth the driver's eye.
+Do NOT re-litigate the fix surfaces on this evidence; the residual is
+the ENVIRONMENTAL stall class vs the skips==0 gate, not the hardening.
+
+**Run ledger vs caps (honest)**: paced done-check runs **2/2
+(EXHAUSTED, both failed at the timing gate on one leg)**; arm
+rebuilds 1/2; cold host checks: check-foh-flows 1/3 + host twin
+smoke (build + 2 unpaced flow runs, scratchpad-only). Device left
+CLEAN (verified post-run-2: no marker, /tmp/mlfk + scratch empty,
+lbc=1, gmenu2x live, no foh_device).
+
+**Refutation shapes**: (a) did NOT fire (measured: needle-count
+parsers only; check-foh-flows drives foh_app). (b) did NOT fire
+(7/7 frozen flows + archived logs pass every tightened grammar).
+(c) did NOT fire (twin starts 15/31 exactly, twice each). (d) FIRED
+in a VARIANT form — not divergence but the paced perf gate; one
+bounded evidence round per failure performed; budget exhausted →
+STOPPED as pre-registered.
+
+**For the driver**: (1) the hardening diff is complete + validated —
+the only missing artifact is one full green cold done-check, blocked
+on the stall class; (2) options: driver-ritual cold re-run (its own
+budget), or dispose the stall class explicitly (e.g. task-14
+adjudication of skips-gate robustness vs transient device stalls —
+any weakening is HARD RULE 3 territory and needs the evidence-package
+machinery, NOT a writer edit); (3) round 2 of the arc should review
+the iter-101 diff + the COMPLETE task-12 packet (M1, driver-owned).
+
+**ZOOM OUT (HARD RULE 8)**: the mustrack fix is the third instance of
+the "aggregate counters are not identity" class (voice starts ==
+counts not voices; music out-frames == liveness not track) — the
+class rule now stands: EVERY audible-plane claim needs a NAMED,
+PINNED identity witness, counters only gate liveness. Instrumented at
+the producer chokepoint (one emission site), not per-check. The
+device-stall residual is itself a CLASS candidate: paced gates vs
+single-core transient steals — if it recurs at task 14, instrument
+(per-frame stall attribution / a stall-burst classifier), do not
+loosen gates one-off.
+
+## driver — 2026-07-20 — iter-101 ADJUDICATED GREEN: orphaned-deadman stall class found + cleaned; driver cold DEVICE TARGET CONFORMS; committed by driver
+
+- The iter-101 writer stopped BLOCKED-HONEST per its pre-registration
+  (2/2 paced runs failed the pre-existing skips==0 gate: 7 skips f06
+  run-1, 14 skips f07 run-2; every NEW gate green both runs; its
+  result entry above has the full in-run attribution).
+- **DRIVER ROOT-CAUSE (measured on-device, 06:27-06:30): TWO orphaned
+  `sh /tmp/mlfk/deadman.sh` loops** (pids 6630/7802, 2 s fork combs)
+  were live on the idle device — leaked by the failed runs' skip-gate
+  death path, which exits WITHOUT deadman teardown. Skip counts
+  DOUBLED with orphan count (7 → 14) — the comb mechanism matches the
+  iter-74 low_bat_check class exactly (2 s phase-random fork bursts).
+  SELF-AMPLIFYING leak: each failed run adds a comb, making the next
+  run likelier to fail. Orphans killed, /tmp/mlfk wiped, zero deadman
+  processes verified. (fkgpiod at ~14 s CPU / 38 min measured benign;
+  idle load ~0.9 is gmenu2x+daemons — parked during paced runs.)
+- **OPERATIONAL CONFIRMATION: driver cold re-run on the CLEAN device,
+  writer's uncommitted tree — `DEVICE TARGET CONFORMS (goldens=2
+  flows=2 shots=4 fbwit=4 p99=13.844ms skips=0 underruns=0 starves=0
+  starts f06-target-t01=15 f07-target-t02=31 sfxpin=15/31
+  music=menu>targettest:5/5 teeth=6)` exit 0**
+  (.loop/m4-tgt101-driver-cold.log). All five review-99 dispositions
+  live in the verdict (track-identified music, pinned SFX counts,
+  strict TLAUNCH, tfinish resemblance, semantic T3).
+- **ADJUDICATION (driver commit, ccebc9b/iter-79 precedent extended):**
+  the writer's work is complete and driver-cold-verified; the only
+  missing pieces were STATE + commit. Driver commits the writer's
+  seven files + this entry + STATE as the iter-101 commit. Writer ≠
+  checker holds: the CHECKER (driver) verified cold from disk.
+- **CLASS FIX REGISTERED → iter-102 (with the review-100 closure):**
+  rig chokepoint — (1) every device check's start = deadman/mlfk
+  orphan comm-scan (stale = loud clean-or-refuse, the rig_qd_normalize
+  step-0 pattern); (2) deadman teardown on ALL exit paths (trap-
+  covered, failure paths included) in riglib, manifest re-pin
+  ceremony. ZOOM OUT: instrument-level fix in riglib, not per-check
+  one-offs.

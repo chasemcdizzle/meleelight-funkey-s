@@ -42,14 +42,25 @@
 #      re-judged); TBRIDGE-STATE cmp; BOTH streams wrap-target'd and
 #      judged by BOTH verifiers; timing p99 < 16.67 ms via
 #      judge-render-timing.js (ordered whitelist), skips == 0; foh/
-#      match/audio/music summaries strict-parsed (starts/stops == the
-#      twins'); the `foh_dev tfinish:` line ABSENT (no committed flow
-#      can reach the finish seam — AGENT-LOG iter-99 refutation; the
-#      finish probe owns mechanical coverage in check-target-sim.sh);
+#      match/audio/music summaries strict-parsed (voice starts == the
+#      FROZEN per-flow pins == the twins' — iter 101, review-99 M3;
+#      stops == the twins'); music evidence is TRACK-IDENTIFIED
+#      (iter 101, review-99 M2): every leg (twins incl. the f06 b twin
+#      + device) must carry the exact `foh_dev mustrack:` pair — boot
+#      menu program + the menu->targettest switch at the TLAUNCH seam,
+#      each naming the pcm path whose bytes this check sha-pins;
+#      aggregate music counters gate liveness only, never identity;
+#      the `foh_dev tfinish:` line ABSENT on ALL legs incl. the f06 b
+#      twin, and ANY 'tfinish' substring resemblance = death
+#      (iter 101, review-99 L2; no committed flow can reach the finish
+#      seam — AGENT-LOG iter-99 refutation; the finish probe owns
+#      mechanical coverage in check-target-sim.sh);
 #  [7] teeth (COPIES only, committed bytes never edited): T1 A/B-swap
 #      flow variant dies at the normalized judge; T2 device T-line
 #      nibble -> verify-target-stream dies; T3 TFIN perturb -> the
-#      finals pin dies; T4 corrupted device-shot copy -> the shot judge
+#      finals pin dies with the SEMANTIC divergence class (rc 2) + the
+#      exact named finals-pin diagnostic (iter 101, review-99 L3);
+#      T4 corrupted device-shot copy -> the shot judge
 #      dies; T5 TBRIDGE-STATE perturb -> the frozen cmp dies; T6
 #      fb-witness eq=0 copy -> the witness judge dies;
 #  [8] park restore + deadman cancel + no-commit guard.
@@ -102,7 +113,7 @@ f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/
 0bc801ea46b06a63e79377aae164636a5e9f649ee45835748e5f2387b9e04281 oracle/harness/streamlib.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-26a87209a5cd52ea24ccb232964ed6caa3594c88bd784f3474d0db8e295ced76 port/foh/judge-foh-trace.js
+2267f8b796b1881d6ef749b5931a5fb08ae9f914b7a67a0e2608d4cada99616e port/foh/judge-foh-trace.js
 b2e814821a809a6cb5772c51587b1e49a87dab6438156f984e8ec07e59ab2141 port/foh/normalize-foh-trace.js
 b0c6ac328d6b87f9ff0c58562c880336eccb98a3053a4fdaadfb71e59e810186 port/foh/flow-to-fkscript.js
 e034539d69e1f55338e87f89c8c6573410c40a5bcd8dbc91066751f60c9c9fd4 port/gfx/judge-render-timing.js
@@ -126,6 +137,15 @@ MUSIC_TT_LOOP='0,224459'
 MUSIC_MENU_VOLBITS=3fd3333333333333
 MUSIC_MENU_START='0,7425'
 MUSIC_MENU_LOOP='7425,173500'
+# SFX evidence pins (iter 101, review-99 M3): per-flow voice-START
+# counts MEASURED-THEN-FROZEN from the committed cold evidence
+# (verdict lines `starts f06-target-t01=15 f07-target-t02=31` in
+# .loop/m4-task12-devtarget-run4.log AND
+# .loop/m4-task12-driver-cold.log). Twin AND device starts must EQUAL
+# these exactly — a deleted snd_push plane (the both-zero
+# self-consistency hole) is death by construction. Re-freeze =
+# reviewed change in the same commit.
+SFX_STARTS_PIN=(15 31)
 
 source port/sim/device/adbsh.sh
 require_device
@@ -248,9 +268,9 @@ done <<< "$PRODUCER_PINS"
 [ "$n_pins" = "$N_PINS_WANT" ] || fail "producer pin inventory — $n_pins/$N_PINS_WANT pins verified"
 # twin pins: the judge sha must sit in check-foh-flows.sh's pin table
 # exactly once; sndpack/menu.pcm must equal the sibling device checks'.
-c="$(grep -cF "26a87209a5cd52ea24ccb232964ed6caa3594c88bd784f3474d0db8e295ced76 port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
+c="$(grep -cF "2267f8b796b1881d6ef749b5931a5fb08ae9f914b7a67a0e2608d4cada99616e port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
 [ "$c" = 1 ] || fail "twin pin — check-foh-flows.sh does not carry the same judge-foh-trace.js sha exactly once (count $c; paired change rule)"
-c="$(grep -cF "26a87209a5cd52ea24ccb232964ed6caa3594c88bd784f3474d0db8e295ced76 port/foh/judge-foh-trace.js" "$FOH/check-device-foh.sh")" || true
+c="$(grep -cF "2267f8b796b1881d6ef749b5931a5fb08ae9f914b7a67a0e2608d4cada99616e port/foh/judge-foh-trace.js" "$FOH/check-device-foh.sh")" || true
 # exactly 2 there: its PRODUCER_PINS row + its own twin grep of
 # check-foh-flows.sh (both carry the sha+path pair)
 [ "$c" = 2 ] || fail "twin pin — check-device-foh.sh does not carry the same judge-foh-trace.js sha exactly twice (count $c; pin row + its twin grep)"
@@ -601,9 +621,39 @@ parse_music_summary() { # <log>
 # the finish line is ABSENT on green legs (no committed flow reaches
 # the finish seam — AGENT-LOG iter-99 refutation; probe-covered)
 assert_no_tfinish() { # <log>
-  local c
+  local c m
   c="$(grep -cF 'foh_dev tfinish:' "$1")" || true
   [ "$c" = 0 ] || fail "app log $1 carries a 'foh_dev tfinish:' line — the finish seam fired on a committed leg (outside the measured domain; investigate)"
+  # malformed-resemblance arm (iter 101, review-99 L2): ANY 'tfinish'
+  # substring — torn/mangled/prefixed variants included — is death;
+  # resembles-but-doesn't-match is corruption, never tolerated
+  # (PROCESS §3). Corpus-validated: zero occurrences across all
+  # archived genuine logs (.loop/m4-task12-* + .loop/m4-task13-*).
+  m="$(grep -cF 'tfinish' "$1")" || true
+  [ "$m" = 0 ] || fail "app log $1 carries a 'tfinish' resemblance on $m line(s) without the exact seam line — corrupted/mangled finish evidence (fail closed)"
+}
+
+# track-identified music evidence (iter 101, review-99 M2): every
+# target leg must carry EXACTLY the mustrack pair — the boot menu
+# program and the menu->targettest switch at the TLAUNCH seam — as
+# exact FULL-LINE fixed-string matches (whitelist by construction;
+# the producer grammar note lives in foh_dev.c's header). The named
+# pcm paths are exactly the paths whose bytes this check sha-pins
+# (host: targettest.pcm == MUSIC_TT_SHA256 / menu.pcm ==
+# MUSIC_MENU_SHA256 at [2]; device: $DSD copies sha-verified == host
+# at [5]) — track identity binds by path join, so a menu track that
+# kept playing (no switch) or an unpinned substitute PCM can never
+# pass. Aggregate out/refill/starve counters gate liveness ONLY.
+MUSTRACK_LEGS=0
+assert_mustrack() { # <log> <pcm-dir> <ctx>
+  local log="$1" pdir="$2" ctx="$3" c
+  c="$(grep -cF 'foh_dev mustrack:' "$log")" || true
+  [ "$c" = 2 ] || grammar_die "$ctx: $c 'foh_dev mustrack:' needles (want exactly 2 — boot menu program + TLAUNCH targettest switch)"
+  c="$(grep -cxF "foh_dev mustrack: from=none to=menu on=0 pcm=$pdir/menu.pcm" "$log")" || true
+  [ "$c" = 1 ] || grammar_die "$ctx: the boot menu-track program line is absent/malformed (want exactly 'foh_dev mustrack: from=none to=menu on=0 pcm=$pdir/menu.pcm')"
+  c="$(grep -cxF "foh_dev mustrack: from=menu to=targettest on=1 pcm=$pdir/targettest.pcm" "$log")" || true
+  [ "$c" = 1 ] || grammar_die "$ctx: the menu->targettest switch line is absent/malformed — the track-identified TLAUNCH music witness (want exactly 'foh_dev mustrack: from=menu to=targettest on=1 pcm=$pdir/targettest.pcm')"
+  MUSTRACK_LEGS=$((MUSTRACK_LEGS + 1))
 }
 
 judge_dev_shot() { # <ctx> <device.ppm> <ref.ppm>
@@ -693,6 +743,12 @@ for k in 0 1; do
     "${FLOW_GID[$k]}" "${FLOW_GNAME[$k]}" "${FLOW_FRAMES[$k]}" "$BUILD/twin-$id-a"
   parse_audio_summary "$BUILD/twin-$id-a/log.txt"
   assert_no_tfinish "$BUILD/twin-$id-a/log.txt"
+  assert_mustrack "$BUILD/twin-$id-a/log.txt" "$AUDIO_OUT/audio/music" "twin $id"
+  # frozen SFX pin (iter 101, review-99 M3): the twin must reproduce
+  # the committed per-flow start count — refutation shape (c) of the
+  # iter-101 pre-registration fires here if the count is run-varying.
+  [ "$au_starts" = "${SFX_STARTS_PIN[$k]}" ] \
+    || fail "twin $id: voice starts $au_starts != the frozen pin ${SFX_STARTS_PIN[$k]} (measured-then-frozen; reviewed re-freeze only)"
   TWIN_STARTS[$k]="$au_starts"
   TWIN_STOPS[$k]="$au_stops"
 done
@@ -710,7 +766,13 @@ done
 parse_audio_summary "$BUILD/twin-f06-target-t01-b/log.txt"
 [ "$au_starts" = "${TWIN_STARTS[0]}" ] || fail "twin f06 x2: voice starts differ"
 [ "$au_stops" = "${TWIN_STOPS[0]}" ] || fail "twin f06 x2: voice stops differ"
-echo "   twin legs OK (2 traces + 2 TBRIDGE-STATEs == frozen; f06 x2 stable; BOTH streams verdict-exact per leg)"
+# the second f06 twin joins the full evidence scan (iter 101,
+# review-99 L2/M2/M3 — no leg is exempt)
+[ "$au_starts" = "${SFX_STARTS_PIN[0]}" ] \
+  || fail "twin f06 x2: voice starts $au_starts != the frozen pin ${SFX_STARTS_PIN[0]}"
+assert_no_tfinish "$BUILD/twin-f06-target-t01-b/log.txt"
+assert_mustrack "$BUILD/twin-f06-target-t01-b/log.txt" "$AUDIO_OUT/audio/music" "twin f06 x2"
+echo "   twin legs OK (2 traces + 2 TBRIDGE-STATEs == frozen; f06 x2 stable; BOTH streams verdict-exact per leg; starts == frozen pins; mustrack pair per leg)"
 
 # --- [4] fk scripts -----------------------------------------------------------
 echo "== [4/8] fk_input scripts (derived x2, byte-stable) =="
@@ -963,12 +1025,22 @@ EOF
   parse_audio_summary "$BUILD/$id.dev-applog.txt"
   [ "$au_underruns" = 0 ] || fail "leg $id: $au_underruns audio underruns (want 0)"
   [ "$au_badlen" = 0 ] || fail "leg $id: $au_badlen audio badlen callbacks (want 0)"
+  # device starts must equal the FROZEN twin counts exactly (iter 101,
+  # review-99 M3): the pin kills the both-zero self-consistency hole;
+  # the twin equality keeps the device bound to the freshly-run twin.
+  [ "$au_starts" = "${SFX_STARTS_PIN[$k]}" ] || fail "leg $id: device voice starts $au_starts != the frozen pin ${SFX_STARTS_PIN[$k]}"
   [ "$au_starts" = "${TWIN_STARTS[$k]}" ] || fail "leg $id: device voice starts $au_starts != twin ${TWIN_STARTS[$k]}"
   [ "$au_stops" = "${TWIN_STOPS[$k]}" ] || fail "leg $id: device voice stops $au_stops != twin ${TWIN_STOPS[$k]}"
   parse_music_summary "$BUILD/$id.dev-applog.txt"
   [ "$mu_starves" = 0 ] || fail "leg $id: $mu_starves music starves (want 0)"
   [ "$mu_out" != 0 ] || fail "leg $id: music consumed 0 output frames"
   [ "$mu_refills" != 0 ] || fail "leg $id: music refills == 0 (the SD streamer never ran)"
+  # track-IDENTIFIED music evidence (iter 101, review-99 M2): the
+  # counters above prove the streamer LIVED; this proves WHICH track —
+  # the targettest program at the TLAUNCH seam, from the menu track,
+  # naming the $DSD pcm whose sha [5] verified against the pinned host
+  # bytes. A menu track that never switched can no longer pass.
+  assert_mustrack "$BUILD/$id.dev-applog.txt" "$DSD" "leg $id"
   assert_no_tfinish "$BUILD/$id.dev-applog.txt"
   DEV_STARTS="$DEV_STARTS $id=$au_starts"
   pullv "$DTMP/$id.bstate.txt" "$BUILD/$id.dev-bstate.txt"
@@ -1102,17 +1174,32 @@ node "$M4G/verify-target-stream.js" "$BUILD/tooth2.target.json" \
 [ "$rc" = 2 ] || fail "T2: target-plane nibble rc $rc (want the divergence class 2)"
 teeth=$((teeth + 1))
 echo "    T2 OK: device T-line nibble dies in verify-target-stream (rc 2)"
-# T3 — TFIN perturb in a device-out COPY -> the finals pin dies.
+# T3 — TFIN perturb in a device-out COPY -> the finals pin dies with
+# the SEMANTIC divergence class (rc 2) + the EXACT named finals-pin
+# diagnostic (iter 101, review-99 L3): a bare nonzero — crash, usage
+# error, unrelated earlier death — no longer passes as a live tooth.
 cp "$BUILD/f06-target-t01.dev-out.txt" "$BUILD/tooth3.out"
 sed -i.bak -E 's/^TFIN [0-9]+ /TFIN 9 /' "$BUILD/tooth3.out"; rm -f "$BUILD/tooth3.out.bak"
+cmp -s "$BUILD/tooth3.out" "$BUILD/f06-target-t01.dev-out.txt" && \
+  fail "T3: TFIN perturb was a no-op (dead tooth)"
+t3_tfin="$(node -e '
+  const j = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  console.log(String(j.params.finalTargetsDestroyed));
+' "$M4G/$T01_NAME.target.sha256.json")" || fail "T3: cannot read the frozen finalTargetsDestroyed"
+[[ "$t3_tfin" =~ ^(0|[1-9][0-9]?)$ ]] || fail "T3: frozen finalTargetsDestroyed grammar ('$t3_tfin')"
+[ "$t3_tfin" != 9 ] || fail "T3: frozen finals == the perturb value 9 (dead tooth — pick a new perturb value, reviewed change)"
+rc=0
+rm -f "$BUILD/tooth3.vlog"
 node "$M4G/wrap-target.js" t01 "$BUILD/tooth3.out" \
   "$BUILD/tooth3.player.json" "$BUILD/tooth3.target.json" >/dev/null
-if node "$M4G/verify-target-stream.js" "$BUILD/tooth3.target.json" \
-    "$M4G/$T01_NAME.target.sha256.json" >/dev/null 2>&1; then
-  fail "T3: TFIN perturb did NOT fail the finals pin"
-fi
+node "$M4G/verify-target-stream.js" "$BUILD/tooth3.target.json" \
+    "$M4G/$T01_NAME.target.sha256.json" > "$BUILD/tooth3.vlog" 2>&1 || rc=$?
+made "$BUILD/tooth3.vlog"
+[ "$rc" = 2 ] || fail "T3: TFIN perturb rc $rc (want EXACTLY the semantic divergence class 2)"
+c="$(grep -cxF "TARGET STREAM MISMATCH: final targetsDestroyed 9 != frozen $t3_tfin" "$BUILD/tooth3.vlog")" || true
+[ "$c" = 1 ] || fail "T3: the exact finals-pin diagnostic is absent (want 'TARGET STREAM MISMATCH: final targetsDestroyed 9 != frozen $t3_tfin' exactly once; got $c — the death came from somewhere else)"
 teeth=$((teeth + 1))
-echo "    T3 OK: TFIN perturb dies at the run-finals binding"
+echo "    T3 OK: TFIN perturb dies at the run-finals binding (rc 2 + the exact diagnostic)"
 # T4 — corrupted device-shot COPY -> the production shot judge dies.
 cp "$BUILD/f06-target-t01.dev-shot-tss-t01.ppm" "$BUILD/tooth4.ppm"
 printf 'x' >> "$BUILD/tooth4.ppm"
@@ -1146,4 +1233,8 @@ echo "    T6 OK: fb-witness eq=0 copy dies in the witness judge"
 echo "== [8/8] hygiene =="
 rig_no_commit_guard "$BUILD" "$DEVB" "$TABLES" "$AUDIO_OUT"
 
-echo "DEVICE TARGET CONFORMS (goldens=2 flows=2 shots=4 fbwit=$FBWIT_TOTAL p99=${P99_WORST_MS}ms skips=0 underruns=0 starves=0 starts${DEV_STARTS} teeth=$teeth)"
+# verdict evidence tokens (iter 101, review-99 M2/M3): sfxpin = the
+# frozen per-flow start counts every leg matched; music = the
+# track-identified transition each of the MUSTRACK_LEGS legs witnessed.
+[ "$MUSTRACK_LEGS" = 5 ] || fail "mustrack leg coverage $MUSTRACK_LEGS != 5 (3 twins + 2 device legs must all be scanned)"
+echo "DEVICE TARGET CONFORMS (goldens=2 flows=2 shots=4 fbwit=$FBWIT_TOTAL p99=${P99_WORST_MS}ms skips=0 underruns=0 starves=0 starts${DEV_STARTS} sfxpin=${SFX_STARTS_PIN[0]}/${SFX_STARTS_PIN[1]} music=menu>targettest:$MUSTRACK_LEGS/5 teeth=$teeth)"

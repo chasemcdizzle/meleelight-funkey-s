@@ -79,6 +79,14 @@
 //   foh_dev music: <out> out frames, <st> starves, <re> refills,
 //    ring=32768 chunk=16384   (counters SUMMED across the menu and
 //    match tracks — the channel restarts at the LAUNCH switch)
+//   foh_dev mustrack: from=<tok|none> to=<tok> on=<0|1> pcm=<path>
+//    (iter 101, review-99 M2 — ONE line per mus_track_program publish;
+//    track-IDENTIFIED evidence: names the programmed track + the
+//    transition so device checks bind the audible plane to the PINNED
+//    per-track PCM bytes by path and witness the menu→targettest
+//    switch at the TLAUNCH seam. NEW line only — every grammar above
+//    is byte-unchanged. check-device-target.sh matches it with exact
+//    full-line fixed-string greps.)
 //
 // KEYMAP SSOT (iter 95 H2; hardened iter 97, review-95 M-b): the
 // logical-button → FLOW1 letter → device letter-keysym mapping lives
@@ -876,6 +884,9 @@ static void load_music_manifest(const char *path) {
 // file-backed SndMusicRead (gfx_app.c mus_file_read verbatim shape)
 static FILE *g_mus_file;
 static uint64_t g_mus_file_frames;
+// last-programmed track token for the mustrack transition witness
+// (iter 101, review-99 M2; "none" until the first program)
+static const char *g_mus_cur_tok = "none";
 
 static void mus_file_read(void *ud, uint64_t fileFrame, int16_t *dst,
                           uint32_t frames) {
@@ -992,6 +1003,14 @@ static void mus_track_program(int idx, int on) {
   g_mix.music.wr = SND_MUSIC_RING_FRAMES;
   g_mix.music.on = on;
   platform_audio_unlock();
+  // track-identity event (iter 101, review-99 M2): GRAMMAR IS
+  // LOAD-BEARING (PROCESS §3; header note) — a NEW line, emitted at
+  // the ONE publish point after the ring is live, so a logged program
+  // is a completed program. The named pcm path is the path whose
+  // bytes the device check sha-pins (track identity by path join).
+  fprintf(stderr, "foh_dev mustrack: from=%s to=%s on=%d pcm=%s\n",
+          g_mus_cur_tok, kMusTok[idx], on, t->path);
+  g_mus_cur_tok = kMusTok[idx];
 }
 
 // stage id (oracle order) -> music track index (main.js:1341-1360)
