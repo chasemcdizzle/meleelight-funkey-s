@@ -77,6 +77,144 @@
 #define SND_SRC_RATE 22050
 #define SND_OUT_RATE 44100
 
+// --- MUSIC channel (M4 task 7) ---------------------------------------------
+// A DEDICATED stereo channel (not an SFX voice — matching the browser,
+// where music is a separate Howl outside any voice pool). Source: the
+// M1 audio stage's 22050 Hz STEREO S16LE PCM streamed via a ring of
+// SND_MUSIC_RING_FRAMES source frames = PLAN §7's 2x64 KB double-buffer
+// (refill unit = one SND_MUSIC_CHUNK_FRAMES chunk = 64 KB whenever free
+// space >= chunk). PORTABILITY Layer 2: both constants are FunKey-tuned
+// (measured fit: 88.2 KB/s consumption -> 0.743 s per half; re-measure
+// per target/storage).
+//
+// SPRITE PROGRAM (upstream music.js semantics, pinned from the vendored
+// howler 2.0.12 source + the authored onend handlers — AGENT-LOG iter
+// 87 pre-registration): play the Start window once, then the Loop
+// window repeating. Windows come from sounds.json sprite ms values via
+// the DOCUMENTED quantization frames = floor(ms*441/20) (22050/1000 =
+// 441/20; boundaries [floor(off), floor(off+dur)) so adjacent windows
+// are gapless). A window index past the decoded file is SILENCE (the
+// fod quirk carried verbatim: howler's sprite timer counts duration
+// regardless of file length — the html5 element just runs dry).
+// Resample: zero-order hold 2x (source frame = outFrame >> 1), Q8 gain
+// per channel, summed with the SFX accumulator BEFORE the single S16
+// clamp. With the channel disabled the fill math is BYTE-IDENTICAL to
+// the pre-music mixer (accL == accR == the old mono sum).
+//
+// THREADING (device): a reader thread produces (fills ring slots >= the
+// consumer position and publishes `wr` under platform_audio_lock); the
+// audio callback consumes (runs with SDL's audio mutex held, so wr is
+// never torn). Offline (snd_render) drives the SAME fill code
+// synchronously. A starve (callback needs a source frame not yet
+// published) emits silence for that output frame and counts — time
+// advances (a starve drops a window, never stretches the track).
+#define SND_MUSIC_RING_FRAMES 32768u  /* 2 x 64 KiB halves (PLAN §7) */
+#define SND_MUSIC_CHUNK_FRAMES 16384u /* one 64 KiB refill read */
+
+typedef struct {
+  int on;
+  uint16_t gainQ8;      // round(SND1 effective volume * 256)
+  uint64_t startBeg;    // source frames (quantized sprite windows)
+  uint64_t startDur;
+  uint64_t loopBeg;
+  uint64_t loopDur;     // > 0 (validated)
+  uint64_t fileFrames;  // stereo frames actually present in the PCM
+  int16_t *ring;        // SND_MUSIC_RING_FRAMES stereo frames
+  uint64_t wr;          // source-timeline frames produced (published)
+  uint64_t outPos;      // 44100 output frames consumed
+  uint64_t starves;     // output frames emitted silent for lack of data
+  uint64_t refills;     // post-prefill chunk refills performed
+} SndMusic;
+
+// ms -> source frames: the documented quantization (header note).
+static uint64_t snd_music_ms_to_frames(uint64_t ms) {
+  return ms * 441ull / 20ull;
+}
+
+// Configure + validate the music channel. Window args are the
+// sounds.json sprite ms values VERBATIM; fileBytes is the PCM file's
+// byte length. Any inconsistency dies loud.
+static void snd_music_cfg(SndMusic *mu, uint16_t gainQ8, uint64_t startOffMs,
+                          uint64_t startDurMs, uint64_t loopOffMs,
+                          uint64_t loopDurMs, uint64_t fileBytes) {
+  memset(mu, 0, sizeof *mu);
+  if (gainQ8 > 256) sim_fatal("music: gainQ8 > 256 (volume > 1)");
+  if (startOffMs > 1000000000ull || startDurMs > 1000000000ull ||
+      loopOffMs > 1000000000ull || loopDurMs > 1000000000ull) {
+    sim_fatal("music: sprite window ms out of the sane domain");
+  }
+  if (fileBytes == 0 || fileBytes % 4 != 0) {
+    sim_fatal("music: PCM byte length not a whole stereo S16 frame count");
+  }
+  mu->gainQ8 = gainQ8;
+  mu->startBeg = snd_music_ms_to_frames(startOffMs);
+  mu->startDur = snd_music_ms_to_frames(startOffMs + startDurMs) - mu->startBeg;
+  mu->loopBeg = snd_music_ms_to_frames(loopOffMs);
+  mu->loopDur = snd_music_ms_to_frames(loopOffMs + loopDurMs) - mu->loopBeg;
+  if (mu->loopDur == 0) sim_fatal("music: empty loop window");
+  mu->fileFrames = fileBytes / 4;
+  mu->ring = malloc((size_t)SND_MUSIC_RING_FRAMES * 4);
+  if (!mu->ring) sim_fatal("music: oom (ring)");
+  mu->on = 1;
+}
+
+// Map source-timeline frame t to a contiguous run: *fileIdx is the file
+// frame when audible; *silence = 1 for a program-silence run (window
+// index past the file — the fod quirk). Returns 1..max frames.
+static uint32_t snd_music_run(const SndMusic *mu, uint64_t t, uint32_t max,
+                              uint64_t *fileIdx, int *silence) {
+  uint64_t idx, remInWindow;
+  if (t < mu->startDur) {
+    idx = mu->startBeg + t;
+    remInWindow = mu->startDur - t;
+  } else {
+    const uint64_t u = (t - mu->startDur) % mu->loopDur;
+    idx = mu->loopBeg + u;
+    remInWindow = mu->loopDur - u;
+  }
+  uint64_t run = remInWindow;
+  if (idx >= mu->fileFrames) {
+    *silence = 1;
+    *fileIdx = 0;
+  } else {
+    *silence = 0;
+    *fileIdx = idx;
+    if (idx + run > mu->fileFrames) run = mu->fileFrames - idx; // EOF boundary
+  }
+  if (run > max) run = max;
+  return (uint32_t)run;
+}
+
+// Reader callback: fill `frames` stereo frames from file frame
+// `fileFrame` into dst (a contiguous file region — guaranteed by
+// snd_music_fill's segmentation). Dies loud on any short read.
+typedef void (*SndMusicRead)(void *ud, uint64_t fileFrame, int16_t *dst,
+                             uint32_t frames);
+
+// Fill `budget` source frames [from, from+budget) into the ring via the
+// sprite program + reader. Ring slots >= the consumer position are
+// producer-owned, so this runs UNLOCKED; the caller publishes wr AFTER
+// it returns (lock discipline — header note).
+static void snd_music_fill(SndMusic *mu, uint64_t from, uint32_t budget,
+                           SndMusicRead rd, void *ud) {
+  uint32_t done = 0;
+  while (done < budget) {
+    uint64_t idx = 0;
+    int sil = 0;
+    uint32_t run = snd_music_run(mu, from + done, budget - done, &idx, &sil);
+    const uint32_t slot = (uint32_t)((from + done) % SND_MUSIC_RING_FRAMES);
+    if (slot + run > SND_MUSIC_RING_FRAMES) {
+      run = SND_MUSIC_RING_FRAMES - slot; // never wrap within one read
+    }
+    if (sil) {
+      memset(mu->ring + (size_t)slot * 2, 0, (size_t)run * 4);
+    } else {
+      rd(ud, idx, mu->ring + (size_t)slot * 2, run);
+    }
+    done += run;
+  }
+}
+
 typedef struct {
   char name[SND_NAME_LEN];
   const int16_t *pcm;
@@ -98,6 +236,7 @@ typedef struct {
   uint32_t count;
   uint64_t step; // 16.16 resample step (SRC_RATE<<16)/OUT_RATE
   SndVoice voice[SND_VOICES];
+  SndMusic music; // M4 task 7: zero-init = disabled (fill byte-identical)
   uint64_t seqCounter;
   uint64_t playCount; // play events consumed (id = 1000 + playCount)
   // event counters (deterministic given the sim's event stream; the
@@ -308,10 +447,28 @@ static void snd_mix_fill(void *ud, int16_t *out, int frames) {
         }
       }
     }
-    if (acc > 32767) acc = 32767;
-    if (acc < -32768) acc = -32768;
-    out[i * 2] = (int16_t)acc;     // mono voice on both channels
-    out[i * 2 + 1] = (int16_t)acc; // (spike fill_mix stereo shape)
+    // M4 task 7: the music channel joins per-channel BEFORE the single
+    // clamp (header note). Disabled: accL == accR == the old mono sum —
+    // byte-identical to the pre-music mixer.
+    int32_t accL = acc, accR = acc;
+    if (m->music.on) {
+      SndMusic *mu = &m->music;
+      const uint64_t t = mu->outPos >> 1; // zero-order hold 2x upsample
+      if (t < mu->wr) {
+        const size_t slot = (size_t)(t % SND_MUSIC_RING_FRAMES) * 2;
+        accL += ((int32_t)mu->ring[slot] * mu->gainQ8) >> 8;
+        accR += ((int32_t)mu->ring[slot + 1] * mu->gainQ8) >> 8;
+      } else {
+        mu->starves++; // silence for this output frame; time advances
+      }
+      mu->outPos++;
+    }
+    if (accL > 32767) accL = 32767;
+    if (accL < -32768) accL = -32768;
+    if (accR > 32767) accR = 32767;
+    if (accR < -32768) accR = -32768;
+    out[i * 2] = (int16_t)accL;    // SFX mono on both channels;
+    out[i * 2 + 1] = (int16_t)accR; // music stereo (spike shape + music)
   }
 }
 

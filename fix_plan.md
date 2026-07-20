@@ -1582,6 +1582,30 @@ overruns):
   underruns == 0, buffer-starve counter == 0, skips == 0.
   done-check: `bash port/gfx/check-device-music.sh` → prints
   `DEVICE MUSIC OK`, exit 0.
+  **DONE (iter 87, committed form)**: cold done-check `DEVICE MUSIC OK
+  (full p99 13.635 ms, underruns 0, starves 0, refill-read p99
+  1.594 ms, skips 0/3600)` exit 0 (.loop/m4-task7-donecheck.log).
+  snd_mixer.h music channel (ring 32768/chunk 16384 = PLAN §7 2x64 KB;
+  Start-once→Loop-repeat sprite program from sounds.json ms windows,
+  floor(ms*441/20); ZOH 2x; Q8 per channel pre-clamp; past-EOF =
+  silence — the fod quirk verbatim; no-music fill byte-identical,
+  proven by the cold MIXER FIDELITY regression); gfx_app.c pthread
+  reader (25 ms poll, one 16384-frame chunk when space >= chunk, wr
+  under platform_audio_lock, prefill before audio start, --music-lat
+  sidecar, separate `gfx_app music:` stderr grammar); offline twin in
+  snd_render.c + independent snd_reference.js --music-track. NEW
+  `bash port/gfx/check-music-fidelity.sh` → `MUSIC FIDELITY OK
+  (goldens=12 tracks=8 diff=bit-identical wraps=2 eofsilence=1)` (12
+  goldens with stage-track music + menu-wrap/fod-EOF/targettest
+  synthetic legs, 8-track sha pin table, teeth T1-T4 + grammar).
+  Device: music PCM staged on REAL SD, sha-verified + T5 corruption
+  tooth; refills 80, musout == cbs*512 exact, sidecar refill-read
+  p50/p99 0.413/1.594 ms per 64 KiB vs the 743 ms half-ring tolerance;
+  SD dd ~21.2 MiB/s. Music selection seam = RENDER-PLANE (main.js:1342
+  stage→track switch, no RNG — pre-reg survey); menu/targettest
+  SELECTION deferred to FOH tasks 9-12 (windows covered here).
+  Registered residual: check-device-music.sh not yet in riglib
+  RIG_SCRIPTS (frozen surface) — queue with the Tier-A arc.
 - task 8 — **skip-burst attribution instrument** (iters 54/57/62
   registered class: transient single-frame sim spikes, burst form
   measured; kernel/adbd-vs-sim-internal attribution OPEN). Diagnostic

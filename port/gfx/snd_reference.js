@@ -36,7 +36,26 @@
 //
 // Usage: node snd_reference.js --audio <pipeline-audio-dir>
 //          --events <schedule> --frames N --out <pcm.raw>
-//          [--voices <cap>]
+//          [--voices <cap>] [--music-track <name>]
+//
+// MUSIC (M4 task 7) — implemented INDEPENDENTLY from the documented
+// semantics (AGENT-LOG iter 87 pre-registration; never from the C
+// code): --music-track reads sounds.json's music.<name> entry + its
+// stereo blob directly. Sprite program = upstream music.js semantics
+// pinned from the vendored howler 2.0.12 source: the Start window
+// once, then the Loop window repeating (the authored onend chain);
+// window ms -> source frames via the documented quantization
+// floor(ms*441/20), boundaries [floor(off), floor(off+dur)); a window
+// index past the decoded file is SILENCE (the fod quirk — howler's
+// sprite timer counts duration regardless of file length). Zero-order
+// hold 2x upsample (source frame = outFrame>>1, L/R separate), gain
+// Math.round(vol*256) per channel ((s*gain)>>8), summed with the SFX
+// accumulator BEFORE the per-channel S16 clamp. Music starts at output
+// frame 0 (match start — upstream plays it in startGame). Music is a
+// DEDICATED channel: it never consumes an SFX voice (browser truth —
+// a separate Howl outside any pool). Without --music-track the output
+// is byte-identical to the pre-music reference. Verdict gains
+// ` musout=<n>` ONLY when --music-track is given.
 // --voices <cap> (M4 task 6 basis contingency, AGENT-LOG iter 82): cap
 // concurrency at <cap> voices with the DOCUMENTED steal policy
 // (steal-oldest-by-start-sequence, snd_mixer.h header) — implemented
@@ -66,6 +85,7 @@ function die(msg) {
 const args = process.argv.slice(2);
 let audioDir = null, eventsPath = null, outPath = null, frames = -1;
 let voiceCap = Infinity;
+let musicTrack = null;
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   const v = () => { if (i + 1 >= args.length) die(a + " needs a value"); return args[++i]; };
@@ -77,6 +97,7 @@ for (let i = 0; i < args.length; i++) {
     voiceCap = parseInt(v(), 10);
     if (!Number.isInteger(voiceCap) || voiceCap < 1) die("bad --voices");
   }
+  else if (a === "--music-track") musicTrack = v();
   else die("bad argument: " + a);
 }
 if (!audioDir || !eventsPath || !outPath || !Number.isInteger(frames) || frames <= 0) {
@@ -104,6 +125,55 @@ for (const name of Object.keys(sounds.sfx)) {
   // 22050 Hz mono S16LE (FORMATS.md §5.1)
   const pcm = new Int16Array(raw.buffer, raw.byteOffset, raw.length / 2);
   lib.set(name, { pcm, gain: Math.round(vol * 256), loop: e.loop === 1 });
+}
+
+// --- music (M4 task 7; header note — independent implementation) ----------
+let mus = null;
+if (musicTrack !== null) {
+  if (!sounds.music || typeof sounds.music !== "object") {
+    die("sounds.json: no music map");
+  }
+  const e = sounds.music[musicTrack];
+  if (!e) die("music track not in the SND1 map: " + musicTrack);
+  const bits = e.volume && e.volume.bits;
+  if (typeof bits !== "string" || !/^[0-9a-f]{16}$/.test(bits)) {
+    die("bad music volume bits for " + musicTrack);
+  }
+  const vol = Buffer.from(bits, "hex").readDoubleBE(0);
+  if (!(vol >= 0 && vol <= 1)) die("music volume outside [0,1]");
+  const sp = e.sprite;
+  if (!sp || !Array.isArray(sp.start) || sp.start.length !== 2 ||
+      !Array.isArray(sp.loop) || sp.loop.length !== 2) {
+    die("bad sprite windows for " + musicTrack);
+  }
+  for (const x of [...sp.start, ...sp.loop]) {
+    if (!Number.isInteger(x) || x < 0) die("non-integer sprite ms");
+  }
+  const msf = (ms) => Math.floor(ms * 441 / 20); // the documented quantization
+  const raw = fs.readFileSync(path.join(audioDir, e.blob)); // ENOENT = loud
+  if (raw.length === 0 || raw.length % 4 !== 0) {
+    die("bad music blob (not whole stereo S16 frames): " + e.blob);
+  }
+  const startBeg = msf(sp.start[0]);
+  const startDur = msf(sp.start[0] + sp.start[1]) - startBeg;
+  const loopBeg = msf(sp.loop[0]);
+  const loopDur = msf(sp.loop[0] + sp.loop[1]) - loopBeg;
+  if (loopDur <= 0) die("empty music loop window");
+  mus = {
+    pcm: new Int16Array(raw.buffer, raw.byteOffset, raw.length / 2),
+    fileFrames: raw.length / 4,
+    gain: Math.round(vol * 256),
+    startBeg, startDur, loopBeg, loopDur,
+  };
+}
+
+// srcAt(t): source-timeline frame t -> file frame index, or -1 for
+// program silence (window past the decoded file — the fod quirk).
+function musSrcAt(t) {
+  let idx;
+  if (t < mus.startDur) idx = mus.startBeg + t;
+  else idx = mus.loopBeg + ((t - mus.startDur) % mus.loopDur);
+  return idx >= mus.fileFrames ? -1 : idx;
 }
 
 // --- schedule (snd_events_tap.c grammar; STRICT full-line) -----------------
@@ -222,10 +292,23 @@ for (let f = 0; f <= frames; f++) {
       }
       acc += (v.pcm[src] * v.gain) >> 8;
     }
-    if (acc > 32767) acc = 32767;
-    if (acc < -32768) acc = -32768;
-    out.writeInt16LE(acc, outPos);
-    out.writeInt16LE(acc, outPos + 2);
+    // M4 task 7: music joins per channel BEFORE the clamp (independent
+    // implementation of the documented semantics — header note).
+    // Without music accL == accR == the old mono sum (byte-identical).
+    let accL = acc, accR = acc;
+    if (mus !== null) {
+      const src = musSrcAt(outIdx >> 1); // ZOH 2x; music starts at out 0
+      if (src >= 0) {
+        accL += (mus.pcm[src * 2] * mus.gain) >> 8;
+        accR += (mus.pcm[src * 2 + 1] * mus.gain) >> 8;
+      }
+    }
+    if (accL > 32767) accL = 32767;
+    if (accL < -32768) accL = -32768;
+    if (accR > 32767) accR = 32767;
+    if (accR < -32768) accR = -32768;
+    out.writeInt16LE(accL, outPos);
+    out.writeInt16LE(accR, outPos + 2);
     outPos += 4;
   }
   // drop ended voices once per frame (keeps the scan bounded)
@@ -237,6 +320,8 @@ if (stopsMatched + stopsUnmatched !== nStops) {
   die("stop split does not sum to the stop total");
 }
 fs.writeFileSync(outPath, out);
+// ` musout=` ONLY with --music-track: the no-music grammar is
+// byte-unchanged (check-mixer-fidelity.sh's pinned pattern).
 console.log(
   "snd-ref OK frames=" + String(frames) +
   " plays=" + String(nPlays) +
@@ -245,4 +330,5 @@ console.log(
   " stopsu=" + String(stopsUnmatched) +
   " maxvoices=" + String(maxVoices) +
   " steals=" + String(steals) +
-  " bytes=" + String(out.length));
+  " bytes=" + String(out.length) +
+  (mus !== null ? " musout=" + String(frames * OUT_PER_FRAME) : ""));

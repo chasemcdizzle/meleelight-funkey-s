@@ -11,10 +11,24 @@
 // reference implementation (snd_reference.js) byte-for-byte.
 //
 //   snd_render --pack p.bin --events e.txt --frames N --out pcm.raw
+//     [--music m.pcm --music-volbits <16hex> --music-start <off>,<dur>
+//      --music-loop <off>,<dur>]
+//
+// MUSIC (M4 task 7): the snd_mixer.h music channel driven OFFLINE — the
+// SAME ring/refill/fill code the device streams through, run
+// synchronously (eager one-chunk refills whenever space >= chunk, ring
+// pre-filled before frame 1, exactly the device policy). Window args
+// are sounds.json sprite ms values VERBATIM; --music-volbits is the
+// SND1 effective-volume IEEE-754 bit pattern (gainQ8 = round(v*256),
+// the pack-snd.js formula). Offline may NEVER starve — asserted, and
+// the verdict gains ` musout=<n> musstarves=<n> musrefills=<n>` fields
+// ONLY when --music is given (the no-music grammar is byte-unchanged —
+// check-mixer-fidelity.sh's pinned pattern parses exactly as before).
 //
 // Verdict grammar (load-bearing; whitelist rule):
 //   snd-render OK frames=<n> plays=<n> stops=<n> stopsm=<n> stopsu=<n>
-//     steals=<n> maxvoices=<n> bytes=<n>
+//     steals=<n> maxvoices=<n> bytes=<n>[ musout=<n> musstarves=<n>
+//     musrefills=<n>]
 // (one line, one trailing newline). stopsm/stopsu = the snd_mixer.h
 // matched/unmatched stop-event split (M4 iter 84, review-82 H:
 // stopsm + stopsu == stops; a stop event that deactivates no voice —
@@ -31,6 +45,14 @@
 //   --tooth-stop-id-skew      +1 on every carried stop id (howler
 //                             stale-id no-op semantics -> loops ring on)
 //   --tooth-steal-newest      steal policy flip (highest seq wins)
+//   --tooth-music-gain        music gainQ8+1
+//   --tooth-music-loop-beg    music loopBeg+1 source frame (fires the
+//                             moment the intro->loop chain lands)
+//   --tooth-music-loop-dur    music loopDur+1 source frame (fires only
+//                             past the loop WRAP — run on a wrap leg)
+//   --tooth-music-underfill   refills withheld after the prefill ->
+//                             starves > 0 reported AND output diverges
+//                             (starve accounting is load-bearing)
 //
 // The schedule parser is STRICT full-line (PROCESS §3): every line must
 // match the tap grammar exactly, the SNDEV OK terminator with matching
@@ -237,12 +259,37 @@ static void load_events(const char *path, long frames) {
   g_stops = stops;
 }
 
+// --- offline music source (whole file in memory; SndMusicRead shape) --------
+static int16_t *g_mus_pcm;
+static uint64_t g_mus_frames;
+
+static void mus_mem_read(void *ud, uint64_t fileFrame, int16_t *dst,
+                         uint32_t frames) {
+  (void)ud;
+  if (fileFrame + frames > g_mus_frames) {
+    sim_fatal("music: read past the loaded PCM (program/segmentation bug)");
+  }
+  memcpy(dst, g_mus_pcm + fileFrame * 2, (size_t)frames * 4);
+}
+
+// strict "<off>,<dur>" ms-pair parse (exact tokens, the scan_num grammar)
+static void parse_ms_pair(const char *s, uint64_t *off, uint64_t *dur) {
+  if (!scan_num(&s, off) || !scan_lit(&s, ",") || !scan_num(&s, dur) ||
+      *s != 0) {
+    sim_fatal("music: bad <offMs>,<durMs> pair (0|[1-9][0-9]* exactly)");
+  }
+}
+
 int main(int argc, char **argv) {
   const char *packPath = 0, *eventsPath = 0, *outPath = 0;
   const char *toothGain = 0;
+  const char *musicPath = 0, *musicVolBits = 0;
+  const char *musicStart = 0, *musicLoop = 0;
   long frames = -1;
   bool toothDropFirstStop = false, toothStepSkew = false;
   bool toothStopIdSkew = false, toothStealNewest = false;
+  bool toothMusGain = false, toothMusLoopBeg = false, toothMusLoopDur = false;
+  bool toothMusUnderfill = false;
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i];
     const bool hasV = i + 1 < argc;
@@ -250,19 +297,34 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--events") == 0 && hasV) eventsPath = argv[++i];
     else if (strcmp(a, "--frames") == 0 && hasV) frames = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--out") == 0 && hasV) outPath = argv[++i];
+    else if (strcmp(a, "--music") == 0 && hasV) musicPath = argv[++i];
+    else if (strcmp(a, "--music-volbits") == 0 && hasV) musicVolBits = argv[++i];
+    else if (strcmp(a, "--music-start") == 0 && hasV) musicStart = argv[++i];
+    else if (strcmp(a, "--music-loop") == 0 && hasV) musicLoop = argv[++i];
     else if (strcmp(a, "--tooth-gain") == 0 && hasV) toothGain = argv[++i];
     else if (strcmp(a, "--tooth-drop-first-stop") == 0) toothDropFirstStop = true;
     else if (strcmp(a, "--tooth-step-skew") == 0) toothStepSkew = true;
     else if (strcmp(a, "--tooth-stop-id-skew") == 0) toothStopIdSkew = true;
     else if (strcmp(a, "--tooth-steal-newest") == 0) toothStealNewest = true;
+    else if (strcmp(a, "--tooth-music-gain") == 0) toothMusGain = true;
+    else if (strcmp(a, "--tooth-music-loop-beg") == 0) toothMusLoopBeg = true;
+    else if (strcmp(a, "--tooth-music-loop-dur") == 0) toothMusLoopDur = true;
+    else if (strcmp(a, "--tooth-music-underfill") == 0) toothMusUnderfill = true;
     else {
       fprintf(stderr, "snd_render: bad argument %s\n", a);
       return 1;
     }
   }
-  if (!packPath || !eventsPath || !outPath || frames <= 0) {
+  const bool music = musicPath != 0;
+  if (!packPath || !eventsPath || !outPath || frames <= 0 ||
+      (music != (musicVolBits != 0)) || (music != (musicStart != 0)) ||
+      (music != (musicLoop != 0)) ||
+      (!music && (toothMusGain || toothMusLoopBeg || toothMusLoopDur ||
+                  toothMusUnderfill))) {
     fprintf(stderr, "usage: snd_render --pack p.bin --events e.txt "
-                    "--frames N --out pcm.raw [tooth flags]\n");
+                    "--frames N --out pcm.raw [--music m.pcm "
+                    "--music-volbits h16 --music-start o,d "
+                    "--music-loop o,d] [tooth flags]\n");
     return 1;
   }
 
@@ -274,6 +336,48 @@ int main(int argc, char **argv) {
     e->gainQ8 = (uint16_t)(e->gainQ8 + 1);
   }
   if (toothStepSkew) mix.step += 1;
+
+  if (music) {
+    // volbits: EXACTLY 16 lowercase hex digits -> IEEE-754 double ->
+    // gainQ8 = round(v*256) (the pack-snd.js formula; v in [0,1]).
+    uint64_t vb = 0;
+    for (int k = 0; k < 16; k++) {
+      const char c = musicVolBits[k];
+      vb <<= 4;
+      if (c >= '0' && c <= '9') vb |= (uint64_t)(c - '0');
+      else if (c >= 'a' && c <= 'f') vb |= (uint64_t)(c - 'a' + 10);
+      else sim_fatal("music: bad --music-volbits digit (16 lowercase hex)");
+    }
+    if (musicVolBits[16] != 0) sim_fatal("music: --music-volbits too long");
+    double vol;
+    memcpy(&vol, &vb, 8);
+    if (!(vol >= 0.0 && vol <= 1.0)) sim_fatal("music: volume outside [0,1]");
+    uint64_t so, sd, lo, ld;
+    parse_ms_pair(musicStart, &so, &sd);
+    parse_ms_pair(musicLoop, &lo, &ld);
+    FILE *mf = fopen(musicPath, "rb");
+    if (!mf) sim_fatal("music: cannot open --music PCM");
+    if (fseek(mf, 0, SEEK_END) != 0) sim_fatal("music: seek failed");
+    const long msz = ftell(mf);
+    if (msz <= 0) sim_fatal("music: empty PCM");
+    if (fseek(mf, 0, SEEK_SET) != 0) sim_fatal("music: seek failed");
+    g_mus_pcm = malloc((size_t)msz);
+    if (!g_mus_pcm) sim_fatal("music: oom (PCM)");
+    if (fread(g_mus_pcm, 1, (size_t)msz, mf) != (size_t)msz) {
+      sim_fatal("music: short PCM read");
+    }
+    fclose(mf);
+    snd_music_cfg(&mix.music, (uint16_t)(vol * 256.0 + 0.5), so, sd, lo, ld,
+                  (uint64_t)msz);
+    g_mus_frames = mix.music.fileFrames;
+    if (toothMusGain) mix.music.gainQ8 = (uint16_t)(mix.music.gainQ8 + 1);
+    if (toothMusLoopBeg) mix.music.loopBeg += 1;
+    if (toothMusLoopDur) mix.music.loopDur += 1;
+    // PRE-FILL the whole ring (the device policy: synchronous, before
+    // any consumption), then refill one chunk whenever space >= chunk.
+    snd_music_fill(&mix.music, 0, SND_MUSIC_RING_FRAMES, mus_mem_read, 0);
+    mix.music.wr = SND_MUSIC_RING_FRAMES;
+  }
 
   load_events(eventsPath, frames);
 
@@ -324,6 +428,20 @@ int main(int argc, char **argv) {
       }
     }
     if (f == 0) continue; // setup events only; no audio before frame 1
+    // MUSIC refill (M4 task 7): the device reader-thread policy run
+    // synchronously — one chunk whenever free space >= chunk. The
+    // underfill tooth withholds every refill after the prefill.
+    if (music && !toothMusUnderfill) {
+      for (;;) {
+        const uint64_t cons = mix.music.outPos >> 1;
+        const uint64_t buffered = mix.music.wr - cons;
+        if (SND_MUSIC_RING_FRAMES - buffered < SND_MUSIC_CHUNK_FRAMES) break;
+        snd_music_fill(&mix.music, mix.music.wr, SND_MUSIC_CHUNK_FRAMES,
+                       mus_mem_read, 0);
+        mix.music.wr += SND_MUSIC_CHUNK_FRAMES;
+        mix.music.refills++;
+      }
+    }
     snd_mix_fill(&mix, buf, OUT_PER_FRAME);
     if (fwrite(buf, sizeof buf, 1, out) != 1) sim_fatal("PCM write failed");
     bytes += sizeof buf;
@@ -334,10 +452,22 @@ int main(int argc, char **argv) {
   if (mix.stopsMatched + mix.stopsUnmatched != mix.stops) {
     sim_fatal("stop split does not sum to the stop total");
   }
+  if (music && !toothMusUnderfill && mix.music.starves != 0) {
+    sim_fatal("offline music render starved (the eager refill loop can "
+              "never starve — ring/refill bug)");
+  }
   printf("snd-render OK frames=%ld plays=%llu stops=%llu stopsm=%" PRIu64
          " stopsu=%" PRIu64 " steals=%" PRIu64 " maxvoices=%" PRIu64
-         " bytes=%" PRIu64 "\n",
+         " bytes=%" PRIu64,
          frames, g_plays, g_stops, mix.stopsMatched, mix.stopsUnmatched,
          mix.steals, mix.maxVoices, bytes);
+  if (music) {
+    // music fields ONLY with --music: the no-music verdict grammar is
+    // byte-unchanged (check-mixer-fidelity.sh's pinned full-line
+    // pattern parses exactly as before).
+    printf(" musout=%" PRIu64 " musstarves=%" PRIu64 " musrefills=%" PRIu64,
+           mix.music.outPos, mix.music.starves, mix.music.refills);
+  }
+  printf("\n");
   return 0;
 }

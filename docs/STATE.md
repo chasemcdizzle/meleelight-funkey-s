@@ -3,7 +3,43 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, session handoff — iter-87 task-7 writer was in flight at handoff; ground-truth its state from disk per the ccebc9b precedent)
+## Live right now (updated: 2026-07-19, iter 87 — M4 task 7 DONE: music streaming, DEVICE MUSIC OK)
+
+- **Iter 87 (M4 task 7 — music streaming: mixer music channel + SD
+  double-buffer reader) DONE** (full entry: AGENT-LOG iter 87
+  pre-registration + result; latest AGENT-LOG id: iter 87; completed
+  by a resumed writer after a mid-task session wipe —
+  .loop/m4-task7-HANDOFF.md was the binding contract): snd_mixer.h
+  gained a DEDICATED music channel (ring 32768 / chunk 16384 = PLAN §7
+  2x64 KB; sounds.json sprite windows, floor(ms*441/20); ZOH 2x; Q8
+  per channel before the single clamp; past-EOF = silence — fod quirk
+  verbatim; disabled = byte-identical fill, cold MIXER FIDELITY OK
+  re-proven); gfx_app.c streams it from SD on a pthread reader (25 ms
+  poll, chunk refills under platform_audio_lock, prefill before audio
+  start, --music-lat sidecar, separate `gfx_app music:` grammar — all
+  prior pinned grammars byte-unchanged). NEW checks:
+  `port/gfx/check-music-fidelity.sh` → MUSIC FIDELITY OK (12 goldens
+  bit-identical WITH stage-track music vs the independent reference +
+  menu-wrap/fod-EOF/targettest synthetic legs; 8-track sha pins; teeth
+  T1-T4+grammar) and the done-check `port/gfx/check-device-music.sh` →
+  **DEVICE MUSIC OK (full p99 13.635 ms, underruns 0, starves 0,
+  refill-read p99 1.594 ms, skips 0/3600)**
+  (.loop/m4-task7-donecheck.log; refills 80, musout == cbs*512, T5
+  PCM-corruption tooth, SD dd ~21.2 MiB/s). Regressions: cold MIXER
+  FIDELITY OK (.loop/m4-task7-reg-mixer.log) + cold DEVICE RENDER OK
+  12.539 ms p99 (.loop/m4-task7-reg-render.log); check-sim SKIPPED
+  justified (port/sim diff EMPTY, .loop/m4-task7-checksim-skip.txt).
+  Music-selection seam verdict: RENDER-PLANE (main.js:1342 stage→track
+  switch, zero RNG). **Driver next: (1) Tier-A arc for the NEW audio
+  surfaces (check-music-fidelity.sh / check-device-music.sh /
+  snd_mixer.h music channel / gfx_app music path) — include the
+  registered residual: add check-device-music.sh to riglib RIG_SCRIPTS
+  when that frozen surface thaws; (2) the pending round-3 FINAL
+  CONFIRM arcs (iter-86 note); (3) tasks 9-10 note: menu/targettest
+  music SELECTION is FOH's surface — the fidelity check already covers
+  their windows via synthetic legs.**
+
+## [superseded by iter 87] (2026-07-19, session handoff — iter-87 task-7 writer was in flight at handoff; ground-truth its state from disk per the ccebc9b precedent)
 
 - **Iter 86 (M4 hardening — BOTH arcs' round-2 residuals: review-83
   1 Medium + review-84 5 Mediums/2 Lows) DONE** (full entry: AGENT-LOG

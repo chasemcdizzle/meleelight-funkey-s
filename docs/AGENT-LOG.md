@@ -13430,3 +13430,120 @@ round 3 = final confirm on this commit's bytes.
 - **PROVENANCE**: music PCM is Nintendo-derived — build output +
   device scratch/SD only, NEVER committed (no-commit guards in both
   new checks; per-track sha256 pins are hashes, not bytes).
+
+## iter 87 — 2026-07-19 — M4 task 7 RESULT: music streaming — DEVICE MUSIC OK (mid-task session wipe; resumed from .loop/m4-task7-HANDOFF.md)
+
+- **DONE-CHECK (cold): `bash port/gfx/check-device-music.sh` →
+  `DEVICE MUSIC OK (full p99 13.635 ms, underruns 0, starves 0,
+  refill-read p99 1.594 ms, skips 0/3600)`, exit 0**
+  (.loop/m4-task7-donecheck.log). Pre-registration followed (frozen
+  entry above); the design shipped exactly as frozen: snd_mixer.h
+  dedicated music channel (ring 32768 / chunk 16384 = PLAN §7 2x64 KB;
+  sprite program Start-once→Loop-repeating; floor(ms*441/20)
+  quantization; ZOH 2x; Q8 per channel pre-clamp; window-past-EOF =
+  silence — the fod quirk verbatim; starve = silence + counter, time
+  advances), snd_render.c offline twin (eager synchronous refills, the
+  SAME fill code), snd_reference.js independent reference
+  (--music-track), gfx_app.c device path (pthread reader thread, 25 ms
+  poll, wr published under platform_audio_lock, PRE-FILL before
+  platform_audio_start, teardown quit+join before audio stop,
+  --music-lat sidecar `<start_ns> <read_ns> <frames>` + `MUSLAT OK
+  rows=<n>`, SEPARATE `gfx_app music:` stderr line — every prior pinned
+  grammar byte-unchanged), NEW port/gfx/check-music-fidelity.sh + NEW
+  port/gfx/check-device-music.sh (done-check).
+- **HOST FIDELITY (cold, first attempt, zero fix rounds):
+  `bash port/gfx/check-music-fidelity.sh` → `MUSIC FIDELITY OK
+  (goldens=12 tracks=8 diff=bit-identical wraps=2 eofsilence=1)`**
+  (.loop/m4-task7-musicfid.log): all 12 goldens (8 oracle + m01/m02 +
+  s01/s02) STREAM MATCH + C x2 byte-stable + C==capped-8-ref
+  BIT-IDENTICAL with the stage's music track mixed in (stage→track map
+  pinned from main.js:1342-1360; all 6 stage tracks covered by the
+  golden set, asserted); synthetic legs menu@10900 (earliest loop WRAP
+  ~frame 10857), fod@20000 (EOF-silence from 304.0 s + wrap ~19927),
+  targettest@600 (22-src-frame intro chain) BIT-IDENTICAL; musout ==
+  frames*735 both sides, musstarves==0, musrefills>0 every leg; 8-row
+  music PCM sha pin table measured-then-frozen; SNDPACK pin
+  cross-grepped vs the mixer check.
+- **TEETH** (.loop/m4-task7-teeth.log + the two check logs): T1
+  music-gain, T2 loop-beg (g01), T3 loop-dur (menu wrap leg — designed
+  wrap-only), T4 underfill (musstarves>0 REPORTED + divergence) all
+  fired; grammar teeth (bad volbits / elastic-space + leading-zero ms
+  pairs / unknown track) die in both renderers; gfx_app arg teeth
+  (music-sans-sndpack, lat-sans-music, bad volbits, malformed pairs)
+  die; T5 device PCM-corruption tooth fired (appended byte flips the
+  device sha verify; re-push restored); music-summary parser teeth
+  (duplicate line / starves=1 / ring-constant drift) die in the strict
+  parser/gate with a clean positive control.
+- **DEVICE MEASUREMENTS (paced g01, render+SFX+music live)**: full p99
+  13.635 ms (< 16.67; sim p99 7.823 / render p99 6.051 / present p99
+  1.773; full max 19.855 — absorbed, skips 0/3600, rendered 3600);
+  wall 60,000 ms; cbs 5167 in [4900,5900], underruns 0, badlen 0, spec
+  44100/512/2; musout 2,645,504 == cbs*512 exact; starves 0; refills
+  80 in the derived [70,95] window; sidecar rows 80 == refills,
+  refill-read p50/p99/max = 0.413/1.594/1.594 ms per 64 KiB chunk
+  (.loop/m4-task7-sdprobe.log). SD dd probe (post drop_caches, logged
+  not gated): 21,357,400 B in 0.96 s ≈ 21.2 MiB/s. CALLBACK-COST
+  SPLIT vs baselines: iter-74 attrib baseline full p99 12.777 ms
+  (audio, no music); same-day render regression (audio absent) 12.539
+  ms; music run 13.635 ms → music+callback+reader cost ≈ +0.9-1.1 ms
+  at p99, margin to budget 3.0 ms. Double-buffer margin: p99 chunk
+  read 1.594 ms vs the 743 ms half-ring tolerance (~466x) — 2x64 KB is
+  comfortably sized (refutation shape (b) not triggered).
+- **REGRESSIONS**: cold `bash port/gfx/check-mixer-fidelity.sh` →
+  `MIXER FIDELITY OK` (.loop/m4-task7-reg-mixer.log — the binding
+  no-music byte-identity proof on the new mixer bytes); cold
+  `bash port/gfx/check-device-render.sh` → `DEVICE RENDER OK (full p99
+  12.539 ms, ..., skips 0/3600)` (.loop/m4-task7-reg-render.log —
+  gfx_app.c shared-TU change re-proven on device). check-sim.sh:
+  SKIPPED per the pre-registration justification — `git diff HEAD
+  --stat -- port/sim/` is EMPTY (.loop/m4-task7-checksim-skip.txt;
+  zero sim TU bytes changed; check-sim.sh additionally ran green
+  composed inside every fidelity execution).
+- **RUN-CAP LEDGER**: paced device runs 2/3 (done-check 1 + render
+  regression 1; 1 spare unused). Host fidelity cold executions: 3
+  (standalone cold ×1 + composed inside the two done-check attempts),
+  0 of the ≤4 fix-round budget consumed — zero divergence-driven fix
+  rounds anywhere (the differential was bit-identical on first
+  contact, pre-wipe smokes included). Browser runs 0.
+- **AMENDMENTS (recorded, with evidence)**: (1) mid-task SESSION WIPE —
+  resumed via .loop/m4-task7-HANDOFF.md; the pre-wipe mixer/renderer/
+  reference edits were kept verbatim and re-proven cold, none redone.
+  (2) The first done-check execution aborted in leg [4]: the Docker
+  DAEMON was down (rig_arm_build cannot see the local SDK image
+  without it) — daemon started, clean re-run; NO paced run was
+  consumed and no device state was touched (failure preceded staging).
+  (3) Device was OFFLINE at resume start (Chase reconnected it ~18:50)
+  — work was ordered host-first per the resume brief; no contingency
+  handoff needed. (4) drop_caches IS available on this kernel —
+  refutation shape (d) not triggered, no page-cache exposure to
+  record.
+- **REGISTERED RESIDUAL (for the driver's Tier-A arc)**: riglib.sh's
+  RIG_SCRIPTS contract says every new device check script adds itself
+  to the stamp-input list, but riglib.sh is byte-frozen under the
+  standing review-arc constraint this iteration — check-device-music.sh
+  is NOT yet in RIG_SCRIPTS. Exposure is narrow (the script changes no
+  build inputs; port/gfx source bytes ARE stamp inputs via
+  rig_srchash), but the one-shared-stamp invariant wants the row —
+  queue it with the task-7 Tier-A arc when riglib unfreezes.
+- **HONEST EXPOSURE (PROCESS §8)**: the differential proves
+  implementation equality of two independent realizations; the
+  documented adaptations (ms→frame quantization, ZOH 2x, Q8, music
+  from output frame 0, dedicated channel) are shared BY DOCUMENTATION
+  — a shared misreading of upstream/howler semantics is invisible to
+  it (the task-6 exposure class; primary-source pins in the pre-reg
+  are the mitigation). The headless host-truth leg proves plumbing
+  only (no callback consumes — honestly reported 0/0/0 and gated so).
+  Audible authority on device remains Chase's M4 acceptance
+  playthrough. Pause ducking / endGame stops / menu-targettest
+  SELECTION are registered out-of-domain (FOH tasks 9-12).
+- **ZOOM OUT (HARD RULE 8)**: no bug was fixed this iteration (first
+  contact bit-identical), but two CLASS artifacts were reinforced
+  rather than one-off'd: (a) the load-bearing-grammar class — the new
+  music summary + sidecar got anchored full-line parsers with
+  pinned-constant fields (ring/chunk in the pattern) and standing
+  parser teeth ON THE REAL functions, not copies; (b) the
+  config-expression-vs-unsequenced-args class (sm64/FURAFURA lineage)
+  was avoided by hoisting reader-thread lat stamps into sequenced
+  locals from the start. The RIG_SCRIPTS residual above is the one
+  instance deliberately left for the class-level fix (add-the-row)
+  when the frozen surface thaws.

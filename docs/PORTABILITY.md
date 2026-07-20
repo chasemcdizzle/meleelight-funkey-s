@@ -43,6 +43,18 @@ A new device = write one new backend TU (+ audio open params).
   measured on the V3s Cortex-A7; re-measure per SoC.
 - Audio: 22050 SFX / 44100 out, 8 voices, 512 buffer — measured fit for
   this SoC (issue #12); re-measure.
+- Music streaming ring: `SND_MUSIC_RING_FRAMES 32768` /
+  `SND_MUSIC_CHUNK_FRAMES 16384` (snd_mixer.h — PLAN §7's 2x64 KB;
+  the ring/chunk literals are also pinned into
+  check-device-music.sh's summary grammar). Measured fit iter 87 on
+  THIS device's SD: refill read p50/p99 0.413/1.594 ms per 64 KiB
+  chunk vs a 743 ms half-ring tolerance (~466x margin); sequential SD
+  read ~21.2 MiB/s. Re-measure per target/storage via the standing
+  instruments: the `--music-lat` sidecar + the check's dd probe.
+- Music reader-thread poll cadence: 25 ms (gfx_app.c mus_reader_main
+  — >= 29 refill opportunities per half-ring drain at 22050 Hz).
+  Re-derive if the ring, source rate, or storage latency class
+  changes on a new target.
 - Input: the S1 chord table (PLAN §6) maps the FunKey's EXACT control
   set (d-pad + 8 buttons, letter keysyms u/d/l/r/a/b/x/y/s/k/n/q).
   A device with real analog or more buttons gets a NEW mapping table

@@ -17,7 +17,44 @@
 //            [--ready-file f]]
 //           [--tapjump-off-p1] [--legible]
 //           [--sndpack pack.bin [--audio-samples N]]
+//           [--music m.pcm --music-volbits h16 --music-start o,d
+//            --music-loop o,d [--music-lat lat.txt]]
 //           [--attrib attrib.txt]
+//
+// MUSIC (M4 task 7): the snd_mixer.h music channel streamed from FILE —
+// the DEVICE path (PLAN §7: 2x64 KB double-buffer off SD). The four
+// --music* args are all-or-none (--music-lat additionally requires
+// them); --music requires --sndpack (the channel lives in the mixer).
+// Window args are sounds.json sprite ms values VERBATIM;
+// --music-volbits is the SND1 effective-volume IEEE-754 bit pattern
+// (gainQ8 = round(v*256), the pack-snd.js formula). Flow (AGENT-LOG
+// iter 87 pre-registration, frozen): the whole ring is PRE-FILLED
+// synchronously BEFORE platform_audio_start (no first-callback race);
+// a dedicated pthread READER THREAD then does ALL music file I/O —
+// ZERO music I/O on the frame loop (the frame path and its 4-column
+// timing grammar are untouched): every 25 ms it snapshots quit/consumer
+// position/wr under platform_audio_lock, and whenever free ring space
+// >= one 16384-frame chunk it reads that chunk (unlocked — producer-
+// owned slots) and publishes wr under the lock (the callback runs with
+// SDL's audio mutex held, so wr is never torn; headless: no callback
+// consumes — the summary honestly reports 0 out frames / 0 refills).
+// Teardown: quit flag under the lock + pthread_join BEFORE
+// platform_audio_stop. Any short read/seek failure on the reader
+// thread is a LOUD death (exit(2) via sim_fatal), never silence.
+//
+// --music-lat <file> (measurement sidecar, RAM-buffered on the reader
+// thread, written post-run): one row per refill —
+//   ^<start_mono_ns> <read_ns> <frames>$
+// then the mandatory terminator line
+//   ^MUSLAT OK rows=<n>$            (n == refill count, exact)
+// GRAMMAR IS LOAD-BEARING (paired with check-device-music.sh's strict
+// sidecar parser; PROCESS §3).
+//
+// Post-run the app prints a SEPARATE music summary stderr line iff
+// --music (every existing pinned grammar — gfx_app:/gfx_app audio: —
+// is byte-unchanged so no prior check parser needs edits):
+//   ^gfx_app music: <outframes> out frames, <starves> starves,
+//    <refills> refills, ring=32768 chunk=16384$
 //
 // --attrib (M4 task 8, skip-stall attribution — DIAGNOSTIC, off on
 // every gate path): per frame at frame START (plus one final sample
@@ -106,6 +143,7 @@
 // pacing sleep and the poll pump are excluded from all buckets (work
 // time, not schedule time).
 #include <inttypes.h>
+#include <pthread.h> // --music reader thread (M4 task 7)
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -419,6 +457,100 @@ static void app_snd_stop_sink(const char *token, int hasId, double id) {
   platform_audio_unlock();
 }
 
+// --- music streaming (M4 task 7; header note) --------------------------------
+// File-backed SndMusicRead: runs on the READER THREAD (and once on the
+// main thread for the synchronous prefill). Loud death on any seek/short
+// read — a silently truncated refill would render as plausible audio.
+static FILE *g_mus_file;
+static uint64_t g_mus_file_frames;
+
+static void mus_file_read(void *ud, uint64_t fileFrame, int16_t *dst,
+                          uint32_t frames) {
+  (void)ud;
+  if (fileFrame + frames > g_mus_file_frames) {
+    sim_fatal("music: read past the PCM file (program/segmentation bug)");
+  }
+  if (fseeko(g_mus_file, (off_t)(fileFrame * 4ull), SEEK_SET) != 0) {
+    sim_fatal("music: reader seek failed");
+  }
+  if (fread(dst, 4, frames, g_mus_file) != frames) {
+    sim_fatal("music: reader short read (truncated/unreadable PCM)");
+  }
+}
+
+// --music-lat rows (reader-thread-owned RAM; flushed post-join by main).
+typedef struct { uint64_t startNs, readNs; uint32_t frames; } MusLatRow;
+#define MUS_LAT_CAP 65536u // >> any run's refill count; overflow dies loud
+static MusLatRow *g_mus_lat;   // NULL unless --music-lat
+static uint64_t g_mus_lat_len;
+static int g_mus_quit; // written by main under platform_audio_lock
+
+// Reader thread (the frozen iter-87 design): 25 ms poll; one chunk per
+// refill whenever free space >= chunk; snapshots + wr publication under
+// platform_audio_lock; lat rows recorded thread-locally.
+static void *mus_reader_main(void *arg) {
+  (void)arg;
+  for (;;) {
+    platform_audio_lock();
+    const int quit = g_mus_quit;
+    const uint64_t cons = g_mix.music.outPos >> 1;
+    const uint64_t wr = g_mix.music.wr;
+    platform_audio_unlock();
+    if (quit) return 0;
+    if (SND_MUSIC_RING_FRAMES - (wr - cons) >= SND_MUSIC_CHUNK_FRAMES) {
+      const uint64_t t0 = now_ns();
+      snd_music_fill(&g_mix.music, wr, SND_MUSIC_CHUNK_FRAMES, mus_file_read,
+                     0);
+      const uint64_t t1 = now_ns();
+      platform_audio_lock();
+      g_mix.music.wr = wr + SND_MUSIC_CHUNK_FRAMES;
+      g_mix.music.refills++;
+      platform_audio_unlock();
+      if (g_mus_lat) {
+        if (g_mus_lat_len == MUS_LAT_CAP) {
+          sim_fatal("music: --music-lat buffer overflow");
+        }
+        g_mus_lat[g_mus_lat_len].startNs = t0;
+        g_mus_lat[g_mus_lat_len].readNs = t1 - t0;
+        g_mus_lat[g_mus_lat_len].frames = SND_MUSIC_CHUNK_FRAMES;
+        g_mus_lat_len++;
+      }
+    } else {
+      struct timespec ts;
+      ts.tv_sec = 0;
+      ts.tv_nsec = 25000000L; // 25 ms poll (pre-registered cadence)
+      nanosleep(&ts, 0);
+    }
+  }
+}
+
+// exact-token numeral scan for the --music-start/--music-loop ms pairs
+// (the snd_render.c grammar: 0|[1-9][0-9]*, no signs/whitespace/leading
+// zeros — PROCESS §3; sim_fatal on violation, never tolerance).
+static uint64_t mus_scan_u64(const char **ps) {
+  const char *s = *ps;
+  if (*s < '0' || *s > '9') sim_fatal("music: bad numeral in ms pair");
+  if (s[0] == '0' && s[1] >= '0' && s[1] <= '9') {
+    sim_fatal("music: leading zero in ms pair (exact-token grammar)");
+  }
+  uint64_t v = 0;
+  while (*s >= '0' && *s <= '9') {
+    if (v > (~0ull - 9ull) / 10ull) sim_fatal("music: ms value overflow");
+    v = v * 10ull + (uint64_t)(*s - '0');
+    s++;
+  }
+  *ps = s;
+  return v;
+}
+
+static void mus_parse_ms_pair(const char *s, uint64_t *off, uint64_t *dur) {
+  *off = mus_scan_u64(&s);
+  if (*s != ',') sim_fatal("music: ms pair missing the comma");
+  s++;
+  *dur = mus_scan_u64(&s);
+  if (*s != 0) sim_fatal("music: trailing bytes on an ms pair");
+}
+
 int main(int argc, char **argv) {
   const char *tracePath = 0, *simdataPath = 0, *bridgePath = 0;
   const char *gfxdataPath = 0, *animDir = 0, *outPath = 0, *timingPath = 0;
@@ -426,6 +558,8 @@ int main(int argc, char **argv) {
   const char *shotPpm = 0, *shotPgm = 0;
   const char *recordPath = 0, *readyPath = 0, *keysPath = 0;
   const char *sndpackPath = 0;
+  const char *musicPath = 0, *musicVolBits = 0; // M4 task 7: music streaming
+  const char *musicStartArg = 0, *musicLoopArg = 0, *musicLatPath = 0;
   const char *attribPath = 0; // M4 task 8: skip-stall attribution sidecar
   long seed = -1, p1 = -1, p2 = -1, stage = -1, frames = -1, difficulty = 3;
   long shotFrame = -1;
@@ -468,6 +602,11 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--tapjump-off-p1") == 0) tapJumpOffP1 = true;
     else if (strcmp(a, "--legible") == 0) legible = true;
     else if (strcmp(a, "--sndpack") == 0 && hasV) sndpackPath = argv[++i];
+    else if (strcmp(a, "--music") == 0 && hasV) musicPath = argv[++i];
+    else if (strcmp(a, "--music-volbits") == 0 && hasV) musicVolBits = argv[++i];
+    else if (strcmp(a, "--music-start") == 0 && hasV) musicStartArg = argv[++i];
+    else if (strcmp(a, "--music-loop") == 0 && hasV) musicLoopArg = argv[++i];
+    else if (strcmp(a, "--music-lat") == 0 && hasV) musicLatPath = argv[++i];
     else if (strcmp(a, "--attrib") == 0 && hasV) attribPath = argv[++i];
     else if (strcmp(a, "--audio-samples") == 0 && hasV) {
       audioSamples = strtol(argv[++i], 0, 10);
@@ -491,7 +630,13 @@ int main(int argc, char **argv) {
       (shotFrame > 0) != (shotPpm && shotPgm) ||
       (shotFrame > 0 && shotFrame > frames) ||
       (audioSamplesGiven && !sndpackPath) ||
-      audioSamples <= 0 || audioSamples > 65535) {
+      audioSamples <= 0 || audioSamples > 65535 ||
+      // M4 task 7: the four --music* args are all-or-none; --music-lat
+      // requires them; --music requires --sndpack (mixer channel).
+      ((musicPath != 0) != (musicVolBits != 0)) ||
+      ((musicPath != 0) != (musicStartArg != 0)) ||
+      ((musicPath != 0) != (musicLoopArg != 0)) ||
+      (musicLatPath && !musicPath) || (musicPath && !sndpackPath)) {
     fprintf(stderr,
             "usage: gfx_app --trace t.txt --simdata s.txt --gfxdata g.txt "
             "--vfxdata v.txt --glyphs gl.txt "
@@ -502,6 +647,8 @@ int main(int argc, char **argv) {
             "[--live --record-trace t.json --record-keys k.txt "
             "[--ready-file f]] [--tapjump-off-p1] [--legible] "
             "[--sndpack pack.bin [--audio-samples N]] "
+            "[--music m.pcm --music-volbits h16 --music-start o,d "
+            "--music-loop o,d [--music-lat lat.txt]] "
             "[--attrib attrib.txt]\n");
     return 1;
   }
@@ -566,13 +713,63 @@ int main(int argc, char **argv) {
   // Audio (M3 task 6): pack load dies loud on ANY structural defect;
   // start dies loud on any renegotiation/open failure — audio never
   // silently runs degraded or not at all while claiming otherwise.
+  pthread_t musThread;
+  memset(&musThread, 0, sizeof musThread); // join is musThreadLive-guarded;
+  // the memset only placates -Wmaybe-uninitialized on the arm gcc build
+  bool musThreadLive = false;
   if (sndpackPath) {
     snd_pack_load(&g_mix, sndpackPath);
+    if (musicPath) {
+      // MUSIC (M4 task 7; header note): volbits — EXACTLY 16 lowercase
+      // hex digits -> IEEE-754 double -> gainQ8 = round(v*256) (the
+      // pack-snd.js formula; the snd_render.c twin of this parse).
+      uint64_t vb = 0;
+      for (int k = 0; k < 16; k++) {
+        const char c = musicVolBits[k];
+        vb <<= 4;
+        if (c >= '0' && c <= '9') vb |= (uint64_t)(c - '0');
+        else if (c >= 'a' && c <= 'f') vb |= (uint64_t)(c - 'a' + 10);
+        else sim_fatal("music: bad --music-volbits digit (16 lowercase hex)");
+      }
+      if (musicVolBits[16] != 0) sim_fatal("music: --music-volbits too long");
+      double vol;
+      memcpy(&vol, &vb, 8);
+      if (!(vol >= 0.0 && vol <= 1.0)) {
+        sim_fatal("music: volume outside [0,1]");
+      }
+      uint64_t so, sd, lo, ld;
+      mus_parse_ms_pair(musicStartArg, &so, &sd);
+      mus_parse_ms_pair(musicLoopArg, &lo, &ld);
+      g_mus_file = fopen(musicPath, "rb");
+      if (!g_mus_file) sim_fatal("music: cannot open --music PCM");
+      if (fseeko(g_mus_file, 0, SEEK_END) != 0) sim_fatal("music: seek failed");
+      const off_t msz = ftello(g_mus_file);
+      if (msz <= 0) sim_fatal("music: empty PCM");
+      snd_music_cfg(&g_mix.music, (uint16_t)(vol * 256.0 + 0.5), so, sd, lo,
+                    ld, (uint64_t)msz);
+      g_mus_file_frames = g_mix.music.fileFrames;
+      // PRE-FILL the whole ring synchronously BEFORE audio starts (no
+      // first-callback race; the frozen iter-87 design).
+      snd_music_fill(&g_mix.music, 0, SND_MUSIC_RING_FRAMES, mus_file_read, 0);
+      g_mix.music.wr = SND_MUSIC_RING_FRAMES;
+      if (musicLatPath) {
+        g_mus_lat = malloc((size_t)MUS_LAT_CAP * sizeof *g_mus_lat);
+        if (!g_mus_lat) sim_fatal("oom (--music-lat buffer)");
+      }
+    }
     if (platform_audio_start(snd_mix_fill, &g_mix, (int)audioSamples) != 0) {
       sim_fatal("platform_audio_start failed");
     }
     ml_snd_sink = app_snd_sink; // the sound-event chokepoint tap
     ml_snd_stop_id_sink = app_snd_stop_sink; // id-routed stops (task 6)
+    if (musicPath) {
+      // reader thread ONLY after audio start (its lock/consumer
+      // snapshots are against the live callback; headless: idles).
+      if (pthread_create(&musThread, 0, mus_reader_main, 0) != 0) {
+        sim_fatal("music: pthread_create(reader) failed");
+      }
+      musThreadLive = true;
+    }
   }
 
   // RAM buffers (post-run flush; NO file I/O in the frame loop)
@@ -722,6 +919,18 @@ int main(int argc, char **argv) {
   if (sndpackPath) {
     ml_snd_sink = 0;
     ml_snd_stop_id_sink = 0;
+    // MUSIC teardown BEFORE platform_audio_stop (M4 task 7): quit flag
+    // under the lock, then join — the reader never outlives the audio
+    // seam it publishes into.
+    if (musThreadLive) {
+      platform_audio_lock();
+      g_mus_quit = 1;
+      platform_audio_unlock();
+      if (pthread_join(musThread, 0) != 0) {
+        sim_fatal("music: pthread_join(reader) failed");
+      }
+      musThreadLive = false;
+    }
     platform_audio_stop();
     platform_audio_stats(&astats);
   }
@@ -763,6 +972,30 @@ int main(int argc, char **argv) {
     if (fclose(af) != 0) sim_fatal("--attrib close/flush failed");
   }
   free(attrib);
+
+  // --music-lat flush (M4 task 7; grammar in the header comment, paired
+  // with check-device-music.sh). Rows == refills by construction (both
+  // written by the joined reader thread) — still asserted, never assumed.
+  if (musicLatPath) {
+    if (g_mus_lat_len != g_mix.music.refills) {
+      sim_fatal("music: lat row count != refill count (reader bookkeeping "
+                "bug)");
+    }
+    FILE *lf = fopen(musicLatPath, "w");
+    if (!lf) sim_fatal("cannot open --music-lat file for writing");
+    for (uint64_t r = 0; r < g_mus_lat_len; r++) {
+      if (fprintf(lf, "%" PRIu64 " %" PRIu64 " %" PRIu32 "\n",
+                  g_mus_lat[r].startNs, g_mus_lat[r].readNs,
+                  g_mus_lat[r].frames) < 0) {
+        sim_fatal("--music-lat write failed");
+      }
+    }
+    if (fprintf(lf, "MUSLAT OK rows=%" PRIu64 "\n", g_mus_lat_len) < 0) {
+      sim_fatal("--music-lat terminator write failed");
+    }
+    if (fclose(lf) != 0) sim_fatal("--music-lat close/flush failed");
+  }
+  free(g_mus_lat);
 
   if (shotFrame > 0) {
     if (!shotTaken) sim_fatal("shot frame never rendered");
@@ -823,6 +1056,21 @@ int main(int argc, char **argv) {
             astats.cbs, astats.underruns, astats.badlen, g_mix.starts,
             g_mix.stops, g_mix.steals, astats.rate, astats.samples,
             astats.channels);
+  }
+  // Music summary (printed iff --music; M4 task 7). GRAMMAR IS
+  // LOAD-BEARING (PROCESS §3): check-device-music.sh matches this line
+  // with an anchored full-line pattern —
+  //   ^gfx_app music: <outframes> out frames, <starves> starves,
+  //    <refills> refills, ring=32768 chunk=16384$
+  // A SEPARATE line by design: gfx_app:/gfx_app audio: grammars stay
+  // byte-unchanged (no prior check parser edits). On headless no
+  // callback consumes, so it honestly reads 0 out frames / 0 refills.
+  if (musicPath) {
+    fprintf(stderr,
+            "gfx_app music: %" PRIu64 " out frames, %" PRIu64 " starves, %"
+            PRIu64 " refills, ring=%u chunk=%u\n",
+            g_mix.music.outPos, g_mix.music.starves, g_mix.music.refills,
+            (unsigned)SND_MUSIC_RING_FRAMES, (unsigned)SND_MUSIC_CHUNK_FRAMES);
   }
   if (skips > 0) {
     fprintf(stderr, "gfx_app: skipped frames:");
