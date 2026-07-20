@@ -14368,3 +14368,21 @@ typed. Music-surface arc round 2 reviews this commit's bytes.
   strongest form of the iter-86 exact-token class; candidates for the
   same upgrade exist in older checks when their arcs next open. FOH
   arc round 2 reviews this commit's bytes.
+
+## driver — 2026-07-19 — MUSIC ARC CLOSED (GO round 2); FOH arc round 2 dispatched
+
+- Music-surface Tier-A arc (iter 87 surfaces): round 1 NO-GO
+  (.loop/review-87-1.log — 1H/3M/3L + residual, all CONFIRMED in
+  .loop/review-87-triage.md) → iter-89 hardening (b7e5bbe, all findings
+  fixed with teeth, driver-cold-verified DEVICE MUSIC OK p99 13.584 ms)
+  → ROUND 2 GO with ZERO findings (.loop/review-89-1.log): metadata
+  pins enforced in read_music, computed wrap/EOF counters asserted
+  pre-verdict, C11 release/acquire atomics + wr/outPos audit upheld,
+  exact-token grammars, no remaining vacuous-pass path. Arc record:
+  riglib.sh manifest row flipped arc-pending → reviewed-go
+  .loop/review-89-1.log this commit (anchor recomputed, self-check
+  ALL ROWS GREEN — .loop/driver-arcclose-selfcheck.log).
+- Also this window: iter-90 FOH hardening landed (7f42cc7,
+  driver-cold-verified FOH FLOWS OK flows=5 diverge=1) — FOH arc
+  round 2 reviews its diff next. Driver re-pin 8bf15ba closed the
+  iter-89 writer's stale wrap-run.js manifest find.

@@ -3,7 +3,19 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 90 — M4 hardening DONE: FOH-arc round-1 findings closed, cold check green first attempt)
+## Live right now (updated: 2026-07-19, driver post-iter-90 — MUSIC ARC CLOSED at GO r2; FOH arc round 2 in flight)
+
+- **MUSIC ARC CLOSED (GO round 2, zero findings —
+  .loop/review-89-1.log)**: iters 87+89 surfaces fully reviewed;
+  riglib manifest row flipped to reviewed-go this commit (anchor
+  recomputed, self-check ALL ROWS GREEN). Iter-90 (7f42cc7)
+  driver-cold-verified (FOH FLOWS OK flows=5 diverge=1); FOH arc
+  ROUND 2 reviews its diff (check-foh-flows.sh + flows/ only) — on
+  GO, task-10 writer dispatches (FOH device; M3 defer-bound binding:
+  real platform_poll/keysym path, judge sha re-pin, menu SFX/music
+  selection, OPK→FOH; SSS RANDOM seeded-draw ruling at brief time).
+
+## [superseded by driver post-iter-90] (2026-07-19, iter 90 — M4 hardening DONE: FOH-arc round-1 findings closed, cold check green first attempt)
 
 - **Iter 90 (M4 hardening — FOH-arc round-1 closure: divergence
   witness, f05/g03 bridge, exact grammars) DONE** (full entry:
