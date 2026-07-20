@@ -3,7 +3,38 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-20, iter 102 — M4 hardening DONE: review-100 persist round-1 closure + the orphaned-deadman leak CLASS FIX, PERSIST OK cold)
+## Live right now (updated: 2026-07-20, iter 103 — M4 micro DONE: finish-banner glyph fix, review-101 round-2 M closed, FOH FLOWS OK cold)
+
+- **Iter 103 DONE (M4 micro; review-101 round-2 M — the sole
+  outstanding finding).** The authored-unreachable finish path was a
+  latent PRODUCT BUG: `gfx_target_banner` drew `COMPLETE!`/`FAILURE`
+  via the frozen VFXGLYPHS atlas font 0 (digits + ':' only), so the
+  FIRST real finish would hit gfx_overlay.c's FATAL missing-glyph path
+  and ABORT (never observed — no committed device leg reaches the finish
+  seam; foh_dev draws the banner only when g_tfin_fired, which
+  check-device-target's assert_no_tfinish forbids). **FIX (triage option
+  (a)):** the banner now renders via the letter-complete self-authored
+  FOH 5x7 font (`foh_text`), split into `gfx_target_banner_text`. Frozen
+  artifacts BYTE-UNTOUCHED; option (b) (atlas re-freeze) refuted/not
+  needed. **WITNESS:** new `port/foh/foh_banner_witness.c` +
+  check-foh-flows.sh [5b] drives the REAL banner-text render for BOTH
+  strings (links gfx_target.o + raster.o + foh_font.o, -Wl,-dead_strip)
+  → `BANNER WITNESS OK` (both non-blank + distinct); the missing-glyph
+  fatal is structurally unreachable for both reachable strings. **TOOTH:**
+  a COPY with a missing glyph (COMPLETE?) still dies loud at foh_font;
+  a font-revert to gfx_glyph_text fails to LINK (guard intact).
+- **Done-checks (cold, logged):** `FOH FLOWS OK (flows=7 shots=17
+  bridges=3 tbridges=2 states=4 tstates=2 diverge=1 control=1 banner=1
+  teeth=19)` exit 0 (.loop/m4-ban103-fohflows-cold.log) — NEW banner=1,
+  teeth 18→19; regression `RENDER OK` exit 0
+  (.loop/m4-ban103-render-cold.log, IOU 0.9049); check-target-sim
+  skip-proved (target_finish_probe.c unchanged, no sim TU touched). ONE
+  atomic commit. Full trail: AGENT-LOG iter-103 pre-reg + result.
+- **Queue:** task-12-arc round 3 (closure-or-cap on THIS iter-103 diff)
+  + persist-arc round 2 → task 14 (verify_m4.sh assembly) → M4 GATE →
+  provision → LOOP STOP: m4-complete.
+
+## [superseded by iter-103] (updated: 2026-07-20, iter 102 — M4 hardening DONE: review-100 persist round-1 closure + the orphaned-deadman leak CLASS FIX, PERSIST OK cold)
 
 - **Iter 102 DONE** (respawn writer; original writer died on a usage
   limit after freezing its pre-reg — this respawn adopted the pre-reg +

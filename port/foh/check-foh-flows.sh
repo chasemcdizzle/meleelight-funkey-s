@@ -1341,7 +1341,70 @@ node "$M4G/verify-target-stream.js" "$B/t18.target.json" \
 [ "$rc" = 2 ] || fail "T18 — verify-target-stream rc $rc on a nibble-flipped target-plane copy (want the divergence class 2)"
 echo "    T18 OK: nibble-flipped target-plane run copy dies in verify-target-stream (rc 2)"
 teeth=$((teeth + 1))
-[ "$teeth" = 18 ] || fail "teeth ledger — $teeth/18 fired"
+# --- [5b] FINISH-BANNER GLYPH WITNESS (M4 micro, iter 103; review-101
+# round-2 M — the authored-unreachable-path class). gfx_target_banner
+# draws COMPLETE!/FAILURE; before iter 103 it used the frozen VFXGLYPHS
+# atlas font 0, which carries digits + ':' ONLY, so gfx_overlay.c's FATAL
+# missing-glyph path would ABORT the FIRST real finish (latent — no
+# committed device leg reaches the finish seam: foh_dev.c draws the
+# banner only when g_tfin_fired, which check-device-target.sh's
+# assert_no_tfinish forbids on every green leg). The fix routes the
+# banner text through the letter-complete self-authored FOH 5x7 font
+# (gfx_target_banner_text). This leg drives that REAL banner-text render
+# for BOTH reachable strings and proves the fatal is structurally
+# unreachable for them. It links gfx_target.o + the [2] raster.o/foh_font.o
+# with -Wl,-dead_strip (the unreferenced scene-frame draws are dropped;
+# a revert to gfx_glyph_text inside gfx_target_banner_text would leave
+# that symbol UNRESOLVED — no atlas linked here — a LINK FAILURE, so the
+# FONT choice is guarded, not merely the strings).
+echo "=== [5b] finish-banner glyph witness (iter 103)"
+banner=0
+rm -f "$B/gfx_target.o" "$B/foh_banner_witness.o" "$B/foh_banner_witness"
+cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/gfx_target.c" -o "$B/gfx_target.o"
+cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_banner_witness.c" -o "$B/foh_banner_witness.o"
+cc -O2 -Wl,-dead_strip -o "$B/foh_banner_witness" \
+  "$B/foh_banner_witness.o" "$B/gfx_target.o" "$B/raster.o" "$B/foh_font.o"
+made "$B/foh_banner_witness"
+rm -rf "$B/banner-shots"; mkdir -p "$B/banner-shots"
+if ! "$B/foh_banner_witness" --shot-dir "$B/banner-shots" > "$B/banner.out" 2>&1; then
+  relay_lines < "$B/banner.out"
+  fail "banner witness exited non-zero (a reachable banner string hit the missing-glyph fatal?)"
+fi
+relay_lines < "$B/banner.out"
+c="$(count_x "$B/banner.out" "BANNER WITNESS OK")"
+[ "$c" = 1 ] || fail "banner witness — 'BANNER WITNESS OK' verdict line absent (got $c)"
+made "$B/banner-shots/banner-complete.pgm" "$B/banner-shots/banner-failure.pgm"
+if cmp -s "$B/banner-shots/banner-complete.pgm" "$B/banner-shots/banner-failure.pgm"; then
+  fail "banner witness — COMPLETE! and FAILURE rendered identical shots (a blank/stubbed draw)"
+fi
+banner=1
+echo "    [5b] OK: gfx_target_banner_text renders COMPLETE! + FAILURE (both non-blank, distinct shots); missing-glyph fatal unreachable for both reachable strings"
+# banner TOOTH (COPY of gfx_target.c; the committed source is never
+# touched): a banner string carrying a glyph the FOH font lacks
+# (COMPLETE! -> COMPLETE?, '?' is not in foh_font.c's kGlyphs) must STILL
+# die FATAL — the loud-failure guard (HARD RULE 2) stays; only the
+# reachable strings are proven covered. The SAME witness .o is relinked
+# against the perturbed copy. (-Iport/gfx lets the build-dir copy resolve
+# its "gfx.h"/"../foh/foh.h" quoted includes.)
+cp "$GFX/gfx_target.c" "$B/gt-banner-tooth.c"
+sed -i.bak 's/"COMPLETE!"/"COMPLETE?"/' "$B/gt-banner-tooth.c"; rm -f "$B/gt-banner-tooth.c.bak"
+grep -q '"COMPLETE?"' "$B/gt-banner-tooth.c" || fail "banner tooth — the missing-glyph perturb did not take"
+cc -O2 "${CFLAGS_COMMON[@]}" -Iport/gfx -c "$B/gt-banner-tooth.c" -o "$B/gt-banner-tooth.o"
+cc -O2 -Wl,-dead_strip -o "$B/foh_banner_witness_tooth" \
+  "$B/foh_banner_witness.o" "$B/gt-banner-tooth.o" "$B/raster.o" "$B/foh_font.o"
+rc=0
+"$B/foh_banner_witness_tooth" > "$B/banner-tooth.out" 2>&1 || rc=$?
+[ "$rc" != 0 ] || fail "banner tooth — a missing-glyph banner string did NOT die (the loud-fatal guard is gone)"
+c="$(count_x "$B/banner-tooth.out" "foh_font: no glyph for requested character")"
+[ "$c" = 1 ] || fail "banner tooth — died but not at the foh_font missing-glyph guard (got: $(cat "$B/banner-tooth.out"))"
+c="$(count_x "$B/banner-tooth.out" "BANNER WITNESS OK")"
+[ "$c" = 0 ] || fail "banner tooth — printed the OK verdict despite a missing glyph"
+rm -f "$B/gt-banner-tooth.c" "$B/gt-banner-tooth.o" "$B/foh_banner_witness_tooth"
+echo "    banner tooth OK: COMPLETE? (missing glyph) dies loud at the foh_font guard; no false OK"
+teeth=$((teeth + 1))
+
+[ "$teeth" = 19 ] || fail "teeth ledger — $teeth/19 fired"
+[ "$banner" = 1 ] || fail "banner ledger — the finish-banner witness leg did not complete"
 
 # --- [6] hygiene ----------------------------------------------------------------
 rc=0
@@ -1354,4 +1417,4 @@ fi
 
 [ "$diverge" = 1 ] || fail "divergence-witness ledger — witness leg did not complete"
 [ "$control" = 1 ] || fail "control ledger — the lcancel=0 control leg did not complete"
-echo "FOH FLOWS OK (flows=7 shots=$total_shots bridges=$bridges tbridges=$tbridges states=$states tstates=$tstates diverge=$diverge control=$control teeth=$teeth)"
+echo "FOH FLOWS OK (flows=7 shots=$total_shots bridges=$bridges tbridges=$tbridges states=$states tstates=$tstates diverge=$diverge control=$control banner=$banner teeth=$teeth)"

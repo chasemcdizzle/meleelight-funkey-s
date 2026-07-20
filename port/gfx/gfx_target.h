@@ -15,9 +15,16 @@ void gfx_target_init(Gfx *g, int tstageId, int backgroundType);
 // stage -> targets -> player 0 -> articles -> vfx -> timer overlay).
 void gfx_target_frame(Gfx *g, const GameState *st, const MlTargets *tp);
 
+// The finish end-banner TEXT (COMPLETE!/FAILURE) via the self-authored
+// FOH 5x7 font (foh_text) — atlas font 0 lacks letters, so the atlas
+// path would FATAL on the first real finish (review-101 round-2 M, iter
+// 103). Split out so the banner glyph coverage is host-drivable without
+// the scene stack (foh_banner_witness.c). Deps: foh_text + raster only.
+void gfx_target_banner_text(Raster *rz, int complete);
+
 // The finish end-banner frame (COMPLETE!/FAILURE over the last state;
 // finishGame :1425-1460 render arm) — the driver calls it after the
-// tp_finish_hook fired.
+// tp_finish_hook fired. = gfx_target_frame + gfx_target_banner_text.
 void gfx_target_banner(Gfx *g, const GameState *st, const MlTargets *tp,
                        int complete);
 

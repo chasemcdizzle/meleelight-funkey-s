@@ -37,6 +37,11 @@
 
 #include "ml_targets.h" // TTAB1 (generated; -I the tables build dir)
 #include "../sim/target/target_play.h"
+#include "../foh/foh.h" // M4 iter 103: the self-authored FOH 5x7 font
+                        // (foh_text) — the frozen VFXGLYPHS atlas font 0
+                        // carries only digits + ':', so the banner's
+                        // letters must come from the letter-complete FOH
+                        // font (review-101 round-2 M; AGENT-LOG iter 103).
 
 // --- camera (gfx_render.c statics restated; same doubles path) --------------
 static double tcanvas_x(const Gfx *g, double wx) { return wx * g->scale + g->offx; }
@@ -165,17 +170,39 @@ void gfx_target_frame(Gfx *g, const GameState *st, const MlTargets *tp) {
   gfx_render_overlay_timer(g, st); // renderOverlay(false): timer only
 }
 
-// the finish banner (finishGame :1425-1460 render arm; Complete! /
+// the finish banner TEXT (finishGame :1425-1460 render arm; Complete! /
 // Failure per the :1431 strict equality — text only at 240x240; the
-// gradient plane is a rewritten-look surface). Drawn OVER the last
-// frame by the driver once the finish hook fired.
+// gradient plane is a rewritten-look surface).
+//
+// FONT (review-101 round-2 M, iter 103): drawn with the self-authored
+// FOH 5x7 font (foh_text), NOT the frozen VFXGLYPHS atlas. Atlas font 0
+// (GFX_FONT_T40) carries ONLY digits + ':' (the timer's alphabet), so
+// gfx_glyph_text on `COMPLETE!`/`FAILURE` would hit gfx_overlay.c's
+// FATAL missing-glyph path and ABORT the first real finish. The FOH
+// font is letter-complete; single-colour (no VFX stroke) is a
+// registered rewrite-delta (the banner is a rewritten-look surface,
+// header above; FOH/menus are NOT checksummed — visual authority is
+// Chase's acceptance playthrough).
+//
+// Split from gfx_target_banner so the banner's glyph coverage is
+// host-drivable WITHOUT the scene-frame stack (foh_banner_witness.c via
+// check-foh-flows.sh links gfx_target.o + raster.o + foh_font.o and
+// dead-strips the unreferenced frame draws). Deps here: foh_text +
+// raster only.
+void gfx_target_banner_text(Raster *rz, int complete) {
+  const RastCol white = { 255, 255, 255, 256 };
+  const char *text = complete ? "COMPLETE!" : "FAILURE"; // :1452/:1465
+  const int scale = 4; // 5x7 glyph -> 20x28 device px, banner-legible
+  const int tw = foh_text_width(text, scale);
+  const int th = 7 * scale;
+  foh_text(rz, 120 - tw / 2, 120 - th / 2, scale, text, white); // centred
+}
+
+// The finish end-banner: redraw the last frame, then overlay the
+// COMPLETE!/FAILURE text. Drawn OVER the last frame by the driver once
+// the finish hook fired.
 void gfx_target_banner(Gfx *g, const GameState *st, const MlTargets *tp,
                        int complete) {
   gfx_target_frame(g, st, tp);
-  const RastCol black = { 0, 0, 0, 256 };
-  const RastCol white = { 255, 255, 255, 256 };
-  const char *text = complete ? "COMPLETE!" : "FAILURE"; // :1452/:1465
-  const double w = gfx_glyph_text_width(GFX_FONT_T40, text);
-  gfx_glyph_text(g, GFX_FONT_T40, text, 120.0 - w / 2, 120.0, white, black,
-                 0);
+  gfx_target_banner_text(&g->rz, complete);
 }

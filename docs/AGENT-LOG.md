@@ -18196,3 +18196,161 @@ consumers. Refutation shapes fired: the M1 discrimination refute
 (unfixed build), the H1 COPY-tooth death-at-judge, T-B1/T-B2, the
 reap-robustness bug (found, fixed, re-verified) — all resolved, none
 left the STOP condition standing.
+
+---
+
+## iter-103 pre-registration (M4 micro — finish-banner glyph fix; review-101 round-2 M)
+
+**Finding closed** (.loop/review-101-triage.md; .loop/review-101-1.log):
+the authored-unreachable-path class — `gfx_target_banner` (gfx_target.c
+:177) renders `COMPLETE!`/`FAILURE` via GFX_FONT_T40, but font 0 in the
+frozen VFXGLYPHS atlas carries only digits + `:`; gfx_overlay.c:181's
+missing-glyph path is FATAL, so the FIRST real finish would ABORT
+(foh_dev.c:1726 draws it only when `g_tfin_fired`, which every committed
+device leg asserts NEVER fires — assert_no_tfinish — so the bug is
+latent, never observed in-run). A PRODUCT BUG on the finish presentation
+path.
+
+**Measurement FIRST (option (a) workability + witness weight):**
+- `nm -u` on a fresh `gfx_target.o` build: it references `gfx_render_*`
+  (player/articles/background/vfx/overlay_timer), `gfx_bg_box_fill`,
+  `gfx_glyph_text{,_width}`, `ml_tstages`, `rast_*`. So driving the FULL
+  `gfx_target_banner` (which calls `gfx_target_frame` first) needs
+  check-render.sh's entire gfx+sim build PLUS the frozen data planes
+  (glyph atlas / gfxdata / vfxdata / anim) — heavy, disproportionate for
+  a micro, and a duplicate of check-render.sh.
+- foh_font.c is a self-contained LEAF (deps: raster + gfx_fatal only);
+  it is co-linked with gfx_target.c in EVERY build that compiles the
+  banner today (foh_dev.c → check-device-{foh,persist,target}.sh,
+  riglib.sh). There is NO TU-boundary that forbids gfx_target consuming
+  foh_font, and no header cycle (foh.h → gfx/{raster,platform}.h only,
+  never gfx_target.h). Option (a) is WORKABLE; (b) (atlas re-freeze) is
+  NOT needed — refutation shape (b) does NOT fire.
+- Prototype (scratchpad): splitting the banner TEXT into
+  `gfx_target_banner_text(Raster*, int)` (deps: foh_text + raster only)
+  and linking `gfx_target.o + raster.o + foh_font.o` with `-Wl,
+  -dead_strip` drops the unreferenced scene-render functions → the
+  witness links LIGHT and drives the REAL banner-text code. A revert to
+  `gfx_glyph_text` inside `gfx_target_banner_text` would leave that
+  symbol unresolved (no atlas linked) → witness LINK FAILURE, so the
+  font choice is guarded, not merely the strings.
+
+**Fix (option (a)):** gfx_target.c renders the banner via the
+self-authored FOH 5x7 font (foh_text), split into
+`gfx_target_banner_text` (drivable without the scene stack);
+`gfx_target_banner` = `gfx_target_frame` + `gfx_target_banner_text`.
+Single-colour FOH banner (no VFX stroke) is a registered rewrite-delta
+(the banner is a "rewritten-look surface", gfx_target.c:170; menus/FOH
+are NOT checksummed, visual authority = Chase's acceptance playthrough).
+Frozen artifacts BYTE-UNTOUCHED.
+
+**Witness (check-owned host leg, home = check-foh-flows.sh):** the
+banner is FOH-plane text; check-foh-flows.sh already generates the
+ml_targets tables gfx_target.c compiles against and already builds
+raster.o + foh_font.o. New witness `port/foh/foh_banner_witness.c` links
+`gfx_target.o(dead-strip) + raster.o + foh_font.o`, renders
+`gfx_target_banner_text` for BOTH `complete=1` (COMPLETE!) and
+`complete=0` (FAILURE) into a 240x240 device raster, and asserts each is
+non-blank, the two are distinct, and NEITHER hits the missing-glyph
+fatal → the fatal is structurally unreachable for both reachable
+strings. Prints `BANNER WITNESS OK`.
+
+**Tooth (COPY, restored by reverse-edit):** a COPY of gfx_target.c with
+a banner string carrying a genuinely-missing glyph (`COMPLETE!` →
+`COMPLETE?`, `?` ∉ foh_font's kGlyphs) → the SAME witness build dies
+FATAL at foh_font.c:77 (`foh_font: no glyph …`). Proves the loud-failure
+guard (HARD RULE 2) stays; only the reachable strings are covered.
+
+**Pass criteria / done-checks (cold, logged):** check-foh-flows.sh (the
+witness host) → `FOH FLOWS OK …` exit 0 with an HONEST counter bump for
+the new banner witness + tooth. Regressions: cold `port/gfx/
+check-render.sh` (a gfx TU is touched — note: it does NOT compile
+gfx_target.c, so it gates the co-plane gfx_overlay/raster only; the
+witness IS the gfx_target.c gate) + cold `port/sim/target/
+check-target-sim.sh` is SKIP-PROVED (target_finish_probe.c UNCHANGED —
+no sim TU touched). If a sim TU proves necessary → STOP + report.
+
+**Refutation shapes:** (b-shape) if (a) were unworkable (gfx cannot link
+foh_font / header cycle / device build breaks) → fall to atlas re-freeze
+via the frozen channel. MEASURED NOT to fire (above). (witness-null) if
+the witness cannot drive the banner light → drive the full
+gfx_target_banner via the heavy build. MEASURED NOT needed (dead-strip
+prototype green). Any refutation → one bounded evidence round, then STOP
+and report. Budgets: paced device 0 (+1 optional spot-check); arm
+rebuilds 1; cold host checks 3; browser 0.
+
+## iter-103 result (M4 micro — finish-banner glyph fix; SHIPPED GREEN)
+
+**(a)/(b) decision — (a) SHIPPED, (b) refuted.** Option (a) (FOH-font
+banner) is workable and shipped; (b) (VFXGLYPHS re-freeze) was NOT
+needed and its refutation shape did NOT fire. Evidence: `gfx_target.c`
+now `#include "../foh/foh.h"` and draws the banner with `foh_text` via a
+split `gfx_target_banner_text(Raster*, int)`; it compiles + links clean
+in the witness build AND check-render's co-plane build; no header cycle
+(foh.h → gfx/{raster,platform}.h only); foh_font is co-linked with
+gfx_target in every existing device build already. Frozen artifacts
+BYTE-UNTOUCHED (check-render's VFXGLYPHS/GFXDATA/VFXDATA freeze
+tripwires all passed byte-exact).
+
+**Surfaces (exactly the allowed set):** `port/gfx/gfx_target.c` (banner
+→ foh_text, split helper), `port/gfx/gfx_target.h` (helper decl — the
+font-consumer wiring), `port/foh/foh_banner_witness.c` (NEW witness),
+`port/foh/check-foh-flows.sh` ([5b] leg + tooth + banner/teeth ledger),
+plus this AGENT-LOG + docs/STATE.md. No frozen artifact, no sim TU.
+
+**Witness (drives the REAL banner-text path for BOTH strings).**
+check-foh-flows.sh [5b]: links `gfx_target.o + raster.o + foh_font.o`
+with `-Wl,-dead_strip`, renders `gfx_target_banner_text` for
+`complete=1`(COMPLETE!) and `complete=0`(FAILURE) into a 240×240 device
+raster, asserts each NON-BLANK, the two DISTINCT, and NEITHER hits the
+missing-glyph fatal. Cold: `BANNER WITNESS OK (complete_ink=2016
+failure_ink=1680 distinct=yes)` → the fatal is structurally unreachable
+for both reachable strings.
+
+**Teeth (COPIES; committed source untouched).** (1) Banner tooth: a
+COPY of gfx_target.c with `COMPLETE!`→`COMPLETE?` ('?' ∉ foh_font's
+kGlyphs), relinked into the SAME witness → dies FATAL `foh_font: no
+glyph for requested character`, no false OK (rc≠0). The loud-failure
+guard (HARD RULE 2) stays; only the reachable strings are covered.
+(2) FONT-choice guard (scratchpad evidence, recorded): a COPY reverting
+`gfx_target_banner_text` to `gfx_glyph_text` fails to LINK — `Undefined
+symbols … _gfx_glyph_text_width` — because no atlas is linked in the
+light witness; a font regression is a build break, not a silent pass.
+
+**Done-checks (cold, logged).**
+- WITNESS HOST: `bash port/foh/check-foh-flows.sh` → `FOH FLOWS OK
+  (flows=7 shots=17 bridges=3 tbridges=2 states=4 tstates=2 diverge=1
+  control=1 banner=1 teeth=19)` exit 0
+  (.loop/m4-ban103-fohflows-cold.log). HONEST counter bump: NEW
+  `banner=1` + `teeth` 18→19 (the banner tooth).
+- REGRESSION: `bash port/gfx/check-render.sh` → `RENDER OK` exit 0
+  (.loop/m4-ban103-render-cold.log), IOU MIN 0.9049 ≥ 0.88, all freeze
+  tripwires byte-exact. (check-render does NOT compile gfx_target.c — it
+  gates the co-plane gfx_overlay/raster/gfx_render, unchanged; the [5b]
+  witness IS the gfx_target.c host gate.)
+- SKIP-PROOF: `port/sim/target/check-target-sim.sh` NOT run —
+  target_finish_probe.c is UNCHANGED and gfx_target.{c,h}/foh are NOT in
+  its build (target_play + sim cluster + tables only); its output is
+  byte-identical to HEAD. No sim TU was touched (STOP condition not
+  reached).
+
+**HONEST COVERAGE.** The [5b] witness drives the REAL
+`gfx_target_banner_text` (same TU, same font, same string constants) —
+the exact function whose foh_text call replaced the fatal GFX_FONT_T40
+draw — with the orthogonal scene-frame redraw dead-stripped (itself
+device-exercised via check-device-target.sh's per-frame
+`gfx_target_frame`, unchanged). The full `gfx_target_banner`
+(frame+text) over a live finished GameState remains device/acceptance
+surface, unchanged, as before iter 103. The banner's single-colour look
+(no VFX stroke) is a registered rewrite-delta (the banner is a
+rewritten-look surface; FOH/menus are NOT checksummed — visual authority
+is Chase's acceptance playthrough).
+
+**Run ledger vs caps.** Paced device runs 0/0 (host-provable; no
+spot-check taken). Arm rebuilds 0/1. Cold host checks 2/3
+(check-foh-flows + check-render; check-target-sim skip-proved).
+Browser 0/0. Refutation shapes: (b) atlas-refreeze — did NOT fire (a
+workable); witness-null (heavy full-render) — did NOT fire (dead-strip
+light witness green); font-revert link-guard — fired as designed in the
+recorded scratchpad probe (confirms the guard). None left the STOP
+condition standing. ONE atomic commit.
