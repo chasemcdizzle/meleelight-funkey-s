@@ -97,7 +97,7 @@ function asI16(where, v) {
 // shim records it (instance.__howlCfg) and loads no audio; post-load
 // mutations by upstream's own changeVolume land on the instances
 // (._volume) exactly as they would on real Howls.
-const EXTRACTOR_GLOBALS = ["__tables", "__stages", "__sounds"];
+const EXTRACTOR_GLOBALS = ["__tables", "__stages", "__sounds", "__targetStages"];
 
 function loadExtractor(distRoot) {
   const srcPath = path.join(distRoot, "dist", "js", "extractor.js");

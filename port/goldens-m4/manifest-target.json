@@ -1,0 +1,27 @@
+{
+  "comment": "M4 TARGET-TEST golden registry (fix_plan §M4 task 11). A SIBLING of manifest.json: the ^[ms] match/scenario grammar there is byte-frozen and byte-pinned by check-ai-live.sh, so target goldens (id ^t[0-9]{2}$) live in this separate file with their own recorder (record-target.sh -> run-target.js), freezer (freeze-target.js), and verifiers (the UNCHANGED oracle/harness/verify-stream.js for the spec-v1 PLAYER stream + verify-target-stream.js for the SEPARATE target-plane stream, per the iter-63 convention). HARD RULE 3 stands: only M0 writes oracle/ — run-target.js reuses the oracle harness bytes VERBATIM by path and every stream is judged by the UNCHANGED oracle verifier. Target mode is single-player (slot 0): p2/stage are null, cpu false, difficulty null; `char` is the slot-0 character (0 marth 1 puff 2 fox 3 falco 4 falcon) and `tstage` is the target stage 0-9 (== upstream activeStage.js targetStageMapping == targetstage1..10). Every target trace is CRAFTED by a committed deterministic generator gen-<id>-trace.js (no gen-trace.js chaos; `seed` is ONLY the run's Math.random seed — the ONE off-step draw is startTargetGame's background draw, targetplay.js:187, so rngCallsOutsideStep == 1 like VS). Quality contract (check-target-quality.js, MECHANICAL): gameMode === 5, playing true at the final frame, stocks == 1, NO ^DEAD state (the player never SDs in-trace), targetsDestroyed >= 2, endTargetGame false throughout (all-broken is never reached: finishGame is FOH plane, trapped in C); t01 additionally maxArticles > 0 (live laser flight). t01 fox/tstage1: TWO article (laser) breaks. t02 falcon/tstage2: TWO melee breaks, zero articles.",
+  "goldens": [
+    {
+      "id": "t01",
+      "name": "t01-fox-lasers-tstage1",
+      "trace": "t01-fox-lasers-tstage1.trace.json",
+      "frames": 3600,
+      "seed": 4801,
+      "char": 2,
+      "tstage": 0,
+      "minTargets": 2,
+      "wantArticles": true
+    },
+    {
+      "id": "t02",
+      "name": "t02-falcon-melee-tstage2",
+      "trace": "t02-falcon-melee-tstage2.trace.json",
+      "frames": 3600,
+      "seed": 4802,
+      "char": 4,
+      "tstage": 1,
+      "minTargets": 2,
+      "wantArticles": false
+    }
+  ]
+}

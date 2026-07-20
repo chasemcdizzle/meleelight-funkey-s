@@ -155,4 +155,10 @@ bool hd_segmentSegmentCollision(Vec2D a1, Vec2D a2, Vec2D b1, Vec2D b2);
 // (read-set projection; internal call sites pass the sim's value).
 void hd_knockbackSounds(double type, double knockback, double charId);
 
+// exported since M4 task 11 (visibility only, body untouched):
+// targetplay.js:27 imports interpolatedHitCircleCollision — the target
+// module (port/sim/target/target_play.c) is its second consumer.
+bool interpolatedHitCircleCollision(MlSim *S, Vec2D circlePos, double r,
+                                    double p, double j);
+
 #endif // ML_HIT_DETECTION_H

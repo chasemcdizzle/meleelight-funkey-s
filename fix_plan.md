@@ -1724,6 +1724,50 @@ overruns):
   them bit-exact host-side.
   done-check: `bash port/sim/target/check-target-sim.sh` → prints
   `TARGET SIM CONFORMS`, exit 0.
+  **DONE (iter 94, 2026-07-19) — committed form**: cold done-check
+  `TARGET SIM CONFORMS (2 goldens: t01 t02; leaves=718 probe=ok
+  teeth=6)` exit 0, FIRST attempt
+  (.loop/m4-task11-check-target-sim-run1.log). Pipeline stage `targets`
+  (TTAB1, FORMATS.md NEW §6): extractor.entry.js +=
+  `stages/targetstages/tstages` → `window.__targetStages` (measured
+  import-clean: only Vec2D/Box2D — no externals stubs needed), new
+  lib/targets-schema.js + stages/targets.js + lib/targets_check.c +
+  lib/targets-dump.js + check-targets.sh (`TARGETS OK`); expected.json
+  gained the measured-then-frozen `targets` section (10 stages, 85
+  boxes, 90 targets, 60 ledges, 2320 f64 / 280 i32); the M1 GATE is
+  EXTENDED not weakened — verify_pipeline.sh runs check-targets.sh and
+  a third round-trip block (38832 + 412 + **718** leaves, `PIPELINE OK`
+  re-verified cold). Sim plane `port/sim/target/`: target_play.{c,h}
+  (MlTargets module state; targetHitDetection/hitTargetCollision/
+  articleTargetCollision/destroyTarget/targetTimerTick/startTargetGame
+  verbatim incl. the DOUBLE-DESTROY quirk), target_main.c (sim_host_target
+  — emits BOTH streams + TFIN), target_hq_probe.c. New goldens
+  port/goldens-m4/{manifest-target.json, run-target.js, record-target.sh,
+  freeze-target.js, verify-target-stream.js, check-target-quality.js,
+  wrap-target.js, gen-t0{1,2}-trace.js}: **t01** fox/tstage1 seed 4801
+  (2 LASER/article breaks, maxArticles 1) · **t02** falcon/tstage2 seed
+  4802 (2 MELEE breaks, 0 articles); both browser-recorded ×2-identical,
+  quality-passed, frozen spec-v1 player stream + the SEPARATE
+  target-plane stream; C replays BOTH bit-exact 3600/3600.
+  TWO MEASURED REFUTATIONS of this task's own text (do NOT re-litigate):
+  (a) **polygonMap does not exist** on any authored stage (VS or target)
+  — builder/encode plane only, pinned ABSENT; (b) **no authored stage
+  carries damageType** (grep over all 16), so the "untrap the
+  stage-damage hq rows" premise is FALSE for authored data — the path
+  stays legitimately zero-live, sim_tick.c:355's VS trap STAYS, target
+  ticking carries its own same-shape trap, and the already-translated
+  CONSUME path (hit_detection executeHits/executeRegularHit) gains
+  mechanical coverage via the NEW standing `target_hq_probe` (drop-arm
+  tooth proven). Regressions: `SIM CONFORMS` 8/8 + `PIPELINE OK` cold.
+  Sim-TU edits were visibility-only (interpolatedHitCircleCollision and
+  interpolatedArticleCircleCollision static→extern, matching
+  targetplay.js's imports) + ML_MAX_LEDGES 8→16 (capacity; targetstage8
+  has 16 ledges) — behavioral identity proven by the bit-exact 8/8.
+  Gotcha class: a static key-set grep MISSED targetstage9's
+  `ledgePos :` (space before colon) — the schema's own exact-key-set
+  hard-throw caught it on the first executed walk, and it is carried
+  verbatim as an OPTIONAL key (the fdest-quirk faithfulness precedent);
+  measure with the EXECUTED walk, never the source grep alone.
 - task 12 — **target test, FOH + device**: target-test select flow +
   timer/records HUD in the FOH; every target golden replayed ON DEVICE
   with render + audio live, streams host-judged (both verifiers), p99

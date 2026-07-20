@@ -498,3 +498,55 @@ this model, implementing against THIS section with the same round-trip
 discipline (dual dump, hard-throw typing). PROVISIONAL (auto-adopted,
 iter 12). On disagreement between code and spec, the spec + a
 regenerated artifact set win.
+
+## 6. TTAB1 — generated C target-test stage tables
+
+Artifacts per pipeline run: `ml_targets.h` + `ml_targets.c` (the authored
+target-stage tables the M4 target sim and renderer link against) and
+`targets.json` (the canonical executed-JS model; doubles carried as bit
+patterns). Generator: `pipeline/stages/targets.js`. Source: the SAME
+extractor bundle as CTAB1/STAB1 (`dist/js/extractor.js`, the M4-task-11
+entry imports upstream's own aggregator
+`src/stages/targetstages/tstages.js` → `window.__targetStages`), executed
+under the shared `window` shim (`tables-schema.js loadExtractor`).
+
+### 6.1 Shape (measured-then-pinned, iter 94 — the STAB1 inverse)
+
+Ten authored stages, id order 0..9 == upstream
+`activeStage.js targetStageMapping` (`targetstage1`..`targetstage10`) ==
+the `setActiveStageTarget` selection domain. Per stage the EXACT key set
+(schema `pipeline/lib/targets-schema.js`, hard-throw on drift):
+`startingPoint` (pinned length 1 — `startTargetGame` reads only `[0]`),
+`box` (Box2D[] — the authored AABBs, PAYLOAD here, the inverse of
+STAB1's pinned-empty), `ground`/`ceiling`/`wallL`/`wallR`/`platform`
+(`[Vec2D, Vec2D]` surfaces; NO authored stage carries the optional
+SurfaceProperties third element — damageType is measured-absent across
+ALL authored stages, its appearance hard-throws, format-bump territory),
+`ledge` (`[type∈{ground,platform}, index (bounds-checked int32), side
+∈{0,1}]`), `target` (Vec2D[] — breakable centers; the collision radius
+is the CODE literal 7 in `targetplay.js`, not data), `scale` (f64),
+`blastzone` (Box2D), `offset` (int32[2]). OPTIONAL: `ledgePos` — EXACTLY
+one authored stage carries it (`targetstage9`, parallel to its 1-entry
+`ledge`; AI-only upstream, ai.js:890, and target mode fields no CPU —
+carried VERBATIM, the fdest-quirk faithfulness precedent; found by the
+schema hard-throw itself: the file's `ledgePos :` space-before-colon
+defeated the static key grep). `name`/`polygon`/`polygonMap`/
+`respawnPoints`/`respawnFace`/`startingFace`/`movingPlats`/
+`movingPlatforms`/`connected` are pinned ABSENT (polygonMap exists only
+on the builder/custom plane, scope-excluded per fix_plan §M4).
+
+### 6.2 Value encoding + round trip
+
+Same discipline as CTAB1 §3.1/STAB1 §4.3: doubles as `UINT64_C(0x…)` bit
+patterns + shortest-round-trip decimal comments (decode `ml_target_f64()`
+— named apart from `ml_f64`/`ml_stage_f64` so all generated headers can
+share a TU); ints int32 with generator hard-throws; empty lists emit
+count 0 / NULL. Canonical leaf dump grammar
+(`tstage/<name>/<field>[i]=<bits|ints>` + the `hasLedgePos` presence
+line): JS walker `pipeline/lib/targets-dump.js`, C twin
+`pipeline/lib/targets_check.c`; `pipeline/check-targets.sh` cmp(1)s the
+two byte-for-byte — 718 leaf values (measured-then-frozen, iter 94).
+Coverage pins live in `pipeline/expected.json` `targets` (10 stages, 90
+targets — targetstage6 has 9, targetstage9 has 1; 85 boxes; per-stage
+counts). On disagreement between code and spec, the spec + regenerated
+artifacts win.

@@ -128,4 +128,10 @@ void art_executeArticleHits(MlSim *S, MlArticles *A,
 // captured-domain overruns — rule 7).
 extern void ml_art_out_of_domain(const char *what);
 
+// exported since M4 task 11 (visibility only, body untouched):
+// targetplay.js:24 imports interpolatedArticleCircleCollision — the
+// target module (port/sim/target/target_play.c) is its second consumer.
+bool interpolatedArticleCircleCollision(MlArticles *A, int a,
+                                        Vec2D circlePos, double r);
+
 #endif // ML_ARTICLE_H

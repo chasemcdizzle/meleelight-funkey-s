@@ -60,7 +60,10 @@ typedef struct {
 
 typedef struct { MlConnHalf l, r; } MlConnPair;
 
-#define ML_MAX_LEDGES 8
+// 8 covered every VS stage (max 4); M4 task 11 widened the CAP to 16 for
+// the authored target stages (targetstage8 has 16 ledge entries) —
+// capacity only, no behavior change on the VS domain (check-sim 8/8).
+#define ML_MAX_LEDGES 16
 
 typedef struct {
   char list;    // 'g' (= "ground") | 'p' (= "platform"): ledge[j][0]

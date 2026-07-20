@@ -23,6 +23,7 @@ const STAGES = [
   require("./stages/tables"),
   require("./stages/stages"),
   require("./stages/audio"),
+  require("./stages/targets"),
 ];
 
 function arg(name, dflt) {

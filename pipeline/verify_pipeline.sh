@@ -8,17 +8,20 @@
 #      manifests + per-file hash verification in both dirs => every
 #      artifact byte-identical across the two runs) and rejects strays,
 #   b. every task-level stage check still passes UNCHANGED
-#      (check-animations / check-tables / check-stages / check-audio,
+#      (check-animations / check-tables / check-stages / check-audio /
+#      check-targets — the last joined at M4 task 11, gate EXTENDED —
 #      each with its own fresh double-run and stage-specific gates),
 #   c. the FULL pinned coverage contract pipeline/expected.json holds on
 #      the integrated run (check-expected.js default = every pinned
 #      section: 5 chars / 744 states / 27,808 paths / the live 754-file
 #      reconciliation / 6 stages / 204 SFX blobs with 180 mapped sounds /
-#      8 tracks / ffmpeg pins + frozen audio aggregate),
+#      8 tracks / ffmpeg pins + frozen audio aggregate / 10 authored
+#      target stages with 90 targets),
 #   d. compiled round-trips against the INTEGRATED run's own artifacts:
-#      generated ml_tables.c and ml_stages.c compile (cc -ffp-contract=off)
-#      and their canonical leaf dumps are byte-identical to fresh
-#      executed-JS walks — exactly 38832 + 412 leaf values (pinned),
+#      generated ml_tables.c, ml_stages.c and ml_targets.c compile
+#      (cc -ffp-contract=off) and their canonical leaf dumps are
+#      byte-identical to fresh executed-JS walks — exactly 38832 + 412 +
+#      718 leaf values (pinned),
 #      plus the framesData/ECB<->ANIM1 xref reconciliation on gate-a,
 #   e. no-commit guard — ALL pipeline build output (incl. Nintendo-derived
 #      audio blobs) is gitignored; nothing under build/ tracked or staged.
@@ -34,8 +37,11 @@ GATE_T0=$SECONDS
 # ---- shared prerequisite: extractor bundle (idempotent, stamp-cached) ----
 bash extractor/build-extractor.sh
 
-# ---- (b) all four task-level stage checks, unchanged ---------------------
-for chk in check-animations.sh check-tables.sh check-stages.sh check-audio.sh; do
+# ---- (b) all task-level stage checks, unchanged ---------------------------
+# (check-targets.sh joined at M4 task 11 — the gate contract EXTENDED
+# measured-then-frozen per fix_plan §M4 conventions, never weakened.)
+for chk in check-animations.sh check-tables.sh check-stages.sh check-audio.sh \
+           check-targets.sh; do
   echo "=== gate: $chk ==="
   bash "$chk"
 done
@@ -83,8 +89,18 @@ STG_LEAVES=$(wc -l < "$RT/stages-c.dump" | tr -d ' ')
 [ "$STG_LEAVES" -eq 412 ] \
   || { echo "FAIL: stages round-trip leaf count $STG_LEAVES != pinned 412"; exit 1; }
 
+cc -std=c99 -O1 -ffp-contract=off -Wall -Wextra -Werror \
+  -Ibuild/gate-a -o "$RT/targets_check" lib/targets_check.c build/gate-a/ml_targets.c
+"$RT/targets_check" > "$RT/targets-c.dump"
+node lib/targets-dump.js "$DIST" > "$RT/targets-js.dump"
+cmp "$RT/targets-c.dump" "$RT/targets-js.dump" \
+  || { echo "FAIL: C target dump != fresh executed-JS walk (round-trip, gate-a)"; exit 1; }
+TGT_LEAVES=$(wc -l < "$RT/targets-c.dump" | tr -d ' ')
+[ "$TGT_LEAVES" -eq 718 ] \
+  || { echo "FAIL: targets round-trip leaf count $TGT_LEAVES != pinned 718"; exit 1; }
+
 echo "round-trip: compiled C == fresh executed-JS walk on the integrated run" \
-  "($TAB_LEAVES + $STG_LEAVES leaf values, bit-exact)"
+  "($TAB_LEAVES + $STG_LEAVES + $TGT_LEAVES leaf values, bit-exact)"
 rm -rf "$RT"
 
 # ---- (e) no-commit guard for ALL build output -----------------------------

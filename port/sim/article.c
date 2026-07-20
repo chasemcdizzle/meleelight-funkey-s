@@ -25,8 +25,8 @@ static bool articleHitCollision(MlSim *S, MlArticles *A, int a, double v,
                                 int k);
 static bool articleShieldCollision(MlSim *S, MlArticles *A, int a, double v,
                                    bool previous);
-static bool interpolatedArticleCircleCollision(MlArticles *A, int a,
-                                               Vec2D circlePos, double r);
+// non-static since M4 task 11: targetplay.js:24 imports this export —
+// visibility-only change, body untouched; prototype in article.h.
 static bool interpolatedArticleHurtCollision(MlSim *S, MlArticles *A, int a,
                                              double v);
 static bool articleHurtCollision(MlSim *S, MlArticles *A, int a, double v,
@@ -683,9 +683,10 @@ static bool articleShieldCollision(MlSim *S, MlArticles *A, int a, double v,
 }
 
 // --- export function interpolatedArticleCircleCollision (a,circlePos,r) ---------------
+// (exported since M4 task 11 — targetplay.js:24 imports it; body untouched)
 
-static bool interpolatedArticleCircleCollision(MlArticles *A, int a,
-                                               Vec2D circlePos, double r) {
+bool interpolatedArticleCircleCollision(MlArticles *A, int a,
+                                        Vec2D circlePos, double r) {
   const Vec2D h1 = A->a[a].posPrev;
   const Vec2D h2 = A->a[a].pos;
   const double s = A->a[a].hb.size;

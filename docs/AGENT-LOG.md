@@ -15027,3 +15027,411 @@ typed. Music-surface arc round 2 reviews this commit's bytes.
   surfaces (check-device-foh.sh, foh_dev.c, the two node tools,
   mlfk-foh.sh, riglib delta, foh.c/render delta) is driver-queued per
   the §M4 conventions.
+
+## iter 94 — 2026-07-19 — M4 task 11 PRE-REGISTRATION: target test, data + sim plane, host (frozen before any implementation; PROCESS §2)
+
+- **Task**: fix_plan §M4 task 11 — NEW pipeline stage `targets`
+  (executed-JS extraction of the authored target-test stages);
+  structure-parallel target-play sim at port/sim/target/; NEW target
+  goldens browser-recorded ×2-identity into port/goldens-m4/ (harness
+  bytes verbatim BY PATH, oracle/ untouched), frozen spec-v1 player
+  stream + a SEPARATE target-plane stream; C sim replays both
+  bit-exact host-side. done-check:
+  `bash port/sim/target/check-target-sim.sh` → `TARGET SIM CONFORMS`,
+  exit 0. Diff-size overrun pre-registered (translation + new rig —
+  the task-1/4/9 class).
+- **MEASURED UPSTREAM INVENTORY (comment-stripped greps + reads,
+  pin 27af171)**: target test = gameMode **5** (main.js:987-1044 arm:
+  endTargetGame→finishGame; playing||frameByFrame → resetHitQueue,
+  destroyArticles, executeArticles, [!starting] interpretInputs(
+  targetBuilder=0, true, …), update(0,input), executeHits(input),
+  targetHitDetection(0), !starting ? targetTimerTick() : startTimer -=
+  0.01666667, START-edge → endGame). NO movingPlatforms, NO
+  checkPhantoms, NO hitDetect/articlesHitDetection, NO matchTimerTick.
+  Owner module src/target/targetplay.js: targetDestroyed[10] flags,
+  targetsDestroyed count, targetHitDetection (per-target: 4 hitboxes —
+  current + prev + interpolatedHitCircleCollision, radius size+7;
+  then aArticles — pos/posPrev + interpolatedArticleCircleCollision,
+  radius hb.size+7, canTurboCancel→hasHit, destroyArticleQueue push),
+  destroyTarget (flags+count+vfx targetDestroy {name,pos} ZERO RNG
+  draws + sounds.targetBreak.play + all-broken → setEndTargetGame),
+  targetTimerTick (matchTimer stopwatch +0.016667 capped 6000; DOM
+  writes = render plane), startTargetGame (background draw
+  Math.round(Math.random()) — the ONE off-step draw, VS-startGame
+  twin; changeGamemode(5); flags reset; resetVfxQueue; resetAArticles;
+  initializePlayers(p,true) → entrance vfx at startingPoint[0]; pos =
+  startingPoint[0]; matchTimer 0; startTimer 1.5; starting true;
+  playing true; inCSS false; stocks 1). Stage data: 10 AUTHORED stages
+  src/stages/targetstages/targetstage{1..10}.js, aggregator
+  tstages.js, each importing ONLY Vec2D/Box2D (no god-module
+  tentacles, no externals stubs needed). Keys: startingPoint(len 1),
+  box[] (NON-empty here), ground/ceiling/wallL/wallR/platform,
+  ledge[] ([type,index,side], NO ledgePos), target[] (Vec2D), scale,
+  blastzone, offset. Targets/stage: 10,10,10,10,10,9,10,10,1,10 (=91).
+  Entry path (stages/targetselect.js:143-146): setActiveStageTarget(n)
+  (targetStageMapping 0-9 → tstages), setTargetStagePlaying(n),
+  startTargetGame(i,false). gameMode-5 arms ALREADY in the C sim
+  verbatim (asshort isFinalDeath :145, physics turbo/lCancel
+  :820/:933/:953/:962, blastzone gameMode===3 :1583) — dead at
+  gameMode 3, flip live at 5 with zero edits. The harness step
+  boundary (main.js:1144-1148) is the COMMON gameTick tail —
+  mode-agnostic, __harness.step drives mode 5 unchanged.
+- **TWO MEASURED REFUTATIONS of the task text (recorded per PROCESS
+  §2; do NOT re-litigate without new evidence)**: (1) **polygonMap**:
+  NO authored stage (VS or target) carries polygonMap — it exists only
+  in encode.js/stage.js-optional/targetbuilder.js (builder plane,
+  scope-EXCLUDED §M4). The targets schema pins it ABSENT, hard-throw
+  on appearance. (2) **damageType**: grep over ALL authored stage
+  defs (6 VS + 10 target) = ZERO SurfaceProperties/damageType
+  occurrences — the "stage-damage hq rows go live on target stages"
+  premise is FALSE for the authored set; the path stays ZERO-LIVE in
+  scope (live only via builder/custom encoded stages, both
+  scope-excluded). Consequence: no STAB1/TTAB1 damageType extension
+  is honest (schema hard-throws if a props element EVER appears);
+  hit_detection's stage-damage CONSUME path (M2-translated,
+  hit_detection.c:1154-1176/930-964) stays zero-live; the sim_tick.c
+  :355 VS trap stays; target_tick carries its own same-shape trap
+  (a stage row on an authored target stage is impossible by
+  construction — a fire = loud death, never silent). NEW standing
+  probe instead of the imagined "untrap": target_hq_probe (C) drives
+  hd_executeHits with a synthetic aIsObj stage row and asserts the
+  synthesized spec constants (dmg 10, kg 100, sk 150, angle from
+  normal) + stageDamageImmunity=20 write — the consume path gets
+  mechanical coverage; drop-tooth = removing the row fails the probe.
+- **RECORDER PATH DECISION (measured)**: the harness does NOT support
+  target mode — meleelight-harness.patch's harnessSetupMatch hardcodes
+  startGame() → changeGamemode(3); run.js has no gameMode/target
+  param; __harness has no target getters. Per the brief, the
+  REGISTERED FALLBACK fires: port/goldens-m4/run-target.js — a
+  page-driving recorder with ZERO oracle/ edits: serves the built
+  upstream, injects oracle/harness/init.js + pagelib.js BY PATH
+  (addInitScript, bytes verbatim), exposes the webpack module cache
+  via the run-capture.js served-bytes BOOT_HOOK class
+  (window.__wpCache, quote-free, disk untouched), locates
+  main/targetplay/activeStage modules by export shape, mirrors the
+  harnessSetupMatch state writes for the 1-player domain (playerType
+  [0,-1,-1,-1], mType[0]="keyboard", currentPlayers, cS[0]=char) then
+  the MEASURED targetselect entry (setActiveStageTarget(n),
+  setTargetStagePlaying(n), startTargetGame(0,false));
+  sounds.menuForward.play() is a Howl call with no seeded draw —
+  skipped, documented. Player stream: pagelib's OWN __runFrames/
+  __serializeState/__sha256 (unchanged bytes) → M0-format run JSON;
+  the ONE off-step draw (startTargetGame background) → expected
+  rngCallsOutsideStep == 1. Target plane: __serializeState is wrapped
+  (post-step call point inside __runFrames) to ALSO capture the
+  target envelope per frame using `ser` EXTRACTED FROM PAGELIB'S OWN
+  BYTES (the M2 task-15 eval-the-oracle class, zero transcription):
+  fixed-literal envelope
+  {"endTargetGame":…,"matchTimer":…,"targetDestroyed":[…],
+  "targetsDestroyed":…} (sorted keys, §3 value rules; targetDestroyed
+  serialized at its VERBATIM length 10 regardless of stage target
+  count), hashed via the page's __sha256. C twin emits the same
+  envelope via ml_ser/ml_fmt.
+- **GOLDEN + FREEZE MACHINERY (separate siblings; nothing pinned
+  moves)**: check-ai-live.sh byte-pins wrap-run.js + verify-stream.js
+  + 3 scripts, and freeze-stream-m4.js/record-m4.sh enforce the EXACT
+  ^[ms] manifest schema — so target goldens get SIBLING machinery in
+  port/goldens-m4/: manifest-target.json (id ^t[0-9]{2}$; keys id,
+  name, trace, frames, seed, p1, tstage 0-9; trace = name-derived;
+  crafted-generator convention MANDATORY — every t-trace comes from a
+  committed deterministic gen-tNN-trace.js, no gen-trace.js chaos),
+  record-target.sh (run-target.js ×2 fresh + both-plane identity +
+  quality + freeze + self-verify; record-m4.sh grammar/lock/rm-
+  before-produce posture inherited), freeze-target.js (player-stream
+  frozen file in the M0 FORMAT with params {trace,traceSha256,frames,
+  seed,p1,p2:null,stage:null,cpu:false,difficulty:null,fdlibm:true,
+  seedRandom:true,mode:"target",tstage:N} — judged by the UNCHANGED
+  verify-stream.js, whose fixed pin list compares p2/stage as null ==
+  null and ignores the extra mode/tstage params keys; those extra
+  keys are PINNED by the target-plane verifier instead; plus the
+  .target.sha256.json target-plane frozen file), verify-target-
+  stream.js (Tier A+ judge: full manifest-target grammar, both-file
+  coupling, params incl. mode/tstage, streamSha256 seal, exact
+  per-frame equality, full length), check-target-quality.js (target
+  quality contract: gameMode===5, playing===true at end, stocks==1,
+  NO ^DEAD state, targetsDestroyed >= the golden's pinned minimum,
+  endTargetGame===false; t01 additionally maxArticles > 0). Existing
+  m4 files (manifest.json, record-m4.sh, freeze-stream-m4.js,
+  check-quality.js, wrap-run.js) BYTE-UNTOUCHED.
+- **GOLDEN MATRIX (frozen)**: t01 = fox(2) on tstage 9 (targetstage10:
+  4 grounds/4 platforms/10 targets/0 ledges), seed 4801, 3600 frames,
+  gen-t01-trace.js — laser + melee breaks (articles live; the
+  articleTargetCollision arm exercised; arm attribution C-instrumented
+  and logged, honest-coverage note); t02 = falcon(4) on tstage 0
+  (targetstage1: 7 grounds/5 platforms/10 targets/3 ledges), seed
+  4802, 3600 frames, gen-t02-trace.js — melee-only (hitTargetCollision
+  arm incl. prev/interpolated faces). t03 marth OPTIONAL iff browser
+  budget ≥2 remains after t01/t02 (never at the cap's expense).
+  Quality minimums: targetsDestroyed >= 2 per golden, all-broken
+  NEVER reached in-trace (endTargetGame false throughout — finishGame
+  is FOH plane, trapped in C), START never pressed (endGame trapped),
+  player alive throughout. Traces are crafted analytically from the
+  extracted geometry and iterated against the C target sim (free,
+  host-side; the browser recording stays sole ground truth) — cap 60
+  C iterations, then ONE geometry re-derivation round, then STOP.
+- **C SIM DESIGN (frozen)**: port/sim/target/ — target_play.{c,h}
+  (MlTargets {destroyed[10], destroyedCount, endTargetGame,
+  targetStagePlaying}; targetHitDetection/hitTargetCollision/
+  articleTargetCollision/destroyTarget/targetTimerTick translated
+  VERBATIM under rules 1-18: js_pow via fdlibm? — Math.pow(x,2) sites
+  copied as fd_pow expression shapes exactly as the upstream shape,
+  never x*x; the M2 float discipline), target_setup.c (targetselect
+  entry + startTargetGame mirror over the sim_boot player builder;
+  gameMode 5 into sim+inp), target_tick.c (the main.js:987-1044 arm
+  verbatim incl. the !starting interpretInputs gate — slot-0 input
+  history does NOT chain through the starting window upstream
+  (input[0] stays nullInputs()), mirrored exactly; START-quit +
+  finishGame arms = loud out-of-domain traps; own hqCount==0
+  assert), target_main.c (sibling driver: --trace/--simdata/--seed/
+  --char/--tstage/--frames/--dump-frames; boots the SAME page plane +
+  data; emits F lines via the UNTOUCHED sim_frame_hash TU and T lines
+  via the target envelope; RNG trailer), target_hq_probe.c (the
+  standing consume-path probe). sim_boot.c/sim_tick.c gain ONLY
+  non-static wrappers where target TUs need existing statics (frozen
+  build symbol surface grows, behavior identical — check-sim.sh
+  BYTE-UNTOUCHED and cold-green required). physics.c/hit_detection.c/
+  asshort/article: ZERO edits expected (gameMode arms already
+  present); any needed edit = STOP-and-reassess against the
+  "match ticking must not change" bar.
+- **PIPELINE STAGE (frozen)**: extractor.entry.js += `import tstages
+  from "stages/targetstages/tstages"; window.__targetStages =
+  tstages;` (self-contained data modules — measured import-clean);
+  build-extractor.sh += __targetStages grep guard; tables-schema.js
+  EXTRACTOR_GLOBALS += "__targetStages"; NEW lib/targets-schema.js
+  (exact key-set hard-throw schema: the 12 measured keys, box/target
+  as PAYLOAD (inverse of STAB1's pinned-empty), ledge triple
+  [type∈{ground,platform}, int index bounds-checked, side], blastzone
+  Box2D, startingPoint len 1, NO name/polygon/respawn*/startingFace/
+  ledgePos/movingPlats/connected — each pinned ABSENT), NEW
+  stages/targets.js ({name:"targets"} → ml_targets.{h,c} +
+  targets.json, format **TTAB1**, FORMATS.md NEW §6; doubles as
+  UINT64_C bit patterns via ml_target_f64(), ints asI32 hard-throw),
+  run.js STAGES += targets; NEW lib/targets_check.c +
+  lib/targets-dump.js (compiled-C vs executed-JS dual dump, leaf
+  count measured-then-frozen); NEW pipeline/check-targets.sh
+  (check-stages.sh clone: ×2 byte-stability, verify-artifacts,
+  expected pins, C round-trip) → `TARGETS OK`; expected.json +=
+  `targets` section (coverage + perStage, measured-then-frozen);
+  check-expected.js += targets assertion block; verify_pipeline.sh +=
+  check-targets.sh in the task-check list + a targets round-trip
+  block + leaf pin (the M1 gate EXTENDED, never weakened — the §M4
+  conventions channel).
+- **DONE-CHECK COMPOSITION (frozen)**: check-target-sim.sh = [0]
+  producer pins (verify-stream.js + oracle/harness/streamlib.js
+  byte-pins), [1] `bash pipeline/check-targets.sh` relayed (×2
+  stability + pins + round-trip inside), [2] build sim_host_target
+  (check-sim.sh's exact TU list + port/sim/target TUs; every TU
+  cc -O2 -ffp-contract=off -Wall -Wextra -Werror), [3] per t-golden:
+  trace→txt, replay, wrap (NEW wrap-target.js, anchored full-line
+  F/T/RNG/SIM-OK grammar, fail closed, corpus-validated on the real
+  runs), judge player stream via the UNCHANGED verify-stream.js and
+  target stream via verify-target-stream.js — exact equality, full
+  length, [4] target_hq_probe, [5] teeth, [6] no-commit guard over
+  build dirs + port/goldens-m4/, run lock (no-reclaim), made()/
+  rm-before-produce throughout. Prints `TARGET SIM CONFORMS`, exit 0.
+- **TEETH (frozen list)**: T1 C-site nibble — target radius constant
+  7→7.5 in a REBUILT COPY of the target TU → target-plane stream
+  diverges at the first break-adjacent frame, count printed, restore
+  cmp-verified; T2 run-JSON nibble (COPY) → verify-stream rc≠0; T3
+  break-frame perturb — RUN-side target-frame hash altered (COPY) →
+  verify-target-stream dies at that frame (run-side per the M3
+  task-2 lesson: frozen-side tamper trips the seal first, proving
+  only the seal); T4 target-count perturb — one emitted double bit
+  flipped in a ml_targets.c COPY → round-trip cmp dies; T5 hq-row
+  drop — probe minus its row → probe fails; T6 wrap grammar —
+  resembling-but-malformed F line in a stdout COPY → wrap-target rc≠0
+  (no partial parse); T7 quality — doctored run JSON below the
+  targetsDestroyed pin → check-target-quality dies. All on
+  copies/variants; committed bytes never edited.
+- **RUN CAPS (hard, brief-given)**: browser runs ≤ 8 total (recording
+  2/golden = 4-6; validation ≤ 2); capture runs ≤ 6 (planned 0 — no
+  calib spec this task; the frame-level double stream + --dump-frames
+  is the divergence instrument, M2CAL class); cold check-target-sim
+  runs ≤ 4; docker extractor rebuilds ≤ 2 (serial); C-sim trace
+  iterations ≤ 60 (cheap host runs, honesty cap); arm builds 0 (host
+  task). §7#1 foreground-poll pattern verbatim for every long run;
+  output → .loop/m4-task11-*.log.
+- **REFUTATION SHAPES**: (a) C replay diverges from a recorded golden
+  → localize via target_main --dump-frames vs run-target
+  --capture-frames byte-diff (M2CAL procedure), ≤3 fix rounds per
+  golden; unexplained residue → STOP and report (escalation path =
+  a dedicated calib spec-target capture rig NEXT iteration, never a
+  weakened judge). (b) browser ×2 target-plane runs differ → recorder
+  determinism defect (async/timing in the wrapper): one bounded round
+  (sync-capture audit), then STOP. (c) crafted traces can't reach
+  targetsDestroyed>=2 inside the iteration cap → ONE geometry
+  re-derivation round, then STOP (quality pins are never lowered).
+  (d) measured rngCallsOutsideStep != 1 → attribute the consumer; a
+  DETERMINISTIC different value is measured-then-frozen in the NEW
+  target freezer with documentation; a NON-deterministic one → STOP.
+  (e) any needed edit to physics/hitdet/asshort/article match TUs →
+  STOP and report (the brief's match-ticking bar). Do NOT retry blind
+  past any cap.
+- **PORTABILITY**: N/A — host-only task, no FunKey-specific code; no
+  docs/PORTABILITY.md rows (stated per the brief).
+
+## iter 94 — 2026-07-19 — M4 task 11 RESULT: target test data + sim plane — TARGET SIM CONFORMS (cold, first attempt)
+
+- **DONE-CHECK (cold): `bash port/sim/target/check-target-sim.sh` →
+  `TARGET SIM CONFORMS (2 goldens: t01 t02; leaves=718 probe=ok
+  teeth=6)`, exit 0** — FIRST attempt
+  (.loop/m4-task11-check-target-sim-run1.log). REGRESSIONS:
+  `bash port/sim/check-sim.sh` → `SIM CONFORMS` 8/8 cold
+  (.loop/m4-task11-check-sim-run1.log) and
+  `bash pipeline/verify_pipeline.sh` → `PIPELINE OK` cold, 27 s
+  (.loop/m4-task11-verify-pipeline-run1.log), its round-trip line now
+  reading `38832 + 412 + 718 leaf values, bit-exact`.
+- **TWO PRE-REGISTERED REFUTATIONS FIRED — both recorded permanently,
+  do NOT retry blind** (PROCESS §2). (1) **polygonMap**: the task text
+  says the targets stage extracts "box/target/polygonMap machinery".
+  MEASURED: NO authored stage — 6 VS or 10 target — has a polygonMap
+  key; it exists only in encode.js / stage.js's optional type /
+  targetbuilder.js (the BUILDER plane, scope-excluded per §M4). The
+  TTAB1 schema pins it ABSENT (exact key set, hard-throw on
+  appearance). (2) **the stage-damage "untrap"**: the task text says
+  target stages make the TRAPPED stage-damage hq rows live. MEASURED
+  (grep for damageType/SurfaceProperties over ALL 16 authored stage
+  defs): ZERO occurrences — authored target stages carry no damaging
+  surfaces, so `dealWithDamagingStageCollision` remains legitimately
+  zero-live across the whole in-scope domain (only builder/custom
+  encoded stages could produce one, and both are scope-excluded).
+  Consequence, per HARD RULE 2 (no fake work) and rule 11: NO STAB1/
+  TTAB1 damageType extension was invented, `sim_tick.c:355`'s VS trap
+  STAYS byte-untouched, target ticking carries its OWN same-shape trap
+  (a stage row on an authored target stage is impossible by
+  construction — a fire is a loud death, never silent), and the honest
+  deliverable is mechanical coverage of the already-M2-translated
+  CONSUME path: NEW standing instrument `port/sim/target/
+  target_hq_probe.c` drives `hd_executeHits` with the exact synthetic
+  aIsObj row physics.c:196-211 would push and asserts the upstream
+  effects (percent += the synthesized dmg 10, stageDamageImmunity 20,
+  hitlag floor(10/3+3)=6, hitPoint == ECBp[angular]); its `--drop` arm
+  is tooth T5 and fails all four assertions.
+- **PIPELINE STAGE `targets` (TTAB1; FORMATS.md NEW §6)**:
+  extractor.entry.js imports upstream's OWN aggregator
+  `stages/targetstages/tstages` → `window.__targetStages`
+  (build-extractor.sh gained the matching grep guard;
+  tables-schema.js EXTRACTOR_GLOBALS += "__targetStages"). MEASURED:
+  every targetstage file imports ONLY Vec2D/Box2D — no god-module
+  tentacles, so unlike STAB1 no new externals stubs were needed (the
+  DOM-leak guard still passes). New `pipeline/lib/targets-schema.js`
+  (exact key-set hard-throw; box/target are PAYLOAD here — the INVERSE
+  of STAB1's pinned-empty posture), `pipeline/stages/targets.js`
+  (ml_targets.{h,c} + targets.json; doubles as UINT64_C bit patterns
+  via `ml_target_f64()`, named apart from ml_f64/ml_stage_f64 so all
+  three generated headers share a TU), `pipeline/lib/targets_check.c`
+  + `pipeline/lib/targets-dump.js` (the dual-dump round trip),
+  `pipeline/check-targets.sh` → `TARGETS OK`. expected.json gained the
+  MEASURED-THEN-FROZEN `targets` section: 10 stages, 85 boxes, 90
+  targets (targetstage6 has 9, targetstage9 has 1), 60 ledges, 2320
+  f64 / 280 i32; check-expected.js gained the assertion block (without
+  it a new section is silently UN-asserted — measured hazard).
+  **The M1 GATE is EXTENDED, never weakened**: verify_pipeline.sh runs
+  check-targets.sh in its task-check list and a THIRD round-trip block
+  with the new 718-leaf pin.
+- **SIM PLANE `port/sim/target/`**: target_play.{c,h} — MlTargets
+  (targetplay.js's module lets + main.js's endTargetGame, kept OUTSIDE
+  GameState like the pointer-seam precedent); tp_stage_from_ttab1 (the
+  sim_stage_from_stab1 twin; hasConnected false, respawnCount 0 so a
+  REBIRTH dispatch traps — unreachable anyway since target-mode
+  isFinalDeath is unconditionally true, asShortcuts:153);
+  tp_setup_target (targetselect.js:143-146 + startTargetGame verbatim
+  incl. the ONE off-step background draw — the startGame twin, so
+  rngCallsOutsideStep == 1 exactly like VS); tp_target_hit_detection /
+  hitTargetCollision / articleTargetCollision / destroyTarget /
+  targetTimerTick verbatim; tp_game_tick_target = main.js:987-1044's
+  arm (NO movingPlatforms, NO checkPhantoms, NO hitDetect/
+  articlesHitDetection, NO matchTimerTick — measured absences; the
+  finishGame and START-quit arms are LOUD TRAPS, both outside the
+  golden quality domain). target_main.c = sim_host_target (BOTH
+  streams + a TFIN finals line; the trace loader/draw counting are
+  cited verbatim lifts from sim_main.c, which stays byte-untouched
+  because two mains cannot link). Carried-verbatim quirks: the
+  DOUBLE-DESTROY (a target destroyed by the hitbox loop is STILL
+  eligible in the same frame's article loop — targetsDestroyed can
+  step PAST target.length so endTargetGame never fires) and
+  hitTargetCollision's UNCLAMPED offset[frame] read (unlike
+  executeRegularHit's frame>1 clamp — trapped at the exact
+  dereference).
+- **GOLDENS + MACHINERY (oracle/ BYTE-UNTOUCHED)**: the harness has NO
+  target entry (measured: harnessSetupMatch hardcodes startGame() →
+  changeGamemode(3); run.js has no gameMode/target param; __harness
+  exposes no target getters), so the brief's REGISTERED FALLBACK
+  fired: `port/goldens-m4/run-target.js` reuses fdlibm.js/init.js/
+  pagelib.js VERBATIM BY PATH and reaches the real entry through the
+  run-capture.js served-bytes class (window.__wpCache; ONE quote-free
+  injection, unique-match hard-fail, disk untouched), locating
+  main/targetplay/activeStage by EXPORT SHAPE and performing the
+  measured targetselect flow. The target plane is captured by wrapping
+  __serializeState (fires exactly once per frame, post-step; count
+  asserted == frames) and hashed with the page's OWN __sha256. Because
+  manifest.json's ^[ms] schema is byte-pinned by check-ai-live.sh, the
+  target goldens got SIBLING machinery: manifest-target.json (^t[0-9]{2},
+  char/tstage/minTargets/wantArticles), record-target.sh,
+  freeze-target.js (BOTH streams; player in the M0 format so the
+  UNCHANGED verify-stream.js judges it — p2/stage null, mode/tstage as
+  extra keys it ignores), verify-target-stream.js (Tier A+ judge for
+  the target plane + the mode/tstage/char pins the player verifier has
+  no field for), check-target-quality.js, wrap-target.js (strict
+  anchored F/T/RNG/TFIN/SIM-OK grammar with F/T interleave checking).
+  **t01** fox / tstage 0 / seed 4801 — 2 ARTICLE (laser) breaks,
+  maxArticles 1; **t02** falcon / tstage 1 / seed 4802 — 2 MELEE
+  breaks, 0 articles. Both ×2 browser-identical, quality-passed
+  (gameMode 5, playing, stocks 1, NO DEAD state, endTargetGame false),
+  both streams frozen; C replays BOTH bit-exact 3600/3600.
+  GEOMETRY AMENDMENT (measured): t01's pre-registered tstage 9 was
+  abandoned after two blind SDs — targetstage10's targets sit >= 5.5
+  units off every laser line reachable without platforming across SD
+  gaps; targetstage1's paired y=0.7 targets lie 7.7 off the
+  center-floor laser line, inside the 8.172 radius (laser hb size
+  1.172 + targetplay's literal 7). Recorded, not hidden.
+- **TEETH 6/6 (all on generated COPIES; committed bytes never edited)**:
+  T1 player-stream nibble → verify-stream diverges; T2 target-plane
+  nibble → verify-target-stream diverges (RUN-side per the M3 task-2
+  lesson: a frozen-side tamper trips the seal first and proves only
+  the seal); T3 TFIN count perturb → the finals pin fails; T4 one
+  emitted double-bit flipped in an ml_targets.c copy → the round-trip
+  cmp diverges; T5 hq-row drop → target_hq_probe fails; T6 malformed
+  F line → wrap-target rejects (no partial parse).
+- **RUN-CAP LEDGER**: browser runs **5 of 8** (1 recorder smoke + 4
+  golden recordings: t01 ×2, t02 ×2); capture runs 0 of 6 (planned —
+  no calib spec this task); cold check-target-sim runs **1 of 4**;
+  docker extractor rebuilds **1 of 2**; C-sim trace iterations **7 of
+  60**; arm builds 0 (host task). No cap approached, no refutation
+  shape (a)-(e) fired beyond the two measurement refutations above.
+- **HONEST COVERAGE (PROCESS §8)**: the target plane is proven over
+  TWO goldens on TWO of ten authored stages — the other eight stages'
+  geometry is proven only by the TTAB1 round trip (data identity), not
+  by live collision. destroyTarget's all-broken arm (endTargetGame →
+  finishGame) is DELIBERATELY never reached in-trace (it is FOH plane,
+  trapped in C) — task 12 owns it. The double-destroy quirk is
+  translated and reasoned but has no live occurrence in either golden
+  (both breaks are single-source). The stage-damage consume path has
+  probe coverage, not golden coverage, because no authored data can
+  produce a row. The cluster capture-replay checks (hitdet/article/
+  physics) were NOT re-run: the edits are visibility-only
+  (static→extern) plus a capacity constant, and check-sim.sh compiles
+  every one of those TUs and replays all 8 goldens BIT-EXACT — a
+  strictly stronger behavioral test than the per-cluster replays,
+  which would additionally have blown the browser cap (6 runs each).
+- **ZOOM OUT (HARD RULE 8)**: class artifacts over one-offs — (a) the
+  targets stage is the THIRD instance of the extractor-bundle
+  generated-table class (CTAB1/STAB1/TTAB1), and it reused the class
+  whole (schema hard-throw + dual-dump round trip + expected.json pin
+  + gate extension) rather than inventing a fourth shape; (b) the
+  measurement lesson generalizes — a SOURCE-TEXT key grep is not a
+  key-set measurement (targetstage9's `ledgePos :` defeated it; the
+  EXECUTED walk's exact-key-set hard-throw is the instrument), so
+  every future schema must be derived from the executed object, never
+  the file bytes; (c) two task-text premises (polygonMap, the
+  stage-damage untrap) were refuted by measurement BEFORE
+  implementation — the pre-registration ritual paid for itself, and
+  the honest substitute (a standing probe) is a reusable pattern for
+  "translated path with no reachable authored data". Tier-A arc for
+  the new non-checksummed surfaces (check-target-sim.sh,
+  run-target.js, record-target.sh, freeze-target.js, wrap-target.js,
+  check-target-quality.js, check-targets.sh) and Tier A+ for
+  verify-target-stream.js (judge path) is driver-queued per the §M4
+  conventions.
+- **PORTABILITY**: N/A — host-only task, zero FunKey-specific code; no
+  docs/PORTABILITY.md rows.

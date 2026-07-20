@@ -3,7 +3,46 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 93 — M4 task 10 DONE: FOH on device, first full device attempt green)
+## Live right now (updated: 2026-07-19, iter 94 — M4 task 11 DONE: target test data + sim plane, host; cold check green first attempt)
+
+- **Iter 94 (M4 task 11 — target test, data + sim plane, host) DONE**
+  (full entry: AGENT-LOG iter 94 pre-registration + result; latest
+  AGENT-LOG id: iter 94). COLD: **`TARGET SIM CONFORMS (2 goldens:
+  t01 t02; leaves=718 probe=ok teeth=6)`** exit 0, FIRST attempt
+  (.loop/m4-task11-check-target-sim-run1.log). NEW pipeline stage
+  `targets` (TTAB1, FORMATS.md §6): 10 authored target stages via
+  upstream's own tstages aggregator -> window.__targetStages, 718-leaf
+  C-vs-executed-JS round trip, expected.json `targets` section
+  measured-then-frozen. NEW sim plane `port/sim/target/` (target_play,
+  target_main = sim_host_target, target_hq_probe). NEW goldens t01
+  fox/tstage1 (2 laser/article breaks) + t02 falcon/tstage2 (2 melee
+  breaks), browser-recorded x2-identical, frozen spec-v1 player stream
+  + the SEPARATE target-plane stream; C replays BOTH bit-exact
+  3600/3600.
+  **TWO MEASURED REFUTATIONS of the task text (permanent; do NOT
+  re-litigate)**: (1) polygonMap exists on NO authored stage (builder
+  plane only) -> pinned ABSENT; (2) NO authored stage carries
+  damageType -> the "untrap the stage-damage hq rows" premise is FALSE,
+  the path stays legitimately zero-live, sim_tick.c:355's VS trap
+  STAYS, and the honest deliverable is the NEW standing
+  `target_hq_probe` covering the already-translated CONSUME path
+  (drop-arm tooth proven).
+  REGRESSIONS: `SIM CONFORMS` 8/8 cold + `PIPELINE OK` cold (the M1
+  gate EXTENDED: 38832 + 412 + 718 leaves). Sim-TU edits were
+  visibility-only (two collision helpers static->extern, matching
+  targetplay.js's imports) + ML_MAX_LEDGES 8->16 (targetstage8 has 16);
+  behavioral identity proven by the bit-exact 8/8.
+  Caps: browser 5/8, cold checks 1/4, docker 1/2, C iterations 7/60.
+  **Driver next: Tier-A arc over the iter-94 non-checksummed surfaces
+  (check-target-sim.sh, run-target.js, record-target.sh,
+  freeze-target.js, wrap-target.js, check-target-quality.js,
+  check-targets.sh) + Tier A+ for verify-target-stream.js (judge
+  path); then task 12 (target test FOH + device).**
+- **Remaining to gate**: 12 (target test FOH+device), 13 (SD persist),
+  14 (verify_m4.sh) -> M4 GATE -> provision device -> LOOP STOP:
+  m4-complete -> Chase acceptance playthrough.
+
+## [superseded by iter 94] (2026-07-19, iter 93 — M4 task 10 DONE: FOH on device, first full device attempt green)
 
 - **Iter 93 (M4 task 10 — FOH on device) DONE** (full entry: AGENT-LOG
   iter 93 pre-registration + result; latest AGENT-LOG id: iter 93).

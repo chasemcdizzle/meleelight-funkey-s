@@ -218,8 +218,9 @@ static HdHitPair interpolatedHitHitCollision(MlSim *S, double i, double p,
                                              double j, double k);
 static bool hitShieldCollision(MlSim *S, double i, double p, double j,
                                bool previous);
-static bool interpolatedHitCircleCollision(MlSim *S, Vec2D circlePos, double r,
-                                           double p, double j);
+// non-static since M4 task 11: targetplay.js imports this export
+// (targetplay.js:27) — visibility-only change, body untouched; prototype
+// in hit_detection.h.
 static bool interpolatedHitHurtCollision(MlSim *S, double i, double p,
                                          double j, bool phantom);
 static bool hitHurtCollision(MlSim *S, double i, double p, double j,
@@ -531,9 +532,10 @@ static bool hitShieldCollision(MlSim *S, double i, double p, double j,
 }
 
 // --- interpolatedHitCircleCollision (:230) ---------------------------------------------------
+// (exported since M4 task 11 — targetplay.js:27 imports it; body untouched)
 
-static bool interpolatedHitCircleCollision(MlSim *S, Vec2D circlePos, double r,
-                                           double p, double j) {
+bool interpolatedHitCircleCollision(MlSim *S, Vec2D circlePos, double r,
+                                    double p, double j) {
   MlPlayer *pp = P(S, p);
   double prevPosFrame = pp->phys.prevFrameHitboxes.frame;
   if (prevPosFrame > 1) {

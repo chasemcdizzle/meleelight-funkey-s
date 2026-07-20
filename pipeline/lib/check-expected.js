@@ -152,6 +152,33 @@ if (wantStages.includes("stages")) {
   }
 }
 
+// ---- targets (authored target-test stage tables, TTAB1) ----
+if (wantStages.includes("targets")) {
+  const exp = expected.targets;
+  const st = manifest.stages.targets;
+  if (!st) {
+    fail("manifest has no targets stage");
+  } else {
+    eq("targets.format", st.format, "TTAB1");
+    for (const k of Object.keys(exp.coverage)) {
+      eq(`targets.coverage.${k}`, st.coverage[k], exp.coverage[k]);
+    }
+    for (const [stageName, expStage] of Object.entries(exp.perStage)) {
+      const got = st.perStage && st.perStage[stageName];
+      if (!got) { fail(`targets.perStage.${stageName} missing`); continue; }
+      for (const k of Object.keys(expStage)) {
+        eq(`targets.perStage.${stageName}.${k}`, got[k], expStage[k]);
+      }
+    }
+    eq("targets.artifacts.length", st.artifacts.length, 3);
+    for (const name of ["ml_targets.h", "ml_targets.c", "targets.json"]) {
+      if (!st.artifacts.some((a) => a.path === name)) {
+        fail(`targets artifact ${name} missing from manifest`);
+      }
+    }
+  }
+}
+
 // ---- audio (converted PCM blobs + sound map, SND1) ----
 if (wantStages.includes("audio")) {
   const exp = expected.audio;

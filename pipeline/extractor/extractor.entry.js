@@ -27,6 +27,11 @@
  * shim that records each constructor cfg verbatim. sfx.js imports only
  * ./music; music.js imports nothing — no god-module tentacles.
  *
+ * M4 task 11 adds the ten authored target-test stages via upstream's own
+ * aggregator stages/targetstages/tstages.js -> window.__targetStages.
+ * Each targetstage file imports ONLY Vec2D/Box2D (measured: no sim
+ * tentacles, no externals stubs needed).
+ *
  * Built by pipeline/extractor/build-extractor.sh with the upstream clone's
  * OWN docker node:8 webpack toolchain (babel query mirrors the game
  * build's happypack loader: presets es2015, plugins
@@ -57,6 +62,8 @@ import {
 
 import vsstages from "stages/vs-stages/vs-stages";
 
+import tstages from "stages/targetstages/tstages";
+
 import { sounds } from "main/sfx";
 import { MusicManager } from "main/music";
 
@@ -72,6 +79,8 @@ window.__tables = {
 };
 
 window.__stages = vsstages;
+
+window.__targetStages = tstages;
 
 window.__sounds = {
   sfx: sounds,

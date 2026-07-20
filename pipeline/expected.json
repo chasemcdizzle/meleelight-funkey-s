@@ -309,4 +309,133 @@
       }
     }
   }
+,
+  "targets": {
+    "coverage": {
+      "boxes": 85,
+      "ceilings": 85,
+      "f64Values": 2320,
+      "grounds": 85,
+      "i32Values": 280,
+      "ledgePosStages": 1,
+      "ledges": 60,
+      "platforms": 92,
+      "stages": 10,
+      "targets": 90,
+      "wallLs": 85,
+      "wallRs": 85
+    },
+    "perStage": {
+      "targetstage1": {
+        "boxes": 7,
+        "ceilings": 7,
+        "grounds": 7,
+        "ledgePos": 0,
+        "ledges": 3,
+        "platforms": 5,
+        "targets": 10,
+        "wallLs": 7,
+        "wallRs": 7
+      },
+      "targetstage10": {
+        "boxes": 4,
+        "ceilings": 4,
+        "grounds": 4,
+        "ledgePos": 0,
+        "ledges": 0,
+        "platforms": 4,
+        "targets": 10,
+        "wallLs": 4,
+        "wallRs": 4
+      },
+      "targetstage2": {
+        "boxes": 6,
+        "ceilings": 6,
+        "grounds": 6,
+        "ledgePos": 0,
+        "ledges": 2,
+        "platforms": 7,
+        "targets": 10,
+        "wallLs": 6,
+        "wallRs": 6
+      },
+      "targetstage3": {
+        "boxes": 5,
+        "ceilings": 5,
+        "grounds": 5,
+        "ledgePos": 0,
+        "ledges": 6,
+        "platforms": 16,
+        "targets": 10,
+        "wallLs": 5,
+        "wallRs": 5
+      },
+      "targetstage4": {
+        "boxes": 6,
+        "ceilings": 6,
+        "grounds": 6,
+        "ledgePos": 0,
+        "ledges": 7,
+        "platforms": 10,
+        "targets": 10,
+        "wallLs": 6,
+        "wallRs": 6
+      },
+      "targetstage5": {
+        "boxes": 8,
+        "ceilings": 8,
+        "grounds": 8,
+        "ledgePos": 0,
+        "ledges": 8,
+        "platforms": 11,
+        "targets": 10,
+        "wallLs": 8,
+        "wallRs": 8
+      },
+      "targetstage6": {
+        "boxes": 10,
+        "ceilings": 10,
+        "grounds": 10,
+        "ledgePos": 0,
+        "ledges": 7,
+        "platforms": 9,
+        "targets": 9,
+        "wallLs": 10,
+        "wallRs": 10
+      },
+      "targetstage7": {
+        "boxes": 10,
+        "ceilings": 10,
+        "grounds": 10,
+        "ledgePos": 0,
+        "ledges": 10,
+        "platforms": 7,
+        "targets": 10,
+        "wallLs": 10,
+        "wallRs": 10
+      },
+      "targetstage8": {
+        "boxes": 9,
+        "ceilings": 9,
+        "grounds": 9,
+        "ledgePos": 0,
+        "ledges": 16,
+        "platforms": 8,
+        "targets": 10,
+        "wallLs": 9,
+        "wallRs": 9
+      },
+      "targetstage9": {
+        "boxes": 20,
+        "ceilings": 20,
+        "grounds": 20,
+        "ledgePos": 1,
+        "ledges": 1,
+        "platforms": 15,
+        "targets": 1,
+        "wallLs": 20,
+        "wallRs": 20
+      }
+    }
+  }
 }
