@@ -32,15 +32,19 @@
 // synchronously BEFORE platform_audio_start (no first-callback race);
 // a dedicated pthread READER THREAD then does ALL music file I/O —
 // ZERO music I/O on the frame loop (the frame path and its 4-column
-// timing grammar are untouched): every 25 ms it snapshots quit/consumer
+// timing grammar are untouched): every 25 ms it reads the ATOMIC quit
+// flag (review-87 M2 — the headless platform lock is a no-op, so the
+// flag carries its own synchronization) and snapshots consumer
 // position/wr under platform_audio_lock, and whenever free ring space
 // >= one 16384-frame chunk it reads that chunk (unlocked — producer-
 // owned slots) and publishes wr under the lock (the callback runs with
 // SDL's audio mutex held, so wr is never torn; headless: no callback
 // consumes — the summary honestly reports 0 out frames / 0 refills).
-// Teardown: quit flag under the lock + pthread_join BEFORE
+// Teardown (review-87 L3, BOUNDED): atomic quit store, deadline-poll
+// of the reader's atomic done flag (5 s — fail LOUD on a wedged SD
+// read, never a pthread_join hang), then pthread_join, all BEFORE
 // platform_audio_stop. Any short read/seek failure on the reader
-// thread is a LOUD death (exit(2) via sim_fatal), never silence.
+// thread is a LOUD death (exit via sim_fatal), never silence.
 //
 // --music-lat <file> (measurement sidecar, RAM-buffered on the reader
 // thread, written post-run): one row per refill —
@@ -144,6 +148,7 @@
 // time, not schedule time).
 #include <inttypes.h>
 #include <pthread.h> // --music reader thread (M4 task 7)
+#include <stdatomic.h> // quit/done flags (review-87 M2 — C11 atomics)
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -483,20 +488,40 @@ typedef struct { uint64_t startNs, readNs; uint32_t frames; } MusLatRow;
 #define MUS_LAT_CAP 65536u // >> any run's refill count; overflow dies loud
 static MusLatRow *g_mus_lat;   // NULL unless --music-lat
 static uint64_t g_mus_lat_len;
-static int g_mus_quit; // written by main under platform_audio_lock
+// Cross-thread FLAGS are C11 atomics, never lock-protected plain ints
+// (review-87 M2, class rule): platform_audio_lock is a mutual-exclusion
+// seam only where BOTH sides actually lock — on the headless backend it
+// is a documented no-op, so a plain quit flag there is a C11 data race
+// (the optimizer may hoist the read and the reader never observes quit).
+// Integer plane only; no FP is involved.
+static atomic_int g_mus_quit;        // main -> reader: teardown request
+static atomic_int g_mus_reader_done; // reader -> main: exit published
+                                     // (the bounded-join witness, L3)
+static int g_tooth_mus_wedge; // --tooth-music-wedge: reader ignores quit
+                              // — exists ONLY to prove the join-deadline
+                              // arm fires (check-device-music.sh tooth)
 
 // Reader thread (the frozen iter-87 design): 25 ms poll; one chunk per
-// refill whenever free space >= chunk; snapshots + wr publication under
-// platform_audio_lock; lat rows recorded thread-locally.
+// refill whenever free space >= chunk; ring snapshots + wr publication
+// under platform_audio_lock (the DEVICE consumer is the SDL callback
+// holding SDL's audio mutex — a real lock there; headless has no
+// consumer thread at all, so wr/outPos are single-threaded by
+// construction: outPos never advances, the ring stays full, and the
+// reader never writes wr after the pre-create prefill); the quit/done
+// flags cross via atomics (note above); lat rows recorded thread-locally
+// and read by main only after the join (happens-before via pthread_join).
 static void *mus_reader_main(void *arg) {
   (void)arg;
   for (;;) {
+    const int quit = atomic_load_explicit(&g_mus_quit, memory_order_acquire);
     platform_audio_lock();
-    const int quit = g_mus_quit;
     const uint64_t cons = g_mix.music.outPos >> 1;
     const uint64_t wr = g_mix.music.wr;
     platform_audio_unlock();
-    if (quit) return 0;
+    if (quit && !g_tooth_mus_wedge) {
+      atomic_store_explicit(&g_mus_reader_done, 1, memory_order_release);
+      return 0;
+    }
     if (SND_MUSIC_RING_FRAMES - (wr - cons) >= SND_MUSIC_CHUNK_FRAMES) {
       const uint64_t t0 = now_ns();
       snd_music_fill(&g_mix.music, wr, SND_MUSIC_CHUNK_FRAMES, mus_file_read,
@@ -607,6 +632,7 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--music-start") == 0 && hasV) musicStartArg = argv[++i];
     else if (strcmp(a, "--music-loop") == 0 && hasV) musicLoopArg = argv[++i];
     else if (strcmp(a, "--music-lat") == 0 && hasV) musicLatPath = argv[++i];
+    else if (strcmp(a, "--tooth-music-wedge") == 0) g_tooth_mus_wedge = 1;
     else if (strcmp(a, "--attrib") == 0 && hasV) attribPath = argv[++i];
     else if (strcmp(a, "--audio-samples") == 0 && hasV) {
       audioSamples = strtol(argv[++i], 0, 10);
@@ -636,7 +662,8 @@ int main(int argc, char **argv) {
       ((musicPath != 0) != (musicVolBits != 0)) ||
       ((musicPath != 0) != (musicStartArg != 0)) ||
       ((musicPath != 0) != (musicLoopArg != 0)) ||
-      (musicLatPath && !musicPath) || (musicPath && !sndpackPath)) {
+      (musicLatPath && !musicPath) || (musicPath && !sndpackPath) ||
+      (g_tooth_mus_wedge && !musicPath)) {
     fprintf(stderr,
             "usage: gfx_app --trace t.txt --simdata s.txt --gfxdata g.txt "
             "--vfxdata v.txt --glyphs gl.txt "
@@ -919,13 +946,29 @@ int main(int argc, char **argv) {
   if (sndpackPath) {
     ml_snd_sink = 0;
     ml_snd_stop_id_sink = 0;
-    // MUSIC teardown BEFORE platform_audio_stop (M4 task 7): quit flag
-    // under the lock, then join — the reader never outlives the audio
-    // seam it publishes into.
+    // MUSIC teardown BEFORE platform_audio_stop (M4 task 7): atomic
+    // quit store (review-87 M2 — the headless lock is a no-op, so the
+    // flag itself carries the synchronization), then a BOUNDED join
+    // (review-87 L3): deadline-poll the reader's own done flag before
+    // pthread_join so a wedged SD read fails LOUD instead of hanging
+    // teardown forever. 5 s deadline vs the measured worst refill read
+    // of 1.6 ms (iter 87) — ~3000x margin; the reader's idle poll
+    // cadence is 25 ms. Ordering kept: quit -> join -> audio stop —
+    // the reader never outlives the audio seam it publishes into.
     if (musThreadLive) {
-      platform_audio_lock();
-      g_mus_quit = 1;
-      platform_audio_unlock();
+      atomic_store_explicit(&g_mus_quit, 1, memory_order_release);
+      const uint64_t musJoinDeadline = now_ns() + 5000000000ull;
+      while (!atomic_load_explicit(&g_mus_reader_done,
+                                   memory_order_acquire)) {
+        if (now_ns() >= musJoinDeadline) {
+          sim_fatal("music: reader thread did not exit within the teardown "
+                    "deadline (wedged SD read or quit-flag defect)");
+        }
+        struct timespec ts;
+        ts.tv_sec = 0;
+        ts.tv_nsec = 2000000L; // 2 ms poll of the done flag
+        nanosleep(&ts, 0);
+      }
       if (pthread_join(musThread, 0) != 0) {
         sim_fatal("music: pthread_join(reader) failed");
       }

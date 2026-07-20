@@ -18,8 +18,15 @@
 #       DETERMINISTIC, zero seeded-RNG involvement; the iter-87 seam
 #       survey verdict: music selection is RENDER-PLANE) + the MUSIC
 #       track sha256 pin table (8 rows, measured-then-frozen iter 87;
-#       ffmpeg is 3-way pinned so blob bytes are stable) + a strict
-#       whitelist extractor for per-track volbits/sprite ms.
+#       ffmpeg is 3-way pinned so blob bytes are stable; SET-BOUND —
+#       duplicate refusal + exact-inventory comparison, review-87 M1) +
+#       the MUSIC METADATA pin table (8 rows volbits + sprite ms,
+#       measured-then-frozen iter 89, review-87 H1a: the differential's
+#       two sides and the device leg all read the same live sounds.json,
+#       so metadata drift is invisible to bit-identity — the frozen pins
+#       close that shared-input hole; enforced inside read_music, every
+#       extraction) + a strict whitelist extractor for per-track
+#       volbits/sprite ms.
 #   [1] SIM CONFORMS — bash port/sim/check-sim.sh (pinned; the forced-
 #       cold rm-before-produce shape — provides sim_host, tables,
 #       simdata, g07/g08 AIBRIDGE1 for the tapped replays).
@@ -50,18 +57,29 @@
 #       — fileFrames 6,703,200 < loop end 7,322,849 — PLUS its wrap at
 #       ~frame 19927), targettest@600 (short-intro chaining, startDur
 #       22 src frames). C vs ref cmp BIT-IDENTICAL each.
-#   [6] TEETH (pre-registered T1-T4 + grammar): T1 --tooth-music-gain
-#       (g01) diverges; T2 --tooth-music-loop-beg (g01) diverges; T3
-#       --tooth-music-loop-dur (menu WRAP leg — fires only past a wrap)
-#       diverges; T4 --tooth-music-underfill -> verdict musstarves > 0
-#       AND diverges (starve accounting is load-bearing); grammar teeth:
+#   [6] TEETH (pre-registered T1-T4 + grammar + the iter-89 hardening
+#       set): T1 --tooth-music-gain (g01) diverges; T2
+#       --tooth-music-loop-beg (g01) diverges; T3 --tooth-music-loop-dur
+#       (menu WRAP leg — fires only past a wrap) diverges; T4
+#       --tooth-music-underfill -> verdict musstarves > 0 AND diverges
+#       (starve accounting is load-bearing; verdict judged by the
+#       renderer's EXACT one-line grammar, review-87 L1); grammar teeth:
 #       bad volbits / malformed ms pair (C) + unknown track (ref) die
-#       nonzero. Positive controls throughout.
+#       nonzero; T-META (review-87 H1a) perturbed sounds.json copy ->
+#       metadata-pin death naming the field; T-PIN-SET (review-87 M1)
+#       dup+omit pin table -> death naming the missing track; T-EOF
+#       (review-87 H1b) the wrap/eof derivation responds to the blob
+#       length and the counter assert dies on mismatch. Positive
+#       controls throughout.
 #   [7] no-commit guard (rc case-split).
 #
 # Prints `MUSIC FIDELITY OK (goldens=12 tracks=8 diff=bit-identical
-# wraps=2 eofsilence=1)`, exit 0; ANY divergence, stream mismatch, pin
-# mismatch, count disagreement, or missing artifact -> nonzero.
+# wraps=2 eofsilence=1)`, exit 0 — where wraps/eofsilence are COMPUTED
+# per leg (review-87 H1b) from the renderer's own musout evidence + the
+# FROZEN metadata pins + the pinned blob byte length, and asserted
+# against the frozen expectations (WRAPS_PIN/EOFSIL_PIN) BEFORE the
+# verdict prints; ANY divergence, stream mismatch, pin mismatch, count
+# disagreement, or missing artifact -> nonzero.
 #
 # HONEST EXPOSURE (PROCESS §8): the differential proves IMPLEMENTATION
 # equality of two independent realizations; the documented device
@@ -240,6 +258,71 @@ bbf52720a559ca7b0cf21837a1425a42fd612719442a006b041c913d5f8c4856 menu
 b503d90bc50b79e6ed2f4e62c4c3fc1a4a1d337730debf69ea7f5bad0a436929 yStory"
 N_TRACKS_WANT=8
 
+# The frozen 8-track inventory (LC_ALL=C sort order — matches the
+# sounds.json JS .sort() comparison below by construction).
+MUSIC_TRACKS_INV="battlefield dreamland finald fod menu pStadium targettest yStory"
+
+# pin_setcheck <label> <newline-separated names> — SET-binding for a pin
+# table's name column (review-87 M1, the iter-84 inventory-binding
+# class): duplicates refused BY NAME, exact-set comparison vs the frozen
+# inventory in BOTH directions (a dup+omit table can no longer count to
+# 8). Loud death NAMES the dup / missing / unpinned track.
+pin_setcheck() {
+  local label="$1" names="$2" dups t n
+  dups="$(printf '%s\n' "$names" | LC_ALL=C sort | uniq -d)"
+  if [ -n "$dups" ]; then
+    fail "$label pin table — duplicate track row(s): $(printf '%s' "$dups" | tr '\n' ' ')"
+  fi
+  for t in $MUSIC_TRACKS_INV; do
+    printf '%s\n' "$names" | grep -qx "$t" || \
+      fail "$label pin table — MISSING track $t (set-binding: the frozen inventory is exact, never a count)"
+  done
+  while IFS= read -r t; do
+    case " $MUSIC_TRACKS_INV " in
+      (*" $t "*) : ;;
+      (*) fail "$label pin table — UNPINNED track '$t' not in the frozen inventory" ;;
+    esac
+  done <<< "$names"
+  n="$(printf '%s\n' "$names" | grep -c '')"
+  [ "$n" = "$N_TRACKS_WANT" ] || fail "$label pin table — $n rows, want $N_TRACKS_WANT (belt: dup/missing/unpinned arms above are the set binding)"
+}
+
+# MUSIC METADATA PINS (measured-then-frozen iter 89; review-87 H1a):
+#   <track> <volbits16> <startOffMs> <startDurMs> <loopOffMs> <loopDurMs>
+# — the sounds.json volume-bits + sprite-window plane the C renderer,
+# snd_reference.js AND the device leg all consume from the SAME live
+# file (bit-identity cannot see a shared-input drift; these pins can).
+# Values are the pinned pipeline audio stage's SND1 output (upstream
+# music volume 0.3 -> bits 3fd3333333333333 on every track). A mismatch
+# is pipeline drift = a reviewed re-freeze, never a tunable. Enforced
+# INSIDE read_music — every extraction on every path is pin-checked.
+MUSIC_META_PINS="\
+battlefield 3fd3333333333333 0 12366 12366 184256
+dreamland 3fd3333333333333 0 16320 16320 194782
+finald 3fd3333333333333 15000 15001 15000 210000
+fod 3fd3333333333333 21320 21321 21320 310782
+menu 3fd3333333333333 0 7425 7425 173500
+pStadium 3fd3333333333333 0 1 0 219496
+targettest 3fd3333333333333 0 1 0 224459
+yStory 3fd3333333333333 0 2957 2957 252182"
+
+# meta_pin_verify <track> — compares the just-extracted M_VOLBITS/M_SO/
+# M_SD/M_LO/M_LD against the track's frozen row; loud death NAMING the
+# field (called by read_music after its whitelist parse).
+meta_pin_verify() {
+  local track="$1" mrow pv_vol pv_so pv_sd pv_lo pv_ld
+  mrow="$(printf '%s\n' "$MUSIC_META_PINS" | grep -E "^$track ")" || \
+    fail "music meta pin — no frozen metadata row for track $track"
+  [ "$(printf '%s\n' "$mrow" | grep -c '')" = 1 ] || \
+    fail "music meta pin — multiple frozen rows for track $track (corrupt table)"
+  read -r _ pv_vol pv_so pv_sd pv_lo pv_ld <<< "$mrow"
+  [ "$M_VOLBITS" = "$pv_vol" ] || fail "music meta pin — $track volbits $M_VOLBITS != frozen $pv_vol (metadata drift is pipeline drift — reviewed re-freeze)"
+  [ "$M_SO" = "$pv_so" ] || fail "music meta pin — $track so $M_SO != frozen $pv_so (metadata drift is pipeline drift — reviewed re-freeze)"
+  [ "$M_SD" = "$pv_sd" ] || fail "music meta pin — $track sd $M_SD != frozen $pv_sd (metadata drift is pipeline drift — reviewed re-freeze)"
+  [ "$M_LO" = "$pv_lo" ] || fail "music meta pin — $track lo $M_LO != frozen $pv_lo (metadata drift is pipeline drift — reviewed re-freeze)"
+  [ "$M_LD" = "$pv_ld" ] || fail "music meta pin — $track ld $M_LD != frozen $pv_ld (metadata drift is pipeline drift — reviewed re-freeze)"
+}
+
 # --- [0d] strict music-config extractor (whitelist parse; PROCESS §3) --------
 # read_music <track> — sets M_BLOB M_VOLBITS M_SO M_SD M_LO M_LD from
 # $AUDIO_OUT/sounds.json via a hard-throwing node emitter + per-key
@@ -306,6 +389,7 @@ read_music() {
     esac
   done <<< "$out"
   [ "$n" = 6 ] || grammar_die "music grammar — $track emitted $n lines, want exactly 6"
+  meta_pin_verify "$track" # review-87 H1a: every extraction is pin-checked
 }
 
 # --- [0e] STRICT GOLDEN PARAM PARSE (the mixer check's read_golden) ----------
@@ -429,6 +513,20 @@ echo "== [2/7] audio stage (fresh) + MUSIC track pins + SNDPACK1 =="
 rm -rf "$AUDIO_OUT"
 node pipeline/run.js --only audio --dist "$DIST" --out "$AUDIO_OUT"
 made "$AUDIO_OUT/sounds.json"
+# SET-BINDING FIRST (review-87 M1): both pin tables' name columns are
+# exact-set-bound to the frozen inventory (dup refusal + both
+# directions) BEFORE any hashing — a duplicated row plus an omitted row
+# can no longer count to 8.
+pin_setcheck "MUSIC_PINS" "$(printf '%s\n' "$MUSIC_PINS" | awk '{print $2}')"
+pin_setcheck "MUSIC_META_PINS" "$(printf '%s\n' "$MUSIC_META_PINS" | awk '{print $1}')"
+# meta table row grammar (anchored; the sha table's rows are checked in
+# the hash loop below)
+while IFS= read -r mmline; do
+  [ -n "$mmline" ] || continue
+  if ! [[ "$mmline" =~ ^[A-Za-z]+\ [0-9a-f]{16}\ (0|[1-9][0-9]{0,9})\ [1-9][0-9]{0,9}\ (0|[1-9][0-9]{0,9})\ [1-9][0-9]{0,9}$ ]]; then
+    fail "music meta pin table — line fails the anchored grammar: '$mmline'"
+  fi
+done <<< "$MUSIC_META_PINS"
 # MUSIC pcm sha table (8 rows, both-directions: every pinned track's
 # blob exists and hashes to its pin; the sounds.json music map must
 # carry EXACTLY the pinned track set)
@@ -453,9 +551,9 @@ mus_inv="$(node -e '
   const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
   process.stdout.write(Object.keys(s.music).sort().join(" "));
 ' "$AUDIO_OUT/sounds.json")" || fail "cannot read the sounds.json music inventory"
-[ "$mus_inv" = "battlefield dreamland finald fod menu pStadium targettest yStory" ] || \
+[ "$mus_inv" = "$MUSIC_TRACKS_INV" ] || \
   fail "music inventory — sounds.json tracks {$mus_inv} != the pinned 8-track set"
-echo "   music pins OK (8 tracks, shas frozen iter 87)"
+echo "   music pins OK (8 tracks set-bound; shas frozen iter 87, metadata frozen iter 89)"
 pack_re='^pack-snd OK count=180 dataBytes=[0-9]{1,12} fileBytes=[0-9]{1,12}$'
 pack_resem='pack-snd '
 rm -f "$MFI/sndpack.bin" "$MFI/sndpack-a.bin" "$MFI/sndpack-b.bin"
@@ -551,6 +649,64 @@ DIFF_COUNT=0
 DIFF_COUNT_PIN=12
 STAGE_COVER="" # accumulates covered stage ids (coverage bind below)
 
+# --- COMPUTED wrap/eofsilence counters (review-87 H1b) -----------------------
+# Per render leg the check DERIVES, from the renderer's own verdict
+# evidence (musout — exact grammar) + the FROZEN metadata pins + the
+# pinned blob's byte length: quantized windows (q(ms) = floor(ms*441/20),
+# snd_mixer.h's documented math restated), t_max = musout/2 - 1 (ZOH 2x),
+# wrap iff t_max >= startDur+loopDur, eofsilence iff any REACHED source
+# index >= fileFrames (start-window max and loop-window max both
+# checked). Accumulated over all 15 legs and asserted against the frozen
+# expectations BEFORE the verdict prints — the old literal `wraps=2
+# eofsilence=1` could not die when fod's EOF arm stopped executing.
+# FROZEN EXPECTATIONS (measured-then-frozen iter 89; arithmetic):
+#   wraps=2   — menu@10900 (startDur+loopDur = 163,721+3,825,675 =
+#               3,989,396 <= t_max 4,005,749) + fod@20000 (470,128 +
+#               6,852,743 = 7,322,871 <= t_max 7,349,999)
+#   eofsilence=1 — fod@20000 (loop max idx 7,322,848 >= fileFrames
+#               6,703,200); no 3600-frame golden reaches a wrap or EOF.
+WRAPS=0
+EOFS=0
+WRAPS_PIN=2
+EOFSIL_PIN=1
+q441() { printf '%s' $(( $1 * 441 / 20 )); }
+# mus_leg_flags <musout> <fileFrames> — uses the M_SO/M_SD/M_LO/M_LD the
+# enclosing read_music just PIN-VERIFIED; sets LEG_WRAP/LEG_EOF (0|1).
+mus_leg_flags() {
+  local musout="$1" ff="$2" sb sdur lb ldur tmax maxidx u
+  sb=$(q441 "$M_SO"); sdur=$(( $(q441 $(( M_SO + M_SD ))) - sb ))
+  lb=$(q441 "$M_LO"); ldur=$(( $(q441 $(( M_LO + M_LD ))) - lb ))
+  [ "$ldur" -gt 0 ] || fail "leg flags — empty quantized loop window (metadata corrupt)"
+  [ $(( musout % 2 )) = 0 ] || fail "leg flags — odd musout '$musout' (ZOH 2x makes musout even by construction)"
+  tmax=$(( musout / 2 - 1 ))
+  [ "$tmax" -ge 0 ] || fail "leg flags — musout too small ('$musout')"
+  LEG_WRAP=0; LEG_EOF=0
+  if [ "$tmax" -ge $(( sdur + ldur )) ]; then LEG_WRAP=1; fi
+  if [ "$tmax" -lt "$sdur" ]; then
+    maxidx=$(( sb + tmax ))
+  else
+    if [ "$LEG_WRAP" = 1 ]; then u=$(( ldur - 1 )); else u=$(( tmax - sdur )); fi
+    maxidx=$(( lb + u ))
+    if [ "$sdur" -gt 0 ] && [ $(( sb + sdur - 1 )) -gt "$maxidx" ]; then
+      maxidx=$(( sb + sdur - 1 ))
+    fi
+  fi
+  if [ "$maxidx" -ge "$ff" ]; then LEG_EOF=1; fi
+}
+assert_counter() { # <name> <got> <frozen-want>
+  [ "$2" = "$3" ] || fail "computed $1 counter $2 != frozen expectation $3 (a changed golden set / sprite windows / blob length is a reviewed re-freeze, never a silent verdict edit)"
+}
+# blob_frames <blob-relpath> — pinned-blob stereo frame count (the same
+# bytes the sha pin just verified; whole-frame asserted).
+blob_frames() {
+  local bf
+  bf="$(wc -c < "$AUDIO_OUT/$1")" || fail "cannot size blob $1"
+  bf="$(printf '%s' "$bf" | tr -d '[:space:]')"
+  [[ "$bf" =~ ^[1-9][0-9]{0,11}$ ]] || fail "blob byte-size read malformed for $1 ('$bf')"
+  [ $(( bf % 4 )) = 0 ] || fail "blob $1 bytes not a whole stereo S16 frame count"
+  printf '%s' $(( bf / 4 ))
+}
+
 # render_pair <tag> <schedule> <frames> <track> — C x2 byte-stable WITH
 # music vs the capped-8 reference with --music-track; cmp BIT-IDENTICAL;
 # music-plane asserts (musout == frames*735 both sides, musstarves == 0,
@@ -559,7 +715,7 @@ STAGE_COVER="" # accumulates covered stage ids (coverage bind below)
 # references (callers rm them — Nintendo-derived, keep the dir lean).
 render_pair() {
   local tag="$1" sched="$2" fr="$3" track="$4"
-  local rline cline want_musout
+  local rline cline want_musout leg_ff
   read_music "$track"
   rm -f "$MFI/$tag.c.pcm" "$MFI/$tag.c2.pcm" "$MFI/$tag.rend.txt"
   "$MFI/snd_render" --pack "$MFI/sndpack.bin" --events "$sched" \
@@ -606,6 +762,12 @@ render_pair() {
     || fail "$tag: play/stop counts disagree (C=$c_plays/$c_stops ref=$r_plays/$r_stops)"
   [ "$c_steals" = "$r_steals" ] || fail "$tag: steal counts disagree (C=$c_steals ref=$r_steals)"
   [ "$c_maxv" = "$r_maxv" ] || fail "$tag: maxvoices disagrees (C=$c_maxv ref=$r_maxv)"
+  # review-87 H1b: derive this leg's wrap/eof flags from the verdict's
+  # own musout + the frozen metadata + the pinned blob length.
+  leg_ff="$(blob_frames "$M_BLOB")"
+  mus_leg_flags "$c_musout" "$leg_ff"
+  WRAPS=$(( WRAPS + LEG_WRAP ))
+  EOFS=$(( EOFS + LEG_EOF ))
 }
 
 # run_one <id> <manifest-dir(oracle|m4)> — tapped replay (STREAM MATCH)
@@ -760,8 +922,11 @@ rm -f "$MFI/tooth4.pcm" "$MFI/tooth4.txt"
   --music-start "$BF_START" --music-loop "$BF_LOOP" \
   --tooth-music-underfill > "$MFI/tooth4.txt" || fail "T4 renderer died"
 made "$MFI/tooth4.pcm" "$MFI/tooth4.txt"
-t4_c="$(count_e "$MFI/tooth4.txt" '^snd-render OK frames=3600 .* musstarves=[1-9][0-9]* musrefills=0$')"
-[ "$t4_c" = 1 ] || fail "T4: underfill render did not report musstarves>0 musrefills=0 (starve accounting must SEE the withheld refills)"
+# review-87 L1: T4's verdict judged by the renderer's EXACT one-line
+# grammar (rend_mus_re with the tooth's starve/refill outcome pinned in
+# — musstarves > 0, musrefills == 0), never a `.*` scan.
+t4_re='^snd-render OK frames=3600 plays=([0-9]{1,9}) stops=([0-9]{1,9}) stopsm=([0-9]{1,9}) stopsu=([0-9]{1,9}) steals=([0-9]{1,9}) maxvoices=([0-9]{1,3}) bytes=([0-9]{1,12}) musout=([0-9]{1,12}) musstarves=([1-9][0-9]{0,11}) musrefills=0$'
+judge_verdict_file "$MFI/tooth4.txt" "$t4_re" "$rend_resem"
 if cmp -s "$MFI/tooth4.pcm" "$MFI/g01.ref.keep.pcm"; then
   fail "T4: underfill output identical to the reference (a starved ring must be audible)"
 fi
@@ -790,6 +955,65 @@ if node "$GFX/snd_reference.js" --audio "$AUDIO_OUT" --events "$SD" \
 fi
 echo "   grammar teeth fired (bad volbits / elastic-space pair / leading-zero pair / unknown track all die)"
 rm -f "$MFI/tg.pcm" "$MFI/g01.ref.keep.pcm" "$MFI/menu.ref.keep.pcm"
+# T-META (review-87 H1a): a perturbed sounds.json COPY (fod loop-window
+# ms +1) must die in the metadata pin verify NAMING the field — the
+# shared-input drift bit-identity cannot see.
+rm -rf "$MFI/tooth-meta"; mkdir -p "$MFI/tooth-meta"
+node -e '
+  const fs = require("fs");
+  const s = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  s.music.fod.sprite.loop[1] += 1;
+  fs.writeFileSync(process.argv[2], JSON.stringify(s));
+' "$AUDIO_OUT/sounds.json" "$MFI/tooth-meta/sounds.json" \
+  || fail "T-META: could not build the perturbed sounds.json copy"
+made "$MFI/tooth-meta/sounds.json"
+if ( AUDIO_OUT="$MFI/tooth-meta"; read_music fod ) \
+    > /dev/null 2> "$MFI/tooth-meta.err"; then
+  fail "TOOTH T-META did NOT fire (read_music accepted a perturbed fod loop window)"
+fi
+grep -q 'music meta pin — fod ld ' "$MFI/tooth-meta.err" || \
+  fail "T-META died for the wrong reason (want the ld pin death): $(cat "$MFI/tooth-meta.err")"
+echo "   tooth T-META fired (perturbed fod loop-window ms dies naming the ld pin)"
+rm -rf "$MFI/tooth-meta" "$MFI/tooth-meta.err"
+# T-PIN-SET (review-87 M1): (a) a dup+omit table (battlefield row
+# duplicated over yStory's, still 8 rows) dies in the dup arm NAMING
+# battlefield; (b) an omit-only table (yStory row dropped, 7 rows) dies
+# in the missing arm NAMING yStory.
+doctored="$(printf '%s\n' "$MUSIC_PINS" | sed 's/^\(.*\) yStory$/\1 battlefield/')"
+if ( pin_setcheck "MUSIC_PINS-doctored" \
+      "$(printf '%s\n' "$doctored" | awk '{print $2}')" ) \
+    > /dev/null 2> "$MFI/tooth-pinset.err"; then
+  fail "TOOTH T-PIN-SET(a) did NOT fire (set-check accepted a dup+omit pin table)"
+fi
+grep -q 'duplicate track row(s): battlefield' "$MFI/tooth-pinset.err" || \
+  fail "T-PIN-SET(a) died without naming the duplicated track: $(cat "$MFI/tooth-pinset.err")"
+doctored="$(printf '%s\n' "$MUSIC_PINS" | grep -v ' yStory$')"
+if ( pin_setcheck "MUSIC_PINS-doctored" \
+      "$(printf '%s\n' "$doctored" | awk '{print $2}')" ) \
+    > /dev/null 2> "$MFI/tooth-pinset.err"; then
+  fail "TOOTH T-PIN-SET(b) did NOT fire (set-check accepted an omitted row)"
+fi
+grep -q 'MISSING track yStory' "$MFI/tooth-pinset.err" || \
+  fail "T-PIN-SET(b) died without naming the missing track: $(cat "$MFI/tooth-pinset.err")"
+echo "   tooth T-PIN-SET fired (dup names battlefield; omission names yStory)"
+rm -f "$MFI/tooth-pinset.err"
+# T-EOF (review-87 H1b): the wrap/eof DERIVATION responds to the blob
+# length — fod's real file at the fod@20000 musout yields wrap=1 eof=1
+# (positive control); an inflated fileFrames (loop window fully inside
+# the file) yields eof=0; and the frozen-expectation assert dies on the
+# 0-vs-1 mismatch.
+read_music fod
+fod_ff="$(blob_frames "$M_BLOB")"
+mus_leg_flags $(( 20000 * 735 )) "$fod_ff"
+[ "$LEG_WRAP" = 1 ] && [ "$LEG_EOF" = 1 ] || \
+  fail "T-EOF positive control broke (fod@20000 real file: wrap=$LEG_WRAP eof=$LEG_EOF, want 1/1)"
+mus_leg_flags $(( 20000 * 735 )) 7400000 # > loop end 7,322,849 — no EOF arm
+[ "$LEG_WRAP" = 1 ] && [ "$LEG_EOF" = 0 ] || \
+  fail "T-EOF derivation did not respond to the blob length (inflated file: wrap=$LEG_WRAP eof=$LEG_EOF, want 1/0)"
+if ( assert_counter eofsilence 0 "$EOFSIL_PIN" ) > /dev/null 2>&1; then
+  fail "TOOTH T-EOF did NOT fire (the counter assert accepted 0 against the frozen expectation $EOFSIL_PIN)"
+fi
+echo "   tooth T-EOF fired (derivation tracks the blob length; the counter assert dies on mismatch)"
 
 # --- [7] no-commit guard (rc case-split) --------------------------------------
 rc=0
@@ -804,4 +1028,9 @@ if [ -n "$dirty" ]; then
   exit 1
 fi
 
-echo "MUSIC FIDELITY OK (goldens=$DIFF_COUNT tracks=8 diff=bit-identical wraps=2 eofsilence=1)"
+# review-87 H1b: the counters are COMPUTED (accumulated per leg above)
+# and asserted against the frozen expectations BEFORE the verdict — the
+# verdict line can only ever print values that survived the assert.
+assert_counter wraps "$WRAPS" "$WRAPS_PIN"
+assert_counter eofsilence "$EOFS" "$EOFSIL_PIN"
+echo "MUSIC FIDELITY OK (goldens=$DIFF_COUNT tracks=$n_tracks diff=bit-identical wraps=$WRAPS eofsilence=$EOFS)"

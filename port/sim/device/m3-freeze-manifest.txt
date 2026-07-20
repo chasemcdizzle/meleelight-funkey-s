@@ -40,7 +40,7 @@
 # circular fixed point; the excluded line is protected by the anchor
 # equality itself.
 7b031055e2329269e4e207012202cd772a75b604bd37ab3df8de9db325e4a254 port/sim/device/adbsh.sh reviewed-go .loop/review-42-1.log
-26d6878f17e2820ff8f1693dc9d96410af1450c0cc603b715c6e617263d3af26 port/sim/device/riglib.sh arc-pending iter80-AGENT-LOG-rig-round3-medium
+b8aadf8732dd3c9b384032fcf0afe325076789f734a12c237356fbabc0e8baf3 port/sim/device/riglib.sh arc-pending iter89-AGENT-LOG-music-arc-round1
 d52f42f6eb9156c7c3a7116fcc3a6f4c3b4c6c223d06b476ede8665eebafeff8 port/sim/device/check-device-g01.sh reviewed-go .loop/review-42-1.log
 f4bff53ba987316d83d127b0a92d281263f66a19d1aca49dcd18969af63352de port/sim/device/check-device-conform.sh reviewed-go .loop/review-47-1.log
 4034ad81601de4e25b85658095ebfd38de2cc813fad594164afb563d6deb81ad port/sim/device/percentiles.js reviewed-go .loop/review-47-1.log

@@ -3,7 +3,43 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-19, iter 88 — M4 task 9 DONE: FOH core + menu flows host, FOH FLOWS OK)
+## Live right now (updated: 2026-07-19, iter 89 — M4 hardening DONE: music-arc round-1 findings closed, both cold checks green)
+
+- **Iter 89 (M4 hardening — music-arc round-1 closure: metadata pins,
+  atomics, exact grammars) DONE** (full entry: AGENT-LOG iter 89
+  pre-registration + result; latest AGENT-LOG id: iter 89). All 9
+  triage dispositions (.loop/review-87-triage.md, review-87 NO-GO)
+  shipped as frozen: H1a metadata pin tables (MUSIC_META_PINS enforced
+  inside read_music; device constants + cross-grep), H1b COMPUTED
+  wraps/eofsilence counters asserted vs frozen expectations before the
+  verdict, M1 set-bound pin tables (pin_setcheck, dup+omit dies naming
+  the track), M2 g_mus_quit -> C11 atomics + wr/outPos audit (device =
+  real SDL lock; headless = no consumer thread; only quit/done cross
+  threads, both atomic), M3 exact-token music-summary grammar +
+  final-newline assertion (corpus-validated, zero false rejections),
+  L1 exact-line pack/T4 verdicts, L2 needle-free failure diagnostic,
+  L3 bounded reader join (5 s deadline + --tooth-music-wedge proof),
+  riglib RIG_SCRIPTS += check-device-music.sh + manifest re-pin +
+  anchor. COLD: `check-music-fidelity.sh` -> **MUSIC FIDELITY OK
+  (goldens=12 tracks=8 diff=bit-identical wraps=2 eofsilence=1)**
+  (computed form, .loop/m4-mus89-musicfid.log); done-check
+  `check-device-music.sh` -> **DEVICE MUSIC OK (full p99 13.433 ms,
+  underruns 0, starves 0, refill-read p99 1.357 ms, skips 0/3600)**
+  first paced attempt (.loop/m4-mus89-donecheck.log); regression
+  `check-mixer-fidelity.sh` -> MIXER FIDELITY OK
+  (.loop/m4-mus89-reg-mixer.log); check-sim SKIP proof
+  (.loop/m4-mus89-checksim-skip.txt). Teeth all fired (T-META,
+  T-PIN-SET, T-EOF, parser 00/torn-line, T-WEDGE rc=3, bf-meta,
+  T-NEEDLE static probe — .loop/m4-mus89-teeth.log). Device runs 1/2
+  cap. **SURPRISE registered (driver-owned, untouched here): the
+  m3-freeze-manifest wrap-run.js row is STALE since iter 81 (commit
+  315f8c5 changed the file, no re-pin) — verify_m3.sh would refuse;
+  self-check otherwise ANCHOR GREEN 23/24
+  (.loop/m4-mus89-manifest-selfcheck.log). Driver next: (1) music-arc
+  round 2 on this commit's bytes; (2) reviewed wrap-run.js re-pin;
+  (3) FOH Tier-A arc + task 10 unchanged from iter 88.**
+
+## [superseded by iter 89] (updated: 2026-07-19, iter 88 — M4 task 9 DONE: FOH core + menu flows host, FOH FLOWS OK)
 
 - **Iter 88 (M4 task 9 — FOH core + menu flows, host) DONE** (full
   entry: AGENT-LOG iter 88 pre-registration + result; latest AGENT-LOG

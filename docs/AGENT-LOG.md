@@ -13860,3 +13860,263 @@ round 3 = final confirm on this commit's bytes.
   (check-foh-flows.sh, judge-foh-trace.js, foh_app.c and the machine
   TUs) is driver-queued per the §M4 conventions (every FOH surface is
   Tier A).
+
+## iter 89 — 2026-07-19 — M4 hardening PRE-REGISTRATION: music-arc round-1 closure — metadata pins, atomics, exact grammars (frozen before any edit; PROCESS §2)
+
+**Surface (driver triage .loop/review-87-triage.md, review
+.loop/review-87-1.log — Tier-A round 1 over the iter-87 music surfaces,
+VERDICT: NO-GO)**: `port/gfx/check-music-fidelity.sh`,
+`port/gfx/check-device-music.sh`, `port/gfx/gfx_app.c` (music reader
+thread only), `port/sim/device/riglib.sh` (RIG_SCRIPTS row for
+check-device-music.sh ONLY — riglib thaws for exactly this row) + the
+freeze-manifest re-pin (`port/sim/device/m3-freeze-manifest.txt` riglib
+row, cite iter89 arc-pending, + the `verify_m3.sh` MANIFEST_SHA256
+anchor SAME commit — the iter-78/80 discipline). NOT touched:
+snd_render.c / snd_reference.js semantics (differential sides stay
+independent; metadata pinning lands in the CHECKS), snd_mixer.h, any
+sim TU, any frozen golden/stream, check-mixer-fidelity.sh,
+check-device-render.sh. Music PCM never committed.
+
+**FIXES (pre-registered shapes; all dispositions CONFIRMED by the
+driver)**:
+1. (H1a) MUSIC METADATA PIN TABLE in check-music-fidelity.sh —
+   measured-then-frozen `MUSIC_META_PINS` (8 rows:
+   `<track> <volbits16> <so> <sd> <lo> <ld>`, the sounds.json sprite ms
+   + volume-bits plane; same posture as MUSIC_PINS: a mismatch is
+   pipeline drift = reviewed re-freeze, loud death NAMING the field +
+   track). Enforced INSIDE `read_music` (class fix: every extraction —
+   section [2], every render leg, the teeth — is pin-checked; the 8-row
+   [2] loop covers all rows). Device leg: the 5 battlefield values
+   pinned as constants (`MUSIC_BF_VOLBITS/SO/SD/LO/LD`), asserted
+   against the staged extraction via `bf_meta_assert`, AND the fidelity
+   check's fod... battlefield meta row cross-grepped (exactly 1 — one
+   metadata identity across the surface, the MUSIC_BF_SHA256 pattern).
+2. (H1b) COMPUTED wrap/eofsilence counters — per render leg the check
+   derives, from the renderer's OWN verdict evidence (musout, exact
+   grammar) + the FROZEN metadata pins + the pinned blob's byte length:
+   quantized windows (q(ms)=ms*441/20 floor — snd_mixer.h's documented
+   math restated in the check), t_max = musout/2 - 1, wrap iff
+   t_max >= startDur+loopDur, eofsilence iff any reached source index
+   >= fileFrames (start-window max and loop-window max both checked).
+   Accumulated over all 15 legs and asserted against the frozen
+   expectations WRAPS_PIN=2 (menu@10900: startDur+loopDur = 163,721 +
+   3,825,675 = 3,989,396 <= t_max 4,005,749; fod@20000: 470,128 +
+   6,852,743 = 7,322,871 <= 7,349,999) and EOFSIL_PIN=1 (fod: loop max
+   idx 7,322,848 >= fileFrames 6,703,200) BEFORE the verdict prints;
+   the verdict line carries the COMPUTED values (and tracks=$n_tracks).
+3. (M1) MUSIC_PINS set-bound — `music_pin_names_check`: duplicate
+   refusal NAMING the dup + exact-set comparison vs the frozen 8-track
+   inventory in both directions (missing track NAMED, unpinned track
+   NAMED) before any hashing (the iter-84 inventory-binding class).
+4. (M2) g_mus_quit -> C11 atomics at CLASS level in gfx_app.c:
+   `atomic_int` + explicit `atomic_store/load` (release/acquire) — the
+   platform lock is a mutual-exclusion seam only where BOTH sides
+   actually lock; a flag crossing a maybe-no-op lock (headless) must be
+   an atomic. AUDIT of wr/outPos under the same lens (reasoning, frozen
+   here): DEVICE — reader snapshots outPos/wr and publishes wr under
+   platform_audio_lock = SDL_LockAudio while the callback runs holding
+   SDL's audio mutex: real lock, no tear/reorder — safe. HEADLESS — the
+   backend is accept-and-idle (platform_headless.c: no callback thread
+   ever exists, snd_mix_fill never runs), so outPos stays 0 and the
+   ring stays full (free = RING-(wr-cons) = 0 < CHUNK): the reader
+   never writes wr post-prefill, and the prefill write
+   happens-before pthread_create; refills/g_mus_lat are reader-owned
+   until pthread_join (join = the main thread's happens-before for its
+   post-join reads). The ONLY cross-thread flags are quit + the new
+   done flag — both atomic now. Integer plane only, zero FP involved
+   (-ffp-contract=off posture untouched); stream bytes cannot change —
+   proven by STREAM MATCH inside every cold run.
+5. (M3) music-summary parser -> exact producer grammar: counters
+   `(0|[1-9][0-9]{0,11})` (leading-zero refusal) + a whole-file
+   final-newline assertion in parse_music_summary (torn write =
+   corruption) — the iter-86 exact-token class.
+6. (L1) pack verdict in check-device-music.sh judged by the fidelity
+   check's judge_verdict_file form (exactly 1 line, final newline,
+   full-grammar + resemblance counts); T4 in check-music-fidelity.sh
+   re-judged by the renderer's EXACT one-line grammar (all fields
+   explicit, musstarves=[1-9][0-9]{0,11}, musrefills=0 pinned — no
+   `.*`).
+7. (L2) rc-70 diagnostic reworded — the anchored success needle
+   (`DEVICE MUSIC OK`) can no longer occur on any failure-path
+   emission; the needle appears in exactly ONE echo (the verdict).
+8. (L3) bounded reader-thread shutdown: reader publishes an atomic
+   done flag on exit; teardown deadline-polls it (5 s — vs measured
+   worst refill read 1.6 ms, ~3000x margin) then joins; deadline
+   expiry = sim_fatal naming the wedged-SD/quit-defect class (fail
+   loud, never a hang in pthread_join). Teardown ordering kept:
+   quit -> bounded join -> platform_audio_stop. NEW hidden flag
+   `--tooth-music-wedge` (reader ignores quit) exists ONLY to prove
+   the deadline arm fires.
+9. (Residual) riglib RIG_SCRIPTS gains port/gfx/check-device-music.sh
+   (the one-shared-stamp invariant; forces one arm rebuild) + manifest
+   riglib-row re-pin (arc-pending, cite iter89) + verify_m3.sh anchor
+   update SAME commit + ad-hoc full-manifest self-check logged.
+
+**TEETH (frozen)**:
+- T-META (fix 1): perturbed sounds.json COPY (fod loop-window ms +1)
+  fed to read_music in a subshell -> meta-pin death NAMING ld/fod;
+  device twin: bf_meta_assert with a perturbed volbits nibble ->
+  death. Standing in the checks; positive controls = the 8 clean rows
+  every run.
+- T-EOF (fix 2): fod flags derivation positive control (real file ->
+  wrap=1 eof=1) + inflated fileFrames -> eof=0 + the counter assert
+  dies in a subshell on 0-vs-1. Standing.
+- T-PIN-SET (fix 3): doctored pin table (battlefield row duplicated,
+  yStory omitted; still 8 rows) -> death NAMING yStory. Standing.
+- T-PARSE-00 + T-PARSE-TRUNC (fix 5): `00`-counter probe and a
+  final-newline-stripped log copy against the REAL parser -> both die;
+  existing dup/starves/ring teeth + positive control retained.
+  Standing.
+- T-WEDGE (fix 8): headless g01 run `--frames 60 --pace 0
+  --tooth-music-wedge` -> exits NONZERO with the join-deadline message
+  (host-side 60 s kill guard so a deadline defect can never hang the
+  check). Standing in check-device-music.sh leg [3].
+- T-NEEDLE (fix 7): static probe — zero failure-path emissions carry
+  the success needle; exactly one verdict echo. One-off ->
+  .loop/m4-mus89-teeth.log.
+- Manifest self-check (fix 9): anchor + every row re-verified
+  (normalized verify_m3.sh row rule) -> .loop/m4-mus89-manifest-selfcheck.log.
+
+**RUN CAPS (frozen)**: device — 2 PACED runs MAX (1 cold
+check-device-music.sh done-check; the 2nd ONLY if a fix round needs
+it); host — 1 cold check-music-fidelity.sh + 1 cold
+check-mixer-fidelity.sh regression (gfx_app.c is a shared TU of its
+app leg); teeth are host-side except the T5-class already inside the
+device check. Parser corpus validation before the cold runs: the
+iter-87 archived music logs + this iteration's fresh headless logs
+must show ZERO false rejections (PROCESS §3.4). Browser runs 0.
+
+**PASS CRITERIA (frozen)**: cold `MUSIC FIDELITY OK
+(goldens=12 tracks=8 diff=bit-identical wraps=2 eofsilence=1)` with
+the COMPUTED-counter verdict, exit 0 (.loop/m4-mus89-musicfid.log);
+cold `DEVICE MUSIC OK`, exit 0 (.loop/m4-mus89-donecheck.log); cold
+`MIXER FIDELITY OK` (.loop/m4-mus89-reg-mixer.log); all teeth fired +
+logged (.loop/m4-mus89-*.log); manifest self-check green; check-sim
+SKIP proof (port/sim diff touches ONLY device-rig files — riglib.sh /
+m3-freeze-manifest.txt / verify_m3.sh, none a sim TU;
+.loop/m4-mus89-checksim-skip.txt); ONE atomic commit, clean tree.
+
+**REFUTATION SHAPES**: (a) computed wrap/eof counters disagree with
+the frozen expectations on the REAL corpus -> the derivation is
+mis-measured — ONE bounded re-derivation round against snd_mixer.h's
+window math (primary source), then STOP; (b) any stream mismatch or
+device-gate regression after the atomics/join change -> the change is
+NOT behavior-neutral where it must be — revert, report, do NOT retry
+blind (the integer-plane argument above says this cannot happen; a
+counterexample refutes the audit, not the caps); (c) the exact-token
+parser false-rejects any genuine log -> grammar mis-measured —
+re-derive from the single gfx_app fprintf producer, one bounded
+re-run; (d) T-WEDGE hangs past the 60 s guard -> the deadline arm is
+defective — kill, fix, re-prove before shipping. Each gets one bounded
+evidence round, then STOP and report.
+
+## iter 89 — 2026-07-19 — M4 hardening RESULT: music-arc round 1 CLOSED — metadata pins, atomics, exact grammars; both cold checks green, first paced attempt
+
+**ALL 9 pre-registered fixes SHIPPED as frozen** (no scope drift):
+1. (H1a) `MUSIC_META_PINS` (8 rows volbits + so/sd/lo/ld,
+   measured-then-frozen iter 89) enforced inside `read_music` — every
+   extraction on every path is pin-checked, loud death naming the
+   field; device leg pins the 5 battlefield values as constants
+   (`bf_meta_assert`) + cross-greps the fidelity check's battlefield
+   meta row (one metadata identity across the surface).
+2. (H1b) wraps/eofsilence COMPUTED per leg (renderer's own musout +
+   frozen metadata + pinned blob byte length; q(ms)=floor(ms*441/20)
+   restated from snd_mixer.h) and asserted vs WRAPS_PIN=2 /
+   EOFSIL_PIN=1 BEFORE the verdict; verdict prints the computed
+   values + tracks=$n_tracks.
+3. (M1) `pin_setcheck` — dup refusal naming the dup + exact-set vs the
+   frozen inventory BOTH directions, applied to MUSIC_PINS AND
+   MUSIC_META_PINS name columns before any hashing; meta rows also
+   grammar-anchored.
+4. (M2) gfx_app.c: `g_mus_quit` -> `atomic_int` with explicit
+   release/acquire store/load (class rule documented at the flag: a
+   flag crossing a maybe-no-op lock must be an atomic); wr/outPos
+   AUDIT confirmed as pre-registered — device leg publishes under the
+   REAL SDL audio lock, headless has no consumer thread (outPos
+   frozen at 0, ring stays full, reader never writes wr post-prefill,
+   prefill happens-before pthread_create, post-join reads
+   happen-after the join). Integer plane only; STREAM MATCH inside
+   every cold run proves stream-neutrality (refutation shape (b) not
+   triggered).
+5. (M3) `mus_re` counters -> exact tokens `(0|[1-9][0-9]{0,11})` +
+   whole-log final-newline assertion in parse_music_summary. Corpus
+   validation (PROCESS §3.4): zero false rejections on the REAL
+   iter-87 device log (refills=80) + both headless logs
+   (.loop/m4-mus89-teeth.log).
+6. (L1) pack verdicts judged by judge_verdict_file (copied reviewed
+   form: 1 line, final newline, full+resemblance counts); T4 judged
+   by the renderer's EXACT one-line grammar (musstarves=[1-9]...,
+   musrefills=0 pinned; `.*` gone).
+7. (L2) rc-70 diagnostic reworded — "without reaching the success
+   verdict line"; T-NEEDLE static probe: the anchored needle now
+   occurs in exactly 1 emission (the verdict echo), 0 failure paths
+   (.loop/m4-mus89-teeth.log).
+8. (L3) bounded shutdown: reader publishes atomic done flag;
+   teardown deadline-polls 5 s (vs 1.6 ms measured worst refill) then
+   joins; expiry = loud sim_fatal. `--tooth-music-wedge` proves the
+   arm.
+9. (Residual) riglib RIG_SCRIPTS += port/gfx/check-device-music.sh;
+   manifest riglib row re-pinned (arc-pending,
+   iter89-AGENT-LOG-music-arc-round1) + verify_m3.sh MANIFEST_SHA256
+   anchor updated SAME commit.
+
+**COLD RUNS (writer-ran; driver re-runs per HARD RULE 7)**:
+- `bash port/gfx/check-music-fidelity.sh` -> **MUSIC FIDELITY OK
+  (goldens=12 tracks=8 diff=bit-identical wraps=2 eofsilence=1)** —
+  the COMPUTED-counter verdict form — rc 0
+  (.loop/m4-mus89-musicfid.log): 12/12 STREAM MATCH + bit-identical,
+  3 synthetic legs, set-bound pins, T1-T4 + grammar + T-META +
+  T-PIN-SET + T-EOF all fired.
+- `bash port/gfx/check-device-music.sh` -> **DEVICE MUSIC OK (full
+  p99 13.433 ms, underruns 0, starves 0, refill-read p99 1.357 ms,
+  skips 0/3600)**, rc 0, FIRST paced attempt
+  (.loop/m4-mus89-donecheck.log): composed fidelity green; meta pins
+  + fidelity-row cross-check + bf-meta tooth; host truth 0/0/0 with
+  the 5 parser teeth + T-WEDGE (rc=3 join-deadline death, no hang);
+  arm rebuild (stamp miss by design — RIG_SCRIPTS + gfx bytes
+  changed); T5 PCM-corruption tooth fired; paced run wall 60,000 ms,
+  cbs 5166, musout 2,644,992 == cbs*512, refills 80 == sidecar rows,
+  muslat p50/p99/max 0.387/1.357/1.357 ms; deadman cancelled without
+  firing; device stream verified by the UNCHANGED verify-stream.js.
+- Regression `bash port/gfx/check-mixer-fidelity.sh` -> **MIXER
+  FIDELITY OK (goldens=12 diff=bit-identical maxvoices=9 steals=2
+  s01stops=4)**, rc 0 (.loop/m4-mus89-reg-mixer.log) — the no-music
+  byte-identity proof over the atomics/join gfx_app.c bytes (its app
+  leg links the same TU).
+- check-sim: SKIPPED with proof (.loop/m4-mus89-checksim-skip.txt) —
+  the port/sim diff is exactly riglib.sh / m3-freeze-manifest.txt /
+  verify_m3.sh (device-rig files, none a sim TU, none in
+  check-sim.sh's TU list; check-sim.sh byte-untouched at the pinned
+  ce0882be... and ran green COMPOSED inside both fidelity executions).
+
+**RUN-CAP LEDGER**: paced device runs 1/2 (done-check first-attempt
+green; the budgeted fix-round run unused). Host: 1/1 musicfid cold +
+1/1 mixer regression + the composed executions inside the device
+check. Browser runs 0. Zero divergence rounds anywhere.
+
+**SURPRISE (registered for the driver, NOT fixed here — outside the
+authorized surface)**: the m3-freeze-manifest self-check
+(.loop/m4-mus89-manifest-selfcheck.log) is ANCHOR GREEN + 23/24 rows,
+with ONE PRE-EXISTING stale row: port/sim/sim/wrap-run.js was edited
+in iter 81 (commit 315f8c5) and never re-pinned — the manifest still
+carries the pre-iter-81 fc6aa569... sha while the tree (unchanged
+since iter 81, untouched here) hashes b835b5f8... (the exact sha
+check-music-fidelity.sh's producer table already pins). verify_m3.sh
+would hard-refuse today on that row; the driver owns the reviewed
+re-pin (cite = whichever arc reviewed the iter-81 wrap-run.js edit).
+This iteration's manifest work (riglib row + anchor) is green.
+
+**ZOOM OUT (HARD RULE 8)**: three class artifacts, not one-offs:
+(a) the shared-input metadata hole is closed at the EXTRACTOR
+chokepoint (read_music/meta pins), so every current and future
+consumer of sounds.json music config in these checks is pin-checked
+by construction — not just the 8 call sites that exist today;
+(b) the atomics fix states the CLASS rule at the flag declaration
+(maybe-no-op lock => atomic), and the wr/outPos audit is recorded so
+the next thread-crossing variable gets the same lens, not a fresh
+debate; (c) pin_setcheck is a reusable set-binding helper (the
+iter-84 class in function form) applied to BOTH tables. The
+hard-coded-verdict-literal class (H1b) now has its second computed
+instance (the first: iter-84 exposure counters) — any future verdict
+field that summarizes evidence must be computed-then-asserted, never
+typed. Music-surface arc round 2 reviews this commit's bytes.

@@ -18,7 +18,12 @@
 #       made()-asserted; the battlefield PCM sha pinned here AND
 #       cross-grepped against check-music-fidelity.sh's pin table row —
 #       one music identity across the surface), pack REBUILT x2 +
-#       pinned, battlefield music cfg extracted by strict whitelist.
+#       pinned (verdicts judged exact-line, review-87 L1), battlefield
+#       music cfg extracted by strict whitelist AND asserted against
+#       the FROZEN metadata pins (volbits + sprite windows, review-87
+#       H1a; the fidelity check's battlefield meta row cross-grepped —
+#       one metadata identity across the surface; perturbed-volbits
+#       tooth standing).
 #   [3] HOST TRUTH — x2 headless replays WITH --sndpack + --music
 #       (--pace 0) produce byte-identical streams; STREAM MATCH vs
 #       frozen g01 (UNCHANGED verify-stream.js); app summary 0 skips /
@@ -26,8 +31,12 @@
 #       (headless never fakes a device spec); music summary EXACTLY
 #       `0 out frames, 0 starves, 0 refills` (no callback consumes on
 #       headless — honest plumbing-only leg); PARSER TEETH: a crafted
-#       duplicate music-summary line, a crafted starves=1 line, and a
-#       ring-constant-drift line all die in the strict parser/gate.
+#       duplicate music-summary line, a crafted starves=1 line, a
+#       ring-constant-drift line, a leading-zero counter, and a log
+#       missing its final newline all die in the strict parser/gate
+#       (exact-token grammar, review-87 M3); T-WEDGE: a
+#       --tooth-music-wedge run (reader ignores quit) dies LOUD at the
+#       app's bounded join deadline, never hangs (review-87 L3).
 #   [4] DEVICE STAGING — shared rig arm build (stamp includes port/gfx
 #       bytes), push provenance + device-side sha verification of every
 #       artifact; music PCM staged on $DSD (REAL SD — the streaming
@@ -99,6 +108,16 @@ SNDPACK_SHA256=f69579082fe569249879faa5ceccb7a810d94d8092695ddc8bb543f3bda3ccb4
 # battlefield music PCM identity (measured-then-frozen iter 87; must
 # equal check-music-fidelity.sh's pin-table row — cross-grepped below)
 MUSIC_BF_SHA256=c7c1fa2262389496beaba8854d9ffa254861a14f89741cde0432e61197649f44
+# battlefield music METADATA identity (measured-then-frozen iter 89;
+# review-87 H1a: the staged volume-bits + sprite windows feed the LIVE
+# device run — the SAME frozen values check-music-fidelity.sh pins, and
+# its battlefield meta row is cross-grepped below so the two checks can
+# never drift apart; a mismatch is pipeline drift = reviewed re-freeze)
+MUSIC_BF_VOLBITS=3fd3333333333333
+MUSIC_BF_SO=0
+MUSIC_BF_SD=12366
+MUSIC_BF_LO=12366
+MUSIC_BF_LD=184256
 WALL_MIN_MS=58000
 WALL_MAX_MS=66000
 CBS_MIN=4900                # check-device-audio.sh's measured callback window
@@ -179,7 +198,10 @@ task7_cleanup() {
   fi
   rig_cleanup
   if [ "$rc" = 0 ] && [ "${MUSIC_OK:-0}" != 1 ]; then
-    echo "DEVICE FAIL: script exited rc 0 without reaching the DEVICE MUSIC OK line (bash expansion-error class) — forcing nonzero" >&2
+    # review-87 L2: this diagnostic must NEVER carry the anchored
+    # success needle — an unanchored consumer grepping the log would
+    # otherwise read success off this exact failure path.
+    echo "DEVICE FAIL: script exited rc 0 without reaching the success verdict line (bash expansion-error class) — forcing nonzero" >&2
     exit 70
   fi
 }
@@ -442,6 +464,55 @@ parse_audio_judge() {
   audio_judge_ingest "$jout" "$jrc"
 }
 
+# --- verdict-file judge (the fidelity check's reviewed form, copied;
+# review-87 L1): exactly one newline-terminated line matching the full
+# grammar + exactly one resembling line — extra lines, torn writes, or
+# resembling non-matching lines are CORRUPTION, never ignorable.
+count_e() {
+  local c rc=0
+  c="$(grep -cE -- "$2" "$1")" || rc=$?
+  if [ "$rc" -ge 2 ]; then
+    echo "DEVICE FAIL: count helper — grep -cE rc $rc reading '$1' (a read error is CORRUPT evidence, never a 0 count)" >&2
+    exit 1
+  fi
+  printf '%s' "$c"
+}
+judge_verdict_file() { # <file> <full-line ERE> <resemblance ERE>
+  local f="$1" full="$2" resem="$3" nl c r
+  if [ ! -s "$f" ]; then
+    echo "DEVICE FAIL: verdict file $f missing or empty" >&2
+    exit 1
+  fi
+  nl="$(grep -c '' "$f")" || { echo "DEVICE FAIL: cannot count lines of $f" >&2; exit 1; }
+  if [ "$nl" != 1 ]; then
+    echo "DEVICE FAIL: verdict file $f has $nl lines, want exactly 1 (extra or missing lines are CORRUPTION)" >&2
+    exit 1
+  fi
+  if [ -n "$(tail -c 1 "$f")" ]; then
+    echo "DEVICE FAIL: verdict file $f lacks the trailing newline (torn write)" >&2
+    exit 1
+  fi
+  c="$(count_e "$f" "$full")"
+  if [ "$c" != 1 ]; then
+    echo "DEVICE FAIL: verdict file $f: $c lines match the full grammar '$full', want exactly 1" >&2
+    exit 1
+  fi
+  r="$(count_e "$f" "$resem")"
+  if [ "$r" != 1 ]; then
+    echo "DEVICE FAIL: verdict file $f: $r lines RESEMBLE the verdict ('$resem') but 1 matches the full grammar — a resembling non-matching line is CORRUPTION" >&2
+    exit 1
+  fi
+}
+
+# --- battlefield metadata pin assert (review-87 H1a; device twin) ------------
+bf_meta_assert() { # <volbits> <so> <sd> <lo> <ld> — staged values vs the pins
+  [ "$1" = "$MUSIC_BF_VOLBITS" ] || { echo "DEVICE FAIL: battlefield meta pin — volbits $1 != frozen $MUSIC_BF_VOLBITS (metadata drift is pipeline drift — reviewed re-freeze)" >&2; exit 1; }
+  [ "$2" = "$MUSIC_BF_SO" ] || { echo "DEVICE FAIL: battlefield meta pin — so $2 != frozen $MUSIC_BF_SO (metadata drift is pipeline drift — reviewed re-freeze)" >&2; exit 1; }
+  [ "$3" = "$MUSIC_BF_SD" ] || { echo "DEVICE FAIL: battlefield meta pin — sd $3 != frozen $MUSIC_BF_SD (metadata drift is pipeline drift — reviewed re-freeze)" >&2; exit 1; }
+  [ "$4" = "$MUSIC_BF_LO" ] || { echo "DEVICE FAIL: battlefield meta pin — lo $4 != frozen $MUSIC_BF_LO (metadata drift is pipeline drift — reviewed re-freeze)" >&2; exit 1; }
+  [ "$5" = "$MUSIC_BF_LD" ] || { echo "DEVICE FAIL: battlefield meta pin — ld $5 != frozen $MUSIC_BF_LD (metadata drift is pipeline drift — reviewed re-freeze)" >&2; exit 1; }
+}
+
 # --- MUSIC summary parser + gate (NEW; PROCESS §3 whitelist grammar) ---------
 # PRODUCER GRAMMAR (measured from gfx_app.c's single music fprintf —
 # the paired change site; corpus: this iteration's host smoke + host
@@ -452,10 +523,23 @@ parse_audio_judge() {
 # a rebuilt app with drifted buffer constants cannot even parse).
 # EXACTLY ONE line may match AND exactly one line may resemble
 # ('gfx_app music: ' prefix) — duplicates/truncations are corruption.
-mus_re='^gfx_app music: ([0-9]{1,12}) out frames, ([0-9]{1,12}) starves, ([0-9]{1,12}) refills, ring=32768 chunk=16384$'
+# review-87 M3 (the iter-86 exact-token class): counters are exact
+# tokens 0|[1-9][0-9]* — the producer is a single %llu-family fprintf
+# that can never emit a leading zero — and the WHOLE log must be
+# newline-terminated (a final line missing only its newline is a torn
+# write grep would otherwise still match).
+mus_re='^gfx_app music: (0|[1-9][0-9]{0,11}) out frames, (0|[1-9][0-9]{0,11}) starves, (0|[1-9][0-9]{0,11}) refills, ring=32768 chunk=16384$'
 parse_music_summary() { # <log> — sets mus_out mus_starves mus_refills
   local log="$1" cnt rcnt line
   unset mus_out mus_starves mus_refills
+  if [ ! -s "$log" ]; then
+    echo "DEVICE FAIL: log $log missing or empty (no music summary to parse)" >&2
+    exit 1
+  fi
+  if [ -n "$(tail -c 1 "$log")" ]; then
+    echo "DEVICE FAIL: log $log is not newline-terminated (torn write) — the music summary cannot be trusted" >&2
+    exit 1
+  fi
   cnt="$(grep -Ec "$mus_re" "$log")" || true
   if [ "$cnt" != 1 ]; then
     echo "DEVICE FAIL: log $log has $cnt lines matching the pinned music summary grammar (want exactly 1)" >&2
@@ -732,8 +816,9 @@ for side in a b; do
   node "$GFX/pack-snd.js" "$AUDIO_OUT" "$BUILD/sndpack-$side.bin" \
     > "$BUILD/pack-out-$side.txt" || { echo "DEVICE FAIL: pack-snd.js failed (side $side)" >&2; exit 1; }
   made "$BUILD/sndpack-$side.bin" "$BUILD/pack-out-$side.txt"
-  pcnt="$(grep -Ec "$pack_re" "$BUILD/pack-out-$side.txt")" || true
-  [ "$pcnt" = 1 ] || { echo "DEVICE FAIL: pack verdict grammar (side $side)" >&2; exit 1; }
+  # review-87 L1: exact-line judge — one valid line plus garbage, or a
+  # missing final newline, is corruption, never a pass.
+  judge_verdict_file "$BUILD/pack-out-$side.txt" "$pack_re" 'pack-snd '
 done
 cmp "$BUILD/sndpack-a.bin" "$BUILD/sndpack-b.bin"
 mv "$BUILD/sndpack-a.bin" "$BUILD/sndpack.bin"; rm -f "$BUILD/sndpack-b.bin"
@@ -793,7 +878,30 @@ while IFS='=' read -r mk mv; do
 done <<< "$mcfg"
 [ "$mn" = 5 ] || { echo "DEVICE FAIL: music cfg emitted $mn lines, want 5" >&2; exit 1; }
 : "$M_VOLBITS" "$M_SO" "$M_SD" "$M_LO" "$M_LD"
-echo "   battlefield music cfg: volbits=$M_VOLBITS start=$M_SO,$M_SD loop=$M_LO,$M_LD"
+# review-87 H1a: the staged metadata must equal the FROZEN pins (the
+# grammar above proves shape, never values — a valid drifted volume or
+# loop window would otherwise reach the live run), and the fidelity
+# check's battlefield meta row must carry the SAME values (one metadata
+# identity across the surface — the MUSIC_BF_SHA256 pattern).
+bf_meta_assert "$M_VOLBITS" "$M_SO" "$M_SD" "$M_LO" "$M_LD"
+metarow="$(grep -Ec "^battlefield ${MUSIC_BF_VOLBITS} ${MUSIC_BF_SO} ${MUSIC_BF_SD} ${MUSIC_BF_LO} ${MUSIC_BF_LD}\$" "$GFX/check-music-fidelity.sh")" || true
+if [ "$metarow" != 1 ]; then
+  echo "DEVICE FAIL: check-music-fidelity.sh carries $metarow meta pin rows matching 'battlefield $MUSIC_BF_VOLBITS $MUSIC_BF_SO $MUSIC_BF_SD $MUSIC_BF_LO $MUSIC_BF_LD' (want exactly 1 — one metadata identity across the surface)" >&2
+  exit 1
+fi
+# standing tooth (review-87 H1a): a perturbed volbits nibble must die
+# in the pin assert — proves the assert compares values, not shape.
+if (bf_meta_assert "ffd3333333333333" "$M_SO" "$M_SD" "$M_LO" "$M_LD") \
+    > /dev/null 2> "$BUILD/tooth-bfmeta.err"; then
+  echo "DEVICE FAIL: TOOTH bf-meta did NOT fire (assert accepted a perturbed volbits)" >&2
+  exit 1
+fi
+if ! grep -q 'battlefield meta pin — volbits' "$BUILD/tooth-bfmeta.err"; then
+  echo "DEVICE FAIL: TOOTH bf-meta died for the wrong reason: $(cat "$BUILD/tooth-bfmeta.err")" >&2
+  exit 1
+fi
+rm -f "$BUILD/tooth-bfmeta.err"
+echo "   battlefield music cfg: volbits=$M_VOLBITS start=$M_SO,$M_SD loop=$M_LO,$M_LD (meta pins verified + fidelity row cross-checked; tooth bf-meta fired)"
 
 echo "== [3/7] host build + host truth (x2 headless WITH music) + parser teeth =="
 CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror
@@ -934,10 +1042,69 @@ if (parse_music_summary "$tooth_log") >/dev/null 2>&1; then
   echo "DEVICE FAIL: TOOTH parse-ring-drift did NOT fire (parser accepted a drifted ring constant)" >&2
   exit 1
 fi
+# (d) review-87 M3: leading-zero counter ('0' -> '00') -> the exact-
+# token grammar refuses (the resemblance count then flags corruption)
+sed -E 's/^(gfx_app music: [0-9]+ out frames, [0-9]+ starves,) ([0-9]+) (refills,)/\1 0\2 \3/' \
+  "$BUILD/g01.mus-log-a.txt" > "$tooth_log"
+if (parse_music_summary "$tooth_log") >/dev/null 2>&1; then
+  echo "DEVICE FAIL: TOOTH parse-leading-zero did NOT fire (parser accepted a '00' counter)" >&2
+  exit 1
+fi
+# (e) review-87 M3: a log missing ONLY its final newline is a torn
+# write -> the parser refuses before any grep can match
+printf '%s' "$(cat "$BUILD/g01.mus-log-a.txt")" > "$tooth_log"
+if (parse_music_summary "$tooth_log") >/dev/null 2>&1; then
+  echo "DEVICE FAIL: TOOTH parse-truncated did NOT fire (parser accepted a non-newline-terminated log)" >&2
+  exit 1
+fi
 # positive control: the genuine log still parses green
 judge_music_gate "$BUILD/g01.mus-log-a.txt"
 rm -f "$tooth_log"
-echo "   music parser teeth fired (dup line / starves=1 / ring drift all die; positive control clean)"
+echo "   music parser teeth fired (dup line / starves=1 / ring drift / leading zero / torn final line all die; positive control clean)"
+
+# JOIN-DEADLINE TOOTH (review-87 L3): --tooth-music-wedge makes the
+# reader thread ignore quit; the app's BOUNDED teardown (5 s deadline
+# poll on the reader's done flag) must die LOUD instead of hanging in
+# pthread_join. Host-side 60 s kill guard so a deadline defect can
+# never hang this check.
+rm -f "$BUILD/wedge-log.txt" "$BUILD/wedge.out" "$BUILD/wedge.tim"
+wrc=0
+"$BUILD/gfx_app_headless" \
+  --trace "$DEVB/g01.trace.txt" --simdata "$DEVB/simdata.txt" \
+  --gfxdata "$GFXDATA_FROZEN" --vfxdata "$VFXDATA_FROZEN" \
+  --glyphs "$VFXGLYPHS_FROZEN" --legible --anim-dir "$TABLES" \
+  --seed "$seed" --p1 "$p1" --p2 "$p2" --stage "$stage" \
+  --frames 60 --pace 0 \
+  --out "$BUILD/wedge.out" --timing "$BUILD/wedge.tim" \
+  --sndpack "$BUILD/sndpack.bin" \
+  --music "$AUDIO_OUT/audio/music/battlefield.pcm" \
+  --music-volbits "$M_VOLBITS" --music-start "$M_SO,$M_SD" \
+  --music-loop "$M_LO,$M_LD" --tooth-music-wedge \
+  2> "$BUILD/wedge-log.txt" &
+wpid=$!
+walive=1
+for _ in $(seq 1 60); do
+  if ! kill -0 "$wpid" 2>/dev/null; then walive=0; break; fi
+  sleep 1
+done
+if [ "$walive" = 1 ]; then
+  kill -9 "$wpid" 2>/dev/null || true
+  wait "$wpid" 2>/dev/null || true
+  echo "DEVICE FAIL: TOOTH T-WEDGE — the wedged-reader run is STILL ALIVE after 60 s (the join deadline did not fire)" >&2
+  exit 1
+fi
+wait "$wpid" || wrc=$?
+if [ "$wrc" = 0 ]; then
+  echo "DEVICE FAIL: TOOTH T-WEDGE did NOT fire (wedged-reader run exited 0)" >&2
+  exit 1
+fi
+wcnt="$(grep -c 'reader thread did not exit within the teardown deadline' "$BUILD/wedge-log.txt")" || true
+if [ "$wcnt" != 1 ]; then
+  echo "DEVICE FAIL: TOOTH T-WEDGE — expected exactly 1 join-deadline death message, got $wcnt ($(cat "$BUILD/wedge-log.txt" 2>/dev/null | tail -3))" >&2
+  exit 1
+fi
+rm -f "$BUILD/wedge-log.txt" "$BUILD/wedge.out" "$BUILD/wedge.tim"
+echo "   tooth T-WEDGE fired (wedged reader -> loud join-deadline death rc=$wrc, never a hang)"
 
 echo "== [4/7] armv7 build (shared rig stamp) + push + provenance + T5 tooth =="
 rig_arm_build

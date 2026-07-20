@@ -25,6 +25,7 @@ RIG_SCRIPTS="port/sim/device/adbsh.sh port/sim/device/riglib.sh \
 port/sim/device/check-device-g01.sh port/sim/device/check-device-conform.sh \
 port/gfx/check-device-render.sh port/gfx/check-device-input.sh \
 port/gfx/check-device-audio.sh port/gfx/check-device-opk.sh \
+port/gfx/check-device-music.sh \
 port/sim/device/check-skip-attrib.sh \
 port/sim/device/verify_m3.sh"
 
