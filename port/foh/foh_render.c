@@ -6,6 +6,8 @@
 // check's shot byte-stability x2 depends on it.
 #include "foh.h"
 
+#include <stdio.h> // snprintf (the task-13 records line)
+
 // Labels: faithful strings from the upstream tables (cited), uppercased
 // for the 5x7 font. These are UI text of a rewritten non-checksummed
 // surface, not engine values (HARD RULE 5 concerns data planes).
@@ -233,8 +235,25 @@ static void render_tss(const FohState *s, Raster *rz) {
     }
     foh_text(rz, x + 6, y + 4, 1, "+ ADD CODE", kDim);
   }
-  // records line (honest fresh-boot; header note)
-  text_center(rz, 194, 1, "PERSONAL BEST --:--:--", kAccent);
+  // records line (task 13 — the READ path through the persist plane):
+  // upstream format targetselect.js:411-419 — -1 -> "--:--:--", else
+  // "0"+floor(rec/60)+":"+((rec%60).toFixed(2), 5-char left-padded).
+  // C form: integer centiseconds cs = (long)(rec*100 + 0.5) — no libc
+  // float formatting on the device path (the iter-38/74 musl rounding
+  // class; registered formatting delta, AGENT-LOG iter 100). The
+  // addcode slot (cursor 10) keeps the dashes (foh.h note).
+  {
+    char line[40] = "PERSONAL BEST --:--:--";
+    if (s->tssCursor <= 9) {
+      const double rec = s->targetRecords[s->p1Char][s->tssCursor];
+      if (rec != -1.0) {
+        const long cs = (long)(rec * 100.0 + 0.5);
+        snprintf(line, sizeof line, "PERSONAL BEST 0%ld:%02ld.%02ld",
+                 cs / 6000, (cs % 6000) / 100, cs % 100);
+      }
+    }
+    text_center(rz, 194, 1, line, kAccent);
+  }
   text_center(rz, 208, 1, "A: GO   B: BACK", kDim);
 }
 

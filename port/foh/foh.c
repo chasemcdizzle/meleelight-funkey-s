@@ -45,6 +45,11 @@ void foh_init(FohState *s) {
   s->p2Type = 0;      // P2 active human (the M3 live-session model)
   s->difficulty = 3;  // cpuDifficulty default (main.js:109)
   // gameSettings defaults (settings.js:44-56): all zero — memset did it.
+  // targetRecords fresh state is -1, NOT 0 (targetplay.js:40) — 0 would
+  // read as a valid 0-second record (task 13).
+  for (int c = 0; c < 5; c++) {
+    for (int t = 0; t < 10; t++) s->targetRecords[c][t] = -1.0;
+  }
 }
 
 static void ev_push(FohState *s, FohEvent e) {

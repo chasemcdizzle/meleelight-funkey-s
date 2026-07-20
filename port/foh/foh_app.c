@@ -34,10 +34,32 @@
 #include "../sim/sim/sim.h"
 #include "../sim/target/target_play.h" // M4 task 12: target bridges
 #include "foh.h"
+#include "foh_persist.h" // M4 task 13: the ONE persistence chokepoint
 
 #define ML_BOOT_DRAWS 465 // the qjs boot pin (oracle/qjs/replay.sh)
 
 void gfx_fatal(const char *what) { sim_fatal(what); }
+
+// --- persistence (M4 task 13) ------------------------------------------------
+// Loaded at boot, applied to the machine; saved at the upstream save
+// points: the options-gameplay B-exit (gameplaymenu.js:29-33) and the
+// finishGame record arm (main.js:1442-1445) via tp_finish_hook. The
+// committed t01/t02 traces never reach the finish seam (iter-99
+// refutation) — the hook is real wiring, exercised by the
+// check-device-persist rig's --tooth-persist-finish arm (foh_dev) and
+// the acceptance surface.
+static FohPersist g_persist;
+
+static void app_persist_finish_hook(GameState *g, bool complete) {
+  if (!complete) return; // main.js:1431 complete arm only
+  const int ch = (int)g->sim.characterSelections[0]; // :1442 operands
+  const int ts = (int)TP.targetStagePlaying;
+  if (foh_persist_record_update(&g_persist, ch, ts, g->matchTimer)) {
+    foh_persist_save(&g_persist); // :1445 setCookie on improvement
+  }
+  // finish sounds (newRecord/complete) = the registered task-12
+  // acceptance-surface deferral (menu-plane Howls, zero seeded draws).
+}
 
 // --- flow script (FLOW1; whitelist grammar, loud death) ---------------------
 
@@ -421,6 +443,12 @@ int main(int argc, char **argv) {
 
   FohState foh;
   foh_init(&foh);
+  // task 13: load persisted settings/records through the chokepoint
+  // (loud reset-to-defaults on missing/corrupt — foh_persist.h) and
+  // apply them to the machine. Hermetic checks point MLFK_PERSIST_DIR
+  // at a fresh dir so flows start from defaults.
+  foh_persist_load(&g_persist);
+  foh_persist_apply(&g_persist, &foh);
   long transitions = 0;
   long launchFrame = 0;
   int rowIdx = 0, shotIdx = 0;
@@ -439,6 +467,13 @@ int main(int argc, char **argv) {
         if (fprintf(tf, "T %ld %s %s %s\n", f, ev->from, ev->to, ev->cause) <
             0) {
           sim_fatal("--flow-out write failed");
+        }
+        // task 13: the upstream options save point (gameplaymenu.js:
+        // 29-33 — setCookie per key on the B-exit).
+        if (strcmp(ev->from, "options-gameplay") == 0 &&
+            strcmp(ev->cause, "b") == 0) {
+          foh_persist_collect(&g_persist, &foh);
+          foh_persist_save(&g_persist);
         }
       } else if (ev->kind == FOH_EV_SEL) {
         int w;
@@ -532,6 +567,9 @@ int main(int argc, char **argv) {
     ml_rng_seed(&G.rng, (uint32_t)seed);
     for (int k = 0; k < ML_BOOT_DRAWS; k++) (void)ml_rng_next(&G.rng);
     G.rngStateAtReset = G.rng.a;
+    // task 13: the finishGame record arm rides the REAL seam (host
+    // twin of foh_dev's hook; never fires on the committed traces).
+    tp_finish_hook = app_persist_finish_hook;
     // THE BRIDGE POINT: char + tstage from the FOH state, never CLI
     // (tp_setup_target consumes the ONE off-step background draw).
     tp_setup_target(&G, foh.p1Char, foh.tssStage);

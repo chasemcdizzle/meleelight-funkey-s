@@ -1824,6 +1824,50 @@ overruns):
   surface); survives power-cycle (two-session device check over ADB).
   done-check: `bash port/foh/check-device-persist.sh` → prints
   `PERSIST OK`, exit 0.
+  **DONE (iter 100, 2026-07-20) — committed form**: cold done-check
+  `PERSIST OK (sessions=2 powercycle=reboot bootwait=12s legs=5
+  pulls=4 roundtrip=byte-exact record=00:14.50 resets missing=1
+  loud-corrupt=2 teeth=9)` exit 0 (.loop/m4-task13-donecheck-run2.log;
+  attempt 1 died at the reboot DISPATCH — a raw `adb shell "… &"` is
+  killed by this old adbd's teardown before the detach takes; the
+  measured house detach recipe fixed it, sessions A evidence all
+  green both attempts). ONE chokepoint `port/foh/foh_persist.{h,c}`:
+  MLFKPERSIST1 (55 LF lines, SUM=sha256 seal, doubles as hex16 bit
+  patterns — strtod-free, the iter-38 musl class structurally out),
+  strict anchored load with LOUD reset lines (`foh_persist: reset
+  cause=missing|version|corrupt detail=…`), atomic tmp+fsync+rename
+  save (rename = the only publish; dir-fsync FAT-tolerant), dir =
+  MLFK_PERSIST_DIR override else /mnt/mlfk-data. Persists the
+  FOH-editable sim-consumed settings subset {turbo,lCancelType,
+  tapJumpOff[4]} (settings.js:44-56 defaults) + targetRecords[5][10]
+  (-1 fresh, targetplay.js:40); medals NOT persisted — upstream
+  cookies only records, medals are DERIVED (giveMedals,
+  targetplay.js:165-174; medal/dev-time DISPLAY stays the registered
+  pipeline-extension deferral). Save points wired in BOTH drivers:
+  options B-exit (gameplaymenu.js:29-33) + the finishGame record arm
+  (main.js:1431-1445 improve-or-first) via tp_finish_hook — REAL
+  wiring, exercised by the NEW `foh_dev --tooth-persist-finish` arm
+  (a genuinely completing run is authored-unreachable, iter-99
+  refutation; live finish = acceptance; honest-coverage note in the
+  iter-100 entries). Records READ path (task-12 deferral CLOSED):
+  FohState.targetRecords → render_tss PERSONAL BEST in the upstream
+  format (integer-centisecond C form — registered delta), device
+  shot byte-exact vs host twin fed the SAME persisted bytes, and !=
+  the defaults control (display load-bearing). HERMETICITY: every
+  check run gets a fresh MLFK_PERSIST_DIR (check-foh-flows fresh_
+  persist; device checks per-leg tmpfs dirs) — cold FOH FLOWS OK
+  (flows=7 … teeth=18) with ALL frozen expectations byte-untouched,
+  zero re-freezes. Device file bytes == host-constructed twin at
+  every pull (4/4); byte-identical across a REAL measured reboot.
+  Teeth 9: corrupt-sum/version/NaN-domain/truncation → exact loud
+  resets; torn-tmp inert; read-only-dir save dies with the real file
+  byte-unchanged; record-regress no-op; device corrupt → loud reset
+  + recovery save == the authored-defaults file + control shot.
+  Paired-pin/mechanical edits registered onward to task 14:
+  check-device-foh.sh (per-leg persist env + the iter-99-broken twin
+  recipe repaired: targets stage + target_play/gfx_target/ml_targets
+  TUs) and check-device-target.sh (persist env) — NOT cold-rerun
+  here (iter-99 precedent; the gate + driver ritual own it).
 - task 14 — **full-game trace suite + M4 exit-gate assembly**:
   `port/sim/device/verify_m4.sh` per the §Commands concretization —
   freeze-manifest discipline first, then [1] full-game conformance on

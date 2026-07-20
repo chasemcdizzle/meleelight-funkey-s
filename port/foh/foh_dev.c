@@ -127,10 +127,18 @@
 #include "../sim/ml_ser.h"
 #include "../sim/sim/sim.h"
 #include "foh.h"
+#include "foh_persist.h" // M4 task 13: the ONE persistence chokepoint
 
 #define ML_BOOT_DRAWS 465 // the qjs boot pin (oracle/qjs/replay.sh)
 
 void gfx_fatal(const char *what) { sim_fatal(what); }
+
+// task 13: driver-held persisted state. Loaded at boot, applied to the
+// machine; saved at the upstream save points (options B-exit,
+// gameplaymenu.js:29-33; the finishGame record arm, main.js:1442-1445
+// via tdev_finish_hook below). Hermetic checks point MLFK_PERSIST_DIR
+// at a fresh dir; the product path (OPK launcher) uses /mnt/mlfk-data.
+static FohPersist g_persist;
 
 // --- keymap SSOT (iter 95 H2; single definition site iter 97, M-b) -----------
 // The compiled logical-button table is port/gfx/platform_keymap.h's
@@ -1047,6 +1055,20 @@ static void tdev_finish_hook(GameState *g, bool complete) {
   g_tfin_fired++;
   g_tfin_complete = complete ? 1 : 0;
   g_tfin_frame = (long)g->frame;
+  // task 13: the finishGame record arm (main.js:1431-1445) — complete
+  // only; operands read from GameState/TP exactly as upstream reads
+  // characterSelections[targetPlayer]/targetStagePlaying/matchTimer.
+  // Exercised by --tooth-persist-finish (below) and live/acceptance
+  // play; never by the committed legs (iter-99 refutation).
+  if (complete) {
+    const int ch = (int)g->sim.characterSelections[0];
+    const int ts = (int)TP.targetStagePlaying;
+    if (foh_persist_record_update(&g_persist, ch, ts, g->matchTimer)) {
+      foh_persist_save(&g_persist); // :1445 setCookie on improvement
+    }
+    // finish sounds (newRecord/complete) = the registered task-12
+    // acceptance-surface deferral.
+  }
 }
 
 // --- main --------------------------------------------------------------------------
@@ -1062,6 +1084,41 @@ int main(int argc, char **argv) {
              kPlatformKeymap[k].flowLetter, kPlatformKeymap[k].keysym);
     }
     if (fflush(stdout) != 0) sim_fatal("--dump-keymap flush failed");
+    return 0;
+  }
+  // --tooth-persist-finish <char 0-4> <tstage 0-9> <hex16 matchTimer>
+  // (M4 task 13; the --tooth-music-wedge precedent): drives the REAL
+  // finishGame seam — tp_finish_game -> tdev_finish_hook -> the
+  // foh_persist chokepoint -> SD bytes — from a crafted complete
+  // TP/GameState. A genuinely completing target run is
+  // authored-unreachable in the committed flows (iter-99 refutation)
+  // and the live finish is the acceptance surface; this arm is the
+  // check's records-write instrument (pre-registered honest-coverage
+  // note, AGENT-LOG iter 100).
+  if (argc == 5 && strcmp(argv[1], "--tooth-persist-finish") == 0) {
+    const char *cs = argv[2], *ts = argv[3], *bs = argv[4];
+    if (strlen(cs) != 1 || cs[0] < '0' || cs[0] > '4' ||
+        strlen(ts) != 1 || ts[0] < '0' || ts[0] > '9' ||
+        strlen(bs) != 16) {
+      fprintf(stderr, "foh_dev: --tooth-persist-finish wants <char 0-4> "
+                      "<tstage 0-9> <hex16>\n");
+      return 1;
+    }
+    uint64_t bits = parse_hex16(bs); // loud death on non-hex
+    double t;
+    memcpy(&t, &bits, 8);
+    foh_persist_load(&g_persist);
+    // craft the COMPLETE finish state (main.js:1431 strict equality)
+    G.sim.characterSelections[0] = (double)(cs[0] - '0');
+    TP.targetStagePlaying = ts[0] - '0';
+    TP.targetCount = 1;
+    TP.targetsDestroyed = 1.0;
+    G.matchTimer = t;
+    G.inp.playing = true;
+    tp_finish_hook = tdev_finish_hook;
+    tp_finish_game(&G);
+    fprintf(stderr, "foh_dev tfinish: complete=%d frame=%ld\n",
+            g_tfin_complete, g_tfin_frame);
     return 0;
   }
   const char *flowPath = 0, *inputMode = 0, *flowOut = 0, *shotsDir = 0;
@@ -1256,6 +1313,12 @@ int main(int argc, char **argv) {
 
   FohState foh;
   foh_init(&foh);
+  // task 13: load + apply the persisted plane through the chokepoint
+  // (loud reset-to-defaults on missing/corrupt; foh_persist.h). The
+  // brLive tapJumpOffP1 preset below intentionally stays AFTER the
+  // apply — the S1 contract preset wins on the live path.
+  foh_persist_load(&g_persist);
+  foh_persist_apply(&g_persist, &foh);
   if (brLive && tapJumpOffP1) {
     // The S1 contract preset (PLAN §6, Chase-ratified): the options
     // screen SHOWS it on and the player may toggle; LAUNCH consumes
@@ -1305,6 +1368,17 @@ int main(int argc, char **argv) {
       if (ev->kind == FOH_EV_TRANS) {
         transitions++;
         tr_line("T %ld %s %s %s", t, ev->from, ev->to, ev->cause);
+        // task 13: the upstream options save point (gameplaymenu.js:
+        // 29-33 — setCookie per key on the B-exit). Committed device
+        // legs run with MLFK_PERSIST_DIR on tmpfs, so this write never
+        // sits on the SD inside the paced loop; the product path's SD
+        // save here mirrors upstream's cookie write at the same UI
+        // moment (registered, PORTABILITY row).
+        if (strcmp(ev->from, "options-gameplay") == 0 &&
+            strcmp(ev->cause, "b") == 0) {
+          foh_persist_collect(&g_persist, &foh);
+          foh_persist_save(&g_persist);
+        }
         if (g_have_music && !menuMusicOn && strcmp(ev->to, "menu-top") == 0 &&
             strcmp(ev->from, "title") == 0) {
           // menu music ON at the join (main.js:388-390) — the track is

@@ -159,6 +159,19 @@ relay_lines() { sed 's/^/  | /'; }
 
 host_sha256() { shasum -a 256 "$1" | cut -d' ' -f1; }
 
+# --- [0-pre] persistence hermeticity (M4 task 13) ----------------------------
+# foh_app now loads/saves the persisted plane through the foh_persist
+# chokepoint at boot + the options B-exit. EVERY foh_app invocation in
+# this check gets a FRESH persist dir so flows start from the authored
+# defaults (the frozen expectations' domain) and no leg's save leaks
+# into another (the wit leg saves lcancel=1 on its B-exit — a shared
+# dir would poison the control). The chokepoint's loud
+# `foh_persist: reset cause=missing` on each boot is the designed
+# first-boot event (relayed, not judged here — the persist plane's own
+# judges live in check-device-persist.sh).
+export MLFK_PERSIST_DIR="$PWD/port/foh/build/check/persist"
+fresh_persist() { rm -rf "$MLFK_PERSIST_DIR"; }
+
 # --- [0] run lock (mkdir-atomic, NO reclaim) ---------------------------------
 mkdir -p "$FOH/build"
 LOCK=$FOH/build/foh-flows.lock
@@ -374,15 +387,17 @@ echo "=== [2] build foh_app"
 CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror
   -I"$TABLES" -Iport/ryu -Iport/sim -Ioracle/qjs)
 rm -f "$B/raster.o" "$B/platform_headless.o" "$B/foh.o" "$B/foh_font.o" \
-      "$B/foh_render.o" "$B/foh_app.o" "$B/foh_app"
+      "$B/foh_render.o" "$B/foh_persist.o" "$B/foh_app.o" "$B/foh_app"
 cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$B/raster.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/platform_headless.c" -o "$B/platform_headless.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh.c" -o "$B/foh.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_font.c" -o "$B/foh_font.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_render.c" -o "$B/foh_render.o"
+cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_persist.c" -o "$B/foh_persist.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_app.c" -o "$B/foh_app.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -o "$B/foh_app" \
-  "$B/foh.o" "$B/foh_font.o" "$B/foh_render.o" "$B/foh_app.o" \
+  "$B/foh.o" "$B/foh_font.o" "$B/foh_render.o" "$B/foh_persist.o" \
+  "$B/foh_app.o" \
   "$B/raster.o" "$B/platform_headless.o" \
   "$SIM/sim_boot.c" "$SIM/sim_tick.c" "$SIM/sim_ser.c" \
   "$SIM/sim_data.c" "$SIM/sim_ai_live.c" \
@@ -487,6 +502,7 @@ for k in 0 1 2 3 4 5 6; do
   echo "== flow $id (bridge=$mode) run A"
   rm -rf "$B/$id"
   mkdir -p "$B/$id/shots-a" "$B/$id/shots-b"
+  fresh_persist # defaults domain (task 13)
   case "$mode" in
     verify)
       extra=()
@@ -535,6 +551,7 @@ for k in 0 1 2 3 4 5 6; do
     *) fail "flow $id: unknown bridge mode '$mode'" ;;
   esac
   echo "== flow $id run B (no bridge)"
+  fresh_persist # defaults domain (task 13; A's save must not leak to B)
   "$B/foh_app" --flow "$FLOWS/$id.flow" --flow-out "$B/$id/trace-b.txt" \
     --shots-dir "$B/$id/shots-b" 2>&1 | relay_lines
   made "$B/$id/trace-a.txt" "$B/$id/trace-b.txt"
@@ -841,6 +858,7 @@ I 460 A
 I 461 -
 END 465
 WEOF
+fresh_persist # defaults domain (task 13; the wit leg saves lcancel=1)
 "$B/foh_app" --flow "$WIT/wit-g01.flow" --flow-out "$WIT/trace.txt" \
   --bridge verify --simdata "$B/simdata.txt" --seed "$G01_SEED" \
   --trace "$B/g01.trace.txt" --frames "$G01_FRAMES" --out "$WIT/stream.txt" \
@@ -916,6 +934,7 @@ rm -rf "$CTRL"
 mkdir -p "$CTRL"
 mkvariant "$WIT/wit-g01.flow" "$CTRL/wit-g01.flow" delete \
   "I 415 A" "I 416 -"
+fresh_persist # defaults domain (task 13; the wit save must not leak here)
 "$B/foh_app" --flow "$CTRL/wit-g01.flow" --flow-out "$CTRL/trace.txt" \
   --bridge verify --simdata "$B/simdata.txt" --seed "$G01_SEED" \
   --trace "$B/g01.trace.txt" --frames "$G01_FRAMES" --out "$CTRL/stream.txt" \
@@ -961,6 +980,7 @@ echo "=== [5] teeth (pre-registered T1-T10 AGENT-LOG iter 90; T11-T14 iter 91; T
 teeth=0
 run_variant() { # <flow-file> <out-trace>
   rm -f "$2"
+  fresh_persist # defaults domain (task 13)
   "$B/foh_app" --flow "$1" --flow-out "$2" 2>&1 | relay_lines
   made "$2"
 }
@@ -1242,6 +1262,7 @@ teeth=$((teeth + 1))
 # is all-else-identical by MEASUREMENT, not assumption.
 mkdir -p "$B/t15"
 cp "$WIT/wit-g01.flow" "$B/t15/wit-idprobe-g01.flow"
+fresh_persist # defaults domain (task 13; same posture as the wit leg)
 "$B/foh_app" --flow "$B/t15/wit-idprobe-g01.flow" --flow-out "$B/t15/trace.txt" \
   --bridge verify --simdata "$B/simdata.txt" --seed "$G01_SEED" \
   --trace "$B/g01.trace.txt" --frames "$G01_FRAMES" --out "$B/t15/stream.txt" \

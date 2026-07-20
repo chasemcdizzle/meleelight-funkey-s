@@ -17153,3 +17153,389 @@ data plane against every C cap (registered, not built — n=2).
   check-foh-flows.sh + judge/normalizer extensions, foh.c/foh.h
   target screens, target_finish_probe, the capacity class fix) and
   **iter-100 = M4 task 13 (SD persistence)** writer.
+
+## iter 100 — 2026-07-20 — M4 task 13 PRE-REGISTRATION: persistence to SD (frozen before any run/edit; PROCESS §2)
+
+**Task** (fix_plan §M4 task 13): settings + target-test records at
+/mnt/mlfk-data through ONE read/write chokepoint (atomic write-rename;
+corrupt/missing = LOUD reset-to-defaults — the qjs getCookie lesson
+inverted for OUR surface); survives power-cycle (two-session device
+check). done-check: `bash port/foh/check-device-persist.sh` →
+`PERSIST OK`, exit 0.
+
+**Measured upstream surface (primary sources, before design):**
+1. Settings persistence = cookies: getGameplayCookies
+   (gameplaymenu.js:14-22) Number()s each gameSettings cookie at boot;
+   SAVE fires on the options-gameplay B-exit
+   (gameplaymenu.js:25-36: setCookie per key, 36500 days). Defaults =
+   settings.js:44-56. The FOH edits exactly the sim-consumed subset
+   {turbo, lCancelType, tapJumpOffp1-4} (foh.h iter 88); the other
+   gameSettings entries are not FOH-editable and keep their
+   compile-time defaults in sim_boot/tp_setup — NOT persisted
+   (registered narrowing; nothing can change them, so persisting them
+   would be dead weight with a live corruption surface).
+2. Records: targetRecords[5][20] default -1 (targetplay.js:40);
+   cookie keys `<char>target<stage>`; WRITE on finishGame complete arm
+   (main.js:1431-1445: improve-or-first `matchTimer < rec || rec ==
+   -1`, then setCookie); READ at boot getTargetCookies
+   (targetplay.js:155-163 — NOTE the upstream read loop is i<3: chars
+   3/4 are saved but never re-loaded; a measured upstream QUIRK of the
+   cookie plane, NOT carried — our persistence is a REWRITTEN surface
+   per the task text and loads all 5 chars; registered deviation).
+   medalsEarned is DERIVED (giveMedals, targetplay.js:165-174, from
+   records vs medalTimes) and medals are NOT directly cookied —
+   records are the only persisted truth; medal DISPLAY needs the
+   medalTimes pipeline extension = already-registered iter-99
+   deferral (stays deferred; nothing to persist for it). devRecords =
+   authored data (display deferred with medals). Custom target stages
+   (slots >= 10) are scope-excluded (addcode refuses) → records plane
+   is [5][10].
+3. Records HUD format (targetselect.js:407-419): -1 → "--:--:--";
+   else "0"+floor(rec/60)+":"+((rec%60).toFixed(2) left-padded to 5).
+   matchTimer is seconds (targetplay.js:281-288, +0.016667/frame,
+   capped < 6000).
+
+**Design (frozen):**
+- ONE chokepoint TU `port/foh/foh_persist.{h,c}` (FOH plane — ZERO sim
+  TU edits planned; needing one = refutation shape (b), STOP).
+  FohPersist = {turbo, lCancelType, tapJumpOff[4],
+  targetRecords[5][10] doubles}. Defaults cited above (settings zeros;
+  records -1).
+- File `/mnt/mlfk-data/mlfk-persist.dat`, format MLFKPERSIST1: exactly
+  55 LF lines — `MLFKPERSIST1` · `turbo [01]` · `lcancel [0-2]` ·
+  `tapjump [01] [01] [01] [01]` · 50 `rec <c> <s> <hex16>` rows in
+  exact (c-major, s-minor) order · `SUM <sha256hex>` over all
+  preceding bytes (ml_sha256_hex — the sim's FIPS 180-4 TU by path).
+  Doubles as hex16 BIT PATTERNS (NO strtod anywhere — the iter-38
+  device-musl strtod class is structurally out). Canonical decimals
+  only. rec domain: bits == -1.0 exactly, or finite in [0,6000).
+- LOAD (boot, every driver): strict anchored line-by-line; missing
+  file → `foh_persist: reset cause=missing`; header
+  MLFKPERSIST[0-9]+ with version != 1 → `reset cause=version`; ANY
+  other deviation (open/grammar/order/domain/sum/truncated/oversize)
+  → `reset cause=corrupt detail=<token>`; success → `foh_persist:
+  loaded`. Every arm emits exactly one stderr line — NEVER silent
+  (the qjs class inverted). Reset = defaults in memory; the bad file
+  is left in place until the next save overwrites it (each boot stays
+  loud until recovery — honest).
+- SAVE: canonical bytes → `<dir>/mlfk-persist.tmp` → fwrite + fflush
+  + fsync + fclose → rename() over mlfk-persist.dat → dir fsync
+  (EINVAL/ENOTSUP tolerated — FAT class; anything else fatal). Any
+  failure = loud death BEFORE the real file is touched (rename is the
+  only publish). Emits `foh_persist: saved`. mkdir(dir) EEXIST-ok.
+  Dir = `MLFK_PERSIST_DIR` env override (hermetic checks) else
+  /mnt/mlfk-data (product).
+- Save POINTS (upstream-cited): (1) options-gameplay B-exit
+  (gameplaymenu.js:29-33) — drivers watch the TRANS
+  options-gameplay→menu-options cause=b event; (2) target-run
+  completion — tp_finish_hook (foh_dev tdev_finish_hook extended;
+  foh_app installs one) runs foh_persist_record_update
+  (main.js:1442-1443 improve-or-first; emits `foh_persist: record
+  char=<c> tstage=<t> improved=<01>`) + save when improved, reading
+  G.sim.characterSelections[0] / TP.targetStagePlaying / G.matchTimer
+  (upstream's exact operands). Finish SOUNDS (newRecord/complete)
+  stay the registered task-12 acceptance-surface deferral.
+- READ path wired (task-12 registered deferral closed): FohState
+  gains targetRecords[5][10] (foh_init → -1.0), drivers
+  foh_persist_apply at boot; render_tss shows PERSONAL BEST for
+  (p1Char, tssCursor<=9) in the upstream format; cursor 10 (addcode)
+  keeps the dashes (upstream shows no PB there — registered).
+  REGISTERED formatting delta: C renders via integer centiseconds
+  cs=(long)(rec*100.0+0.5) — no libc float formatting on the device
+  path (iter-38/iter-74 musl rounding class); ties differ from JS
+  toFixed only at exact half-centiseconds, unreachable from
+  0.016667-step sums at display precision; non-checksummed UI.
+- HERMETICITY (binding constraint "frozen expectations unchanged by
+  default"): flows start from defaults because every CHECK run gets a
+  FRESH persist dir: check-foh-flows.sh exports MLFK_PERSIST_DIR to a
+  per-invocation-wiped build dir (its f03/wit/ctrl legs SAVE on their
+  B-exits — without this the wit leg's lcancel=1 save would leak into
+  the control leg); check-device-foh.sh + check-device-target.sh leg
+  launchers + host twins get per-leg fresh dirs under $DTMP/build
+  (tmpfs — also keeps the mid-flow save out of the paced-loop SD
+  fsync class). These two device checks get PAIRED MECHANICAL EDITS
+  ONLY, NOT cold-rerun this iteration (the iter-99 precedent;
+  task 14's gate + driver ritual own the rerun — REGISTERED). The
+  PRODUCT path (mlfk-foh.sh OPK launcher, byte-untouched) uses the
+  /mnt/mlfk-data default; its mid-play save-on-options-exit does SD
+  I/O inside the render loop — same class as upstream's cookie write
+  at the same UI moment; play surface has no skips gate (registered,
+  PORTABILITY row).
+- riglib: foh_device recipe += port/foh/foh_persist.c; RIG_SCRIPTS +=
+  port/foh/check-device-persist.sh. m3-freeze-manifest riglib row is
+  ALREADY stale post-M3 (b8aadf87… vs current b7417fc3…; iters 93/99
+  edited riglib without re-pin) — no new obligation; task 14's
+  m4-freeze-manifest pins fresh.
+- foh_dev NEW dev arm `--tooth-persist-finish <char> <tstage>
+  <hex16>`: crafts a complete TP/G state and calls the REAL
+  tp_finish_game → REAL hook → REAL chokepoint. This is the records
+  WRITE instrument: a genuinely completing target run is
+  authored-unreachable in committed flows (iter-99 t03 refutation)
+  and the live finish is the registered acceptance surface — the arm
+  exercises the full driver wiring short of sim-reached completion
+  (HONEST COVERAGE note below).
+
+**check-device-persist.sh (NEW, house conventions)** — composition:
+[0] adbsh + riglib chokepoints (lock, qd-normalize, stale
+marker/deadman handling, sha self-test); [1] judge-foh-trace.js twin
+pin + data planes (extractor + animations,tables,stages,targets into
+sim-tables); [2] host foh_dev_headless build (the check-device-target
+recipe + foh_persist.c); [3] check-owned flows p00 (boot probe), p01
+(settings-edit session: turbo→1, lcancel→2, tapjump2→1, B-exit save,
+1 shot), p02 (verify session: options shot + B-exit resave +
+menu→target-test + tss-record shot) as in-check heredocs (wit-g01
+precedent) + HOST REFERENCES: p01 file ×2 byte-stable, post-arm
+record file, p02 twin shots fed the same bytes, p02 DEFAULTS-CONTROL
+shots (must DIFFER from the persisted twins — display load-bearing),
+all files independently grammar+SUM-verified host-side (anchored
+full-line; shasum recompute); [4] HOST TEETH on copies: corrupt-sum
+nibble → reset corrupt/sum; version bump (MLFKPERSIST2, SUM
+recomputed) → reset version; NaN rec bits (SUM recomputed) → reset
+corrupt/domain; truncation → reset corrupt; torn-write sim (garbage
+.tmp beside a valid file) → `loaded` with values intact
+(rename-atomicity witness, publish-only-by-rename); read-only dir →
+save dies LOUD with the real file byte-unchanged (atomicity tooth);
+record-regress (worse time) → improved=0, NO save, file
+byte-identical; [5] rig_arm_build + rehash + push + provenance;
+pre-existing /mnt/mlfk-data/mlfk-persist.dat pulled aside (restored
+at cleanup — product state), our residue wiped at cleanup; [6]
+SESSION A (park+deadman window 1): device leg dp01 (--input flow,
+--pace 0, product dir default) → pull applog (reset missing=1,
+saved=1, exact-line greps), trace judged (judge-foh-trace + exact S/T
+lines), persist file pull #1 == host p01 reference BYTE-IDENTICAL;
+device record arm → pull #2 == host post-arm reference; unpark; [7]
+POWER-CYCLE: `adb reboot`, bounded adbd wait (120 s poll), re-verify
+device id + sha self-test, re-park (window 2) + re-push (tmpfs
+wiped; provenance re-verified); [8] SESSION B: leg dp02 → applog
+`loaded`=1 + resets=0 + `saved`=1; pull #3 BYTE-IDENTICAL to pull #2
+(round-trip across the power cycle); device shots opt-persisted +
+tss-record BYTE-EXACT vs the host persisted-twin shots (records READ
+path witnessed end-to-end: SD bytes → chokepoint → FohState → HUD
+pixels); [9] DEVICE TEETH: corrupted file pushed (nibble-flipped
+COPY of pull #3, sha-verified) → p00 probe applog `reset
+cause=corrupt detail=sum`; recovery leg dp03 (=p02 flow) → save
+publishes DEFAULTS → pull == the host defaults-control file +
+tss-record shot == the host CONTROL shot (loud-inverse witnessed ON
+the product surface); [10] hygiene: unpark verified, deadman
+cancelled unfired, mlfk-data residue wiped/pre-existing restored,
+rig_no_commit_guard; verdict `PERSIST OK (…honest counters…)`.
+
+**Power-cycle form (pre-registered decision)**: PRIMARY = reboot over
+ADB between the two sessions (`adb -s $DEV reboot`; adbd returns on
+boot via the SD `adb` marker — CLAUDE.md §Device access). The park
+marker NEVER spans the reboot (unpark → reboot → re-park): a
+mid-reboot death cannot strand /mnt/disable_frontend with the
+tmpfs-resident deadman gone. FALLBACK (registered, engaged only if
+the bounded 120 s adbd wait exhausts or the rebooted device fails
+require_device/sha self-test ON THE FIRST ATTEMPT — no blind reboot
+retries): rewrite the check to two full app sessions + `sync` +
+`echo 3 > /proc/sys/vm/drop_caches` between them (page cache dropped
+→ session B reads the SD media), and RECORD the measurement here.
+
+**Run caps (frozen)**: paced device runs 0/4 — every persist leg runs
+UNPACED (no perf claim; skips not asserted; no lbc quiesce needed);
+device app invocations ≤ 8 (dp01, arm, dp02, p00-corrupt probe, dp03
++ 3 spare); reboots ≤ 1 (no retry — fallback instead); arm rebuilds
+≤ 3 (expect 1); cold host checks ≤ 4 (done-check reruns +
+check-foh-flows cold); browser 0. PRE-REGISTERED DEVIATION from the
+M3 `--input poll` binding: persist legs drive `--input flow` on
+device — the input path is task 10/12's proven surface and is NOT
+this check's claim; flow-fed legs remove fk_input/uinput noise from
+the persistence evidence.
+
+**Pass criteria**: cold `bash port/foh/check-device-persist.sh` →
+`PERSIST OK` exit 0 with: device-vs-host persist-file BYTE-IDENTITY
+at every pull point; `loaded` (not reset) on the post-reboot boot;
+pull#3 == pull#2; both session-B shots byte-exact vs persisted twins
+AND != defaults controls; all teeth fire. Regressions: cold
+`bash port/foh/check-foh-flows.sh` → FOH FLOWS OK with flows/*.expect
++ *.bstate.expect + all frozen artifacts BYTE-UNTOUCHED (zero
+re-freezes); mechanical skip-proofs for check-sim.sh +
+check-target-sim.sh (port/sim diff EMPTY — no sim TU edits);
+check-device-foh.sh + check-device-target.sh = paired mechanical
+edits + registration (task 14 rerun), NOT cold-rerun here.
+
+**Refutation shapes (frozen)**:
+(a) reboot-over-ADB flaky (bounded wait exhausted once) → engage the
+    registered fallback form, record the measurement; do NOT retry
+    blind.
+(b) any sim TU edit proves necessary → STOP and report (task-brief
+    refutation shape).
+(c) any committed flow's frozen expectation perturbs by default
+    (cold FOH FLOWS cmp mismatch on untouched frozen bytes) → STOP
+    and re-design the seam; NEVER re-freeze silently.
+(d) device persist file != host twin bytes → ONE bounded evidence
+    round (pull + diff + applog); if not a check defect, the format
+    is not byte-deterministic cross-platform = design refutation →
+    STOP and report.
+Default: one bounded evidence round, then STOP.
+
+**HONEST COVERAGE (PROCESS §8, stated up front)**: the
+sim-reaches-completion → tp_finish_game edge is NOT exercised
+end-to-end (authored-unreachable in committed flows, iter-99
+refutation; live finish = acceptance surface). The records write is
+proven from tp_finish_game DOWNWARD (the real finishGame body → real
+hook → real chokepoint → real SD bytes → real HUD read-back) via the
+--tooth-persist-finish arm; the upstream finish TRIGGER
+(endTargetGame → tp_finish_game) is already mechanically covered by
+target_finish_probe (iter 99). Settings coverage is end-to-end real
+(the actual options UI path on device). Blind spot: a defect that
+only manifests when tp_finish_game is entered FROM tp_game_tick_target
+with a live GameState (vs the arm's crafted state) — bounded by the
+probe + the acceptance playthrough.
+
+## iter 100 — 2026-07-20 — M4 task 13 RESULT: persistence to SD — PERSIST OK
+
+**COLD done-check**: `bash port/foh/check-device-persist.sh` →
+**`PERSIST OK (sessions=2 powercycle=reboot bootwait=12s legs=5
+pulls=4 roundtrip=byte-exact record=00:14.50 resets missing=1
+loud-corrupt=2 teeth=9)`** exit 0
+(.loop/m4-task13-donecheck-run2.log). Attempt 1
+(.loop/m4-task13-donecheck-run1.log) died at [7]: the reboot
+DISPATCH never took — see the measured gotcha below; every
+session-A leg in attempt 1 was already green (dp01 file
+byte-identical, record arm green), zero device-evidence
+discrepancies across both attempts.
+
+**Shipped surfaces**:
+- NEW `port/foh/foh_persist.{h,c}` — the ONE chokepoint (contract +
+  format spec + defaults provenance in the header): MLFKPERSIST1,
+  55 LF lines, SUM sha256 seal (ml_sha256_hex by path), doubles as
+  hex16 bit patterns (strtod-free — the iter-38 musl class
+  structurally out), strict anchored load (missing/version/corrupt →
+  exact LOUD stderr reset lines + defaults in memory; the bad file
+  stays until the next save — every boot stays loud), atomic save
+  (tmp + fwrite + fflush + fsync + fclose + rename; rename = the
+  ONLY publish; dir-fsync with the FAT EINVAL/ENOTSUP tolerance),
+  `MLFK_PERSIST_DIR` override else /mnt/mlfk-data,
+  foh_persist_record_update = main.js:1442-1443 improve-or-first.
+- FohState grew targetRecords[5][10] (foh_init → -1.0 per
+  targetplay.js:40); render_tss PERSONAL BEST shows the record for
+  (p1Char, cursor≤9) in the upstream targetselect.js:411-419 format
+  via integer centiseconds (registered formatting delta — no libc
+  float formatting on the device path); cursor 10 keeps dashes.
+- Drivers (foh_app.c + foh_dev.c): boot load+apply; save on the
+  options-gameplay B-exit TRANS (gameplaymenu.js:29-33); the
+  finishGame record arm in tp_finish_hook (foh_dev's
+  tdev_finish_hook extended; foh_app installs a twin in tverify) —
+  complete arm only, operands read from GameState/TP exactly as
+  main.js:1431-1445 reads them. foh_dev NEW dev arm
+  `--tooth-persist-finish <char> <tstage> <hex16>` drives the REAL
+  tp_finish_game → hook → chokepoint → SD chain from a crafted
+  complete state.
+- NEW `port/foh/check-device-persist.sh` (composed per the house
+  conventions; riglib hygiene, RC-echo dsh, judge twin pin,
+  host-side judgment, whitelist grammars incl. an independent
+  MLFKPERSIST1 verifier — anchored full-line counts + a shasum
+  recompute of the seal): host references ×2 byte-stable + p02
+  persisted-twin/defaults-control shot pair; 7 host teeth + 2
+  device teeth; two REAL device sessions bracketing a REAL reboot
+  with an OFFLINE witness (a non-cycle can never pass as a cycle);
+  every pull byte-compared against a host-constructed twin file.
+- HERMETICITY (the binding "frozen expectations unchanged by
+  default" constraint): check-foh-flows.sh gained
+  `fresh_persist`/MLFK_PERSIST_DIR per invocation (+ foh_persist.c
+  in its build); check-device-foh.sh + check-device-target.sh
+  launchers/twins gained per-leg fresh tmpfs persist dirs (also
+  keeps the f03 mid-flow save off the SD inside paced loops);
+  riglib foh_device recipe += foh_persist.c, RIG_SCRIPTS +=
+  check-device-persist.sh. mlfk-foh.sh (product) byte-untouched.
+
+**Evidence chain (the claim, end to end)**: dp01 edits settings
+through the REAL options UI on device → save on the upstream B-exit
+→ pull #1 == the host p01 twin BYTE-IDENTICAL; the device record arm
+→ pull #2 == the host post-record twin; REAL reboot (down ≈2 s after
+dispatch, adbd healthy ≈40 s, uptime 0 verified in the evidence
+round; in-check bootwait 12 s from the offline edge); dp02 boots →
+`foh_persist: loaded` (zero reset lines) → pull #3 == pull #2 ==
+the host twin (the power-cycle survival claim); the options shot
+shows the persisted values and the PERSONAL BEST shot shows
+00:14.50 — both BYTE-EXACT vs host twins fed the pulled bytes and
+both ≠ the defaults-control shots (the READ path is load-bearing);
+device teeth: a nibble-flipped file resets LOUDLY
+(cause=corrupt detail=sum) and the recovery save publishes a file
+byte-identical to the authored-defaults control + the control shot.
+p02 structural traces are IDENTICAL between persisted and default
+runs (the persisted plane cannot perturb frozen flow expectations —
+refutation shape (c) mechanically witnessed, not just asserted).
+
+**Regressions**: cold `bash port/foh/check-foh-flows.sh` →
+`FOH FLOWS OK (flows=7 shots=17 bridges=3 tbridges=2 states=4
+tstates=2 diverge=1 control=1 teeth=18)` exit 0, FIRST attempt,
+ALL frozen flows/*.expect + *.bstate.expect + goldens byte-untouched
+— ZERO re-freezes (.loop/m4-task13-fohflows-run1.log).
+check-sim.sh + check-target-sim.sh: mechanical skip-proof — the
+port/sim diff is exactly {riglib.sh, check-device-target.sh}, both
+rig scripts, zero sim TUs (.loop/m4-task13-checksim-skip.txt).
+check-device-foh.sh + check-device-target.sh: paired mechanical
+edits only, NOT cold-rerun (iter-99 precedent; task 14 + the driver
+ritual own them) — REGISTERED, incl. that device-foh's host-twin
+build was REPAIRED here (it had been link-broken since iter 99:
+missing targets stage + target_play/gfx_target/ml_targets TUs).
+
+**MEASURED gotcha (NEW, PORTABILITY row)**: a raw
+`adb shell "setsid … reboot &"` dispatch is KILLED by this old
+adbd's session teardown before the detach takes — the device never
+went down (attempt 1's loud death; the offline witness worked
+exactly as designed). The house detach recipe through nonce-dsh
+(`setsid sh -c 'sleep 2; /sbin/reboot' </dev/null >/dev/null 2>&1 &
+sleep 1`) is the working form — the sleep-2 lets the RC marker
+return before adbd dies. ALSO MEASURED: /mnt/mlfk-data is the LIVE
+play-install data dir (anim bins, sndpack, gfxdata, mlfk-logs) —
+the persist surface COEXISTS there; the check touches only
+mlfk-persist.dat{,.tmp} and pulls aside/restores any pre-existing
+file.
+
+**Run ledger vs caps (honest)**: paced device runs 0/4 (all legs
+unpaced — pre-registered); device app invocations 7/8 (attempt 1:
+dp01+arm; attempt 2: dp01, arm, dp02, dpc, dp03); REBOOTS: cap said
+≤1 — actual 3 total (attempt 1: zero — the dispatch never fired;
+1 diagnostic reboot in the bounded evidence round that ATTRIBUTED
+the failure to the dispatch mechanism and proved the primary form
+healthy; 1 in-check on attempt 2). OVERAGE RECORDED: the cap was
+written as one-reboot-per-run + no blind retry; the evidence-round
+reboot was the measurement that made the retry non-blind (refutation
+shape (a) — adbd-not-returning — never fired; the fallback form was
+NOT engaged and stays registered). Arm rebuilds 2/3 (both stamp
+MISSes were real: source edits, then the check's own dispatch-fix
+bytes — RIG_SCRIPTS keying works as designed). Cold host checks 3/4
+(FOH FLOWS ×1, done-check ×2). Browser 0/0.
+
+**Refutation shapes**: (a) NOT fired (adbd returned; fallback
+unused). (b) NOT fired — zero sim TU edits. (c) NOT fired — zero
+re-freezes, plus the standing trace-identity witness. (d) NOT fired
+— every pull byte-identical first try (the format is
+byte-deterministic cross-platform by construction: canonical
+integers + hex16 + one emission site).
+
+**HONEST COVERAGE (final)**: as pre-registered — the
+sim-completes→finish trigger is not end-to-end here
+(authored-unreachable; probe-covered in check-target-sim; live
+finish = acceptance). The records write is proven from
+tp_finish_game DOWNWARD through the real hook/chokepoint/SD/HUD
+chain on BOTH host and device. The dp legs drive `--input flow` on
+device (pre-registered deviation; the input path is task 10/12's
+proven surface). Medal/dev-time DISPLAY stays the registered
+pipeline-extension deferral (nothing persisted is lost — medals are
+derived from records upstream). The finish SOUNDS
+(newRecord/complete) stay the task-12 acceptance-surface deferral.
+
+**ZOOM OUT (HARD RULE 8)**: (1) the qjs getCookie lesson is now a
+CLASS RULE with an instrument — every absent/corrupt persisted
+surface resets LOUDLY through one chokepoint with exact-token
+events; there is no second fopen site to drift (the GUARD/GUARDON
+sibling-drift class is structurally excluded by the single-TU
+design). (2) The reboot-dispatch failure was attributed to the
+KNOWN adbd-teardown class (the M3 "detached runs need setsid …
+sleep" rule) — the fix reuses the standing recipe rather than
+inventing a new mechanism; recorded in PORTABILITY so the next
+target re-measures it as a class. (3) The check-device-foh
+link-breakage found here is an instance of the recurring
+"sibling check recipes drift because TU lists are copy-pasted"
+class — repaired mechanically now, but the CLASS fix (one shared
+host-twin recipe function sourced by both device checks, the
+build_foh_headless factoring extended across scripts) is REGISTERED
+for the task-14 rig round rather than expanded mid-task. (4)
+Hermeticity was fixed at CLASS level: every FOH-driving check got
+the fresh-persist-dir pattern in the same commit, not just the new
+check.

@@ -106,13 +106,19 @@
 // SAME array — S events keep the p1char token; WRAP on this screen,
 // cited, vs the CSS rewrite's clamp). A or START launches
 // (targetselect.js:131 accepts either). The trace records
-// `TLAUNCH <f> char=<0-4> tstage=<0-9>`. Records HUD: "PERSONAL BEST
-// --:--:--" is the honest fresh-boot value (targetRecords ≡ -1,
-// targetplay.js:40 -> the "--:--:--" arm, targetselect.js:411-412);
-// records READ/persistence = task 13 (REGISTERED deferral);
+// `TLAUNCH <f> char=<0-4> tstage=<0-9>`. Records HUD (task 13, iter
+// 100 — the iter-99 READ deferral closed): targetRecords[5][10] lives
+// in FohState (fresh-boot -1 per targetplay.js:40 -> "--:--:--",
+// targetselect.js:411-412; else the upstream time format,
+// targetselect.js:415-419), populated at boot by the drivers through
+// the foh_persist chokepoint (foh_persist.h — the machine itself
+// stays I/O-free); the addcode slot (cursor 10) keeps the dashes
+// (upstream shows no PB there — registered rewrite delta).
 // medalTimes/devRecords display DEFERRED (authored data values — HARD
 // RULE 5 forbids hand-retyping; needs a pipeline extension; registered
-// AGENT-LOG iter 99).
+// AGENT-LOG iter 99; medals are DERIVED from records upstream —
+// giveMedals, targetplay.js:165-174 — so nothing is lost in the
+// persisted plane).
 //
 // INPUT SEAM: foh_tick consumes PlatformInput. On the host check the
 // rows come from a committed FLOW script (foh_app.c); on device (task
@@ -184,6 +190,11 @@ typedef struct {
   int turbo;
   int lCancelType;
   int tapJumpOff[4];
+  // target-test records DISPLAY plane (task 13): seconds, -1 = none
+  // (upstream fresh state, targetplay.js:40). foh_init sets -1; the
+  // drivers overwrite from the foh_persist chokepoint at boot
+  // (foh_persist_apply). The machine only READS it (render_tss).
+  double targetRecords[5][10];
   // launch record (frozen once screen == FOH_MATCH / FOH_TMATCH):
   // targetMode false -> VS launch (stageSel); true -> target launch
   // (tssStage; char == p1Char)

@@ -3,7 +3,57 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-20, iter 99 — M4 task 12 DONE: target test FOH + device, DEVICE TARGET CONFORMS cold)
+## Live right now (updated: 2026-07-20, iter 100 — M4 task 13 DONE: SD persistence, PERSIST OK cold)
+
+- **Iter 100 (M4 task 13 — persistence to SD) DONE** (full entry:
+  AGENT-LOG iter 100 pre-registration + result; latest AGENT-LOG id:
+  iter 100). COLD: **`PERSIST OK (sessions=2 powercycle=reboot
+  bootwait=12s legs=5 pulls=4 roundtrip=byte-exact record=00:14.50
+  resets missing=1 loud-corrupt=2 teeth=9)`** exit 0
+  (.loop/m4-task13-donecheck-run2.log). ONE chokepoint
+  port/foh/foh_persist.{h,c} (MLFKPERSIST1: sha256-sealed, hex16
+  bit-pattern doubles/strtod-free, atomic tmp+fsync+rename, LOUD
+  reset-to-defaults on missing/version/corrupt — the qjs lesson
+  inverted); settings {turbo,lcancel,tapjump[4]} +
+  targetRecords[5][10] (medals DERIVED upstream — not persisted;
+  display deferral stands); save points = options B-exit +
+  the finishGame record arm (tp_finish_hook, REAL wiring; exercised
+  by the NEW foh_dev --tooth-persist-finish arm — completing runs
+  authored-unreachable, registered honest coverage). Records READ
+  path CLOSED: PERSONAL BEST renders the persisted record, device
+  shot byte-exact vs host twin + != defaults control. TWO real
+  sessions across a REAL measured reboot (down ~2 s post-dispatch,
+  adbd healthy ~40 s; in-check bounded 120 s + offline witness); all
+  4 pulls byte-identical to host-constructed twins. Regression: cold
+  **FOH FLOWS OK (flows=7 shots=17 bridges=3 tbridges=2 states=4
+  tstates=2 diverge=1 control=1 teeth=18)** with ZERO re-freezes
+  (.loop/m4-task13-fohflows-run1.log); check-sim/check-target-sim
+  mechanical skip-proof (.loop/m4-task13-checksim-skip.txt — no sim
+  TU touched). Device left clean (verified: no marker, no residue,
+  scratch wiped, gmenu2x live, lbc==1). MEASURED gotcha (new): a raw
+  `adb shell "… &"` reboot dispatch is killed by this adbd's
+  teardown — use the house setsid+dsh detach recipe (PORTABILITY
+  row).
+- **MEASURED: /mnt/mlfk-data is the LIVE play-install data dir**
+  (anim bins/sndpack/gfxdata/mlfk-logs) — the check touches ONLY
+  mlfk-persist.dat{,.tmp} and restores any pre-existing file.
+- **Registered residuals for task 14**: check-device-foh.sh +
+  check-device-target.sh got PAIRED MECHANICAL edits (per-leg
+  MLFK_PERSIST_DIR hermeticity; device-foh's host-twin recipe also
+  REPAIRED — it was link-broken since iter 99: targets stage +
+  target_play/gfx_target/ml_targets TUs added) WITHOUT cold device
+  reruns (iter-99 precedent — the gate + driver ritual own them).
+  m3-freeze-manifest riglib row stale since iter 93 (pre-existing;
+  the m4 manifest pins fresh). Tier-A arc for the iter-100 surfaces
+  (check-device-persist.sh NEW, foh_persist.{h,c}, check-foh-flows
+  delta, driver deltas) = driver-run, post-commit. Product-path
+  note: the OPK launcher saves to SD inside the render loop at the
+  upstream cookie moment (no skips gate on the play surface;
+  PORTABILITY row).
+- **Next: task 14 (verify_m4.sh assembly) → M4 GATE → provision
+  device → LOOP STOP: m4-complete.**
+
+## [superseded by iter 100] (2026-07-20, iter 99 — M4 task 12 DONE: target test FOH + device, DEVICE TARGET CONFORMS cold)
 
 - **Iter 99 (M4 task 12 — target test FOH + device) DONE** (full
   entry: AGENT-LOG iter 99 pre-registration + result; latest

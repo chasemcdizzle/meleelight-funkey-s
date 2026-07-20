@@ -35,6 +35,16 @@ the port cost for a new target is the DEVICE-BOUND column, not the sim.
   sim over the same raster + camera constants — device-agnostic
   (iter 99); the Layer-2 letterbox/legibility constants apply as for
   the VS renderer.
+- The persistence chokepoint (`port/foh/foh_persist.{h,c}`, iter
+  100): the MLFKPERSIST1 format (checksummed, hex16 bit-pattern
+  doubles — strtod-free by design, so device-libc parse quirks are
+  structurally out), the loud reset-to-defaults semantics, and the
+  atomic tmp+fsync+rename save are device-agnostic (proven: host
+  arm64 macOS file bytes == armv7 musl device bytes). Only the
+  DEFAULT DIRECTORY (`/mnt/mlfk-data` — the FunKey SD data dir) and
+  the dir-fsync EINVAL/ENOTSUP tolerance (FAT class) are
+  target-flavored; a new target re-points the default dir
+  (`MLFK_PERSIST_DIR` is the same override either way).
 
 ## Layer 1 — the platform seam (per-target TU, by design)
 
@@ -129,6 +139,19 @@ A new device = write one new backend TU (+ audio open params).
 - **PMIC stall mitigation**: `low_bat_check` is FunKey OS's daemon;
   the skip-attribution INSTRUMENT (`skip-attrib/`) is the portable
   part — run it on any new device to find ITS stall sources.
+- **Power-cycle rig** (`port/foh/check-device-persist.sh`, iter 100):
+  the two-session persistence proof reboots THIS device over ADB —
+  the dispatch is the FunKey-measured detach recipe (`setsid sh -c
+  'sleep 2; /sbin/reboot'` through nonce-dsh; a raw `adb shell "… &"`
+  is killed by this old adbd's teardown before the detach takes —
+  measured iter 100) and relies on the SD `adb` marker restarting
+  adbd at boot (~40 s to healthy; bounded 120 s wait + an offline
+  witness so a non-cycle can never pass as a cycle). A new target
+  re-measures its reboot/return path; the session/byte-identity
+  judgment structure ports as-is. The product save fires on the
+  options B-exit inside the render loop (upstream's own cookie-write
+  moment) — an SD-latency-sensitive target may need the save
+  deferred to a loop boundary (registered class note).
 
 ## Porting recipe (when a new target appears)
 

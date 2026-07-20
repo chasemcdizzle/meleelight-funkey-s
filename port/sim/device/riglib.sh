@@ -29,6 +29,7 @@ port/gfx/check-device-music.sh \
 port/sim/device/check-skip-attrib.sh \
 port/foh/check-device-foh.sh \
 port/sim/target/check-device-target.sh \
+port/foh/check-device-persist.sh \
 port/sim/device/verify_m3.sh"
 
 # The armv7 binaries the shared build produces (one docker run).
@@ -1029,7 +1030,7 @@ rig_arm_build() {
         -o "$DEVB/foh_device" \
         "$DEVB/raster_arm.o" \
         port/foh/foh_dev.c port/foh/foh.c port/foh/foh_font.c \
-        port/foh/foh_render.c \
+        port/foh/foh_render.c port/foh/foh_persist.c \
         port/sim/target/target_play.c \
         "$GFX/platform_sdl1.c" \
         "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_target.c" \
