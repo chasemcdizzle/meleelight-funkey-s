@@ -22,20 +22,25 @@
 //
 // MANIFEST GRAMMAR (PROCESS §3 whitelist rule): the freezer is the
 // artifact-minting authority, so it validates the WHOLE manifest-target
-// before trusting any row — exact top-level and per-golden key set/order,
-// types, ranges, id/name/trace grammar (^t[0-9]{2}$), duplicate
-// rejection, a raw duplicate-JSON-key token guard, name-derived
-// basename-only trace, and resolved-path containment in the golden home.
+// before trusting any row. The iter-94 grammar was EXTRACTED VERBATIM
+// into the SHARED validate-target-manifest.js (review-94 H1, iter 96)
+// so every done-check consumer runs the same validator.
+//
+// x2 BROWSER IDENTITY (review-94 L1, iter 96): the two fresh runs must
+// record the SAME browser name + version — a channel-Chrome run A paired
+// with a bundled-Chromium fallback run B is NOT same-browser
+// repeatability evidence; mismatch = refusal naming both sides.
 "use strict";
 const fs = require("fs");
 const path = require("path");
 const { streamDigest, sha256File, specVersion } =
   require("../../oracle/harness/streamlib");
+const { loadValidatedManifest, goldenByIdOrName } =
+  require("./validate-target-manifest");
 
 const GOLDENS_DIR = __dirname; // port/goldens-m4
 
 function die(msg) { console.error("freeze-target: " + msg); process.exit(1); }
-function vdie(msg) { die("manifest grammar — " + msg); }
 
 function checkSpec(v, what) {
   if (typeof v !== "number" || !Number.isInteger(v) || v < 1) {
@@ -46,105 +51,12 @@ function checkSpec(v, what) {
 }
 const CUR_SPEC = checkSpec(specVersion(), "current oracle/CHECKSUM.md");
 
-const GOLDEN_KEYS = ["id", "name", "trace", "frames", "seed",
-  "char", "tstage", "minTargets", "wantArticles"];
-
-function loadManifest() {
-  const mPath = path.join(GOLDENS_DIR, "manifest-target.json");
-  const raw = fs.readFileSync(mPath, "utf8");
-  let m;
-  try { m = JSON.parse(raw); } catch (e) {
-    vdie("manifest-target.json is not valid JSON: " + e.message);
-  }
-  if (typeof m !== "object" || m === null || Array.isArray(m)) {
-    vdie("top level is not an object");
-  }
-  const topKeys = Object.keys(m).sort().join(",");
-  if (topKeys !== "comment,goldens") {
-    vdie("top-level keys {" + topKeys + "} != {comment,goldens} (exact schema)");
-  }
-  if (typeof m.comment !== "string") vdie("comment is not a string");
-  if (!Array.isArray(m.goldens) || m.goldens.length < 1) {
-    vdie("goldens is not a nonempty array");
-  }
-  for (const k of GOLDEN_KEYS) {
-    const tok = JSON.stringify(k) + ":";
-    let cnt = 0, i = -1;
-    while ((i = raw.indexOf(tok, i + 1)) !== -1) cnt++;
-    if (cnt !== m.goldens.length) {
-      vdie("raw token " + tok + " occurs " + cnt + " times, want exactly " +
-        m.goldens.length + " (one per golden; a duplicated JSON key is " +
-        "silently last-wins — corruption, refuse)");
-    }
-  }
-  const dir = path.resolve(GOLDENS_DIR);
-  const ids = new Set(), names = new Set(), traces = new Set();
-  m.goldens.forEach(function (g, idx) {
-    const where = "goldens[" + idx + "]";
-    if (typeof g !== "object" || g === null || Array.isArray(g)) {
-      vdie(where + " is not an object");
-    }
-    const keys = Object.keys(g);
-    if (keys.length !== GOLDEN_KEYS.length ||
-        GOLDEN_KEYS.some(function (k, j) { return keys[j] !== k; })) {
-      vdie(where + " key set/order {" + keys.join(",") + "} != {" +
-        GOLDEN_KEYS.join(",") + "} (exact schema, fail closed)");
-    }
-    if (typeof g.id !== "string" || !/^t[0-9]{2}$/.test(g.id)) {
-      vdie(where + " id '" + g.id + "' fails ^t[0-9]{2}$");
-    }
-    if (typeof g.name !== "string" || !/^t[0-9]{2}(-[a-z0-9]+)+$/.test(g.name)) {
-      vdie(where + " name '" + g.name + "' fails ^t[0-9]{2}(-[a-z0-9]+)+$");
-    }
-    if (g.name.slice(0, 3) !== g.id) {
-      vdie(where + " name '" + g.name + "' does not begin with its id '" + g.id + "'");
-    }
-    if (g.trace !== g.name + ".trace.json") {
-      vdie(where + " trace '" + g.trace + "' != name-derived '" + g.name +
-        ".trace.json' (basename-only by construction)");
-    }
-    if (path.basename(g.trace) !== g.trace) {
-      vdie(where + " trace '" + g.trace + "' is not a bare basename");
-    }
-    if (path.dirname(path.resolve(dir, g.trace)) !== dir) {
-      vdie(where + " trace resolves outside the golden home " + dir);
-    }
-    for (const suffix of [".sha256.json", ".target.sha256.json"]) {
-      if (path.dirname(path.resolve(dir, g.name + suffix)) !== dir) {
-        vdie(where + " frozen path " + suffix + " resolves outside " + dir);
-      }
-    }
-    if (!Number.isInteger(g.frames) || g.frames < 1 || g.frames > 999999) {
-      vdie(where + " frames " + g.frames + " is not an integer in 1..999999");
-    }
-    if (!Number.isInteger(g.seed) || g.seed < 0 || g.seed > 4294967295) {
-      vdie(where + " seed " + g.seed + " is not an integer in 0..2^32-1");
-    }
-    if (!Number.isInteger(g.char) || g.char < 0 || g.char > 4) {
-      vdie(where + " char " + g.char + " outside the char domain 0-4");
-    }
-    if (!Number.isInteger(g.tstage) || g.tstage < 0 || g.tstage > 9) {
-      vdie(where + " tstage " + g.tstage + " outside the target-stage domain 0-9");
-    }
-    if (!Number.isInteger(g.minTargets) || g.minTargets < 1 || g.minTargets > 10) {
-      vdie(where + " minTargets " + g.minTargets + " outside 1..10");
-    }
-    if (typeof g.wantArticles !== "boolean") {
-      vdie(where + " wantArticles is not a boolean");
-    }
-    if (ids.has(g.id)) vdie("duplicate golden id " + g.id);
-    if (names.has(g.name)) vdie("duplicate golden name " + g.name);
-    if (traces.has(g.trace)) vdie("duplicate golden trace " + g.trace);
-    ids.add(g.id); names.add(g.name); traces.add(g.trace);
-  });
-  return m;
-}
-
 function goldenById(id) {
-  const m = loadManifest();
-  const g = m.goldens.find((x) => x.id === id || x.name === id);
-  if (!g) die("golden not in port/goldens-m4/manifest-target.json: " + id);
-  return g;
+  // The SHARED strict validator (review-94 H1) — the whole manifest is
+  // validated before any row is trusted; violations die here.
+  let m;
+  try { m = loadValidatedManifest(); } catch (e) { die(e.message); }
+  try { return goldenByIdOrName(m, id); } catch (e) { die(e.message); }
 }
 
 const argv = process.argv.slice(2);
@@ -221,6 +133,19 @@ for (const [label, r] of [["A", a], ["B", b]]) {
   if (r.target.frames.length !== g.frames) {
     die(`run ${label} has ${r.target.frames.length} target frames, wants ${g.frames}`);
   }
+}
+
+// --- x2 browser identity (review-94 L1) --------------------------------------
+if (typeof a.meta.browser !== "string" || typeof a.meta.version !== "string" ||
+    typeof b.meta.browser !== "string" || typeof b.meta.version !== "string") {
+  die("run meta.browser/meta.version missing or not strings — x2 browser " +
+      "identity requires both runs to record their browser");
+}
+if (a.meta.browser !== b.meta.browser || a.meta.version !== b.meta.version) {
+  die(`runs A/B used DIFFERENT browsers — A ${a.meta.browser} ` +
+      `${a.meta.version} vs B ${b.meta.browser} ${b.meta.version} ` +
+      "(x2 identity evidence requires one browser; the channel-Chrome vs " +
+      "bundled-Chromium fallback pair is refused)");
 }
 
 // --- write a frozen file deterministically, guarding overwrite ---------------

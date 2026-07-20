@@ -29,19 +29,31 @@
 
 #include "../sim/sim.h" // GameState (port/sim/target/ -> port/sim/sim/)
 
-#define TP_MAX_TARGETS 16 // authored max is 10 (TTAB1 pin)
+// ML_MAX_TARGETS — THE pinned authored target-count cap (review-94 M5,
+// iter 96; ONE constant, schema twin = pipeline/lib/targets-schema.js's
+// identical ML_MAX_TARGETS). MEASURED over all 10 authored stages
+// (executed walk, .loop/m4-tgt96-measure-keys.log == expected.json
+// targets.perStage): 8 stages author 10 targets, targetstage6 authors 9,
+// targetstage9 authors 1 — max = 10 == the upstream 10-slot
+// targetDestroyed literal (targetplay.js:37; the _Static_assert in
+// target_play.c ties the literal to the cap). tp_setup_target dies
+// LOUDLY outside 1..cap (never truncation); the old 16-slot silent
+// acceptance — which let targetDestroyed[] index out of bounds for
+// counts 11-16 — is dead.
+#define ML_MAX_TARGETS 10
 
 typedef struct {
   // targetplay.js module lets (:34-38)
   bool targetTesting;
   double targetPlayer;
   double targetStagePlaying;
-  bool targetDestroyed[10]; // literal [false x10] (:37; reset :189)
+  bool targetDestroyed[10]; // literal [false x10] (:37; reset :189) ==
+                            // ML_MAX_TARGETS (static-asserted)
   double targetsDestroyed;
   // main.js let endTargetGame (setEndTargetGame; read main.js:988)
   bool endTargetGame;
   // activeStage.target for the ACTIVE target stage (TTAB1-decoded)
-  Vec2D target[TP_MAX_TARGETS];
+  Vec2D target[ML_MAX_TARGETS];
   int targetCount;
 } MlTargets;
 

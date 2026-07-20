@@ -57,6 +57,12 @@ if [ ! -f "$DIST/dist/meleelight.html" ]; then
   die "no built upstream at $DIST — run oracle/build-upstream.sh"
 fi
 
+# SHARED strict manifest validation FIRST (review-94 H1, iter 96): the
+# whole manifest must pass validate-target-manifest.js before any row is
+# trusted (duplicate ids/names/traces, key order, domains, containment).
+node "$M4G/validate-target-manifest.js" \
+  || die "manifest-target.json failed the shared strict validator"
+
 # Pull params from the target manifest — strict key=value line-parse with
 # per-key anchored whitelists (the eval class is dead; PROCESS §3).
 out="$(node -e '

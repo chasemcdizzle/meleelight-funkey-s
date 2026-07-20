@@ -55,6 +55,17 @@ const TSTAGE_KEYS = ["startingPoint", "box", "ground", "ceiling", "wallL",
   "wallR", "platform", "ledge", "target", "scale", "blastzone", "offset"];
 const TSTAGE_KEYS_OPTIONAL = ["ledgePos"];
 
+// ML_MAX_TARGETS — THE pinned authored target-count cap (review-94 M5,
+// iter 96; the C twin is port/sim/target/target_play.h's identical
+// constant, static-asserted against the upstream 10-slot targetDestroyed
+// literal, targetplay.js:37). MEASURED over all 10 authored stages
+// (executed walk, .loop/m4-tgt96-measure-keys.log, == expected.json
+// targets.perStage): 8 stages author 10 targets, targetstage6 authors 9,
+// targetstage9 authors 1 — max = 10. Above the cap the C sim would index
+// targetDestroyed out of bounds, so the schema hard-throws here (format
+// bump territory, never droppable/truncatable).
+const ML_MAX_TARGETS = 10;
+
 function loadTargetStages(distRoot) {
   const { win, srcSha256 } = loadExtractor(distRoot);
   const tstages = win.__targetStages;
@@ -64,8 +75,23 @@ function loadTargetStages(distRoot) {
   return { tstages, srcSha256 };
 }
 
+// Nested shapes are EXACT-KEY-SET validated (review-94 M4, iter 96 —
+// the executed-walk instrument): own-key sets MEASURED over every
+// authored position (.loop/m4-tgt96-measure-keys.log — 1155 Vec2D
+// instances all {x,y}, 95 Box2D instances all {min,max}); an
+// upstream-added enumerable field now hard-throws instead of being
+// silently projected away on BOTH the generation and fresh-JS-dump
+// sides of the round trip.
 function asVec2(where, p) {
-  if (!p || typeof p.x !== "number" || typeof p.y !== "number") {
+  if (!p || typeof p !== "object" || Array.isArray(p)) {
+    throw new Error(`${where}: not a Vec2D`);
+  }
+  const ks = Object.keys(p).sort().join(",");
+  if (ks !== "x,y") {
+    throw new Error(`${where}: Vec2D own-key set {${ks}} != {x,y} (exact ` +
+      `schema; an upstream-added field is a format change, never droppable)`);
+  }
+  if (typeof p.x !== "number" || typeof p.y !== "number") {
     throw new Error(`${where}: not a Vec2D`);
   }
   return { x: asF64(where + ".x", p.x), y: asF64(where + ".y", p.y) };
@@ -84,7 +110,14 @@ function asSurface(where, s) {
 }
 
 function asBox2(where, b) {
-  if (!b || !b.min || !b.max) throw new Error(`${where}: not a Box2D`);
+  if (!b || typeof b !== "object" || Array.isArray(b)) {
+    throw new Error(`${where}: not a Box2D`);
+  }
+  const ks = Object.keys(b).sort().join(",");
+  if (ks !== "max,min") {
+    throw new Error(`${where}: Box2D own-key set {${ks}} != {min,max} (exact ` +
+      `schema; an upstream-added field is a format change, never droppable)`);
+  }
   return {
     min: asVec2(where + ".min", b.min),
     max: asVec2(where + ".max", b.max),
@@ -167,9 +200,16 @@ function buildTargetStageModel(tstagesObj) {
     }
 
     // -- targets (breakable centers; radius is the CODE literal 7 in
-    //    targetplay.js, not data) --
-    if (!Array.isArray(st.target) || st.target.length < 1) {
-      throw new Error(`${sn}: target must be a nonempty array`);
+    //    targetplay.js, not data). Count pinned 1..ML_MAX_TARGETS
+    //    (review-94 M5): the C targetDestroyed plane is the 10-slot
+    //    upstream literal — a count above the cap is a loud format
+    //    failure here, never a silent OOB acceptance downstream. --
+    if (!Array.isArray(st.target) || st.target.length < 1 ||
+        st.target.length > ML_MAX_TARGETS) {
+      throw new Error(`${sn}: target count ` +
+        `${Array.isArray(st.target) ? st.target.length : typeof st.target} ` +
+        `outside 1..${ML_MAX_TARGETS} (the measured authored cap; ` +
+        `targetDestroyed is a 10-slot literal upstream)`);
     }
     model.target = st.target.map((p, i) => asVec2(where(`target[${i}]`), p));
 
@@ -216,6 +256,6 @@ function dumpTargetStages(model, emit) {
 }
 
 module.exports = {
-  TSTAGE_NAMES, SURF_KINDS, LEDGE_TYPES,
+  TSTAGE_NAMES, SURF_KINDS, LEDGE_TYPES, ML_MAX_TARGETS,
   loadTargetStages, buildTargetStageModel, dumpTargetStages, f64bits,
 };

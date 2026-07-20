@@ -15737,3 +15737,314 @@ typed. Music-surface arc round 2 reviews this commit's bytes.
   triage's arc plan); task-14 notes registered above (render-rung
   witness inheritance, match-phase witness, frontend-nav + live
   branch exercise).
+
+## iter 96 — 2026-07-20 — M4 hardening PRE-REGISTRATION: target-rig round-1 closure (review-94 triage, ALL dispositions; frozen before any run/edit; PROCESS §2)
+
+- **Task**: close ALL dispositions in `.loop/review-94-triage.md`
+  (Tier A over 927294e, verify-target-stream.js weighted Tier A+,
+  VERDICT: NO-GO — 2 High, 5 Medium, 2 Low, all FIX; detail
+  `.loop/review-94-1.log`). HOST-ONLY. Surfaces ONLY:
+  port/sim/target/{check-target-sim.sh,target_play.c,target_play.h},
+  port/goldens-m4/{run-target.js,record-target.sh,freeze-target.js,
+  verify-target-stream.js,wrap-target.js,check-target-quality.js} +
+  NEW shared validator port/goldens-m4/validate-target-manifest.js,
+  pipeline/lib/targets-schema.js. manifest-target.json: expected
+  UNTOUCHED (touch only if the validator demands a format fix).
+  check-sim.sh, verify-stream.js, oracle/, all frozen *.sha256.json:
+  BYTE-UNTOUCHED. Every fix must judge the EXISTING frozen artifacts
+  green — NO re-freeze, NO spec bump.
+- **Budgets (hard caps)**: browser runs 4 total (plan: 2 — one fresh
+  probe per golden t01/t02 proving the M3 instrument; 2 spare for one
+  bounded refutation round). Cold done-check runs 3
+  (check-target-sim.sh x2 max + check-sim.sh x1); plus cold
+  `bash pipeline/check-targets.sh` (targets-schema.js changes; the
+  triage names it cheap-run-it). Component-level node invocations
+  (validator/judge/wrap/freeze against ARCHIVED bytes) are corpus
+  validation, not done-check runs. Logs -> `.loop/m4-tgt96-*.log`.
+- **H1 method (shared manifest validator)**: freeze-target.js's iter-94
+  manifest grammar (exact top-level + per-golden key set/order, types,
+  domains, id ^t[0-9]{2}$, name/trace derivation, raw
+  duplicate-JSON-key token guard, duplicate id/name/trace rejection,
+  resolved-path containment) is EXTRACTED VERBATIM into NEW
+  port/goldens-m4/validate-target-manifest.js (module
+  `loadValidatedManifest([path])` throwing on violation + CLI printing
+  `TARGET MANIFEST OK (...)`/dying naming the violation). EVERY
+  done-check consumer runs it before use: freeze-target.js (requires
+  the module — extraction, behavior-identical), wrap-target.js,
+  verify-target-stream.js, record-target.sh (CLI, before its param
+  pull), check-target-sim.sh (CLI, before [3]'s IDS derivation).
+  Per-golden scratch paths already derive from ids — now validated
+  unique. Tooth T12: a duplicate-row manifest COPY (row 0 cloned over
+  row 1 — passes the per-golden checks, hits the dup gate) -> the CLI
+  dies naming "duplicate golden id"; the committed manifest passes.
+- **H2 method (full-metadata seal binding)**: verify-target-stream.js
+  gains (a) MANIFEST BINDING — the committed manifest passes the
+  shared validator and carries a row named frozen.golden whose
+  {trace,frames,seed,char,tstage,minTargets,wantArticles} equal the
+  frozen params EXACTLY; (b) SIBLING BINDING — frozen.playerStream
+  must == golden+".sha256.json", the sibling next to the frozen target
+  file is loaded, its OWN streamSha256 seal verified over its frames
+  (numbering 1..N), specVersion equal, params cross-pinned
+  (trace/traceSha256/frames/seed/p1==char/mode/tstage), and the run's
+  coverage.rngCalls/rngCallsOutsideStep must equal the sibling's
+  frozen values; (c) MECHANICAL QUALITY re-judgment from frozen
+  metadata — finalTargetsDestroyed >= minTargets, finalEndTargetGame
+  === false. HONEST COVERAGE: wantArticles has NO stream-derivable
+  witness (the target envelope carries no article field; player frames
+  are hashes) — it binds frozen<->manifest only; article presence
+  itself was proven live at record time (check-target-quality.js) and
+  is baked into the frozen player hashes any conforming replay must
+  reproduce. If a needed field were genuinely absent from the frozen
+  files -> STOP (finding about the binding; never weaken/re-freeze) —
+  measured NOW: the frozen params DO carry minTargets/wantArticles/
+  char/tstage/seed/frames + playerStream (head of both .target files
+  read this session), so the binding is direct.
+- **M1 method (judge vacuous-pass death)**: exact whitelist schema on
+  the frozen target file — top-level key ORDER {golden,stream,
+  specVersion,playerStream,params,streamSha256,frames}; params key
+  ORDER {trace,traceSha256,frames,seed,char,tstage,mode,minTargets,
+  wantArticles,finalTargetsDestroyed,finalEndTargetGame}; every field
+  typed + domain-checked (frames int 1..999999 — `0/0 MATCH`
+  structurally unreachable; seed u32; char 0-4; tstage 0-9; minTargets
+  1-10; finalTargetsDestroyed int 0..20 — the double-destroy quirk can
+  exceed targetCount; hex fields ^[0-9a-f]{64}$); frames rows exactly
+  {f,h} with f==i+1. Run-side required-field death: meta
+  frames/seed/tstage/p1 integers + mode string, coverage.target
+  {targetsDestroyed int, endTargetGame bool}, run target rows strict
+  {f,h}/numbering/hex — undefined===undefined impossible by
+  construction. Corpus (zero false rejections required): the 2
+  committed frozen pairs + the 4 ARCHIVED iter-94 browser run JSONs
+  (oracle/harness/out/target-t0{1,2}-{a,b}.json, on disk) + fresh
+  wraps of the 2 ARCHIVED sim.out files.
+- **M2 method (wrap exact-token grammar)**: producer grammar MEASURED
+  from target_main.c's printf discipline (:217-218 `F %ld %s`/`T %ld
+  %s` per frame, :246 `RNG %u %u`, :250 `TFIN %d %s`, :251 `SIM OK`):
+  wrap-target.js becomes a POSITIONAL exact-token parser — exactly
+  2N+3 lines; for f=1..N line pairs `F <f> <hex64>` then `T <f>
+  <hex64>` where the frame token must equal String(f) (canonical
+  integer text — `F 0001`/reordering/interleave breakage = death exit
+  3 naming the line); then RNG with canonical ints, then TFIN, then
+  SIM OK, then EOF. Corpus: re-wrap the ARCHIVED t01/t02 sim.out ->
+  output run JSONs byte-identical (cmp) to the archived
+  t0{1,2}.player.json/.target.json; fresh cold-run wraps green.
+- **M3 method (page-own frame counter)**: run-target.js's
+  __serializeState wrap captures `window.__frameCount` AT CALL TIME —
+  pagelib.js:101 sets `__frameCount = f+1` immediately BEFORE the
+  post-step __serializeState call (measured this session), so the
+  captured value IS the page's own index of the frame just stepped.
+  The wrapper THROWS on any non-(+1)-monotonic capture (prev+1 !=
+  now: a duplicate or dropped callback dies at the exact frame, even
+  in the constant starting window); post-run asserts first==1,
+  last==FRAMES, length==FRAMES, and the emitted target.frames rows
+  carry the CAPTURED counter (never invented k+1). NO golden
+  re-record. Proof: one fresh probe run per golden -> STREAM MATCH vs
+  the frozen player stream (UNCHANGED verify-stream.js) + TARGET
+  STREAM MATCH vs the frozen target stream (the hardened production
+  judge). REFUTATION SHAPES: (r1) __frameCount unreachable/stale from
+  the wrap context (probe throws monotonicity at frame 1) -> the
+  preferred form is refuted -> fallback: an injected counter
+  incremented at the harness's own step site, recorded; one bounded
+  round, then STOP. (r2) probe streams do NOT match the frozen goldens
+  -> the instrument perturbed the run -> STOP and report (never ship a
+  recorder whose fresh runs can't reproduce the frozen artifacts).
+- **M4 method (nested exact-key-set)**: capture-FIRST — ONE
+  measurement run (node, executed walk over all 10 authored stages)
+  records the OWN-key sets of every Vec2D/Box2D position reached
+  (startingPoint/box{,min,max}/surfaces/ledgePos/target/blastzone).
+  Expected {x,y} and {min,max}; the measured sets are then PINNED as
+  exact-key-set hard-throws in asVec2/asBox2 (the executed-walk
+  instrument, iter-94's own lesson). REFUTATION: extra enumerable keys
+  measured -> pin the MEASURED set exactly and record the delta (never
+  silently project). Corpus: cold check-targets.sh (x2 pipeline runs +
+  718-leaf round trip) — zero false rejections.
+- **M5 method (ONE pinned target cap) — PRE-REGISTERED AMENDMENT of
+  the triage's "(max 9 per stage, tstage6)"**: the committed frozen
+  pins (pipeline/expected.json targets.perStage, read this session)
+  say: 8 stages author 10 targets, targetstage6 authors 9,
+  targetstage9 authors 1 — the measured authored MAX is **10**, ==
+  the upstream 10-slot targetDestroyed literal (targetplay.js:37).
+  The triage's "9" mistook tstage6's count for the max; a 9 cap would
+  falsely reject 8 of 10 authored stages (refuted before any edit —
+  do NOT re-litigate). Fix form stands verbatim: ONE
+  `ML_MAX_TARGETS = 10` — target_play.h (replaces TP_MAX_TARGETS 16;
+  target[] sized to it; `_Static_assert(ML_MAX_TARGETS == 10)` ties
+  the verbatim 10-slot targetDestroyed literal to the cap) + loud
+  tp_setup_target death outside 1..cap (never truncation) + the
+  schema twin in targets-schema.js (target.length 1..10 hard-throw).
+  16-slot acceptance dead everywhere. Capacity-only: behavioral
+  identity proven by cold SIM CONFORMS 8/8 + TARGET SIM CONFORMS.
+- **L1 method**: freeze-target.js asserts a.meta.{browser,version}
+  and b.meta.{browser,version} are strings AND equal — mismatch =
+  refusal naming both sides. Regression: freeze on the ARCHIVED a/b
+  pairs must print `unchanged (byte-identical re-freeze)` for all 4
+  frozen files (also exercises the extracted validator + proves the
+  freezer still mints byte-identical artifacts).
+- **L2 method (frozen-side teeth)**: check-target-sim.sh [5] gains a
+  frozen-copy rig (basename-preserving COPIES of the t01 frozen
+  target file + player sibling + trace under $BUILD/ftooth; committed
+  bytes never edited; restores = re-copy from the pristine copy) with
+  an untouched-copy PASS CONTROL first, then T7 frozen-frame nibble
+  (h hex flip -> seal death), T8 frame-numbering perturb (f 1800 ->
+  1801 -> numbering death), T9 seal perturb (streamSha256 flip), T10
+  metadata perturb (params.minTargets 2->3 -> quality/manifest-binding
+  death), T11 sibling-seal perturb (player sibling streamSha256 flip
+  -> sibling-binding death) — each must die in the PRODUCTION judge
+  (verify-target-stream.js) — plus H1's T12 duplicate-manifest tooth.
+  Existing run-side teeth T1-T6 stay. Verdict teeth counter 6->12
+  (honest counter change).
+- **Also (registered mechanical edits)**: check-target-sim.sh [1] runs
+  check-targets.sh ONCE (captured + relayed + grep on the captured
+  output) instead of twice — verdict semantics unchanged, cold cost
+  halved; check-target-quality.js gains canonical-integer argv text
+  checks (the M2 exact-token class, one line); wrap-target.js header
+  comment rewritten to the measured producer grammar (the old comment
+  carried a confusing dead draft paragraph).
+- **Pass criteria (all required)**: cold
+  `bash pipeline/check-targets.sh` -> `TARGETS OK` exit 0; cold
+  `bash port/sim/target/check-target-sim.sh` -> `TARGET SIM CONFORMS
+  (2 goldens: t01 t02; leaves=718 probe=ok teeth=12)` exit 0; cold
+  `bash port/sim/check-sim.sh` -> `SIM CONFORMS` 8/8 exit 0; both
+  probe runs STREAM MATCH + TARGET STREAM MATCH vs the frozen
+  artifacts; corpus validations zero false rejections; all teeth
+  fire; ONE atomic commit; budgets respected.
+- **Refutation catch-all**: any NEW binding failing against the
+  EXISTING frozen artifacts (beyond the pre-measured facts above) is
+  a finding about the binding — one bounded evidence round, then STOP
+  and report; never weaken, never re-freeze, never bump specs.
+
+## iter 96 — 2026-07-20 — M4 hardening RESULT: target-rig round-1 closure — ALL review-94 dispositions shipped; cold checks green FIRST attempt
+
+- **COLD verdicts (all first attempt)**:
+  `TARGET SIM CONFORMS (2 goldens: t01 t02; leaves=718 probe=ok
+  teeth=12)` exit 0 (.loop/m4-tgt96-donecheck.log) ·
+  `TARGETS OK` exit 0 (.loop/m4-tgt96-check-targets.log) ·
+  `SIM CONFORMS` 8/8 exit 0 (.loop/m4-tgt96-check-sim.log). FROZEN
+  artifacts byte-untouched (git status: no *.sha256.json, no oracle/,
+  check-sim.sh untouched); zero divergence rounds; zero refutation
+  shapes fired except the PRE-REGISTERED M5 amendment below.
+- **H1 SHIPPED**: NEW port/goldens-m4/validate-target-manifest.js —
+  the freezer's manifest grammar EXTRACTED VERBATIM (exact key
+  set/order, domains, id/name/trace derivation + containment, raw
+  duplicate-JSON-key token guard, duplicate id/name/trace rejection);
+  module + CLI. ALL done-check consumers now run it before use:
+  freeze-target.js (requires it — extraction, behavior identical:
+  archived a/b re-freeze printed `unchanged (byte-identical
+  re-freeze)` x4), wrap-target.js, verify-target-stream.js,
+  record-target.sh (CLI before its param pull), check-target-sim.sh
+  (CLI + validated IDS pull + validated per-golden reads). Tooth T12:
+  duplicate-row COPY -> `manifest grammar — duplicate golden id t01`
+  (never reports its goldens).
+- **H2 SHIPPED**: verify-target-stream.js now binds (a) frozen params
+  {trace,frames,seed,char,tstage,minTargets,wantArticles} == the
+  validated COMMITTED manifest row named frozen.golden; (b) the
+  playerStream sibling BY NAME (must be golden+".sha256.json") with
+  its OWN streamSha256 seal verified over its frames + numbering +
+  specVersion + params cross-pins (trace/traceSha256/frames/seed/
+  p1==char/mode/tstage) + rngCallsOutsideStep==1, and the run's
+  rngCalls/rngCallsOutsideStep must equal the sibling's frozen
+  values; (c) MECHANICAL QUALITY from frozen metadata:
+  finalTargetsDestroyed >= minTargets, finalEndTargetGame == false.
+  HONEST COVERAGE: wantArticles has NO stream-derivable witness (the
+  target envelope carries no article field; player frames are hashes)
+  — bound frozen<->manifest only; article presence was proven live at
+  record time (check-target-quality.js) and is baked into the frozen
+  player hashes every conforming replay reproduces bit-exactly.
+- **M1 SHIPPED**: exact whitelist schema on the frozen target file
+  (top-level + params key ORDER, full typing/domains, frames rows
+  exactly {f,h}/f==i+1/64-hex, frames >= 1 by schema + manifest
+  binding — `0/0 MATCH` structurally unreachable) + run-side
+  required-field/type death (meta ints, coverage.target
+  {targetsDestroyed int, endTargetGame bool}, strict run rows) —
+  undefined===undefined holes dead (component witness f4: emptied
+  finals object dies naming the field).
+- **M2 SHIPPED**: wrap-target.js is a POSITIONAL exact-token parser of
+  the MEASURED producer grammar (target_main.c printf discipline):
+  exactly 2N+3 lines — per frame `F <f> <hex64>` then `T <f> <hex64>`
+  with the frame token == String(f) (canonical text), then RNG, TFIN,
+  SIM OK; ANY deviation dies exit 3 naming the line. Witnesses:
+  zero-padded token (f1), RNG-amid-frames (f2), TFIN-before-RNG (f3)
+  all die. CORPUS: archived t01/t02 sim.out re-wrapped -> run JSONs
+  BYTE-IDENTICAL (cmp) to the archived iter-94 wraps; fresh cold-run
+  wraps green — zero false rejections.
+- **M3 SHIPPED**: run-target.js captures the page's OWN
+  window.__frameCount (set to f+1 at pagelib.js:101 immediately
+  before the post-step __serializeState call) INSIDE the wrapper at
+  call time, THROWS on any non-(+1)-monotonic capture, and emits
+  target.frames rows from the CAPTURED counter (never invented k+1);
+  post-run asserts length/first/last. NO golden re-record. PROOF: one
+  fresh probe per golden (.loop/m4-tgt96-probe.log) — both STREAM
+  MATCH the frozen player streams (UNCHANGED verify-stream.js) AND
+  TARGET STREAM MATCH the frozen target streams (hardened production
+  judge). Refutation shape r1 (counter unreachable) did NOT fire.
+- **M4 SHIPPED**: capture-FIRST measurement
+  (.loop/m4-tgt96-measure-keys.log): 1155 executed Vec2D instances
+  all own-keys {x,y}, 95 Box2D instances all {min,max} — pinned as
+  exact-key-set hard-throws in asVec2/asBox2. Teeth on the REAL
+  executed registry: live Vec2D +z and Box2D +mid both die naming the
+  key set; restore-control clean. Corpus: cold TARGETS OK (executed
+  walk over all 10 stages, 718-leaf round trip) — zero false
+  rejections.
+- **M5 SHIPPED (with the PRE-REGISTERED AMENDMENT)**: the triage's
+  "(max 9 per stage, tstage6)" was REFUTED by measurement before any
+  edit — expected.json targets.perStage AND the executed walk agree:
+  8 stages author 10 targets, targetstage6 authors 9, targetstage9
+  authors 1 -> the authored MAX is **10** == the upstream 10-slot
+  targetDestroyed literal (targetplay.js:37). A 9 cap would falsely
+  reject 8 of 10 authored stages — do NOT re-litigate. Shipped: ONE
+  `ML_MAX_TARGETS 10` in target_play.h (replaces TP_MAX_TARGETS 16;
+  target[] sized to it; _Static_asserts tie the 10-slot literal to
+  the cap) + tp_setup_target LOUD death outside 1..cap (never
+  truncation; the 11-16 OOB window is dead) + the schema twin
+  (targets-schema.js ML_MAX_TARGETS, target count 1..10 hard-throw;
+  11-target tooth dies). Capacity-only: cold SIM CONFORMS 8/8 +
+  TARGET SIM CONFORMS prove behavioral identity.
+- **L1 SHIPPED**: freeze-target.js refuses A/B browser
+  name/version mismatch naming both sides (and missing/untyped
+  fields); archived-pair regression re-froze byte-identical.
+- **L2 SHIPPED**: frozen-side teeth in check-target-sim.sh [5] on
+  basename-preserving COPIES (target frozen + player sibling + trace
+  under $BUILD/ftooth), untouched-copy PASS CONTROL first, then T7
+  frozen-frame nibble (seal death), T8 frame-numbering perturb
+  (numbering death), T9 streamSha256 perturb (seal death), T10
+  minTargets perturb (metadata-binding death — the exact H2 hole),
+  T11 sibling-seal perturb (sibling-binding death) + T12 (H1).
+  Verdict teeth counter 6->12 (honest change). Run-side T1-T6 stay.
+- **Also (registered mechanical)**: check-target-sim.sh [1] runs
+  check-targets.sh ONCE (captured/relayed/grep'd — cold cost halved,
+  semantics kept); check-target-quality.js canonical-integer argv
+  text; wrap-target.js header rewritten to the measured grammar (the
+  old comment carried a dead draft paragraph).
+- **Run ledger vs budgets**: browser 2/4 (probe t01 + t02; both
+  planes matched — no spare consumed); cold done-checks:
+  check-target-sim 1/2, check-sim 1/1, + check-targets 1 (the
+  triage's named extra); component/corpus node invocations logged in
+  .loop/m4-tgt96-corpus.log (validator, wrap cmp x4, judge x8 archived
+  +2 probe, freeze x2, schema teeth) — zero false rejections across
+  the ENTIRE archived corpus.
+- **Honest coverage (PROCESS §8) — what the new bindings still cannot
+  see**: (1) wantArticles remains a manifest<->frozen consistency pin,
+  not a stream-decoded fact (no article field exists on the target
+  plane; adding one is CHECKSUM-adjacent format territory). (2) The
+  sibling binding proves the player FROZEN file's integrity + params
+  coherence, not that the player STREAM verdict was run — that stays
+  check-target-sim [3]'s explicit verify-stream.js call (writer !=
+  checker split unchanged). (3) The M3 monotonicity witness lives at
+  RECORD time; already-frozen goldens are protected by the probe's
+  STREAM MATCH triangle, not re-derived. (4) M5's cap kills the OOB
+  class for AUTHORED data flowing through the schema; a hand-crafted
+  TTAB1 bypassing the pipeline is out of scope (the C setup death
+  still catches counts > 10). (5) Frozen-side teeth prove the judge
+  bites on t01's copy set; t02 shares the identical code path.
+- **ZOOM OUT (HARD RULE 8)**: two class instruments landed rather
+  than spot fixes — the SHARED manifest validator kills the
+  "each consumer trusts the registry raw" class for every current and
+  future goldens-m4 consumer, and the frozen-metadata/sibling binding
+  extends the M3-task2 lesson (seal covers ONLY what it hashes) into
+  a general rule: every frozen artifact field that a verdict depends
+  on must be either sealed or bound to a validated source of truth.
+  The M5 amendment is the standing "measure the domain yourself
+  before pinning it" rule paying out again (triage prose != measured
+  pins). Registered residual for the round-2 arc: record-target.sh's
+  bash-side param grammar and the validator overlap (two dialects of
+  one grammar — acceptable: one is line-protocol hygiene, one is the
+  registry authority; noted for the reviewer).

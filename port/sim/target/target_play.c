@@ -31,6 +31,16 @@
 
 MlTargets TP; // zero-init: page-boot values (targetplay.js:34-38 lets)
 
+// The verbatim 10-slot targetDestroyed literal (targetplay.js:37) IS the
+// authored cap (review-94 M5) — if either side ever moves, this dies at
+// compile time instead of reopening the OOB window.
+_Static_assert(ML_MAX_TARGETS == 10,
+               "ML_MAX_TARGETS must equal the upstream 10-slot "
+               "targetDestroyed literal (targetplay.js:37)");
+_Static_assert(sizeof TP.targetDestroyed / sizeof TP.targetDestroyed[0] ==
+                   ML_MAX_TARGETS,
+               "targetDestroyed[] must hold exactly ML_MAX_TARGETS slots");
+
 // --- slot deref (P()/slot() are hit_detection.c statics; same semantics) -----
 
 static MlPlayer *tp_P(GameState *g, double p) {
@@ -253,7 +263,13 @@ void tp_setup_target(GameState *g, int charId, int tstageId) {
   TP.targetStagePlaying = (double)tstageId;
   // activeStage.target -> the module's decoded copy
   const ml_tstage_t *st = &ml_tstages[tstageId];
-  if (st->targetCount > TP_MAX_TARGETS) sim_fatal("TTAB1 target list over cap");
+  // review-94 M5: LOUD death outside the measured authored domain
+  // 1..ML_MAX_TARGETS (never truncation) — above the cap the
+  // targetDestroyed plane would index out of bounds.
+  if (st->targetCount < 1 || st->targetCount > ML_MAX_TARGETS) {
+    sim_fatal("TTAB1 target count outside 1..ML_MAX_TARGETS (the measured "
+              "authored cap; refusing — never truncated)");
+  }
   TP.targetCount = st->targetCount;
   for (int32_t k = 0; k < st->targetCount; k++) {
     TP.target[k].x = ml_target_f64(st->target[k].x);

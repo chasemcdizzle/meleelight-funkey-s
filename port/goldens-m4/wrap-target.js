@@ -4,41 +4,40 @@
 // twin for gameMode 5): the PLAYER run JSON (judged by the UNCHANGED
 // oracle/harness/verify-stream.js) and the TARGET-plane run JSON (judged
 // by verify-target-stream.js). Params come from
-// port/goldens-m4/manifest-target.json (single param source).
+// port/goldens-m4/manifest-target.json (single param source), validated
+// by the SHARED strict validator before any row is trusted (review-94
+// H1, iter 96).
 //
 // Usage: node wrap-target.js <goldenId> <sim-output.txt> \
 //          <out-player.json> <out-target.json>
 //
-// Sim output contract (whitelist grammar, PROCESS §3; HARD-FAILED exit 3
-// on any drift — anchored full-line patterns only, binary outcome, no
-// partial parses, no silent skips):
-//   - lines "F <n> <64-lowercase-hex>": the PLAYER checksum stream;
-//   - lines "T <n> <64-lowercase-hex>": the TARGET-plane stream;
-//     F and T for a given frame must INTERLEAVE F<n> then T<n>, both
-//     contiguous 1..N with N == the golden's frame count;
-//   - exactly one line "RNG <rngCalls> <rngCallsOutsideStep>" (integers);
-//   - a final line "SIM OK" (nothing after it);
-//   - ANY other line is an error (resembles-but-doesn't-match =
-//     corruption = fail closed).
+// Sim output contract — the EXACT-TOKEN POSITIONAL grammar (review-94
+// M2, iter 96; PROCESS §3): the producer is target_main.c's printf
+// discipline (measured — :217-218 "F %ld %s"/"T %ld %s" per frame,
+// :246 "RNG %u %u", :250 "TFIN %d %s", :251 "SIM OK"), so the parser
+// accepts NOTHING the producer cannot emit. Exactly 2N+3 lines
+// (N = the golden's manifest frame count):
+//   for f = 1..N, in order:  "F <f> <64-lowercase-hex>"
+//                      then  "T <f> <64-lowercase-hex>"
+//     — the frame token must be the CANONICAL integer text String(f)
+//       (no leading zeros, exact single spacing); any reordering,
+//       interleave break, or zero-padded token is corruption;
+//   then exactly:  "RNG <int> <int>"    (canonical integer text)
+//   then exactly:  "TFIN <int> <T|F>"   (targetsDestroyed + endTargetGame)
+//   then exactly:  "SIM OK"             (the final line; nothing after)
+// ANY deviation = corruption = HARD FAIL exit 3 naming the line
+// (resembles-but-doesn't-match = death; no partial parses, no silent
+// skips, no normalization).
 //
-// The target run JSON reuses the player meta shape + carries
-// coverage.target finals from the FROZEN target sha (the C sim does not
-// emit finals on its stdout — they are derivable from the target stream's
-// last frame, so wrap-target reads them off the frozen file it will be
-// judged against, and verify-target-stream re-checks stream + finals; a
-// mismatch there is still caught). To avoid a self-referential finals
-// pass, the finals are recomputed from the manifest's committed
-// finalTargetsDestroyed only via verify — here we DERIVE them from the
-// sim's own last target frame is impossible (hash only), so the finals
-// come from re-running the target-plane envelope? No: the C sim already
-// emitted the plane; the finals live in coverage. We instead read the
-// COUNT the C sim reached from a REQUIRED trailing "TFIN" line.
+// The target run JSON reuses the player meta shape and carries
+// coverage.target finals from the REQUIRED TFIN line (the C sim's own
+// reported finals); verify-target-stream.js re-checks stream + finals
+// against the frozen artifacts.
 "use strict";
 
 const fs = require("fs");
 const path = require("path");
-
-const GOLDENS_DIR = __dirname;
+const { loadValidatedManifest } = require("./validate-target-manifest");
 
 function die(msg) { console.error("wrap-target: " + msg); process.exit(3); }
 
@@ -50,8 +49,11 @@ if (!goldenId || !simOutPath || !outPlayerPath || !outTargetPath) {
   process.exit(1);
 }
 
-const manifest = JSON.parse(
-  fs.readFileSync(path.join(GOLDENS_DIR, "manifest-target.json"), "utf8"));
+let manifest;
+try { manifest = loadValidatedManifest(); } catch (e) {
+  console.error("wrap-target: " + e.message);
+  process.exit(1);
+}
 const g = manifest.goldens.find((x) => x.id === goldenId);
 if (!g) {
   console.error("wrap-target: unknown golden id " + goldenId + " (have: " +
@@ -62,66 +64,64 @@ if (!g) {
 const rawLines = fs.readFileSync(simOutPath, "utf8").split("\n");
 if (rawLines.length && rawLines[rawLines.length - 1] === "") rawLines.pop();
 
-const F_RE = /^F (\d+) ([0-9a-f]{64})$/;
-const T_RE = /^T (\d+) ([0-9a-f]{64})$/;
-const RNG_RE = /^RNG (\d+) (\d+)$/;
-const TFIN_RE = /^TFIN (\d+) (T|F)$/; // targetsDestroyed + endTargetGame
+// Exact-token patterns (canonical integer text: 0 | [1-9][0-9]*).
+const F_RE = /^F (0|[1-9][0-9]*) ([0-9a-f]{64})$/;
+const T_RE = /^T (0|[1-9][0-9]*) ([0-9a-f]{64})$/;
+const RNG_RE = /^RNG (0|[1-9][0-9]*) (0|[1-9][0-9]*)$/;
+const TFIN_RE = /^TFIN (0|[1-9][0-9]*) (T|F)$/;
+
+const wantLines = 2 * g.frames + 3;
+if (rawLines.length !== wantLines) {
+  die("sim output has " + rawLines.length + " lines; the producer grammar " +
+      "requires exactly " + wantLines + " (2x" + g.frames +
+      " frame lines + RNG + TFIN + SIM OK)");
+}
+
 const playerFrames = [];
 const targetFrames = [];
-let rng = null;
-let tfin = null;
-let simOk = false;
-for (let i = 0; i < rawLines.length; i++) {
-  const line = rawLines[i];
-  if (simOk) die("output continues after SIM OK at line " + (i + 1) +
-                 ": " + JSON.stringify(line));
-  let m;
-  if ((m = F_RE.exec(line)) !== null) {
-    const n = parseInt(m[1], 10);
-    if (n !== playerFrames.length + 1) {
-      die("F lines not contiguous 1..N: got F " + n + " after " +
-          playerFrames.length + " (line " + (i + 1) + ")");
-    }
-    if (n !== targetFrames.length + 1) {
-      die("F/T interleave broken: F " + n + " but " + targetFrames.length +
-          " T lines so far (line " + (i + 1) + ")");
-    }
-    playerFrames.push({ f: n, h: m[2] });
-  } else if ((m = T_RE.exec(line)) !== null) {
-    const n = parseInt(m[1], 10);
-    if (n !== targetFrames.length + 1) {
-      die("T lines not contiguous 1..N: got T " + n + " after " +
-          targetFrames.length + " (line " + (i + 1) + ")");
-    }
-    if (n !== playerFrames.length) {
-      die("F/T interleave broken: T " + n + " must follow its F " + n +
-          " (line " + (i + 1) + ")");
-    }
-    targetFrames.push({ f: n, h: m[2] });
-  } else if ((m = RNG_RE.exec(line)) !== null) {
-    if (rng !== null) die("duplicate RNG line at line " + (i + 1));
-    rng = { rngCalls: parseInt(m[1], 10),
-            rngCallsOutsideStep: parseInt(m[2], 10) };
-  } else if ((m = TFIN_RE.exec(line)) !== null) {
-    if (tfin !== null) die("duplicate TFIN line at line " + (i + 1));
-    tfin = { targetsDestroyed: parseInt(m[1], 10), endTargetGame: m[2] === "T" };
-  } else if (line === "SIM OK") {
-    simOk = true;
-  } else {
-    die("unrecognized sim output at line " + (i + 1) + ": " +
-        JSON.stringify(line));
+let li = 0;
+for (let f = 1; f <= g.frames; f++) {
+  const fLine = rawLines[li];
+  let m = F_RE.exec(fLine);
+  if (m === null || m[1] !== String(f)) {
+    die("line " + (li + 1) + ": expected exactly 'F " + f +
+        " <64-lowercase-hex>' (canonical integer text, strict F/T " +
+        "interleave); got " + JSON.stringify(fLine));
   }
+  playerFrames.push({ f: f, h: m[2] });
+  li++;
+  const tLine = rawLines[li];
+  m = T_RE.exec(tLine);
+  if (m === null || m[1] !== String(f)) {
+    die("line " + (li + 1) + ": expected exactly 'T " + f +
+        " <64-lowercase-hex>' (canonical integer text, strict F/T " +
+        "interleave); got " + JSON.stringify(tLine));
+  }
+  targetFrames.push({ f: f, h: m[2] });
+  li++;
 }
-if (!simOk) die("missing final SIM OK line");
-if (rng === null) die("missing RNG line");
-if (tfin === null) die("missing TFIN line");
-if (playerFrames.length !== g.frames) {
-  die("sim produced " + playerFrames.length + " player frames, golden " +
-      g.id + " requires " + g.frames);
+const rngLine = rawLines[li];
+const rngM = RNG_RE.exec(rngLine);
+if (rngM === null) {
+  die("line " + (li + 1) + ": expected exactly 'RNG <int> <int>' " +
+      "(canonical integer text, after all " + g.frames + " frame pairs); " +
+      "got " + JSON.stringify(rngLine));
 }
-if (targetFrames.length !== g.frames) {
-  die("sim produced " + targetFrames.length + " target frames, golden " +
-      g.id + " requires " + g.frames);
+const rng = { rngCalls: Number(rngM[1]),
+              rngCallsOutsideStep: Number(rngM[2]) };
+li++;
+const tfinLine = rawLines[li];
+const tfinM = TFIN_RE.exec(tfinLine);
+if (tfinM === null) {
+  die("line " + (li + 1) + ": expected exactly 'TFIN <int> <T|F>' " +
+      "(after the RNG line); got " + JSON.stringify(tfinLine));
+}
+const tfin = { targetsDestroyed: Number(tfinM[1]),
+               endTargetGame: tfinM[2] === "T" };
+li++;
+if (rawLines[li] !== "SIM OK") {
+  die("line " + (li + 1) + ": expected exactly 'SIM OK' as the final " +
+      "line; got " + JSON.stringify(rawLines[li]));
 }
 
 const baseMeta = {

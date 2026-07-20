@@ -45,7 +45,11 @@
 // Snapshot timing: __serializeState is wrapped (called EXACTLY once per
 // frame inside pagelib's __runFrames, immediately post-step) to push the
 // target envelope STRING synchronously; hashing happens after the run
-// (crypto.subtle — no seeded-RNG interaction either way).
+// (crypto.subtle — no seeded-RNG interaction either way). Each snap
+// carries the page's OWN frame counter (window.__frameCount, set to f+1
+// at pagelib.js:101 right before the call) captured AT CALL TIME with a
+// strict +1 monotonicity death — frame numbers are never invented
+// post-hoc (review-94 M3, iter 96).
 "use strict";
 
 const fs = require("fs");
@@ -236,21 +240,36 @@ async function main() {
     // Target-plane capture: wrap __serializeState (called EXACTLY once
     // per frame inside __runFrames, post-step) to push the envelope
     // string synchronously; the hash pass runs after the frame loop.
+    // FRAME NUMBERS ARE CAPTURED, NEVER INVENTED (review-94 M3, iter
+    // 96): pagelib.js:101 sets window.__frameCount = f+1 immediately
+    // BEFORE this post-step call, so the captured value IS the page's
+    // OWN index of the frame just stepped; strict +1 monotonicity is
+    // asserted AT CALL TIME — a duplicate or dropped callback dies at
+    // the exact frame, even inside the constant starting window where
+    // hash sequences could mask it.
     const numStr = (v) => (Object.is(v, -0) ? "-0" : String(v)); // pagelib.js:10-13
     window.__targetSnaps = [];
     const origSer = window.__serializeState;
     window.__serializeState = function () {
+      const fNow = window.__frameCount; // the page's OWN frame counter
+      const prev = window.__targetSnaps.length
+        ? window.__targetSnaps[window.__targetSnaps.length - 1].f : 0;
+      if (!Number.isInteger(fNow) || fNow !== prev + 1) {
+        throw new Error("target-plane snap counter broke +1 monotonicity: " +
+          prev + " -> " + fNow +
+          " (duplicate/dropped __serializeState callback)");
+      }
       const td = tpM.targetDestroyed; // re-read: startTargetGame REBINDS it
       let tdStr = "[";
       for (let k = 0; k < td.length; k++) {
         tdStr += (k ? "," : "") + (td[k] ? "T" : "F");
       }
       tdStr += "]";
-      window.__targetSnaps.push(
+      window.__targetSnaps.push({ f: fNow, s:
         '{"endTargetGame":' + (mainM.endTargetGame ? "T" : "F") +
         ',"matchTimer":' + numStr(mainM.matchTimer) +
         ',"targetDestroyed":' + tdStr +
-        ',"targetsDestroyed":' + numStr(tpM.targetsDestroyed) + "}");
+        ',"targetsDestroyed":' + numStr(tpM.targetsDestroyed) + "}" });
       return origSer();
     };
     window.__targetFinal = function () {
@@ -283,11 +302,13 @@ async function main() {
   const wall = Date.now() - t0;
 
   // Target-plane hash pass (page's own __sha256; crypto.subtle — no
-  // seeded-RNG interaction).
+  // seeded-RNG interaction). Frame numbers come from the CAPTURED page
+  // counter (review-94 M3) — never invented here.
   const targetFrames = await page.evaluate(async () => {
     const out = [];
     for (let k = 0; k < window.__targetSnaps.length; k++) {
-      out.push({ f: k + 1, h: await window.__sha256(window.__targetSnaps[k]) });
+      const snap = window.__targetSnaps[k];
+      out.push({ f: snap.f, h: await window.__sha256(snap.s) });
     }
     return out;
   });
@@ -295,6 +316,15 @@ async function main() {
     console.error(`target-plane snap count ${targetFrames.length} != frames ${FRAMES} ` +
       "(the __serializeState wrapper must fire exactly once per frame)");
     process.exit(1);
+  }
+  // Captured-counter first/last + numbering (monotonicity was already
+  // asserted at call time inside the wrapper; this is the belt).
+  for (let k = 0; k < targetFrames.length; k++) {
+    if (targetFrames[k].f !== k + 1) {
+      console.error(`captured frame counter row ${k} carries f=` +
+        `${targetFrames[k].f}, want ${k + 1} (first must be 1, last ${FRAMES})`);
+      process.exit(1);
+    }
   }
 
   const coverage = await page.evaluate(() => window.__coverage());

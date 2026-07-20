@@ -3,31 +3,57 @@
 // target-plane stream (fix_plan §M4 task 11; the iter-63 separate-stream
 // convention; Tier A+ — it is a judge path). The spec-v1 PLAYER stream is
 // judged SEPARATELY by the UNCHANGED oracle/harness/verify-stream.js; this
-// verifier owns ONLY the target plane + the target-specific param pins the
-// player verifier has no field for (mode/tstage/char).
+// verifier owns the target plane + the full target metadata binding
+// (review-94 H2/M1 hardened, iter 96).
 //
 // Usage: node verify-target-stream.js <run.json> <frozen.target.sha256.json>
 //
 // PASS ("TARGET STREAM MATCH …", exit 0) requires ALL of:
-//   1. frozen-file integrity: streamSha256 seal matches its frames, frame
-//      numbers exactly 1..N, N == params.frames, stream == "target-plane",
-//      basename == golden + ".target.sha256.json";
-//   2. spec pin: frozen specVersion == oracle/CHECKSUM.md's current version;
-//   3. trace pin: the golden trace (next to the frozen file) hashes to
-//      params.traceSha256, and the run consumed that trace;
-//   4. param pin: run.meta {frames, seed, mode:"target", tstage} and the
-//      target CHAR (run.meta.p1) match the frozen params exactly;
-//   5. the target-plane stream: EXACT per-frame {f,h} equality, FULL
-//      length (never epsilon/prefix);
-//   6. the target-plane FINALS: run.coverage.target.targetsDestroyed ==
-//      params.finalTargetsDestroyed and endTargetGame == finalEndTargetGame
-//      (the plane's end-state, pinned bit-exactly alongside the stream).
+//   1. frozen-file EXACT SCHEMA (whitelist, fail closed — review-94 M1):
+//      top-level key ORDER {golden,stream,specVersion,playerStream,
+//      params,streamSha256,frames}; params key ORDER {trace,traceSha256,
+//      frames,seed,char,tstage,mode,minTargets,wantArticles,
+//      finalTargetsDestroyed,finalEndTargetGame}; every field typed +
+//      domain-checked; frames = rows of exactly {f,h}, f == i+1,
+//      h 64-lowercase-hex; frames length == params.frames >= 1 (a
+//      "0/0 MATCH" is structurally unreachable); basename ==
+//      golden + ".target.sha256.json"; streamSha256 integrity seal.
+//   2. MECHANICAL QUALITY from the frozen metadata (review-94 H2):
+//      finalTargetsDestroyed >= minTargets; finalEndTargetGame == false.
+//      HONEST COVERAGE: wantArticles has NO stream-derivable witness
+//      (the target envelope carries no article field; player frames are
+//      hashes) — it binds frozen<->manifest below; article presence was
+//      proven live at record time (check-target-quality.js) and is baked
+//      into the frozen player hashes any conforming replay reproduces.
+//   3. MANIFEST BINDING (review-94 H2): the COMMITTED manifest-target
+//      passes the SHARED strict validator and carries a row named
+//      frozen.golden whose {trace,frames,seed,char,tstage,minTargets,
+//      wantArticles} equal the frozen params exactly.
+//   4. SIBLING BINDING (review-94 H2): frozen.playerStream ==
+//      golden + ".sha256.json"; the sibling next to the frozen target
+//      file exists, its OWN streamSha256 seal verifies over its frames
+//      (numbering 1..N), specVersion matches, and its params cross-pin
+//      the target params (trace/traceSha256/frames/seed/p1==char/mode/
+//      tstage); its rngCallsOutsideStep == 1.
+//   5. spec pin: frozen specVersion == oracle/CHECKSUM.md's current.
+//   6. trace pin: the golden trace (next to the frozen file) hashes to
+//      params.traceSha256, and the run consumed that trace.
+//   7. run pins (required fields, TYPED — undefined never compares
+//      equal): meta {frames,seed,tstage,p1 ints; mode "target"};
+//      coverage {rngCalls,rngCallsOutsideStep} == the SIBLING's frozen
+//      values; coverage.target {targetsDestroyed int, endTargetGame
+//      bool}.
+//   8. the target-plane stream: EXACT per-frame {f,h} equality, FULL
+//      length (never epsilon/prefix); run rows strictly typed, f == i+1.
+//   9. finals: run targetsDestroyed/endTargetGame == the frozen
+//      finalTargetsDestroyed/finalEndTargetGame.
 // Any failure prints the reason and exits nonzero (divergence exits 2).
 "use strict";
 const fs = require("fs");
 const path = require("path");
 const { streamDigest, sha256File, specVersion } =
   require("../../oracle/harness/streamlib");
+const { loadValidatedManifest } = require("./validate-target-manifest");
 
 function die(msg, code) {
   console.error("TARGET STREAM MISMATCH: " + msg);
@@ -39,64 +65,257 @@ if (!runPath || !frozenPath) {
   console.error("usage: node verify-target-stream.js <run.json> <frozen.target.sha256.json>");
   process.exit(1);
 }
-const run = JSON.parse(fs.readFileSync(runPath, "utf8"));
-const frozen = JSON.parse(fs.readFileSync(frozenPath, "utf8"));
+let run, frozen;
+try { run = JSON.parse(fs.readFileSync(runPath, "utf8")); } catch (e) {
+  die("run JSON unreadable/unparseable: " + e.message);
+}
+try { frozen = JSON.parse(fs.readFileSync(frozenPath, "utf8")); } catch (e) {
+  die("frozen file unreadable/unparseable: " + e.message);
+}
 
-// 1. frozen-file integrity
+const isInt = Number.isInteger;
+const HEX64 = /^[0-9a-f]{64}$/;
+function keysExact(obj, want, what) {
+  if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    die(what + " is not an object");
+  }
+  const ks = Object.keys(obj);
+  if (ks.length !== want.length || want.some((k, i) => ks[i] !== k)) {
+    die(what + " key set/order {" + ks.join(",") + "} != {" +
+        want.join(",") + "} (exact schema, fail closed)");
+  }
+}
+
+// 1. frozen-file exact schema + integrity ------------------------------------
+keysExact(frozen, ["golden", "stream", "specVersion", "playerStream",
+  "params", "streamSha256", "frames"], "frozen top level");
+if (typeof frozen.golden !== "string" ||
+    !/^t[0-9]{2}(-[a-z0-9]+)+$/.test(frozen.golden)) {
+  die("frozen golden " + JSON.stringify(frozen.golden) +
+      " fails ^t[0-9]{2}(-[a-z0-9]+)+$");
+}
 if (frozen.stream !== "target-plane") {
   die(`frozen file stream is ${JSON.stringify(frozen.stream)}, not "target-plane"`);
+}
+if (!isInt(frozen.specVersion) || frozen.specVersion < 1) {
+  die("frozen specVersion " + JSON.stringify(frozen.specVersion) +
+      " is not a strict positive integer");
+}
+if (frozen.playerStream !== frozen.golden + ".sha256.json") {
+  die("frozen playerStream " + JSON.stringify(frozen.playerStream) +
+      " != name-derived " + frozen.golden + ".sha256.json (sibling binding)");
+}
+if (typeof frozen.streamSha256 !== "string" || !HEX64.test(frozen.streamSha256)) {
+  die("frozen streamSha256 is not 64 lowercase hex");
 }
 if (path.basename(frozenPath) !== frozen.golden + ".target.sha256.json") {
   die(`frozen file ${path.basename(frozenPath)} does not match its embedded ` +
       `golden name ${frozen.golden}`);
 }
-if (!Array.isArray(frozen.frames) || frozen.frames.length !== frozen.params.frames) {
+const P = frozen.params;
+keysExact(P, ["trace", "traceSha256", "frames", "seed", "char", "tstage",
+  "mode", "minTargets", "wantArticles", "finalTargetsDestroyed",
+  "finalEndTargetGame"], "frozen params");
+if (P.trace !== frozen.golden + ".trace.json") {
+  die("frozen params.trace " + JSON.stringify(P.trace) +
+      " != name-derived " + frozen.golden + ".trace.json");
+}
+if (typeof P.traceSha256 !== "string" || !HEX64.test(P.traceSha256)) {
+  die("frozen params.traceSha256 is not 64 lowercase hex");
+}
+if (!isInt(P.frames) || P.frames < 1 || P.frames > 999999) {
+  die("frozen params.frames " + JSON.stringify(P.frames) +
+      " is not an integer in 1..999999 (a 0-frame stream is never judgeable)");
+}
+if (!isInt(P.seed) || P.seed < 0 || P.seed > 4294967295) {
+  die("frozen params.seed outside 0..2^32-1");
+}
+if (!isInt(P.char) || P.char < 0 || P.char > 4) {
+  die("frozen params.char outside the char domain 0-4");
+}
+if (!isInt(P.tstage) || P.tstage < 0 || P.tstage > 9) {
+  die("frozen params.tstage outside the target-stage domain 0-9");
+}
+if (P.mode !== "target") die("frozen params.mode is not \"target\"");
+if (!isInt(P.minTargets) || P.minTargets < 1 || P.minTargets > 10) {
+  die("frozen params.minTargets outside 1..10");
+}
+if (typeof P.wantArticles !== "boolean") {
+  die("frozen params.wantArticles is not a boolean");
+}
+// 0..20: the double-destroy quirk can count a target twice, so the count
+// may exceed the 10-target authored cap but never 2x it.
+if (!isInt(P.finalTargetsDestroyed) || P.finalTargetsDestroyed < 0 ||
+    P.finalTargetsDestroyed > 20) {
+  die("frozen params.finalTargetsDestroyed outside 0..20");
+}
+if (typeof P.finalEndTargetGame !== "boolean") {
+  die("frozen params.finalEndTargetGame is not a boolean");
+}
+if (!Array.isArray(frozen.frames) || frozen.frames.length !== P.frames) {
   die(`frozen stream has ${frozen.frames && frozen.frames.length} frames but ` +
-      `params.frames=${frozen.params.frames}`);
+      `params.frames=${P.frames}`);
 }
 for (let i = 0; i < frozen.frames.length; i++) {
-  if (frozen.frames[i].f !== i + 1) die(`frozen frame numbering broken at index ${i}`);
+  const row = frozen.frames[i];
+  keysExact(row, ["f", "h"], "frozen frames[" + i + "]");
+  if (row.f !== i + 1) die(`frozen frame numbering broken at index ${i}`);
+  if (typeof row.h !== "string" || !HEX64.test(row.h)) {
+    die(`frozen frames[${i}].h is not 64 lowercase hex`);
+  }
 }
 if (streamDigest(frozen.frames) !== frozen.streamSha256) {
   die("frozen file streamSha256 seal does not match its frames (corrupt/edited)");
 }
 
-// 2. spec version pin
+// 2. mechanical quality from the frozen metadata (review-94 H2) --------------
+if (P.finalTargetsDestroyed < P.minTargets) {
+  die(`mechanical quality — frozen finalTargetsDestroyed ` +
+      `${P.finalTargetsDestroyed} < minTargets ${P.minTargets}`);
+}
+if (P.finalEndTargetGame !== false) {
+  die("mechanical quality — frozen finalEndTargetGame must be false " +
+      "(all-broken is never reached in the golden domain)");
+}
+
+// 3. manifest binding (review-94 H2; the SHARED strict validator) ------------
+let manifest;
+try { manifest = loadValidatedManifest(); } catch (e) {
+  die("committed manifest-target.json failed the shared validator: " + e.message);
+}
+const row = manifest.goldens.find((x) => x.name === frozen.golden);
+if (!row) {
+  die("frozen golden " + frozen.golden +
+      " has NO row in the committed manifest-target.json");
+}
+for (const k of ["trace", "frames", "seed", "char", "tstage",
+                 "minTargets", "wantArticles"]) {
+  if (P[k] !== row[k]) {
+    die(`frozen params.${k} = ${JSON.stringify(P[k])} != committed manifest ` +
+        `row's ${JSON.stringify(row[k])} (metadata binding)`);
+  }
+}
+
+// 4. player-stream sibling binding (review-94 H2) ----------------------------
+const sibPath = path.join(path.dirname(frozenPath), frozen.playerStream);
+if (!fs.existsSync(sibPath)) die("player-stream sibling missing: " + sibPath);
+let sib;
+try { sib = JSON.parse(fs.readFileSync(sibPath, "utf8")); } catch (e) {
+  die("player-stream sibling unparseable: " + e.message);
+}
+if (sib.golden !== frozen.golden) {
+  die(`sibling golden ${JSON.stringify(sib.golden)} != ${frozen.golden}`);
+}
+if (sib.specVersion !== frozen.specVersion) {
+  die(`sibling specVersion ${sib.specVersion} != frozen ${frozen.specVersion}`);
+}
+if (typeof sib.params !== "object" || sib.params === null) {
+  die("sibling has no params object");
+}
+for (const [sk, fv, what] of [
+  ["trace", P.trace, "trace"],
+  ["traceSha256", P.traceSha256, "traceSha256"],
+  ["frames", P.frames, "frames"],
+  ["seed", P.seed, "seed"],
+  ["p1", P.char, "p1==char"],
+  ["mode", "target", "mode"],
+  ["tstage", P.tstage, "tstage"],
+]) {
+  if (sib.params[sk] !== fv) {
+    die(`sibling params.${sk} = ${JSON.stringify(sib.params[sk])} != target ` +
+        `params' ${JSON.stringify(fv)} (${what} cross-pin)`);
+  }
+}
+if (!Array.isArray(sib.frames) || sib.frames.length !== P.frames) {
+  die(`sibling stream has ${sib.frames && sib.frames.length} frames, ` +
+      `want ${P.frames}`);
+}
+for (let i = 0; i < sib.frames.length; i++) {
+  if (!sib.frames[i] || sib.frames[i].f !== i + 1 ||
+      typeof sib.frames[i].h !== "string" || !HEX64.test(sib.frames[i].h)) {
+    die(`sibling frame row ${i} malformed/misnumbered`);
+  }
+}
+if (typeof sib.streamSha256 !== "string" ||
+    streamDigest(sib.frames) !== sib.streamSha256) {
+  die("player-stream sibling streamSha256 seal does not match its frames " +
+      "(corrupt/edited sibling)");
+}
+if (!isInt(sib.rngCalls) || sib.rngCalls < 0) {
+  die("sibling rngCalls is not a nonnegative integer");
+}
+if (sib.rngCallsOutsideStep !== 1) {
+  die(`sibling rngCallsOutsideStep ${JSON.stringify(sib.rngCallsOutsideStep)} ` +
+      "!= 1 (the ONE startTargetGame background draw)");
+}
+
+// 5. spec version pin --------------------------------------------------------
 const cur = specVersion();
 if (frozen.specVersion !== cur) {
   die(`frozen target stream is spec v${frozen.specVersion} but oracle/CHECKSUM.md ` +
       `is v${cur} — re-freeze required (CHECKSUM.md §8)`);
 }
 
-// 3. trace pin
-const traceFile = path.join(path.dirname(frozenPath), frozen.params.trace);
+// 6. trace pin ---------------------------------------------------------------
+const traceFile = path.join(path.dirname(frozenPath), P.trace);
 if (!fs.existsSync(traceFile)) die("golden trace missing: " + traceFile);
 const th = sha256File(traceFile);
-if (th !== frozen.params.traceSha256) {
-  die(`trace ${frozen.params.trace} sha256 ${th} != frozen ${frozen.params.traceSha256}`);
+if (th !== P.traceSha256) {
+  die(`trace ${P.trace} sha256 ${th} != frozen ${P.traceSha256}`);
 }
-if (path.basename(String(run.meta.trace)) !== frozen.params.trace) {
-  die(`run consumed trace ${run.meta.trace}, frozen stream is for ${frozen.params.trace}`);
+if (typeof run !== "object" || run === null || Array.isArray(run)) {
+  die("run JSON is not an object");
 }
-
-// 4. param pin (target-specific: char is run.meta.p1; mode + tstage)
-if (run.meta.frames !== frozen.params.frames) {
-  die(`run meta.frames = ${run.meta.frames}, frozen ${frozen.params.frames}`);
+if (typeof run.meta !== "object" || run.meta === null) {
+  die("run JSON has no meta object");
 }
-if (run.meta.seed !== frozen.params.seed) {
-  die(`run meta.seed = ${run.meta.seed}, frozen ${frozen.params.seed}`);
-}
-if (run.meta.mode !== "target" || frozen.params.mode !== "target") {
-  die(`mode pin failed (run ${run.meta.mode}, frozen ${frozen.params.mode})`);
-}
-if (run.meta.tstage !== frozen.params.tstage) {
-  die(`run meta.tstage = ${run.meta.tstage}, frozen ${frozen.params.tstage}`);
-}
-if (run.meta.p1 !== frozen.params.char) {
-  die(`run char (meta.p1) = ${run.meta.p1}, frozen ${frozen.params.char}`);
+if (typeof run.meta.trace !== "string" ||
+    path.basename(run.meta.trace) !== P.trace) {
+  die(`run consumed trace ${run.meta.trace}, frozen stream is for ${P.trace}`);
 }
 
-// 5. the target-plane stream: exact equality, every frame, full length
+// 7. run pins (typed; undefined never compares equal) ------------------------
+if (!isInt(run.meta.frames) || run.meta.frames !== P.frames) {
+  die(`run meta.frames = ${JSON.stringify(run.meta.frames)}, frozen ${P.frames}`);
+}
+if (!isInt(run.meta.seed) || run.meta.seed !== P.seed) {
+  die(`run meta.seed = ${JSON.stringify(run.meta.seed)}, frozen ${P.seed}`);
+}
+if (run.meta.mode !== "target") {
+  die(`run meta.mode = ${JSON.stringify(run.meta.mode)}, want "target"`);
+}
+if (!isInt(run.meta.tstage) || run.meta.tstage !== P.tstage) {
+  die(`run meta.tstage = ${JSON.stringify(run.meta.tstage)}, frozen ${P.tstage}`);
+}
+if (!isInt(run.meta.p1) || run.meta.p1 !== P.char) {
+  die(`run char (meta.p1) = ${JSON.stringify(run.meta.p1)}, frozen ${P.char}`);
+}
+if (typeof run.coverage !== "object" || run.coverage === null) {
+  die("run JSON has no coverage object");
+}
+if (!isInt(run.coverage.rngCalls) || run.coverage.rngCalls !== sib.rngCalls) {
+  die(`run coverage.rngCalls = ${JSON.stringify(run.coverage.rngCalls)} != ` +
+      `the frozen player sibling's ${sib.rngCalls}`);
+}
+if (run.coverage.rngCallsOutsideStep !== sib.rngCallsOutsideStep) {
+  die(`run coverage.rngCallsOutsideStep = ` +
+      `${JSON.stringify(run.coverage.rngCallsOutsideStep)} != the frozen ` +
+      `player sibling's ${sib.rngCallsOutsideStep}`);
+}
+const tf = run.coverage.target;
+if (typeof tf !== "object" || tf === null) {
+  die("run coverage has no target finals object");
+}
+if (!isInt(tf.targetsDestroyed)) {
+  die("run coverage.target.targetsDestroyed is not an integer: " +
+      JSON.stringify(tf.targetsDestroyed));
+}
+if (typeof tf.endTargetGame !== "boolean") {
+  die("run coverage.target.endTargetGame is not a boolean: " +
+      JSON.stringify(tf.endTargetGame));
+}
+
+// 8. the target-plane stream: exact equality, every frame, full length -------
 const rf = run.target && run.target.frames;
 if (!Array.isArray(rf)) die("run JSON has no target.frames");
 if (rf.length !== frozen.frames.length) {
@@ -104,26 +323,31 @@ if (rf.length !== frozen.frames.length) {
       "(full-length match required)", 2);
 }
 for (let i = 0; i < frozen.frames.length; i++) {
-  if (rf[i].f !== frozen.frames[i].f || rf[i].h !== frozen.frames[i].h) {
+  const rrow = rf[i];
+  if (!rrow || typeof rrow !== "object" || rrow.f !== i + 1 ||
+      typeof rrow.h !== "string" || !HEX64.test(rrow.h)) {
+    die(`run target frame row ${i} malformed/misnumbered (want f=${i + 1}, ` +
+        "64-lowercase-hex h)");
+  }
+  if (rrow.h !== frozen.frames[i].h) {
     die(`first target-plane divergence at frame ${frozen.frames[i].f} of ` +
         `${frozen.frames.length}\n  frozen: ${frozen.frames[i].h}\n  run:    ` +
-        rf[i].h, 2);
+        rrow.h, 2);
   }
 }
 
-// 6. target-plane finals
-const tf = run.coverage && run.coverage.target;
-if (!tf) die("run coverage has no target finals");
-if (tf.targetsDestroyed !== frozen.params.finalTargetsDestroyed) {
+// 9. target-plane finals -----------------------------------------------------
+if (tf.targetsDestroyed !== P.finalTargetsDestroyed) {
   die(`final targetsDestroyed ${tf.targetsDestroyed} != frozen ` +
-      `${frozen.params.finalTargetsDestroyed}`, 2);
+      `${P.finalTargetsDestroyed}`, 2);
 }
-if (tf.endTargetGame !== frozen.params.finalEndTargetGame) {
+if (tf.endTargetGame !== P.finalEndTargetGame) {
   die(`final endTargetGame ${tf.endTargetGame} != frozen ` +
-      `${frozen.params.finalEndTargetGame}`, 2);
+      `${P.finalEndTargetGame}`, 2);
 }
 
 console.log(`TARGET STREAM MATCH ${frozen.golden}: ${frozen.frames.length}/` +
   `${frozen.frames.length} target frames exact, targetsDestroyed=` +
-  `${tf.targetsDestroyed}, endTargetGame=${tf.endTargetGame}, specVersion=${cur}`);
+  `${tf.targetsDestroyed} (>= minTargets ${P.minTargets}), endTargetGame=` +
+  `${tf.endTargetGame}, sibling seal OK, manifest bound, specVersion=${cur}`);
 process.exit(0);

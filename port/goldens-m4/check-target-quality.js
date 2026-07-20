@@ -25,7 +25,11 @@ function die(msg) { console.error("TARGET QUALITY FAIL: " + msg); process.exit(1
 const runPath = process.argv[2];
 const minTargets = parseInt(process.argv[3], 10);
 const wantArticles = process.argv[4] === "1";
-if (!runPath || !Number.isInteger(minTargets)) {
+// canonical integer text only (the M2 exact-token class, iter 96):
+// "2x"/zero-padded argv is corruption, never parseInt-normalized.
+if (!runPath || !Number.isInteger(minTargets) ||
+    String(minTargets) !== process.argv[3] ||
+    !(process.argv[4] === "0" || process.argv[4] === "1")) {
   console.error("usage: node check-target-quality.js <run.json> <minTargets> <wantArticles 0|1>");
   process.exit(1);
 }

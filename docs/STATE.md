@@ -3,7 +3,58 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
-## Live right now (updated: 2026-07-20, iter 95 — M4 hardening DONE: device-FOH round-1 closure, all review-93 dispositions shipped; cold check green first attempt)
+## Live right now (updated: 2026-07-20, iter 96 — M4 hardening DONE: target-rig round-1 closure, all review-94 dispositions shipped; cold checks green first attempt)
+
+- **Iter 96 (M4 hardening — target-rig round-1 closure, review-94
+  triage H1/H2/M1-M5/L1/L2 ALL closed) DONE** (full entry: AGENT-LOG
+  iter 96 pre-registration + result; latest AGENT-LOG id: iter 96).
+  COLD, FIRST attempt: **`TARGET SIM CONFORMS (2 goldens: t01 t02;
+  leaves=718 probe=ok teeth=12)`** exit 0
+  (.loop/m4-tgt96-donecheck.log) + **`TARGETS OK`**
+  (.loop/m4-tgt96-check-targets.log) + **`SIM CONFORMS`** 8/8
+  (.loop/m4-tgt96-check-sim.log). FROZEN artifacts byte-untouched; NO
+  re-record, NO re-freeze. **H1**: NEW SHARED
+  port/goldens-m4/validate-target-manifest.js (freezer grammar
+  extracted verbatim; module + CLI) run by EVERY done-check consumer
+  (freeze/wrap/verify/record/check); T12 duplicate-id tooth dies
+  naming the dup. **H2**: verify-target-stream.js binds frozen params
+  == the validated manifest row (frames/seed/char/tstage/minTargets/
+  wantArticles/trace), the playerStream sibling by name + its OWN
+  seal + cross-pins + run rngCalls equality, and re-judges mechanical
+  quality (finalTargetsDestroyed >= minTargets, finalEndTargetGame ==
+  false) from the frozen metadata. **M1**: exact frozen-file whitelist
+  schema + typed run pins — `0/0 MATCH`/undefined===undefined
+  structurally dead. **M2**: wrap-target.js positional exact-token
+  grammar (2N+3 lines, canonical integer text, strict section order);
+  corpus: archived sim.out re-wraps byte-identical. **M3**:
+  run-target.js captures the page-own __frameCount at
+  __serializeState call time with +1-monotonicity death; proof = 2
+  fresh probes (browser 2/4) STREAM MATCH + TARGET STREAM MATCH vs
+  the frozen goldens (.loop/m4-tgt96-probe.log). **M4**: nested
+  Vec2D/Box2D exact-key-set hard-throws (measured: 1155/{x,y},
+  95/{min,max}; live-registry teeth fire). **M5 (pre-registered
+  AMENDMENT)**: the triage's "max 9 (tstage6)" REFUTED — measured
+  authored max is **10** (8 stages x10; == the upstream 10-slot
+  targetDestroyed literal); shipped ONE ML_MAX_TARGETS 10
+  (target_play.h + schema twin, static-asserted, loud death, 16-slot
+  OOB window dead). **L1**: x2 browser-identity refusal in
+  freeze-target.js. **L2**: frozen-side teeth T7-T11 on COPIES
+  (control + frame-nibble/numbering/seal/metadata/sibling-seal
+  deaths in the PRODUCTION judge); verdict teeth 6->12. Run ledger:
+  browser 2/4, cold check-target-sim 1/2 + check-sim 1/1 +
+  check-targets 1; corpus zero false rejections
+  (.loop/m4-tgt96-corpus.log).
+  **Driver next: review-94 ROUND 2 over the iter-96 diff — including
+  the Tier A+ INDEPENDENT second review (grok) of
+  verify-target-stream.js on the hardened bytes + the A+ byte-identity
+  regression on the archived iter-94 runs (already exercised in
+  .loop/m4-tgt96-corpus.log [d]); then task 12 (target test FOH +
+  device).**
+- **Remaining to gate**: 12 (target test FOH+device), 13 (SD persist),
+  14 (verify_m4.sh) -> M4 GATE -> provision device -> LOOP STOP:
+  m4-complete -> Chase acceptance playthrough.
+
+## [superseded by iter 96] (2026-07-20, iter 95 — M4 hardening DONE: device-FOH round-1 closure, all review-93 dispositions shipped; cold check green first attempt)
 
 - **Iter 95 (M4 hardening — device-FOH round-1 closure, review-93
   triage H1/H2/M1/M2/M3/M4/L ALL closed) DONE** (full entry:

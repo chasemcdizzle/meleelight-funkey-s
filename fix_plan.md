@@ -1768,6 +1768,14 @@ overruns):
   hard-throw caught it on the first executed walk, and it is carried
   verbatim as an OPTIONAL key (the fdest-quirk faithfulness precedent);
   measure with the EXECUTED walk, never the source grep alone.
+  **HARDENED (iter 96, review-94 round-1 closure)**: shared strict
+  manifest validator (validate-target-manifest.js, every consumer),
+  frozen-metadata + player-sibling seal binding + exact schema in
+  verify-target-stream.js, exact-token wrap grammar, captured
+  page-counter frame numbering, nested Vec2D/Box2D exact-key schema,
+  ONE ML_MAX_TARGETS 10 pin (triage's "9" refuted — measured authored
+  max is 10), x2 browser-identity refusal, frozen-side teeth T7-T12
+  (teeth 6->12); frozen artifacts byte-untouched — AGENT-LOG iter 96.
 - task 12 — **target test, FOH + device**: target-test select flow +
   timer/records HUD in the FOH; every target golden replayed ON DEVICE
   with render + audio live, streams host-judged (both verifiers), p99
