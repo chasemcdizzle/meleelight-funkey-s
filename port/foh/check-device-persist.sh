@@ -165,14 +165,36 @@ BOOTID_SRC=""
 # Returns 1 on any newline-shape violation (empty, no final LF,
 # multi-line). Pure host logic (reads a local file) — teeth invoke it.
 raw_single_line() {
-  local f="$1" nl last
-  tr -d '\r' < "$f" > "$f.dc" 2>/dev/null && mv "$f.dc" "$f" || { rm -f "$f.dc"; return 1; }
-  [ -s "$f" ] || return 1
-  last="$(tail -c1 "$f" | od -An -tx1 | tr -d ' \n')"
-  [ "$last" = 0a ] || return 1        # final byte MUST be exactly LF
-  nl="$(grep -c "" "$f")" || return 1 # exactly one LF-terminated line
-  [ "$nl" = 1 ] || return 1
-  printf '%s' "$(cat "$f")"           # content sans the (single) trailing LF
+  # review-104 M-1: BYTE-EXACT validation of the RAW device capture — NO
+  # tr/squeeze/normalization on a decision-bearing stream, and no
+  # $()-through laundering (command substitution silently DROPS NULs and
+  # trailing LFs, the exact holes the round-2 tr masked). Render the WHOLE
+  # file to hex (od -An -v -tx1 — every captured byte, incl. CR/LF/NUL,
+  # preserved as a hex pair; the tr here strips only od's column layout
+  # from the HEX RENDERING, never a captured byte) and require the exact
+  # MEASURED adb-pty producer grammar: <printable-ASCII-body><CR><LF>. The
+  # body bytes must be strictly 0x20-0x7e — an interior CR/LF/NUL/control
+  # byte, a de-CR'd token, a missing CR, or ANY trailing byte after the
+  # CRLF all fail closed. The decoded body is echoed WITHOUT the
+  # terminator; the CALLER applies the exact token grammar.
+  local f="$1" hex body pair ch ascii=""
+  hex="$(od -An -v -tx1 "$f" 2>/dev/null | tr -d ' \n')" || return 1
+  case "$hex" in
+    *0d0a) : ;;                       # whole file MUST end in exactly one CRLF
+    *) return 1 ;;
+  esac
+  body="${hex%0d0a}"                  # bytes before the CRLF terminator
+  [ -n "$body" ] || return 1          # a bare CRLF (empty token) is not valid
+  # body must be printable ASCII only (0x20-0x7e): rejects interior CR (0d),
+  # LF (0a), NUL (00), any control byte, DEL (7f), and high bytes.
+  [[ "$body" =~ ^([2-6][0-9a-f]|7[0-9a-e])*$ ]] || return 1
+  # decode the validated printable body hex -> ASCII (bounded; tokens <= 40)
+  while [ -n "$body" ]; do
+    pair="${body:0:2}"; body="${body:2}"
+    printf -v ch "\\x$pair" || return 1
+    ascii="$ascii$ch"
+  done
+  printf '%s' "$ascii"
 }
 capture_bootid() {
   local rawf s
@@ -738,7 +760,7 @@ echo "   L1 OK: PERSONAL BEST '$REC_DISPLAY' derived independently from the reco
 # actual pixels, not a renderer-vs-renderer echo. Pinned like the judge
 # twin (artifact identity, PROCESS §4). Region: text_center line at
 # y=194, scale 1, 22 glyphs ("PERSONAL BEST " + the 8-char PB display).
-DECODE_SHA=595286ce8de9f3dde056cb7a03706aa109b69ca1cc556df951e9029fdff4766d
+DECODE_SHA=1b7ada83dcb9b23f6f7c42974738788cd2811d502660cb19d16a74e122cfbe70
 have="$(rig_host_sha256 "$FOH/decode-pb-glyphs.js")" || exit 1
 [ "$have" = "$DECODE_SHA" ] || fail "decode-pb-glyphs.js sha $have != pinned $DECODE_SHA (reviewed pin update in the same commit)"
 decode_pb_line() { # <shot.ppm> -> the decoded 22-char PERSONAL BEST line
@@ -950,6 +972,71 @@ apply_resid "$act" "$USERF"
 teeth=$((teeth + 1))
 echo "    H trap tooth OK: UNPROBED/unknown keep the user file byte-identical; delete only on ABSENT; PRESENT restores/never-deletes"
 
+# H COPY-LEVEL tooth (review-104 L-1): the unit tooth above proves the PURE
+# decision; THIS proves the REAL `trap cleanup EXIT` + REAL cleanup()
+# dispatch, on a COPY of THIS check killed right after the trap installs
+# (PERSIST_STATE=UNPROBED, before any probe runs). The device seam is
+# host-simulated (bare-no-op stubs; rig_dsh_retry runs the device command on
+# the LOCAL override paths), so the tooth consumes NO paced run and never
+# touches the real product file. Contract: a planted override file SURVIVES
+# byte-identical under UNPROBED; a dead-tooth COPY at PERSIST_STATE=ABSENT
+# DELETES it (proving the residue dispatch really reaches the device-delete
+# arm through the real trap, not a mirror). The awk injects the seam stubs
+# after the two library `source` lines and a state-override + early `exit`
+# right after the trap install; anchored guards fail loudly if a future
+# refactor renames those lines and silently defangs the tooth.
+htc="$HP/htcopy"; rm -rf "$htc"; mkdir -p "$htc"
+L1_COPY="$htc/l1-copy.sh"
+awk '
+  /^cd "\$\(dirname/ { print "cd \"${MLFK_L1_REPO:?}\""; next }
+  { print }
+  /^source port\/sim\/device\/adbsh\.sh$/ { print "require_device() { :; }" }
+  /^source port\/sim\/device\/riglib\.sh$/ {
+    print "rig_lock_acquire() { :; }"
+    print "rig_cleanup() { :; }"
+    print "rig_dsh_retry() { eval \"$1\" >/dev/null 2>&1 || true; }"
+    print "dsh() { :; }"
+  }
+  /^trap cleanup EXIT$/ {
+    print "PERSIST_STATE=\"${MLFK_L1_STATE:?}\"; DFILE=\"${MLFK_L1_DFILE:?}\"; DDATA=\"${MLFK_L1_DDATA:?}\"; BUILD=\"${MLFK_L1_BUILD:?}\"; PREEXIST_RESTORED=0; exit 0"
+  }
+' "$0" > "$L1_COPY"
+[ "$(grep -c '^cd .*MLFK_L1_REPO' "$L1_COPY")" = 1 ] \
+  || fail "H copy tooth: repo-cd replacement did not land (the check's dirname-cd line changed?)"
+[ "$(grep -c '^require_device() { :; }$' "$L1_COPY")" = 1 ] \
+  || fail "H copy tooth: require_device stub injection did not land (adbsh source-line anchor changed?)"
+[ "$(grep -c '^rig_dsh_retry() { eval' "$L1_COPY")" = 1 ] \
+  || fail "H copy tooth: device-seam stub injection did not land (riglib source-line anchor changed?)"
+[ "$(grep -c '^PERSIST_STATE=.*MLFK_L1_STATE' "$L1_COPY")" = 1 ] \
+  || fail "H copy tooth: early-exit injection did not land (trap-line anchor changed?)"
+l1_run() { # <state> : run the COPY with an override dir + a planted file
+  local st="$1" ovd plant rc
+  ovd="$htc/override-$st"; rm -rf "$ovd"; mkdir -p "$ovd" "$htc/build-$st"
+  plant="$ovd/mlfk-persist.dat"
+  cp "$FILE_REC" "$plant"           # a planted user file (byte-known)
+  L1_SHA="$(rig_host_sha256 "$plant")" || exit 1
+  rc=0
+  MLFK_L1_STATE="$st" MLFK_L1_DFILE="$plant" MLFK_L1_DDATA="$ovd" \
+    MLFK_L1_BUILD="$htc/build-$st" MLFK_L1_REPO="$PWD" \
+    bash "$L1_COPY" >"$htc/log-$st.txt" 2>&1 || rc=$?
+  L1_RC="$rc"; L1_PLANT="$plant"
+}
+# UNPROBED (the hazard): the COPY exits at the trap with no probe -> the REAL
+# cleanup KEEPS the planted file byte-identical.
+l1_run UNPROBED
+[ "$L1_RC" = 0 ] || fail "H copy tooth: the UNPROBED copy exited nonzero ($L1_RC); see $htc/log-UNPROBED.txt"
+[ -f "$L1_PLANT" ] || fail "H copy tooth: the REAL trap DELETED the planted file on an UNPROBED (early) exit — DATA LOSS"
+l1_now="$(rig_host_sha256 "$L1_PLANT")" || exit 1
+[ "$l1_now" = "$L1_SHA" ] || fail "H copy tooth: the REAL trap ALTERED the planted file on UNPROBED ($l1_now != $L1_SHA)"
+# dead-tooth: at PERSIST_STATE=ABSENT the SAME real trap MUST delete the
+# override file (proves the dispatch reaches the device-delete arm; a no-op
+# here would mean the tooth could never observe a real deletion).
+l1_run ABSENT
+[ "$L1_RC" = 0 ] || fail "H copy tooth: the ABSENT copy exited nonzero ($L1_RC); see $htc/log-ABSENT.txt"
+[ ! -f "$L1_PLANT" ] || fail "H copy tooth: dead-tooth — the ABSENT real trap did NOT delete the override file (the copy is not dispatching the real cleanup)"
+teeth=$((teeth + 1))
+echo "    H copy-trap tooth OK: the REAL trap+cleanup on a killed COPY keeps the planted file byte-identical under UNPROBED, deletes it under ABSENT (dead-tooth guarded); no paced run"
+
 # M-a standing teeth (review-102): the RAW freshness-token grammars reject
 # resemblance. raw_single_line enforces the newline shape; the caller
 # regexes reject squeezed junk. Feed crafted raw files.
@@ -961,28 +1048,44 @@ MA_OUT=""; MA_RC=0
 ma_run() { MA_OUT=""; MA_RC=0; MA_OUT="$(raw_single_line "$1" 2>/dev/null)" || MA_RC=$?; }
 BID_RE='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 BT_RE='^btime ([1-9][0-9]{5,12})$'
-UP_RE='^([0-9]+)\.[0-9]+ [0-9]+\.[0-9]+$'
-# boot_id: genuine passes; double-LF / no-LF die on the NEWLINE SHAPE (rc!=0)
-printf '5b9b339e-1234-4abc-8def-0011223344ff\n' > "$mat/bid-ok"
-ma_run "$mat/bid-ok"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $BID_RE ]]; } || fail "M-a tooth: genuine boot_id rejected (rc=$MA_RC)"
-printf '5b9b339e-1234-4abc-8def-0011223344ff\n\n' > "$mat/bid-2lf"
-ma_run "$mat/bid-2lf"; [ "$MA_RC" != 0 ] || fail "M-a tooth: double-LF boot_id accepted the newline shape (rc0, raw='$MA_OUT')"
+UP_RE='^([0-9]+)\.[0-9]{2} [0-9]+\.[0-9]{2}$'   # M-1: exactly 2 frac digits (measured)
+# review-104 M-1: the MEASURED adb-pty producer terminates every captured
+# line with CRLF (0d 0a). raw_single_line validates that BYTE-EXACTLY (no
+# de-CR normalization, no $() NUL/LF laundering); the caller regex then
+# rejects a resembling token. Genuine CRLF passes; LF-only / no-terminator
+# / double-CRLF / INTERIOR-CR / INTERIOR-NUL / trailing-junk all die on the
+# BYTE SHAPE (rc!=0) — the interior-CR/NUL cases are the exact holes a
+# `tr -d '\r'` normalize + `$(cat)` capture would have laundered into a match.
+printf '5b9b339e-1234-4abc-8def-0011223344ff\r\n' > "$mat/bid-ok"
+ma_run "$mat/bid-ok"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $BID_RE ]]; } || fail "M-a tooth: genuine (CRLF) boot_id rejected (rc=$MA_RC out='$MA_OUT')"
+printf '5b9b339e-1234-4abc-8def-0011223344ff\n' > "$mat/bid-lfonly"
+ma_run "$mat/bid-lfonly"; [ "$MA_RC" != 0 ] || fail "M-a tooth: LF-only boot_id accepted (missing CR; producer is CRLF) (rc0, raw='$MA_OUT')"
 printf '5b9b339e-1234-4abc-8def-0011223344ff' > "$mat/bid-nolf"
-ma_run "$mat/bid-nolf"; [ "$MA_RC" != 0 ] || fail "M-a tooth: no-final-LF boot_id accepted (rc0, raw='$MA_OUT')"
-# btime: 'btime 7 garbage' must die on the GRAMMAR (no whitespace squeeze)
-printf 'btime 19283746\n' > "$mat/bt-ok"
-ma_run "$mat/bt-ok"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $BT_RE ]]; } || fail "M-a tooth: genuine btime rejected (rc=$MA_RC)"
-printf 'btime 7 garbage\n' > "$mat/bt-junk"
+ma_run "$mat/bid-nolf"; [ "$MA_RC" != 0 ] || fail "M-a tooth: no-terminator boot_id accepted (rc0, raw='$MA_OUT')"
+printf '5b9b339e-1234-4abc-8def-0011223344ff\r\n\r\n' > "$mat/bid-2crlf"
+ma_run "$mat/bid-2crlf"; [ "$MA_RC" != 0 ] || fail "M-a tooth: double-CRLF boot_id accepted (rc0, raw='$MA_OUT')"
+printf '5b9b339e-1234-4abc-8def-00112233\r44ff\r\n' > "$mat/bid-icr"
+ma_run "$mat/bid-icr"; [ "$MA_RC" != 0 ] || fail "M-a tooth: interior-CR boot_id laundered into a match (rc0, raw='$MA_OUT')"
+{ printf '5b9b339e-1234-4abc-8def-00112233'; printf '\000'; printf '44ff\r\n'; } > "$mat/bid-inul"
+ma_run "$mat/bid-inul"; [ "$MA_RC" != 0 ] || fail "M-a tooth: interior-NUL boot_id laundered into a match (rc0, raw='$MA_OUT')"
+printf '5b9b339e-1234-4abc-8def-0011223344ff\r\nX' > "$mat/bid-trail"
+ma_run "$mat/bid-trail"; [ "$MA_RC" != 0 ] || fail "M-a tooth: trailing-byte-after-CRLF boot_id accepted (rc0, raw='$MA_OUT')"
+# btime: genuine CRLF passes; 'btime 7 garbage' (valid byte shape) dies on the GRAMMAR
+printf 'btime 19283746\r\n' > "$mat/bt-ok"
+ma_run "$mat/bt-ok"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $BT_RE ]]; } || fail "M-a tooth: genuine btime rejected (rc=$MA_RC out='$MA_OUT')"
+printf 'btime 7 garbage\r\n' > "$mat/bt-junk"
 ma_run "$mat/bt-junk"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $BT_RE ]]; } && fail "M-a tooth: 'btime 7 garbage' laundered into a match" || true
-# uptime: exact two-field decimal; single field / trailing junk die
-printf '1234.56 2345.67\n' > "$mat/up-ok"
-ma_run "$mat/up-ok"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $UP_RE ]]; } || fail "M-a tooth: genuine uptime rejected (rc=$MA_RC)"
-printf '7 garbage\n' > "$mat/up-junk"
+# uptime: exact two 2-frac decimals; single field / trailing junk / wrong frac width die
+printf '1234.56 2345.67\r\n' > "$mat/up-ok"
+ma_run "$mat/up-ok"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $UP_RE ]]; } || fail "M-a tooth: genuine uptime rejected (rc=$MA_RC out='$MA_OUT')"
+printf '7 garbage\r\n' > "$mat/up-junk"
 ma_run "$mat/up-junk"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $UP_RE ]]; } && fail "M-a tooth: '7 garbage' accepted as uptime" || true
-printf '1234.56 garbage\n' > "$mat/up-junk2"
+printf '1234.56 garbage\r\n' > "$mat/up-junk2"
 ma_run "$mat/up-junk2"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $UP_RE ]]; } && fail "M-a tooth: '1234.56 garbage' accepted as uptime" || true
+printf '1234.5 2345.67\r\n' > "$mat/up-frac1"
+ma_run "$mat/up-frac1"; { [ "$MA_RC" = 0 ] && [[ "$MA_OUT" =~ $UP_RE ]]; } && fail "M-a tooth: 1-frac-digit uptime accepted (producer emits exactly 2)" || true
 teeth=$((teeth + 1))
-echo "    M-a teeth OK: raw freshness-token grammars reject double-LF/no-LF/squeezed-junk, accept genuine shapes"
+echo "    M-a teeth OK: raw CRLF byte-grammar rejects LF-only/no-term/double-CRLF/interior-CR/interior-NUL/trailing-junk + token-grammar junk, accepts genuine shapes"
 
 # M-c standing teeth (review-102): the PURE device-scan validator
 # rig_orphan_parse (from riglib) reconciles MLFKPROC rows == reaped
@@ -995,14 +1098,19 @@ mc_ok()   { [[ "$(rig_orphan_parse "$1")" =~ ^OK\  ]] || fail "M-c tooth: '$1' s
 # neutralize the check's set -e so we can inspect the prefix.
 mc_fail() { local r; r="$(rig_orphan_parse "$1")" || true; [ "${r%% *}" = FAIL ] || fail "M-c tooth: '$2' should FAIL closed (got '$r')"; }
 mc_ok "MLFKSCAN 0 0"                                              # clean
-mc_ok "$(printf 'MLFKPROC 123 sh /tmp/mlfk/deadman.sh\nMLFKSCAN 1 0')" # reconciled 1-found
-mc_ok "$(printf 'MLFKPROC 9 z\nMLFKSCAN 1 1')"                    # left>0 still parses (caller judges left)
-mc_fail "$(printf 'MLFKPROC 1 x\nMLFKPROC 2 y\nMLFKSCAN 1 0')" "reconciliation mismatch (2 rows, found 1)"
+mc_ok "$(printf 'MLFKPROC 123 sh /tmp/mlfk/deadman.sh\nMLFKSCAN 1 0')" # reconciled 1-found (conforming row)
+mc_ok "$(printf 'MLFKPROC 9 sh /tmp/mlfk/deadman.sh\nMLFKSCAN 1 1')"   # left>0 still parses (caller judges left)
+# M-3 (review-104): a resembling MLFKPROC row (missing cmdline field, pid 0)
+# is CORRUPTION DEATH now, never a silently-accepted count.
+mc_fail "$(printf 'MLFKPROC 9 z\nMLFKSCAN 1 1')" "malformed MLFKPROC (no cmdline field — the exact round-2 hole)"
+mc_fail "$(printf 'MLFKPROC 12 sh\nMLFKSCAN 1 0')" "malformed MLFKPROC (comm only, no cmdline)"
+mc_fail "$(printf 'MLFKPROC 0 sh /tmp/mlfk/a\nMLFKSCAN 1 0')" "malformed MLFKPROC (pid 0)"
+mc_fail "$(printf 'MLFKPROC 1 sh /tmp/mlfk/a\nMLFKPROC 2 sh /tmp/mlfk/b\nMLFKSCAN 1 0')" "reconciliation mismatch (2 rows, found 1)"
 mc_fail "$(printf 'MLFKUNREADABLE 55\nMLFKSCAN 0 0')" "live unreadable proc"
 mc_fail "$(printf 'GARBAGE\nMLFKSCAN 0 0')" "non-whitelisted line"
-mc_fail "MLFKPROC 1 x" "absent MLFKSCAN summary"
+mc_fail "MLFKPROC 1 sh /tmp/mlfk/a" "absent MLFKSCAN summary"
 teeth=$((teeth + 1))
-echo "    M-c teeth OK: rig_orphan_parse reconciles rows==found; fails on unreadable/mismatch/junk/absent-summary"
+echo "    M-c teeth OK: rig_orphan_parse enforces the anchored MLFKPROC row grammar + reconciles rows==found; fails closed on malformed-row/unreadable/mismatch/junk/absent-summary"
 
 # M-b corpus (review-102, mandatory): every genuine reference passes;
 # byte-drop / trailing-NUL / embedded-NUL / bad-SUM-line variants reject.
@@ -1304,16 +1412,19 @@ rig_devsha_selftest
 BOOTID_POST="$(capture_bootid)"
 BOOTID_POST_SRC="${BOOTID_POST%% *}"
 BOOTID_POST_ID="${BOOTID_POST#* }"
-# M-a: validate the RAW /proc/uptime bytes against the exact producer
-# line shape FIRST (two space-separated decimals + a single trailing LF),
-# then extract integer seconds of field 1 — never a permissive split.
+# M-1 (review-104): validate the RAW /proc/uptime bytes against the exact
+# MEASURED producer shape FIRST — raw_single_line enforces the byte-exact
+# CRLF terminator + printable body (no de-CR, no squeeze), then the token
+# grammar requires two space-separated decimals with EXACTLY two fractional
+# digits (kernel `%lu.%02lu`; measured 2026-07-20). Extract integer seconds
+# of field 1 — never a permissive split.
 UPT_RAW="$BUILD/.uptime.raw.$$"; rm -f "$UPT_RAW"
 adb -s "$DEV" shell 'cat /proc/uptime 2>/dev/null' > "$UPT_RAW" 2>/dev/null || true
 UPT_LINE="$(raw_single_line "$UPT_RAW")" \
-  || fail "boot-identity: POST /proc/uptime newline shape invalid (not exactly one LF-terminated line)"
+  || fail "boot-identity: POST /proc/uptime capture invalid (not one CRLF-terminated printable line)"
 rm -f "$UPT_RAW"
-[[ "$UPT_LINE" =~ ^([0-9]+)\.[0-9]+\ [0-9]+\.[0-9]+$ ]] \
-  || fail "boot-identity: POST /proc/uptime line does not match the exact '<up>.<frac> <idle>.<frac>' shape ('$UPT_LINE')"
+[[ "$UPT_LINE" =~ ^([0-9]+)\.[0-9]{2}\ [0-9]+\.[0-9]{2}$ ]] \
+  || fail "boot-identity: POST /proc/uptime line does not match the exact '<up>.NN <idle>.NN' shape ('$UPT_LINE')"
 POST_UPTIME="${BASH_REMATCH[1]}"   # integer seconds of field 1
 [[ "$POST_UPTIME" =~ ^(0|[1-9][0-9]{0,7})$ ]] || fail "boot-identity: POST uptime integer seconds '$POST_UPTIME' not canonical"
 BOOT_GAP=$(( $(date +%s) - BOOT_T0 ))

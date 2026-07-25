@@ -15,7 +15,33 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-20, iter 105 — M4 micro DONE: task-12-arc round-3 M closed, [5b] banner-witness grammar anchored, FOH FLOWS OK cold teeth=21)
+## Live right now (updated: 2026-07-25, iter 106 — M4 hardening DONE: persist-arc round-3 closure driver-committed; PERSIST OK cold teeth=18; model-assignment ruling in force)
+
+- **Iter 106 DONE (persist-arc round-3 closure; driver-committed per
+  iter-101 precedent — the 2026-07-20 writer finished implementation +
+  warm checks then died; this driver ground-truthed COLD 2026-07-25).**
+  COLD done-check: `PERSIST OK (sessions=2 powercycle=reboot
+  bootid=bootid:PRE!=POST bootwait=13s legs=5 pulls=4
+  roundtrip=byte-exact record=00:14.50 resets missing=1 loud-corrupt=2
+  dirsync=plain-saved+degraded-tooth teeth=18)` exit 0
+  (.loop/driver-cold-per106.log; teeth 17→18). Manifest self-check COLD
+  all rows + anchor GREEN (.loop/driver-cold-per106-manifest.log).
+  Closures: all 6 review-104-triage dispositions (M-1 CRLF byte-exact
+  raw grammars, M-2 scan fail-closed rc/zero-byte arms, M-3 anchored
+  MLFKPROC grammar, M-4 decoder full-initializer + exact-byte PPM
+  reconciliation, L-1 real-EXIT-trap COPY tooth, L-2 `(deleted)` cwd
+  forms) + riglib manifest re-pin + verify_m3 anchor. foh_persist.{c,h}
+  BYTE-UNCHANGED. Honest gap logged: writer's refutation ledger
+  (R1–R5) not separately recorded — round 4 owns follow-up.
+- **Ruling in force:** 2026-07-25 model assignment (§rulings below /
+  PROCESS §11, commit b7b8c5c).
+- **Queue:** persist-arc **round 4 (closure-or-cap) over the iter-106
+  diff — dispatch to an Opus 5 writer per §11** (first ruling-shaped
+  arc; riglib manifest row stays arc-pending until its GO) → task 14
+  (verify_m4.sh assembly) → M4 GATE → provision → LOOP STOP:
+  m4-complete.
+
+## [superseded by iter-106] (updated: 2026-07-20, iter 105 — M4 micro DONE: task-12-arc round-3 M closed, [5b] banner-witness grammar anchored, FOH FLOWS OK cold teeth=21)
 
 - **Iter 105 DONE (M4 micro; review-103 round-3 NO-GO — the sole
   Medium, PROCESS §3 whitelist-grammar rule).** The NEW [5b]

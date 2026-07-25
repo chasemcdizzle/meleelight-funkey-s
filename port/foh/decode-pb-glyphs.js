@@ -37,13 +37,24 @@ if (!Number.isInteger(y) || !Number.isInteger(scale) || !Number.isInteger(n) ||
 }
 
 // --- parse the font table from foh_font.c AS DATA ---------------------------
+// review-104 M-4: EXACT full-initializer reconciliation, not a `>= 30`
+// floor. Isolate the `static const FohGlyph kGlyphs[] = { … };` initializer
+// BODY, count its DECLARED entries structurally, parse every entry, and
+// require declared == parsed with NO unparsed residue. A silently
+// dropped/added/malformed entry (the permissive-parse hole) is now a hard
+// failure, and the glyph count is bound to the measured table size exactly.
 const fontSrc = fs.readFileSync(fontPath, 'utf8');
-// Each entry: {'X', {0x.., 0x.., 0x.., 0x.., 0x.., 0x.., 0x..}},
-// The char group captures either an escaped char (\' or \\) or one char.
-const re = /\{'(\\.|[^'\\])',\s*\{\s*([^}]*?)\s*\}\s*\}/g;
+const arrM = fontSrc.match(/\bkGlyphs\s*\[\]\s*=\s*\{([\s\S]*?)\n\};/);
+if (!arrM) die('could not locate the kGlyphs[] initializer in ' + fontPath, 3);
+const body = arrM[1];
+// Each entry: {'X', {0x.., ×7}}. The char group captures either an escaped
+// char (\' or \\) or one non-quote char.
+const ENTRY_SRC = "\\{'(\\\\.|[^'\\\\])',\\s*\\{\\s*([^}]*?)\\s*\\}\\s*\\}";
+const declared = (body.match(/\{'/g) || []).length; // every top-level entry opener
 const glyphs = []; // {ch, rows:[7]}
 let m;
-while ((m = re.exec(fontSrc)) !== null) {
+const re = new RegExp(ENTRY_SRC, 'g');
+while ((m = re.exec(body)) !== null) {
   let ch = m[1];
   if (ch === "\\'") ch = "'";
   else if (ch === '\\\\') ch = '\\';
@@ -56,7 +67,19 @@ while ((m = re.exec(fontSrc)) !== null) {
   });
   glyphs.push({ ch, rows: bytes });
 }
-if (glyphs.length < 30) die('parsed only ' + glyphs.length + ' font glyphs from ' + fontPath + ' (expected the full FOH table)', 3);
+if (glyphs.length !== declared) {
+  die('font initializer reconciliation: parsed ' + glyphs.length + ' glyphs != ' +
+      declared + ' declared kGlyphs entries (a dropped/malformed entry)', 3);
+}
+if (glyphs.length < 1) die('parsed no font glyphs from ' + fontPath, 3);
+// trailing bytes = death (analog): after removing every matched entry the
+// initializer body must be ONLY whitespace, commas, and line comments.
+let residue = body.replace(new RegExp(ENTRY_SRC, 'g'), '');
+residue = residue.replace(/\/\/[^\n]*/g, '').replace(/[\s,]/g, '');
+if (residue.length !== 0) {
+  die('font initializer has unparsed content (not entry/comma/comment): ' +
+      JSON.stringify(residue.slice(0, 40)), 3);
+}
 
 // signature (7 bytes joined) -> char; collisions are a hard error
 const sig2ch = new Map();
@@ -89,12 +112,22 @@ function readPPM(buf) {
     }
     return s;
   };
-  const w = parseInt(tok(), 10), h = parseInt(tok(), 10), mx = parseInt(tok(), 10);
+  // review-104 M-4: canonical full-token integers (reject '240junk',
+  // leading zeros, signs, empty) — a permissive parseInt prefix is a hole.
+  const intTok = (label) => {
+    const t = tok();
+    if (!/^(0|[1-9][0-9]*)$/.test(t)) die('PPM ' + label + ' not a canonical integer token: ' + JSON.stringify(t), 3);
+    return parseInt(t, 10);
+  };
+  const w = intTok('width'), h = intTok('height'), mx = intTok('maxval');
   if (!(w > 0) || !(h > 0)) die('bad PPM dimensions ' + w + 'x' + h, 3);
   if (mx !== 255) die('PPM maxval ' + mx + ' != 255 (unsupported)', 3);
   i++; // exactly one whitespace byte after maxval, then pixel data
   const need = w * h * 3;
-  if (buf.length - i < need) die('PPM pixel data short (' + (buf.length - i) + ' < ' + need + ')', 3);
+  const avail = buf.length - i;
+  // review-104 M-4: EXACT byte count — trailing bytes are corruption death,
+  // not tolerated slack.
+  if (avail !== need) die('PPM pixel data byte count ' + avail + ' != w*h*3 (' + need + ') — short/trailing bytes', 3);
   return { w, h, data: buf.slice(i, i + need) };
 }
 const img = readPPM(raw);

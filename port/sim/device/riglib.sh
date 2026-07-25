@@ -86,13 +86,24 @@ ARMBINS="sim_device csweep_arm fmt_diff_arm mathsweep_arm gfx_device fk_input sk
 # returns 1. Never touches the device.
 rig_orphan_parse() {
   local out="$1" line last nscan nproc nunread nfound nleft
+  # M-3 (review-104): the MLFKPROC row grammar, anchored full-line
+  # (whitelist-grammar rule). mlfk_scan emits `MLFKPROC <pid> <comm>
+  # <cmdline...>`: pid a positive decimal (no leading zero), comm the
+  # MEASURED rig alphabet (sh/ash/busybox/deadman.sh/foh_device, or the `?`
+  # read-fallback), then a NON-EMPTY cmdline field. A resembling row
+  # (missing cmdline, pid 0, junk comm) is CORRUPTION DEATH, not a
+  # silently-counted find.
+  local proc_re='^MLFKPROC [1-9][0-9]* ([a-z0-9_.-]+|[?]) .+$'
   out="${out%$'\n'}"
   last="${out##*$'\n'}"
   nscan=0; nproc=0; nunread=0
   while IFS= read -r line; do
     case "$line" in
       MLFKSCAN\ *)       nscan=$((nscan + 1)) ;;
-      MLFKPROC\ *)       nproc=$((nproc + 1)) ;;
+      MLFKPROC\ *)
+        [[ "$line" =~ $proc_re ]] \
+          || { printf 'FAIL malformed MLFKPROC row (not `MLFKPROC <pid> <comm> <cmdline>`): %s' "$line"; return 1; }
+        nproc=$((nproc + 1)) ;;
       MLFKUNREADABLE\ *) nunread=$((nunread + 1)) ;;
       *) printf 'FAIL non-whitelisted scan line: %s' "$line"; return 1 ;;
     esac
@@ -114,53 +125,61 @@ rig_orphan_reap() {
   local mode out rc line last nfound nleft presult
   mode="$1"
   rc=0
+  # The device scan block below is kept COMPACT — every byte rides the adb
+  # shell command line, which has a hard length limit (an over-long block
+  # aborts with "shell command too long"). Design (rationale kept HOST-side,
+  # off the wire):
+  #  * cat reads cmdline with its OWN stderr -> /dev/null; a bare
+  #    `< $p/cmdline` redirect would leak an un-suppressible SHELL open error
+  #    into the captured grammar (so cat, never a redirect).
+  #  * M-2 (review-104): capture cats rc AND byte count EXPLICITLY — never
+  #    behind a `| tr` pipe, whose $? is trs (the round-2 hole). A read that
+  #    ERRORED (crc!=0) while /proc/<pid> is present is LIVE UNREADABLE (the
+  #    -r stat missed it) -> fail closed; a readable-EMPTY cmdline while
+  #    present is a kernel thread/zombie (benign — a rig process ALWAYS
+  #    carries argv; MEASURED 28/41 kthreads empty+readable) UNLESS its cwd
+  #    resolves under a rig dir (then it is OURS, unidentifiable -> fail
+  #    closed); dir gone on re-check is VANISHED (benign, skip).
+  #  * cwd_rig() matches the rig scratch roots INCL. their ` (deleted)` forms
+  #    (L-a + L-2). SPLIT LITERALS ("/tmp/m""lfk") keep the scanning shells
+  #    OWN cmdline from ever matching itself; NEVER write a contiguous rig
+  #    path anywhere in the block (a comment would count — it is on the wire
+  #    and in the shells cmdline). No apostrophes inside the single-quoted
+  #    block. tf is a NON-rig-matched scratch path.
   out="$(dsh '
+cwd_rig() {
+  case "$1" in
+    "/tmp/m""lfk"|"/tmp/m""lfk/"*|"/tmp/m""lfk (deleted)"|"/tmp/m""lfk/"*" (deleted)"|"/mnt/m""lfk-scratch"|"/mnt/m""lfk-scratch/"*|"/mnt/m""lfk-scratch (deleted)"|"/mnt/m""lfk-scratch/"*" (deleted)") return 0 ;;
+  esac
+  return 1
+}
 mlfk_scan() {
   for p in /proc/[0-9]*; do
     pid="${p#/proc/}"
     [ "$pid" = "$$" ] && continue
     [ "$pid" = "$PPID" ] && continue
-    # let cat open the file (its OWN stderr -> /dev/null): a process that
-    # vanishes mid-scan is the common case, and a SHELL "< $p/cmdline"
-    # redirect prints an un-suppressible open error to real stderr that
-    # adb merges into the captured output and breaks the whitelist
-    # grammar. cat swallows the vanish; an empty cl simply never matches.
-    cl="$(cat "$p/cmdline" 2>/dev/null | tr "\0" " ")"
-    if [ -z "$cl" ]; then
-      # M-c (review-102): an empty read is NOT automatically clean.
-      # Distinguish a VANISHED proc (dir gone -> benign, skip) from a
-      # LIVE UNREADABLE one (dir + cmdline present but not readable ->
-      # a stale mlfk process we cannot inspect -> LOUD). Kernel threads
-      # / zombies have a readable-but-empty cmdline and never match the
-      # rig dirs, so they fall through here harmlessly.
-      if [ -d "$p" ] && [ -e "$p/cmdline" ] && [ ! -r "$p/cmdline" ]; then
-        echo "MLFKUNREADABLE $pid"
-      fi
+    tf="/tmp/rigscancl.$$"
+    cat "$p/cmdline" 2>/dev/null > "$tf"; crc=$?
+    nb="$(wc -c < "$tf" 2>/dev/null)"; nb="${nb##* }"; [ -n "$nb" ] || nb=0
+    if [ "$crc" != 0 ] || [ "$nb" = 0 ]; then
+      rm -f "$tf"
+      [ -d "$p" ] || continue
+      if [ "$crc" != 0 ]; then echo "MLFKUNREADABLE $pid"; continue; fi
+      cwd_rig "$(readlink "$p/cwd" 2>/dev/null)" && echo "MLFKUNREADABLE $pid"
       continue
     fi
+    cl="$(tr "\0" " " < "$tf")"
+    rm -f "$tf"
     cm=""
     matched=0
     case "$cl" in
       *"/tmp/m""lfk"*|*"/mnt/m""lfk-scratch"*) matched=1 ;;
     esac
     if [ "$matched" = 0 ]; then
-      # L-a (review-102): the relative-cwd spelling (cd into a rig scratch
-      # dir, then ./deadman.sh) carries NO dir literal in cmdline. Also
-      # match when comm is a rig shell/app AND the process CWD resolves
-      # under a rig dir. NOTE: the rig-dir paths below are SPLIT literals
-      # ("/tmp/m""lfk") so the scanning shell OWN cmdline can never match
-      # itself; never write the contiguous path anywhere in this dsh
-      # block (a comment counts: it is part of the device cmdline). No
-      # apostrophes here either: this whole block is a single-quoted dsh
-      # string and one stray quote would close it early.
       cm="$(cat "$p/comm" 2>/dev/null)"
       case "$cm" in
         sh|ash|busybox|deadman.sh|foh_device)
-          cwd="$(readlink "$p/cwd" 2>/dev/null)"
-          case "$cwd" in
-            "/tmp/m""lfk"|"/tmp/m""lfk/"*|"/mnt/m""lfk-scratch"|"/mnt/m""lfk-scratch/"*) matched=1 ;;
-          esac
-          ;;
+          cwd_rig "$(readlink "$p/cwd" 2>/dev/null)" && matched=1 ;;
       esac
     fi
     if [ "$matched" = 1 ]; then
@@ -173,9 +192,6 @@ n=0
 pids=""
 OUT="$(mlfk_scan)"
 if [ -n "$OUT" ]; then
-  # match rows (`<pid> <comm> <cmdline>`) -> MLFKPROC; a live-unreadable
-  # row (`MLFKUNREADABLE <pid>`) is passed through verbatim for the host
-  # parser to fail on. Only match rows are killed + counted in n.
   printf "%s\n" "$OUT" | while IFS= read -r row; do
     case "$row" in
       MLFKUNREADABLE\ *) echo "$row" ;;

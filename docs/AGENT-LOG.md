@@ -18808,3 +18808,147 @@ task 14 (verify_m4.sh assembly), M4 GATE.
   ABSENT deletes), M-b's byte-exact persist-file grammar, M-d's
   explicit failure arm, the L-b pixel connection, the manifest re-pin.
   Triage → .loop/review-104-triage.md; iter-106 dispatching.
+
+---
+
+iter 106 · 2026-07-20 · phase M4 · task-13 persist-arc round-3 closure (PRE-REGISTRATION) · raw-byte validation + scan fail-closed + exact decoder grammars
+
+**Scope.** Close ALL 6 dispositions in .loop/review-104-triage.md (4
+Medium + 2 Low — direct refinements of the round-2 closures; the
+confirmed-sound list is NOT reworked). Surfaces:
+port/foh/check-device-persist.sh, port/sim/device/riglib.sh (+ its
+m3-freeze-manifest riglib-row re-pin + verify_m3.sh anchor SAME commit),
+port/foh/decode-pb-glyphs.js (+ its DECODE_SHA pin in the check).
+foh_persist.{c,h} + all frozen artifacts BYTE-UNCHANGED (confirmed).
+
+**MEASUREMENT-FIRST (whitelist-grammar rule, PROCESS §3 — measured the
+producers EMPIRICALLY before writing any grammar; .loop/m4-per106-measure
+recorded in the RESULT):**
+- adb `shell 'cat …'` producer emits **CRLF** (`0d 0a`), NOT bare LF:
+  boot_id raw = 36 UUID bytes + `0d0a` (38 B); btime = `btime <dec>` +
+  `0d0a`; /proc/uptime = `<int>.<2frac> <int>.<2frac>` + `0d0a` (frac
+  width EXACTLY 2, kernel `%lu.%02lu`). The triage's "one trailing LF"
+  was the PRE-measurement assumption (current code de-CRs, hiding the raw
+  shape); the rule binds me to the measured grammar = CRLF. Pinning
+  LF-only would FALSE-REJECT the real device capture and fail the
+  done-check.
+- Device /proc population: **41 procs, 28 with empty-but-READABLE
+  cmdline** (all kernel threads: kthreadd/migration/kworker/…). So the
+  triage's literal "zero bytes → MLFKUNREADABLE" would flag 28 kernel
+  threads and fail EVERY scan (28 false rejections). The genuine hole is
+  the READ-ERROR case (cat rc≠0 while /proc/<pid> present, which the
+  stat-only `-r` gate misses). Kernel threads carry no argv, so a
+  zero-byte read can never be a rig orphan — gate the zero-byte arm on
+  the proc's cwd resolving under a rig dir (fail closed there only).
+- Genuine P6 PPM = 15-byte header (`P6\n<w> <h>\n255\n`) + EXACTLY
+  w*h*3 bytes, ZERO trailing (172815 == 15 + 240*240*3). foh_font.c
+  kGlyphs[] = EXACTLY 49 entries (`grep -c` and structural `{'` count
+  agree); one line-comment, trailing comma. Exact reconciliation is
+  satisfiable with zero false rejections.
+
+**Method / edits.**
+- M-1 (check :167 raw_single_line, :1315 uptime, M-a teeth): replace the
+  `tr -d '\r'` normalize + `$(cat)` (NUL/LF-laundering) with a BYTE-EXACT
+  validator — render the raw file to hex (`od -An -v -tx1`), require the
+  whole file to be `<printable-ASCII-body><0d><0a>` (body bytes strictly
+  0x20–0x7e: rejects interior CR/LF/NUL/control, missing CR, trailing
+  junk), decode + echo the body; caller applies the token ERE. uptime
+  frac tightened to exactly 2 digits. M-a teeth move to CRLF fixtures +
+  new byte-shape teeth (interior-CR, interior-NUL, LF-only, trailing-junk
+  all reject; genuine CRLF accept). CORPUS = the in-run M-a teeth
+  (synthesized to the MEASURED CRLF grammar; build/ is gitignored — no
+  committed capture corpus exists).
+- M-2 (riglib mlfk_scan): capture cat's rc + byte count EXPLICITLY (not
+  behind the tr pipe). rc≠0 while `/proc/<pid>` present → MLFKUNREADABLE
+  (fail closed); zero-byte readable + present → benign kernel thread
+  UNLESS cwd under a rig dir → MLFKUNREADABLE; dir gone on re-check →
+  VANISHED (skip). Never silently skip a present-but-unreadable entry.
+- M-3 (riglib rig_orphan_parse :92; check M-c teeth): add an anchored
+  full-line MLFKPROC grammar `^MLFKPROC [1-9][0-9]* ([a-z0-9_.-]+|[?])
+  .+$` (pid, comm, NON-EMPTY cmdline field) — `MLFKPROC 9 z` (no cmdline)
+  now dies as corruption. M-c teeth rows made conforming (4-field) + a
+  malformed-row negative tooth added.
+- M-4 (decode-pb-glyphs.js + check DECODE_SHA): full-initializer
+  reconciliation (slice kGlyphs[] body; declared entry count via `{'` ==
+  parsed glyph count; residue after removing matches = only ws/commas/
+  comments), canonical PPM integer tokens (`^(0|[1-9][0-9]*)$` full-token
+  for w/h/maxval), EXACT pixel byte count (`avail === w*h*3`, trailing =
+  death). Re-pin DECODE_SHA in the check same commit; corpus = the L-b
+  section decoding the real rendered PPMs during the cold run.
+- L-1 (check H tooth): run a COPY of the check (device seam host-stubbed
+  via a scratch stub-lib; DFILE/DDATA → an override scratch dir) killed
+  right after `trap cleanup EXIT` at PERSIST_STATE=UNPROBED — the COPY's
+  REAL EXIT trap fires and the planted file survives BYTE-IDENTICAL (rc +
+  sha judged); a dead-tooth COPY at PERSIST_STATE=ABSENT deletes it
+  (proves the real dispatch is wired). Keep the decision-table unit tooth
+  as the supplement. Consumes NO paced run (host-simulated seam).
+- L-2 (riglib cwd predicate :161 + the M-2 empty-arm cwd check): add the
+  ` (deleted)` suffix forms of both rig roots.
+- Manifest: re-pin the riglib.sh row in m3-freeze-manifest.txt
+  (`shasum -a 256`; status stays arc-pending — round 4 owns the GO) +
+  update the MANIFEST_SHA256 anchor in verify_m3.sh (same commit). Inline
+  self-check: ALL ROWS GREEN + ANCHOR GREEN (cross-checked with
+  `openssl dgst -sha256`).
+
+**Pass criteria.** COLD `bash port/foh/check-device-persist.sh` →
+`PERSIST OK (…)` exit 0 (honest counters; teeth count grows for the new
+byte-shape/malformed/copy-trap teeth). Manifest self-check ALL 23 ROWS
+GREEN + ANCHOR GREEN. Real reboot judged (PRE≠POST, uptime<gap).
+
+**Refutation shapes (frozen; default = ONE bounded evidence round, then
+STOP + report):**
+- R1: the device producer is NOT CRLF on the cold reboot capture (e.g.
+  bare LF) → the measured grammar is wrong for that boot → STOP,
+  re-measure the exact bytes, do NOT loosen to accept both blindly.
+- R2: the cold scan flags a kernel thread (or any genuine proc)
+  MLFKUNREADABLE → a false rejection → STOP, the zero-byte/rc classifier
+  is wrong; re-measure /proc, do NOT loosen the fail-closed arm.
+- R3: a genuine rendered PPM or the real foh_font.c fails the tightened
+  decoder (exact byte count / initializer reconciliation) → STOP,
+  re-measure the artifact, do NOT relax the grammar to pass.
+- R4: the L-1 COPY tooth touches the REAL device or consumes a paced run
+  → the seam stub is incomplete → STOP and redesign the host simulation.
+- R5: manifest self-check shows any row RED or the anchor mismatched →
+  the re-pin/anchor update is inconsistent → STOP and reconcile before
+  commit.
+
+**Budgets.** paced device runs ≤2 (1 = the cold done-check incl. its
+reboot; +1 spare); L-1 tooth = copy-level, NO paced run. arm rebuilds ≤1.
+cold host checks ≤3. Command output → .loop/m4-per106-* ONLY. Teeth on
+COPIES under scratch/override paths; restores by reverse-edit. Corpus
+re-validation for M-1 (M-a CRLF teeth) and M-4 (L-b real PPMs)
+mandatory. ONE atomic commit when green.
+
+**iter 106 RESULT (driver-committed, iter-101 precedent — writer session
+2026-07-20 completed implementation + warm checks, died before RESULT;
+driver session 2026-07-25 ground-truthed COLD from disk and commits).**
+- **Done-check COLD (driver):** `bash port/foh/check-device-persist.sh`
+  → `PERSIST OK (sessions=2 powercycle=reboot bootid=bootid:PRE!=POST
+  bootwait=13s legs=5 pulls=4 roundtrip=byte-exact record=00:14.50
+  resets missing=1 loud-corrupt=2 dirsync=plain-saved+degraded-tooth
+  teeth=18)` exit 0 — .loop/driver-cold-per106.log (real reboot judged;
+  bootwait is measured, 12s writer-warm vs 13s driver-cold). Writer warm
+  run: .loop/m4-per106-donecheck.log (same SUM line, rc 0). Teeth 17→18.
+- **Manifest self-check COLD (driver):** all rows GREEN incl. the
+  riglib re-pin; verify_m3.sh row GREEN under its ^MANIFEST_SHA256=
+  exclusion rule; ANCHOR GREEN (literal==manifest sha256) —
+  .loop/driver-cold-per106-manifest.log. Writer's:
+  .loop/m4-per106-manifest-selfcheck.log (ALL 23 ROWS + ANCHOR GREEN).
+- **Surfaces == pre-reg exactly:** check-device-persist.sh,
+  riglib.sh, decode-pb-glyphs.js, m3-freeze-manifest.txt (riglib row),
+  verify_m3.sh (anchor) — foh_persist.{c,h} + all frozen artifacts
+  BYTE-UNCHANGED (diff names zero C/frozen files).
+- **Conformance guard:** skip-proof by shared-surface scan — the diff is
+  rig/check scripts + the decoder JS only; no sim/gfx/foh TU touched.
+- **Honest gap:** the writer ended before logging the refutation ledger;
+  R1–R5 are constructed to block the green path and both checks are
+  green COLD, but no separate negative-evidence logs exist — recorded as
+  a gap, not reconstructed. Round-4 review owns any follow-up.
+- **Owner ruling day-tag (2026-07-25, commit b7b8c5c):** PROCESS §11
+  model assignment — driver = Fable 5 (no shipping code); ALL coding →
+  Opus 5 writers, each writer session owning its full Codex review arc
+  (implement → codex exec → fix warranted → GO/cap) in-session; §3
+  verdict-from-log contract unchanged. Mirrored in STATE §rulings.
+- **Next:** persist-arc round 4 (closure-or-cap) over THIS commit's
+  diff — dispatches to an Opus 5 writer per §11 (first ruling-shaped
+  arc), then task 14 (verify_m4.sh assembly) → M4 GATE.
