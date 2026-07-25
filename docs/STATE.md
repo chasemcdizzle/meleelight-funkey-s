@@ -15,7 +15,27 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-25, iter 107 — PERSIST ARC CLOSED: GO round 7, riglib reviewed-go; PERSIST OK cold teeth=19; first §11 Opus-writer arc)
+## Live right now (updated: 2026-07-25, iter 108 — task-14 increment 1: verify_m4.sh DELIVERED + arc GO r4; task 14 OPEN — leg engines unbuilt, no M4 golden replays on device yet)
+
+- **Iter 108 DONE (task-14 increment 1, §11 Opus writer).** verify_m4.sh
+  (spec-verbatim gate: anchor→pins→[0b] refusal before any leg, relay
+  contract, anchored grammars) committed with its Tier A arc CLOSED —
+  .loop/review-108-{1..4}.log NO-GO ×3 → GO r4 zero findings; 9 Highs
+  + 1 Medium fixed. Driver cold: bash -n + refusal run rc 1
+  (.loop/driver-cold-t14-refusal.log). Producer ledger
+  .loop/m4-t14-producer-status.md (25 rows verified).
+- **KEY DISCOVERY (writer, honest stop):** leg 1 unassemblable today —
+  gfx_app refuses --cpu without --ai-bridge (no live-AI arm);
+  foh_dev's live ai.c reachable only through menu flows; only m01 has
+  a flow. NO M4 golden replays on device yet.
+- **Queue (task 14 remains, iter-109 dispatch):** foh_dev direct-match
+  entry → check-device-fullgame.sh (12 traces, render+audio+music) →
+  check-device-opk.sh FOH mode → m4-freeze-manifest.txt (+
+  driver-sanctioned m3 re-cites: render/judge-shot → review-80-1 GO;
+  check-device-opk STAYS pending) → new-surface arcs → M4 GATE →
+  provision → LOOP STOP: m4-complete.
+
+## [superseded by iter-108] (updated: 2026-07-25, iter 107 — PERSIST ARC CLOSED: GO round 7, riglib reviewed-go; PERSIST OK cold teeth=19; first §11 Opus-writer arc)
 
 - **Iter 107 DONE — persist-arc rounds 4-7 CLOSED at GO** (first
   PROCESS §11 arc: Opus 5 writer ran Codex ×4 itself and fixed

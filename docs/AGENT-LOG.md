@@ -19004,3 +19004,48 @@ review-106-triage.md.
 **PERSIST ARC FULLY CLOSED.** Remaining arc-pending manifest rows (4)
 belong to the render/opk arcs. Next: task 14 — verify_m4.sh assembly
 (Opus 5 writer per §11) → M4 GATE → provision → LOOP STOP: m4-complete.
+
+---
+
+iter 108 · 2026-07-25 · phase M4 · task 14 INCREMENT 1: verify_m4.sh gate script + Tier A arc GO · task 14 REMAINS OPEN (leg engines unbuilt)
+
+**Writer:** claude-opus-5 (§11). Pre-reg: .loop/m4-t14-prereg.md
+(frozen before first edit; caps ≤2 device passes/≤2 arm rebuilds/0
+browser — ACTUAL: 0 device, 0 arm). Codex arc: .loop/review-108-
+{1..4}.log — NO-GO ×3 → **VERDICT: GO round 4, zero findings**
+(driver-read from logs). 9 Highs + 1 Medium fixed across rounds
+(flow-identity grammars incl. duplicate-f06-masking, torn-duplicate
+closure by construction, unterminated-final-record drop,
+count-only-reconciliation, swallowed find rc, symlink/nested
+blindness, CRLF tears); 2 written dispositions
+(.loop/review-108-triage.md).
+**Delivered:** `port/sim/device/verify_m4.sh` (28.9 KB, untracked→now
+committed) — spec-verbatim CLAUDE.md §Commands M4 EXIT GATE: manifest
+anchor → byte pins → [0b] arc-status refusal BEFORE any leg; readonly
+sentinel lockout; `  | ` relay contract; anchored full-line verdict
+grammars; gate-side integer p99 re-assertion; flow-coverage identity
+reconciliation. Producer ledger: .loop/m4-t14-producer-status.md (25
+producers, each reviewed-go claim verified against a bare VERDICT: GO).
+**Driver ground-truth COLD:** bash -n clean; `bash
+port/sim/device/verify_m4.sh` → `M4 GATE REFUSED: freeze manifest …
+missing` rc 1 refusing before any leg (.loop/driver-cold-t14-refusal
+.log == writer's .loop/m4-t14-gate.log); review-80-1.log verified a
+genuine device-rig round-4 GO.
+**HONEST STATUS: task 14 NOT complete — `M4 GATE OK` never printable
+yet.** Writer discovery (framing gap): leg 1 is not assemblable from
+existing parts — gfx_app.c:654 refuses --cpu without --ai-bridge (no
+live-AI path) while foh_dev takes match params only from FOH menus;
+only m01 has a flow. NO M4 golden replays on device today.
+**Remains (iter-109 dispatch):** (1) foh_dev direct-match entry (~60
+lines) so all 12 leg-1 goldens replay through the live-AI binary; (2)
+port/sim/device/check-device-fullgame.sh (g01–g08+m01/m02/s01/s02,
+render+audio+music, ~14 paced runs); (3) check-device-opk.sh
+MLFK_OPK_FOH=1 frontend-into-FOH mode; (4) m4-freeze-manifest.txt +
+real MANIFEST_SHA256 (23/25 hashes pre-computed in the ledger) incl.
+driver-sanctioned m3-row corrections: check-device-render.sh +
+judge-shot.js truthfully re-cite .loop/review-80-1.log (pins predate
+and survive the GO; be83cd0 wrote arc-pending minutes early);
+check-device-opk.sh STAYS pending until its FOH mode lands+arcs;
+adbsh.sh/check-device-conform.sh mechanical re-pins settle per the
+fix_plan "onward to task 14" register; (5) arcs for new surfaces →
+gate run.
