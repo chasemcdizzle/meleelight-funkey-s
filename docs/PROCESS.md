@@ -203,6 +203,30 @@ restated in the loop prompt so they survive context loss. Escalate only
 true impossibilities; batch decision points; push-notify milestone-grade
 events and genuine decisions, not progress noise.
 
+## 11. Model assignment (owner ruling 2026-07-25)
+
+- **Driver = Claude Fable 5** (`claude-fable-5`): runs the loop —
+  orientation, dispatch, ground-truth ritual (§5), cold done-check
+  re-runs, STATE/AGENT-LOG upkeep, arc arbitration, commits. The driver
+  writes NO shipping code; "micro" iterations the driver used to take
+  itself now dispatch to a writer like everything else.
+- **Writer = Claude Opus 5** (`claude-opus-5`): ALL coding work. Pin
+  the model at dispatch time (`claude --model claude-opus-5 -p <brief>`,
+  or the harness agent's model field where dispatch goes through the
+  Agent/Task tools) and record the model in the iteration's AGENT-LOG
+  entry. **The writer session owns its whole review arc**: implement →
+  invoke Codex itself (`codex exec`, backgrounded per §7.8) → fix what
+  is warranted per the existing bar (Medium+ fixed; Lows dispositioned
+  in writing) → repeat to VERDICT: GO or the §3 cap — all in ONE writer
+  session, no driver round-trip per round.
+- **Reviewer = Codex** (unchanged §3; fallback `grok`): every change
+  still gets at least one review round — the §3 tiers already guarantee
+  this (Tier B is never wholly skippable). §3's contract is unchanged
+  by writer-invoked review: prompt + full log under
+  `.loop/review-<iter>-<n>.log`, exact verdict line, and the DRIVER
+  reads verdicts from the log files cold at ground-truth time (§5),
+  never from the writer's summary. Driver arbitrates disputes and caps.
+
 ## Explicitly NOT adopted (with reasons; reopen only with new evidence)
 
 - **Parallel lanes / claim files / host-idle multi-lane dispatch** —

@@ -3,6 +3,18 @@
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
+## §rulings (standing owner directives, day-tagged)
+
+- **2026-07-25 — Model assignment (PROCESS.md §11):** driver = Claude
+  Fable 5 (runs the loop, writes no shipping code); ALL coding work
+  dispatches to Claude Opus 5 writers (`claude --model claude-opus-5`).
+  The writer session owns its whole review arc: implement → invoke
+  Codex itself → fix what's warranted (Medium+ fixed, Lows
+  dispositioned in writing) → repeat to GO/cap, in ONE session. §3
+  contract unchanged: verdicts live in `.loop/review-*.log`; driver
+  reads them cold, arbitrates, caps. Writer model recorded in each
+  AGENT-LOG iter entry.
+
 ## Live right now (updated: 2026-07-20, iter 105 — M4 micro DONE: task-12-arc round-3 M closed, [5b] banner-witness grammar anchored, FOH FLOWS OK cold teeth=21)
 
 - **Iter 105 DONE (M4 micro; review-103 round-3 NO-GO — the sole

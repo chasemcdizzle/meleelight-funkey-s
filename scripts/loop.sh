@@ -15,6 +15,9 @@ cd "$(dirname "$0")/.."
 
 MAX_ITERS="${MAX_ITERS:-300}"
 PERM_MODE="${PERM_MODE:-default}"
+# Model roles (PROCESS.md §11, owner ruling 2026-07-25): driver = Fable 5;
+# writers the driver dispatches run claude-opus-5; Codex reviews.
+DRIVER_MODEL="${DRIVER_MODEL:-claude-fable-5}"
 mkdir -p .loop
 
 # Refuse to run anywhere but the dedicated branch.
@@ -29,7 +32,7 @@ for ((i=1; i<=MAX_ITERS; i++)); do
     echo "[$i] LOOP STOP sentinel found — loop halted for the owner."; break
   fi
   echo "=== iteration $i / $MAX_ITERS  ($(git rev-parse --short HEAD)) ==="
-  claude -p "$(cat docs/LOOP.md)" --permission-mode "$PERM_MODE" < /dev/null || \
+  claude -p "$(cat docs/LOOP.md)" --model "$DRIVER_MODEL" --permission-mode "$PERM_MODE" < /dev/null || \
     echo "[$i] claude exited non-zero; continuing to next iteration."
 done
 
