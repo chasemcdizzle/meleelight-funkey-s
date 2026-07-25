@@ -18952,3 +18952,55 @@ driver session 2026-07-25 ground-truthed COLD from disk and commits).**
 - **Next:** persist-arc round 4 (closure-or-cap) over THIS commit's
   diff — dispatches to an Opus 5 writer per §11 (first ruling-shaped
   arc), then task 14 (verify_m4.sh assembly) → M4 GATE.
+
+---
+
+iter 107 · 2026-07-25 · phase M4 · persist-arc rounds 4-7 CLOSED (GO) · first PROCESS §11 arc — Opus 5 writer owned review+fix in-session
+
+**Writer:** claude-opus-5 (Agent dispatch, model recorded per PROCESS
+§11). Codex `codex exec --sandbox read-only` ×4. Verdicts READ FROM
+LOGS by the driver: .loop/review-106-1.log NO-GO → -2 NO-GO → -3
+NO-GO → **-4 GO (zero findings; MLFKPROC-grammar-exactness class
+CAPPED, Tier-A bounded convergence)**. Prompts + per-round diffs +
+triage: .loop/review-106-{1..4}-prompt.md, review-106-*diff*.txt,
+review-106-triage.md.
+**Headline closures (8 Mediums over rounds 4-6):**
+- NEW CLASS (host-side collateral destruction): the iter-106 H copy
+  tooth `eval`ed device command strings on the HOST — every cold run
+  executed cleanup's `pkill foh_device` locally. Class fix: NO eval of
+  any device command anywhere — the stub records commands verbatim,
+  acts only on exact-string equality with one fixed quoted rm; guards:
+  exact full-line stub pin, adb stub, eval-count parity copy==check,
+  seam-predicate unit tooth. (ZOOM OUT: registered as a class — any
+  host-run copy of a device script must stub by RECORDING, never by
+  evaluating; the parity guard makes regression structural.)
+- Scan fail-closed: wc/tr rc no longer coerces to benign-zero-byte
+  (per-reader rc → MLFKUNREADABLE). The missing iter-106 refutation
+  ledger was produced here (fake-/proc harness: OLD silently skips,
+  NEW fails closed).
+- MLFKPROC grammar re-measured ON DEVICE
+  (.loop/m4-per107-measure-pidcomm.log): pid_max 32768, comm alphabet
+  incl. `/`,`:`,uppercase; final grammar pid ≤ 32767 + comm ≤ 15 BYTES
+  under LC_ALL=C (round 6: `{1,15}` counted chars under UTF-8).
+- Lows: all 6 fixed incl. the claimed-but-missing 12345678 tooth.
+  Dispositions accepted in writing (round 7): space-bearing comm
+  framing (producer change; tooth-pinned), rigscancl.$$ temp path,
+  R1-R5 ledger location (driver's).
+**Driver ground-truth COLD (§5):**
+- Done-check: `bash port/foh/check-device-persist.sh` → `PERSIST OK
+  (… bootid=bootid:PRE!=POST bootwait=12s … teeth=19)` exit 0 —
+  .loop/driver-cold-per107.log. Confirms the writer-flagged unverified
+  teeth 18→19 counter. (Writer's own green run:
+  .loop/m4-per107-donecheck.log, teeth=18 pre-round-5/6 host edits.)
+- Manifest: ALL 23 ROWS GREEN incl. riglib re-pin b0f89119… flipped
+  arc-pending → `reviewed-go .loop/review-106-4.log`; verify_m3.sh row
+  green under its ^MANIFEST_SHA256= exclusion; ANCHOR GREEN
+  b84db784… — .loop/driver-cold-per107-manifest.log (writer's:
+  .loop/m4-per107-manifest-selfcheck.log).
+- Surfaces: exactly check-device-persist.sh, riglib.sh,
+  m3-freeze-manifest.txt, verify_m3.sh; foh_persist.{c,h},
+  decode-pb-glyphs.js + all frozen artifacts BYTE-UNCHANGED; committed
+  eval-of-device-commands count 2 → 0.
+**PERSIST ARC FULLY CLOSED.** Remaining arc-pending manifest rows (4)
+belong to the render/opk arcs. Next: task 14 — verify_m4.sh assembly
+(Opus 5 writer per §11) → M4 GATE → provision → LOOP STOP: m4-complete.

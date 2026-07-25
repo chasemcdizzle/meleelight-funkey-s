@@ -158,12 +158,14 @@ BOOTID_SRC=""
 # newline shape on a captured raw device stream. Command substitution
 # ($(...)) silently DROPS trailing LFs (and NULs — the M-b byte-drop
 # class), so freshness tokens MUST be validated as bytes on disk, not
-# through $(). De-CRs the measured adb pty artifact IN PLACE, then
-# requires the file to be EXACTLY one LF-terminated line: final byte ==
-# 0x0a AND exactly one line total. Echoes the content WITHOUT the
-# trailing LF (the CALLER applies the producer's exact-token grammar).
-# Returns 1 on any newline-shape violation (empty, no final LF,
-# multi-line). Pure host logic (reads a local file) — teeth invoke it.
+# through $(). review-104 M-1 (contract corrected review-106 L-b): the
+# capture file is READ-ONLY here — nothing is normalized, de-CR'd or
+# rewritten. The whole file must be EXACTLY <printable-ASCII body><CR><LF>
+# (the MEASURED adb-pty producer shape); the body is echoed WITHOUT the
+# terminator (the CALLER applies the producer's exact-token grammar).
+# Returns 1 on any byte-shape violation (empty body, missing CR or LF,
+# interior CR/LF/NUL/control, high bytes, any trailing byte after the
+# CRLF). Pure host logic (reads a local file) — teeth invoke it.
 raw_single_line() {
   # review-104 M-1: BYTE-EXACT validation of the RAW device capture — NO
   # tr/squeeze/normalization on a decision-bearing stream, and no
@@ -200,9 +202,9 @@ capture_bootid() {
   local rawf s
   rawf="$BUILD/.bootid.raw.$$"; rm -f "$rawf"
   adb -s "$DEV" shell 'cat /proc/sys/kernel/random/boot_id 2>/dev/null' > "$rawf" 2>/dev/null || true
-  # RAW-byte grammar FIRST (M-a): validate the exact producer shape (36-char
-  # canonical UUID + a single trailing LF) BEFORE extraction — never a
-  # whitespace squeeze that would launder junk into a match.
+  # RAW-byte grammar FIRST (M-a/M-1): validate the exact MEASURED producer
+  # shape (36-char canonical UUID body + a single trailing CRLF) BEFORE
+  # extraction — never a whitespace squeeze that would launder junk in.
   if s="$(raw_single_line "$rawf")" \
      && [[ "$s" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
     rm -f "$rawf"; printf 'bootid %s' "$s"; return 0
@@ -976,9 +978,12 @@ echo "    H trap tooth OK: UNPROBED/unknown keep the user file byte-identical; d
 # decision; THIS proves the REAL `trap cleanup EXIT` + REAL cleanup()
 # dispatch, on a COPY of THIS check killed right after the trap installs
 # (PERSIST_STATE=UNPROBED, before any probe runs). The device seam is
-# host-simulated (bare-no-op stubs; rig_dsh_retry runs the device command on
-# the LOCAL override paths), so the tooth consumes NO paced run and never
-# touches the real product file. Contract: a planted override file SURVIVES
+# host-simulated: no-op stubs plus a rig_dsh_retry that RECORDS every device
+# command verbatim and NEVER executes one — it performs a single fixed,
+# quoted `rm -f` of the two LOCAL override paths iff the recorded string
+# equals the exact delete command the real cleanup emits (review-106
+# rounds 4-5). So the tooth consumes NO paced run, cannot reach the device,
+# and cannot run a device command against the host. Contract: a planted override file SURVIVES
 # byte-identical under UNPROBED; a dead-tooth COPY at PERSIST_STATE=ABSENT
 # DELETES it (proving the residue dispatch really reaches the device-delete
 # arm through the real trap, not a mirror). The awk injects the seam stubs
@@ -994,8 +999,9 @@ awk '
   /^source port\/sim\/device\/riglib\.sh$/ {
     print "rig_lock_acquire() { :; }"
     print "rig_cleanup() { :; }"
-    print "rig_dsh_retry() { eval \"$1\" >/dev/null 2>&1 || true; }"
-    print "dsh() { :; }"
+    print "rig_dsh_retry() { printf \"%s\\n\" \"$1\" >> \"${MLFK_L1_CMDS:?}\"; if [ \"$1\" = \"rm -f ${MLFK_L1_DFILE:?} ${MLFK_L1_DDATA:?}/mlfk-persist.tmp\" ]; then rm -f \"${MLFK_L1_DFILE}\" \"${MLFK_L1_DDATA}/mlfk-persist.tmp\"; fi; return 0; }"
+    print "dsh() { printf \"DSH %s\\n\" \"$*\" >> \"${MLFK_L1_CMDS:?}\"; return 0; }"
+    print "adb() { printf \"ADB %s\\n\" \"$*\" >> \"${MLFK_L1_CMDS:?}\"; return 0; }"
   }
   /^trap cleanup EXIT$/ {
     print "PERSIST_STATE=\"${MLFK_L1_STATE:?}\"; DFILE=\"${MLFK_L1_DFILE:?}\"; DDATA=\"${MLFK_L1_DDATA:?}\"; BUILD=\"${MLFK_L1_BUILD:?}\"; PREEXIST_RESTORED=0; exit 0"
@@ -1005,8 +1011,50 @@ awk '
   || fail "H copy tooth: repo-cd replacement did not land (the check's dirname-cd line changed?)"
 [ "$(grep -c '^require_device() { :; }$' "$L1_COPY")" = 1 ] \
   || fail "H copy tooth: require_device stub injection did not land (adbsh source-line anchor changed?)"
-[ "$(grep -c '^rig_dsh_retry() { eval' "$L1_COPY")" = 1 ] \
-  || fail "H copy tooth: device-seam stub injection did not land (riglib source-line anchor changed?)"
+# review-106 M-C (round 4) + round-5 hardening: the COPY must never EXECUTE a
+# device command string on the HOST. The round-3 stub `eval`ed every one — so
+# cleanup's `pkill foh_device` ran locally, twice per cold run
+# (host-side collateral destruction) — and the round-4 attempt still `eval`ed
+# any string that MENTIONED the override dir, which is membership, not
+# confinement (`rm -f $DFILE ...; rm -f /elsewhere` would have run whole).
+# There is now NO eval anywhere in the seam: the stub RECORDS every device
+# command verbatim, and performs ONE hardcoded local deletion of the two
+# override paths iff the recorded string is EXACTLY the delete command the
+# real cleanup emits (whitelist by full-string equality, fixed action). The
+# injected seam is pinned as an EXACT FULL LINE: any drift — a reintroduced
+# eval, a widened predicate, a dropped recorder — fails here instead of
+# running device commands against the host. (Anchored -x so this pin cannot
+# match its own source line.)
+L1_STUB='rig_dsh_retry() { printf "%s\n" "$1" >> "${MLFK_L1_CMDS:?}"; if [ "$1" = "rm -f ${MLFK_L1_DFILE:?} ${MLFK_L1_DDATA:?}/mlfk-persist.tmp" ]; then rm -f "${MLFK_L1_DFILE}" "${MLFK_L1_DDATA}/mlfk-persist.tmp"; fi; return 0; }'
+[ "$(grep -cxF "$L1_STUB" "$L1_COPY")" = 1 ] \
+  || fail "H copy tooth: the device-seam stub is not the exact recorded+confined form (injection missed, or a refactor reintroduced host execution)"
+[ "$(grep -c '^adb() { printf' "$L1_COPY")" = 1 ] \
+  || fail "H copy tooth: adb stub injection did not land (the COPY could reach the REAL device)"
+[ "$(grep -c 'eval' "$L1_COPY")" = "$(grep -c 'eval' "$0")" ] \
+  || fail "H copy tooth: the generated COPY introduced an eval the check itself does not have (host-execution class)"
+# review-106 round-5 tooth: the seam predicate is EXACT-STRING, not membership.
+# Define the very function the COPY carries (from the pinned text) and prove:
+# a command that merely MENTIONS the override paths does NOT execute (the
+# round-4 hole — it would have deleted both files), the EXACT delete command
+# DOES delete exactly the two override paths, and every command is recorded.
+subu="$htc/stubunit"; rm -rf "$subu"; mkdir -p "$subu"
+( set +e
+  MLFK_L1_CMDS="$subu/cmds"; : > "$MLFK_L1_CMDS"
+  MLFK_L1_DDATA="$subu"; MLFK_L1_DFILE="$subu/mlfk-persist.dat"
+  printf 'victim' > "$MLFK_L1_DFILE"; printf 'collateral' > "$subu/other.dat"
+  eval "$L1_STUB"
+  rig_dsh_retry "pkill foh_device; true"
+  rig_dsh_retry "rm -f $MLFK_L1_DFILE $subu/other.dat"
+  [ -f "$MLFK_L1_DFILE" ] || exit 21   # a MENTIONING command must not run
+  [ -f "$subu/other.dat" ] || exit 22   # ...and must not take collateral
+  rig_dsh_retry "rm -f $MLFK_L1_DFILE $MLFK_L1_DDATA/mlfk-persist.tmp"
+  [ -f "$MLFK_L1_DFILE" ] && exit 23    # the EXACT command must delete
+  [ -f "$subu/other.dat" ] || exit 24   # ...and still take no collateral
+  [ "$(grep -c '' "$MLFK_L1_CMDS")" = 3 ] || exit 25
+  exit 0 )
+subu_rc=$?
+[ "$subu_rc" = 0 ] \
+  || fail "H copy tooth (seam predicate unit): exact-string confinement failed (rc $subu_rc: 21/22 = a merely-MENTIONING device command executed on the host, 23 = the exact delete did not act, 24 = collateral, 25 = commands not recorded)"
 [ "$(grep -c '^PERSIST_STATE=.*MLFK_L1_STATE' "$L1_COPY")" = 1 ] \
   || fail "H copy tooth: early-exit injection did not land (trap-line anchor changed?)"
 l1_run() { # <state> : run the COPY with an override dir + a planted file
@@ -1015,11 +1063,18 @@ l1_run() { # <state> : run the COPY with an override dir + a planted file
   plant="$ovd/mlfk-persist.dat"
   cp "$FILE_REC" "$plant"           # a planted user file (byte-known)
   L1_SHA="$(rig_host_sha256 "$plant")" || exit 1
+  L1_CMDS="$htc/cmds-$st.txt"; : > "$L1_CMDS"
   rc=0
   MLFK_L1_STATE="$st" MLFK_L1_DFILE="$plant" MLFK_L1_DDATA="$ovd" \
-    MLFK_L1_BUILD="$htc/build-$st" MLFK_L1_REPO="$PWD" \
+    MLFK_L1_BUILD="$htc/build-$st" MLFK_L1_REPO="$PWD" MLFK_L1_CMDS="$L1_CMDS" \
     bash "$L1_COPY" >"$htc/log-$st.txt" 2>&1 || rc=$?
   L1_RC="$rc"; L1_PLANT="$plant"
+  # review-106 M-C: cleanup's FIRST device command on every path is the
+  # foh_device pkill. It must have been RECORDED by the seam stub (proof the
+  # REAL cleanup body ran through the REAL seam) and NEVER executed on the
+  # host. Full-line fixed match, exactly once.
+  [ "$(grep -cxF 'pkill foh_device; true' "$L1_CMDS")" = 1 ] \
+    || fail "H copy tooth ($st): cleanup's device pkill was not recorded exactly once by the seam stub — the tooth is not observing the real cleanup (or a command escaped to the HOST)"
 }
 # UNPROBED (the hazard): the COPY exits at the trap with no probe -> the REAL
 # cleanup KEEPS the planted file byte-identical.
@@ -1028,14 +1083,19 @@ l1_run UNPROBED
 [ -f "$L1_PLANT" ] || fail "H copy tooth: the REAL trap DELETED the planted file on an UNPROBED (early) exit — DATA LOSS"
 l1_now="$(rig_host_sha256 "$L1_PLANT")" || exit 1
 [ "$l1_now" = "$L1_SHA" ] || fail "H copy tooth: the REAL trap ALTERED the planted file on UNPROBED ($l1_now != $L1_SHA)"
+[ "$(grep -c '^rm -f ' "$L1_CMDS")" = 0 ] \
+  || fail "H copy tooth: the UNPROBED trap DISPATCHED a device delete command (it must not reach the delete arm at all)"
 # dead-tooth: at PERSIST_STATE=ABSENT the SAME real trap MUST delete the
 # override file (proves the dispatch reaches the device-delete arm; a no-op
 # here would mean the tooth could never observe a real deletion).
 l1_run ABSENT
 [ "$L1_RC" = 0 ] || fail "H copy tooth: the ABSENT copy exited nonzero ($L1_RC); see $htc/log-ABSENT.txt"
 [ ! -f "$L1_PLANT" ] || fail "H copy tooth: dead-tooth — the ABSENT real trap did NOT delete the override file (the copy is not dispatching the real cleanup)"
-teeth=$((teeth + 1))
-echo "    H copy-trap tooth OK: the REAL trap+cleanup on a killed COPY keeps the planted file byte-identical under UNPROBED, deletes it under ABSENT (dead-tooth guarded); no paced run"
+[ "$(grep -cxF "rm -f $L1_PLANT $htc/override-ABSENT/mlfk-persist.tmp" "$L1_CMDS")" = 1 ] \
+  || fail "H copy tooth: the ABSENT delete was not the exact override-confined device command the real cleanup emits (see $L1_CMDS)"
+teeth=$((teeth + 2))
+echo "    H copy-trap tooth OK: the REAL trap+cleanup on a killed COPY keeps the planted file byte-identical under UNPROBED (zero delete commands dispatched), deletes it under ABSENT via the exact expected delete command (dead-tooth guarded); no paced run"
+echo "    H seam-predicate tooth OK: the COPY never EVALs a device command — every command is recorded verbatim, only the EXACT expected delete acts (as a fixed local rm on the two override paths), and a merely-MENTIONING command takes no action and no collateral"
 
 # M-a standing teeth (review-102): the RAW freshness-token grammars reject
 # resemblance. raw_single_line enforces the newline shape; the caller
@@ -1105,6 +1165,27 @@ mc_ok "$(printf 'MLFKPROC 9 sh /tmp/mlfk/deadman.sh\nMLFKSCAN 1 1')"   # left>0 
 mc_fail "$(printf 'MLFKPROC 9 z\nMLFKSCAN 1 1')" "malformed MLFKPROC (no cmdline field — the exact round-2 hole)"
 mc_fail "$(printf 'MLFKPROC 12 sh\nMLFKSCAN 1 0')" "malformed MLFKPROC (comm only, no cmdline)"
 mc_fail "$(printf 'MLFKPROC 0 sh /tmp/mlfk/a\nMLFKSCAN 1 0')" "malformed MLFKPROC (pid 0)"
+# review-106 round-5: the producer bounds are the MEASURED device ones
+# (.loop/m4-per107-measure-pidcomm.log — pid_max 32768 so max pid 32767; comm
+# <= 15 bytes over an OPEN alphabet: the live device carries `/`, `:` and
+# UPPERCASE comms). Past a bound = corruption; INSIDE the bounds, including
+# every measured comm spelling, must still ACCEPT (zero false rejections).
+mc_fail "$(printf 'MLFKPROC 32768 sh /tmp/mlfk/a\nMLFKSCAN 1 0')" "pid == pid_max (exclusive; not allocatable)"
+mc_fail "$(printf 'MLFKPROC 99999 sh /tmp/mlfk/a\nMLFKSCAN 1 0')" "pid past the measured pid_max (digit-width alone would accept it)"
+mc_fail "$(printf 'MLFKPROC 12345678 sh /tmp/mlfk/a\nMLFKSCAN 1 0')" "pid far past the measured pid_max (8 digits)"
+# round-6: the bounds are BYTE bounds (LC_ALL=C in the parser) — a 15-CHARACTER
+# but 30-BYTE comm is corruption, not a find (it would have matched under a
+# UTF-8 locale). The genuine 15-BYTE comm above still accepts.
+mc_fail "$(printf 'MLFKPROC 12 \303\251\303\251\303\251\303\251\303\251\303\251\303\251\303\251\303\251\303\251\303\251\303\251\303\251\303\251\303\251 /tmp/mlfk/a\nMLFKSCAN 1 0')" "15-character/30-byte comm (locale-dependent bound)"
+# round-6 (dispositioned, pinned so it cannot drift silently): the row is
+# space-delimited, so a space-bearing comm is framed as comm=first word +
+# cmdline=rest. It PARSES (the split is not decision-bearing: kills use the
+# device-side pid list and the count reconciliation catches drops).
+mc_ok "$(printf 'MLFKPROC 12 My Tool /tmp/mlfk/MyTool\nMLFKSCAN 1 0')"
+mc_fail "$(printf 'MLFKPROC 12 abcdefghijklmnop /tmp/mlfk/a\nMLFKSCAN 1 0')" "over-long comm (16 bytes > TASK_COMM_LEN-1)"
+mc_ok "$(printf 'MLFKPROC 32767 irq/42-axp20x_i /tmp/mlfk/a\nMLFKSCAN 1 0')"  # max pid + a MEASURED 15-byte comm with `/`
+mc_ok "$(printf 'MLFKPROC 7 kworker/0:1H /tmp/mlfk/a\nMLFKSCAN 1 0')"         # measured comm with `:` + UPPERCASE
+mc_ok "$(printf 'MLFKPROC 8 MyTool /tmp/mlfk/MyTool\nMLFKSCAN 1 0')"          # human-launched tool (the round-4 false-rejection bug)
 mc_fail "$(printf 'MLFKPROC 1 sh /tmp/mlfk/a\nMLFKPROC 2 sh /tmp/mlfk/b\nMLFKSCAN 1 0')" "reconciliation mismatch (2 rows, found 1)"
 mc_fail "$(printf 'MLFKUNREADABLE 55\nMLFKSCAN 0 0')" "live unreadable proc"
 mc_fail "$(printf 'GARBAGE\nMLFKSCAN 0 0')" "non-whitelisted line"

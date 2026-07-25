@@ -15,7 +15,27 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-25, iter 106 — M4 hardening DONE: persist-arc round-3 closure driver-committed; PERSIST OK cold teeth=18; model-assignment ruling in force)
+## Live right now (updated: 2026-07-25, iter 107 — PERSIST ARC CLOSED: GO round 7, riglib reviewed-go; PERSIST OK cold teeth=19; first §11 Opus-writer arc)
+
+- **Iter 107 DONE — persist-arc rounds 4-7 CLOSED at GO** (first
+  PROCESS §11 arc: Opus 5 writer ran Codex ×4 itself and fixed
+  in-session; driver read verdicts from .loop/review-106-{1..4}.log —
+  NO-GO ×3 → GO, MLFKPROC-grammar class CAPPED round 7). 8 Mediums
+  closed, headline = NEW host-side collateral-destruction class (the
+  H copy tooth eval'ed device commands on the host, running `pkill
+  foh_device` locally — now zero eval-of-device-commands + parity
+  guard + seam unit tooth). Driver COLD: `PERSIST OK (… teeth=19)`
+  exit 0 (.loop/driver-cold-per107.log — verifies the writer-flagged
+  teeth counter) + manifest ALL 23 ROWS + ANCHOR GREEN with riglib
+  `reviewed-go .loop/review-106-4.log`
+  (.loop/driver-cold-per107-manifest.log). Full trail: AGENT-LOG
+  iter-107.
+- **Queue:** task 14 — verify_m4.sh assembly (dispatch Opus 5 writer
+  per §11; the 4 remaining arc-pending manifest rows belong to the
+  render/opk arcs it composes) → M4 GATE → provision → LOOP STOP:
+  m4-complete.
+
+## [superseded by iter-107] (updated: 2026-07-25, iter 106 — M4 hardening DONE: persist-arc round-3 closure driver-committed; PERSIST OK cold teeth=18; model-assignment ruling in force)
 
 - **Iter 106 DONE (persist-arc round-3 closure; driver-committed per
   iter-101 precedent — the 2026-07-20 writer finished implementation +

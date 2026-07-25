@@ -86,14 +86,51 @@ ARMBINS="sim_device csweep_arm fmt_diff_arm mathsweep_arm gfx_device fk_input sk
 # returns 1. Never touches the device.
 rig_orphan_parse() {
   local out="$1" line last nscan nproc nunread nfound nleft
+  # review-106 round-6: BYTE semantics for every pattern below. The producer's
+  # bounds are BYTE bounds (comm is 15 BYTES in the kernel), while bash's
+  # regex engine counts CHARACTERS in the inherited locale — under a UTF-8
+  # locale a 30-byte, 15-character comm would have matched a {1,15} bound.
+  # `local LC_ALL=C` switches the match to bytes and is restored on return.
+  local LC_ALL=C
   # M-3 (review-104): the MLFKPROC row grammar, anchored full-line
   # (whitelist-grammar rule). mlfk_scan emits `MLFKPROC <pid> <comm>
-  # <cmdline...>`: pid a positive decimal (no leading zero), comm the
-  # MEASURED rig alphabet (sh/ash/busybox/deadman.sh/foh_device, or the `?`
-  # read-fallback), then a NON-EMPTY cmdline field. A resembling row
-  # (missing cmdline, pid 0, junk comm) is CORRUPTION DEATH, not a
-  # silently-counted find.
-  local proc_re='^MLFKPROC [1-9][0-9]* ([a-z0-9_.-]+|[?]) .+$'
+  # <cmdline...>`: pid a positive decimal (no leading zero), comm one
+  # non-empty non-space token of at most 15 bytes over an OPEN alphabet (the
+  # `?` read-fallback is just one such token — see the measurement note
+  # below), then a NON-EMPTY cmdline field. A resembling row
+  # (missing cmdline, pid 0, over-long comm, out-of-range pid) is CORRUPTION DEATH, not a
+  # silently-counted find. review-106 round-5: BOTH open quantifiers are now
+  # bounded by the producer MEASURED ON THE DEVICE 2026-07-25
+  # (.loop/m4-per107-measure-pidcomm.log), not by assumption:
+  #   * /proc/sys/kernel/pid_max = 32768 -> allocated pids are < pid_max,
+  #     so the largest genuine pid is 32767 (checked NUMERICALLY below; a
+  #     digit-width class alone would accept 99999).
+  #   * comm is <= 15 bytes (TASK_COMM_LEN-1; the longest live comm measured
+  #     is exactly 15, "irq/42-axp20x_i") over an OPEN alphabet — the live
+  #     device carries `/`, `:` and UPPERCASE comms (kworker/0:1H,
+  #     jbd2/mmcblk0p2-), and an MLFKPROC row is emitted for ANY process
+  #     whose cmdline contains a rig root (every pushed ARMBINS binary, or
+  #     anything a human ran against the rig dirs). The round-4 attempt at
+  #     an [a-z0-9_.-] class was therefore a FALSE-REJECTION bug: it would
+  #     have killed the scan on a genuine `/tmp/mlfk/MyTool`. The measured
+  #     grammar of the field is "one non-empty, non-space token <= 15 bytes"
+  #     — structure pinned exactly, alphabet left where the producer leaves
+  #     it.
+  # HONEST LIMIT of that field split (review-106 round-6, dispositioned in
+  # writing rather than fixed): the row is space-delimited, so a comm that
+  # ITSELF contains a space is not detectable from the host — the match
+  # simply frames the first word as comm and the rest as cmdline (`My Tool`
+  # parses as comm `My`, cmdline `Tool ...`) and an all-space comm is
+  # rejected. Making this exact would need a producer change (escaping comm
+  # on the wire), i.e. a device-behaviour change, and it would buy nothing:
+  # the comm/cmdline SPLIT is not decision-bearing. Kills use the
+  # DEVICE-side pid list, a dropped or added row is caught by the
+  # nproc==nfound reconciliation, and both fields are only echoed into the
+  # WARN log. No comm on this device contains a space (measured, 41/41).
+  # Structure stays strict where decisions live: canonical pid, a NON-EMPTY
+  # cmdline field, exactly one trailing MLFKSCAN, rows == reaped count.
+  local proc_re='^MLFKPROC ([1-9][0-9]{0,4}) ([^ ]{1,15}) .+$'
+  local pid_max_last=32767   # MEASURED (pid_max 32768, exclusive)
   out="${out%$'\n'}"
   last="${out##*$'\n'}"
   nscan=0; nproc=0; nunread=0
@@ -103,6 +140,8 @@ rig_orphan_parse() {
       MLFKPROC\ *)
         [[ "$line" =~ $proc_re ]] \
           || { printf 'FAIL malformed MLFKPROC row (not `MLFKPROC <pid> <comm> <cmdline>`): %s' "$line"; return 1; }
+        [ "${BASH_REMATCH[1]}" -le "$pid_max_last" ] \
+          || { printf 'FAIL MLFKPROC pid %s exceeds the MEASURED device pid_max-1 (%s) - corruption (remeasure /proc/sys/kernel/pid_max if the kernel changed): %s' "${BASH_REMATCH[1]}" "$pid_max_last" "$line"; return 1; }
         nproc=$((nproc + 1)) ;;
       MLFKUNREADABLE\ *) nunread=$((nunread + 1)) ;;
       *) printf 'FAIL non-whitelisted scan line: %s' "$line"; return 1 ;;
@@ -132,8 +171,13 @@ rig_orphan_reap() {
   #  * cat reads cmdline with its OWN stderr -> /dev/null; a bare
   #    `< $p/cmdline` redirect would leak an un-suppressible SHELL open error
   #    into the captured grammar (so cat, never a redirect).
-  #  * M-2 (review-104): capture cats rc AND byte count EXPLICITLY — never
-  #    behind a `| tr` pipe, whose $? is trs (the round-2 hole). A read that
+  #  * M-2 (review-104 + review-106 M-A): capture the rc of EVERY reader in
+  #    the chain EXPLICITLY — cat (crc), wc (crc=91 / non-numeric count 92)
+  #    and tr (crc=93) — never behind a `| tr` pipe, whose $? is trs (the
+  #    round-2 hole) and never coerced to a benign 0/empty (the round-4
+  #    hole: a wc/tr failure on a GENUINE rig cmdline used to read as an
+  #    empty kernel-thread cmdline and get skipped). Any reader failure on a
+  #    still-present /proc entry is UNREADABLE = fail closed. A read that
   #    ERRORED (crc!=0) while /proc/<pid> is present is LIVE UNREADABLE (the
   #    -r stat missed it) -> fail closed; a readable-EMPTY cmdline while
   #    present is a kernel thread/zombie (benign — a rig process ALWAYS
@@ -160,7 +204,9 @@ mlfk_scan() {
     [ "$pid" = "$PPID" ] && continue
     tf="/tmp/rigscancl.$$"
     cat "$p/cmdline" 2>/dev/null > "$tf"; crc=$?
-    nb="$(wc -c < "$tf" 2>/dev/null)"; nb="${nb##* }"; [ -n "$nb" ] || nb=0
+    nb="$(wc -c < "$tf" 2>/dev/null)" || crc=91
+    nb="${nb##* }"
+    case "$nb" in ""|*[!0-9]*) crc=92 ;; esac
     if [ "$crc" != 0 ] || [ "$nb" = 0 ]; then
       rm -f "$tf"
       [ -d "$p" ] || continue
@@ -168,8 +214,13 @@ mlfk_scan() {
       cwd_rig "$(readlink "$p/cwd" 2>/dev/null)" && echo "MLFKUNREADABLE $pid"
       continue
     fi
-    cl="$(tr "\0" " " < "$tf")"
+    cl="$(tr "\0" " " < "$tf")" || crc=93
     rm -f "$tf"
+    if [ "$crc" != 0 ]; then
+      [ -d "$p" ] || continue
+      echo "MLFKUNREADABLE $pid"
+      continue
+    fi
     cm=""
     matched=0
     case "$cl" in
