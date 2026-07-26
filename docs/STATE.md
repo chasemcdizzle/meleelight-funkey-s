@@ -15,7 +15,31 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-25, iter 108 — task-14 increment 1: verify_m4.sh DELIVERED + arc GO r4; task 14 OPEN — leg engines unbuilt, no M4 golden replays on device yet)
+## Live right now (updated: 2026-07-26, iter 109 — task-14 increment 2 COMMITTED: full-game engine live, 12/12 streams exact ON DEVICE ×2 passes, cold-start skip class CLOSED; residual = environmental sim-stall class, attribution next)
+
+- **Iter 109 DONE (4 Opus writer sessions + driver runs/rulings; full
+  trail AGENT-LOG iter-109).** foh_dev direct-match entry + launch
+  warm-up; check-device-fullgame.sh (12 legs, per-leg quiesce,
+  owned-claim recovery, 21 teeth); riglib hardening; PORTABILITY entry;
+  verify_m4 teeth=21 tighten. Arc r1-9 CAPPED (all M+ closed except the
+  registered five-producer recovery class; "no bar-(a) defect" ×5
+  rounds); delta arc r10-13 CAPPED ("gate-contract escalation" class,
+  dissent verbatim in .loop/review-109-r3-triage.md; §8 blind-spot
+  statement in AGENT-LOG).
+- **Evidence:** run4 10/12 — 24/24 STREAM MATCH, p99 ≤16.003, underruns
+  0, starves 0; g01 cold-start class CLOSED (R7 held: all frame-1s
+  8.1-13.4 ms). Residual: g04 f1831 sim=28.7 ms, m02 f3356 sim=15.9 ms
+  — NON-deterministic sim-phase environmental stalls (single-core
+  preemption/paging); SD-writeback class fix HELD (zero render stalls).
+- **Queue:** task-8 instrument RETARGET (foh_device/any-leg) +
+  attribution runs on the sim-stall class (hypotheses to MEASURE:
+  music-PCM SD streaming contention, major-fault paging under the
+  ~150 MB PCM set, daemons incl. system_stats) → skips==0 12-leg pass
+  (= increment-3 exit `FULLGAME CONFORMS 12/12`) → OPK FOH mode →
+  m4-freeze-manifest (+ driver-sanctioned m3 re-cites) → M4 GATE →
+  provision → LOOP STOP: m4-complete.
+
+## [superseded by iter-109] (updated: 2026-07-25, iter 108 — task-14 increment 1: verify_m4.sh DELIVERED + arc GO r4; task 14 OPEN — leg engines unbuilt, no M4 golden replays on device yet)
 
 - **Iter 108 DONE (task-14 increment 1, §11 Opus writer).** verify_m4.sh
   (spec-verbatim gate: anchor→pins→[0b] refusal before any leg, relay

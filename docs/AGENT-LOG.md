@@ -19049,3 +19049,71 @@ check-device-opk.sh STAYS pending until its FOH mode lands+arcs;
 adbsh.sh/check-device-conform.sh mechanical re-pins settle per the
 fix_plan "onward to task 14" register; (5) arcs for new surfaces →
 gate run.
+
+---
+
+iter 109 · 2026-07-26 · phase M4 · task 14 INCREMENT 2 COMMITTED: full-game device engine + direct-match entry + cold-start class CLOSED · residual = environmental sim-stall class (attribution next)
+
+**Writers:** claude-opus-5 ×4 sessions (§11): original (built engine,
+run1/run2, arc r1), respawn-1 (arc r2-4; died session-limit — r4
+completed on disk post-death), respawn-2 (arc r5-9, 110/110 host
+harness, CAPPED), respawn-3 (warm-up, arc r10-13 delta, run4).
+**Built:** port/foh/foh_dev.c direct-match entry (+91) + launch warm-up
+(direct-only platform_poll/present of the pre-render black buffer +
+unconditional never-presented gfx_render_frame, then gfx_init/
+legibility/gfx_vfx_install re-run — r10-M caught the REAL
+fg2LineWidth=4.0 staleness a single-constructor scheme left);
+port/sim/device/check-device-fullgame.sh (NEW, 987→ final form; per-leg
+low_bat_check quiesce windows + rig_quiesce_bracket_assert; owned-claim
+lock/recovery machinery; anchored full-line grammars; 21 teeth frozen);
+riglib.sh (rig_inherited_restore restore-before-reap, ownership nonce,
+session-fenced heartbeat, clock-free deadman, rig_comm_pids retry,
+rig_qd_probe/reassert); docs/PORTABILITY.md inventory entry; driver
+one-liner verify_m4.sh FULLGAME_RE teeth=21 (reviewed in the delta-arc
+packets); fix_plan registered recovery-ownership class item.
+**Review arcs (all verdicts driver-read from logs):** rounds 1-9
+`.loop/review-109-{1..9}.log` NO-GO ×9 → **CLOSED CAPPED** (driver
+ruling 2026-07-26): every Medium+ closed except round-6 H3 (=the
+registered fix_plan class item — refactor of five OTHER pinned
+producers); reviewer stated "no bar-(a) defect" five consecutive
+rounds. Delta rounds 10-13 `.loop/review-109-{10..13}.log` NO-GO ×4 →
+**CAPPED, class "gate-contract escalation: per-frame-max judgment
+beyond the frozen p99+skips surface"**, dissent verbatim in
+`.loop/review-109-r3-triage.md`; r10/r11 findings closed on merits.
+**Driver disposition of r12-H1/r13 (PROCESS §8 blind-spot statement,
+permanent):** the fullgame timing judge's unjudged population is
+sub-frame-period transient lateness ONLY — (i) frame-1 cold first sim
+tick (inherent every entry path; unwarmable without double-ticking the
+checksummed sim) and (ii) terminal-frame debt (r13's counterexample:
+trailing over-budget frames whose accumulated debt has no successor
+frame left to skip). All ≥1-frame accumulated lag IS gate-fatal via
+the governor's skip counter (g01 r3 frames 3/4 proved the mechanism).
+Per-frame full_max/dev-tim artifacts are pulled+archived per leg —
+exposure visible, not judged. Any future per-frame-max or
+terminal-debt pin (e.g. t3−D_last<budget) is a GATE-STRENGTHEN
+reserved to the evidence-package machinery — registered with the
+capped class. CORRECTION carried: disposition ground (c)
+("physically unsatisfiable") withdrawn as overbroad — the g03
+arithmetic binds THIS binary, not all implementations.
+**Device evidence:** run3 `.loop/m4-t109-fullgame-run3.log` (driver-run,
+10/12 — diagnosed g01 f1/3/4 cold-start + g04 f3595 render tail);
+run4 `.loop/m4-t109-fullgame-run4.log` (10/12): **24/24 STREAM MATCH,
+p99 11.465-16.003 ms all legs, underruns 0, starves 0; g01 cold-start
+class CLOSED (3→0 skips; all 12 legs' frame 1 sums 8.1-13.4 ms vs two
+legs over budget in run3 — pre-reg R7 held)**. Residual skips: g04
+f1831 sim=28.666 ms, m02 f3356 sim=15.854 ms — NON-deterministic
+SIM-phase spikes (different legs/frames/phases every pass; sim mean
+4.08-5.54 ms) = environmental preemption/paging class on the
+single-core A7. Post-sync-fix there are ZERO random render stalls:
+the SD-writeback class fix HELD.
+**Attribution NOT spent (honest):** check-skip-attrib.sh is hardwired
+to g01/gfx_device; no seam reaches g04/m02 under foh_device — the
+instrument RETARGET is the next increment (its m3-manifest row re-pins
+after that arc, riglib-re-pin precedent).
+**Commit rationale (driver):** streams/p99/underruns/starves green
+12/12 ×2 passes; the failing pin (skips) is an attributed-pending
+ENVIRONMENTAL class, not an engine defect; five files across four
+sessions is unacceptable crash exposure. FULLGAME CONFORMS stays the
+increment-3 exit condition.
+**Next:** instrument retarget + attribution on the sim-stall class →
+skips==0 pass → OPK FOH mode → m4-freeze-manifest → M4 GATE.

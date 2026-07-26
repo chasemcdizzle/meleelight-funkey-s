@@ -123,6 +123,28 @@ A new device = write one new backend TU (+ audio open params).
   99) is the same class again — its target-leg plumbing is FunKey-OS
   layout; its both-verifier stream judgment + TBRIDGE-STATE witness
   are portable patterns.
+  `port/sim/device/check-device-fullgame.sh` (iter 109, the M4 gate's
+  leg-1 engine: 12 paced match/scenario goldens on device with live
+  render + SFX mixer + SD music streaming) is the same class a third
+  time. FunKey-BOUND: the per-leg `low_bat_check` quiesce window
+  (stop -> launch -> restore-first -> `rig_quiesce_bracket_assert`) and
+  its `/etc/init.d/S12low-bat-check` START channel; the `/mnt` SD
+  scratch + `/tmp` tmpfs split the pushes and the `sync`-before-pacing
+  step assume; the `/mnt/disable_frontend` park + gmenu2x kill; the
+  on-device recovery deadman (a busybox-`sh` `/proc` comm scan against
+  THIS init system). DEVICE-MEASURED PINS that a new target must
+  RE-MEASURE and RE-FREEZE, in-script, as reviewed edits — none of
+  them is a portable constant: the sustained-playback windows
+  `CB_MIN/CB_MAX` (44100 Hz / 512-sample callback cadence),
+  `MUSOUT_MIN/MUSOUT_MAX` and `REFILL_MIN/REFILL_MAX` (the SD music
+  streamer's 32768/16384 ring+chunk geometry), `P99_FULL_LIMIT_NS` and
+  `WALL_MIN_MS/WALL_MAX_MS` (this device's 60 fps pacing budget),
+  `READY_TRIES`/`DEADMAN_S`, and `QW_PRE_SLACK_S/QW_POST_SLACK_S` (the
+  measured ADB round-trip + daemon-restart latency). PORTABLE: the
+  frozen `SFX_PINS` table and `TEETH_PIN` (sim-plane facts, not device
+  facts — they change only when the sim/mixer changes), the twin-vs-
+  device judgment structure, the whitelist-grammar parsers, and the
+  teeth. The audio-window derivations are recorded beside the pins.
 - **Present witness fb pins** (`foh_dev.c` FBWIT_*, iter 95 —
   kernel-specific, MEASURED on this kernel): fb 240x720 declared (3
   pages) but FBIOPAN_DISPLAY rejected, yoffset always 0, read() exposes

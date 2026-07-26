@@ -67,6 +67,20 @@
 //                     this iteration (registered; the acceptance
 //                     playthrough + task-14 gate own it).
 //
+// DIRECT MATCH (M4 task 14, iter 109 — the leg-1 engine's entry):
+//   --p1 N --p2 N --p2type N --difficulty N --stage N  (all five, no
+//   --flow/--flow-out/--input/--shots-dir/--foh-max/--fb-witness) runs
+//   `--bridge verify|state` with NO FOH phase: the five values are
+//   written into the SAME FohState fields the SSS-A launch arm writes
+//   (foh.c:313-332), `launched` is set, and every line from the bridge
+//   onward is the untouched launch seam. This is what lets
+//   check-device-fullgame.sh replay all 12 leg-1 goldens through the
+//   product binary — including g07/g08 (difficulty 5) and m02
+//   (difficulty 9), which the FOH's own 1..4 slider domain
+//   (foh.h:79-82) can NEVER select, so no .flow could ever drive them.
+//   Direct mode accepts the harness domain 1..9; the FOH machine's
+//   slider domain is untouched.
+//
 // Post-run summary grammars (stderr; LOAD-BEARING, PROCESS §3 — parsed
 // anchored by check-device-foh.sh):
 //   foh_dev foh: <t> ticks, <n> transitions, <s> shots, <k> render
@@ -114,6 +128,8 @@
 // `--fb-witness-raw <dir>` is the measurement instrument (dumps
 // yoffset + all fb pages + the submitted buffer per shot, no
 // judgment) used to pin the transform/page policy on a new kernel.
+#include <errno.h>
+#include <limits.h>
 #include <inttypes.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -1090,6 +1106,67 @@ static void tdev_finish_hook(GameState *g, bool complete) {
   }
 }
 
+// --- strict argv integer parse (review-109-1 M3) ------------------------------
+// `strtol(s, 0, 10)` is a PERMISSIVE parser: "junk" yields 0 and "1junk"
+// yields 1, so an out-of-domain ARGUMENT silently becomes an in-domain
+// VALUE and reaches sim_setup_match. That is the whitelist-grammar rule's
+// exact failure mode (CLAUDE.md / PROCESS §3) applied to argv. Every
+// numeric flag in main's argv loop goes through here instead: whole-string
+// decimal only, errno checked, no leading/trailing slop, no whitespace, no
+// "+"/"0x"/octal surprises. Returns false on ANY deviation; callers die
+// loudly naming the flag.
+static bool parse_long_strict(const char *s, long *out) {
+  if (!s || !*s) return false;
+  const char *d = (*s == '-') ? s + 1 : s;
+  if (!*d) return false;
+  for (const char *q = d; *q; q++) {
+    if (*q < '0' || *q > '9') return false;
+  }
+  errno = 0;
+  char *end = 0;
+  const long v = strtol(s, &end, 10);
+  if (errno != 0 || !end || *end != '\0') return false;
+  *out = v;
+  return true;
+}
+
+// Same discipline for the one genuinely 64-bit flag (--budget-ns is a
+// uint64_t). review-109-2 L8: routing it through `long` would REJECT
+// valid budgets above LONG_MAX on the 32-bit ARM target, where long is
+// 32 bits — a host/device behavioural split in an argv parser.
+static bool parse_u64_strict(const char *s, uint64_t *out) {
+  if (!s || !*s) return false;
+  for (const char *q = s; *q; q++) {
+    if (*q < '0' || *q > '9') return false; // no sign, no slop, no 0x
+  }
+  errno = 0;
+  char *end = 0;
+  const unsigned long long v = strtoull(s, &end, 10);
+  if (errno != 0 || !end || *end != '\0') return false;
+  *out = (uint64_t)v;
+  return true;
+}
+
+static bool parse_u32_strict(const char *s, uint32_t *out) {
+  uint64_t v = 0;
+  if (!parse_u64_strict(s, &v)) return false;
+  if (v > 0xffffffffULL) return false;
+  *out = (uint32_t)v;
+  return true;
+}
+
+// parse_int_strict — a strict parse that ALSO validates the value fits
+// the narrow type before the cast (review-109-2 L8: on LP64
+// `--tooth-finish-at 1 4294967296 0 …` parsed fine as a long and then
+// narrowed to 0, which passed the 0..4 domain check downstream).
+static bool parse_int_strict(const char *s, int *out) {
+  long v = 0;
+  if (!parse_long_strict(s, &v)) return false;
+  if (v < INT_MIN || v > INT_MAX) return false;
+  *out = (int)v;
+  return true;
+}
+
 // --- main --------------------------------------------------------------------------
 
 int main(int argc, char **argv) {
@@ -1148,12 +1225,32 @@ int main(int argc, char **argv) {
   const char *animDir = 0;
   const char *sndpackPath = 0, *musicManifest = 0;
   const char *recordPath = 0, *keysPath = 0;
-  long seed = -1, frames = -1, fohMax = -1;
+  long frames = -1, fohMax = -1;
+  // --seed is a uint32 SEED, not a long (review-109-3 L7): routing it
+  // through `long` REJECTED valid seeds 2147483648..4294967295 on the
+  // 32-bit ARM target, and on LP64 accepted values above UINT32_MAX that
+  // then silently WRAPPED at the ml_rng_seed cast. Value and presence are
+  // tracked separately, so `-1` is a parse error rather than "absent".
+  uint32_t seed = 0;
+  bool seedGiven = false;
   long audioSamples = 512;
   bool audioSamplesGiven = false;
   long pace = 1;
   uint64_t budgetNs = 16666667ull;
   bool cpuLive = false, legible = false, tapJumpOffP1 = false;
+  // DIRECT-MATCH ENTRY (M4 task 14, iter 109) — see the header block
+  // "DIRECT MATCH". -1 == not given; the guard below requires all five
+  // together and rejects the whole flow plane alongside them.
+  long dmP1 = -1, dmP2 = -1, dmP2Type = -1, dmDiff = -1, dmStage = -1;
+  // PRESENCE, tracked separately from VALUE (review-109-1 M3): with
+  // value-only opt-in, `--p1 -1` read as "absent" (so a direct flag on a
+  // flow invocation was silently ignored) and `--foh-max 0` read as
+  // "absent" (so it evaded direct mode's flow-plane refusal). Each bit is
+  // set exactly once; a repeated flag is corruption, not a last-wins
+  // override.
+  unsigned dmSeen = 0; // bits 0..4 == --p1 --p2 --p2type --difficulty --stage
+  const unsigned DM_ALL = 0x1fu;
+  bool fohMaxGiven = false;
   // review-100 M1 witness (--tooth-finish-at <frame> <char> <tstage>
   // <hex16>): fire the crafted tp_finish_game chain MID-FLOW at <frame>
   // (flow mode, no bridge), driving the REAL finishGame -> hook ->
@@ -1164,6 +1261,34 @@ int main(int argc, char **argv) {
   int toothFinishChar = -1, toothFinishTstage = -1;
   uint64_t toothFinishBits = 0;
   bool toothFinishGiven = false;
+  // ARGN/ARGI: consume the next argv as a strict whole-string decimal into
+  // <dst>, or die naming the flag and the offending token (review-109-1
+  // M3). DMFLAG additionally records PRESENCE and refuses a repeat.
+#define ARGN(dst)                                                            \
+  do {                                                                       \
+    if (!parse_long_strict(argv[++i], &(dst))) {                             \
+      fprintf(stderr, "foh_dev: %s wants a decimal integer, got '%s'\n", a,  \
+              argv[i]);                                                      \
+      return 1;                                                              \
+    }                                                                        \
+  } while (0)
+#define ARGI(dst)                                                            \
+  do {                                                                       \
+    if (!parse_int_strict(argv[++i], &(dst))) {                              \
+      fprintf(stderr, "foh_dev: %s wants a decimal int, got '%s'\n", a,      \
+              argv[i]);                                                      \
+      return 1;                                                              \
+    }                                                                        \
+  } while (0)
+#define DMFLAG(bit, dst)                                                     \
+  do {                                                                       \
+    if (dmSeen & (bit)) {                                                    \
+      fprintf(stderr, "foh_dev: %s given more than once\n", a);              \
+      return 1;                                                              \
+    }                                                                        \
+    dmSeen |= (bit);                                                         \
+    ARGN(dst);                                                               \
+  } while (0)
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i];
     const bool hasV = i + 1 < argc;
@@ -1172,13 +1297,21 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--flow-out") == 0 && hasV) flowOut = argv[++i];
     else if (strcmp(a, "--shots-dir") == 0 && hasV) shotsDir = argv[++i];
     else if (strcmp(a, "--ready-file") == 0 && hasV) readyPath = argv[++i];
-    else if (strcmp(a, "--foh-max") == 0 && hasV) fohMax = strtol(argv[++i], 0, 10);
+    else if (strcmp(a, "--foh-max") == 0 && hasV) { ARGN(fohMax); fohMaxGiven = true; }
     else if (strcmp(a, "--bridge") == 0 && hasV) bridge = argv[++i];
     else if (strcmp(a, "--simdata") == 0 && hasV) simdataPath = argv[++i];
     else if (strcmp(a, "--bstate-out") == 0 && hasV) bstateOut = argv[++i];
-    else if (strcmp(a, "--seed") == 0 && hasV) seed = strtol(argv[++i], 0, 10);
+    else if (strcmp(a, "--seed") == 0 && hasV) {
+      if (!parse_u32_strict(argv[++i], &seed)) {
+        fprintf(stderr,
+                "foh_dev: --seed wants a decimal integer in 0..4294967295, "
+                "got '%s'\n", argv[i]);
+        return 1;
+      }
+      seedGiven = true;
+    }
     else if (strcmp(a, "--trace") == 0 && hasV) tracePath = argv[++i];
-    else if (strcmp(a, "--frames") == 0 && hasV) frames = strtol(argv[++i], 0, 10);
+    else if (strcmp(a, "--frames") == 0 && hasV) ARGN(frames);
     else if (strcmp(a, "--out") == 0 && hasV) outPath = argv[++i];
     else if (strcmp(a, "--timing") == 0 && hasV) timingPath = argv[++i];
     else if (strcmp(a, "--gfxdata") == 0 && hasV) gfxdataPath = argv[++i];
@@ -1191,12 +1324,19 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--record-keys") == 0 && hasV) keysPath = argv[++i];
     else if (strcmp(a, "--fb-witness") == 0 && hasV) g_fbwit_path = argv[++i];
     else if (strcmp(a, "--fb-witness-raw") == 0 && hasV) g_fbwit_raw = argv[++i];
-    else if (strcmp(a, "--pace") == 0 && hasV) pace = strtol(argv[++i], 0, 10);
-    else if (strcmp(a, "--budget-ns") == 0 && hasV) budgetNs = strtoull(argv[++i], 0, 10);
+    else if (strcmp(a, "--pace") == 0 && hasV) ARGN(pace);
+    else if (strcmp(a, "--budget-ns") == 0 && hasV) {
+      if (!parse_u64_strict(argv[++i], &budgetNs)) {
+        fprintf(stderr,
+                "foh_dev: --budget-ns wants a non-negative decimal integer, "
+                "got '%s'\n", argv[i]);
+        return 1;
+      }
+    }
     else if (strcmp(a, "--tooth-finish-at") == 0 && i + 4 < argc) {
-      toothFinishFrame = strtol(argv[++i], 0, 10);
-      toothFinishChar = (int)strtol(argv[++i], 0, 10);
-      toothFinishTstage = (int)strtol(argv[++i], 0, 10);
+      ARGN(toothFinishFrame);
+      ARGI(toothFinishChar);
+      ARGI(toothFinishTstage);
       const char *bs = argv[++i];
       if (strlen(bs) != 16) {
         fprintf(stderr, "foh_dev: --tooth-finish-at wants <frame> <char 0-4> "
@@ -1206,17 +1346,25 @@ int main(int argc, char **argv) {
       toothFinishBits = parse_hex16(bs); // loud death on non-hex
       toothFinishGiven = true;
     }
+    else if (strcmp(a, "--p1") == 0 && hasV) DMFLAG(0x01u, dmP1);
+    else if (strcmp(a, "--p2") == 0 && hasV) DMFLAG(0x02u, dmP2);
+    else if (strcmp(a, "--p2type") == 0 && hasV) DMFLAG(0x04u, dmP2Type);
+    else if (strcmp(a, "--difficulty") == 0 && hasV) DMFLAG(0x08u, dmDiff);
+    else if (strcmp(a, "--stage") == 0 && hasV) DMFLAG(0x10u, dmStage);
     else if (strcmp(a, "--cpu-live") == 0) cpuLive = true;
     else if (strcmp(a, "--legible") == 0) legible = true;
     else if (strcmp(a, "--tapjump-off-p1") == 0) tapJumpOffP1 = true;
     else if (strcmp(a, "--audio-samples") == 0 && hasV) {
-      audioSamples = strtol(argv[++i], 0, 10);
+      ARGN(audioSamples);
       audioSamplesGiven = true;
     } else {
       fprintf(stderr, "foh_dev: bad argument %s\n", a);
       return 1;
     }
   }
+#undef DMFLAG
+#undef ARGI
+#undef ARGN
   const bool inFlow = inputMode && strcmp(inputMode, "flow") == 0;
   const bool inPoll = inputMode && strcmp(inputMode, "poll") == 0;
   const bool brState = bridge && strcmp(bridge, "state") == 0;
@@ -1227,15 +1375,49 @@ int main(int argc, char **argv) {
   // target_main.c stdout grammar for wrap-target.js.
   const bool brTState = bridge && strcmp(bridge, "tstate") == 0;
   const bool brTVerify = bridge && strcmp(bridge, "tverify") == 0;
-  if (!flowPath || !flowOut || !inputMode || (!inFlow && !inPoll) ||
+  // --- DIRECT MATCH (M4 task 14, iter 109) ------------------------------
+  // Any one of the five selection flags opts in; ALL five are then
+  // required and the ENTIRE flow plane is refused, so no existing
+  // invocation can reach direct mode by accident and direct mode can
+  // never half-drive the FOH. The flags do NOT bypass the launch seam —
+  // they populate the same FohState fields a menu launch writes (below,
+  // right after foh_persist_apply), and every line from `if (bridge)`
+  // onward runs BYTE-UNCHANGED.
+  //
+  // WHY THIS EXISTS (measured, iter 109): the FOH's own CPU-difficulty
+  // domain is the upstream SLIDER's 1..4 (foh.h:79-82, css.js:316-329),
+  // but the M4 exit gate's leg [1] must replay g07/g08 at difficulty 5
+  // and m02 at difficulty 9. Those are STRUCTURALLY UNREACHABLE through
+  // any menu flow, so no `.flow` can ever drive them. Direct mode
+  // therefore accepts the HARNESS domain 1..9. This widens the CLI
+  // surface ONLY; the FOH machine's slider domain is untouched, so the
+  // menu-flow evidence (leg [2]) is unaffected.
+  // opt-in is by PRESENCE, never by value (review-109-1 M3): `--p1 -1`
+  // must enter direct mode and then FAIL its domain, not vanish.
+  const bool direct = dmSeen != 0;
+  const bool directBad =
+      direct && (dmSeen != DM_ALL ||
+                 dmP1 < 0 || dmP1 > 4 || dmP2 < 0 || dmP2 > 4 ||
+                 dmP2Type < 0 || dmP2Type > 1 || dmDiff < 1 || dmDiff > 9 ||
+                 dmStage < 0 || dmStage > 5 ||
+                 // the whole flow plane is refused in direct mode, BY
+                 // PRESENCE (`--foh-max 0` used to evade a `> 0` test)
+                 flowPath || flowOut || inputMode || shotsDir || fohMaxGiven ||
+                 g_fbwit_path || g_fbwit_raw || toothFinishGiven ||
+                 // VS bridges only (the target plane has its own
+                 // char/tstage selection and its own witness)
+                 !(brVerify || brState));
+  if (directBad ||
+      (!direct &&
+       (!flowPath || !flowOut || !inputMode || (!inFlow && !inPoll))) ||
       (bridge && !brState && !brVerify && !brLive && !brTState &&
        !brTVerify) ||
       // poll mode is wall-clock by definition and needs its tick budget
       (inPoll && (pace != 1 || fohMax <= 0)) ||
-      (inFlow && (fohMax > 0 || readyPath)) ||
+      (inFlow && (fohMaxGiven || readyPath)) ||
       // bridge modes need the sim data plane + seed + the state witness
-      (bridge && (!simdataPath || seed < 0 || !bstateOut)) ||
-      (!bridge && (simdataPath || seed >= 0 || bstateOut)) ||
+      (bridge && (!simdataPath || !seedGiven || !bstateOut)) ||
+      (!bridge && (simdataPath || seedGiven || bstateOut)) ||
       // verify needs the golden trace + stream/timing sinks + render data
       ((brVerify || brTVerify) &&
        (!tracePath || frames <= 0 || !outPath || !timingPath ||
@@ -1273,18 +1455,26 @@ int main(int argc, char **argv) {
             " [--sndpack p [--audio-samples N]] [--music-manifest m.txt]"
             " [--fb-witness w.txt [--fb-witness-raw D]]"
             " [flow: --tooth-finish-at F C S hex16 (M1 witness)]"
+            " | DIRECT MATCH (no flow): --p1 0-4 --p2 0-4 --p2type 0-1"
+            " --difficulty 1-9 --stage 0-5 --bridge verify|state"
+            " --simdata s --seed N --bstate-out b [verify: --trace ..."
+            " --frames N --out o --timing tim --gfxdata ... [--cpu-live]]"
             " | --dump-keymap\n");
     return 1;
   }
   if (frames > 1000000L) sim_fatal("foh_dev: --frames exceeds the buffer cap");
   if (fohMax > 1000000L) sim_fatal("foh_dev: --foh-max exceeds the tick cap");
 
+  char flowId[64];
+  if (direct) {
+    // no flow to load; the id names the mode in the trace/witness
+    memcpy(flowId, "direct", 7);
+  } else {
   load_flow(flowPath);
 
   // flow id = basename minus .flow (foh_app.c verbatim)
   const char *base = strrchr(flowPath, '/');
   base = base ? base + 1 : flowPath;
-  char flowId[64];
   {
     size_t blen = strlen(base);
     if (blen < 6 || blen - 5 >= sizeof flowId ||
@@ -1302,6 +1492,7 @@ int main(int argc, char **argv) {
       }
     }
   }
+  } // end !direct (flow load + id derivation)
 
   // poll-mode shot split (pre-registered rule): SHOT rows before the
   // flow's FIRST NON-NEUTRAL input row are tick-indexed; the rest are
@@ -1367,6 +1558,23 @@ int main(int argc, char **argv) {
   // apply — the S1 contract preset wins on the live path.
   foh_persist_load(&g_persist);
   foh_persist_apply(&g_persist, &foh);
+  if (direct) {
+    // DIRECT MATCH: write the SAME FohState fields a menu launch writes
+    // (foh.c:313-332's SSS-A arm), then mark it launched. Everything
+    // downstream — the seed + 465 boot draws, sim_setup_match, the
+    // options plane, the music switch, the BRIDGE-STATE witness and the
+    // paced match loop — is the untouched launch seam. The persisted
+    // options plane applied just above still wins, exactly as it does
+    // for a menu launch.
+    foh.p1Char = (int)dmP1;
+    foh.p2Char = (int)dmP2;
+    foh.p2Type = (int)dmP2Type;
+    foh.difficulty = (int)dmDiff;
+    foh.stageSel = (int)dmStage;
+    foh.sssCursor = (int)dmStage;
+    foh.targetMode = false;
+    foh.launched = true;
+  }
   if (brLive && tapJumpOffP1) {
     // The S1 contract preset (PLAN §6, Chase-ratified): the options
     // screen SHOWS it on and the player may toggle; LAUNCH consumes
@@ -1390,7 +1598,10 @@ int main(int argc, char **argv) {
   memset(&prevPin, 0, sizeof prevPin);
   bool menuMusicOn = false;
   long fohTicks = 0;
-  const long fohLimit = inPoll ? fohMax : g_flow_frames;
+  // direct mode has no FOH phase at all: 0 ticks, so the loop body below
+  // never executes (chosen over wrapping 140 lines in an `if` — the
+  // existing FOH code stays byte-identical for every flow caller).
+  const long fohLimit = direct ? 0 : (inPoll ? fohMax : g_flow_frames);
   const uint64_t fohStart = now_ns();
   long endTick = 0;
   for (long t = 1; t <= fohLimit; t++) {
@@ -1539,7 +1750,7 @@ int main(int argc, char **argv) {
 
   // flush the FOH artifacts now (between phases; never inside a paced
   // loop — the match loop below is the paced surface that matters)
-  {
+  if (flowOut) { // NULL only in direct mode (no FOH phase to record)
     FILE *tf = fopen(flowOut, "w");
     if (!tf) sim_fatal("cannot open --flow-out for writing");
     if (fwrite(g_tr.buf, 1, g_tr.len, tf) != g_tr.len) {
@@ -1591,7 +1802,7 @@ int main(int argc, char **argv) {
       // --- the TARGET launch bridge (target_main.c boot parity;
       // foh_app.c tstate/tverify twin with the LIVE render plane) ------
       ml_active_rng = &G.rng;
-      ml_rng_seed(&G.rng, (uint32_t)seed);
+      ml_rng_seed(&G.rng, seed);
       for (int k = 0; k < ML_BOOT_DRAWS; k++) (void)ml_rng_next(&G.rng);
       G.rngStateAtReset = G.rng.a;
       if (brTVerify) {
@@ -1734,7 +1945,7 @@ int main(int argc, char **argv) {
 
     // seed + boot draws ONLY at the launch seam (foh_app.c verbatim)
     ml_active_rng = &G.rng;
-    ml_rng_seed(&G.rng, (uint32_t)seed);
+    ml_rng_seed(&G.rng, seed);
     for (int k = 0; k < ML_BOOT_DRAWS; k++) (void)ml_rng_next(&G.rng);
     G.rngStateAtReset = G.rng.a;
 
@@ -1748,6 +1959,109 @@ int main(int argc, char **argv) {
       MlRng peek = G.rng;
       const int backgroundType = (int)js_round(ml_rng_next(&peek));
       gfx_init(&g_gfx, foh.stageSel, backgroundType);
+      g_gfx.legibility = legible ? 1 : 0;
+      // WARM-UP (menu-launch parity). The first platform_poll and the
+      // first gfx_render_frame after gfx_init are COLD: measured on
+      // device (iter-109 run 3, port/foh/build/device-fullgame/
+      // g01.dev-tim.txt) the first poll cost ~8.5 ms and the first
+      // render 43.16 ms against a 16.67 ms budget, which cost the direct
+      // entry THREE frame-skips at match start — frame 1 skipped because
+      // poll+sim alone passed the deadline, frames 3-4 skipped catching
+      // up from the 43 ms render. A menu-driven launch reaches the match
+      // through a long rendering FOH phase; the direct entry runs zero
+      // FOH ticks (fohLimit above), so it primes the same paths here.
+      //
+      // NO PRE-MATCH GAME FRAME IS EVER PRESENTED (review-109-10 H1).
+      // Presenting the warm render would push a pre-setup frame — empty
+      // stage, 08:00 on the clock, no players, no entrance vfx — onto the
+      // physical display, covered by no screenshot, no checksum and no
+      // counter. The warm RENDER therefore goes to g_gfx.rz and is never
+      // shown; frame 1's own render overwrites it.
+      //
+      // WHICH PATHS ARE ACTUALLY COLD, measured rather than assumed: on a
+      // POLLED flow launch the FOH phase polls and presents every
+      // non-skipped tick (the fohPresentFails site above), so its poll and
+      // present are already warm at the launch seam — only gfx_render_frame
+      // is cold, because the FOH phase renders menus through foh_render.c
+      // and never calls it. The direct entry runs zero FOH ticks, so all
+      // three are cold there. The warm-up is split to match: the render
+      // pass runs on both entries, the poll+present pair only on the direct
+      // entry. That leaves the flow path's visual behaviour byte-unchanged.
+      //
+      // KNOWN GAP, deliberately not closed here (review-109-12 L2): the
+      // FOH phase polls only in --input poll mode, so a scripted
+      // (non-polled) flow launch still meets the match loop with a cold
+      // first poll. That path is outside the authoritative domain — every
+      // device and live entry the gate drives is either direct or polled —
+      // so widening the condition to `direct || !inPoll` was left to the
+      // driver rather than added after the last review round.
+      //
+      // The direct entry's present warms on g_gfx.rz.fb BEFORE any render
+      // — zero-initialised, i.e. black — and on that entry nothing has
+      // ever been presented, so it puts no new content on the display
+      // (review-109-10 H1's "explicit black framebuffer for direct
+      // entry"). Its outcome is NOT discarded (review-109-10 L4): a
+      // failure counts into matchPresentFails, which the gate requires to
+      // be 0, so a warm-up present that fails fails the run rather than
+      // hiding behind a later success.
+      //
+      // Frame 1 must meet ITS OWN 16.67 ms deadline, not merely avoid a
+      // skip (review-109-11 H1: the skip predicate samples t1 after
+      // sim+hash, so an over-budget frame 1 would record skipped=0 and
+      // slip past a judge that only asserts p99 and skips). With poll,
+      // present and render all warm, frame 1 is sim + render + present.
+      // Its sim tick is cold by construction on EVERY entry path — it is
+      // the first tick there is, ~8.15 ms measured against ~2.06 ms
+      // steady — so frame 1 is expected at roughly 8.2 + 5.3 + 1.1 ms.
+      // That is the measured prediction this warm-up is judged on
+      // (.loop/m4-t109r3-prereg.md R7); it is not conceded slack.
+      //
+      // ONE pass (review-109-10 L5): one full frame first-touches both
+      // raster planes and executes every pass exactly once. The earlier
+      // "3 flip pages" justification was withdrawn — the device measures
+      // yoffset always 0 with FBIOPAN_DISPLAY rejected, so extra presents
+      // would not have touched extra pages, and nothing measured supports
+      // a larger count.
+      //
+      // STATE NEUTRALITY IS BY RE-RUNNING THE CONSTRUCTORS, not by
+      // per-field bookkeeping (review-109-10 M3 found the field an
+      // earlier by-placement argument missed: gfx_render.c:299 leaves
+      // g->fg2LineWidth at 4.0 — canvas-state emulation that persists
+      // across frames — while a fresh gfx_init leaves the canvas default
+      // 1.0, and gfx_vfx_install does not touch it). The warm-up is
+      // therefore bracketed: gfx_init below re-establishes every Gfx
+      // field it owns (stab, camera, backgroundType, fg2LineWidth), and
+      // gfx_vfx_install re-establishes every module-static render plane
+      // (vfx queue, render-local RNG, vm_reset, gfx_overlay_reset,
+      // gfx_bg_reset). SCOPE OF THAT CLAIM, narrowed to what was actually
+      // audited (review-109-12 L2): the two constructors own every
+      // PERSISTENT, OUTPUT-AFFECTING field the warm render writes. They do
+      // NOT own Raster's pixel/ink/clip/scratch state, which is instead
+      // neutral because the first real frame's rast_clear overwrites every
+      // Raster field before any read (ink/path state exits each pass
+      // cleanly, the circle cache is deterministic) — audited, not
+      // guaranteed by construction. A future pass that adds persistent
+      // output-affecting state OUTSIDE both constructors would need this
+      // re-audited; this comment is not a standing promise that it cannot.
+      //
+      // The warm render runs BEFORE sim_setup_match, so playerPresent is
+      // 0 and the player/article passes are skipped by their own guards:
+      // this primes the rasteriser, both planes, the stage/background/
+      // overlay passes and the glyph atlas, but NOT the per-player anim
+      // raster (same raster primitives, so the residual is expected
+      // small — a measured prediction, .loop/m4-t109r3-prereg.md R2).
+      //
+      // The warm poll's PlatformInput is discarded. platform_poll is
+      // level-based (SDL_GetKeyState) so no key state is lost; the only
+      // edge it consumes is SDL_QUIT, which the FunKey has no window
+      // manager to send (review-109-10 L4, dispositioned).
+      if (direct) { // the FOH phase warms these on a flow launch
+        PlatformInput warm;
+        platform_poll(&warm);
+        if (platform_present(g_gfx.rz.fb) != 0) matchPresentFails++;
+      }
+      gfx_render_frame(&g_gfx, &G); // offscreen: never presented
+      gfx_init(&g_gfx, foh.stageSel, backgroundType); // undo the warm render
       g_gfx.legibility = legible ? 1 : 0;
       gfx_vfx_install(&g_gfx); // BEFORE sim_setup_match (boot events)
     }

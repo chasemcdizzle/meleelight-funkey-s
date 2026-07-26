@@ -445,7 +445,7 @@ p99_under_budget() {
 # fixed literal sequences in a fixed order (check-device-target.sh:320,
 # check-device-foh.sh:374), so the exact ids are pinned in that order
 # and a dropped/duplicated flow now dies here.
-FULLGAME_RE='^FULLGAME CONFORMS 12/12 \(render\+sfx\+music live; live-ai=g07,g08,m01,m02 p99=[0-9]{1,3}\.[0-9]{3}ms skips=0 underruns=0 starves=0 presentfails=0 teeth=[0-9]{1,3}\)$'
+FULLGAME_RE='^FULLGAME CONFORMS 12/12 \(render\+sfx\+music live; live-ai=g07,g08,m01,m02 p99=[0-9]{1,3}\.[0-9]{3}ms skips=0 underruns=0 starves=0 presentfails=0 teeth=21\)$'
 TARGET_RE='^DEVICE TARGET CONFORMS \(goldens=2 flows=2 shots=4 fbwit=[0-9]{1,6} p99=[0-9]{1,3}\.[0-9]{3}ms skips=0 underruns=0 starves=0 starts f06-target-t01=[0-9]{1,6} f07-target-t02=[0-9]{1,6} sfxpin=[0-9]{1,6}/[0-9]{1,6} music=menu>targettest:[0-9]{1,2}/5 teeth=[0-9]{1,3}\)$'
 FOH_RE='^DEVICE FOH OK \(flows=5 shots=[0-9]{1,4} bridge=1 states=3 opk=evidence fbwit=[0-9]{1,6} p99=[0-9]{1,3}\.[0-9]{3}ms skips=0 underruns=0 starves=0 starts f01-vs-g01=[0-9]{1,6} f02-cpu-m01=[0-9]{1,6} f03-options=[0-9]{1,6} f04-nav=[0-9]{1,6} f05-vs-g03=[0-9]{1,6} teeth=[0-9]{1,3}\)$'
 OPKFOH_RE='^OPK FOH LAUNCH OK \(frontend-launched via gmenu2x into the FOH, boot marker bin-sha == stamp, evidence rc=0, [0-9]{1,3} transitions vs frozen, shot structural\)$'

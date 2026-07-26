@@ -27,6 +27,7 @@ port/gfx/check-device-render.sh port/gfx/check-device-input.sh \
 port/gfx/check-device-audio.sh port/gfx/check-device-opk.sh \
 port/gfx/check-device-music.sh \
 port/sim/device/check-skip-attrib.sh \
+port/sim/device/check-device-fullgame.sh \
 port/foh/check-device-foh.sh \
 port/sim/target/check-device-target.sh \
 port/foh/check-device-persist.sh \
@@ -269,7 +270,7 @@ echo "MLFKSCAN $n $left"')" || rc=$?
   if [ "$rc" != 0 ]; then
     if [ "$mode" = step0 ]; then
       echo "DEVICE FAIL: step-0 mlfk orphan reap could not run (dsh rc $rc)" >&2
-      [ -n "${LOCK:-}" ] && rm -rf "$LOCK"
+      # lock release: the EXIT trap is the sole releaser (review-109-5 H1)
       exit 1
     fi
     echo "WARN: cleanup mlfk orphan reap could not run (dsh rc $rc) — stale processes may remain on the device" >&2
@@ -294,7 +295,7 @@ echo "MLFKSCAN $n $left"')" || rc=$?
     if [ "$mode" = step0 ]; then
       echo "DEVICE FAIL: step-0 mlfk orphan reap output failed validation: ${presult#FAIL }" >&2
       printf '%s\n' "$out" >&2
-      [ -n "${LOCK:-}" ] && rm -rf "$LOCK"
+      # lock release: the EXIT trap is the sole releaser (review-109-5 H1)
       exit 1
     fi
     echo "WARN: cleanup mlfk orphan reap output failed validation (stale processes may remain): ${presult#FAIL }" >&2
@@ -303,7 +304,8 @@ echo "MLFKSCAN $n $left"')" || rc=$?
   fi
   [[ "$presult" =~ ^OK\ ([0-9]+)\ ([0-9]+)$ ]] || {
     echo "DEVICE FAIL: rig_orphan_parse returned an unparseable OK line ('$presult')" >&2
-    [ "$mode" = step0 ] && { [ -n "${LOCK:-}" ] && rm -rf "$LOCK"; exit 1; }
+    # lock release: the EXIT trap is the sole releaser (review-109-5 H1)
+    [ "$mode" = step0 ] && exit 1
     return 1
   }
   nfound="${BASH_REMATCH[1]}"
@@ -311,40 +313,140 @@ echo "MLFKSCAN $n $left"')" || rc=$?
   if [ "$nleft" != 0 ]; then
     if [ "$mode" = step0 ]; then
       echo "DEVICE FAIL: $nleft stale mlfk process(es) SURVIVED the step-0 reap (found $nfound) — inspect the device before running any check" >&2
-      [ -n "${LOCK:-}" ] && rm -rf "$LOCK"
+      # lock release: the EXIT trap is the sole releaser (review-109-5 H1)
       exit 1
     fi
     echo "WARN: $nleft stale mlfk process(es) survived the cleanup reap (found $nfound)" >&2
     return 1
   fi
   if [ "$nfound" != 0 ] && [ "$mode" = step0 ]; then
-    # duty transfer: the reaped deadman can no longer restore what a
-    # dead run left behind — restore it here, loudly, BEFORE any check
-    # work: quiesced daemons off their markers, then a stale frontend
-    # park marker (RC-verified gone).
-    if ! rig_qd_normalize; then
-      echo "DEVICE FAIL: step-0 reap killed a stale deadman but could not restore a marker-quiesced daemon — inspect the device" >&2
-      [ -n "${LOCK:-}" ] && rm -rf "$LOCK"
-      exit 1
-    fi
-    local mrc=0
-    dsh "test -f /mnt/disable_frontend" >/dev/null 2>&1 || mrc=$?
-    if [ "$mrc" = 0 ]; then
-      if ! dsh "rm -f /mnt/disable_frontend" >/dev/null 2>&1 ||
-         ! dsh "test ! -f /mnt/disable_frontend" >/dev/null 2>&1; then
-        echo "DEVICE FAIL: step-0 reap could not remove the stale /mnt/disable_frontend left by the reaped run" >&2
-        [ -n "${LOCK:-}" ] && rm -rf "$LOCK"
-        exit 1
-      fi
-      echo "   step-0 reap: stale /mnt/disable_frontend removed (RC-verified gone)" >&2
-    elif [ "$mrc" != 1 ]; then
-      echo "DEVICE FAIL: step-0 reap could not probe the frontend marker (rc $mrc)" >&2
-      [ -n "${LOCK:-}" ] && rm -rf "$LOCK"
-      exit 1
-    fi
+    # POST-KILL RE-VERIFY (review-109-4 H1). The inherited state was
+    # already restored and VERIFIED by rig_inherited_restore BEFORE this
+    # reap ran (see rig_lock_acquire) — the duty transfer is transactional
+    # in that direction. Re-running it here is idempotent and closes the
+    # remaining window: a stale deadman killed PART-WAY through its own
+    # restore arm (e.g. after re-parking nothing but before its daemon
+    # start verified) leaves state this second pass picks up. A failure
+    # here is still a loud death, and by then the marker/park evidence is
+    # intact for the next run's step 0.
+    rig_inherited_restore
     echo "   step-0 reap: $nfound stale mlfk process(es) cleaned; device comb-free" >&2
   fi
   return 0
+}
+
+# rig_inherited_restore — INHERITED-STATE RESTORATION, run BEFORE the
+# step-0 orphan reap (review-109-4 H1: the recurring "inherited-state
+# startup" objection, rounds 2/3/4).
+#
+# THE DEFECT IT CLOSES: the reap kills every stale rig process INCLUDING
+# the prior run's recovery deadman — the device's ONLY remaining backstop
+# for an abandoned run — and the restoration used to run AFTERWARDS. That
+# is a non-transactional duty transfer: any failure between the kill and
+# the restore (a dropped ADB transport, a daemon that will not start, this
+# process itself dying before the caller installs its own cleanup trap)
+# left the device parked with low_bat_check down and NOTHING armed to
+# recover it.
+#
+# THE ORDER IS THE FIX: restore-and-verify the inherited state FIRST, and
+# only then reap the now-redundant deadman. Every failure path below dies
+# with the stale deadman still ARMED and its nonce untouched ($DTMP is
+# wiped by nobody on this path), which is the correct failure direction.
+# Both operations are idempotent (rig_daemon_restore is exact-cardinality
+# and never touches the START channel when the daemon is already up; the
+# park-marker arm is a probe + rm + absence re-probe), so the healthy case
+# costs four no-op probes and changes nothing.
+rig_inherited_restore() {
+  local mrc=0 qrc=0
+  # ATOMIC OWNERSHIP (review-109-5 H2): hold the device recovery claim for
+  # the whole daemon-plane section, so a still-live stale deadman cannot be
+  # driving the same non-idempotent START channel at the same moment.
+  rig_qd_claim || exit 1
+  # TRANSACTIONAL HANDOFF (review-109-7 H2 — the ordering settled after
+  # rounds 4/6 pulled it in opposite directions):
+  #   round-4 H1 said "do not kill the inherited deadman before restoring"
+  #     (killing first leaves no backstop if the restore then fails);
+  #   round-6 H3 said "a claimless deadman can race the restore"
+  #     (both actors take the non-idempotent START channel).
+  # BOTH are satisfied by keeping the OLD watchdog armed until the NEW
+  # owner has finished and VERIFIED the restore, and only then retiring
+  # it. So the order here is: claim -> restore + verify (inherited deadman
+  # still armed the whole time) -> unpark -> quiesce the inherited deadman
+  # -> release the claim. There is never an instant in which this run has
+  # taken responsibility while nothing on the device could recover it.
+  #
+  # The residual race (a CLAIMLESS deadman from an older producer firing
+  # during our restore) is bounded and LOUD, not silent: two instances
+  # make rig_daemon_restore refuse with an exact-cardinality death, the
+  # marker is retained, and the inherited deadman is still armed. That is
+  # strictly better than the alternative it replaces, in which a host
+  # death right after the cancel left the device with no restorer at all.
+  # Centralising every producer's deadman body remains the durable fix and
+  # is registered as a driver-owned item.
+  rig_qd_normalize || qrc=$?
+  if [ "$qrc" != 0 ]; then
+    # release the claim so the STILL-ARMED inherited deadman can act on it
+    # (holding it would gate the very backstop we are relying on)
+    rig_qd_unclaim
+    echo "DEVICE FAIL: an inherited marker-quiesced daemon could not be restored — NOTHING has been retired yet, so the inherited deadman is still ARMED as the backstop; inspect the device" >&2
+    # lock release: the EXIT trap is the sole releaser (review-109-5 H1)
+    exit 1
+  fi
+  dsh "test -f /mnt/disable_frontend" >/dev/null 2>&1 || mrc=$?
+  case "$mrc" in
+    0)
+      if ! dsh "rm -f /mnt/disable_frontend" >/dev/null 2>&1 ||
+         ! dsh "test ! -f /mnt/disable_frontend" >/dev/null 2>&1; then
+        rig_qd_unclaim
+        echo "DEVICE FAIL: inherited /mnt/disable_frontend could not be removed and verified absent — the inherited deadman is left ARMED (unretired) so the device can still recover; inspect it" >&2
+        # lock release: the EXIT trap is the sole releaser (review-109-5 H1)
+        exit 1
+      fi
+      echo "   step-0: inherited /mnt/disable_frontend removed (RC-verified gone) BEFORE any stale-deadman reap" >&2
+      ;;
+    1) : ;;
+    *)
+      rig_qd_unclaim
+      echo "DEVICE FAIL: could not probe the frontend park marker (rc $mrc) — refusing to retire the inherited recovery deadman on unknown state" >&2
+      # lock release: the EXIT trap is the sole releaser (review-109-5 H1)
+      exit 1
+      ;;
+  esac
+  # THE HANDOFF COMPLETES HERE, and not one statement earlier: the
+  # inherited state is now restored AND verified, so the old watchdog has
+  # nothing left to recover and is retired through the universal cancel
+  # channel (every generation of the deadman script in this repo polls
+  # $DTMP/deadman.cancel). Retiring it is what lets THIS run arm its own.
+  if ! rig_deadman_quiesce; then
+    rig_qd_unclaim
+    echo "DEVICE FAIL: the inherited deadman could not be retired after a verified restore — refusing to continue with a foreign watchdog still armed (it could fire mid-run); inspect the device" >&2
+    # lock release: the EXIT trap is the sole releaser (review-109-5 H1)
+    exit 1
+  fi
+  rig_qd_unclaim
+}
+
+# rig_lock_release — THE ONLY code path that removes the rig lock
+# (review-109-5 H1). It covers two duties:
+#   * the EXIT trap installed by rig_lock_acquire, covering the window
+#     between acquisition and the CALLER's own cleanup trap (review-109-4
+#     H1) — without it, a death inside step 0 exits with the lock held;
+#   * the release inside rig_cleanup, i.e. the normal end of every run.
+# OWNERSHIP-CHECKED: the lock is removed only while $LOCK/owner still
+# carries THIS run's nonce. A second release attempt (or a release by a
+# run whose lock was already reclaimed by hand) finds a foreign/absent
+# nonce and refuses loudly instead of deleting another run's lock.
+rig_lock_release() {
+  local own=""
+  [ -n "${LOCK:-}" ] || return 0
+  [ -d "$LOCK" ] || return 0
+  own="$(cat "$LOCK/owner" 2>/dev/null)" || own="<unreadable>"
+  if [ "$own" != "${RIG_LOCK_NONCE:-<unset>}" ]; then
+    echo "WARN: rig lock $LOCK is owned by '$own', not by this run ('${RIG_LOCK_NONCE:-<unset>}') — NOT releasing it (releasing another run's lock would put two rigs on one device). Remove it by hand if you are sure no rig is running: rm -rf '$LOCK'" >&2
+    return 0
+  fi
+  rm -rf "$LOCK" 2>/dev/null \
+    || echo "WARN: could not release rig lock $LOCK — remove manually: rm -rf '$LOCK'" >&2
 }
 
 # rig_lock_acquire — exclusive rig lock (iter 41, review rounds 1-3
@@ -362,8 +464,23 @@ echo "MLFKSCAN $n $left"')" || rc=$?
 # (rig_orphan_reap above) — the shared rig entry, inherited by every
 # consumer; it runs only AFTER the lock is held, so it can never touch
 # the device while another rig run legitimately owns it.
+# Iter 109 (review-109-4 H1): step 0 is now ORDERED — an interim EXIT
+# trap (lock release only), then rig_inherited_restore (restore + verify
+# what a dead run left behind), and only THEN the reap that kills that
+# run's recovery deadman. Acquisition, recovery and reaping are three
+# separate steps and the recovery duty is transferred before the backstop
+# is destroyed, never after.
 rig_lock_acquire() {
   LOCK="${TMPDIR:-/tmp}/mlfk-rig-${DEV}.lock"
+  # OWNERSHIP NONCE (review-109-5 H1). The lock was released by whichever
+  # code path happened to run — several step-0 failure paths did their own
+  # `rm -rf "$LOCK"` and the EXIT trap then released it AGAIN. Between the
+  # two, a waiting run can mkdir the lock and legitimately own it, and the
+  # first run's second release deletes the SECOND run's lock: two rigs on
+  # one device. Every release now goes through rig_lock_release, which
+  # removes the lock ONLY when the owner file still carries this run's
+  # nonce. A double release is therefore a no-op with a loud warning.
+  RIG_LOCK_NONCE="$$.$RANDOM.$(date +%s)"
   if ! mkdir "$LOCK" 2>/dev/null; then
     local lockage lockmtime
     lockage="unknown"
@@ -375,6 +492,19 @@ rig_lock_acquire() {
     echo "  are sure no rig is running, remove it manually: rm -rf '$LOCK'" >&2
     exit 1
   fi
+  # stamp ownership BEFORE any release path can run
+  printf '%s\n' "$RIG_LOCK_NONCE" > "$LOCK/owner" || {
+    rm -rf "$LOCK" 2>/dev/null
+    echo "DEVICE FAIL: could not write the rig lock ownership file $LOCK/owner" >&2
+    exit 1
+  }
+  # the lock is ours from here — cover the window until the caller's own
+  # cleanup trap replaces this one. This trap is the SOLE releaser for
+  # every step-0 failure path below (none of them removes the lock
+  # itself any more — review-109-5 H1).
+  trap rig_lock_release EXIT
+  # RESTORE FIRST, REAP SECOND (the H1 ordering — see rig_inherited_restore)
+  rig_inherited_restore
   rig_orphan_reap step0
 }
 
@@ -424,8 +554,8 @@ rig_cleanup() {
         || echo "WARN: device scratch cleanup failed — $DSD may remain on the device" >&2
     fi
   fi
-  rm -rf "$LOCK" 2>/dev/null \
-    || echo "WARN: could not release rig lock $LOCK — remove manually: rm -rf '$LOCK'" >&2
+  # ownership-checked, single release path (review-109-5 H1)
+  rig_lock_release
 }
 
 # rig_dsh_retry <cmd> — best-effort dsh with TRANSPORT recovery (iter 52,
@@ -528,14 +658,49 @@ rig_proc_respawn_poll() {
 # the FunKey's shell daemons; the comm scan sees every process class
 # uniformly. Whitelist-parsed: every output line must be a bounded
 # decimal pid, else loud death. Echoes zero+ pid lines.
+# STATUS-CHECKED SCAN (review-109-5 H3 — the round-4 masked-read class,
+# found surviving inside this SHARED helper after it was closed in the
+# fullgame deadman). The scan used to discard every `cat` status, so a
+# LIVE but unreadable /proc entry simply vanished from the inventory:
+# rig_daemon_restore would then see "0 instances", take the NON-IDEMPOTENT
+# START channel and create a duplicate, or certify "exactly 1" while only
+# the readable copy was counted. Now the device emits `U<pid>` for any
+# entry whose comm read FAILED while /proc/<pid> is still present
+# (unclassifiable), and only a verified-vanished entry is the tolerated
+# race. An unclassifiable inventory is a loud refusal here, which
+# propagates as a refusal to stop OR start anything.
 rig_comm_pids() {
-  local d out line
+  local d out line unread=0 attempt=0
   d="$1"
-  out="$(dsh 'for c in /proc/[0-9]*/comm; do n="$(cat "$c" 2>/dev/null)"; if [ "x$n" = "x'"$d"'" ]; then c2="${c#/proc/}"; echo "${c2%/comm}"; fi; done')" || {
-    echo "DEVICE FAIL: comm scan for $d failed on the device" >&2
-    return 1
-  }
-  out="${out%$'\n'}" # the single measured dsh trailing-newline artifact
+  # ALL-READABLE SNAPSHOT OR NOTHING (review-109-6 H4). Round 5 emitted
+  # U<pid> only when a `[ -d /proc/<pid> ]` re-probe still saw the entry —
+  # but `test -d` is ALSO false for a lookup/stat failure, so a live daemon
+  # whose comm read AND re-probe both hit a procfs error still vanished
+  # from the inventory and rig_daemon_restore could START a duplicate. The
+  # device now reports EVERY failed read as U<pid> with no downgrade, and
+  # the genuine vanished-pid race is handled the only sound way: RETRY THE
+  # WHOLE SCAN. A pid that really disappeared is simply absent from the
+  # next snapshot; one that is live-but-unreadable keeps reporting U and,
+  # after the retries, the inventory is refused as unclassifiable.
+  while :; do
+    attempt=$((attempt + 1))
+    unread=0
+    out="$(dsh 'for c in /proc/[0-9]*/comm; do n="$(cat "$c" 2>/dev/null)"; crc=$?; p="${c#/proc/}"; p="${p%/comm}"; if [ "$crc" != 0 ]; then echo "U$p"; continue; fi; if [ "x$n" = "x'"$d"'" ]; then echo "$p"; fi; done')" || {
+      echo "DEVICE FAIL: comm scan for $d failed on the device" >&2
+      return 1
+    }
+    out="${out%$'\n'}" # the single measured dsh trailing-newline artifact
+    case "$out" in
+      *U[0-9]*) unread=1 ;;
+    esac
+    [ "$unread" = 0 ] && break
+    if [ "$attempt" -ge 3 ]; then
+      echo "DEVICE FAIL: comm scan for $d still reports UNREADABLE /proc entries after $attempt full-scan attempts — the daemon inventory cannot be classified, so this rig refuses to stop or start anything; inspect the device" >&2
+      printf '%s\n' "$out" >&2
+      return 1
+    fi
+    sleep 1
+  done
   [ -z "$out" ] && return 0
   while IFS= read -r line; do
     if ! [[ "$line" =~ ^[0-9]{1,7}$ ]]; then
@@ -678,32 +843,292 @@ rig_daemon_restore() {
 # an unrestorable daemon is a loud death naming the manual command —
 # the stale deadman then STAYS armed (the caller's errexit path
 # preserves $DTMP), which is the correct failure direction.
+# rig_qd_probe <name> — WHITELIST-GRAMMAR marker presence (review-109-5
+# M4). The old probe read `ls`'s exit status and treated BOTH rc 1 and
+# rc 2 as "no marker", but those statuses also cover a failed directory
+# traversal or read — an unreadable $DTMP therefore certified "no daemon
+# is quiesced" and licensed the caller to reap the recovery deadman. The
+# device now answers with one of three DEFINITE tokens; any transport
+# failure is dsh's own nonzero rc, and any other output is corruption.
+rig_qd_probe() {
+  local d="$1" out
+  # STATUS-DISTINGUISHABLE ENUMERATION (review-109-6 M5). Round 5's tokens
+  # renamed the old answer without separating the cases: `[ ! -d $DTMP ]`
+  # is also false-on-stat-failure and any nonzero `ls` (traversal error,
+  # I/O error, ARG_MAX) read as QDABSENT — so a failed enumeration could
+  # certify "nothing is quiesced" and license the stale-deadman reap while
+  # a marker existed. Now the directory is ensured with a CHECKED
+  # operation and enumeration goes through `find`, whose successful-empty
+  # result is distinct from its nonzero traversal failure; a failure is its
+  # OWN token and dies here.
+  out="$(dsh "if ! mkdir -p $DTMP 2>/dev/null; then echo QDMKFAIL; else f=\"\$(find $DTMP -maxdepth 1 -name 'qd.$d.*' 2>/dev/null)\"; frc=\$?; if [ \$frc != 0 ]; then echo QDPROBEFAIL; elif [ -n \"\$f\" ]; then echo QDPRESENT; else echo QDABSENT; fi; fi")" || {
+    echo "DEVICE FAIL: could not probe for stale quiesce markers of $d (transport)" >&2
+    return 1
+  }
+  out="${out%$'\n'}"
+  case "$out" in
+    QDPRESENT|QDABSENT) printf '%s\n' "$out" ;;
+    QDMKFAIL)
+      echo "DEVICE FAIL: could not ensure the device scratch dir $DTMP exists while probing $d's quiesce marker — refusing to treat that as 'no marker'" >&2
+      return 1
+      ;;
+    QDPROBEFAIL)
+      echo "DEVICE FAIL: enumerating $d's quiesce markers under $DTMP FAILED (traversal/IO) — refusing to treat a failed enumeration as absence" >&2
+      return 1
+      ;;
+    *)
+      echo "DEVICE FAIL: quiesce-marker probe for $d answered '$out' (want exactly QDPRESENT|QDABSENT)" >&2
+      return 1
+      ;;
+  esac
+}
+
+# --- ATOMIC RECOVERY OWNERSHIP (review-109-5 H2) -----------------------------
+# The arc's finding: "recovery has no atomic owner" — at startup the HOST's
+# inherited-state restore and a still-live STALE deadman can both observe
+# zero daemon instances and both take the NON-IDEMPOTENT init START
+# channel, producing two instances (which every later helper then refuses,
+# loudly, but only after the damage).
+#
+# The primitive is `mkdir`, which is atomic on the device's filesystem:
+# exactly one actor can create $DTMP/qd.claim, and only its holder may
+# touch the daemon plane or consume a quiesce marker. The holder releases
+# it when done.
+#
+# TAKEOVER: a claim held longer than the recovery arm can possibly take
+# (its holder died mid-recovery) would otherwise deadlock the next run, so
+# the host force-takes after a bounded wait, LOUDLY — and because
+# rig_daemon_restore re-derives the inventory by comm-scan every time, the
+# post-takeover state is verified from the DEVICE, never inferred from the
+# marker's presence (the reviewer's "reverify cardinality independently of
+# marker presence after takeover").
+#
+# TRANSITION (honest exposure): a deadman deployed by an EARLIER run
+# carries that run's script and does not take the claim. The claim
+# therefore protects every pairing from this run onward; the one
+# already-deployed generation remains covered only by the loud
+# exact-cardinality refusals. Nothing can retro-fit a script that is
+# already on the device.
+# OWNED claim (review-109-6 H2 — the claim was an unowned lock bit, so its
+# takeover repeated the very ABA race the host lock had just fixed: the
+# host deleted it on a timer and a resuming holder could then delete the
+# HOST's replacement claim). The claim directory now carries an owner
+# token written by whoever created it:
+#     HOST:<rig lock nonce>     |     DM:<deadman pid>
+# and the rules are:
+#   * release ONLY a claim this run owns (rig_qd_unclaim re-reads the
+#     token; a foreign token is left alone, loudly);
+#   * NEVER steal from a holder that is positively ALIVE — a DM:<pid>
+#     whose /proc entry exists means the deadman is mid-recovery, and the
+#     init START channel is not idempotent, so this run WAITS and then
+#     dies loudly rather than racing it;
+#   * steal ONLY when the holder is positively verified dead, or when the
+#     claim carries no readable owner at all (a pre-protocol claim), and
+#     then say so loudly. Cardinality is re-derived by comm-scan after any
+#     takeover, so nothing is ever inferred from the claim itself.
+rig_qd_claim() {
+  local tries=0 out own tok
+  tok="HOST:${RIG_LOCK_NONCE:-nolock}"
+  while :; do
+    # PUBLICATION IS STATUS-CHECKED (review-109-8 L): a claim whose owner
+    # token failed to write is an UNOWNED claim — it would be reported as
+    # ours, released by nobody, and taken over by the next actor. The
+    # device answers CLAIMFAIL and we treat it as a failure to claim.
+    out="$(dsh "mkdir -p $DTMP >/dev/null 2>&1; if mkdir $DTMP/qd.claim 2>/dev/null; then if printf '%s\n' '$tok' > $DTMP/qd.claim/owner; then echo CLAIMED; else rm -rf $DTMP/qd.claim; echo CLAIMFAIL; fi; else echo BUSY; fi")" || {
+      echo "DEVICE FAIL: could not take the device recovery claim (transport)" >&2
+      return 1
+    }
+    out="${out%$'\n'}"
+    case "$out" in
+      CLAIMED) return 0 ;;
+      BUSY) : ;;
+      CLAIMFAIL)
+        echo "DEVICE FAIL: the recovery claim was created but its owner token could not be written — an unowned claim is worse than none, so it was removed and this run refuses to proceed" >&2
+        return 1
+        ;;
+      *)
+        echo "DEVICE FAIL: recovery-claim probe answered '$out' (want exactly CLAIMED|BUSY|CLAIMFAIL)" >&2
+        return 1
+        ;;
+    esac
+    tries=$((tries + 1))
+    if [ "$tries" -ge 15 ]; then
+      # who holds it, and is that holder still alive?
+      own="$(dsh "if [ -f $DTMP/qd.claim/owner ]; then cat $DTMP/qd.claim/owner; else echo NOOWNER; fi")" || {
+        echo "DEVICE FAIL: could not read the recovery claim's owner token" >&2
+        return 1
+      }
+      own="${own%$'\n'}"
+      case "$own" in
+        DM:[0-9]*)
+          # DEFINITE-ABSENCE ONLY (review-109-8 H4): `dsh test -d` returns
+          # the DEVICE command's rc, but 70/71 are TRANSPORT failures. The
+          # old form treated every nonzero as "the holder is dead", so a
+          # transient transport blip licensed deleting a LIVE deadman's
+          # claim and racing its non-idempotent START. Only rc 1 — the
+          # device answering "no such directory" — is death.
+          local prc=0
+          dsh "test -d /proc/${own#DM:}" >/dev/null 2>&1 || prc=$?
+          case "$prc" in
+            0)
+              echo "DEVICE FAIL: the device recovery claim is held by a LIVE deadman (pid ${own#DM:}) that is mid-recovery — refusing to steal it (the init START channel is not idempotent, and racing it would create a second daemon). Wait for it to finish, or inspect the device." >&2
+              return 1
+              ;;
+            1)
+              echo "WARN: the recovery claim's holder (deadman pid ${own#DM:}) is verified DEAD (device answered rc 1) — taking the claim over. Cardinality is re-derived by comm-scan below, so nothing is inferred from the claim." >&2
+              ;;
+            *)
+              echo "DEVICE FAIL: could not determine whether the recovery claim's holder (deadman pid ${own#DM:}) is alive (rc $prc — transport or malformed marker). Refusing to take over on an indefinite answer; inspect the device." >&2
+              return 1
+              ;;
+          esac
+          ;;
+        NOOWNER|"")
+          echo "WARN: the recovery claim $DTMP/qd.claim carries no owner token (a pre-protocol claim) and has been held >30 s — taking it over. Cardinality is re-derived by comm-scan below." >&2
+          ;;
+        *)
+          echo "WARN: the recovery claim is held by '$own', which is not a live-verifiable holder, and has been held >30 s — taking it over. Cardinality is re-derived by comm-scan below." >&2
+          ;;
+      esac
+      dsh "rm -rf $DTMP/qd.claim" >/dev/null 2>&1 || true
+    fi
+    if [ "$tries" -ge 20 ]; then
+      echo "DEVICE FAIL: could not take the device recovery claim $DTMP/qd.claim even after a takeover attempt — inspect the device" >&2
+      return 1
+    fi
+    sleep 2
+  done
+}
+
+# rig_deadman_quiesce — stop ANY inherited deadman, of ANY generation,
+# before this run touches the daemon plane (review-109-6 H3). Uses the one
+# channel every generated deadman in this repo honours: the presence of
+# $DTMP/deadman.cancel, polled on a 2 s cadence, and $DTMP/deadman.pid,
+# which each generation writes at start and removes at exit. Returns 0 only
+# when no deadman process remains (either it acknowledged the cancel, or
+# its pid file was orphaned and the pid is verifiably dead).
+rig_deadman_quiesce() {
+  local out tries=0
+  dsh "mkdir -p $DTMP && touch $DTMP/deadman.cancel" >/dev/null || {
+    echo "DEVICE FAIL: could not write the deadman cancel marker $DTMP/deadman.cancel" >&2
+    return 1
+  }
+  while :; do
+    out="$(dsh "if [ -f $DTMP/deadman.pid ]; then cat $DTMP/deadman.pid; else echo NONE; fi")" || {
+      echo "DEVICE FAIL: could not read $DTMP/deadman.pid while quiescing an inherited deadman" >&2
+      return 1
+    }
+    out="${out%$'\n'}"
+    [ "$out" = NONE ] && return 0
+    if ! [[ "$out" =~ ^(0|[1-9][0-9]{0,6})$ ]]; then
+      echo "DEVICE FAIL: $DTMP/deadman.pid is not a bounded decimal pid ('$out')" >&2
+      return 1
+    fi
+    # DEFINITE-ABSENCE ONLY (review-109-8 H4): the same rc conflation as
+    # rig_qd_claim — a transport rc (70/71) must never read as "the
+    # watchdog is dead", which would retire a backstop that is still armed.
+    local prc=0
+    dsh "test -d /proc/$out" >/dev/null 2>&1 || prc=$?
+    case "$prc" in
+      0) : ;;
+      1)
+        echo "   step-0: the inherited deadman pid file was orphaned (pid $out verifiably dead)" >&2
+        return 0
+        ;;
+      *)
+        echo "DEVICE FAIL: could not determine whether the inherited deadman (pid $out) is alive (rc $prc — transport or malformed marker); refusing to proceed on an indefinite answer" >&2
+        return 1
+        ;;
+    esac
+    tries=$((tries + 1))
+    if [ "$tries" -ge 8 ]; then
+      echo "DEVICE FAIL: an inherited deadman (pid $out) is STILL RUNNING 16 s after its cancel marker was written — it is not honouring the universal cancel channel; inspect the device" >&2
+      return 1
+    fi
+    sleep 2
+  done
+}
+
+# rig_qd_reassert — REVALIDATE OWNERSHIP IMMEDIATELY BEFORE ANY
+# DAEMON-PLANE ACTION (review-109-9 H1: the suspended-host case).
+# A host that blocks for a long time (laptop sleep, a stalled adb round
+# trip) while holding the claim can be declared dead by the deadman: the
+# deadman sees a frozen lease, reclaims the claim and republishes it as
+# DM:<pid>. If the host then resumes and trusts its own in-memory
+# "I hold the claim" flag, BOTH actors scan zero and BOTH take the
+# non-idempotent START channel. An in-memory flag cannot survive a
+# blocking interval, so it is never trusted across one: this re-reads the
+# DEVICE's own owner token and, if the claim is no longer ours, takes a
+# fresh one through rig_qd_claim (which never steals from a live holder).
+# Callers invoke it immediately before stopping or restoring a daemon.
+rig_qd_reassert() {
+  local own tok
+  tok="HOST:${RIG_LOCK_NONCE:-nolock}"
+  own="$(dsh "if [ -f $DTMP/qd.claim/owner ]; then cat $DTMP/qd.claim/owner; elif [ -d $DTMP/qd.claim ]; then echo NOOWNER; else echo GONE; fi")" || {
+    echo "DEVICE FAIL: could not re-read the recovery claim's owner token before a daemon-plane action" >&2
+    return 1
+  }
+  own="${own%$'\n'}"
+  if [ "$own" = "$tok" ]; then
+    return 0
+  fi
+  echo "WARN: this run's recovery claim was taken over while it was blocked (owner is now '$own') — re-acquiring before touching the daemon plane, so two actors can never drive the non-idempotent START channel at once" >&2
+  rig_qd_claim
+}
+
+rig_qd_unclaim() {
+  local own tok
+  tok="HOST:${RIG_LOCK_NONCE:-nolock}"
+  own="$(dsh "if [ -f $DTMP/qd.claim/owner ]; then cat $DTMP/qd.claim/owner; elif [ -d $DTMP/qd.claim ]; then echo NOOWNER; else echo GONE; fi")" || {
+    echo "WARN: could not read the recovery claim's owner token while releasing it — leaving $DTMP/qd.claim in place" >&2
+    return 0
+  }
+  own="${own%$'\n'}"
+  case "$own" in
+    GONE) return 0 ;;
+    "$tok")
+      dsh "rm -rf $DTMP/qd.claim" >/dev/null 2>&1 \
+        || echo "WARN: could not release the device recovery claim $DTMP/qd.claim — remove it by hand before the next run" >&2
+      ;;
+    *)
+      echo "WARN: the device recovery claim is now owned by '$own', not by this run — NOT releasing it (deleting another actor's claim is the ABA race this ownership token exists to prevent)" >&2
+      ;;
+  esac
+}
+
 rig_qd_normalize() {
-  local d isc nrc
+  local d isc st st2
   for d in low_bat_check system_stats fkgpiod; do
     case "$d" in
       low_bat_check) isc=/etc/init.d/S12low-bat-check ;;
       system_stats)  isc=/etc/init.d/S13system-stats ;;
       fkgpiod)       isc=/etc/init.d/S11gpio ;;
     esac
-    nrc=0
-    dsh "ls $DTMP/qd.$d.* >/dev/null 2>&1" >/dev/null || nrc=$?
-    case "$nrc" in
-      0)
+    st="$(rig_qd_probe "$d")" || return 1
+    case "$st" in
+      QDPRESENT)
         echo "WARN: stale quiesce marker for $d on the device — a prior run may have left the daemon down; restoring BEFORE any disarm/wipe" >&2
         if rig_daemon_restore "$d" "$isc"; then
-          dsh "rm -f $DTMP/qd.$d.*" >/dev/null || true
-          echo "   stale-quiesced $d verified running (comm-scan, exactly 1); marker cleared" >&2
+          # VERIFIED REMOVAL (review-109-5 M4): the removal used to be
+          # `|| true` and its result was never re-probed, so this function
+          # could report success — and license the deadman reap — with the
+          # marker still sitting on the device.
+          dsh "rm -f $DTMP/qd.$d.*" >/dev/null || {
+            echo "DEVICE FAIL: stale quiesce marker for $d could not be removed after a verified restore" >&2
+            return 1
+          }
+          st2="$(rig_qd_probe "$d")" || return 1
+          if [ "$st2" = QDPRESENT ]; then
+            echo "DEVICE FAIL: stale quiesce marker for $d is STILL present after removal — refusing to report the device normalized" >&2
+            return 1
+          fi
+          echo "   stale-quiesced $d verified running (comm-scan, exactly 1); marker cleared and absence verified" >&2
         else
           echo "DEVICE FAIL: stale-quiesced $d could not be restored to exactly one instance — run '$isc start' on the device manually and inspect" >&2
           return 1
         fi
         ;;
-      1|2) : ;; # no marker (ls found nothing) — the healthy path
-      *)
-        echo "DEVICE FAIL: could not probe for stale quiesce markers of $d (rc $nrc)" >&2
-        return 1
-        ;;
+      QDABSENT) : ;; # no marker — the healthy path (the ONLY absence token)
     esac
   done
 }

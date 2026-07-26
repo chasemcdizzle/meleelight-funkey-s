@@ -1879,3 +1879,14 @@ overruns):
   (LOOP §F-advance.3/§H) — the GATE does not print it (driver duty).
   done-check: `bash port/sim/device/verify_m4.sh` → prints
   `M4 GATE OK`, exit 0.
+
+- registered follow-up (NON-gate-blocking; driver ruling 2026-07-26 on
+  the review-109 arc CAPPED at round 9): centralize the per-producer
+  deadman bodies (check-device-render/music/foh/target/skip-attrib)
+  onto riglib's owned-claim recovery machinery (round-6 H3's class
+  fix). Bar-(b) hygiene only — reviewer confirmed "no bar-(a) defect"
+  five consecutive rounds (nothing can pass bad evidence as clean;
+  residual = loud duplicate/stopped-daemon states needing human
+  reconciliation). Touching it invalidates five reviewed producer
+  pins → its own arc, scheduled AFTER the M4 gate. Evidence:
+  .loop/review-109-triage.md §ARC STATUS.
