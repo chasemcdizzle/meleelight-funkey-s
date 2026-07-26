@@ -459,6 +459,11 @@ static void mus_file_read(void *ud, uint64_t fileFrame, int16_t *dst,
   if (fread(dst, 4, frames, g_mus_file) != frames) {
     sim_fatal("music: reader short read (truncated/unreadable PCM)");
   }
+  // SD-swap pressure class: drop the range we just consumed (rationale,
+  // measured domain and the start->loop re-read exceptions: snd_mixer.h).
+  // gfx_device streams PCM off the same SD card foh_device does, so the
+  // advice belongs on BOTH readers or the class is only half fixed.
+  snd_music_drop_cache(g_mus_file, fileFrame, frames);
 }
 
 // --music-lat rows (reader-thread-owned RAM; flushed post-join by main).
@@ -747,6 +752,7 @@ int main(int argc, char **argv) {
       mus_parse_ms_pair(musicLoopArg, &lo, &ld);
       g_mus_file = fopen(musicPath, "rb");
       if (!g_mus_file) sim_fatal("music: cannot open --music PCM");
+      snd_music_seq_hint(g_mus_file);
       if (fseeko(g_mus_file, 0, SEEK_END) != 0) sim_fatal("music: seek failed");
       const off_t msz = ftello(g_mus_file);
       if (msz <= 0) sim_fatal("music: empty PCM");

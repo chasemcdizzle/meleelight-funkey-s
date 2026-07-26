@@ -19178,3 +19178,61 @@ check-skip-attrib.sh not device-re-run after the gfx_app.c lift
 **Next (iter 111):** the deciding vmstat measurement → conditional
 in-scope fix → vanilla 12-leg pass (FULLGAME CONFORMS 12/12) → OPK
 FOH mode → m4-freeze-manifest → M4 GATE.
+
+---
+
+iter 111 · 2026-07-26 · phase M4 · task 14 increment 3b: fadvise class fix (BOTH readers) + per-leg memory diagnostics + run-5 11/12 — residual NAMED first-legs displacement transient · DRIVER RULING on the three levers
+
+**Writer:** claude-opus-5. Pre-reg .loop/m4-t111-prereg.md; Amendment 1
+(pre-run audit): music sprite windows are MILLISECONDS → a 60s leg
+never wraps, each byte consumed once → DONTNEED safe (frames-units
+would have INVERTED the fix — cache hits into SD reads).
+**Built:** snd_music_drop_cache()/snd_music_seq_hint() ONCE in
+port/gfx/snd_mixer.h (round-2 H caught my half-class premise:
+gfx_device links gfx_app.c's reader too — HARD RULE 8, fix at the
+shared seam); foh_dev.c + gfx_app.c call sites; fullgame script
+per-leg /proc/vmstat+interrupts snapshots BETWEEN legs only,
+run_guarded, decision-inert (round-2's real H: my first placement sat
+inside the qstop→launch bracket where a diagnostic's LATENCY could
+fail a leg the app passed — moved out entirely; reducers fail-closed,
+6/6 teeth).
+**Arc:** r1 killed (10-min cap, no verdict; log kept). r2 codex NO-GO
+(1H/3M/1L, genuine). r3 log carries the CACHED repeat (cmp/sha/tokens
+proven, 2nd instance of the §7-4 codex malfunction) THEN a fresh
+retry: **genuine codex GO** ("No [H] or [M] defects in the delta",
+1L fixed-class comment note) — driver verified the tail is
+responsive, not stale. r4 **grok GO** (GROK_RC=0) independent.
+Note: two rounds share review-111-3.log (hygiene: one round per file
+henceforth). Triage .loop/review-111-triage.md.
+**Run 5 (vanilla, disarmed; .loop/m4-t111-fullgame-run5.log):**
+**11/12** — 24/24 streams exact, p99 ≤16.004, underruns/starves/
+presentfails 0; g02 FAIL 4 skips. Memory columns are the story:
+pswpout aggregate -27% vs iter-110 (SD IRQs -24%); **74% of all
+swap-out lands in legs 1-2** (g01 2616, g02 2043, then ≤868, last
+four legs 0). Fix helped; residual = FIRST-LEGS DISPLACEMENT
+TRANSIENT: the app's working set displaces ambient anon memory to
+SD-swap ONCE, early; judged legs absorbing that burst play a latency
+lottery (g02 skipped, g01 with more pressure didn't). Writer
+correctly refused a reroll (pre-reg outcome ii).
+**Registered-gap closed:** check-skip-attrib device re-run post-lift —
+`SKIP ATTRIB OK (arm=sampler, skips=3/3600, events=34, stream MATCH)`
+rc 0 (.loop/m4-t111-skipattrib.log).
+**DRIVER RULING (the pre-registered owner-call fork):** (a) device
+swap policy (swappiness/swapoff) REJECTED — OS-level change affecting
+real play; reserve as last resort. (c) re-scoping the skips=0 pin
+REJECTED — gate-weaken, evidence-package territory, not needed. **(b)
+APPROVED: pre-suite settle phase** under the iter-109 warm-up
+precedent (measurement fidelity, not gaming): real play boots FOH →
+sndpack loads → menus render + menu music streams for MINUTES before
+any match — the displacement burst happens there, UNJUDGED; the
+suite's direct legs boot cold into judged windows, absorbing at
+match-time what real play absorbs at menu-time. Requirements binding
+iter-112: settle = one unjudged app boot/dwell after the PCM push,
+before leg 1, entirely outside judged machinery; decision grammars
+untouched; delta review round; EVIDENCE BAR: post-settle judged legs
+show flat pswpout INCLUDING legs 1-2, skips==0 12/12. If the settle
+fails the evidence bar → the (a) swap-policy owner call goes to Chase
+with the full A/B. check-device-music.sh run AUTHORIZED (owed gfx-half
+evidence).
+**Next:** iter-112 settle + FULLGAME CONFORMS 12/12 +
+check-device-music → OPK FOH mode → m4-freeze-manifest → M4 GATE.

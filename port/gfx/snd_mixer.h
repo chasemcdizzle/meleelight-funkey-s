@@ -66,6 +66,7 @@
 #ifndef GFX_SND_MIXER_H
 #define GFX_SND_MIXER_H
 
+#include <fcntl.h> // POSIX_FADV_* for the music reader's cache advice
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -190,6 +191,58 @@ static uint32_t snd_music_run(const SndMusic *mu, uint64_t t, uint32_t max,
 // snd_music_fill's segmentation). Dies loud on any short read.
 typedef void (*SndMusicRead)(void *ud, uint64_t fileFrame, int16_t *dst,
                              uint32_t frames);
+
+// --- PCM page-cache advice (M4 task 14 increment 3b) -------------------------
+// SD-SWAP PRESSURE CLASS, attributed the previous iteration: the device has
+// 57 MB of RAM and its ONLY swap is a 128 MB swap FILE on the SD card, so
+// growing page cache pushes anonymous pages out to that card, and the
+// resulting SD-controller IRQ storms preempt the paced frame loop (skips
+// co-occur with them 100% of the time; majflt is 0 throughout — we never
+// fault back, the cost is preemption, not our paging).
+//
+// The advice lives HERE, beside the reader contract, rather than in either
+// app: gfx_app.c and foh_dev.c carry the SAME file-backed SndMusicRead body
+// and BOTH are built as ARM device binaries (riglib.sh builds gfx_device
+// from gfx_app.c and foh_device from foh_dev.c), so a fix in one app is a
+// fix for half the class.
+//
+// MEASURED domain (sprite windows are MILLISECONDS — snd_music_cfg above):
+// every track's loop window is 173-310 s and the PCM files are 15.6-36.3 MB,
+// so a ~60 s run NEVER wraps the loop and consumes each byte once. The one
+// exception is the start-window -> loop-window jump where loopOff <
+// startOff+startDur: fdest re-reads 15 s (1.3 MB), fountain 21.3 s (1.9 MB),
+// pstadium 1 ms; the other five tracks' windows are disjoint and re-read
+// nothing. Net per run: ~5.3 MB of write-once cache dropped against ≤1.9 MB
+// re-read on the two stages that overlap. That trade is deliberately NOT
+// guarded with loop-aware branch logic in the audio reader.
+//
+// ADVISORY BY DEFINITION: a kernel that ignores these calls behaves exactly
+// as before, which is why no audio path may depend on them. macOS defines no
+// POSIX_FADV_*, so both compile to nothing on the host builds.
+
+// Drop the cache for a music range the reader has just consumed. Never
+// touches the readahead AHEAD of the range, never another file.
+static inline void snd_music_drop_cache(FILE *f, uint64_t fileFrame,
+                                        uint32_t frames) {
+#ifdef POSIX_FADV_DONTNEED
+  (void)posix_fadvise(fileno(f), (off_t)(fileFrame * 4ull),
+                      (off_t)frames * 4, POSIX_FADV_DONTNEED);
+#else
+  (void)f;
+  (void)fileFrame;
+  (void)frames;
+#endif
+}
+
+// Read it as what it is: one strictly sequential pass. Fewer, larger SD
+// reads means fewer IRQ events inside the paced window.
+static inline void snd_music_seq_hint(FILE *f) {
+#ifdef POSIX_FADV_SEQUENTIAL
+  (void)posix_fadvise(fileno(f), 0, 0, POSIX_FADV_SEQUENTIAL);
+#else
+  (void)f;
+#endif
+}
 
 // Fill `budget` source frames [from, from+budget) into the ring via the
 // sprite program + reader. Ring slots >= the consumer position are

@@ -15,7 +15,24 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-26, iter 110 — STALL CLASS ATTRIBUTED: SD-swap-driven preemption bursts (57MB RAM + 128MB swap-on-SD); instrument retargeted behind default-OFF gate; fix pending ONE deciding measurement)
+## Live right now (updated: 2026-07-26, iter 111 — fadvise class fix landed (run-5 11/12, swap-out −27%, tail legs clean); residual = FIRST-LEGS displacement transient; driver approved pre-suite settle (warm-up precedent); swap-policy + pin-rescope levers REJECTED)
+
+- **Iter 111 DONE.** snd_mixer.h shared fadvise helpers (both readers —
+  half-class premise caught by review), decision-inert per-leg
+  vmstat/interrupt snapshots, arc GO ×2 (fresh codex retry + grok;
+  codex cached-round malfunction recurred, proven again). Run 5
+  vanilla: 11/12, 24/24 streams exact, only g02 (4 skips); 74% of
+  swap-out in legs 1-2 → warm-up displacement transient, not
+  in-window I/O. skip-attrib gap closed (`SKIP ATTRIB OK` rc 0).
+  Full trail: AGENT-LOG iter-111 incl. the driver ruling.
+- **RULING:** settle phase APPROVED (menu-dwell parity, evidence bar:
+  flat pswpout on judged legs + 12/12); swap policy + pin re-scope
+  REJECTED (swap = last-resort owner call with A/B if settle fails).
+- **Queue:** iter-112 settle + `FULLGAME CONFORMS 12/12` +
+  check-device-music (authorized) → OPK FOH mode → m4-freeze-manifest
+  (+ m3 re-cites) → M4 GATE → provision → LOOP STOP: m4-complete.
+
+## [superseded by iter-111] (updated: 2026-07-26, iter 110 — STALL CLASS ATTRIBUTED: SD-swap-driven preemption bursts (57MB RAM + 128MB swap-on-SD); instrument retargeted behind default-OFF gate; fix pending ONE deciding measurement)
 
 - **Iter 110 DONE.** attrib.h lift + foh_dev --attrib
   (MLFK_FULLGAME_ATTRIB default-OFF; armed verdict ` [ATTRIB-ARMED]`

@@ -1743,6 +1743,102 @@ attrib_snapshot() {
     "$d/softirqs.txt" "$d/pidstat.txt"
 }
 
+# --- SD-PRESSURE DIAGNOSTIC (M4 task 14 increment 3b) ------------------------
+# Per-leg swap + SD-controller-IRQ deltas, at EVERY attrib level including 0.
+# The iter-110 attribution named the stall class (involuntary-preemption
+# bursts co-occurring with SD IRQ storms, driven by swap-out to the 128 MB
+# swap FILE on the SD card of a 57 MB device), and the in-app fix targets the
+# one file we stream inside the paced window. This arm is how a VANILLA pass
+# carries the mechanism evidence — the level-2 sampler's signal without the
+# level-2 sampler's in-run contamination.
+#
+# STRICTLY DIAGNOSTIC, three ways, none of which rely on reviewer goodwill:
+#  (a) both snapshots are taken BETWEEN legs — pre BEFORE the leg's quiesce
+#      window opens (deliberately OUTSIDE the bounded qstop->launch bracket,
+#      review-111-2 H1: a diagnostic must not be able to spend that slack),
+#      post after every pull — so no read of /proc ever lands inside a paced
+#      frame. The safety property is "between legs, never in a paced frame";
+#      it is NOT "inside the quiesce window", and moving pre back in there to
+#      tighten the bracket would reintroduce H1 (review-111-4 L1);
+#  (b) nothing judged reads these files: judge_leg, the verdict, and the
+#      correlator (which keeps its OWN untouched attrib-{pre,post} dirs) have
+#      no reference to `sddiag` anywhere;
+#  (c) both entry points go through run_guarded, so a transport failure
+#      prints "unavailable" and CANNOT fail a leg, and the printed line is
+#      `   -> sd-diag ...`, which cannot match verify_m4.sh's anchored
+#      FULLGAME_RE.
+# It adds no teeth: the verdict grammar (including `teeth=21`) is unchanged.
+sd_diag_snap() {
+  local d="$BUILD/$1.sddiag-$2"
+  rm -rf "$d"
+  mkdir -p "$d"
+  dsh "cat /proc/vmstat" > "$d/vmstat.txt"
+  dsh "cat /proc/interrupts" > "$d/interrupts.txt"
+  # non-empty is the whole contract here (a diagnostic that fails is a
+  # missing diagnostic, never a failed leg — see (c) above)
+  [ -s "$d/vmstat.txt" ] && [ -s "$d/interrupts.txt" ]
+}
+
+# sd_diag_report <id> — one line of pre->post deltas. pswpin/pswpout are in
+# PAGES, pgpgin/pgpgout in KB (kernel units, carried verbatim, never
+# converted); mmc = the sunxi-mmc line of /proc/interrupts (the SD host
+# controller whose IRQ storms the attribution named).
+#
+# BOTH reducers REFUSE rather than improvise (review-111-2 M3): a missing or
+# duplicated key, a non-numeric counter, a changed CPU-column count, or a
+# DECREASE (reboot, counter rollover, truncated pull) exits non-zero, which
+# surfaces as `unavailable` instead of a plausible-looking zero. Evidence
+# that quietly reads 0 when the producer changed shape is worse than no
+# evidence — this line is the whole reason the pass carries a mechanism
+# story. `exit` inside an awk rule still runs END, so failures set `bad` and
+# END prints ONLY when bad is unset.
+sd_diag_report() {
+  local a="$BUILD/$1.sddiag-pre" b="$BUILD/$1.sddiag-post" v i
+  v="$(awk -v keys="pswpout pswpin pgpgin pgpgout" '
+        BEGIN { n = split(keys, K, " "); for (j = 1; j <= n; j++) want[K[j]] = 1 }
+        FNR == NR { if ($1 in want) { if ($1 in p) bad = 1; p[$1] = $2 } next }
+                  { if ($1 in want) { if ($1 in q) bad = 1; q[$1] = $2 } }
+        END {
+          if (bad) exit 1
+          for (j = 1; j <= n; j++) {
+            k = K[j]
+            if (!(k in p) || !(k in q)) exit 1
+            if (p[k] !~ /^[0-9]+$/ || q[k] !~ /^[0-9]+$/) exit 1
+            d = q[k] - p[k]
+            if (d < 0) exit 1
+            s = s sprintf("%s%s=%d", (j > 1 ? " " : ""), k, d)
+          }
+          print s
+        }' "$a/vmstat.txt" "$b/vmstat.txt")" || return 1
+  # CPU-column count comes from the header line, so only the real per-CPU
+  # counters are summed — the old `every numeric field` form also swept up
+  # the hwirq number (constant, so the delta hid it) and would silently
+  # absorb any future column.
+  i="$(awk '
+        function tot(nc,   s, k) {
+          s = 0
+          for (k = 2; k <= 1 + nc; k++) {
+            if ($k !~ /^[0-9]+$/) { bad = 1; return 0 }
+            s += $k
+          }
+          return s
+        }
+        FNR == NR { if (FNR == 1) { pn = NF; next }
+                    if ($NF == "sunxi-mmc") { pm = tot(pn); pc++ } next }
+                  { if (FNR == 1) { qn = NF; next }
+                    if ($NF == "sunxi-mmc") { qm = tot(qn); qc++ } }
+        END {
+          if (bad || pc != 1 || qc != 1 || pn != qn || pn < 1) exit 1
+          if (qm < pm) exit 1
+          printf "mmcirq=%d\n", qm - pm
+        }' "$a/interrupts.txt" "$b/interrupts.txt")" || return 1
+  # explicit early return: `[ -n "$v" ] && [ -n "$i" ]` mid-function would be
+  # errexit-EXEMPT (non-final command of an AND-OR list) and fall through to
+  # print an empty delta line as if it were a measurement.
+  if [ -z "$v" ] || [ -z "$i" ]; then return 1; fi
+  echo "   -> sd-diag $1: $v $i"
+}
+
 echo "== [6/9] device legs: $N_GOLDENS_PIN paced matches, render+sfx+music live =="
 P99_WORST_NS=0
 P99_WORST_MS=""
@@ -1816,6 +1912,17 @@ EOF
   dsh "chmod +x $DTMP/$id-launch.sh"
 
   echo "== leg $id ($name, stage $stage/$tok, cpu=$cpu difficulty=$difficulty)"
+  # SD-pressure diagnostic, PRE half. Taken BEFORE the quiesce window opens,
+  # never inside it (review-111-2 H1): rig_quiesce_bracket_assert bounds the
+  # daemon-stop -> app-start gap by QW_PRE_SLACK_S, and run_guarded contains
+  # a failure's STATUS but not its LATENCY — two slow adb round trips inside
+  # that bracket could fail a leg the app itself passed, which is exactly
+  # what a diagnostic must never be able to do. Consequence, stated so it is
+  # never read as signal: the pre->post deltas therefore span the daemon
+  # stop AND its restore (the same disclosure attrib_snapshot's post side
+  # already carries).
+  run_guarded sdpre sd_diag_snap "$id" pre
+  [ "$sdpre" = 0 ] || echo "   -> sd-diag $id: pre snapshot unavailable (rc $sdpre)"
   # PER-LEG QUIESCE WINDOW (review-109-4 M; the reviewed sibling protocol,
   # check-device-foh.sh:1183-1229 / check-device-target.sh, adopted whole).
   # The daemon goes down IMMEDIATELY before this leg's launch and comes
@@ -1938,6 +2045,17 @@ EOF
     attrib_snapshot "$id" post
     pullv "$DTMP/$id.attrib.txt" "$BUILD/$id.dev-attrib.txt"
     dsh "rm -f $DTMP/$id.attrib.txt"
+  fi
+  # POST half. The pre status is carried SEPARATELY (review-111-2 M2): with
+  # one shared variable a successful post overwrote a failed pre, and the
+  # report then differenced an empty/stale pre dir into confident-looking
+  # numbers. Report only when BOTH halves landed.
+  run_guarded sdpost sd_diag_snap "$id" post
+  if [ "$sdpre" = 0 ] && [ "$sdpost" = 0 ]; then
+    run_guarded sdrep sd_diag_report "$id"
+    [ "$sdrep" = 0 ] || echo "   -> sd-diag $id: unusable snapshots (rc $sdrep)"
+  else
+    echo "   -> sd-diag $id: unavailable (pre rc $sdpre, post rc $sdpost)"
   fi
   dsh "rm -f $DTMP/$id.out.txt $DTMP/$id.tim.txt $DTMP/$id.trace.txt"
 
