@@ -19236,3 +19236,47 @@ with the full A/B. check-device-music.sh run AUTHORIZED (owed gfx-half
 evidence).
 **Next:** iter-112 settle + FULLGAME CONFORMS 12/12 +
 check-device-music → OPK FOH mode → m4-freeze-manifest → M4 GATE.
+
+---
+
+iter 112 · 2026-07-26 · phase M4 · task 14 increment 3c: **FULLGAME CONFORMS 12/12 minted (run 7, rc 0)** + DEVICE MUSIC OK — but settle hypothesis REFUTED by its own instrument: close is BY LUCK, not by cause · driver zoom-out names the next suspect: the rig's own tmpfs plane
+
+**Writer:** claude-opus-5. Pre-reg .loop/m4-t112-prereg.md. Settle =
+zero-C FOH flow-mode dwell (measured I 375 S edge turns menu music
+on; structurally unable to mint judged evidence — foh_dev refuses
+--trace/--out/--timing without --bridge). Arc r2 codex NO-GO
+(1H/5M genuine) → r3 codex CACHED (3rd proven instance, cmp+sha,
+every premise false in tree) → r4 grok NO-GO (2M) → **r5 grok GO
+(0 findings)**; writer refused codex-H's ask to make a diagnostic
+verdict-bearing (would reverse iter-111-r2's settled finding), grok
+upheld. Triage .loop/review-112-triage.md.
+**Run 7 (.loop/m4-t112-fullgame-run7.log): `FULLGAME CONFORMS 12/12
+(… p99=15.977ms skips=0 underruns=0 starves=0 presentfails=0
+teeth=21)` rc 0** — anchored-regex-verified vs verify_m4.sh. Also
+`DEVICE MUSIC OK` (.loop/m4-t112-devicemusic.log) closing the
+gfx-half fadvise evidence. Run 6 aborted on a transient rig /proc
+scan failure (non-skip; diagnosed; no luck reroll).
+**EVIDENCE BAR: R2 FIRED — settle refuted.** Settle absorbed 0 pages
+across 13 windows; leg 1 then displaced 4495 (MORE than run-5's
+2616). The menu working set does not displace what the match working
+set displaces. skips==0 held anyway ⇒ burst→skip is probabilistic;
+the iter-111 fadvise fix likely did the real work. Caveat honestly
+carried: device was rebooted pre-pass (codex-requested fresh ambient
+state), so run-7's g01 burst is that boot's first — refutation clean,
+but state differs from run-5. Settle machinery stays committed
+(harmless, witnessed, reviewed) pending the next increment's verdict
+on it.
+**DRIVER ZOOM-OUT (HARD RULE 8) — before any swap-policy owner call:**
+the suite pushes a ~33 MB artifact plane into /tmp/mlfk = tmpfs = RAM
+on a 57 MB device (traces, anim bins, simdata, binaries; PCM+sndpack
+already on SD scratch). That is RIG-INDUCED anon pressure REAL PLAY
+DOES NOT HAVE — the OPK reads game data from SD. Hypothesis (measure
+first): the match-time displacement is substantially the kernel
+squeezing our own tmpfs plane + app working set into 57 MB; relocating
+the large pushed artifacts to /mnt/mlfk-scratch removes the artificial
+pressure AND makes the measurement MORE representative. Iter-113:
+measure the plane, relocate, evidence bar = pswpout ≈0 ALL legs incl.
+leg 1 + skips 0 + 12/12 (a PROVEN close). Only if pressure persists
+with the tmpfs plane gone does the swap-policy lever go to Chase.
+**Next:** iter-113 tmpfs-relocation increment → proven class close →
+OPK FOH mode → m4-freeze-manifest → M4 GATE.

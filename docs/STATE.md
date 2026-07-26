@@ -15,7 +15,24 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-26, iter 111 — fadvise class fix landed (run-5 11/12, swap-out −27%, tail legs clean); residual = FIRST-LEGS displacement transient; driver approved pre-suite settle (warm-up precedent); swap-policy + pin-rescope levers REJECTED)
+## Live right now (updated: 2026-07-26, iter 112 — **FULLGAME CONFORMS 12/12 MINTED (run 7 rc 0)** + DEVICE MUSIC OK; settle hypothesis REFUTED (close is BY LUCK); driver zoom-out: rig's ~33MB tmpfs plane named as suspect — relocation increment next, swap owner-call deferred)
+
+- **Iter 112 DONE.** Run 7: `FULLGAME CONFORMS 12/12 (… skips=0
+  teeth=21)` rc 0 + `DEVICE MUSIC OK`. Settle shipped (flow-mode
+  dwell, structurally judgment-inert) but its OWN instrument refuted
+  it: settle absorbed 0 pages, leg 1 displaced 4495 — menu working
+  set ≠ match working set. Arc GO r5 (grok; codex cached-round
+  malfunction 3rd proven instance). Full trail AGENT-LOG iter-112.
+- **ZOOM-OUT (driver):** the suite's ~33MB /tmp/mlfk tmpfs plane =
+  rig-induced RAM pressure real play doesn't have (OPK reads from
+  SD). Iter-113 measures + relocates large artifacts to SD scratch;
+  evidence bar = pswpout ≈0 ALL legs + 12/12 (PROVEN close). Swap
+  owner-call only if pressure survives relocation.
+- **Queue:** iter-113 tmpfs relocation → OPK FOH mode →
+  m4-freeze-manifest (+ m3 re-cites) → M4 GATE → provision →
+  LOOP STOP: m4-complete.
+
+## [superseded by iter-112] (updated: 2026-07-26, iter 111 — fadvise class fix landed (run-5 11/12, swap-out −27%, tail legs clean); residual = FIRST-LEGS displacement transient; driver approved pre-suite settle (warm-up precedent); swap-policy + pin-rescope levers REJECTED)
 
 - **Iter 111 DONE.** snd_mixer.h shared fadvise helpers (both readers —
   half-class premise caught by review), decision-inert per-leg
