@@ -103,60 +103,24 @@ WALL_MAX_MS=78000
 READY_TRIES=90
 DEADMAN_S="${MLFK_DEADMAN_S:-1800}"
 
-# --- PRE-SUITE SETTLE (M4 task 14 increment 3c; driver ruling, iter 111) -----
-# One UNJUDGED FOH menu dwell between the push and leg 1. It exists for
-# MEASUREMENT FIDELITY, not leniency: a real player boots the FOH, loads the
-# 4.5 MB sndpack, renders menus and streams menu music for MINUTES before the
-# first match, so the app's one-time displacement of ambient anon memory to
-# the SD swap file (57 MB RAM, 128 MB swap FILE) happens there — UNJUDGED.
-# The suite's direct legs boot cold straight into judged windows and were
-# absorbing that same burst INSIDE them: 74% of run-5's swap-out landed in
-# legs 1-2 (2616 + 2043 pages, then <= 868, last four legs 0), and the leg
-# that drew the resulting preemption burst failed its skips==0 pin while a
-# leg with MORE pressure passed — a latency lottery, not a workload signal.
-# The settle moves the burst to where real play already puts it.
+# --- THE SWAP-PRESSURE EVIDENCE BAR (M4 task 14 increment 3d) ----------------
+# The stall class attributed in iter-110 is: memory pressure -> tmpfs/anon
+# swap-out to SD -> SD-controller IRQ storms -> involuntary-preemption bursts
+# -> an isolated frame over budget. Increment 3d removes that pressure AT ITS
+# CAUSE by moving the suite's own artifact plane off tmpfs (see [4/9]), so
+# `d_pswpout` per leg is the number that says whether the cause is gone.
 #
-# MEASURED (iter-112 sizing boots a/b/c, .loop/m4-t112-settle-size-*.log —
-# boot c reproduced this suite's landscape exactly: the ~33 MB tmpfs data
-# plane + 12 traces + ANIM1 bins AND ~150 MB of music through page cache):
-# the push itself emitted 259 + 170 pages, the settle boot emitted 69 pages
-# ALL INSIDE ITS FIRST 10 s WINDOW, and the following SEVENTEEN consecutive
-# 10 s windows were EXACTLY ZERO. The displacement is front-loaded and
-# plateaus in ~one window.
+# 200 pages (800 kB) per ~71 s leg. DERIVED from the frozen per-leg tables,
+# not picked: run-7's mid-suite floor is literally 0 on five legs
+# (g02/m01/m02/s01/s02) and the largest other floor-tier value is 160 (g06);
+# 200 is the smallest round number strictly above it. It is a HARD bar — only
+# 6 of run 7's 12 legs would meet it, and run-7's leg 1 (4495) misses by 22x.
 #
-# DISCLOSED LIMIT OF THAT SIZING (review-112-2 M6, accepted): those boots ran
-# on an ALREADY-DISPLACED device — boot a starts at pswpout 51447, which is
-# EXACTLY run-5's terminal counter (s02.sddiag-post/vmstat.txt), so nothing
-# had re-accumulated in between and the 0/69-page readings size a device that
-# had nothing left to displace. They therefore bound the PLATEAU SHAPE (front
-# loaded, then flat), not the burst SIZE. SETTLE_TICKS is consequently set
-# from the demand side instead: 120 s is ~1.7x one paced leg (71 s), so the
-# dwell offers more app-time demand than the single leg whose burst it must
-# absorb.
-#
-# RESIDUAL, STATED PLAINLY (review-112-4 finding 2 — an earlier draft of this
-# comment called the pin "not load-bearing" because the plateau poll
-# "re-verifies" it and the evidence bar "judges" it; BOTH of those are
-# NON-BLOCKING, so that was false comfort and is withdrawn). What is actually
-# true: a dwell that ends mid-burst prints `NOT PLATEAUED`, the suite
-# continues, and the run can still emit the verdict line while `bar=UNMET`.
-# Nothing here mechanically stops a short pin from being used — the writer's
-# report and the driver's evidence bar are what catch it, from the two lines
-# this phase prints. `120 s` is a heuristic backed by demand, not a measured
-# absorb of the 2616+2043-page first-leg class, and it stays that way until a
-# run on a genuinely transient-bearing device measures the burst.
-SETTLE_TICKS=7200            # 120 s at the 60 Hz pace (FLOW1 END frame)
-SETTLE_POLL_S=10             # pswpout sampling period during the dwell
-# A "flat" 10 s window, in PAGES. DERIVED, not picked (review-112-2 M4): the
-# mid-suite legs the evidence bar calls flat sit at <= 868 pages per ~71 s
-# leg, i.e. ~122 pages per 10 s; this is half that rate, and the measured
-# plateau windows were EXACTLY 0. The old 200 permitted 1200 pages/minute —
-# a sustained rate ABOVE the whole-leg value it was supposed to witness.
-SETTLE_PLATEAU_PAGES=64
-SETTLE_FLAT_WINDOWS=2        # consecutive flat windows that mean "plateaued"
-# The per-leg evidence bar (driver ruling, iter 111): legs 1-2 must land in
-# the same order as the mid-suite values. 868 IS that measured maximum.
-LEG_FLAT_PAGES=868
+# DECISION-INERT, deliberately (iter-111 round-2 H1, settled): the sd-diag arm
+# must never be able to fail a leg the app itself passed, and the M4 EXIT
+# gate's frozen leg-[1] conditions carry no swap-counter pin. This value
+# thresholds a PRINTED summary line, nothing else.
+BAR_PAGES=200
 
 # --- SKIP-ATTRIBUTION ARM (M4 task 14 increment 3a) --------------------------
 # The gate fails on a stochastic ~1-2-per-pass frame stall (measured
@@ -1201,6 +1165,20 @@ judge_timing() { # <label> <timing> <frames>
   done < "$jf"
   [ "$ji" = "${#KEYS[@]}" ] || fail "$label: timing judge output has $ji lines"
   : "$full_p99_ns" "$full_p99_ms" "$skips" "$rendered"
+  # PERSIST THE p99 BEFORE THE skips GATE (review-113-5 [L]). The p99 has
+  # already been parsed and grammar-checked at this point, and it is a VALID
+  # measurement whether or not the leg then fails `skips==0`. Aggregating it
+  # only on the pass path meant a skip-failing leg could carry the run's
+  # NARROWEST margin and never appear in the margin summary — and a failing
+  # run emitted no margin line at all. Written next to the timing artifact so
+  # the caller can pick it up regardless of the leg's verdict. Diagnostic
+  # only: nothing reads this to decide anything.
+  # `|| true` because this is a DIAGNOSTIC on the `set -e` critical path,
+  # AHEAD of the production asserts below (review-113-6 [L]). A read-only or
+  # full $BUILD would otherwise abort judge_timing before the skips/p99 gates
+  # ever ran — a diagnostic failing a leg the app itself passed, which is the
+  # settled iter-111 H1 rule. Losing the margin line is the correct failure.
+  printf '%s %s\n' "$full_p99_ns" "$full_p99_ms" > "$2.p99" || true
   [ "$skips" = 0 ] || fail "$label: timing artifact reports $skips render skips (want 0)"
   [ "$rendered" = "$fr" ] || fail "$label: rendered $rendered != $fr"
   [ "$full_p99_ns" -lt "$P99_FULL_LIMIT_NS" ] \
@@ -1349,37 +1327,72 @@ echo "== [4/9] armv7 build (shared rig stamp) + push + provenance =="
 rig_arm_build
 rig_stamp_rehash foh_device
 dsh "rm -rf $DTMP $DSD && mkdir -p $DTMP $DSD"
-# The [5b] settle's FLOW1 script, generated here so it ships with every other
-# input and is sha-verified on the device like every other input. `S` at 375
-# is MEASURED, not chosen: port/foh/flows/f04-nav.expect pins
-# `T 370 startup title timer` then `T 375 title menu-top start`, so 375 is the
-# earliest tick at which the title->menu-top edge exists — and that edge is
-# what flips the menu music on (foh_dev.c:1677-1685). Every later tick is an
-# idle menu-top dwell with the menu track streaming through the same
-# mus_file_read + POSIX_FADV_DONTNEED path a player's menu time uses.
-rm -f "$BUILD/settle.flow"
-{ echo "FLOW1"
-  echo "# generated by check-device-fullgame.sh — [5b] pre-suite settle"
-  echo "I 1 -"
-  echo "I 375 S"
-  echo "I 376 -"
-  echo "END $SETTLE_TICKS"
-} > "$BUILD/settle.flow"
-made "$BUILD/settle.flow"
-push_files=("$DEVB/foh_device" "$BUILD/simdata.txt" "$GFXDATA_FROZEN"
-  "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" "$BUILD/mus-dev.txt"
-  "$BUILD/settle.flow")
+# WHICH PLANE GOES WHERE, AND WHY (M4 task 14 increment 3d — the fix for the
+# attributed stall class). $DTMP is /tmp = **tmpfs = RAM** on this device
+# (measured: `tmpfs on /tmp type tmpfs (rw,relatime,size=131072k)`,
+# MemTotal 57196 kB, swap = the 128 MB partition /dev/mmcblk0p3). tmpfs pages
+# are anonymous: the ONLY way the kernel can reclaim them is to SWAP THEM OUT
+# TO SD — which is the exact first link of the iter-110 chain (pswpout ->
+# SD-IRQ storm -> involuntary-preemption burst -> a frame over budget).
+#
+# The suite used to push its ENTIRE artifact plane there: 33.96 MiB on a
+# 57.2 MiB device = 59% of RAM, of which 12 traces (17.78 MB) + 5 ANIM1 bins
+# (15.73 MB) + simdata (0.54 MB) are 96%. That is RIG-INDUCED pressure REAL
+# PLAY DOES NOT HAVE — the shipped OPK reads its data plane from SD. Two
+# independent signatures in the frozen logs fit it and nothing else: the
+# pre-3d suite DELETED each leg's trace from tmpfs after its leg, so the
+# plane shrank 1.48 MB per leg, and both run 5 and run 7 show d_pswpout
+# collapsing to EXACTLY 0 on the last legs while pgpgin decays monotonically
+# to an identical 5372 floor on both runs (more free RAM => the music/sndpack
+# page cache survives => fewer re-reads).
+# (HISTORY, stated in the past tense on purpose — review-113-3 [L]. The
+# CURRENT cleanup removes only the STAGED tmpfs copy; the SD originals are
+# deliberately retained. Do not "restore the delete" on SD to save space:
+# that reintroduces the unsynced-writeback hazard M-2 removed.)
+#
+# So the big COLD artifacts move to $DSD (SD): read once at app boot / match
+# setup, strictly BEFORE the paced loop — gfx_data_load/gfx_load_anim/
+# gfx_vfx_load/gfx_glyphs_load run at foh_dev.c:1968-1972, after the ready
+# marker at :1561, after which the warm-up primes render and only THEN does
+# frame 1 of the timed match start. Their read latency lands in an unjudged
+# window and their pages are clean file-backed cache the kernel can drop
+# WITHOUT swapping. This also makes the measurement more representative of
+# real play, not less.
+# ONE EXCEPTION, stated here and not only at the leg site (review-113-3 [L],
+# same false-invariant class as round-1's [L]): simdata.txt is read by
+# sim_data_load at foh_dev.c:1528, which is BEFORE the ready marker — so
+# relocating it can move ready latency. READY_TRIES=90 is therefore bound to
+# MEASUREMENT (2 s ready across three device legs, .loop/m4-t113-smoke*.log),
+# never to a claim that every relocated read happens post-ready.
+#
+# What deliberately STAYS in tmpfs: foh_device (exec'd per leg), the three
+# frozen gfx/vfx/glyph planes (209 kB combined — 0.6% of the plane, not worth
+# the diff), mus-dev.txt, the launcher/deadman state, and EVERY PER-LEG
+# OUTPUT. The outputs must never move: they are written DURING the judged
+# window, and SD writes there are precisely the hazard the [4/9] sync exists
+# to keep out of the paced legs.
+#
+# ...and ONE trace at a time comes BACK to tmpfs: the current leg's, staged
+# and re-verified immediately before its launch (review-113-1 M1, at the leg
+# site). A partial SD read of a trace is the single relocation risk that
+# degrades into a PASS rather than a failure, so that file is read from RAM.
+# Resident tmpfs plane is therefore ~3.2 MB (binary + frozen planes + one
+# trace + outputs) against the 33.96 MB this section used to push.
+push_files=("$DEVB/foh_device" "$GFXDATA_FROZEN"
+  "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" "$BUILD/mus-dev.txt")
+push_sd=("$BUILD/simdata.txt")
 for id in $PINNED_GOLDEN_SET; do
-  push_files+=("$BUILD/traces/$id.trace.txt")
+  push_sd+=("$BUILD/traces/$id.trace.txt")
 done
 # all five characters are fielded across the 12 goldens, so every ANIM1
 # binary ships (named anim_<id>_<char>.bin by the pipeline; the list is
 # defined and freshness-checked in section [2])
 for a in $ANIM_BINS; do
   [ -f "$TABLES/$a" ] || fail "ANIM1 binary $a missing from $TABLES"
-  push_files+=("$TABLES/$a")
+  push_sd+=("$TABLES/$a")
 done
 adb -s "$DEV" push "${push_files[@]}" "$DTMP/" >/dev/null
+adb -s "$DEV" push "${push_sd[@]}" "$DSD/" >/dev/null
 adb -s "$DEV" push "$BUILD/sndpack.bin" "$DSD/" >/dev/null
 for tok in $MUS_TOKENS; do
   base="$(mus_pcm_for "$tok")"
@@ -1397,16 +1410,21 @@ if [ "$ATTRIB" = 2 ]; then
   dsh "chmod +x $DTMP/sk_sampler"
   echo "   sk_sampler pushed (attrib level 2: 250 ms /proc windows)"
 fi
-# every pushed input re-hashed on the device (never trust push rc)
-for f in "$BUILD/simdata.txt" "$GFXDATA_FROZEN" "$VFXDATA_FROZEN" \
-         "$VFXGLYPHS_FROZEN" "$BUILD/mus-dev.txt" "$BUILD/settle.flow"; do
+# EVERY pushed input re-hashed on the device (never trust push rc). The
+# relocation above changes WHERE a byte lands, never WHETHER it is verified:
+# each artifact keeps its device-side sha comparison, at its new path.
+for f in "$GFXDATA_FROZEN" "$VFXDATA_FROZEN" \
+         "$VFXGLYPHS_FROZEN" "$BUILD/mus-dev.txt"; do
   hsum="$(rig_host_sha256 "$f")" || exit 1
   dsum="$(rig_dev_sha256 "$DTMP/${f##*/}")" || exit 1
   [ "$dsum" = "$hsum" ] || fail "pushed ${f##*/} sha mismatch"
 done
+hsum="$(rig_host_sha256 "$BUILD/simdata.txt")" || exit 1
+dsum="$(rig_dev_sha256 "$DSD/simdata.txt")" || exit 1
+[ "$dsum" = "$hsum" ] || fail "pushed simdata.txt sha mismatch"
 for a in $ANIM_BINS; do
   hsum="$(rig_host_sha256 "$TABLES/$a")" || exit 1
-  dsum="$(rig_dev_sha256 "$DTMP/$a")" || exit 1
+  dsum="$(rig_dev_sha256 "$DSD/$a")" || exit 1
   [ "$dsum" = "$hsum" ] || fail "pushed $a sha mismatch"
 done
 # EVERY PUSHED TRACE (review-109-1 M8). The 12 input traces were pushed
@@ -1418,7 +1436,7 @@ done
 # single leg executes.
 for id in $PINNED_GOLDEN_SET; do
   hsum="$(rig_host_sha256 "$BUILD/traces/$id.trace.txt")" || exit 1
-  dsum="$(rig_dev_sha256 "$DTMP/$id.trace.txt")" || exit 1
+  dsum="$(rig_dev_sha256 "$DSD/$id.trace.txt")" || exit 1
   [ "$dsum" = "$hsum" ] || fail "pushed $id.trace.txt sha mismatch"
 done
 hsum="$(rig_host_sha256 "$BUILD/sndpack.bin")" || exit 1
@@ -1842,14 +1860,33 @@ attrib_snapshot() {
 #      FULLGAME_RE.
 # It adds no teeth: the verdict grammar (including `teeth=21`) is unchanged.
 sd_diag_snap() {
-  local d="$BUILD/$1.sddiag-$2"
+  local d="$BUILD/$1.sddiag-$2" rc=0
   rm -rf "$d"
   mkdir -p "$d"
-  dsh "cat /proc/vmstat" > "$d/vmstat.txt"
-  dsh "cat /proc/interrupts" > "$d/interrupts.txt"
-  # non-empty is the whole contract here (a diagnostic that fails is a
-  # missing diagnostic, never a failed leg — see (c) above)
-  [ -s "$d/vmstat.txt" ] && [ -s "$d/interrupts.txt" ]
+  # THE RC IS THE CONTRACT, NOT THE BYTES ON DISK (review-113-1 M2). `dsh`
+  # PRINTS whatever stdout it received BEFORE returning 71 for a missing RC
+  # marker (adbsh.sh:49), so a FAILED snapshot can still leave a
+  # plausible-looking /proc/vmstat behind. Any later reducer that merely
+  # reparses those bytes would silently turn a transport failure into a
+  # reassuring number — which is exactly how an evidence summary reports
+  # `bar=met` off a snapshot that never happened. Both reads are rc-checked
+  # and the OK marker is written LAST, only once everything held;
+  # sd_diag_pswpout refuses without both markers.
+  dsh "cat /proc/vmstat" > "$d/vmstat.txt" || rc=$?
+  [ "$rc" = 0 ] || return "$rc"
+  dsh "cat /proc/interrupts" > "$d/interrupts.txt" || rc=$?
+  [ "$rc" = 0 ] || return "$rc"
+  # non-empty is still required (an rc-0 but truncated read is not a snapshot)
+  if [ ! -s "$d/vmstat.txt" ] || [ ! -s "$d/interrupts.txt" ]; then return 1; fi
+  # THE MARKER CARRIES THIS RUN'S NONCE (review-113-5 [M]). $BUILD PERSISTS
+  # ACROSS RUNS, so a presence-only marker is a stale-state trap: if this
+  # function's own `rm -rf "$d"` ever fails, run_guarded contains that
+  # failure, the current capture correctly reports unavailable — and a
+  # PREVIOUS run's vmstat.txt plus its empty OK marker survive and satisfy a
+  # presence test, letting the summary print `bar=met` off bytes from a
+  # different run. A nonce the reducer must match byte-exactly closes that:
+  # a stale marker can be present but can never be THIS run's.
+  printf '%s\n' "$DM_NONCE" > "$d/OK"
 }
 
 # sd_diag_pswpout <id> — JUST the pswpout delta, for the [8/9] evidence-bar
@@ -1857,6 +1894,21 @@ sd_diag_snap() {
 # key on each side, decimal, no decrease) so a summary can never invent a
 # reassuring number; the caller prints `?` when this refuses.
 sd_diag_pswpout() {
+  # BOTH HALVES MUST HAVE SUCCEEDED (review-113-1 M2). The per-leg statuses
+  # live in leg-local variables that are gone by the time the summary runs,
+  # so the success markers sd_diag_snap writes LAST are what carry that fact
+  # here. Without them a failed capture's leftover bytes could be reparsed
+  # into a confident delta.
+  # Presence is NOT enough — the marker must be THIS run's (review-113-5 [M]);
+  # $BUILD persists across runs and a survived marker would otherwise certify
+  # a previous run's bytes.
+  local wantn
+  wantn="$(printf '%s\n' "$DM_NONCE")"
+  if [ ! -f "$BUILD/$1.sddiag-pre/OK" ] || [ ! -f "$BUILD/$1.sddiag-post/OK" ] \
+     || [ "$(cat "$BUILD/$1.sddiag-pre/OK")" != "$wantn" ] \
+     || [ "$(cat "$BUILD/$1.sddiag-post/OK")" != "$wantn" ]; then
+    return 1
+  fi
   # `bad` flag, not a bare `exit`: awk runs END even after `exit` inside a
   # rule, so the duplicate-key arm used to REFUSE (rc 1) and still PRINT a
   # number — safe only for callers that check rc. Same trap, same fix, as
@@ -1932,197 +1984,15 @@ sd_diag_report() {
   echo "   -> sd-diag $1: $v $i"
 }
 
-# --- [5b] PRE-SUITE SETTLE ---------------------------------------------------
-# ONE unjudged FOH menu dwell (rationale + measurement: the SETTLE_* pins).
-# Placed AFTER the [5/9] frontend park — so it displaces against the SAME
-# memory landscape the legs run under, gmenu2x already gone — and BEFORE
-# leg 1's quiesce window, so it sits outside every bracket the legs assert.
-#
-# OUTSIDE THE JUDGED MACHINERY, BY CONSTRUCTION:
-#  (a) it touches no judged state — `pass`, `FAILED_LEGS`, `P99_WORST_*`,
-#      `PINNED_GOLDEN_SET`, judge_leg/judge_stream/judge_applog/judge_timing,
-#      the teeth block and `TEETH_PIN` are untouched; it adds no tooth and
-#      increments no counter;
-#  (b) it CANNOT produce judged evidence even by accident: foh_dev refuses
-#      --trace/--frames/--out/--timing/--gfxdata/--vfxdata/--glyphs/
-#      --anim-dir/--attrib/--legible whenever --bridge verify is absent
-#      (foh_dev.c:1438-1446), so this argv can emit no checksum stream and no
-#      timing file. That is the CALLEE's domain guard, not our restraint —
-#      and the no-bridge assertion below states it on our side too;
-#  (c) every line it prints starts `== [5b] ` or `   -> settle`, neither of
-#      which can match verify_m4.sh's anchored full-line FULLGAME_RE;
-#  (d) it opens NO quiesce window and stops no daemon: real play runs with
-#      low_bat_check up, and the settle is real play's menu time.
-# It is NOT a retry, a reroll, or a threshold move: the dwell is bounded by a
-# frozen pin, the burst it absorbs is the one real play already absorbs, and
-# the evidence bar it exists to satisfy (flat per-leg d_pswpout INCLUDING
-# legs 1-2 with skips==0) is measured by the SAME sd-diag arm on the SAME
-# legs afterwards — a warm-up that is allowed to prove itself useless.
-#
-# ASYMMETRIC FAILURE HANDLING, deliberately: a settle that did not RUN is
-# fatal (a silently skipped settle would let a plain run claim settle
-# credit), while a settle that ran without plateauing only WARNS — that is a
-# measurement about this device's state, and the judged legs remain the
-# decision. Neither can fail a leg: both happen before leg 1 exists.
-echo "== [5b] pre-suite settle: one unjudged FOH menu dwell ($SETTLE_TICKS ticks) =="
-# pswpout, read strictly: exactly one such key, decimal, or REFUSE. The
-# awk is the same fail-closed discipline as sd_diag_report's reducers — a
-# diagnostic that improvises a plausible 0 is worse than no diagnostic.
-settle_pswpout() {
-  dsh "cat /proc/vmstat" | awk '$1 == "pswpout" { n++; v = $2 }
-    END { if (n != 1 || v !~ /^[0-9]+$/) exit 1; print v }'
-}
-run_guarded sspre sd_diag_snap settle pre
-[ "$sspre" = 0 ] || echo "   -> settle: pre snapshot unavailable (rc $sspre)"
-settle_args="--flow $DTMP/settle.flow --input flow --flow-out $DTMP/settle.trace.txt"
-settle_args="$settle_args --pace 1 --budget-ns $BUDGET_NS"
-settle_args="$settle_args --sndpack $DSD/sndpack.bin --music-manifest $DTMP/mus-dev.txt"
-rm -f "$BUILD/settle.argv"; printf '%s\n' "$settle_args" > "$BUILD/settle.argv"
-# THE NO-BRIDGE ASSERTION (the settle must never be a judged-shaped run).
-# Through grep_count, so an unreadable argv dies instead of certifying.
-nsb="$(grep_count '--bridge' "$BUILD/settle.argv" "settle argv")"
-[ "$nsb" = 0 ] \
-  || fail "settle: the dwell argv carries --bridge (the settle must never run a match)"
-rm -f "$BUILD/settle-launch.sh"
-cat > "$BUILD/settle-launch.sh" << EOF
-#!/bin/sh
-# generated by check-device-fullgame.sh — [5b] PRE-SUITE SETTLE (unjudged)
-cd $DTMP || exit 9
-rm -rf settle.apprc settle.trace.txt settle.applog.txt settle-persist foh.pid.$DM_NONCE
-# THE NONCE PID FILE IS NOT OPTIONAL (review-112-2 M3). \$DTMP/foh.pid.\$NONCE
-# is the ONLY app pid the park deadman reads, and it kills only after
-# verifying \`foh_device\` in that pid's cmdline. A settle that did not publish
-# it would be UNKILLABLE by the deadman: a host death mid-dwell would leave an
-# orphan holding the audio device and the framebuffer — the iter-101
-# orphaned-process class, re-opened. Same launcher shape as a leg's.
-setsid sh -c 'MLFK_PERSIST_DIR=$DTMP/settle-persist ./foh_device $settle_args \\
-  2> $DTMP/settle.applog.txt & \\
-  echo \$! > $DTMP/foh.pid.$DM_NONCE; \\
-  wait \$!; arc=\$?; \\
-  echo "RC=\$arc" > $DTMP/settle.apprc' \\
-  </dev/null >/dev/null 2>&1 &
-sleep 2
-EOF
-made "$BUILD/settle-launch.sh"
-adb -s "$DEV" push "$BUILD/settle-launch.sh" "$DTMP/" >/dev/null
-hsum="$(rig_host_sha256 "$BUILD/settle-launch.sh")" || exit 1
-dsum="$(rig_dev_sha256 "$DTMP/settle-launch.sh")" || exit 1
-[ "$dsum" = "$hsum" ] || fail "pushed settle-launch.sh sha mismatch"
-dsh "chmod +x $DTMP/settle-launch.sh"
-settle_base="$(settle_pswpout)" || fail "settle: /proc/vmstat pswpout unreadable before the dwell"
-dsh "sh -lc $DTMP/settle-launch.sh"
-# THE PLATEAU POLL. The dwell length is a frozen pin, but "did the
-# displacement actually finish" is MEASURED on every run: sample pswpout each
-# SETTLE_POLL_S and require the trailing SETTLE_FLAT_WINDOWS windows to be
-# <= SETTLE_PLATEAU_PAGES. The cap bounds this at the dwell plus 2 minutes,
-# so a hung app cannot park the run here (its rc marker is checked below).
-settle_series=""
-settle_prev="$settle_base"
-settle_w=0
-settle_flat=0
-settle_cap=$(( SETTLE_TICKS / 60 / SETTLE_POLL_S + 12 ))
-while [ "$settle_w" -lt "$settle_cap" ]; do
-  sleep "$SETTLE_POLL_S"
-  settle_w=$((settle_w + 1))
-  settle_cur="$(settle_pswpout)" \
-    || fail "settle: /proc/vmstat pswpout unreadable at window $settle_w"
-  settle_d=$((settle_cur - settle_prev))
-  # a DECREASE means a reboot or a counter rollover: refuse, never report it
-  # as a beautifully flat window (sd_diag_report's rule, same reason)
-  [ "$settle_d" -ge 0 ] \
-    || fail "settle: pswpout decreased at window $settle_w ($settle_prev -> $settle_cur)"
-  settle_series="$settle_series w$settle_w=+$settle_d"
-  if [ "$settle_d" -le "$SETTLE_PLATEAU_PAGES" ]; then
-    settle_flat=$((settle_flat + 1))
-  else
-    settle_flat=0
-  fi
-  settle_prev="$settle_cur"
-  if dsh "test -f $DTMP/settle.apprc" >/dev/null 2>&1; then break; fi
-done
-settle_done=0
-for _ in $(seq 1 30); do
-  if dsh "test -f $DTMP/settle.apprc" >/dev/null 2>&1; then settle_done=1; break; fi
-  sleep 2
-done
-[ "$settle_done" = 1 ] || fail "settle: the app never wrote its rc marker"
-# THE FINAL SAMPLE (review-112-2 M5). The drain loop above can wait up to 60 s
-# more WITHOUT sampling, so a dwell that plateaued and then swapped heavily
-# during its last seconds would have printed PLATEAUED off stale state. One
-# more sample, taken after the marker exists, closes the unsampled tail and
-# joins the flatness decision like any other window. (Total bound: the dwell,
-# plus the poll cap's 2 minutes, plus this 60 s drain.)
-settle_cur="$(settle_pswpout)" || fail "settle: /proc/vmstat pswpout unreadable at the final sample"
-settle_d=$((settle_cur - settle_prev))
-[ "$settle_d" -ge 0 ] \
-  || fail "settle: pswpout decreased at the final sample ($settle_prev -> $settle_cur)"
-settle_series="$settle_series wF=+$settle_d"
-# VETO ONLY — never a plateau CREDIT (review-112-4 finding 1). This sample
-# usually spans ~0-2 s (the drain loop finds the marker on its first probe),
-# so counting it as a full SETTLE_POLL_S window would hand out a nearly-free
-# flat tooth: one real flat window plus this would print PLATEAUED at
-# SETTLE_FLAT_WINDOWS=2, and a dwell that ended mid-burst
-# (`… wN-1=big wN=+0 wF=+0`) would pass the very re-check that exists to
-# catch it. It can only CLEAR the flat run, never extend it.
-if [ "$settle_d" -gt "$SETTLE_PLATEAU_PAGES" ]; then settle_flat=0; fi
-settle_prev="$settle_cur"
-# the same byte-exact marker discipline the legs use (review-109-1 M6): a
-# torn `RC=0` must not read as a clean exit
-pullv "$DTMP/settle.apprc" "$BUILD/settle.apprc"
-printf 'RC=0\n' > "$BUILD/settle.apprc.want"
-cmp -s "$BUILD/settle.apprc" "$BUILD/settle.apprc.want" \
-  || fail "settle: rc marker is not exactly 'RC=0<LF>' (the settle boot did not exit cleanly)"
-pullv "$DTMP/settle.trace.txt" "$BUILD/settle.trace.txt"
-pullv "$DTMP/settle.applog.txt" "$BUILD/settle.applog.txt"
-# THE MENU-MUSIC WITNESS. A settle that never reached menu-top never turned
-# the music on (foh_dev.c:1677-1685), so it exercised neither the streamer
-# nor the page-cache path the fadvise fix lives on — it would be a dwell on
-# the title screen wearing the settle's name. Exact full-line fixed strings,
-# both halves: the FOH edge and the mixer's own track publish.
-nmt="$(grep -c -F -x "T 375 title menu-top start" "$BUILD/settle.trace.txt")" || nmt=0
-[ "$nmt" = 1 ] \
-  || fail "settle: its flow trace has $nmt 'T 375 title menu-top start' rows (want 1 — the settle never reached the menu, so no menu music streamed)"
-nmp="$(grep -c -F -x "foh_dev mustrack: from=none to=menu on=0 pcm=$DSD/menu.pcm" "$BUILD/settle.applog.txt")" || nmp=0
-[ "$nmp" = 1 ] \
-  || fail "settle: its app log has $nmp menu-track publishes (want 1 — the menu music plane never came up)"
-# ...and the publish alone is NOT the witness (review-112-2 M2): foh_dev emits
-# that line at PROGRAM time, before the audio device is even opened, so a
-# settle whose mixer produced nothing would satisfy it. The settle's OWN
-# post-run summaries are the evidence that the dwell really ran and really
-# streamed: full tick count, both menu transitions, and a music plane that
-# actually moved frames. Floors are MEASURED from sizing boot c (180 s ->
-# 7,657,472 out frames / 233 refills; 120 s scales to ~5.1M / ~155) and set
-# with margin, so they catch "nothing streamed", never a slow device.
-nft="$(grep -c -F "foh_dev foh: $SETTLE_TICKS ticks, 2 transitions," "$BUILD/settle.applog.txt")" || nft=0
-[ "$nft" = 1 ] \
-  || fail "settle: its app log has $nft 'foh_dev foh: $SETTLE_TICKS ticks, 2 transitions,' summaries (want 1 — the dwell did not run to its full length through both menu transitions)"
-smus="$(grep -E '^foh_dev music: [0-9]+ out frames, [0-9]+ starves, [0-9]+ refills, ring=32768 chunk=16384$' "$BUILD/settle.applog.txt")" || smus=""
-[ "$(printf '%s\n' "$smus" | grep -c .)" = 1 ] \
-  || fail "settle: want exactly 1 well-formed 'foh_dev music:' summary in its app log"
-sout="$(printf '%s\n' "$smus" | awk '{print $3}')"
-sref="$(printf '%s\n' "$smus" | awk '{print $8}')"
-[ "$sout" -ge 4000000 ] && [ "$sref" -ge 100 ] \
-  || fail "settle: music plane produced $sout out frames / $sref refills (want >= 4000000 / >= 100 — the dwell did not actually stream the menu track, so it never exercised the SD reader it exists to warm)"
-echo "   -> settle: $SETTLE_TICKS ticks, pswpout +$((settle_prev - settle_base)) pages;$settle_series"
-if [ "$settle_flat" -ge "$SETTLE_FLAT_WINDOWS" ]; then
-  echo "   -> settle: PLATEAUED ($settle_flat trailing windows <= $SETTLE_PLATEAU_PAGES pages)"
-else
-  echo "   -> settle: NOT PLATEAUED (only $settle_flat trailing windows <= $SETTLE_PLATEAU_PAGES pages) — the dwell pin is short for this device state; the judged legs below still decide"
-fi
-run_guarded sspost sd_diag_snap settle post
-if [ "$sspre" = 0 ] && [ "$sspost" = 0 ]; then
-  run_guarded ssrep sd_diag_report settle
-  [ "$ssrep" = 0 ] || echo "   -> sd-diag settle: unusable snapshots (rc $ssrep)"
-else
-  echo "   -> sd-diag settle: unavailable (pre rc $sspre, post rc $sspost)"
-fi
-# leave the tmpfs as the legs expect to find it (settle.flow stays: it is a
-# pushed, sha-verified input like every other)
-dsh "rm -rf $DTMP/settle.trace.txt $DTMP/settle.applog.txt $DTMP/settle.apprc $DTMP/settle-persist"
-
 echo "== [6/9] device legs: $N_GOLDENS_PIN paced matches, render+sfx+music live =="
 P99_WORST_NS=0
 P99_WORST_MS=""
+# The MARGIN trackers (review-113-5 [L]) — every timing-valid leg, passing or
+# not. P99_WORST_* keeps its existing meaning (worst among PASSING legs; it is
+# what the verdict line prints), so the gate's semantics are untouched.
+MARGIN_WORST_NS=0
+MARGIN_WORST_MS=""
+MARGIN_WORST_LEG=""
 pass=0
 FAILED_LEGS=""
 for id in $PINNED_GOLDEN_SET; do
@@ -2131,14 +2001,29 @@ for id in $PINNED_GOLDEN_SET; do
   extra=""
   [ "$cpu" = 1 ] && extra=" --cpu-live"
   args="--p1 $p1 --p2 $p2 --p2type $cpu --difficulty $difficulty --stage $stage"
-  args="$args --bridge verify --simdata $DTMP/simdata.txt --seed $seed"
+  # READ-ONCE INPUTS FROM SD, OUTPUTS TO TMPFS (increment 3d — see the [4/9]
+  # plane note). --simdata and --anim-dir are consumed at boot and at match
+  # setup, before the paced loop exists; --trace is STAGED back into tmpfs
+  # per leg (M1 above); --out/--timing/--bstate-out/--ready-file are written
+  # while the match runs and stay on tmpfs.
+  #
+  # READY_TIMEOUT, stated correctly (review-113-1 [L]): it is NOT true that
+  # every relocated read happens after the ready marker — sim_data_load runs
+  # at foh_dev.c:1528, BEFORE the marker is written at :1561, so relocating
+  # simdata.txt genuinely can move the ready latency. READY_TRIES=90 is left
+  # unchanged because it is bound to MEASUREMENT, not to that (false)
+  # invariant: three hand-driven device legs on the relocated plane reached
+  # the ready marker in 2 s (.loop/m4-t113-smoke{,2,3}.log), against a 90 s
+  # allowance. The anim/trace reads, which are the large ones, do land after
+  # the marker and inside the host's `sleep 55`.
+  args="$args --bridge verify --simdata $DSD/simdata.txt --seed $seed"
   args="$args --bstate-out $DTMP/$id.bstate.txt"
   args="$args --trace $DTMP/$id.trace.txt --frames $frames"
   args="$args --out $DTMP/$id.out.txt --timing $DTMP/$id.tim.txt"
   args="$args --ready-file $DTMP/$id.ready --pace 1 --budget-ns $BUDGET_NS"
   args="$args --sndpack $DSD/sndpack.bin --music-manifest $DTMP/mus-dev.txt"
   args="$args --gfxdata $DTMP/gfxdata-frozen.txt --vfxdata $DTMP/vfxdata-frozen.txt"
-  args="$args --glyphs $DTMP/vfxglyphs-frozen.txt --anim-dir $DTMP --legible$extra"
+  args="$args --glyphs $DTMP/vfxglyphs-frozen.txt --anim-dir $DSD --legible$extra"
   # the attribution arm (default off; see the MLFK_FULLGAME_ATTRIB block)
   [ "$ATTRIB" != 0 ] && args="$args --attrib $DTMP/$id.attrib.txt"
   rm -f "$BUILD/$id.argv"; printf '%s\n' "$args" > "$BUILD/$id.argv"
@@ -2191,6 +2076,43 @@ EOF
   dsum="$(rig_dev_sha256 "$DTMP/$id-launch.sh")" || exit 1
   [ "$dsum" = "$hsum" ] || fail "pushed $id-launch.sh sha mismatch"
   dsh "chmod +x $DTMP/$id-launch.sh"
+  # SD-PRESSURE DIAGNOSTIC, PRE HALF — TAKEN HERE, ABOVE THE STAGING COPY
+  # (review-113-5 [M], found independently by two reviewers). The M1 staging
+  # below allocates a 1,482,000-byte trace into tmpfs every leg = 362 ANON
+  # pages, plus as much newly-populated SD page cache. That is the largest
+  # RAM event the rig performs between legs, it is the one thing this
+  # increment ADDED, and with the pre snapshot below it, it landed in the gap
+  # between the previous leg's post and this leg's pre — a window no bracket
+  # covers. 362 pages is 1.8x BAR_PAGES, so `bar=met` could be reported by a
+  # suite displacing more than the bar in a window the bar cannot see, caused
+  # by this change's own machinery. The per-leg deltas now TILE the staging.
+  # Still strictly OUTSIDE the quiesce window (which opens at the qd. marker
+  # below): this moves the snapshot FURTHER from that bracket, not into it,
+  # so the settled iter-111 H1 ruling is untouched and the arm stays
+  # decision-inert. The existing disclosure below already states that the
+  # pre->post delta deliberately spans more than the paced window.
+  run_guarded sdpre sd_diag_snap "$id" pre
+  [ "$sdpre" = 0 ] || echo "   -> sd-diag $id: pre snapshot unavailable (rc $sdpre)"
+  # STAGE THIS LEG'S TRACE INTO TMPFS, RE-VERIFIED (review-113-1 M1).
+  # The trace is the one relocated artifact whose PARTIAL read degrades
+  # silently into a PASS instead of a failure: load_trace (foh_dev.c:385)
+  # treats a read error as EOF, only a WHOLLY empty trace is rejected
+  # (:423), and the frame loop REPEATS the final loaded row (:2182) — and
+  # s01/s02 genuinely end in long runs of an identical final row, so a
+  # truncated read can still emit the exact conforming stream. On tmpfs
+  # that risk did not exist; moving the file to SD created it, and the
+  # [4/9] sha proves only the bytes that landed before leg 1, not the read
+  # the app performs 10 legs later.
+  # So the leg's own trace is copied SD -> tmpfs and sha-compared against
+  # the HOST file immediately before launch, and the app reads it from RAM.
+  # Cost: ONE 1.48 MB trace resident at a time instead of all twelve
+  # (17.78 MB) — 96% of the relocation win kept, integrity restored.
+  dsh "cp $DSD/$id.trace.txt $DTMP/$id.trace.txt" \
+    || fail "leg $id: staging the trace SD -> tmpfs failed"
+  hsum="$(rig_host_sha256 "$BUILD/traces/$id.trace.txt")" || exit 1
+  dsum="$(rig_dev_sha256 "$DTMP/$id.trace.txt")" || exit 1
+  [ "$dsum" = "$hsum" ] \
+    || fail "leg $id: staged trace sha mismatch — the SD -> tmpfs copy is not the pushed bytes"
 
   echo "== leg $id ($name, stage $stage/$tok, cpu=$cpu difficulty=$difficulty)"
   # SD-pressure diagnostic, PRE half. Taken BEFORE the quiesce window opens,
@@ -2202,8 +2124,6 @@ EOF
   # never read as signal: the pre->post deltas therefore span the daemon
   # stop AND its restore (the same disclosure attrib_snapshot's post side
   # already carries).
-  run_guarded sdpre sd_diag_snap "$id" pre
-  [ "$sdpre" = 0 ] || echo "   -> sd-diag $id: pre snapshot unavailable (rc $sdpre)"
   # PER-LEG QUIESCE WINDOW (review-109-4 M; the reviewed sibling protocol,
   # check-device-foh.sh:1183-1229 / check-device-target.sh, adopted whole).
   # The daemon goes down IMMEDIATELY before this leg's launch and comes
@@ -2338,6 +2258,14 @@ EOF
   else
     echo "   -> sd-diag $id: unavailable (pre rc $sdpre, post rc $sdpost)"
   fi
+  # The STAGED tmpfs copy goes (that is what keeps only one trace resident);
+  # the SD original is deliberately KEPT (review-112 supplemental M-2): on SD
+  # an `rm` is an UNSYNCED WRITE whose deferred writeback would land inside
+  # the NEXT leg's paced window — precisely the SD-writeback-during-a-leg
+  # mechanism this increment exists to remove. Deleting the write beats
+  # adding a `sync` after it, and staleness is impossible anyway ([4/9] wipes
+  # and recreates $DSD, and every trace is sha-compared before leg 1 and
+  # again at its own staging step). These three removals are tmpfs-only.
   dsh "rm -f $DTMP/$id.out.txt $DTMP/$id.tim.txt $DTMP/$id.trace.txt"
 
   # JUDGMENTS RUN IN A SUBSHELL AND ARE COLLECT-AND-CONTINUE.
@@ -2354,11 +2282,31 @@ EOF
   # (review-109-2 H2): otherwise a leftover read-only `.legresult.tmp`
   # from a prior run makes this run's write fail, and the `mv` then
   # renames the STALE record into place as this run's PASS.
+  # `.p99` JOINS THIS LIST (review-113-6 [M]). $BUILD persists across runs and
+  # judge_leg runs bstate -> stream -> timing, so ANY failure before
+  # judge_timing used to leave a PREVIOUS run's `.p99` in place for the
+  # presence-only fold below to report as this run's margin — the same
+  # stale-artifact class the sd-diag OK markers just had, with different
+  # bytes. Clearing it here makes "file present" mean "this judgment wrote
+  # it", which is exactly what the fold assumes.
   rm -f "$BUILD/$id.legresult" "$BUILD/$id.legresult.tmp" \
+        "$BUILD/$id.dev-tim.txt.p99" \
         "$BUILD/$id.dev-applog.txt.mustrack.got" \
         "$BUILD/$id.dev-applog.txt.mustrack.want"
   lrc=0
   run_guarded lrc judge_leg "$id" "$name" "$gdir" "$mfarg" "$frames" "$tok"
+  # THE MARGIN, gathered from EVERY leg whose timing parsed (review-113-5 [L]).
+  # Read outside the pass branch on purpose: a leg that failed `skips==0` still
+  # measured a real p99, and it may be the narrowest one in the run.
+  if [ -f "$BUILD/$id.dev-tim.txt.p99" ]; then
+    mline="$(head -1 "$BUILD/$id.dev-tim.txt.p99")"
+    if [[ "$mline" =~ ^([0-9]{1,15})\ ([0-9]+\.[0-9]{3})$ ]] \
+       && [ "${BASH_REMATCH[1]}" -gt "$MARGIN_WORST_NS" ]; then
+      MARGIN_WORST_NS="${BASH_REMATCH[1]}"
+      MARGIN_WORST_MS="${BASH_REMATCH[2]}"
+      MARGIN_WORST_LEG="$id"
+    fi
+  fi
   if [ "$lrc" = 0 ] && [ -f "$BUILD/$id.legresult" ]; then
     # ONE line plus EXACTLY one terminating newline, validated BEFORE any
     # field extraction (review-109-1 M6: command substitution strips
@@ -2427,6 +2375,101 @@ EOF
   # age the lease into the deadman's firing window (review-109-5 H2)
   lease_renew
 done
+# THE EVIDENCE-BAR SUMMARY (review-112-2 H1, dispositioned — see below).
+# The driver's bar for increment 3d is "d_pswpout ≈0 on ALL legs INCLUDING
+# leg 1, and skips==0 on all 12". `skips==0` is already a hard pin of the
+# verdict. The SWAP half is diagnostic, and it stays diagnostic ON PURPOSE:
+#   - the sd-diag arm was ruled DECISION-INERT by a previous review round
+#     (iter-111 round 2 H1: a diagnostic must never be able to fail a leg the
+#     app itself passed), and making it verdict-bearing reverses that;
+#   - the M4 EXIT gate's leg [1] conditions are frozen in CLAUDE.md and
+#     verify_m4.sh (untouchable this iteration). A swap-counter pin that the
+#     gate spec does not have would fail a genuinely conforming run whenever
+#     the DEVICE's ambient state is busy — a strictly worse gate;
+#   - the driver rejected re-scoping pins; silently ADDING one is the same
+#     class of unilateral move.
+# What the finding is RIGHT about is that a printed-only number is easy to
+# skip past. So the bar is computed and stated HERE, mechanically, right
+# before the verdict: nobody can read this run's output and be unclear on
+# whether the swap pressure is gone. `bar=met` vs `bar=UNMET (closed by luck)`
+# is the writer's report language, decided by the numbers rather than narrated.
+#
+# ALL TWELVE LEGS, not just the first two (increment 3d). The iter-111 bar
+# watched legs 1-2 because that is where the displacement transient landed
+# while the plane lived in tmpfs. Increment 3d claims the pressure is gone
+# EVERYWHERE, so the summary reports the WORST leg and names it: a bar that
+# only ever looked at g01/g02 could be met by a run whose pressure had merely
+# MOVED down the suite.
+#
+# PLACED BEFORE THE FAILED_LEGS GATE (review-112 supplemental M-1). It used to
+# sit in `[8/9]`, downstream of a `fail` — so on exactly the runs that need
+# these numbers most (an 11/12 like run 5) the whole table was suppressed.
+#
+# WHAT THIS BAR DOES *NOT* PROVE (review-112 supplemental M-3/M-4, and the
+# driver's amended bar): `pswpout -> skip` is CORRELATIONAL. Run 7 contains
+# its own counterexample — s01 swapped ZERO pages and posted the suite's
+# WORST p99 (15.977 ms), while g01 swapped 4495 and posted 13.862 with no
+# skips. So a flat bar shows the RIG-INDUCED memory pressure is gone and the
+# measurement is representative of real play; it is NOT on its own evidence
+# that the stall class is closed. That evidence is two zero-skip passes, one
+# of them ATTRIB-ARMED so any surviving stall is ATTRIBUTED rather than merely
+# absent. `BAR_PAGES` is likewise derived from PRE-relocation data and
+# self-obsoletes once the plane is off tmpfs (supplemental [L], accepted): it
+# is an A/B threshold for this increment, not a permanent pin.
+bar_worst=-1
+bar_worst_leg=""
+bar_series=""
+bar_unknown=0
+for id in $PINNED_GOLDEN_SET; do
+  v="$(sd_diag_pswpout "$id")" || v="?"
+  bar_series="$bar_series $id=$v"
+  # a refused/missing reading is UNKNOWN, never a beautifully flat 0 — the
+  # same fail-closed discipline the sd_diag reducers use.
+  # THE LENGTH GUARD IS NOT COSMETIC (review-113-1 M4): bash 3.2's `[ -gt ]`
+  # is a SIGNED 64-bit compare, and a digit-only value too large to represent
+  # makes `test` return 2. Inside an `if` condition errexit is suppressed, so
+  # that leg would be SILENTLY DROPPED from bar_worst and an earlier small
+  # value could still print `bar=met`. 15 digits is far above any physical
+  # page count and far below the int64 limit, so anything longer is a
+  # corrupt/absurd reading and is marked unknown rather than discarded.
+  case "$v" in
+    ''|*[!0-9]*) bar_unknown=1 ;;
+    *) if [ "${#v}" -gt 15 ]; then
+         bar_unknown=1
+       elif [ "$v" -gt "$bar_worst" ]; then
+         bar_worst="$v"; bar_worst_leg="$id"
+       fi ;;
+  esac
+done
+bar_verdict="UNMET (12/12 would be CLOSED BY LUCK — swap-out pressure is still live on the judged legs)"
+# explicit `if`, never an `&&` chain: a false AND-OR list is the LAST command
+# of its case arm, and under `set -e` that kills the run (the script's
+# ERREXIT DISCIPLINE note). A diagnostic must not be able to do that.
+#
+# A KNOWN BREACH OUTRANKS AN UNKNOWN (review-113-1 M3). If one leg is
+# unreadable while another is measured ABOVE the threshold, the outcome is
+# already decided — the pre-registered verdict is HYPOTHESIS REFUTED — and
+# printing `UNKNOWN` there would hide a fact the run actually established.
+# So: breach first, then unknown, then met.
+if [ "$bar_worst" -gt "$BAR_PAGES" ]; then
+  : # the UNMET default already says it
+elif [ "$bar_unknown" = 1 ] || [ "$bar_worst" -lt 0 ]; then
+  bar_verdict="UNKNOWN (a leg's sd-diag snapshots are missing or refused)"
+else
+  bar_verdict="met (every leg <= $BAR_PAGES pages; worst $bar_worst_leg=$bar_worst)"
+fi
+echo "   -> evidence bar (tmpfs-relocation): worst leg $bar_worst_leg d_pswpout=$bar_worst, flat<=$BAR_PAGES pages -> bar=$bar_verdict"
+echo "   -> evidence bar per leg:$bar_series"
+# THE p99 MARGIN, printed before the gate so a FAILING run still states it
+# (review-113-5 [L]; the driver's standing instruction is that this margin is
+# reported prominently, because it is the gate's real standing risk).
+if [ -n "$MARGIN_WORST_MS" ]; then
+  margin_ns=$((P99_FULL_LIMIT_NS - MARGIN_WORST_NS))
+  echo "   -> p99 margin (ALL timing-valid legs): worst $MARGIN_WORST_LEG p99=${MARGIN_WORST_MS} ms vs 16.670 ms budget -> ${margin_ns} ns headroom"
+else
+  echo "   -> p99 margin: no timing-valid leg produced a p99"
+fi
+
 if [ -n "$FAILED_LEGS" ]; then
   fail "legs failed judgment:$FAILED_LEGS ($pass/$N_GOLDENS_PIN passed) — see the per-leg diagnostics above"
 fi
@@ -2878,40 +2921,5 @@ cmp -s "$T/ledger.sorted" "$T/ledger.want" \
 # --- [8/9] hygiene + verdict --------------------------------------------------
 echo "== [8/9] hygiene =="
 rig_no_commit_guard "$BUILD" "$DEVB" "$TABLES" "$AUDIO_OUT"
-
-# THE EVIDENCE-BAR SUMMARY (review-112-2 H1, dispositioned — see below).
-# The driver's bar for the settle increment is "post-settle judged legs show
-# FLAT pswpout INCLUDING legs 1-2, and skips==0 on all 12". `skips==0` is
-# already a hard pin of the verdict. The FLATNESS half is diagnostic, and it
-# stays diagnostic ON PURPOSE:
-#   - the sd-diag arm was ruled DECISION-INERT by a previous review round
-#     (iter-111 round 2 H1: a diagnostic must never be able to fail a leg the
-#     app itself passed), and making it verdict-bearing reverses that;
-#   - the M4 EXIT gate's leg [1] conditions are frozen in CLAUDE.md and
-#     verify_m4.sh (untouchable this iteration). A swap-counter pin that the
-#     gate spec does not have would fail a genuinely conforming run whenever
-#     the DEVICE's ambient state is busy — a strictly worse gate;
-#   - the driver rejected re-scoping pins; silently ADDING one is the same
-#     class of unilateral move.
-# What the finding is RIGHT about is that a printed-only number is easy to
-# skip past. So the bar is computed and stated HERE, mechanically, right
-# before the verdict: nobody can read this run's output and be unclear on
-# whether legs 1-2 were flat. `bar=met` vs `bar=UNMET (closed by luck)` is
-# the writer's report language, decided by the numbers rather than narrated.
-bar_l1="$(sd_diag_pswpout g01)" || bar_l1="?"
-bar_l2="$(sd_diag_pswpout g02)" || bar_l2="?"
-bar_verdict="UNMET (12/12 would be CLOSED BY LUCK — the first-legs displacement transient is still live)"
-# explicit `if`, never an `&&` chain: a false AND-OR list is the LAST command
-# of its case arm, and under `set -e` that kills the run (the script's
-# ERREXIT DISCIPLINE note). A diagnostic must not be able to do that.
-case "$bar_l1$bar_l2" in
-  *'?'*)
-    bar_verdict="UNKNOWN (a leg's sd-diag snapshots are missing or refused)" ;;
-  *)
-    if [ "$bar_l1" -le "$LEG_FLAT_PAGES" ] && [ "$bar_l2" -le "$LEG_FLAT_PAGES" ]; then
-      bar_verdict="met (both first legs flat)"
-    fi ;;
-esac
-echo "   -> evidence bar (settle): leg1 g01 d_pswpout=$bar_l1, leg2 g02 d_pswpout=$bar_l2, flat<=$LEG_FLAT_PAGES pages -> bar=$bar_verdict"
 
 echo "FULLGAME CONFORMS ${pass}/${N_GOLDENS_PIN} (render+sfx+music live; live-ai=${LIVE_AI_CSV} p99=${P99_WORST_MS}ms skips=0 underruns=0 starves=0 presentfails=0 teeth=$teeth)${ATTRIB_TAG}"

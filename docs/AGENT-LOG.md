@@ -19280,3 +19280,58 @@ leg 1 + skips 0 + 12/12 (a PROVEN close). Only if pressure persists
 with the tmpfs plane gone does the swap-policy lever go to Chase.
 **Next:** iter-113 tmpfs-relocation increment → proven class close →
 OPK FOH mode → m4-freeze-manifest → M4 GATE.
+
+---
+
+iter 113 · 2026-07-26 · phase M4 · task 14 increment 3d: RIG SWAP PRESSURE ELIMINATED AT CAUSE (tmpfs plane → SD; worst leg 4495→28 pages) · settle REMOVED · residual re-attributed: pacing wakeup jitter + sim tail COLLISION — driver names the hybrid-sleep class fix
+
+**Writer:** claude-opus-5. Pre-reg .loop/m4-t113-prereg.md (+A1 driver
+evidence-bar amendment, +A2.x each pre-run; A2.6: level-2 sampler is
+itself a measured contaminant — armed pass runs level 1).
+**Plane inventory (the measurement):** 35,612,272 B pushed into
+/tmp/mlfk tmpfs = 59% of 57.2 MiB RAM (traces 17.78 MB + ANIM1 15.73
+MB = 96%); tmpfs pages are anon — reclaim = swap to SD. RELOCATED:
+traces/anim/simdata → /mnt/mlfk-scratch; per-leg trace staged back
+SD→tmpfs + sha-verified pre-launch (review-forced: load_trace treats
+read error as EOF + final-row repeat + s01/s02 identical-row tails ⇒
+a partial SD read could emit a CONFORMING stream — evidence-integrity
+hole closed). Resident plane now ~3.2 MB. **One-variable A/B (same
+device/hour, binary sha-identical):** tmpfs layout 94 skips/10,663
+pages swapped; SD layout 6-13 skips/0 pages; streams byte-identical
+to frozen. **Settle REMOVED** (−187 lines; measured 0-page absorber).
+**Run 8 (armed L1; .loop/m4-t113-fullgame-run8-armed.log): 10/12,
+FULLGAME_RC=1 — bar (a) MET** (worst leg 28 pages vs 200 bar vs
+run-7's 4495; inter-leg gaps 0), **bar (b) NOT met**: g03 f3346 +
+m02 f3360, both `late_start≈3ms + sim_ns 13.8-15.2ms`, d_majflt=0,
+d_nivcsw 5-9 — NOT the iter-110 IRQ-storm class. Streams 12/12
+exact; underruns/starves/presentfails 0. Vanilla pass DELIBERATELY
+WITHHELD per pre-reg (no reroll; attribution first). Worst p99
+15.975 vs 16.670 (0.695 ms margin) — recorded prominently.
+**Arc:** 7 rounds, 11 findings fixed, 0 undispositioned — r1 codex
+NO-GO → r2 codex CACHED (4th proven instance) → r3 grok GO → r4
+aborted (writer's own stale line-gate) → r5a Opus-supplemental GO
+(irregular channel, findings adopted as input NOT as an arc round —
+reviewer set stays codex+grok, driver re-affirmed) → r5b codex fresh
+NO-GO → r6 grok NO-GO → **r7 grok GO (0 findings)**. Class learned
+(3 instances in one iter): $BUILD persists across runs ⇒ any artifact
+read BY PRESENCE is a stale-evidence trap. Budget overruns DECLARED
+(single-leg 4/2 — the tmpfs control + polling-hypothesis refutation;
+host checks ~6/3 zero-cost). Caveat carried: rounds 5b-7 fixes
+postdate run 8 — final bytes have NO device pass yet.
+**DRIVER RULING (the "engine headroom" fork):** NOT re-scoped as an
+engine-perf increment. Read of the evidence: neither component alone
+busts 16.67 (sim tails 13.8-15.2 ms are content-driven and were
+survivable all match; late_start ≈3 ms is nanosleep wakeup overshoot
+— sleep_until_ns in BOTH foh_dev.c:449 and gfx_app.c:312 is a bare
+nanosleep(rem), classic HZ-granularity overshoot); the SKIP is their
+COLLISION. Class fix = hybrid sleep at the shared seam (attrib.h
+precedent): coarse nanosleep to deadline−SPIN_NS, then bounded
+CLOCK_MONOTONIC spin — removes ~3 ms jitter on exactly the colliding
+frames (both run-8 events land <16.67 with prompt wakeup), improves
+REAL-play pacing (same loops live), touches no sim/checksum surface.
+Engine-perf work stays OFF the table unless the fix + proving passes
+refute this too. Chase informed of the 0.695 ms margin as the gate's
+standing risk.
+**Next (iter 114):** hybrid-sleep fix → armed pass + vanilla pass on
+FINAL bytes (covers the run-8 staleness caveat + mints gate evidence)
+→ OPK FOH mode → m4-freeze-manifest → M4 GATE.

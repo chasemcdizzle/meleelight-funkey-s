@@ -15,7 +15,27 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-26, iter 112 — **FULLGAME CONFORMS 12/12 MINTED (run 7 rc 0)** + DEVICE MUSIC OK; settle hypothesis REFUTED (close is BY LUCK); driver zoom-out: rig's ~33MB tmpfs plane named as suspect — relocation increment next, swap owner-call deferred)
+## Live right now (updated: 2026-07-26, iter 113 — rig swap pressure ELIMINATED at cause (4495→28 pages; A/B 94-skips-tmpfs vs 0-pages-SD); settle removed; residual = wakeup-jitter × sim-tail collision; hybrid-sleep class fix ruled; vanilla pass withheld pending final-bytes passes)
+
+- **Iter 113 DONE.** Tmpfs plane measured 35.6 MB = 59% of RAM →
+  relocated to SD (staged-back + sha-verified per review); one-var
+  A/B decisive; settle removed; arc GO r7 (7 rounds, 11 fixes;
+  codex cached-malfunction 4th instance; $BUILD read-by-presence
+  stale-evidence class learned). Run 8 armed: bar (a) MET (swap
+  flat), bar (b) not — g03/m02 skips = late_start≈3ms nanosleep
+  overshoot COLLIDING with 13.8-15.2ms content sim tails (majflt 0,
+  nivcsw single-digit). Worst p99 15.975/16.670 (0.695 ms margin =
+  standing gate risk). Full trail AGENT-LOG iter-113.
+- **RULING:** hybrid sleep (coarse nanosleep + bounded spin tail) at
+  the shared seam in foh_dev.c:449 + gfx_app.c:312; engine-perf
+  re-scope REJECTED unless this too is refuted. Final bytes still
+  need their device passes (run-8 staleness caveat).
+- **Queue:** iter-114 hybrid-sleep + armed & vanilla passes on final
+  bytes (mints FULLGAME CONFORMS 12/12 as PROVEN close) → OPK FOH
+  mode → m4-freeze-manifest (+ m3 re-cites) → M4 GATE → provision →
+  LOOP STOP: m4-complete.
+
+## [superseded by iter-113] (updated: 2026-07-26, iter 112 — **FULLGAME CONFORMS 12/12 MINTED (run 7 rc 0)** + DEVICE MUSIC OK; settle hypothesis REFUTED (close is BY LUCK); driver zoom-out: rig's ~33MB tmpfs plane named as suspect — relocation increment next, swap owner-call deferred)
 
 - **Iter 112 DONE.** Run 7: `FULLGAME CONFORMS 12/12 (… skips=0
   teeth=21)` rc 0 + `DEVICE MUSIC OK`. Settle shipped (flow-mode
