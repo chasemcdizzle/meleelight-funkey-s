@@ -139,6 +139,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "../gfx/attrib.h" // --attrib row sampler/writer (shared w/ gfx_app.c)
 #include "../gfx/gfx.h"
 #include "../gfx/gfx_target.h" // M4 task 12: the target-mode compositor
 #include "../gfx/gfx_vfx.h"
@@ -1221,6 +1222,9 @@ int main(int argc, char **argv) {
   const char *readyPath = 0, *bridge = 0;
   const char *simdataPath = 0, *bstateOut = 0;
   const char *tracePath = 0, *outPath = 0, *timingPath = 0;
+  // --attrib (M4 task 14 increment 3a): the skip-attribution row capture,
+  // grammar + sampler owned by port/gfx/attrib.h. Verify-mode only.
+  const char *attribPath = 0;
   const char *gfxdataPath = 0, *vfxdataPath = 0, *glyphsPath = 0;
   const char *animDir = 0;
   const char *sndpackPath = 0, *musicManifest = 0;
@@ -1314,6 +1318,7 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--frames") == 0 && hasV) ARGN(frames);
     else if (strcmp(a, "--out") == 0 && hasV) outPath = argv[++i];
     else if (strcmp(a, "--timing") == 0 && hasV) timingPath = argv[++i];
+    else if (strcmp(a, "--attrib") == 0 && hasV) attribPath = argv[++i];
     else if (strcmp(a, "--gfxdata") == 0 && hasV) gfxdataPath = argv[++i];
     else if (strcmp(a, "--vfxdata") == 0 && hasV) vfxdataPath = argv[++i];
     else if (strcmp(a, "--glyphs") == 0 && hasV) glyphsPath = argv[++i];
@@ -1428,7 +1433,13 @@ int main(int argc, char **argv) {
                   cpuLive || !inPoll)) ||
       (!brVerify && !brLive && !brTVerify &&
        (tracePath || frames > 0 || outPath || timingPath || gfxdataPath ||
-        vfxdataPath || glyphsPath || animDir || legible)) ||
+        vfxdataPath || glyphsPath || animDir || legible || attribPath)) ||
+      // --attrib rides the --timing buffer's lifetime exactly: only the
+      // brVerify arm allocates `tim`, runs the loop at the frame-start
+      // sample site and flushes post-run (brTVerify is a DIFFERENT loop,
+      // brLive writes no timing). Anywhere else the flag would silently
+      // produce nothing, so it is rejected instead.
+      (attribPath && !brVerify) ||
       (!brLive && (recordPath || keysPath || tapJumpOffP1)) ||
       (cpuLive && !brVerify) ||
       (pace != 0 && pace != 1) || budgetNs == 0 ||
@@ -1449,7 +1460,7 @@ int main(int argc, char **argv) {
             " --bstate-out b]"
             " [verify: --trace t --frames N --out o --timing tim"
             " --gfxdata g --vfxdata v --glyphs gl --anim-dir D [--legible]"
-            " [--cpu-live]]"
+            " [--cpu-live] [--attrib a.txt]]"
             " [live: --frames N --record-trace t.json --record-keys k.txt"
             " --gfxdata ... [--legible] [--tapjump-off-p1]]"
             " [--sndpack p [--audio-samples N]] [--music-manifest m.txt]"
@@ -2112,6 +2123,16 @@ int main(int argc, char **argv) {
         tim = malloc((size_t)frames * sizeof *tim);
         if (!tim) sim_fatal("oom (timing buffer)");
       }
+      // --attrib buffer (M4 task 14 increment 3a): frames+1 rows, one
+      // per frame START plus one tail row. RAM-only until the post-run
+      // flush — zero file I/O inside the paced loop, same discipline as
+      // --timing (and allocated alongside it, before tStart, so no
+      // allocation ever lands inside the paced window).
+      AttribRow *attrib = 0;
+      if (attribPath) {
+        attrib = attrib_alloc(frames); // allocates AND pre-faults
+        if (!attrib) sim_fatal("oom (attrib buffer)");
+      }
       const size_t streamCap = (size_t)frames * 80 + 128;
       char *stream = malloc(streamCap);
       if (!stream) sim_fatal("oom (stream buffer)");
@@ -2130,6 +2151,10 @@ int main(int argc, char **argv) {
       PlatformInput pin;
       const uint64_t tStart = now_ns();
       for (long f = 0; f < frames; f++) {
+        // FIRST statement of the body, i.e. OUTSIDE the t0..t3 brackets
+        // below: the instrument can consume pacing slack but can never
+        // inflate a number judge-render-timing.js computes.
+        if (attrib) attrib_sample(&attrib[f]);
         platform_poll(&pin);
         const uint64_t deadline = tStart + (uint64_t)(f + 1) * budgetNs;
         const MlInput *rows[4];
@@ -2185,6 +2210,7 @@ int main(int argc, char **argv) {
         if (pace == 1) sleep_until_ns(deadline);
       }
       const uint64_t tEnd = now_ns();
+      if (attrib) attrib_sample(&attrib[frames]); // tail row
       matchWallMs = (tEnd - tStart) / 1000000ull;
       ranMatch = true;
 
@@ -2217,7 +2243,19 @@ int main(int argc, char **argv) {
           }
         }
         if (fclose(tf) != 0) sim_fatal("--timing close/flush failed");
+        // --attrib flush: frames+1 rows through the ONE writer of the
+        // pinned grammar (port/gfx/attrib.h), paired with the UNCHANGED
+        // correlate-skips.js.
+        if (attribPath) {
+          switch (attrib_flush(attribPath, attrib, frames)) {
+            case 0: break;
+            case -1: sim_fatal("cannot open --attrib for writing");
+            case -2: sim_fatal("--attrib write failed");
+            default: sim_fatal("--attrib close/flush failed");
+          }
+        }
       }
+      free(attrib);
       if (brLive) {
         ml_sb_puts(&rec, "\n]\n");
         FILE *rf = fopen(recordPath, "w");

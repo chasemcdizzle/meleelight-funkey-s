@@ -159,6 +159,7 @@
 #include "../sim/ml_events.h"
 #include "../sim/ml_js.h"
 #include "../sim/ml_ser.h"
+#include "attrib.h" // --attrib row sampler/writer (shared with foh_dev.c)
 #include "gfx.h"
 #include "gfx_vfx.h"
 #include "platform.h"
@@ -303,33 +304,10 @@ static uint64_t now_ns(void) {
 }
 
 // --attrib capture (M4 task 8): one row per frame START + one tail row.
-// now_raw_ns/attrib_sample die loud on failure — a silently-zero row
-// would read as a plausible measurement (fail-loud beats fail-plausible).
-static uint64_t now_raw_ns(void) {
-  struct timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) != 0) {
-    sim_fatal("clock_gettime(CLOCK_MONOTONIC_RAW) failed");
-  }
-  return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
-}
-
-typedef struct {
-  uint64_t mono, raw;
-  uint64_t nvcsw, nivcsw, minflt, majflt;
-} AttribRow;
-
-static void attrib_sample(AttribRow *row) {
-  struct rusage ru;
-  row->mono = now_ns();
-  row->raw = now_raw_ns();
-  if (getrusage(RUSAGE_SELF, &ru) != 0) {
-    sim_fatal("getrusage(RUSAGE_SELF) failed");
-  }
-  row->nvcsw = (uint64_t)ru.ru_nvcsw;
-  row->nivcsw = (uint64_t)ru.ru_nivcsw;
-  row->minflt = (uint64_t)ru.ru_minflt;
-  row->majflt = (uint64_t)ru.ru_majflt;
-}
+// AttribRow/attrib_sample/attrib_flush moved to port/gfx/attrib.h in M4
+// task 14 increment 3a so foh_dev.c emits the SAME pinned rows from the
+// SAME code (one owner of the grammar correlate-skips.js parses).
+// attrib_sample's CLOCK_MONOTONIC read is now_ns()'s clock verbatim.
 
 static void sleep_until_ns(uint64_t target) {
   for (;;) {
@@ -814,7 +792,7 @@ int main(int argc, char **argv) {
   // one tail after the loop). RAM-only until the post-run flush.
   AttribRow *attrib = 0;
   if (attribPath) {
-    attrib = malloc(((size_t)frames + 1) * sizeof *attrib);
+    attrib = attrib_alloc(frames); // allocates AND pre-faults
     if (!attrib) sim_fatal("oom (attrib buffer)");
   }
 
@@ -998,21 +976,15 @@ int main(int argc, char **argv) {
   }
   if (fclose(tf) != 0) sim_fatal("--timing close/flush failed");
 
-  // --attrib flush (M4 task 8): frames+1 rows, grammar in the header
-  // comment (paired with correlate-skips.js).
+  // --attrib flush (M4 task 8): frames+1 rows, grammar owned by
+  // port/gfx/attrib.h (paired with correlate-skips.js).
   if (attribPath) {
-    FILE *af = fopen(attribPath, "w");
-    if (!af) sim_fatal("cannot open --attrib file for writing");
-    for (long f = 0; f <= frames; f++) {
-      if (fprintf(af,
-                  "%" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
-                  " %" PRIu64 "\n",
-                  attrib[f].mono, attrib[f].raw, attrib[f].nvcsw,
-                  attrib[f].nivcsw, attrib[f].minflt, attrib[f].majflt) < 0) {
-        sim_fatal("--attrib write failed");
-      }
+    switch (attrib_flush(attribPath, attrib, frames)) {
+      case 0: break;
+      case -1: sim_fatal("cannot open --attrib file for writing");
+      case -2: sim_fatal("--attrib write failed");
+      default: sim_fatal("--attrib close/flush failed");
     }
-    if (fclose(af) != 0) sim_fatal("--attrib close/flush failed");
   }
   free(attrib);
 

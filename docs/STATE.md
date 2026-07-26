@@ -15,7 +15,26 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-26, iter 109 — task-14 increment 2 COMMITTED: full-game engine live, 12/12 streams exact ON DEVICE ×2 passes, cold-start skip class CLOSED; residual = environmental sim-stall class, attribution next)
+## Live right now (updated: 2026-07-26, iter 110 — STALL CLASS ATTRIBUTED: SD-swap-driven preemption bursts (57MB RAM + 128MB swap-on-SD); instrument retargeted behind default-OFF gate; fix pending ONE deciding measurement)
+
+- **Iter 110 DONE.** attrib.h lift + foh_dev --attrib
+  (MLFK_FULLGAME_ATTRIB default-OFF; armed verdict ` [ATTRIB-ARMED]`
+  structurally cannot match verify_m4's anchor). ATTRIBUTED: skips =
+  involuntary-preemption bursts 100%-co-occurring with SD-IRQ storms
+  (g01 f243: d_nivcsw=1374/frame; majflt=0 everywhere — paging and
+  music-drain hypotheses REFUTED); per-leg SD IRQs track pswpout →
+  swap-out bursts to the SD swap file under 57MB RAM. Arc GO r5 via
+  grok fallback after codex returned two PROVEN-cached rounds (cmp
+  byte-identical; §7 failure-mode 4 named). Full trail: AGENT-LOG
+  iter-110.
+- **Queue:** iter-111 = deciding measurement (vmstat in sampler
+  windows: readahead vs swap-out) → in-scope fix (fadvise) OR owner
+  call (swap policy) → vanilla 12-leg pass = FULLGAME CONFORMS 12/12 →
+  check-skip-attrib device re-run (registered gap) → OPK FOH mode →
+  m4-freeze-manifest (+ m3 re-cites) → M4 GATE → provision →
+  LOOP STOP: m4-complete.
+
+## [superseded by iter-110] (updated: 2026-07-26, iter 109 — task-14 increment 2 COMMITTED: full-game engine live, 12/12 streams exact ON DEVICE ×2 passes, cold-start skip class CLOSED; residual = environmental sim-stall class, attribution next)
 
 - **Iter 109 DONE (4 Opus writer sessions + driver runs/rulings; full
   trail AGENT-LOG iter-109).** foh_dev direct-match entry + launch

@@ -19117,3 +19117,64 @@ sessions is unacceptable crash exposure. FULLGAME CONFORMS stays the
 increment-3 exit condition.
 **Next:** instrument retarget + attribution on the sim-stall class →
 skips==0 pass → OPK FOH mode → m4-freeze-manifest → M4 GATE.
+
+---
+
+iter 110 · 2026-07-26 · phase M4 · task 14 increment 3a: attribution instrument retargeted + STALL CLASS ATTRIBUTED — SD-I/O-driven involuntary-preemption bursts (swap-out to SD under 57MB RAM); no fix shipped (issuing agent unproven, pre-reg-forbidden guess)
+
+**Writer:** claude-opus-5 (respawn after a session-limit death; a survey
+subagent's instrument map seeded the brief). Pre-reg
+.loop/m4-t110-prereg.md (2 amendments, each pre-run; honest-null N1 +
+contamination N5 shapes).
+**Built:** port/gfx/attrib.h (NEW — AttribRow/now_raw_ns/attrib_sample
+lifted from gfx_app.c statics; shared row grammar); gfx_app.c
+(includes the header, behavior-identical); foh_dev.c --attrib +
+match-loop sampling behind default-OFF MLFK_FULLGAME_ATTRIB;
+check-device-fullgame.sh attrib arm — an armed run appends
+` [ATTRIB-ARMED]` to the verdict line, which CANNOT match
+verify_m4.sh's anchored FULLGAME_RE (proven both directions): the
+armed instrument is structurally unable to mint gate evidence.
+**ATTRIBUTION (the class is named; 174 event rows, 2 armed passes):**
+- H2 major-fault paging REFUTED: majflt_total=0 all 12 legs, d_majflt=0
+  every event row. H1 music-streaming-as-steady-drain REFUTED:
+  steady-state SD IRQs 0-2/250ms window, mmcqd/0 ~30ms per 71s leg.
+  H3 daemon saturation REFUTED: non-app CPU constant, device 26-48%
+  idle — these are LATENCY events, not load.
+- NAMED: bursts of INVOLUNTARY PREEMPTION co-occurring with
+  SD-controller IRQ storms. Captured skip g06 f3344: d_nivcsw=15 vs
+  leg median 3 + late_start_ns=5.22ms; extreme g01 f243:
+  d_nivcsw=1374 in one 18.85ms frame (a deschedule every ~13.7µs),
+  zero faults. Correlation monotone: d_nivcsw>=30 buckets show 100%
+  sampler-window SD-IRQ co-occurrence (avg 77/196 IRQs vs 9.7
+  baseline). Per-leg SD IRQ totals track /proc/vmstat pswpout (g01
+  3760 pages swapped out; m02 0) — DEVICE HAS 57MB RAM + 128MB SWAP
+  FILE ON SD: memory pressure → swap-out bursts → IRQ storms →
+  preemption. Our process never faults back (majflt=0), which is why
+  run-level CPU accounting looked innocent.
+- Fix deliberately NOT taken (pre-reg §5): whether the burst issuer is
+  music page-cache readahead vs swap-out is UNPROVEN; device budgets
+  exhausted; mlockall's premise is refuted. One measurement decides
+  (vmstat in sk_sampler windows or --music-lat): readahead →
+  in-scope POSIX_FADV_DONTNEED; swap-out from ambient pressure →
+  owner call (swap off / daemon policy).
+**Arc (writer-owned):** r1 codex NO-GO (1H/3M/1L) → fixes (incl.
+disassembly-verified non-elidable pre-fault; instrumented-vs-clean
+loop split so the disarmed path is byte-identical) → r2/r4 codex
+returned CACHED byte-identical output (proven by cmp; stale citation
+of a deleted line — PROCESS §7 failure-mode-4 instance, reviewer
+malfunction NAMED) → r3 codex NO-GO (1M/5L, genuine) → fixes →
+**r5 grok (§3 fallback) VERDICT: GO**, 3 Lows accepted as written
+dispositions. .loop/review-110-{1..5}.log, triage
+.loop/review-110-triage.md. Driver verified: verdict lines on disk,
+CODEX_RC/GROK_RC markers, cached-round cmp reproduced, tree scope
+exact.
+**Passes (both armed, neither mints gate evidence):** pass1 11/12
+(g06 1 skip, captured+attributed); pass2 9/12 (level-2 sampler = the
+pre-registered contamination check firing, expected). Streams
+verdict-exact 24/24; underruns/starves/presentfails 0 throughout.
+**Registered gaps:** vanilla disarmed 12-leg pass still owed;
+check-skip-attrib.sh not device-re-run after the gfx_app.c lift
+(compile-verified; next device session covers it).
+**Next (iter 111):** the deciding vmstat measurement → conditional
+in-scope fix → vanilla 12-leg pass (FULLGAME CONFORMS 12/12) → OPK
+FOH mode → m4-freeze-manifest → M4 GATE.

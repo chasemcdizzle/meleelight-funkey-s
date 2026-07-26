@@ -65,7 +65,10 @@
 # anywhere else in this script.
 #
 # Env: FUNKEY_ADB_ID (device id), MLFK_FORCE_ARM=1 (shared arm rebuild),
-#      MLFK_DEADMAN_S (frontend-park deadman seconds, default 1800).
+#      MLFK_DEADMAN_S (frontend-park deadman seconds, default 1800),
+#      MLFK_FULLGAME_ATTRIB=1 (M4 task 14 increment 3a — arm the
+#      skip-attribution instrument, see the block below; DEFAULT OFF and
+#      structurally NON-AUTHORITATIVE when on).
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 
@@ -99,6 +102,52 @@ WALL_MIN_MS=58000                      # 3600 paced frames == 60.0 s nominal
 WALL_MAX_MS=78000
 READY_TRIES=90
 DEADMAN_S="${MLFK_DEADMAN_S:-1800}"
+
+# --- SKIP-ATTRIBUTION ARM (M4 task 14 increment 3a) --------------------------
+# The gate fails on a stochastic ~1-2-per-pass frame stall (measured
+# 15-29 ms, migrating leg/frame/phase). Attribution is only valid if the
+# measured run reproduces the LEG conditions exactly — same per-leg
+# quiesce window, same launcher, same paced 3600-frame match with
+# render+sfx+music live — so the instrument is armed HERE rather than in
+# a separate rig that would measure a different question.
+#
+# When armed, each leg additionally: passes `--attrib` to foh_device (the
+# per-frame row sampler in port/gfx/attrib.h — sampled OUTSIDE the
+# sim/render/present brackets, so it cannot inflate any number
+# judge-render-timing.js computes), brackets the paced window with
+# /proc kernel-counter snapshots taken OUTSIDE it, and runs the UNCHANGED
+# port/sim/device/skip-attrib/correlate-skips.js over the pulled
+# evidence. sk_sampler is deliberately NOT armed: its 250 ms /proc poll
+# is itself a periodic CPU consumer on this single-core A7 and could
+# MANUFACTURE the event class under investigation (it stays available for
+# a targeted follow-up run where that trade is worth making).
+#
+# STRUCTURALLY NON-AUTHORITATIVE: an armed run suffixes its verdict line
+# with ` [ATTRIB-ARMED]`, which verify_m4.sh's anchored full-line
+# FULLGAME_RE cannot match. An armed pass can therefore never mint the
+# authoritative M4 gate result, exactly as a dev override cannot.
+# LEVELS: 0 = off (the gate configuration). 1 = per-frame rows + pre/post
+# /proc snapshots only. 2 = level 1 PLUS a concurrent sk_sampler, whose
+# 250 ms /proc windows are the ONLY way to name WHICH irq/process caused
+# a specific frame's preemption burst — paid for with a periodic poller
+# on a single-core A7, so it is opt-in above level 1 rather than default.
+ATTRIB="${MLFK_FULLGAME_ATTRIB:-0}"
+case "$ATTRIB" in
+  0|1|2) ;;
+  *) echo "FULLGAME FAIL: MLFK_FULLGAME_ATTRIB must be 0, 1 or 2, got '$ATTRIB'" >&2
+     exit 1 ;;
+esac
+ATTRIB_TAG=""
+[ "$ATTRIB" != 0 ] && ATTRIB_TAG=" [ATTRIB-ARMED]"
+SKA=port/sim/device/skip-attrib
+SAMPLER_PERIOD_MS=250       # the iter-74 pre-registered cadence, verbatim
+# 175 s cap at 250 ms. check-skip-attrib.sh uses 400 (100 s) for a ~63 s
+# run; a fullgame leg can wait up to READY_TRIES=90 s for the ready
+# marker BEFORE its ~60 s match, so 400 could run the sampler dry
+# mid-match and turn uncovered events into silent `win=none` rows
+# (review-110-1 finding 3). Sized so the cap cannot bite, and the
+# uncovered-event count is REPORTED per leg so a gap is never silent.
+SAMPLER_MAX=700
 # THE DEADMAN LEASE (review-109-5 H2). The deadman fires only after BOTH
 # its countdown has elapsed AND the host has been silent for this long —
 # so it can never act concurrently with a live host that is mid-leg
@@ -407,6 +456,13 @@ cleanup_all() {
   # our own processes first (idempotent, rc-tolerant)
   rig_dsh_retry "pkill foh_device; true" >/dev/null 2>&1 \
     || echo "DEVICE WARN: could not pkill foh_device on device" >&2
+  # sk_sampler only when THIS run armed it (review-110-1 finding 1): the
+  # disarmed path must be inert, and an unconditional pkill would also
+  # reach a sampler some OTHER rig started.
+  if [ "$ATTRIB" = 2 ]; then
+    rig_dsh_retry "pkill sk_sampler; true" >/dev/null 2>&1 \
+      || echo "DEVICE WARN: could not pkill sk_sampler on device" >&2
+  fi
   # daemon FIRST, so its outcome can gate the deadman cancellation
   if [ "$LBC_STOPPED" = 1 ]; then
     if rig_daemon_restore low_bat_check /etc/init.d/S12low-bat-check; then
@@ -1258,6 +1314,16 @@ for tok in $MUS_TOKENS; do
 done
 rig_push_provenance "$DTMP" foh_device
 dsh "chmod +x $DTMP/foh_device"
+if [ "$ATTRIB" = 2 ]; then
+  # sk_sampler comes out of the SAME shared arm build (it is already in
+  # ARMBINS), so it is stamp-covered exactly like foh_device and gets the
+  # same rehash-adjacent-to-push + provenance treatment.
+  rig_stamp_rehash sk_sampler
+  adb -s "$DEV" push "$DEVB/sk_sampler" "$DTMP/" >/dev/null
+  rig_push_provenance "$DTMP" sk_sampler
+  dsh "chmod +x $DTMP/sk_sampler"
+  echo "   sk_sampler pushed (attrib level 2: 250 ms /proc windows)"
+fi
 # every pushed input re-hashed on the device (never trust push rc)
 for f in "$BUILD/simdata.txt" "$GFXDATA_FROZEN" "$VFXDATA_FROZEN" \
          "$VFXGLYPHS_FROZEN" "$BUILD/mus-dev.txt"; do
@@ -1646,6 +1712,37 @@ esac
 echo "   deadman armed (${DEADMAN_S}s) + frontend parked"
 
 # --- [6/9] device legs --------------------------------------------------------
+# attrib_snapshot <id> <pre|post> — the kernel-counter dumps the
+# correlator's --pre-dir/--post-dir consume. Lifted from the reviewed
+# check-skip-attrib.sh snapshot() (same five files, same names, same
+# stderr-silencing rationale) and, like it, run ONLY outside the paced
+# window. Every dump goes through the RC-checked dsh; `made` kills the
+# run on an empty file, so a transport failure can never present as a
+# quiet kernel.
+attrib_snapshot() {
+  local sid stag d
+  sid="$1"
+  stag="$2"
+  d="$BUILD/$sid.attrib-$stag"
+  rm -rf "$d"
+  mkdir -p "$d"
+  dsh "cat /proc/interrupts" > "$d/interrupts.txt"
+  dsh "cat /proc/stat" > "$d/stat.txt"
+  dsh "cat /proc/vmstat" > "$d/vmstat.txt"
+  dsh "cat /proc/softirqs" > "$d/softirqs.txt"
+  # cat's stderr is silenced: this adbd MERGES device stderr into the
+  # stream, and a pid vanishing between glob and cat is expected churn,
+  # not corruption (measured, check-skip-attrib.sh's same call).
+  # `|| true` per ITERATION (review-110-1 finding 4): a bare loop
+  # propagates only the LAST cat's status, so a pid vanishing at exactly
+  # the wrong moment made dsh fail and aborted the whole host script
+  # under set -e — while a REAL transport failure still yields an empty
+  # file, which `made` below kills on.
+  dsh 'for p in /proc/[0-9]*/stat; do cat "$p" 2>/dev/null || true; done' > "$d/pidstat.txt"
+  made "$d/interrupts.txt" "$d/stat.txt" "$d/vmstat.txt" \
+    "$d/softirqs.txt" "$d/pidstat.txt"
+}
+
 echo "== [6/9] device legs: $N_GOLDENS_PIN paced matches, render+sfx+music live =="
 P99_WORST_NS=0
 P99_WORST_MS=""
@@ -1665,6 +1762,8 @@ for id in $PINNED_GOLDEN_SET; do
   args="$args --sndpack $DSD/sndpack.bin --music-manifest $DTMP/mus-dev.txt"
   args="$args --gfxdata $DTMP/gfxdata-frozen.txt --vfxdata $DTMP/vfxdata-frozen.txt"
   args="$args --glyphs $DTMP/vfxglyphs-frozen.txt --anim-dir $DTMP --legible$extra"
+  # the attribution arm (default off; see the MLFK_FULLGAME_ATTRIB block)
+  [ "$ATTRIB" != 0 ] && args="$args --attrib $DTMP/$id.attrib.txt"
   rm -f "$BUILD/$id.argv"; printf '%s\n' "$args" > "$BUILD/$id.argv"
   # THE LIVE-AI BINDING, asserted per leg: an AIBRIDGE1 replay would
   # satisfy the stream but not the gate's live-C-AI clause.
@@ -1683,12 +1782,23 @@ for id in $PINNED_GOLDEN_SET; do
     [ "$c" = 0 ] || fail "leg $id: non-CPU golden carries --cpu-live"
   fi
 
+  # attrib level 2: the sampler starts in the SAME launcher, immediately
+  # before the app, so its windows bracket the whole paced run (its own
+  # stop file ends it; check-skip-attrib.sh's designed channel, verbatim).
+  SAMPLER_LINES=""
+  if [ "$ATTRIB" = 2 ]; then
+    SAMPLER_LINES="rm -f $DTMP/sk.pid $DTMP/sk.stop $DTMP/$id.sampler.txt
+setsid ./sk_sampler --out $DTMP/$id.sampler.txt --pid-file $DTMP/sk.pid \\
+  --stop-file $DTMP/sk.stop --period-ms $SAMPLER_PERIOD_MS \\
+  --max-samples $SAMPLER_MAX </dev/null >/dev/null 2>&1 &"
+  fi
   rm -f "$BUILD/$id-launch.sh"
   cat > "$BUILD/$id-launch.sh" << EOF
 #!/bin/sh
 # generated by check-device-fullgame.sh — leg launcher for $id
 cd $DTMP || exit 9
 rm -rf $id.apprc $id.ready $id-persist foh.pid.$DM_NONCE app.start.ts app.end.ts
+$SAMPLER_LINES
 setsid sh -c 'date +%s > $DTMP/app.start.ts; MLFK_PERSIST_DIR=$DTMP/$id-persist ./foh_device $args \\
   2> $DTMP/$id.applog.txt & \\
   echo \$! > $DTMP/foh.pid.$DM_NONCE; \\
@@ -1733,6 +1843,9 @@ EOF
   lbc_pid="$(rig_daemon_stop low_bat_check)"
   dsh "date +%s > $DTMP/qstop.ts"
   echo "   low_bat_check quiesced for this leg only (pid $lbc_pid)"
+  # PRE snapshot INSIDE the quiesce window and immediately before launch,
+  # so the pre/post bracket sees the same daemon state the leg runs under.
+  [ "$ATTRIB" != 0 ] && attrib_snapshot "$id" pre
   dsh "sh -lc $DTMP/$id-launch.sh"
   ready=0
   for _ in $(seq 1 "$READY_TRIES"); do
@@ -1798,6 +1911,34 @@ EOF
   pullv "$DTMP/$id.tim.txt" "$BUILD/$id.dev-tim.txt"
   pullv "$DTMP/$id.bstate.txt" "$BUILD/$id.dev-bstate.txt"
   pullv "$DTMP/$id.applog.txt" "$BUILD/$id.dev-applog.txt"
+  if [ "$ATTRIB" != 0 ]; then
+    # POST snapshot AFTER the daemon restore, following the reviewed
+    # restore-first discipline (review-109-4) rather than delaying it for
+    # five more adb round trips. CONSEQUENCE, stated so it is never read
+    # as signal: the run-level `PID|`/`IRQ|` deltas this produces include
+    # the low_bat_check stop AND its restore. The PER-FRAME `EV|` counters
+    # — which are what actually attributes a stall — are unaffected: they
+    # come from the app's own rusage inside the paced window.
+    if [ "$ATTRIB" = 2 ]; then
+      # stop through the sampler's DESIGNED channel and verify it exited
+      # (a killed sampler leaves a truncated capture, which the
+      # correlator's SAMPLER DONE terminator check would reject anyway —
+      # this makes the failure say what actually happened).
+      dsh "touch $DTMP/sk.stop"
+      skgone=0
+      for _ in $(seq 1 8); do
+        if dsh "test ! -f $DTMP/sk.pid" >/dev/null 2>&1; then skgone=1; break; fi
+        sleep 1
+      done
+      [ "$skgone" = 1 ] \
+        || fail "leg $id: sk_sampler did not exit within 8 s of its stop file"
+      pullv "$DTMP/$id.sampler.txt" "$BUILD/$id.dev-sampler.txt"
+      dsh "rm -f $DTMP/$id.sampler.txt $DTMP/sk.stop"
+    fi
+    attrib_snapshot "$id" post
+    pullv "$DTMP/$id.attrib.txt" "$BUILD/$id.dev-attrib.txt"
+    dsh "rm -f $DTMP/$id.attrib.txt"
+  fi
   dsh "rm -f $DTMP/$id.out.txt $DTMP/$id.tim.txt $DTMP/$id.trace.txt"
 
   # JUDGMENTS RUN IN A SUBSHELL AND ARE COLLECT-AND-CONTINUE.
@@ -1841,6 +1982,47 @@ EOF
     printf 'FAIL rc=%s\n' "$lrc" > "$BUILD/$id.legresult"
     FAILED_LEGS="$FAILED_LEGS $id"
     echo "   -> leg $id JUDGMENT FAILED (rc $lrc) — continuing to gather the remaining legs' evidence"
+  fi
+  # ATTRIBUTION runs AFTER the leg verdict and INDEPENDENTLY of it: the
+  # leg we most need attributed is a FAILING one, so this must not sit
+  # behind the pass branch. The correlator is the UNCHANGED pinned judge
+  # (port/sim/device/skip-attrib/correlate-skips.js) fed UNMODIFIED
+  # artifacts — the fullgame `--timing` grammar and gfx_app's are the
+  # same four columns, verified against a real artifact before this arm
+  # was written, so no adapter exists anywhere in this path.
+  if [ "$ATTRIB" != 0 ]; then
+    rm -f "$BUILD/$id.corr.txt"
+    corr_args=(--timing "$BUILD/$id.dev-tim.txt"
+      --attrib "$BUILD/$id.dev-attrib.txt"
+      --frames "$frames" --budget-ns "$BUDGET_NS"
+      --pre-dir "$BUILD/$id.attrib-pre"
+      --post-dir "$BUILD/$id.attrib-post")
+    [ "$ATTRIB" = 2 ] && corr_args+=(--sampler "$BUILD/$id.dev-sampler.txt")
+    if node "$SKA/correlate-skips.js" "${corr_args[@]}" > "$BUILD/$id.corr.txt"; then
+      made "$BUILD/$id.corr.txt"
+      # the correlator's own completeness seal (the iter-62 judge pattern)
+      tail -c 18 "$BUILD/$id.corr.txt" | cmp -s - <(printf 'attrib_complete=1\n') \
+        || fail "leg $id: correlator output does not end with the exact bytes 'attrib_complete=1<LF>' — corrupt evidence"
+      # printed with plain commands, never inside another command's
+      # argument list (review-109-4 L6: no decision-bearing — or
+      # evidence-bearing — pipeline hidden inside a larger success).
+      echo "   -> attrib $id (correlator summary + every EV row):"
+      grep -E '^(skips|over_budget_frames|late_start_frames|events|nivcsw_total|nvcsw_total|minflt_total|majflt_total|nivcsw_per_frame_median|minflt_per_frame_median|mono_raw_drift_ns)=' \
+        "$BUILD/$id.corr.txt" | sed 's/^/      /' || true
+      grep -E '^EV\|' "$BUILD/$id.corr.txt" | sed 's/^/      /' || true
+      if [ "$ATTRIB" = 2 ]; then
+        # uncovered events are a COVERAGE GAP, not an absence of signal
+        # (review-110-1 finding 3) — count them out loud.
+        # through grep_count (review-110-3 finding 4): the bare
+        # `|| nowin=0` form accepted grep's "no match" (rc 1) AND every
+        # real read failure (rc 2+) as "zero uncovered events" — a
+        # coverage gap and an unreadable file read identically.
+        nowin="$(grep_count '^EV\|.*\|win=none$' "$BUILD/$id.corr.txt" "leg $id correlator output")"
+        echo "      events_without_sampler_window=$nowin"
+      fi
+    else
+      fail "leg $id: correlate-skips.js failed on the pulled attribution evidence"
+    fi
   fi
   # renew at the END of the leg too, so a long host-side judgment can never
   # age the lease into the deadman's firing window (review-109-5 H2)
@@ -2298,4 +2480,4 @@ cmp -s "$T/ledger.sorted" "$T/ledger.want" \
 echo "== [8/9] hygiene =="
 rig_no_commit_guard "$BUILD" "$DEVB" "$TABLES" "$AUDIO_OUT"
 
-echo "FULLGAME CONFORMS ${pass}/${N_GOLDENS_PIN} (render+sfx+music live; live-ai=${LIVE_AI_CSV} p99=${P99_WORST_MS}ms skips=0 underruns=0 starves=0 presentfails=0 teeth=$teeth)"
+echo "FULLGAME CONFORMS ${pass}/${N_GOLDENS_PIN} (render+sfx+music live; live-ai=${LIVE_AI_CSV} p99=${P99_WORST_MS}ms skips=0 underruns=0 starves=0 presentfails=0 teeth=$teeth)${ATTRIB_TAG}"
