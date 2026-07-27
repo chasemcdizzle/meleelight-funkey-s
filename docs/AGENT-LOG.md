@@ -19619,3 +19619,40 @@ correct; zero sentinel occurrences; device clean.
 **Next (closure continuation):** delta r5+ serial → GO/cap →
 tables-schema arc → flip rows → final anchors/self-checks →
 M4 GATE live legs.
+
+---
+
+iter 119 · 2026-07-27 · phase M4 · **M4 EXIT GATE PASSES AUTHORITATIVE — TWICE (writer + driver cold)** · delta arc CLOSED (grok+Opus dual-GO per §11 after codex proven-failed ×3) · tables-schema CLOSED (dual-GO) · manifest 87/87 review-closed
+
+**Writer:** claude-opus-5. Delta arc r5-r7: codex VOID ×3 (cached
+final message ×2 — ROOT CAUSE REFINED: CODEX_RC fires while the
+process is STILL ALIVE (ps-verified), pollers read a growing log into
+which the companion replays prior transcripts; discipline now =
+sentinel AND process-gone — plus one safety-filter abort), genuine
+codex NO-GOs r5b/r6b each fixed with before/after teeth; final class
+fix ended the new-High-per-round streak: the tear detector refuses
+ANY line ending with a non-empty prefix of the verdict (subsumes
+every corrupt shape; threshold 1, measured 0-char worst suffix across
+all 18 archived genuine logs). §11 fallback: **grok GO + Opus 5 GO**
+(.loop/review-119-delta-7-{grok2,opus}.log). tables-schema.js:
+**Opus GO + grok GO** (CHAR_NAMES vacuity closed 4 ways, 7 mutations
+caught). Two reviewer Lows + one Medium REGISTERED not applied
+(editing after dual-GO = unreviewed gate bytes; both reviewers
+verified fail-closed, no live false pass).
+**THE GATE:** writer run .loop/m4-gate-run2.log rc 0; **DRIVER COLD
+.loop/driver-cold-m4-gate.log rc 0** — `M4 GATE OK` exactly once,
+unprefixed, both runs. Legs (cold): [1] `FULLGAME CONFORMS 12/12
+(render+sfx+music live; live-ai=g07,g08,m01,m02 p99=16.340ms skips=0
+underruns=0 starves=0 presentfails=0 teeth=21)` + `DEVICE TARGET
+CONFORMS (goldens=2 … p99=14.627ms … teeth=6)`; [2] flows 7/7
+(FOH p99 14.133 ms); [3] `OPK FOH LAUNCH OK` via real gmenu2x, boot
+marker bin-sha == stamp. Manifest 87/87 rows review-closed, anchor
+green. Every frozen surface untouched (judge byte-identical
+4b68fba5). M3 refuses honestly on the deferred audio row (post-gate).
+**MILESTONE PASS: M4 (mechanical)** — PLAN §4/M4 EXIT satisfied on
+hardware, twice, independently. Post-gate window (owner-ruled +
+registered): jitter increment (SCHED_FIFO + spin retune), M3 audio
+attribution→green, present-column judge arm, grok-M ||-true sites,
+Opus-L1 duplicate check, plib deferral Low.
+
+LOOP STOP: m4-complete — awaiting Chase acceptance playthrough

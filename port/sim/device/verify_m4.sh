@@ -109,7 +109,7 @@ mkdir -p "$VDIR"
 # line (a full-byte self-row plus this anchor would be a two-unknown
 # hash fixed point with no solution); the excluded line is protected
 # by the anchor equality itself — a wrong literal IS a refusal.
-MANIFEST_SHA256=ab4dd41a3d942fb642c171ba8ce208a69f0adaa841583c8b487b3944aee1f82b
+MANIFEST_SHA256=88d33afd9559dae82a6a6d1149fb10390923772d8dfe28792fef7015b28e3537
 
 # AUTHORITATIVE — computed ONCE, then readonly (the sentinel lockout).
 # Any dev/canned-evidence signal zeroes it; the `M4 GATE OK` sentinel
@@ -467,7 +467,8 @@ run_engine() { # <name> <script> [KEY=VAL ...] — runs (or replays) an
 # `M4 GATE OK`. A leg log picks up NULs from relayed device bytes, so
 # this needs no adversary. -a forces the text path unconditionally.
 expect_grammar() {
-  local logf="$1" full="$2" resem="$3" label="$4" c r line
+  local logf="$1" full="$2" resem="$3" label="$4" c r line crc rrc nseen nfile nrc
+  local ctl_raw ctl_clean ctl_rc tk
   # TORN FINAL WRITE (review-117-delta-1 [M1]): `grep` treats EOF as a
   # line terminator, so a log whose LAST line was written without its
   # newline — the exact byte signature of a truncated/killed write —
@@ -501,8 +502,28 @@ expect_grammar() {
   # bytes other than LF/TAB (0 CR, 0 ESC, 0 other), so this cannot
   # false-reject. Non-ASCII/UTF-8 is deliberately still allowed — the
   # engines' own messages contain em-dashes.
-  if [ "$(LC_ALL=C tr -d '\000-\010\013-\037\177' < "$logf" | wc -c | tr -d ' ')" \
-     != "$(wc -c < "$logf" | tr -d ' ')" ]; then
+  # STATUS-HONEST (review-119-delta-5b [H2]): the previous shape compared two
+  # command substitutions INSIDE `[ ]`, where errexit does not apply and both
+  # exit statuses are discarded. A failed read left BOTH sides empty, so
+  # `"" != ""` was false and the guard PASSED VACUOUSLY on unreadable
+  # evidence. Measured into checked variables instead; an evidence log that
+  # cannot be measured is CORRUPT, never assumed clean.
+  ctl_raw="$(wc -c < "$logf")" && ctl_rc=0 || ctl_rc=$?
+  if [ "$ctl_rc" != 0 ]; then
+    echo "M4 GATE FAIL: could not size $logf ($label) — an evidence read that fails mid-judgement is CORRUPT evidence, never ignorable" >&2
+    exit 1
+  fi
+  ctl_clean="$(LC_ALL=C tr -d '\000-\010\013-\037\177' < "$logf" | wc -c)" && ctl_rc=0 || ctl_rc=$?
+  if [ "$ctl_rc" != 0 ]; then
+    echo "M4 GATE FAIL: could not scan $logf for control bytes ($label) — an evidence read that fails mid-judgement is CORRUPT evidence, never ignorable" >&2
+    exit 1
+  fi
+  ctl_raw="${ctl_raw// /}"; ctl_clean="${ctl_clean// /}"
+  if [ -z "$ctl_raw" ] || [ -z "$ctl_clean" ]; then
+    echo "M4 GATE FAIL: byte-class measurement of $logf produced no count ($label) — CORRUPT evidence" >&2
+    exit 1
+  fi
+  if [ "$ctl_raw" != "$ctl_clean" ]; then
     echo "M4 GATE FAIL: $logf contains control byte(s) other than TAB/LF — a text evidence log with embedded control bytes is CORRUPT ($label); such bytes defeat line-oriented verdict parsing (junk-prefixed torn writes)" >&2
     exit 1
   fi
@@ -515,14 +536,30 @@ expect_grammar() {
     echo "M4 GATE FAIL: $logf does not end with a newline — its final line is a torn/truncated write, which is CORRUPT $label evidence, never ignorable" >&2
     exit 1
   fi
-  c="$(grep -acE "$full" "$logf")" || true
+  # GREP STATUS IS EVIDENCE (review-118-delta-4-codex [H], residual): the
+  # old `|| true` laundered EVERY nonzero status, not just the benign one.
+  # grep's contract is rc 0 = matched, rc 1 = no match (legitimate here —
+  # the count check below reports it), rc >= 2 = a REAL error (unreadable
+  # file, I/O failure, regex blowup) whose stdout is meaningless. Under
+  # `|| true` an rc-2 read left `c` holding whatever partial bytes grep had
+  # flushed, and judgement continued on it. rc >= 2 is now refused outright:
+  # an evidence read that fails mid-judgement is CORRUPT evidence.
+  c="$(grep -acE "$full" "$logf")" && crc=0 || crc=$?
+  if [ "$crc" -gt 1 ]; then
+    echo "M4 GATE FAIL: grep exited $crc while counting $label verdict lines in $logf — an evidence read that fails mid-judgement is CORRUPT evidence, never ignorable (rc 0/1 = matched/not-matched; 2+ = real error)" >&2
+    exit 1
+  fi
   if [ "$c" != 1 ]; then
     echo "M4 GATE FAIL: expected exactly 1 $label verdict line matching the pinned grammar in $logf, found $c" >&2
     echo "  grammar: $full" >&2
     echo "  — an engine that exits 0 without its exact verdict is CORRUPT evidence" >&2
     exit 1
   fi
-  r="$(grep -acE "$resem" "$logf")" || true
+  r="$(grep -acE "$resem" "$logf")" && rrc=0 || rrc=$?
+  if [ "$rrc" -gt 1 ]; then
+    echo "M4 GATE FAIL: grep exited $rrc while counting $label verdict-resemblance lines in $logf — an evidence read that fails mid-judgement is CORRUPT evidence, never ignorable" >&2
+    exit 1
+  fi
   if [ "$r" != 1 ]; then
     echo "M4 GATE FAIL: $logf carries $r lines matching the verdict-resemblance grammar '$resem' but exactly 1 full-grammar verdict — a verdict-RESEMBLING malformed line (truncated/torn duplicate) is CORRUPTION, never ignorable" >&2
     exit 1
@@ -550,22 +587,63 @@ expect_grammar() {
   # retained because it catches the complementary case this cannot —
   # corruption that diverges MID-line rather than truncating.
   local l
+  nseen=0
   while IFS= read -r l || [ -n "$l" ]; do
+    nseen=$((nseen + 1))
     # strip a trailing CR before comparing (review-108-3 H-c): a torn
     # CRLF write leaves `F\r`, which is not a proper prefix of the
     # verdict as raw bytes and would slip through both guards.
     l="${l%$'\r'}"
     [ -n "$l" ] || continue
     [ "$l" != "$line" ] || continue
-    case "$line" in
-      "$l"*)
-        echo "M4 GATE FAIL: $logf carries a line that is a PROPER PREFIX of the $label verdict — a truncated/torn duplicate write is CORRUPTION, never ignorable" >&2
+    # CLASS-CLOSING TEAR DETECTOR (review-119-delta-6b [H1]). The previous
+    # form asked "is this line a proper PREFIX of the verdict", which only
+    # sees tears that begin at byte zero; round 6 defeated it with
+    # `trailing OPK FOH LAUNC` — junk prepended AND truncated below the
+    # resemblance stem, so the unanchored stem count missed it too. Rounds
+    # 3/4/5/6 each found a new shape because the question was wrong, not
+    # because a byte was missing from a list.
+    # The right question is what a TRUNCATED WRITE actually looks like: the
+    # line ENDS at the truncation point, so it ends with some prefix of the
+    # verdict, whatever junk precedes it and whatever length it reached.
+    # So: refuse if any other line ENDS WITH a non-empty prefix of the
+    # verdict. This subsumes every shape found so far — plain proper prefix,
+    # control-prefixed, printable-prefixed, whitespace-prefixed, and
+    # short-truncated — at every tear length, with no byte enumeration.
+    # MEASURED, zero false-reject and full margin: over all 18 archived
+    # genuine engine leg logs, the longest suffix of any non-verdict line
+    # that is a prefix of that log's verdict is ZERO characters. The
+    # threshold is therefore 1 (maximum strictness) rather than a tuned
+    # constant, and a false reject costs a re-run while a false pass ships
+    # a lie — so this fails CLOSED on purpose.
+    tk=${#l}
+    [ "$tk" -le "${#line}" ] || tk=${#line}
+    while [ "$tk" -ge 1 ]; do
+      if [ "${l:${#l}-tk}" = "${line:0:tk}" ]; then
+        echo "M4 GATE FAIL: $logf carries a line ENDING WITH a $tk-character prefix of the $label verdict — a truncated/torn duplicate write is CORRUPTION, never ignorable" >&2
         echo "  torn:   '$l'" >&2
         echo "  verdict:'$line'" >&2
         exit 1
-        ;;
-    esac
+      fi
+      tk=$((tk - 1))
+    done
   done < "$logf"
+  # TERMINAL STATUS OF THE TEAR LOOP (review-118-delta-4-codex [H],
+  # residual): a `read` that fails PART-WAY through the file ends the loop
+  # silently and successfully, so every line after the failure point — a
+  # torn duplicate among them — is never examined at all. The loop had no
+  # completion evidence of any kind. It does now: the number of iterations
+  # must equal the number of lines in the file. (The final-LF guard above
+  # already makes `grep -c ""` and the read loop agree on what a line is.)
+  nfile="$(grep -ac "" "$logf")" && nrc=0 || nrc=$?
+  if [ "$nrc" -gt 1 ]; then
+    echo "M4 GATE FAIL: grep exited $nrc while re-counting the lines of $logf — an evidence read that fails mid-judgement is CORRUPT evidence, never ignorable" >&2
+    exit 1
+  fi
+  if [ "$nseen" != "$nfile" ]; then
+    echo "M4 GATE FAIL: the torn-duplicate scan of $logf consumed $nseen lines but the file has $nfile — the read terminated early, so part of the $label evidence was NEVER judged; an incomplete evidence read is CORRUPT evidence, never ignorable" >&2
+    exit 1
+  fi
   printf '%s\n' "$line"
 }
 
@@ -679,10 +757,26 @@ OPKFOH_RE='^OPK FOH LAUNCH OK \(frontend-launched via gmenu2x into the FOH, boot
 # stayed 1/1 and the corrupt log PASSED. Each discriminator below is the
 # shortest stable line-start of its producer's verdict, with no trailing
 # space, so every truncation of that verdict is caught.
-FULLGAME_RESEM='^FULLGAME CONFORMS'
-TARGET_RESEM='^DEVICE TARGET CONFORMS'
-FOH_RESEM='^DEVICE FOH OK'
-OPKFOH_RESEM='^OPK FOH LAUNCH'
+# UNANCHORED ON PURPOSE (review-119-delta-5b [H1] — the class fix that ends
+# the junk-prefix whack-a-mole). These stems were `^`-anchored for four
+# rounds, and each round found a new byte that could be PREPENDED to a torn
+# verdict to escape every guard at once: the anchored stem no longer matched
+# (the line stopped starting with the stem) and the proper-prefix loop only
+# looks at prefixes beginning at byte zero. Round 3 found NUL, round 4 found
+# CR/SOH/ESC, round 5 found `X`, SPACE and TAB — i.e. the refusable-byte set
+# was never the invariant. The invariant is: in a genuine evidence log the
+# verdict stem occurs on EXACTLY ONE line, ANYWHERE in that line. Counting
+# unanchored makes every junk prefix — printable, control, whitespace, any
+# byte at all — push the count to 2 and be refused, without enumerating
+# anything. MEASURED, zero false-reject: over all 18 archived genuine engine
+# leg logs (FULLGAME 3, TARGET 4, FOH 9, OPKFOH 2) the anchored and
+# unanchored counts are both exactly 1 — identical, no exceptions. (Codex
+# review transcripts do diverge, because they quote verdicts in prose; those
+# are not evidence logs and are never fed to this function.)
+FULLGAME_RESEM='FULLGAME CONFORMS'
+TARGET_RESEM='DEVICE TARGET CONFORMS'
+FOH_RESEM='DEVICE FOH OK'
+OPKFOH_RESEM='OPK FOH LAUNCH'
 
 echo "== [E1/4] FULL-GAME TRACE SUITE (engine: check-device-fullgame.sh) =="
 run_engine fullgame port/sim/device/check-device-fullgame.sh

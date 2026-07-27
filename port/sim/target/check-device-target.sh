@@ -69,6 +69,33 @@
 # mismatch, grammar violation, perf/audio shortfall, or missing
 # artifact -> nonzero.
 set -euo pipefail
+# ascii_text_ok <file> — returns 0 iff the file contains NO control byte other
+# than TAB and LF. STATUS-HONEST BY CONSTRUCTION (review-119-delta-5b [H2]):
+# every measurement is status-checked and an unmeasurable file returns 1
+# (CORRUPT), because the previous shape — `[ "$(a|b)" = "$(c)" ]` — discarded
+# both pipelines' statuses inside `[ ]`, where errexit does not apply, so a
+# failed read made BOTH sides empty and the guard passed VACUOUSLY.
+# WHY THIS CLASS AT ALL (review-118-delta-4 [M], review-119-delta-5b [H2]):
+# bash `read -r` STOPS AT NUL, so `full_p99_ns=1<NUL>20000000` is parsed as
+# `full_p99_ns=1` and a 120 ms p99 is judged as 1 ns; likewise a witness row
+# `... eq=1<NUL> eq=0 CORRUPT` is parsed as a passing row. Line counts and
+# trailing-newline checks agree with the lie, so no line-level guard can see
+# it. Every reader of a text evidence file must refuse the class up front.
+# MEASURED SAFE: the FBWIT1 and judge-render-timing.js emitters are pure
+# ASCII by construction (fixed format strings, decimal numbers, fixed-table
+# names), so a genuine file can never contain one.
+ascii_text_ok() {
+  local f="$1" nraw nclean rc
+  nraw="$(wc -c < "$f")" && rc=0 || rc=$?
+  [ "$rc" = 0 ] || return 1
+  nclean="$(LC_ALL=C tr -d '\000-\010\013-\037\177' < "$f" | wc -c)" && rc=0 || rc=$?
+  [ "$rc" = 0 ] || return 1
+  nraw="${nraw// /}"; nclean="${nclean// /}"
+  [ -n "$nraw" ] && [ -n "$nclean" ] || return 1
+  [ "$nraw" = "$nclean" ] || return 1
+  return 0
+}
+
 cd "$(dirname "$0")/../../.."
 
 GFX=port/gfx
@@ -549,13 +576,41 @@ judge_both_streams() { # <ctx> <sim-out> <gid> <gname> <frames> <outdir>
 }
 
 # strict summary parsers (the check-device-foh grammars — same producer)
+# --- app-log reader hygiene, LIFTED VERBATIM from check-device-fullgame.sh
+# (review-119-delta-6b [H2]): these two helpers already existed there and
+# were already reviewed; target/foh simply never used them, so their app-log
+# parsers asserted no newline termination and laundered grep status with
+# `|| true`. Reusing the reviewed bytes rather than writing a third variant.
+nl_terminated() {
+  local f="$1" label="$2" n
+  [ -f "$f" ] || grammar_die "$label: $f missing"
+  [ -s "$f" ] || grammar_die "$label: $f is empty"
+  # STANDALONE, STATUS-CHECKED capture (review-109-3 M2): inside
+  # `[ "$(...)" = 1 ]` the surrounding `[` reports success on the TEXT
+  # alone, so a producer that printed `1` and then failed still certified
+  # newline termination. The assignment is its own command, so `set -e`
+  # (or the explicit guard) sees the pipeline's real status.
+  n="$(tail -c 1 "$f" | wc -l | tr -d ' ')" \
+    || grammar_die "$label: could not read the final byte of $f"
+  [ "$n" = 1 ] \
+    || grammar_die "$label: $f does not end in a newline (torn write)"
+}
+
+grep_count() {
+  local re="$1" f="$2" label="$3" n rc=0
+  n="$(grep -cE -e "$re" "$f")" || rc=$?
+  [ "$rc" -le 1 ] || grammar_die "$label: grep failed reading $f (rc $rc)"
+  printf '%s\n' "$n"
+}
+
 parse_foh_summary() { # <log> <launched 0|1> <want-shots>
   local log="$1" launched="$2" wshots="$3" re cnt line pcnt
   unset foh_skips foh_fails foh_transitions
-  pcnt="$(grep -cF 'foh_dev foh:' "$log")" || true
+  nl_terminated "$log" "foh summary"
+  pcnt="$(grep_count 'foh_dev foh:' "$log" "foh summary")"
   [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt 'foh_dev foh:' needles (want 1)"
   re="^foh_dev foh: ${NUM12} ticks, ${NUM12} transitions, ${wshots} shots, ${NUM12} render skips, ${NUM12} failed presents, launched=${launched}\$"
-  cnt="$(grep -cE "$re" "$log")" || true
+  cnt="$(grep_count "$re" "$log" "foh summary")"
   [ "$cnt" = 1 ] || grammar_die "app log $log has $cnt foh-summary grammar matches (want 1)"
   line="$(grep -E "$re" "$log")"
   if [[ "$line" =~ ^foh_dev\ foh:\ (0|[1-9][0-9]{0,11})\ ticks,\ (0|[1-9][0-9]{0,11})\ transitions,\ ${wshots}\ shots,\ (0|[1-9][0-9]{0,11})\ render\ skips,\ (0|[1-9][0-9]{0,11})\ failed\ presents,\ launched=${launched}$ ]]; then
@@ -569,10 +624,11 @@ parse_foh_summary() { # <log> <launched 0|1> <want-shots>
 parse_match_summary() { # <log> <frames> <pace>
   local log="$1" fr="$2" pace="$3" re cnt line pcnt
   unset match_skips match_fails match_wall_ms
-  pcnt="$(grep -cF 'foh_dev match:' "$log")" || true
+  nl_terminated "$log" "match summary"
+  pcnt="$(grep_count 'foh_dev match:' "$log" "match summary")"
   [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt 'foh_dev match:' needles (want 1)"
   re="^foh_dev match: ${fr} frames, ${NUM12} render skips, ${NUM12} failed presents, wall ${NUM12} ms, pace=${pace} budget=${BUDGET_NS} ns\$"
-  cnt="$(grep -cE "$re" "$log")" || true
+  cnt="$(grep_count "$re" "$log" "match summary")"
   [ "$cnt" = 1 ] || grammar_die "app log $log has $cnt match-summary grammar matches (want 1)"
   line="$(grep -E "$re" "$log")"
   if [[ "$line" =~ ^foh_dev\ match:\ ${fr}\ frames,\ (0|[1-9][0-9]{0,11})\ render\ skips,\ (0|[1-9][0-9]{0,11})\ failed\ presents,\ wall\ (0|[1-9][0-9]{0,11})\ ms,\ pace=${pace}\ budget=${BUDGET_NS}\ ns$ ]]; then
@@ -586,10 +642,11 @@ parse_match_summary() { # <log> <frames> <pace>
 parse_audio_summary() { # <log>
   local log="$1" re cnt line pcnt
   unset au_underruns au_badlen au_starts au_stops
-  pcnt="$(grep -cF 'foh_dev audio:' "$log")" || true
+  nl_terminated "$log" "audio summary"
+  pcnt="$(grep_count 'foh_dev audio:' "$log" "audio summary")"
   [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt 'foh_dev audio:' needles (want 1)"
   re="^foh_dev audio: ${NUM12} callbacks, ${NUM12} underruns, ${NUM12} badlen, ${NUM12} voice starts, ${NUM12} voice stops, ${NUM12} steals, rate=(0|44100) samples=(0|512) channels=(0|2)\$"
-  cnt="$(grep -cE "$re" "$log")" || true
+  cnt="$(grep_count "$re" "$log" "audio summary")"
   [ "$cnt" = 1 ] || grammar_die "app log $log has $cnt audio-summary grammar matches (want 1)"
   line="$(grep -E "$re" "$log")"
   if [[ "$line" =~ ^foh_dev\ audio:\ (0|[1-9][0-9]{0,11})\ callbacks,\ (0|[1-9][0-9]{0,11})\ underruns,\ (0|[1-9][0-9]{0,11})\ badlen,\ (0|[1-9][0-9]{0,11})\ voice\ starts,\ (0|[1-9][0-9]{0,11})\ voice\ stops,\ (0|[1-9][0-9]{0,11})\ steals, ]]; then
@@ -604,10 +661,11 @@ parse_audio_summary() { # <log>
 parse_music_summary() { # <log>
   local log="$1" re cnt line pcnt
   unset mu_out mu_starves mu_refills
-  pcnt="$(grep -cF 'foh_dev music:' "$log")" || true
+  nl_terminated "$log" "music summary"
+  pcnt="$(grep_count 'foh_dev music:' "$log" "music summary")"
   [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt 'foh_dev music:' needles (want 1)"
   re="^foh_dev music: ${NUM19} out frames, ${NUM12} starves, ${NUM12} refills, ring=32768 chunk=16384\$"
-  cnt="$(grep -cE "$re" "$log")" || true
+  cnt="$(grep_count "$re" "$log" "music summary")"
   [ "$cnt" = 1 ] || grammar_die "app log $log has $cnt music-summary grammar matches (want 1)"
   line="$(grep -E "$re" "$log")"
   if [[ "$line" =~ ^foh_dev\ music:\ (0|[1-9][0-9]{0,18})\ out\ frames,\ (0|[1-9][0-9]{0,11})\ starves,\ (0|[1-9][0-9]{0,11})\ refills, ]]; then
@@ -678,6 +736,21 @@ judge_fbwit() { # <file> <flow-id> <shot-names...>  (the iter-97 strict reader)
   shift 2
   local want=("$@") nw=${#want[@]} i=0 ln sawEnd=0
   made "$wf"
+  # NO CONTROL BYTES except TAB/LF (review-118-delta-4-codex [M]): bash's
+  # `read -r` STOPS AT NUL, so the bytes `W 12 shot-name yoff=0 eq=1\0 eq=0
+  # CORRUPT` are parsed as just `W 12 shot-name yoff=0 eq=1` — the row
+  # grammar passes, the line count agrees, the trailing-LF check agrees,
+  # and the engine emits a clean verdict over a witness whose real bytes
+  # say the pixels did NOT match. Every guard in this reader reasons about
+  # LINES, and a control byte breaks line reasoning in ways no line-level
+  # guard can see (this is the same class verify_m4.sh refuses in its
+  # evidence logs; closed HERE too, because the gate never sees the
+  # witness file itself). A control byte in an ASCII witness is corruption
+  # by definition, so the class is refused once, before anything parses.
+  # MEASURED SAFE: the FBWIT1 grammar is pure ASCII (header literals plus
+  # `[a-z0-9-]` shot names), so a genuine witness can never contain one.
+  ascii_text_ok "$wf" \
+    || grammar_die "fbwit $fid: witness contains control byte(s) other than TAB/LF, or could not be measured — CORRUPT witness (control bytes defeat line-oriented row parsing)"
   [ -z "$(tail -c 1 "$wf")" ] \
     || grammar_die "fbwit $fid: missing trailing newline (torn write)"
   local nlines
@@ -1056,6 +1129,8 @@ EOF
   node "$GFX/judge-render-timing.js" "$BUILD/$id.dev-tim.txt" "${FLOW_FRAMES[$k]}" \
     > "$BUILD/$id.timjudge.txt" || fail "leg $id: timing judgment failed"
   made "$BUILD/$id.timjudge.txt"
+  ascii_text_ok "$BUILD/$id.timjudge.txt" \
+    || fail "leg $id: timing judge output contains control byte(s) other than TAB/LF, or could not be measured — CORRUPT timing evidence (a NUL truncates a value mid-read, so a failing p99 parses as a passing one)"
   if ! tail -c 17 "$BUILD/$id.timjudge.txt" | cmp -s - <(printf 'judge_complete=1\n'); then
     fail "leg $id: timing judge output does not END with 'judge_complete=1'"
   fi

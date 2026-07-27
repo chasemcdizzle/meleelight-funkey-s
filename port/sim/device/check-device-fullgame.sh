@@ -70,6 +70,33 @@
 #      skip-attribution instrument, see the block below; DEFAULT OFF and
 #      structurally NON-AUTHORITATIVE when on).
 set -euo pipefail
+# ascii_text_ok <file> — returns 0 iff the file contains NO control byte other
+# than TAB and LF. STATUS-HONEST BY CONSTRUCTION (review-119-delta-5b [H2]):
+# every measurement is status-checked and an unmeasurable file returns 1
+# (CORRUPT), because the previous shape — `[ "$(a|b)" = "$(c)" ]` — discarded
+# both pipelines' statuses inside `[ ]`, where errexit does not apply, so a
+# failed read made BOTH sides empty and the guard passed VACUOUSLY.
+# WHY THIS CLASS AT ALL (review-118-delta-4 [M], review-119-delta-5b [H2]):
+# bash `read -r` STOPS AT NUL, so `full_p99_ns=1<NUL>20000000` is parsed as
+# `full_p99_ns=1` and a 120 ms p99 is judged as 1 ns; likewise a witness row
+# `... eq=1<NUL> eq=0 CORRUPT` is parsed as a passing row. Line counts and
+# trailing-newline checks agree with the lie, so no line-level guard can see
+# it. Every reader of a text evidence file must refuse the class up front.
+# MEASURED SAFE: the FBWIT1 and judge-render-timing.js emitters are pure
+# ASCII by construction (fixed format strings, decimal numbers, fixed-table
+# names), so a genuine file can never contain one.
+ascii_text_ok() {
+  local f="$1" nraw nclean rc
+  nraw="$(wc -c < "$f")" && rc=0 || rc=$?
+  [ "$rc" = 0 ] || return 1
+  nclean="$(LC_ALL=C tr -d '\000-\010\013-\037\177' < "$f" | wc -c)" && rc=0 || rc=$?
+  [ "$rc" = 0 ] || return 1
+  nraw="${nraw// /}"; nclean="${nclean// /}"
+  [ -n "$nraw" ] && [ -n "$nclean" ] || return 1
+  [ "$nraw" = "$nclean" ] || return 1
+  return 0
+}
+
 cd "$(dirname "$0")/../../.."
 
 FOH=port/foh
@@ -1158,6 +1185,8 @@ judge_timing() { # <label> <timing> <frames>
   node "$GFX/judge-render-timing.js" "$tf" "$fr" > "$jf" \
     || fail "$label: timing judgment failed"
   made "$jf"
+  ascii_text_ok "$jf" \
+    || fail "$label: timing judge output contains control byte(s) other than TAB/LF, or could not be measured — CORRUPT timing evidence (a NUL truncates a value mid-read, so a failing p99 parses as a passing one)"
   if ! tail -c 17 "$jf" | cmp -s - <(printf 'judge_complete=1\n'); then
     fail "$label: timing judge output does not END with 'judge_complete=1'"
   fi

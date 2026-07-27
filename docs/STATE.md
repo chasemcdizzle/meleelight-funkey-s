@@ -30,7 +30,25 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-27, iter 118 — universe 87 producers all pinned; 3 more gate false-greens fixed (NUL/binary-grep/tear); delta arc OPEN at r4 (codex Highs genuine, serial-codex rule adopted); M3 audio wired but perf-red 17.444 ms → deferred post-gate; queue = delta r5 → tables-schema arc → flips → GATE)
+## Live right now (updated: 2026-07-27, iter 119 — **M4 GATE OK — AUTHORITATIVE, TWICE (writer + driver cold)**; LOOP STOP: m4-complete — awaiting Chase acceptance playthrough)
+
+- **THE M4 EXIT GATE PASSED** (commit pending this entry): 87/87
+  producers review-closed; delta arc + tables-schema both CLOSED on
+  grok+Opus dual-GO (§11 fallback; codex proven-failed ×3, root cause
+  refined: CODEX_RC fires pre-exit → sentinel-AND-process-gone
+  discipline). Writer run rc 0 + driver COLD rc 0: `M4 GATE OK`
+  exactly once each. Legs: FULLGAME CONFORMS 12/12 (p99 16.340 ms,
+  skips 0, underruns 0, starves 0) · targets 2/2 · flows 7/7 · OPK
+  frontend launch green. Evidence: .loop/m4-gate-run2.log,
+  .loop/driver-cold-m4-gate.log, verify-m4/leg-*.log.
+- **HUMAN GATE OPEN:** Chase acceptance playthrough closes the build
+  phase (LOOP §H sentinel is the AGENT-LOG last line).
+- **Post-gate queue (after ratification):** jitter increment
+  (SCHED_FIFO + spin retune, §rulings) · M3 audio attribution →
+  M3 GATE OK · present-column judge arm · grok-M/Opus-L1/plib-Low
+  hardening registrations.
+
+## [superseded by iter-119] (updated: 2026-07-27, iter 118 — universe 87 producers all pinned; 3 more gate false-greens fixed (NUL/binary-grep/tear); delta arc OPEN at r4 (codex Highs genuine, serial-codex rule adopted); M3 audio wired but perf-red 17.444 ms → deferred post-gate; queue = delta r5 → tables-schema arc → flips → GATE)
 
 - **Iter 118 DONE** (commit 2c027ec). All four iter-117 rulings
   executed; ruling-4's premise was false (engine needed full
