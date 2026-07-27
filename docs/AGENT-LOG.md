@@ -19704,3 +19704,8 @@ LAST per the 2026-07-26 ruling; M3-audio + judge-arm + hardening Lows
 ride the window). M4 mechanical gate stands (fe885bd evidence);
 FROZEN surfaces stay frozen — FOH/menu work re-runs the affected
 check arcs + re-pins per the established discipline.
+
+**iter-120 addendum (owner, 2026-07-27):** punch list extended A9-A12
+(portraits reuse; network-entry decision deferred post-A1; pause/quit
+via START = P0 with ssb64-funkey-s fk_menu.{c,h} as the owner-directed
+reference/copy source; MENU/HOME button wired to the overlay).

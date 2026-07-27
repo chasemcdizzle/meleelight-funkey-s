@@ -1972,3 +1972,25 @@ overruns):
 - A8 (P2) reuse audit report to owner.
 Sequence: punch list → owner re-play/ratification → post-gate window
 (jitter LAST per §rulings).
+- A9 (rides A1) portraits/pictures: REUSE upstream's own images for
+  character select + stage select (currently no pictures anywhere).
+  They live in the built dist/ and the M1 pipeline precedent covers
+  executed/derived assets (Nintendo-derived: gitignored build output,
+  PRIVATE USE ONLY, never committed — LICENSING hygiene). May be
+  subsumed by A1 fidelity work; decide per-screen.
+- A10 (decision AFTER A1; owner) battle-mode entries spectate/p2p/
+  server = upstream NETWORK features (deepstream) — dead on device.
+  Options to present post-A1: hide vs keep-visibly-inert vs greyed.
+  No work now.
+- A11 (P0) NO pause/quit in match — START does nothing. Implement
+  in-match pause menu; REFERENCE/COPY the owner's ssb64-funkey-s
+  implementation: ~/code_projects/ssb64-funkey-s/port/gfx/fk_menu.c +
+  port/include/fk_menu.h (MIT, owner's own code: modal menu drawn
+  over the paused frame, blocks the loop, returns continue|quit).
+  NOTE: pausing must NOT perturb replay/checksum domains — pause is a
+  live-play-only surface (gate/evidence runs never pause); the frozen
+  streams' pause machine exists upstream (bank `s` truthiness reads)
+  — study before wiring START so live semantics stay faithful.
+- A12 (P1) HOME/MENU button (keysym q) does nothing — wire to the
+  same fk_menu-style overlay (quit-to-frontend at minimum), matching
+  the ssb64 port's behavior.
