@@ -30,7 +30,26 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-26, iter 116 — m4 manifest assembled (33 rows, truthful) + universe extended; gate CORRECTLY REFUSES [0b] on 6 unclosed rows; arcs proved a jrt FALSE-GREEN (p99 13.9→7.1 rc 0) + fail-open plib plane; 5 driver rulings queued for iter 117)
+## Live right now (updated: 2026-07-27, iter 117 — jrt arc GO (judge frozen 4b68fba5, 5 false greens rejected, 100/100 zero-cost) + plib CLOSED (3 GOs); delta arc r1 NO-GO (23 unpinned frozen artifacts + status-token + 2 gate-grammar Ms); M3 leg-1 re-validated 8/8 on hardware, leg-2 red = known audio-TU gap; 4 rulings issued)
+
+- **Iter 117 DONE (3 writer sessions).** Judge hardened through 9
+  rounds + regression/falsification (10 code lines total, both
+  driver-sanctioned); manifests M3 23/23 + M4 44/44 green with 5
+  honest arc-in-flight rows; writer refused to flip rows over a NO-GO
+  (correct). Present-column residual registered with the class named
+  and both proposed remedies measured wrong. Full trail AGENT-LOG
+  iter-117 + .loop/review-117-triage.md.
+- **Rulings for the closure session:** pin the 23 frozen artifacts
+  individually (provenance cites; consolidated provenance arc for any
+  uncovered); add `grandfathered-m1` token + relabel; strengthen-only
+  gate-grammar fixes authorized (final-LF, shots=13, 5/5, no leading
+  zeros); audio-TU repair + m3 re-pin to full green.
+- **Queue:** closure session (rulings → delta r2 → flip rows → final
+  anchors → M4 GATE live legs) → LOOP STOP: m4-complete → Chase
+  playthrough → FINAL jitter increment (§rulings) + present-column
+  judge arm + plib deferral Low.
+
+## [superseded by iter-117] (updated: 2026-07-26, iter 116 — m4 manifest assembled (33 rows, truthful) + universe extended; gate CORRECTLY REFUSES [0b] on 6 unclosed rows; arcs proved a jrt FALSE-GREEN (p99 13.9→7.1 rc 0) + fail-open plib plane; 5 driver rulings queued for iter 117)
 
 - **Iter 116 DONE.** Manifest + universe 25→33 (8 omitted
   decision-bearing producers); statuses honest; driver cold refusal

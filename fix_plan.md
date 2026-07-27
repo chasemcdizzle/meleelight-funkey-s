@@ -1945,3 +1945,13 @@ overruns):
   update through its own arc + one device run + m3-manifest re-pin;
   schedule with (or after) the post-gate jitter increment. Evidence:
   .loop/m4-t115-reg-audio.log.
+
+- registered residual (iter 117): judge-corruption-grammar exactness —
+  the PRESENT column has no single-valued/alias arm (reproduced:
+  present:=1000 on all rendered rows → rc 0, p99 13.903→12.808; on a
+  shifted s02, a FAILING 16.704→15.161). Both round-9b remedies
+  measured WRONG (0.0003 fraction leaks ≤3333-row artifacts;
+  distinctPresent>=2 false-rejects genuine valve-tim.txt 1/1). Fix =
+  row-count-gated single-valued test (POP_MIN_ROWS design), own arc +
+  teeth + 5-site re-pin fan-out; schedule post-gate with the jitter
+  increment. Evidence: .loop/review-117-triage.md §9.

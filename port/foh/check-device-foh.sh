@@ -139,7 +139,7 @@ f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
 2267f8b796b1881d6ef749b5931a5fb08ae9f914b7a67a0e2608d4cada99616e port/foh/judge-foh-trace.js
-e034539d69e1f55338e87f89c8c6573410c40a5bcd8dbc91066751f60c9c9fd4 port/gfx/judge-render-timing.js
+4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js
 2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e port/foh/keymap-frozen.txt"
 N_PINS_WANT=7
 # Audio artifact pins: sndpack + battlefield.pcm are TWIN-PINNED to the
@@ -314,7 +314,7 @@ c="$(grep -cF "2267f8b796b1881d6ef749b5931a5fb08ae9f914b7a67a0e2608d4cada99616e 
 [ "$c" = 1 ] || fail "twin pin — check-foh-flows.sh does not carry the same judge-foh-trace.js sha exactly once (count $c; paired change rule)"
 rig_pin_assert_once "$GFX/check-device-music.sh" SNDPACK_SHA256 "$SNDPACK_SHA256" || exit 1
 rig_pin_assert_once "$GFX/check-device-music.sh" MUSIC_BF_SHA256 "$MUSIC_BF_SHA256" || exit 1
-echo "   producer pins OK (6) + twin pins (judge sha, sndpack, battlefield.pcm)"
+echo "   producer pins OK ($N_PINS_WANT) + twin pins (judge sha, sndpack, battlefield.pcm)"
 
 # g01 params (strict extraction — check-device-render class)
 unset name seed p1 p2 stage frames trace

@@ -719,17 +719,23 @@ echo "   matrix OK: $N_GOLDENS_PIN goldens, live-AI subset {$PINNED_LIVE_AI_SET}
 # NOTE for the gate layer: these same paths must also join
 # port/sim/device/m4-freeze-manifest.txt (increment 3, driver-owned) —
 # this in-script pin is the engine's own guarantee, not the gate's.
+# json-dup-key-scan.js joined this table in iter 117 (review-117-plib-4o
+# [L]): both plib verifiers now `require` it to scan raw JSON bytes before
+# parsing, so it became decision-bearing on THIS path — a weakened scanner
+# would re-open the last-wins duplicate-key hole it exists to close.
 PRODUCER_PINS="$(cat <<'EOF'
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js
 0bc801ea46b06a63e79377aae164636a5e9f649ee45835748e5f2387b9e04281 oracle/harness/streamlib.js
 b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wrap-run.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
-e034539d69e1f55338e87f89c8c6573410c40a5bcd8dbc91066751f60c9c9fd4 port/gfx/judge-render-timing.js
+4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js
 bf29fa7cba83708cfff093195f48ad20a8eda2ad794fe25b270f211b08876eee port/gfx/pack-snd.js
-df557422ee30b0db18aff710916c383a4b453bb66a8e309bfc22f14de9a8db6c pipeline/lib/verify-artifacts.js
-95c9fbc4a49d74434ce6f66b32e66a8c75e902cb94c08756667a6bb0457af1cf pipeline/lib/check-expected.js
-679a1763e232fe7f2e8ab8994c865e145efad9b3e96ed274f24e8dcff3083e74 pipeline/lib/manifest.js
-c7d85936db09c6b59dbc25b016567195e433c43228114e01830e14c269550191 pipeline/expected.json
+826e16854bdbfb6061052d1a0dbdcc4675f282754b04fb5262f34b5b30283a45 pipeline/lib/verify-artifacts.js
+ec578b42d0490448d61bef3f21c958105a48d99c4cc1a5d403a742e7627b8e18 pipeline/lib/check-expected.js
+46606bed441ae2923c7c67355f12b789f5854543295c5e718fa679bf23a0d533 pipeline/lib/manifest.js
+31e5946a0269095f7895b01aaf7f78e9c3496aae75c638b8cd1b4a678c4bd29b pipeline/expected.json
+624956898890e749170a4768af0f8ef86e05ce4dd75046d084701747c9d9121f port/goldens-m4/json-dup-key-scan.js
+a574fec40685b6770e85d55ee1aaabd35553caab00c9aeadec0ea234b4173590 pipeline/lib/tables-anim-xref.js
 EOF
 )"
 nprod=0
@@ -743,7 +749,7 @@ while IFS=' ' read -r want p extra; do
     || fail "producer $p is NOT the reviewed bytes (got $got, pinned $want) — a decision-bearing tool changed; re-pin only after its review reaches GO"
   nprod=$((nprod + 1))
 done <<< "$PRODUCER_PINS"
-[ "$nprod" = 10 ] || fail "producer pin table has $nprod rows (want 10)"
+[ "$nprod" = 12 ] || fail "producer pin table has $nprod rows (want 12)"
 echo "   $nprod decision-bearing producers sha256-verified against their reviewed pins"
 
 # per-golden params, parsed by a no-eval strict line parser
@@ -820,6 +826,18 @@ node pipeline/run.js --only animations,tables,stages,targets --out "$TABLES" >/d
 for g in $GEN_TABLES $ANIM_BINS manifest.json; do made "$TABLES/$g"; done
 node pipeline/lib/verify-artifacts.js "$TABLES" >/dev/null \
   || fail "generated tables/animations fail their own pipeline manifest re-hash"
+# EXTERNAL identity, not just self-consistency (review-117-plib-1 [H]1):
+# the re-hash above proves only that the run agrees with the manifest the
+# same run wrote, so a deterministic generator regression that preserves
+# every count passed it. check-expected.js compares each stage's
+# path+sha256 aggregate to the pin frozen in pipeline/expected.json and
+# asserts the coverage contract for exactly the four stages this partial
+# run produces; tables-anim-xref.js asserts the 72 framesData/ECB<->ANIM1
+# reconciliation pins, which no other arm on this path ever read.
+node pipeline/lib/check-expected.js "$TABLES" "${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}" animations,tables,stages,targets >/dev/null \
+  || fail "generated tables/animations fail the frozen pipeline coverage contract (pipeline/expected.json)"
+node pipeline/lib/tables-anim-xref.js "$TABLES" >/dev/null \
+  || fail "generated tables fail the frozen framesData/ECB <-> ANIM1 reconciliation pins"
 rm -f "$BUILD/simdata.txt"
 node "$CAL/dump-sim-data.js" --out "$BUILD/simdata.txt" >/dev/null
 made "$BUILD/simdata.txt"
@@ -2332,11 +2350,25 @@ EOF
   fi
   # ATTRIBUTION runs AFTER the leg verdict and INDEPENDENTLY of it: the
   # leg we most need attributed is a FAILING one, so this must not sit
-  # behind the pass branch. The correlator is the UNCHANGED pinned judge
-  # (port/sim/device/skip-attrib/correlate-skips.js) fed UNMODIFIED
-  # artifacts — the fullgame `--timing` grammar and gfx_app's are the
-  # same four columns, verified against a real artifact before this arm
-  # was written, so no adapter exists anywhere in this path.
+  # behind the pass branch. The correlator
+  # (port/sim/device/skip-attrib/correlate-skips.js) runs UNMODIFIED over
+  # UNMODIFIED artifacts — the fullgame `--timing` grammar and gfx_app's
+  # are the same four columns, verified against a real artifact before
+  # this arm was written, so no adapter exists anywhere in this path.
+  # It is NOT a pinned gate producer, and this comment used to claim it
+  # was (corrected iter 117, driver ruling 4). Measured facts behind the
+  # correction: it is absent from verify_m4.sh's REQUIRED_PRODUCERS and
+  # from port/sim/device/m4-freeze-manifest.txt; no VERDICT: GO has ever
+  # covered its current bytes (its arcs — .loop/review-{73,76,78}-1.log,
+  # diff packets review-{73-74,76,78}-diff.txt — all closed NO-GO, and
+  # its current sha256 appears only in the NO-GO .loop/review-78-1.log);
+  # and this whole arm is unreachable under the gate, which never sets
+  # MLFK_FULLGAME_ATTRIB, so ATTRIB is 0 (line 153) and no gate verdict
+  # can depend on it. An ARMED run is structurally non-authoritative
+  # anyway (the ` [ATTRIB-ARMED]` suffix cannot match FULLGAME_RE).
+  # Pinning it would therefore add an unapproved row that refuses the
+  # gate for evidence the gate does not use — the honest fix is this
+  # comment, not a manufactured status.
   if [ "$ATTRIB" != 0 ]; then
     rm -f "$BUILD/$id.corr.txt"
     corr_args=(--timing "$BUILD/$id.dev-tim.txt"
@@ -2662,7 +2694,18 @@ tooth_expect T3 1 \
 echo "    T3 OK: an injected render skip dies in the production timing judge (rc 1, pinned diagnostic)"
 
 # T4 — an over-budget frame in a timing COPY -> the p99 assert dies.
-awk -v n="$P99_FULL_LIMIT_NS" '{ if (NR % 2 == 0) print (n+5000000)" 1000 1000 0"; else print }' \
+# render/present are DELIBERATELY UNEQUAL (1000 vs 2000). They used to be
+# both 1000, which made this fixture the ONLY artifact in the corpus with a
+# nonzero render==present rate (50%) — and that lone synthetic data point was
+# then used to argue the render/present pair could not carry a fractional
+# alias bound. It could: the bound is the MAX_COL_ALIAS_FRAC entry for the
+# render/present pair in judge-render-timing.js's alias arm (cited by NAME,
+# not by line — the previous :335 citation had already rotted), and it
+# costs zero judgments (.loop/review-117-jrt-regression-r7.log [R8],
+# review-117-jrt-7 [M1] / -7o [M3]). Unequal values keep this tooth exercising
+# the arm it is aimed at — the p99 assert — instead of colliding with an
+# unrelated one.
+awk -v n="$P99_FULL_LIMIT_NS" '{ if (NR % 2 == 0) print (n+5000000)" 1000 2000 0"; else print }' \
   "$BUILD/g01.dev-tim.txt" > "$T/t4.tim.txt"
 cmp -s "$T/t4.tim.txt" "$BUILD/g01.dev-tim.txt" && fail "T4: inflation was a no-op (dead tooth)"
 tooth_expect T4 1 \

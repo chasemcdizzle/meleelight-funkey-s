@@ -1,6 +1,6 @@
 {
-  "_comment": "Pinned coverage contract for the M1 data pipeline (fix_plan §M1 conventions). Values are MEASURED-THEN-FROZEN from executed-JS runs against the upstream pin — never hand-invented (AGENT-LOG iters 9-12 record the measurements). check-expected.js asserts a run manifest against this file and re-derives the 754-file reconciliation live from the src tree. tables.animXref pins the measured framesData/ECB vs ANIM1 reconciliation (lists are exact and sorted; tables-anim-xref.js re-derives them live from the run artifacts). audio pins the ffmpeg version + exact conversion argv + an aggregate sha256 over path+sha256 of every audio artifact: a different ffmpeg build may resample differently, so it must FAIL here loudly, never drift — re-freeze deliberately per FORMATS.md §5.",
-  "upstreamPinPrefix": "27af171",
+  "_comment": "Pinned coverage contract for the M1 data pipeline (fix_plan \u00a7M1 conventions). Values are MEASURED-THEN-FROZEN from executed-JS runs against the upstream pin \u2014 never hand-invented (AGENT-LOG iters 9-12 record the measurements). check-expected.js asserts a run manifest against this file and re-derives the 754-file reconciliation live from the src tree. tables.animXref pins the measured framesData/ECB vs ANIM1 reconciliation (lists are exact and sorted; tables-anim-xref.js re-derives them live from the run artifacts). audio pins the ffmpeg version + exact conversion argv + an aggregate sha256 over path+sha256 of every audio artifact: a different ffmpeg build may resample differently, so it must FAIL here loudly, never drift \u2014 re-freeze deliberately per FORMATS.md \u00a75.",
+  "upstreamPinPrefix": "27af171d983184c7100be87d4c5ba30c0e35a5ae",
   "audio": {
     "artifactsSha256": "e776a885df21edd45b32964bd99c9a33548e3cfddda55ee8999dd8367733810d",
     "artifactsTotal": 214,
@@ -25,8 +25,50 @@
     },
     "tool": {
       "ffmpeg": "8.1.1",
-      "musicArgs": ["-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-fflags", "+bitexact", "-i", "<in.ogg>", "-map_metadata", "-1", "-f", "s16le", "-acodec", "pcm_s16le", "-ar", "22050", "-ac", "2", "<out.pcm>"],
-      "sfxArgs": ["-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-fflags", "+bitexact", "-i", "<in.wav>", "-map_metadata", "-1", "-f", "s16le", "-acodec", "pcm_s16le", "-ar", "22050", "-ac", "1", "<out.pcm>"]
+      "musicArgs": [
+        "-hide_banner",
+        "-nostdin",
+        "-loglevel",
+        "error",
+        "-y",
+        "-fflags",
+        "+bitexact",
+        "-i",
+        "<in.ogg>",
+        "-map_metadata",
+        "-1",
+        "-f",
+        "s16le",
+        "-acodec",
+        "pcm_s16le",
+        "-ar",
+        "22050",
+        "-ac",
+        "2",
+        "<out.pcm>"
+      ],
+      "sfxArgs": [
+        "-hide_banner",
+        "-nostdin",
+        "-loglevel",
+        "error",
+        "-y",
+        "-fflags",
+        "+bitexact",
+        "-i",
+        "<in.wav>",
+        "-map_metadata",
+        "-1",
+        "-f",
+        "s16le",
+        "-acodec",
+        "pcm_s16le",
+        "-ar",
+        "22050",
+        "-ac",
+        "1",
+        "<out.pcm>"
+      ]
     }
   },
   "animations": {
@@ -66,7 +108,8 @@
       "falco/THROWNDOCDOWN",
       "falco/THROWNDOCFORWARD",
       "falco/THROWNDOCUP"
-    ]
+    ],
+    "artifactsSha256": "28c8462383b558980ce4064826c2b6078600ac9a93a0414c6a492f1fd0459ef9"
   },
   "tables": {
     "coverage": {
@@ -216,7 +259,8 @@
         "falcon/TECHWALLJUMP",
         "fox/TECHWALLJUMP"
       ]
-    }
+    },
+    "artifactsSha256": "a18aacad56e9c456c6d4f44c7dfc8311ae22dcf490116da232a32a8aaad09ec1"
   },
   "stages": {
     "coverage": {
@@ -307,9 +351,9 @@
         "wallLs": 11,
         "wallRs": 11
       }
-    }
-  }
-,
+    },
+    "artifactsSha256": "31390c74081e09f4875a4d476270a6adfe6075c7b857f425f87c092a2fda03ba"
+  },
   "targets": {
     "coverage": {
       "boxes": 85,
@@ -436,6 +480,7 @@
         "wallLs": 20,
         "wallRs": 20
       }
-    }
+    },
+    "artifactsSha256": "f086d122af041dc01db3a1f754ecf0ce5d342b2fe605a8f3232154bbd9b2ca7c"
   }
 }

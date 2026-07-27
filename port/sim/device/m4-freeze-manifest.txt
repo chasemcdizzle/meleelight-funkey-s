@@ -18,7 +18,14 @@
 #                      run REFUSES before leg 1.
 #
 # The producer set is EXACTLY verify_m4.sh's REQUIRED_PRODUCERS literal
-# (33 paths, same order). verify_m4.sh HARD-REFUSES to run any leg when
+# (44 paths). What is asserted is SET equality, not row order: the gate
+# compares the two path sets sorted and space-normalized, which implies
+# count AND identity without constraining the order rows appear in
+# (pipeline/lib/tables-anim-xref.js, added iter-117, sits at
+# verify_m4.sh:157 but last in this file — legal, and asserted as such).
+# Corrected per .loop/review-117-delta-1.log [L]; the header previously
+# said "43 paths, same order" and both halves were false.
+# verify_m4.sh HARD-REFUSES to run any leg when
 # a producer's current bytes mismatch its pin, when a row is missing or
 # duplicated, or when an extra row appears ("hashes prove identity, not
 # approval" — a producer change invalidates prior gate evidence).
@@ -64,8 +71,12 @@
 # two-unknown fixed point with no solution; the excluded line is
 # protected by the anchor equality itself.
 #
-# UNCLOSED ROWS — six producers are unresolved (five `arc-pending`
-# plus verify_m4.sh itself, `arc-in-flight`), which makes verify_m4.sh
+# UNCLOSED ROWS — five producers are unresolved: the judge
+# (port/gfx/judge-render-timing.js, `arc-pending`) plus FOUR
+# `arc-in-flight` — the three evidence engines check-device-fullgame.sh,
+# check-device-target.sh and check-device-foh.sh (iter-117 jrt
+# producer-pin fan-out changed their bytes) and verify_m4.sh itself.
+# (Count corrected per .loop/review-117-jrt-7.log [L3].) This makes verify_m4.sh
 # [0b] HARD-REFUSE in AUTHORITATIVE mode. verify_m4.sh is unresolved
 # because THIS iteration's driver-sanctioned universe extension changed
 # its bytes and its delta arc has not reached GO
@@ -186,22 +197,102 @@
 # their content — every log naming them ends NO-GO, and the GO logs that
 # mention them do so only as pin rows or as call sites inside another
 # file's diff. See the UNCLOSED ROWS block.
+#
+# --- UNIVERSE EXTENSION #2 (iter 117, driver ruling 3, strengthen-only).
+# The FROZEN COMPARISON BASIS of leg [1] was unpinned. Leg [1] judges every
+# M4 golden's device stream against port/goldens-m4/*.sha256.json using the
+# UNCHANGED oracle verify-stream.js — but nothing in the gate pinned those
+# frozen files or the two manifests that select and parameterise them, so
+# the standard against which conformance is measured could drift while the
+# gate reported conformance. (oracle/goldens/ needs no such row: HARD RULE
+# 3 makes it read-only to every task after M0, and the gate's own engines
+# re-derive nothing from it.) Ten rows added: both manifests + all eight
+# frozen streams (the four match/scenario streams, the two target streams,
+# and the two .target.sha256.json target-plane streams). The .trace.json
+# files are NOT separate rows and do not need to be: each frozen stream
+# pins its trace's sha256 and verify-stream.js asserts it, so a swapped
+# trace fails inside an already-pinned file.
+# Status basis, verified row by row rather than assumed:
+#   - m01/m02/s01/s02 + manifest.json — the M4-golden RECORDING machinery
+#     (record-m4.sh, freeze-stream-m4.js, check-quality.js) closed its arc
+#     at .loop/review-86-1.log, LAST anchored verdict GO, and that log names
+#     m01/m02/s01/s02 and record-m4.sh (x64) / freeze-stream-m4.js (x32).
+#     m01, m02 and s01 are additionally BYTE-BOUND: each one's CURRENT
+#     sha256 appears verbatim inside an earlier round of that same arc
+#     (.loop/review-81-1.log for m01/m02, .loop/review-82-1.log and
+#     .loop/review-84-1.log for s01), so the reviewed bytes and the pinned
+#     bytes are provably the same bytes. s02 and manifest.json are bound by
+#     the arc naming them plus NO commit touching them since (56415ab).
+#   - t01/t02 (both stream and target-plane stream) + manifest-target.json —
+#     the TARGET rig arc closed at .loop/review-98-1.log, LAST anchored
+#     verdict GO, over commit a3fc74d; that round's own scope names
+#     manifest-target.json (x24), t02 (x20) and .target.sha256 (x25), and
+#     its dup-key scanner was run over every port/goldens-m4/*.json. No
+#     commit has touched these files since 927294e.
+# What is NOT claimed: these are RECORDED EVIDENCE, and the claim is that
+# reviewed machinery produced them and that the reviewed bytes are the
+# pinned bytes — not that a reviewer independently re-derived a checksum
+# stream by hand. Re-recording is the mechanical check (record-m4.sh must
+# print `unchanged (byte-identical re-freeze)`); a DIFFERING overwrite
+# needs --refreeze and a spec version bump.
+#
+# --- RULING 4 (iter 117): the false "pinned judge" comment, and why the
+# three skip-attrib diagnostics did NOT become rows.
+# check-device-fullgame.sh's attribution arm called correlate-skips.js
+# "the UNCHANGED pinned judge". It was not pinned. The driver's ruling was
+# to correct the comment AND pin correlate-skips.js / validate-ev.js /
+# sk_sampler.c "with statuses from their genuine arc history — verify".
+# VERIFIED, and the premise does not hold:
+#   - NO VERDICT: GO has ever covered any of the three. Their arcs are
+#     .loop/review-{73,76,78}-1.log with diff packets
+#     .loop/review-{73-74,76,78}-diff.txt — every one closed NO-GO. The
+#     only log carrying correlate-skips.js's current sha256 is the NO-GO
+#     .loop/review-78-1.log; sk_sampler.c's and validate-ev.js's current
+#     shas appear in no log at all. The later GO logs that MENTION them
+#     (110-5, 111-3, 114-5, 106-4, 89-1) had other files in scope.
+#   - validate-ev.js is not reachable from the gate at all: its sole
+#     caller repo-wide is port/sim/device/check-skip-attrib.sh, which is
+#     not a gate engine.
+#   - correlate-skips.js is reachable only through the ARMED arm, and the
+#     gate never arms it: check-device-fullgame.sh:153 reads
+#     ATTRIB="${MLFK_FULLGAME_ATTRIB:-0}" and verify_m4.sh sets no such
+#     variable, so ATTRIB is 0 on every gate run. An armed run is
+#     structurally non-authoritative anyway (its ` [ATTRIB-ARMED]` suffix
+#     cannot match the anchored FULLGAME_RE).
+#   - sk_sampler.c is compiled by the shared arm build (riglib.sh:1725)
+#     but is never run by any gate leg and emits no verdict.
+# Pinning them would therefore have added unapproved rows that REFUSE the
+# gate over evidence no gate leg consumes — manufacturing a status to
+# avoid that is precisely the laundering round 1 raised as [H]2. The
+# honest half of the ruling was executed instead: the comment now states
+# what is true, and cites the measurements above. ESCALATED TO DRIVER as
+# an explicit deviation from ruling 4's second half, with the evidence.
 7b031055e2329269e4e207012202cd772a75b604bd37ab3df8de9db325e4a254 port/sim/device/adbsh.sh reviewed-go task-4-arc-CAPPED-CLOSED-driver-accepted-AGENT-LOG-2026-07-17+rounds-.loop/review-52-1.log-.loop/review-55-1.log
 0c9126aa1789ad575a76f4e725b231a64cd3d792397aefc9a47dc39801213752 port/sim/device/riglib.sh reviewed-go .loop/review-109-9.log-capped-driver-accepted-AGENT-LOG-iter-109+delta-GOs-.loop/review-110-5.log-.loop/review-113-7.log
 4034ad81601de4e25b85658095ebfd38de2cc813fad594164afb563d6deb81ad port/sim/device/percentiles.js reviewed-go .loop/review-45-1.log+r3-closure-.loop/review-47-1.log
-5520fe4f59ffa5098395420ca13fd4411bdcf2154bea1e4059b28e7c179b5bbf port/sim/device/check-device-fullgame.sh reviewed-go .loop/review-113-7.log-r7-GO-final-bytes+iter-109-arc-capped-driver-accepted-AGENT-LOG-iter-109+delta-GOs-.loop/review-110-5.log-.loop/review-111-4.log-.loop/review-112-5.log
-c9b088c48747362a337a2add299807f9671aed8992b68ea65f6d2ccd39449eff port/sim/target/check-device-target.sh reviewed-go .loop/review-101-1.log+r4-closure-.loop/review-105-1.log
+84a8b2ca249632b758083e998cc39bcf53101e2782113314797efb9f92fcf97e port/sim/device/check-device-fullgame.sh arc-in-flight iter-117-ruling-4-comment-correction-bytes-in-the-cumulative-delta-arc+prior-bytes-.loop/review-113-7.log-r7-GO-final-bytes+iter-109-arc-capped-driver-accepted-AGENT-LOG-iter-109+delta-GOs-.loop/review-110-5.log-.loop/review-111-4.log-.loop/review-112-5.log
+d0f8f031f576d8d2bf4fa106a18a42284a44e42be6205588d1dd38b952dd9235 port/sim/target/check-device-target.sh arc-in-flight iter-117-jrt-producer-pin-fanout-line-119-only-in-the-jrt-arc-per-.loop/review-117-jrt-6o.log-H1+prior-bytes-.loop/review-101-1.log+r4-closure-.loop/review-105-1.log
 415335239fcc04df97eba07298a1fa521602d5ea45b087aa8d7d40bd740c122a port/goldens-m4/verify-target-stream.js reviewed-go .loop/review-98-1.log
 2cf5c5a532207372b70c4cee57412c7ac65643ac4f4066c745d9eb7fe4aa0e9b port/goldens-m4/wrap-target.js reviewed-go .loop/review-98-1.log
 6b1b6b5be3700c51dfae8c0c4cb1f012e5b61239394ae4146c2e5e19cc4fcc47 port/goldens-m4/validate-target-manifest.js reviewed-go .loop/review-98-1.log
 624956898890e749170a4768af0f8ef86e05ce4dd75046d084701747c9d9121f port/goldens-m4/json-dup-key-scan.js reviewed-go .loop/review-98-1.log-full-review-of-commit-a3fc74d-current-bytes
-8597a1583cc10e51af23bc7ddff29d394588769835f111006d4cf271f93a70ca port/foh/check-device-foh.sh reviewed-go .loop/review-97-1.log+iter101-delta-in-.loop/review-101-1.log+r4-closure-.loop/review-105-1.log
+f10e00010c769642e550959f3e3ea329bb6c0ae32ca642c3a8a0e29a69135aac port/goldens-m4/manifest.json reviewed-go .loop/review-86-1.log-GO-closes-the-record-m4.sh+freeze-stream-m4.js-arc-that-registered-m01-m02-s01-s02+rounds-.loop/review-81-1.log-.loop/review-83-1.log-.loop/review-84-1.log
+b1fe39e64b8e76b8b7e361e0b3c42258f8140d0caad58e5a1df941f5c714f1ac port/goldens-m4/manifest-target.json reviewed-go .loop/review-98-1.log-GO-target-rig-arc-closure-names-manifest-target.json-x24+rounds-.loop/review-94-1.log-.loop/review-96-2.log
+a48c47b0bc682abbade75d38ec00832d4235f6f22dd7e5015eba516213688b6b port/goldens-m4/m01-falcon-marth-d1-ystory.sha256.json reviewed-go .loop/review-86-1.log-GO-arc-closure+BYTE-BOUND-current-sha-a48c47b0-appears-in-round-.loop/review-81-1.log
+041bc10edcb333480f7d8390aa161861f2b80e8839e35fc1bbc700c247f5cab1 port/goldens-m4/m02-falcon-fox-d9-dreamland.sha256.json reviewed-go .loop/review-86-1.log-GO-arc-closure+BYTE-BOUND-current-sha-041bc10e-appears-in-round-.loop/review-81-1.log
+4229cdebcbc18edb1f62812feb017fdfc24b87011b3af7159c674501cd5d9126 port/goldens-m4/s01-marth-fox-stops-battlefield.sha256.json reviewed-go .loop/review-86-1.log-GO-arc-closure+BYTE-BOUND-current-sha-4229cdeb-appears-in-rounds-.loop/review-82-1.log-.loop/review-84-1.log
+67bfaee2c5df277dc1c6434516eea2a85cfec393421870e5343e707ab15ab076 port/goldens-m4/s02-marth-fox-guardon-break-battlefield.sha256.json reviewed-go .loop/review-86-1.log-GO-arc-closure-names-s02-golden+rounds-.loop/review-83-1.log-.loop/review-84-1.log-NO-commit-since-56415ab
+5ae4a05d161d2d6d4826828cc0c8c6b32bbdf778f9e09457e1b7e1a1f949ca95 port/goldens-m4/t01-fox-lasers-tstage1.sha256.json reviewed-go .loop/review-98-1.log-GO-target-rig-arc-closure-scanned-every-goldens-m4-json+round-.loop/review-94-1.log-NO-commit-since-927294e
+677c81e677ece8dc2442ab340a7227bfb4ce44d416348d357327db76f4032daf port/goldens-m4/t01-fox-lasers-tstage1.target.sha256.json reviewed-go .loop/review-98-1.log-GO-target-rig-arc-closure-scanned-every-goldens-m4-json+round-.loop/review-94-1.log-NO-commit-since-927294e
+6e4116060b6e81fa57313c6fe08544201edfa23a7eb4d8b5f2e0362f3e906afb port/goldens-m4/t02-falcon-melee-tstage2.sha256.json reviewed-go .loop/review-98-1.log-GO-target-rig-arc-closure-scanned-every-goldens-m4-json+round-.loop/review-94-1.log-NO-commit-since-927294e
+d0718dd760ffa802326f2de42078bd8cc55de75440113fa0b7d34e676a757e30 port/goldens-m4/t02-falcon-melee-tstage2.target.sha256.json reviewed-go .loop/review-98-1.log-GO-target-rig-arc-closure-scanned-every-goldens-m4-json+round-.loop/review-94-1.log-NO-commit-since-927294e
+d2f742ba006d271fa807bc3bfd1113543218af07a928a48a049ee86a39f599ea port/foh/check-device-foh.sh arc-in-flight iter-117-jrt-producer-pin-fanout-line-142-only-in-the-jrt-arc-per-.loop/review-117-jrt-6o.log-H1+prior-bytes-.loop/review-97-1.log+iter101-delta-in-.loop/review-101-1.log+r4-closure-.loop/review-105-1.log
 2267f8b796b1881d6ef749b5931a5fb08ae9f914b7a67a0e2608d4cada99616e port/foh/judge-foh-trace.js reviewed-go .loop/review-101-1.log+r4-closure-.loop/review-105-1.log
 b2e814821a809a6cb5772c51587b1e49a87dab6438156f984e8ec07e59ab2141 port/foh/normalize-foh-trace.js reviewed-go .loop/review-99-1.log+r4-closure-.loop/review-105-1.log
 b0c6ac328d6b87f9ff0c58562c880336eccb98a3053a4fdaadfb71e59e810186 port/foh/flow-to-fkscript.js reviewed-go .loop/review-95-1.log+r3-closure-.loop/review-97-1.log
 2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e port/foh/keymap-frozen.txt reviewed-go .loop/review-95-1.log+r3-closure-.loop/review-97-1.log-BYTE-BOUND-current-sha-appears-in-both-logs
 de32dffbe43423bee43f67516007d4039abbd80237a626aec81e54fd7dc4ca68 port/gfx/judge-shot.js reviewed-go .loop/review-73-1.log+r4-closure-.loop/review-80-1.log
-e034539d69e1f55338e87f89c8c6573410c40a5bcd8dbc91066751f60c9c9fd4 port/gfx/judge-render-timing.js arc-pending NO-GO-ever-named-this-file-per-.loop/review-116-1.log-H2+iter-108-ledger-weakest-row+needs-PROCESS-3-Tier-A-plus-arc
+4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js reviewed-go iter-117-Tier-A-plus-arc-CLOSED-VERDICT-GO-.loop/review-117-jrt-9b.log+independent-second-.loop/review-117-jrt-8o.log+byte-identity-regression-100-of-100-.loop/review-117-jrt-regression-r7.log-R12
 8ceaf028fe5740a1c0bb384e2eae113996bdb5c3db5720f1337af068266b966f port/gfx/judge-audio-summary.js reviewed-go .loop/review-59-1.log+r3-.loop/review-61-1.log
 bf29fa7cba83708cfff093195f48ad20a8eda2ad794fe25b270f211b08876eee port/gfx/pack-snd.js reviewed-go .loop/review-57-1.log+r2r3-closure-.loop/review-61-1.log
 d43628d4a22e278ebffa8e3116709cff52933332a51a926fb28c3cfa4ad0dbc4 port/gfx/check-device-opk.sh reviewed-go .loop/review-115-3.log-r3-GO+r1-.loop/review-115-1.log+r2-.loop/review-115-2.log
@@ -214,8 +305,9 @@ b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wr
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js grandfathered-m2 M2-exit-gate-SIM-CONFORMS
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js oracle-frozen M0-task5-HARD-RULE-3
 0bc801ea46b06a63e79377aae164636a5e9f649ee45835748e5f2387b9e04281 oracle/harness/streamlib.js oracle-frozen M0-task5-HARD-RULE-3
-679a1763e232fe7f2e8ab8994c865e145efad9b3e96ed274f24e8dcff3083e74 pipeline/lib/manifest.js arc-pending no-GO-ever-reviewed-this-file-per-.loop/review-116-1.log-H1+Tier-A-plus-arc-.loop/review-116-plib-1.log
-df557422ee30b0db18aff710916c383a4b453bb66a8e309bfc22f14de9a8db6c pipeline/lib/verify-artifacts.js arc-pending no-GO-ever-reviewed-this-file-per-.loop/review-116-1.log-H1+Tier-A-plus-arc-.loop/review-116-plib-1.log
-95c9fbc4a49d74434ce6f66b32e66a8c75e902cb94c08756667a6bb0457af1cf pipeline/lib/check-expected.js arc-pending no-GO-ever-reviewed-this-file-per-.loop/review-116-1.log-H1+Tier-A-plus-arc-.loop/review-116-plib-1.log
-c7d85936db09c6b59dbc25b016567195e433c43228114e01830e14c269550191 pipeline/expected.json arc-pending no-GO-ever-reviewed-this-file-per-.loop/review-116-1.log-H1+Tier-A-plus-arc-.loop/review-116-plib-1.log
-b592e8c089bba9507a9b39f6a495668bf86add3f37e38e89d3f0c8647b7121f8 port/sim/device/verify_m4.sh arc-in-flight iter-116-universe-extension-bytes-UNREVIEWED-delta-arc-.loop/review-116-2o.log-NO-GO+codex-round-.loop/review-116-2-cached-DISCARDED.log-cmp-proven-byte-identical-to-.loop/review-116-plib-1.log+prior-bytes-only-.loop/review-108-4.log-r4-GO
+46606bed441ae2923c7c67355f12b789f5854543295c5e718fa679bf23a0d533 pipeline/lib/manifest.js reviewed-go .loop/review-117-plib-4o.log-GO-closure-round+.loop/review-117-plib-2o.log-GO+NO-GO-rounds-.loop/review-116-plib-1.log-.loop/review-116-plib-2-grok.log-.loop/review-117-plib-1.log+PROCESS-11-Opus-5-second-codex-aborted-x3-cyberfilter-grok-x3-no-verdict
+826e16854bdbfb6061052d1a0dbdcc4675f282754b04fb5262f34b5b30283a45 pipeline/lib/verify-artifacts.js reviewed-go .loop/review-117-plib-4o.log-GO-closure-round+.loop/review-117-plib-2o.log-GO+NO-GO-rounds-.loop/review-116-plib-1.log-.loop/review-116-plib-2-grok.log-.loop/review-117-plib-1.log+PROCESS-11-Opus-5-second-codex-aborted-x3-cyberfilter-grok-x3-no-verdict
+ec578b42d0490448d61bef3f21c958105a48d99c4cc1a5d403a742e7627b8e18 pipeline/lib/check-expected.js reviewed-go .loop/review-117-plib-4o.log-GO-closure-round+.loop/review-117-plib-2o.log-GO+NO-GO-rounds-.loop/review-116-plib-1.log-.loop/review-116-plib-2-grok.log-.loop/review-117-plib-1.log+PROCESS-11-Opus-5-second-codex-aborted-x3-cyberfilter-grok-x3-no-verdict
+31e5946a0269095f7895b01aaf7f78e9c3496aae75c638b8cd1b4a678c4bd29b pipeline/expected.json reviewed-go .loop/review-117-plib-4o.log-GO-closure-round+.loop/review-117-plib-2o.log-GO+NO-GO-rounds-.loop/review-116-plib-1.log-.loop/review-116-plib-2-grok.log-.loop/review-117-plib-1.log+PROCESS-11-Opus-5-second-codex-aborted-x3-cyberfilter-grok-x3-no-verdict
+a574fec40685b6770e85d55ee1aaabd35553caab00c9aeadec0ea234b4173590 pipeline/lib/tables-anim-xref.js grandfathered-m2 M1-era-checker-unchanged-since-iter10-21da425-proven-by-the-M1-EXIT-GATE-PIPELINE-OK+newly-pinned-per-.loop/review-117-jrt-8.log-H+STATUS-TOKEN-VOCABULARY-STRETCH-M1-NOT-M2-FLAGGED-FOR-DRIVER
+7d54e55ab3d0666ae2f46b4efa7e0b4aa0e158a9349276468dac9c67e48b73e6 port/sim/device/verify_m4.sh arc-in-flight iter-116-universe-extension-bytes-UNREVIEWED-delta-arc-.loop/review-116-2o.log-NO-GO+codex-round-.loop/review-116-2-cached-DISCARDED.log-cmp-proven-byte-identical-to-.loop/review-116-plib-1.log+prior-bytes-only-.loop/review-108-4.log-r4-GO

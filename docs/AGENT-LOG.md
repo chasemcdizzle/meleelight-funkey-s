@@ -19510,3 +19510,58 @@ M1 machinery cannot underwrite an M4 pass.
    ONE arc to GO → row flips reviewed-go with that cite.
 **Next (iter 117):** rulings 1-5 → all rows closed → manifest
 re-anchor → delta arc GO → **M4 GATE RUN (legs live)**.
+
+---
+
+iter 117 · 2026-07-27 · phase M4 · jrt arc CLOSED AT GO (judge frozen 4b68fba5, 100/100 zero-cost, 5 false greens now rejected) + plib arc CLOSED (3 GOs incl. grok) · delta arc r1 NO-GO (2H/2M honest) — gate stays refused · M3 leg-1 re-validated 8/8 ON HARDWARE; M3 leg 2 red on the known audio-TU gap · 4 driver rulings for the closure session
+
+**Writers:** three claude-opus-5 sessions (two session-limit deaths +
+one external kill mid-round-9; each successor ground-truthed from disk
+— §7 of .loop/review-117-triage.md records the verified handoffs).
+**jrt arc (rounds 1-9b):** codex GO at round 9b over bytes 4b68fba5
+("no uncapped Medium+ remains") — driver-ratified MAX_COL_ALIAS_FRAC +
+cap-authority MIN_DISTINCT_RENDER_FRAC are the ONLY 10 code lines
+across the whole r6→final chain (delta archive invertible, [R12]);
+100-artifact differential 100/100 identical rc+stdout; all five
+round-8 rc-0 false greens (7.9-9.3 ms vs truthful 13.9) now reject
+rc 3. Judge rows flipped reviewed-go in BOTH manifests; anchors
+re-set; self-checks green. REGISTERED RESIDUAL (class named:
+judge-corruption-grammar exactness — single-valued/aliased timed
+columns; present column uncovered): present-collapse false green
+reproduced (13.903→12.808 rc 0) but BOTH proposed remedies measured
+wrong (0.0003 fraction leaks ≤3333-row artifacts; distinctPresent>=2
+false-rejects the genuine valve-tim.txt) — needs a row-count-gated
+design + own arc; fix_plan gets the item.
+**plib arc:** CLOSED on codex-r1-genuine-NO-GO→fixes→grok GO (bare
+anchored verdict after the output-discipline prompt) + Opus GO ×2;
+PIPELINE OK on shipped bytes with attributed teeth.
+**Delta arc r1 (codex NO-GO, verified live by the writer):** [H1] 23
+unpinned evidence artifacts (3 frozen gfx planes existence-checked
+only at fullgame:973 + all 20 port/foh/flows/ .flow/.expect/
+.bstate.expect — the frozen references M4 leg 2 judges against);
+[H2] tables-anim-xref.js token `grandfathered-m2` on an M1-era file
+(reviewer CONFLICT: r9b called it [L] naming debt); [M1]
+expect_grammar accepts a torn final line (no LF check); [M2] FOH_RE/
+TARGET_RE accept impossible engine output (shots wildcard vs
+hardcoded 13; music N/5 vs required 5/5; leading zeros). Writer
+correctly REFUSED to flip engine rows over a NO-GO.
+**M3 GATE: leg 0/0b PASS (23/23 review-closed — a first), leg 1 PASS
+ON HARDWARE (`DEVICE CONFORMS 8/8 + SIM P99 OK` — fresh full M3
+re-validation), leg 2 FAIL** = the registered iter-115 audio-TU gap
+(check-device-audio.sh:712/726 missing gfx_bg/overlay/vfx.c — the
+same three modules whose data planes are [H1]'s unpinned trio).
+**DRIVER RULINGS (closure session):** (1) [H1]: pin all 23 as
+INDIVIDUAL rows (no new aggregate machinery); statuses from VERIFIED
+provenance cites (the FOH-flow and render arcs that froze them);
+any row without genuine coverage → one consolidated Tier A
+frozen-plane PROVENANCE arc over the set (data review: provenance +
+freeze integrity), then reviewed-go. (2) [H2]: dissolve the conflict
+by making the TOKEN truthful — add `grandfathered-m1` to [0b]'s
+accepted set and relabel the row; era-accurate vocabulary beats both
+laundering and false refusal. (3) verify_m4.sh gate-logic edits
+AUTHORIZED, strengthen-only + the token addition: expect_grammar
+final-LF assertion; FOH_RE shots=13 exact; TARGET_RE music=5/5 exact;
+no leading zeros anywhere. All ride delta arc r2. (4) audio-TU fix
+AUTHORIZED: the 3-file TU-list repair + its arc + one device audio
+run + m3 re-pin → verify_m3 to FULL GREEN. Then: delta r2 → flip
+rows → final anchors/self-checks → THE GATE.

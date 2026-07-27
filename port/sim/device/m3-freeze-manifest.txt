@@ -45,7 +45,7 @@ d52f42f6eb9156c7c3a7116fcc3a6f4c3b4c6c223d06b476ede8665eebafeff8 port/sim/device
 f4bff53ba987316d83d127b0a92d281263f66a19d1aca49dcd18969af63352de port/sim/device/check-device-conform.sh reviewed-go .loop/review-47-1.log
 4034ad81601de4e25b85658095ebfd38de2cc813fad594164afb563d6deb81ad port/sim/device/percentiles.js reviewed-go .loop/review-47-1.log
 70e118e0fc4aa8243e5ebbd3df3f8f74aeb3c956a25c4ab7d3209cc93b7e176a port/gfx/check-device-render.sh reviewed-go .loop/review-80-1.log
-e034539d69e1f55338e87f89c8c6573410c40a5bcd8dbc91066751f60c9c9fd4 port/gfx/judge-render-timing.js reviewed-go task4-capped-AGENT-LOG+iter62-class-completion-per-.loop/review-61-1.log-pattern
+4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js reviewed-go iter-117-Tier-A-plus-arc-CLOSED-VERDICT-GO-.loop/review-117-jrt-9b.log+independent-second-.loop/review-117-jrt-8o.log+byte-identity-regression-100-of-100-.loop/review-117-jrt-regression-r7.log-R12
 de32dffbe43423bee43f67516007d4039abbd80237a626aec81e54fd7dc4ca68 port/gfx/judge-shot.js reviewed-go .loop/review-73-1.log+r4-closure-.loop/review-80-1.log
 5526c99be30e558960c11ac6c22c27ed735b4f8b478d190203875c3272831dbe port/gfx/check-device-input.sh reviewed-go .loop/review-53-1.log
 12ba15434041dd14e8b787751854b907e7cadf50b3965f1c561fe2ca639ef354 port/gfx/judge-s1-coverage.js reviewed-go .loop/review-53-1.log

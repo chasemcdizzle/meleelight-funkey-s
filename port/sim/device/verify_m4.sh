@@ -108,7 +108,7 @@ mkdir -p "$VDIR"
 # line (a full-byte self-row plus this anchor would be a two-unknown
 # hash fixed point with no solution); the excluded line is protected
 # by the anchor equality itself — a wrong literal IS a refusal.
-MANIFEST_SHA256=4da832d047e76df05cb4c231deea9f55d3a887ba8f3d795dfebdfbca22548eca
+MANIFEST_SHA256=0a7b1a74687e4dece62c0e38644454fe3fdb669c1ff296078adebde031301dbb
 
 # AUTHORITATIVE — computed ONCE, then readonly (the sentinel lockout).
 # Any dev/canned-evidence signal zeroes it; the `M4 GATE OK` sentinel
@@ -154,6 +154,17 @@ port/goldens-m4/verify-target-stream.js
 port/goldens-m4/wrap-target.js
 port/goldens-m4/validate-target-manifest.js
 port/goldens-m4/json-dup-key-scan.js
+pipeline/lib/tables-anim-xref.js
+port/goldens-m4/manifest.json
+port/goldens-m4/manifest-target.json
+port/goldens-m4/m01-falcon-marth-d1-ystory.sha256.json
+port/goldens-m4/m02-falcon-fox-d9-dreamland.sha256.json
+port/goldens-m4/s01-marth-fox-stops-battlefield.sha256.json
+port/goldens-m4/s02-marth-fox-guardon-break-battlefield.sha256.json
+port/goldens-m4/t01-fox-lasers-tstage1.sha256.json
+port/goldens-m4/t01-fox-lasers-tstage1.target.sha256.json
+port/goldens-m4/t02-falcon-melee-tstage2.sha256.json
+port/goldens-m4/t02-falcon-melee-tstage2.target.sha256.json
 port/foh/check-device-foh.sh
 port/foh/judge-foh-trace.js
 port/foh/normalize-foh-trace.js
