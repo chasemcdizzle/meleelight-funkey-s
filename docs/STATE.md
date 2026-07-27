@@ -5,6 +5,13 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## §rulings (standing owner directives, day-tagged)
 
+- **2026-07-26 — Post-gate jitter removal (FINAL scheduled work):**
+  after the M4 gate + Chase's acceptance playthrough: SCHED_FIFO RT
+  priority for the frame loop (audio ranked above, music reader CFS)
+  + the SPIN_NS 3→2 ms retune with enough passes for statistical
+  power. Goal = remove the pacing-contention class entirely. Details
+  + manifest re-pin obligations: fix_plan residual item addendum.
+
 - **2026-07-25 — Model assignment (PROCESS.md §11):** driver = Claude
   Fable 5 (runs the loop, writes no shipping code); ALL coding work
   dispatches to Claude Opus 5 writers (`claude --model claude-opus-5`).
@@ -15,7 +22,24 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-26, iter 114 — hybrid sleep landed: **runs 9+10 BOTH zero-skip on final bytes, vanilla FULLGAME CONFORMS 12/12 rc 0**; contention residual REGISTERED (not closed); gate evidence accepted by driver ruling)
+## Live right now (updated: 2026-07-26, iter 115 — **GATE LEG 3 GREEN: OPK FOH LAUNCH OK via real gmenu2x, driver-cold rc 0**; pace regressions foh/target/render green; m3 manifest 23/23 truthful, zero arc-pending; audio-check stale-TU registered)
+
+- **Iter 115 DONE.** MLFK_OPK_FOH arm (arc GO codex r3, 8 findings
+  fixed; .desktop trailing-line defect fixed; three measured
+  corrections: live gmenu2x conf anchoring, 2-column grid nav,
+  busybox-ls terminal mode). Driver COLD on final bytes:
+  `OPK FOH LAUNCH OK …` rc 0. Regressions: FOH OK / TARGET CONFORMS
+  / RENDER OK (audio = pre-existing stale TU, gate-inert,
+  registered). Driver manifest rulings executed: riglib re-pin
+  (iter-109 capped-arc cite), 3 status flips per iter-108 ledger —
+  cold self-check 23/23 + ANCHOR GREEN, verify_m3 runnable again.
+  Full trail AGENT-LOG iter-115.
+- **Queue:** iter-116 (LAST pre-gate) m4-freeze-manifest assembly +
+  verify_m4 anchor → **M4 GATE RUN** → LOOP STOP: m4-complete →
+  Chase acceptance playthrough → FINAL jitter increment (SCHED_FIFO
+  + spin retune, §rulings) + audio-check TU repair.
+
+## [superseded by iter-115] (updated: 2026-07-26, iter 114 — hybrid sleep landed: **runs 9+10 BOTH zero-skip on final bytes, vanilla FULLGAME CONFORMS 12/12 rc 0**; contention residual REGISTERED (not closed); gate evidence accepted by driver ruling)
 
 - **Iter 114 DONE.** pace.h shared hybrid sleep (SPIN_NS=3 ms,
   measured two-component late-start split; net −14 lines); arc GO
@@ -29,7 +53,9 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   = standing gate risk. Full trail AGENT-LOG iter-114.
 - **Queue:** iter-115 OPK FOH mode + pace.h caller regressions
   (foh/target/render/audio on final bytes) → m4-freeze-manifest
-  (+ m3 re-cites) → M4 GATE → provision → LOOP STOP: m4-complete.
+  (+ m3 re-cites) → M4 GATE → provision → LOOP STOP: m4-complete →
+  Chase acceptance playthrough → **FINAL: jitter-removal increment
+  (SCHED_FIFO + spin retune, owner ruling 2026-07-26)**.
 
 ## [superseded by iter-114] (updated: 2026-07-26, iter 113 — rig swap pressure ELIMINATED at cause (4495→28 pages; A/B 94-skips-tmpfs vs 0-pages-SD); settle removed; residual = wakeup-jitter × sim-tail collision; hybrid-sleep class fix ruled; vanilla pass withheld pending final-bytes passes)
 

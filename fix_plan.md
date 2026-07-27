@@ -1904,3 +1904,44 @@ overruns):
   the contending thread via sampler windows, audio-callback
   batch/period audit. Evidence: .loop/m4-t114-lateclass-run9.log,
   AGENT-LOG iter-114.
+  - addendum (driver, 2026-07-26, post-iter-114): writer proposed a
+    SPIN_NS 3→2 ms retune + one discriminating pass (arithmetic: 2 ms
+    clears both observed collisions ×1.4 margin, cuts spin burn
+    18%→12%). DENIED for now — the experiment cannot discriminate:
+    run-to-run p99 noise on IDENTICAL bytes is ~0.4 ms (run-9 s01
+    16.455 vs run-10 16.075), same order as the +0.3-0.8 ms effect it
+    would test; one pass has no statistical power, and the skips=0 pin
+    is met twice. The R3 "p99 rose 10/12 legs" signal is itself within
+    drift. If the class REOPENS (gate-context skip): the pre-named
+    lever is SCHED_FIFO RT priority for the frame loop (+ audio thread
+    ranked above it; music reader stays CFS) — it subsumes both the
+    contention mechanism and the spin-cost question, and post-gate it
+    may allow SHRINKING the spin; the 2 ms retune is the cheap second
+    lever if RT is refused. Escalation ladder above 3 ms is RETIRED
+    (writer's own evidence: more spin feeds the contention).
+  - OWNER RULING (Chase, 2026-07-26) — SUPERSEDES the "denied for
+    now / reopen-trigger" framing above: the jitter-removal increment
+    is SCHEDULED as the FINAL work item, to run AFTER the M4 gate and
+    Chase's acceptance playthrough. Scope: (1) SCHED_FIFO RT priority
+    for the frame loop (audio callback thread ranked above it; music
+    reader stays CFS; sleep-every-frame + rig deadman = runaway
+    guard); (2) the writer's SPIN_NS 3→2 ms discriminating retune —
+    with gate pressure off, run ENOUGH passes for statistical power
+    against the ~0.4 ms run-to-run noise floor (single passes cannot
+    discriminate), and under RT the spin may shrink further or go
+    away. Goal: remove the pacing-contention jitter class entirely,
+    not just meet the pin. NOTE: touching pace.h/foh_dev.c after the
+    gate invalidates m4-freeze-manifest pins — the increment carries
+    its own done-check (fullgame suite green on new bytes + the
+    late-start component evidence) and a manifest re-pin, per the
+    riglib re-pin precedent.
+
+- registered follow-up (NON-gate-blocking; iter 115 finding):
+  check-device-audio.sh host-build TU list is STALE since the M4
+  render-plane TUs (missing gfx_vfx.c/gfx_overlay.c/gfx_bg.c that
+  check-device-render.sh:694,709 carries) — link dies on 7 _gfx_*
+  symbols, the check has been un-runnable since; NOT in verify_m4's
+  producer set, M3 closed/ratified, so gate-inert. Fix = 2-line TU
+  update through its own arc + one device run + m3-manifest re-pin;
+  schedule with (or after) the post-gate jitter increment. Evidence:
+  .loop/m4-t115-reg-audio.log.

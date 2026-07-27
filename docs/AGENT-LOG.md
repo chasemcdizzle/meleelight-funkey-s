@@ -19394,3 +19394,60 @@ target/render/audio must re-run on final bytes (folded into the OPK
 FOH increment).
 **Next (iter 115):** OPK FOH mode + pace.h caller regressions →
 m4-freeze-manifest (+ m3 re-cites) → M4 GATE.
+
+---
+
+iter 115 · 2026-07-26 · phase M4 · task 14 increment 4: **M4 GATE LEG 3 GREEN ON HARDWARE** — MLFK_OPK_FOH frontend launch via gmenu2x + pace.h caller regressions 3/4 · m3 manifest now ALL-ROWS truthful (driver rulings) · audio-check stale-TU finding registered
+
+**Writer:** claude-opus-5. Pre-reg .loop/m4-t115-prereg.md (5
+falsifiable predictions). Arc: r1 codex NO-GO (1H/5M) → r2 codex
+NO-GO (r1 closed except one; NEW-H $ev_ticks unset under set -u —
+runtime-fatal, invisible to bash -n; NEW-M trap-guard skip) → **r3
+codex GO** ("No Medium+ … no new defect"). All 8 findings FIXED, none
+disputed (.loop/review-115-triage.md).
+**Built:** check-device-opk.sh MLFK_OPK_FOH=1 arm (single-copy 8-step
+skeleton, mode variables; M3 arm additive-untouched); .desktop
+trailing-newline defect fixed (+1 byte — the mandatory empty line was
+MISSING; never parsed by gmenu2x before this iteration). THREE
+measured-fact corrections to inherited beliefs: (1) gmenu2x DOES read
+its start section from the live per-user conf (iter-58 concluded
+opposite from editing the /usr/share copy) — start state now anchored
+via transactional rewrite + restore + re-verify; (2) the games grid
+is 2-COLUMN (r wraps within the row — iter-73's nav could never reach
+link 2); (3) this busybox ls colourises/multi-columns at a terminal —
+enumerations use find. Class note: "frontend state assumed from shipped
+defaults" is now a measured-then-anchored surface.
+**Evidence:** writer green run .loop/m4-t115-opkfoh-run4.log +
+**driver COLD end-to-end on FINAL bytes: `OPK FOH LAUNCH OK
+(frontend-launched via gmenu2x into the FOH, boot marker bin-sha ==
+stamp, evidence rc=0, 1 transitions vs frozen, shot structural)`
+rc 0** (.loop/driver-cold-t115-opkfoh.log — §5 ritual; covers the
+post-r2-fix staleness). Boot marker bin-sha == arm stamp; conf
+restored bytes-verified; device left clean, frontend TRUE-respawn.
+**pace.h caller regressions (final bytes):** DEVICE FOH OK (teeth=15)
+· DEVICE TARGET CONFORMS (teeth=6) · DEVICE RENDER OK (skips 0/3600)
+— all rc 0 (.loop/m4-t115-reg-{foh,target,render}.log).
+**check-device-audio.sh FAILED rc 1 PRE-EXISTING** (host link, 7
+_gfx_* undefined — TU list stale since the M4 render-plane TUs;
+un-runnable since, gate-inert, registered in fix_plan for the
+post-gate window; .loop/m4-t115-reg-audio.log).
+**Driver manifest rulings (executed this iteration):** riglib.sh row
+re-pinned 0c9126aa… cite=iter-109 arc (CAPPED, driver-accepted) +
+delta GOs 110-5/113-7 (row went stale at commit 89bb115 — a re-pin
+was missed at the iter-109 commit; process note: any commit touching
+a pinned producer re-pins IN THE SAME COMMIT); render/judge-shot/
+mlfk.sh rows flipped arc-pending → reviewed-go per the verified
+iter-108 ledger (pins byte-current, GOs genuine); anchor re-set.
+COLD self-check: **23/23 rows GREEN + ANCHOR GREEN, zero arc-pending
+rows remain** (.loop/driver-t115-manifest.log) — verify_m3.sh is
+runnable again and the M4 freeze-manifest assembly has a fully
+truthful producer base. Budget note: writer arm rebuilds 3 vs cap 1 —
+declared; cap was driver-misconfigured for a RIG_SCRIPTS member.
+**Owner ruling recorded this iteration (Chase, 2026-07-26):**
+post-gate FINAL increment = SCHED_FIFO + spin retune (STATE §rulings,
+fix_plan addendum).
+**Next (iter 116 — the LAST pre-gate increment):** assemble
+port/sim/device/m4-freeze-manifest.txt (25 producers; re-cite the
+.desktop via review-115-3; check-device-opk.sh row now reviewed-go)
++ verify_m4.sh MANIFEST_SHA256 anchor → **M4 GATE RUN** → sentinel
+`LOOP STOP: m4-complete — awaiting Chase acceptance playthrough`.
