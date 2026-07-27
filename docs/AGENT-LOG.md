@@ -19335,3 +19335,62 @@ standing risk.
 **Next (iter 114):** hybrid-sleep fix → armed pass + vanilla pass on
 FINAL bytes (covers the run-8 staleness caveat + mints gate evidence)
 → OPK FOH mode → m4-freeze-manifest → M4 GATE.
+
+---
+
+iter 114 · 2026-07-26 · phase M4 · task 14 increment 3e: hybrid-sleep fix — **TWO consecutive zero-skip passes, vanilla FULLGAME CONFORMS 12/12 rc 0 (run 10)**; jitter class honestly NOT proven closed (contention residual) · DRIVER RULING: accept + register, no revert, no component-A re-attack
+
+**Writer:** claude-opus-5. Pre-reg .loop/m4-t114-prereg.md. MECHANISM
+CORRECTION (measured, supersedes the iter-113 ruling's story):
+device hrtimers are 1 ns res / 50 µs slack — HZ-overshoot was NOT the
+mechanism (modal late-start 85-135 µs). late_start splits by an exact
+identity into component A (carry-over debt, ~62%, same c≈130 µs
+constant on two independent corpora — NO sleep involved, any sleep
+fix is a provable no-op) and component B (sleep-phase delays, ~38%,
+1.24-5.16 ms — the only reachable target). SPIN_NS=3 ms two-sided
+(≥1.4 ms efficacy ×2.1, ≤3 ms to stay in the idle band).
+**Built:** port/gfx/pace.h (NEW shared hybrid sleep; both duplicated
+statics deleted, 4 call sites, net −14 lines). Host micro-check:
+overshoot median 0 vs 508 µs bare, spin bounded, 0 early returns.
+**Arc:** r1 codex NO-GO → r2 codex CACHED (5th proven instance) →
+r3 grok NO-GO (7 fixed) → r4 claude-supplemental CRITICAL (budget
+floor would have broken the frozen iter-57 --budget-ns 1000 standing
+tests — writer verified both call sites and REVERTED the floor) →
+**r5 grok GO** → r6 claude-supplemental tooling findings (fixed
+pre-use; TAIL_MIN_N pooling). HYGIENE NOTE (driver): rounds 4/6 used
+a claude reviewer — the §3 reviewer set remains codex+grok (ruled
+twice); adopted as INPUT (and r4's catch was load-bearing), the arc's
+closing verdict is grok r5. Writers: stop drifting the reviewer set.
+**Passes (final bytes):** run 9 armed `FULLGAME CONFORMS 12/12 …
+[ATTRIB-ARMED]` rc 0; **run 10 vanilla `FULLGAME CONFORMS 12/12
+(… p99=16.104ms skips=0 underruns=0 starves=0 presentfails=0
+teeth=21)` rc 0** (.loop/m4-t114-fullgame-run{9-armed,10}.log). Both
+skip-legs of run 8 (g03/m02) clean in both. Swap flat (worst 49/55
+pages). BUT closure bar NOT met (.loop/m4-t114-lateclass-run9.log
+rc 3): 15 component-B events ≥2 ms survived, max 6.41 ms > run-8's
+3.80 — R2 fired: the residual B events are CONTENTION during the
+sleep window, not wake latency; a spin cannot cap what it doesn't
+prevent. R3 partial: p99 +0.3-0.8 ms on 10/12 legs; worst headroom
+0.566 ms (s02 16.104).
+**DRIVER RULING:** (1) ACCEPTED for the gate: the frozen contract
+pins skips=0/p99/underruns — met twice consecutively on final bytes;
+"class proven closed" was OUR higher bar, and the residual is now
+CHARACTERIZED (rare contention delays, skip only on collision with a
+content sim tail; armed instrument stands ready for attribution if
+the gate ever hits one). (2) Hybrid sleep KEPT — it removed the only
+observed skip mechanism twice; reverting to reclaim ~0.4 ms p99
+would reintroduce a proven skip path to buy margin the pin doesn't
+need. Writer's advice against SPIN escalation ACCEPTED (more spin
+feeds the contention it fights). (3) Component-A debt-carry re-attack
+REJECTED — it would change the governor's skip semantics =
+gate-adjacent surface, reserved, and unnecessary while the pin is
+met. (4) REGISTERED in fix_plan: "pacing-contention residual" class
+with the s01/s02 ~0.6 ms headroom as the standing gate risk; reopen
+trigger = any skip in a gate-context run (attribute via the armed
+arm, never reroll).
+**Registered follow-up (r1-M3):** pace.h's FOH/target/gfx callers
+were not exercised by --bridge verify legs — check-device-foh/
+target/render/audio must re-run on final bytes (folded into the OPK
+FOH increment).
+**Next (iter 115):** OPK FOH mode + pace.h caller regressions →
+m4-freeze-manifest (+ m3 re-cites) → M4 GATE.

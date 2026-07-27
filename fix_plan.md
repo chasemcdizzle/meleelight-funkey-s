@@ -1890,3 +1890,17 @@ overruns):
   reconciliation). Touching it invalidates five reviewed producer
   pins → its own arc, scheduled AFTER the M4 gate. Evidence:
   .loop/review-109-triage.md §ARC STATUS.
+
+- registered residual (NON-gate-blocking; driver ruling 2026-07-26,
+  iter 114): "pacing-contention residual" — rare (≈15/43k frames)
+  component-B sleep-window delays up to ~6.4 ms from single-core
+  contention (NOT wake latency — hybrid sleep landed; NOT swap —
+  eliminated iter 113; NOT paging — majflt 0). Skip requires
+  collision with a content sim tail (13.8-15.2 ms); two consecutive
+  final-bytes passes ran zero-skip (runs 9/10). Standing gate risk:
+  worst vanilla p99 16.104 vs 16.670 (0.566 ms). Reopen trigger: any
+  skip in a gate-context run → attribute via MLFK_FULLGAME_ATTRIB=1
+  (never reroll); candidate next levers (evidence-gated): identify
+  the contending thread via sampler windows, audio-callback
+  batch/period audit. Evidence: .loop/m4-t114-lateclass-run9.log,
+  AGENT-LOG iter-114.

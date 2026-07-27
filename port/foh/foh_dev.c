@@ -140,6 +140,7 @@
 #include <time.h>
 
 #include "../gfx/attrib.h" // --attrib row sampler/writer (shared w/ gfx_app.c)
+#include "../gfx/pace.h"   // pace_sleep_until_ns: frame pacing (shared w/ gfx_app.c)
 #include "../gfx/gfx.h"
 #include "../gfx/gfx_target.h" // M4 task 12: the target-mode compositor
 #include "../gfx/gfx_vfx.h"
@@ -446,17 +447,9 @@ static uint64_t now_ns(void) {
   return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
 }
 
-static void sleep_until_ns(uint64_t target) {
-  for (;;) {
-    const uint64_t now = now_ns();
-    if (now >= target) return;
-    const uint64_t rem = target - now;
-    struct timespec ts;
-    ts.tv_sec = (time_t)(rem / 1000000000ull);
-    ts.tv_nsec = (long)(rem % 1000000000ull);
-    nanosleep(&ts, 0); // EINTR: loop re-derives the remainder
-  }
-}
+// The frame-pacing wait now lives in port/gfx/pace.h (M4 task 14
+// increment 3e) — one hybrid sleep+spin body shared with gfx_app.c, which
+// had a byte-identical copy of the bare loop this replaces.
 
 // --- shot writer (foh_app.c write_shot_ppm verbatim) ---------------------------
 
@@ -1756,7 +1749,7 @@ int main(int argc, char **argv) {
     }
     endTick = t;
     if (launched && inPoll) break; // device: END right after LAUNCH
-    if (pace == 1) sleep_until_ns(deadline);
+    if (pace == 1) pace_sleep_until_ns(deadline);
   }
   tr_line("END %ld transitions=%ld", inPoll ? endTick : g_flow_frames,
           transitions);
@@ -1908,7 +1901,7 @@ int main(int argc, char **argv) {
             sim_fatal("stream buffer overflow");
           }
           streamLen += (size_t)w;
-          if (pace == 1) sleep_until_ns(deadline);
+          if (pace == 1) pace_sleep_until_ns(deadline);
         }
         const uint64_t tEnd = now_ns();
         matchWallMs = (tEnd - tStart) / 1000000ull;
@@ -2211,7 +2204,7 @@ int main(int argc, char **argv) {
           sim_fatal("stream buffer overflow");
         }
         streamLen += (size_t)w;
-        if (pace == 1) sleep_until_ns(deadline);
+        if (pace == 1) pace_sleep_until_ns(deadline);
       }
       const uint64_t tEnd = now_ns();
       if (attrib) attrib_sample(&attrib[frames]); // tail row

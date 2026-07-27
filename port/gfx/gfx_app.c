@@ -160,6 +160,7 @@
 #include "../sim/ml_js.h"
 #include "../sim/ml_ser.h"
 #include "attrib.h" // --attrib row sampler/writer (shared with foh_dev.c)
+#include "pace.h"   // pace_sleep_until_ns: frame pacing (shared w/ foh_dev.c)
 #include "gfx.h"
 #include "gfx_vfx.h"
 #include "platform.h"
@@ -309,17 +310,9 @@ static uint64_t now_ns(void) {
 // SAME code (one owner of the grammar correlate-skips.js parses).
 // attrib_sample's CLOCK_MONOTONIC read is now_ns()'s clock verbatim.
 
-static void sleep_until_ns(uint64_t target) {
-  for (;;) {
-    const uint64_t now = now_ns();
-    if (now >= target) return;
-    const uint64_t rem = target - now;
-    struct timespec ts;
-    ts.tv_sec = (time_t)(rem / 1000000000ull);
-    ts.tv_nsec = (long)(rem % 1000000000ull);
-    nanosleep(&ts, 0); // EINTR: loop re-derives the remainder
-  }
-}
+// The frame-pacing wait now lives in port/gfx/pace.h (M4 task 14
+// increment 3e) — one hybrid sleep+spin body shared with foh_dev.c, which
+// had a byte-identical copy of the bare loop this replaces.
 
 // --- RAM-staged screenshot writers (post-run; gfx_dump_ppm conventions) ---------------
 
@@ -901,7 +894,7 @@ int main(int argc, char **argv) {
     }
     streamLen += (size_t)w;
 
-    if (pace == 1) sleep_until_ns(deadline);
+    if (pace == 1) pace_sleep_until_ns(deadline);
   }
   const uint64_t tEnd = now_ns();
   if (attrib) attrib_sample(&attrib[frames]); // tail row (M4 task 8)

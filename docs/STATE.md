@@ -15,7 +15,23 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-26, iter 113 — rig swap pressure ELIMINATED at cause (4495→28 pages; A/B 94-skips-tmpfs vs 0-pages-SD); settle removed; residual = wakeup-jitter × sim-tail collision; hybrid-sleep class fix ruled; vanilla pass withheld pending final-bytes passes)
+## Live right now (updated: 2026-07-26, iter 114 — hybrid sleep landed: **runs 9+10 BOTH zero-skip on final bytes, vanilla FULLGAME CONFORMS 12/12 rc 0**; contention residual REGISTERED (not closed); gate evidence accepted by driver ruling)
+
+- **Iter 114 DONE.** pace.h shared hybrid sleep (SPIN_NS=3 ms,
+  measured two-component late-start split; net −14 lines); arc GO
+  (grok r5; codex cached ×5th; claude-supplemental input adopted,
+  reviewer set re-affirmed codex+grok). Runs 9 (armed) + 10
+  (vanilla) both `FULLGAME CONFORMS 12/12 … skips=0` rc 0 on FINAL
+  bytes; run-8's skip legs clean twice; swap flat. Jitter class NOT
+  proven closed (15 B-events survive, max 6.4 ms = contention;
+  p99 +0.3-0.8 ms cost) — ACCEPTED for gate per ruling, residual
+  REGISTERED in fix_plan with reopen trigger. Worst headroom 0.566 ms
+  = standing gate risk. Full trail AGENT-LOG iter-114.
+- **Queue:** iter-115 OPK FOH mode + pace.h caller regressions
+  (foh/target/render/audio on final bytes) → m4-freeze-manifest
+  (+ m3 re-cites) → M4 GATE → provision → LOOP STOP: m4-complete.
+
+## [superseded by iter-114] (updated: 2026-07-26, iter 113 — rig swap pressure ELIMINATED at cause (4495→28 pages; A/B 94-skips-tmpfs vs 0-pages-SD); settle removed; residual = wakeup-jitter × sim-tail collision; hybrid-sleep class fix ruled; vanilla pass withheld pending final-bytes passes)
 
 - **Iter 113 DONE.** Tmpfs plane measured 35.6 MB = 59% of RAM →
   relocated to SD (staged-back + sha-verified per review); one-var
