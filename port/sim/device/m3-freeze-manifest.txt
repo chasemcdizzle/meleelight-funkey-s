@@ -51,7 +51,7 @@ de32dffbe43423bee43f67516007d4039abbd80237a626aec81e54fd7dc4ca68 port/gfx/judge-
 12ba15434041dd14e8b787751854b907e7cadf50b3965f1c561fe2ca639ef354 port/gfx/judge-s1-coverage.js reviewed-go .loop/review-53-1.log
 26bdc02bbc3074d2e9defda3db27abb065a227dbfe98e3933efd56dcea208b3a port/gfx/s1-session.script reviewed-go .loop/review-53-1.log
 05ced80f57e993541f6da8b647e63abcac4163cd6e5b275f2a811a49c2faeb76 port/tools/fk_input.c reviewed-go .loop/review-53-1.log
-2ceace21cdc6565fc59b3532000f855e60aec9a27f4c9a2f615160c1c47fb62a port/gfx/check-device-audio.sh reviewed-go .loop/review-61-1.log
+59569d53348363db36478653e53b9ebe7c3382b11f0f06eeb1dd8f3be17ef71e port/gfx/check-device-audio.sh arc-in-flight iter-118-audio-TU-and-data-plane-repair-driver-ruling-4-ARC-NOT-CLOSED-gfx_bg+gfx_overlay+gfx_vfx-linked-and-vfxdata/vfxglyphs-wired-through-all-5-invocations-host-legs-green-device-stream-STREAM-MATCH-3600/3600-but-PERF-BLOCKED-p99-17.444ms-evidence-.loop/m4-t118-audio-device-2.log
 8ceaf028fe5740a1c0bb384e2eae113996bdb5c3db5720f1337af068266b966f port/gfx/judge-audio-summary.js reviewed-go .loop/review-59-1.log+r3-.loop/review-61-1.log
 bf29fa7cba83708cfff093195f48ad20a8eda2ad794fe25b270f211b08876eee port/gfx/pack-snd.js reviewed-go .loop/review-57-1.log+r2r3-closure-.loop/review-61-1.log
 d43628d4a22e278ebffa8e3116709cff52933332a51a926fb28c3cfa4ad0dbc4 port/gfx/check-device-opk.sh reviewed-go .loop/review-115-3.log-r1-.loop/review-115-1.log+r2-.loop/review-115-2.log

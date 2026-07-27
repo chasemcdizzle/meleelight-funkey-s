@@ -163,6 +163,16 @@ DEADMAN_S="${MLFK_DEADMAN_S:-420}" # park deadman window: covers both
 APPRC_TRIES=90      # x2 s host poll per attempt for the detached rc file
 GFXDATA_FROZEN=$GFX/gfxdata-frozen.txt
 GFXDATA_SHA256=5499a3dd5fc374d6ed988faf0bef6fa2e189eb314e892bdd83c7534dc0865c94
+# iter 118: the two committed vfx render-plane artifacts. gfx_app.c
+# REQUIRES --vfxdata/--glyphs, and gfx_vfx.c/gfx_overlay.c are now
+# linked into this engine's binaries (they always were referenced from
+# gfx_app.c — the omission was a link failure, not a smaller program).
+# Same class and same literals as check-device-render.sh:127-130:
+# committed INPUT, content integrity pinned here, freshness is git's.
+VFXDATA_FROZEN=$GFX/vfxdata-frozen.txt
+VFXDATA_SHA256=545015a3d7e3bc138059fcb9711040758e729a7d21aac650b009ed7fdb5bd662
+VFXGLYPHS_FROZEN=$GFX/vfxglyphs-frozen.txt
+VFXGLYPHS_SHA256=8926cab4d648579d099053994bf309943b5a6bc3c5abf733af9ac6b71f3cbbeb
 
 source port/sim/device/adbsh.sh # (also defines $DEV — it keys the lock)
 source port/sim/device/riglib.sh
@@ -626,6 +636,18 @@ if [ "$gsum" != "$GFXDATA_SHA256" ]; then
   exit 1
 fi
 echo "   gfxdata-frozen pin OK ($GFXDATA_SHA256)"
+made "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN"
+vsum="$(rig_host_sha256 "$VFXDATA_FROZEN")" || exit 1
+if [ "$vsum" != "$VFXDATA_SHA256" ]; then
+  echo "DEVICE FAIL: $VFXDATA_FROZEN sha256 $vsum != pinned $VFXDATA_SHA256" >&2
+  exit 1
+fi
+gsum2="$(rig_host_sha256 "$VFXGLYPHS_FROZEN")" || exit 1
+if [ "$gsum2" != "$VFXGLYPHS_SHA256" ]; then
+  echo "DEVICE FAIL: $VFXGLYPHS_FROZEN sha256 $gsum2 != pinned $VFXGLYPHS_SHA256" >&2
+  exit 1
+fi
+echo "   vfxdata/vfxglyphs frozen pins OK"
 
 bash pipeline/extractor/build-extractor.sh
 rm -f "$TABLES/ml_tables.c" "$TABLES/ml_tables.h" \
@@ -711,6 +733,7 @@ cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$BUILD/raster.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/gfx_app_headless" \
   "$BUILD/raster.o" "$GFX/gfx_app.c" "$GFX/platform_headless.c" \
   "$GFX/anim1.c" "$GFX/gfx_render.c" \
+  "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
   "${SIM_TUS[@]}" \
   port/sim/characters/shared/moves/*.c \
   port/sim/characters/fox/moves/*.c \
@@ -725,6 +748,7 @@ if command -v sdl2-config >/dev/null 2>&1; then
     -o "$BUILD/gfx_app_sdl2" \
     "$BUILD/raster.o" "$GFX/gfx_app.c" "$GFX/platform_sdl2.c" \
     "$GFX/anim1.c" "$GFX/gfx_render.c" \
+    "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
     "${SIM_TUS[@]}" \
     port/sim/characters/shared/moves/*.c \
     port/sim/characters/fox/moves/*.c \
@@ -747,7 +771,8 @@ for side in a b; do
     "$BUILD/g01.au-log-$side.txt"
   "$BUILD/gfx_app_headless" \
     --trace "$DEVB/g01.trace.txt" --simdata "$DEVB/simdata.txt" \
-    --gfxdata "$GFXDATA_FROZEN" --anim-dir "$TABLES" \
+    --gfxdata "$GFXDATA_FROZEN" --vfxdata "$VFXDATA_FROZEN" \
+    --glyphs "$VFXGLYPHS_FROZEN" --anim-dir "$TABLES" \
     --seed "$seed" --p1 "$p1" --p2 "$p2" --stage "$stage" \
     --frames "$frames" --pace 0 \
     --out "$BUILD/g01.au-out-$side.txt" \
@@ -811,7 +836,8 @@ made "$BUILD/sndpack-trunc.bin"
 t1rc=0
 "$BUILD/gfx_app_headless" \
   --trace "$DEVB/g01.trace.txt" --simdata "$DEVB/simdata.txt" \
-  --gfxdata "$GFXDATA_FROZEN" --anim-dir "$TABLES" \
+  --gfxdata "$GFXDATA_FROZEN" --vfxdata "$VFXDATA_FROZEN" \
+  --glyphs "$VFXGLYPHS_FROZEN" --anim-dir "$TABLES" \
   --seed "$seed" --p1 "$p1" --p2 "$p2" --stage "$stage" \
   --frames 10 --pace 0 \
   --out "$BUILD/t1-out.txt" --timing "$BUILD/t1-tim.txt" \
@@ -830,7 +856,8 @@ made "$BUILD/sndpack-drop.bin"
 t2rc=0
 "$BUILD/gfx_app_headless" \
   --trace "$DEVB/g01.trace.txt" --simdata "$DEVB/simdata.txt" \
-  --gfxdata "$GFXDATA_FROZEN" --anim-dir "$TABLES" \
+  --gfxdata "$GFXDATA_FROZEN" --vfxdata "$VFXDATA_FROZEN" \
+  --glyphs "$VFXGLYPHS_FROZEN" --anim-dir "$TABLES" \
   --seed "$seed" --p1 "$p1" --p2 "$p2" --stage "$stage" \
   --frames "$frames" --pace 0 \
   --out "$BUILD/t2-out.txt" --timing "$BUILD/t2-tim.txt" \
@@ -954,12 +981,14 @@ rig_stamp_rehash gfx_device
 dsh "rm -rf $DTMP $DSD && mkdir -p $DTMP $DSD"
 adb -s "$DEV" push "$DEVB/gfx_device" "$DEVB/simdata.txt" \
   "$DEVB/g01.trace.txt" "$GFXDATA_FROZEN" \
+  "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" \
   "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2" "$DTMP/" >/dev/null
 rig_push_provenance "$DTMP" gfx_device
 dsh "chmod +x $DTMP/gfx_device"
 # SND1 pack -> SD scratch (big artifact; blobs NEVER live in the repo)
 adb -s "$DEV" push "$BUILD/sndpack.bin" "$DSD/" >/dev/null
 for hf in "$DEVB/simdata.txt" "$DEVB/g01.trace.txt" "$GFXDATA_FROZEN" \
+          "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" \
           "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2"; do
   bn="$(basename "$hf")"
   hsum="$(rig_host_sha256 "$hf")" || exit 1
@@ -1019,7 +1048,9 @@ cd $DTMP || exit 9
 rm -f audio.apprc.$at gfx.pid.$DM_NONCE
 setsid sh -c './gfx_device \
   --trace $DTMP/g01.trace.txt --simdata $DTMP/simdata.txt \
-  --gfxdata $DTMP/gfxdata-frozen.txt --anim-dir $DTMP \
+  --gfxdata $DTMP/gfxdata-frozen.txt \
+  --vfxdata $DTMP/vfxdata-frozen.txt --glyphs $DTMP/vfxglyphs-frozen.txt \
+  --anim-dir $DTMP \
   --seed $seed --p1 $p1 --p2 $p2 --stage $stage --frames $frames \
   --pace 1 --budget-ns $BUDGET_NS \
   --sndpack $DSD/sndpack.bin \
@@ -1047,7 +1078,9 @@ cd $DTMP || exit 9
 rm -f t5.apprc gfx.pid.$DM_NONCE
 setsid sh -c './gfx_device \
   --trace $DTMP/g01.trace.txt --simdata $DTMP/simdata.txt \
-  --gfxdata $DTMP/gfxdata-frozen.txt --anim-dir $DTMP \
+  --gfxdata $DTMP/gfxdata-frozen.txt \
+  --vfxdata $DTMP/vfxdata-frozen.txt --glyphs $DTMP/vfxglyphs-frozen.txt \
+  --anim-dir $DTMP \
   --seed $seed --p1 $p1 --p2 $p2 --stage $stage --frames $T5_FRAMES \
   --pace 1 --budget-ns $T5_BUDGET_NS \
   --sndpack $DSD/sndpack.bin --audio-samples $T5_SAMPLES \

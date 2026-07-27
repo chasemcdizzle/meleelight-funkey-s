@@ -19565,3 +19565,57 @@ no leading zeros anywhere. All ride delta arc r2. (4) audio-TU fix
 AUTHORIZED: the 3-file TU-list repair + its arc + one device audio
 run + m3 re-pin → verify_m3 to FULL GREEN. Then: delta r2 → flip
 rows → final anchors/self-checks → THE GATE.
+
+---
+
+iter 118 · 2026-07-27 · phase M4 · closure rulings executed: universe 44→87 (all 23 frozen artifacts pinned, provenance arc GO) + grandfathered-m1 + THREE more demonstrated gate false-greens fixed · delta arc NOT converged (r3/r4 codex Highs genuine) · M3 audio premise false — engine needed full data-plane wiring, now measures 17.444 ms p99 (deferred) · serial-codex root cause found
+
+**Writer:** claude-opus-5. Ruling 1 DONE: 23 rows pinned with VERIFIED
+provenance (f01-f03/f05 → review-92-1 GO; f04/f06/f07 → review-105-1
+GO; the 3 gfx planes had NO genuine coverage → NEW
+.loop/review-118-prov-1.log GO, claims spot-checked against live
+bytes). Ruling 2 DONE (grandfathered-m1 token + relabel; r9b-[L] vs
+delta-[H] mooted). Ruling 3 DONE + EXCEEDED: 4 delta rounds found
+three DEMONSTRATED false-green paths in the gate itself, all fixed +
+reproduced before/after — (i) one NUL byte flips grep to binary mode
+("Binary file matches"), silently killing the tear guard, and the OPK
+leg had no p99 backstop → reached M4 GATE OK; fixed grep -a ×3;
+(ii) bash strips NULs in command substitution so the final-LF test
+passed NUL-terminated logs (zsh masks it) → byte-exact od compare;
+(iii) control-byte-prefixed torn duplicates evade both anchored
+grammar and prefix test → control-class refusal; plus failed-read
+empty-line loophole. 9 constant fields pinned exact (shots=13,
+music 5/5, transitions=1, starts, sfxpin, fbwit, teeth), leading
+zeros eliminated; 0 false-rejects vs archived output.
+**Ruling 4 PREMISE FALSE (honest stop):** the 3-TU fix was necessary
+but gfx_app REQUIRES the vfx data planes — full 9-site wiring landed;
+device stream verifies EXACTLY (3600/3600) but p99 17.444 ms + 8
+skips: the M3-era engine is measuring the modern full renderer for
+the first time, in a rig configuration that PREDATES the iter-113
+SD-relocation and iter-114 pacing classes. Writer correctly refused
+to spend the M3 gate run on a known-red leg. **DRIVER RULING (a):
+DEFERRED to the post-gate window** — attribution via the KNOWN
+classes (tmpfs staging relocation first), then arc + re-pin →
+M3 GATE OK; M3 refusing honestly at [0b] meanwhile; M4 not blocked
+(audio is not an M4 producer). fix_plan item widened.
+**Delta arc state:** r2/r2b DISCARDED with evidence — ROOT CAUSE
+FOUND, OURS NOT CODEX'S: three concurrent `codex exec` sessions had
+their transcripts SPLICED by the companion (two CODEX_RC lines in one
+file, both processes alive). Run SERIALLY codex attests correctly and
+caught the Highs Opus missed. STANDING RULE: codex rounds run
+SERIAL, one per log, always. (Some earlier "cached-malfunction"
+instances may share this cause; the cmp-discard discipline was still
+correct — an unattested log is void either way.) r3: Opus GO / codex
+NO-GO (genuine H). r4: Opus GO / codex NO-GO (genuine H, fixed,
+UNREVIEWED). grok verdict-less ×2. **DRIVER RULING (b): CONTINUE the
+arc** — distinct real mechanisms each round is the arc WORKING, not
+churn; round 5 mandatory over the r4 fixes; §3 cap discipline at ~8
+rounds; Highs never capped. **Ruling (c): tables-schema.js gets its
+real Tier A arc** (honest arc-pending row until then).
+**Gates:** M4 [0] 87/87 pins green, [0b] refuses on 5 rows (4
+arc-in-flight + tables-schema arc-pending) rc 1; M3 [0] 23/23, [0b]
+refuses on check-device-audio (arc-in-flight) rc 1. Both refusals
+correct; zero sentinel occurrences; device clean.
+**Next (closure continuation):** delta r5+ serial → GO/cap →
+tables-schema arc → flip rows → final anchors/self-checks →
+M4 GATE live legs.

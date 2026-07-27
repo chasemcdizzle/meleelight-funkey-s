@@ -9,6 +9,16 @@
 #                      driver-recorded CAPPED-CLOSED; cite = the arc's
 #                      verdict log and/or the driver AGENT-LOG entry)
 #   oracle-frozen    — HARD RULE 3 surface (never edited since freeze)
+#   grandfathered-m1 — M1-era pipeline tool predating PROCESS
+#                      adoption; proven by the M1 exit gate
+#                      (`bash pipeline/verify_pipeline.sh` -> PIPELINE
+#                      OK) rather than the M2 corpus. Added iter 118
+#                      (driver ruling 2) because the m2-only token
+#                      forced a choice between a FALSE era claim on an
+#                      M1-era file and a false refusal of a genuinely
+#                      closed surface; the era is now stated truthfully.
+#                      Enforcement strength is identical to
+#                      grandfathered-m2 — only the era claim differs.
 #   grandfathered-m2 — M2-era judge-path tool predating PROCESS
 #                      adoption; proven by the M2 exit gate corpus
 #   arc-in-flight / arc-pending — grammar-legal, but verify_m4.sh [0b]
@@ -18,13 +28,44 @@
 #                      run REFUSES before leg 1.
 #
 # The producer set is EXACTLY verify_m4.sh's REQUIRED_PRODUCERS literal
-# (44 paths). What is asserted is SET equality, not row order: the gate
-# compares the two path sets sorted and space-normalized, which implies
+# (87 paths). What is asserted is SET equality, not row order: the gate
+# proves equality by per-required-producer cardinality plus a total record
+# count, which implies
 # count AND identity without constraining the order rows appear in
-# (pipeline/lib/tables-anim-xref.js, added iter-117, sits at
-# verify_m4.sh:157 but last in this file — legal, and asserted as such).
+# (pipeline/lib/tables-anim-xref.js, added iter-117, sits mid-list in
+# verify_m4.sh but near the end of this file — legal, and asserted as
+# such; row ORDER is never asserted, so no claim is made about which
+# record is last).
 # Corrected per .loop/review-117-delta-1.log [L]; the header previously
 # said "43 paths, same order" and both halves were false.
+#
+# 44 -> 67 -> 84 (iter 118). First, review-117-delta-1 [H1]: the universe gained the
+# 23 FROZEN REFERENCE artifacts the judges compare evidence against —
+# port/gfx/{gfxdata,vfxdata,vfxglyphs}-frozen.txt (previously only
+# existence-checked at check-device-fullgame.sh:973) and all 20
+# port/foh/flows/ files (.flow scripts + .expect/.bstate.expect frozen
+# expectations). Pinning the engines but not their reference data left
+# common-mode drift undetectable: an edit moving BOTH an expectation and
+# the trace judged against it keeps leg 2 green while shrinking what it
+# proves. See verify_m4.sh's REQUIRED_PRODUCERS comment block.
+# Then 67 -> 84, review-118-delta-3-opus [M4]: leg 1's OWN ground truth
+# was still outside the universe — oracle/goldens/manifest.json (which
+# decides WHICH goldens leg 1 runs) plus the 8 frozen *.sha256.json
+# streams its conformance claim is judged against, plus the 8
+# *.trace.json inputs. All 17 are HARD RULE 3 surfaces untouched since
+# 38d6733 (iter 8), so they carry `oracle-frozen` and add no unresolved
+# row. Still open and REGISTERED for a driver scope ruling: the 6
+# port/goldens-m4/*.trace.json, port/goldens-m4/gen-t0{1,2}-trace.js and
+# port/foh/check-foh-flows.sh (the last three are CODE and would need
+# provenance/statuses of their own), plus the non-FOH OPK assets
+# port/gfx/opk/mlfk.sh and meleelight.funkey-s.desktop, which no gate
+# leg currently invokes (review-118-delta-3-opus [M4] tail and [L1]).
+# Finally 84 -> 86 (review-118-delta-3-codex [M]): oracle/CHECKSUM.md
+# (parsed by the pinned streamlib.js for the specVersion pin — a
+# same-version normative edit would otherwise leave all hashes green
+# while changing the binding spec) and pipeline/lib/animbin.js
+# (required by the pinned tables-anim-xref.js). See the TRANSITIVE
+# DECISION INPUTS block at the end for what remains registered.
 # verify_m4.sh HARD-REFUSES to run any leg when
 # a producer's current bytes mismatch its pin, when a row is missing or
 # duplicated, or when an extra row appears ("hashes prove identity, not
@@ -71,26 +112,47 @@
 # two-unknown fixed point with no solution; the excluded line is
 # protected by the anchor equality itself.
 #
-# UNCLOSED ROWS — five producers are unresolved: the judge
-# (port/gfx/judge-render-timing.js, `arc-pending`) plus FOUR
-# `arc-in-flight` — the three evidence engines check-device-fullgame.sh,
-# check-device-target.sh and check-device-foh.sh (iter-117 jrt
-# producer-pin fan-out changed their bytes) and verify_m4.sh itself.
-# (Count corrected per .loop/review-117-jrt-7.log [L3].) This makes verify_m4.sh
-# [0b] HARD-REFUSE in AUTHORITATIVE mode. verify_m4.sh is unresolved
-# because THIS iteration's driver-sanctioned universe extension changed
-# its bytes and its delta arc has not reached GO
-# (.loop/review-116-2o.log, VERDICT: NO-GO); carrying `reviewed-go`
-# there would be inherited approval applied to later bytes — the exact
-# class round 1 raised as [H] against judge-render-timing.js. This is the
-# truthful status and the refusal is a correct outcome, not a defect.
-# Each was given a Tier A+ arc over its CURRENT bytes (PROCESS §3:
-# judge/verify paths take an independent second reviewer as well). Both
-# arcs RAN in iter 116 and both returned NO-GO with Medium+ findings, so
-# no row flips. A row flips to `reviewed-go` only when its findings are
-# fixed and BOTH reviewers reach an anchored VERDICT: GO — never by
-# re-citing an older log, and never by driver-capping an arc that has
-# not converged.
+# UNCLOSED ROWS (state of record: iter 118, end of session) — FIVE rows
+# are unresolved. FOUR are `arc-in-flight`:
+#     port/sim/device/check-device-fullgame.sh
+#     port/sim/target/check-device-target.sh
+#     port/foh/check-device-foh.sh
+#     port/sim/device/verify_m4.sh
+# and ONE is `arc-pending`:
+#     pipeline/lib/tables-schema.js  (never had an arc; see the
+#     TRANSITIVE DECISION INPUTS block at the end of this file)
+# The three engines carry the iter-117 jrt producer-pin fan-out; the
+# gate itself carries the iter-116 universe extension plus this
+# iteration's ruling-2/3 gate-logic edits. All four ride the CUMULATIVE
+# gate-delta arc and flip together, or not at all.
+# While any of the five remains, verify_m4.sh [0b] HARD-REFUSES in
+# AUTHORITATIVE mode — the truthful status and a correct outcome, not a
+# defect. A row flips to `reviewed-go` only when its findings are fixed
+# and the arc reaches an anchored VERDICT: GO — never by re-citing an
+# older log, and never by driver-capping an arc that has not converged.
+#
+# NOT in the unresolved set (both closed this iteration):
+#   - the three frozen graphics planes port/gfx/{gfxdata,vfxdata,
+#     vfxglyphs}-frozen.txt are `reviewed-go` on the consolidated
+#     frozen-plane provenance arc (.loop/review-118-prov-1.log,
+#     VERDICT: GO at line 7764, no High or Medium findings);
+#   - the 20 port/foh/flows/ rows are `reviewed-go` on the arcs that
+#     froze their bytes (.loop/review-92-1.log:640,
+#     .loop/review-105-1.log:446).
+#
+# ITER-118 CORRECTION: this header previously read "five producers are
+# unresolved: the judge (arc-pending) plus FOUR arc-in-flight". That
+# became false in iter 117 when the jrt arc closed at GO and the judge
+# row flipped to `reviewed-go` (.loop/review-117-jrt-9b.log) without
+# this prose being updated. The 20 port/foh/flows/ rows added this
+# iteration are NOT in the unresolved set: each carries a verified
+# anchored VERDICT: GO cite (see their rows' cites).
+#
+# THE DETAIL BELOW IS RETAINED AS THE HISTORICAL RECORD of how each
+# row reached its present status. Where it describes a row as unclosed
+# and that row now reads `reviewed-go`, the closure is recorded in the
+# row's own cite and in docs/AGENT-LOG.md — the narrative below is the
+# arc's history, not its current state.
 #   port/gfx/judge-render-timing.js
 #     -> .loop/review-116-jrt-1.log (codex) VERDICT: NO-GO — two [M]:
 #        leading-zero numeric tokens accepted (grammar, PROCESS §3
@@ -204,9 +266,12 @@
 # UNCHANGED oracle verify-stream.js — but nothing in the gate pinned those
 # frozen files or the two manifests that select and parameterise them, so
 # the standard against which conformance is measured could drift while the
-# gate reported conformance. (oracle/goldens/ needs no such row: HARD RULE
-# 3 makes it read-only to every task after M0, and the gate's own engines
-# re-derive nothing from it.) Ten rows added: both manifests + all eight
+# gate reported conformance. (SUPERSEDED iter 118 — this paragraph originally
+# read "oracle/goldens/ needs no such row: HARD RULE 3 makes it read-only
+# to every task after M0, and the gate's own engines re-derive nothing
+# from it." That was WRONG on both halves: policy is not a byte pin, and
+# the engines judge leg 1 directly against those streams. All 17
+# oracle/goldens files ARE pinned now — see the 67 -> 84 note above.) Ten rows added: both manifests + all eight
 # frozen streams (the four match/scenario streams, the two target streams,
 # and the two .target.sha256.json target-plane streams). The .trace.json
 # files are NOT separate rows and do not need to be: each frozen stream
@@ -309,5 +374,92 @@ f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/
 826e16854bdbfb6061052d1a0dbdcc4675f282754b04fb5262f34b5b30283a45 pipeline/lib/verify-artifacts.js reviewed-go .loop/review-117-plib-4o.log-GO-closure-round+.loop/review-117-plib-2o.log-GO+NO-GO-rounds-.loop/review-116-plib-1.log-.loop/review-116-plib-2-grok.log-.loop/review-117-plib-1.log+PROCESS-11-Opus-5-second-codex-aborted-x3-cyberfilter-grok-x3-no-verdict
 ec578b42d0490448d61bef3f21c958105a48d99c4cc1a5d403a742e7627b8e18 pipeline/lib/check-expected.js reviewed-go .loop/review-117-plib-4o.log-GO-closure-round+.loop/review-117-plib-2o.log-GO+NO-GO-rounds-.loop/review-116-plib-1.log-.loop/review-116-plib-2-grok.log-.loop/review-117-plib-1.log+PROCESS-11-Opus-5-second-codex-aborted-x3-cyberfilter-grok-x3-no-verdict
 31e5946a0269095f7895b01aaf7f78e9c3496aae75c638b8cd1b4a678c4bd29b pipeline/expected.json reviewed-go .loop/review-117-plib-4o.log-GO-closure-round+.loop/review-117-plib-2o.log-GO+NO-GO-rounds-.loop/review-116-plib-1.log-.loop/review-116-plib-2-grok.log-.loop/review-117-plib-1.log+PROCESS-11-Opus-5-second-codex-aborted-x3-cyberfilter-grok-x3-no-verdict
-a574fec40685b6770e85d55ee1aaabd35553caab00c9aeadec0ea234b4173590 pipeline/lib/tables-anim-xref.js grandfathered-m2 M1-era-checker-unchanged-since-iter10-21da425-proven-by-the-M1-EXIT-GATE-PIPELINE-OK+newly-pinned-per-.loop/review-117-jrt-8.log-H+STATUS-TOKEN-VOCABULARY-STRETCH-M1-NOT-M2-FLAGGED-FOR-DRIVER
-7d54e55ab3d0666ae2f46b4efa7e0b4aa0e158a9349276468dac9c67e48b73e6 port/sim/device/verify_m4.sh arc-in-flight iter-116-universe-extension-bytes-UNREVIEWED-delta-arc-.loop/review-116-2o.log-NO-GO+codex-round-.loop/review-116-2-cached-DISCARDED.log-cmp-proven-byte-identical-to-.loop/review-116-plib-1.log+prior-bytes-only-.loop/review-108-4.log-r4-GO
+a574fec40685b6770e85d55ee1aaabd35553caab00c9aeadec0ea234b4173590 pipeline/lib/tables-anim-xref.js grandfathered-m1 M1-era-checker-unchanged-since-iter10-21da425-proven-by-the-M1-EXIT-GATE-PIPELINE-OK+newly-pinned-per-.loop/review-117-jrt-8.log-H+era-token-corrected-m2-to-m1-per-iter-118-driver-ruling-2-dissolving-review-117-delta-1-H2-vs-jrt-9b-L
+02db34e9c27eaf37bd31d7c3d1e80f0441d145ada710a5dd1cb3523b1d0f1d36 port/sim/device/verify_m4.sh arc-in-flight iter-116-universe-extension-bytes-UNREVIEWED-delta-arc-.loop/review-116-2o.log-NO-GO+codex-round-.loop/review-116-2-cached-DISCARDED.log-cmp-proven-byte-identical-to-.loop/review-116-plib-1.log+prior-bytes-only-.loop/review-108-4.log-r4-GO
+
+# --- FROZEN REFERENCE DATA (added iter 118, review-117-delta-1 [H1]) ---
+# The 23 artifacts the M4 judges compare evidence AGAINST, previously
+# outside the universe. These rows are DATA: there is no logic to
+# review, so their closure evidence is PROVENANCE + FREEZE INTEGRITY —
+# which arc froze these exact bytes, that the arc reached an anchored
+# VERDICT: GO, and that no commit has touched the file since. Each cite
+# below names the arc's own byte-carrying diff packet AND its GO log;
+# both were re-verified by reading the logs' last anchored VERDICT
+# lines in iter 118 (review-92-1:640 GO, review-105-1:446 GO).
+
+11243eed2db7df6a74228a3f258e5187f7a2a8967473c05bf8c848cde06c5fb3 port/foh/flows/f01-vs-g01.flow reviewed-go .loop/review-92-1.log-GO-r4-FOH-host-arc-closure-driver-FOH-ARC-CLOSED-AGENT-LOG-14707+bytes-frozen-041305b-iter-88-byte-hunks-in-the-arcs-own-packet-.loop/review-88-diff.txt+no-commit-since
+de2aae01d5347a04742c8e112584207a753fce32b8bd65f9e87b19f1a6fb1f1b port/foh/flows/f01-vs-g01.expect reviewed-go .loop/review-92-1.log-GO-r4-FOH-host-arc-closure-driver-FOH-ARC-CLOSED-AGENT-LOG-14707+bytes-frozen-041305b-iter-88-byte-hunks-in-the-arcs-own-packet-.loop/review-88-diff.txt+no-commit-since
+ce2313ec61aea10f577da236800f8d601990e34e9f94a7f6849bf3689a75f163 port/foh/flows/f01-vs-g01.bstate.expect reviewed-go .loop/review-92-1.log-GO-r4-FOH-host-arc-closure-driver-FOH-ARC-CLOSED-AGENT-LOG-14707+bytes-frozen-041305b-iter-88-byte-hunks-in-the-arcs-own-packet-.loop/review-88-diff.txt+no-commit-since
+e8073c9c99b2b20f48599963cec659663f8368b1954a3a0948ded578c2896f2f port/foh/flows/f02-cpu-m01.flow reviewed-go .loop/review-92-1.log-GO-r4-FOH-host-arc-closure-driver-FOH-ARC-CLOSED-AGENT-LOG-14707+bytes-frozen-041305b-iter-88-byte-hunks-in-the-arcs-own-packet-.loop/review-88-diff.txt+no-commit-since
+96ad489f6c2a8d5a44b234d1277a16b456313eca92b7e08549ee580c8a912d3f port/foh/flows/f02-cpu-m01.expect reviewed-go .loop/review-92-1.log-GO-r4-FOH-host-arc-closure-driver-FOH-ARC-CLOSED-AGENT-LOG-14707+bytes-frozen-041305b-iter-88-byte-hunks-in-the-arcs-own-packet-.loop/review-88-diff.txt+no-commit-since
+26b5e753fdbfdca952e8b244effce8c6653585befcf01fdd290cb5e834f778fb port/foh/flows/f02-cpu-m01.bstate.expect reviewed-go .loop/review-92-1.log-GO-r4-FOH-host-arc-closure-driver-FOH-ARC-CLOSED-AGENT-LOG-14707+bytes-frozen-041305b-iter-88-byte-hunks-in-the-arcs-own-packet-.loop/review-88-diff.txt+no-commit-since
+bc246758d67772e604621b5aa060e240beb28e314cd13c2338befb6d29bf7840 port/foh/flows/f03-options.flow reviewed-go .loop/review-92-1.log-GO-r4-FOH-host-arc-closure-driver-FOH-ARC-CLOSED-AGENT-LOG-14707+bytes-frozen-041305b-iter-88-byte-hunks-in-the-arcs-own-packet-.loop/review-88-diff.txt+no-commit-since
+c58db1299eb97a05fc2188b37622a56931e41b62c1e0d13fec93f0a22a232ea9 port/foh/flows/f03-options.expect reviewed-go .loop/review-92-1.log-GO-r4-FOH-host-arc-closure-driver-FOH-ARC-CLOSED-AGENT-LOG-14707+bytes-frozen-041305b-iter-88-byte-hunks-in-the-arcs-own-packet-.loop/review-88-diff.txt+no-commit-since
+5eb18799a9d2ab715fdb1a9466da7a3457ea951ac7235dd62d3af74aa5f9657a port/foh/flows/f03-options.bstate.expect reviewed-go .loop/review-92-1.log-GO-r4-FOH-host-arc-closure-driver-FOH-ARC-CLOSED-AGENT-LOG-14707+bytes-frozen-041305b-iter-88-byte-hunks-in-the-arcs-own-packet-.loop/review-88-diff.txt+no-commit-since
+
+128972e14395d7a4663386353391e3983f6ff987da0890a6e6a9d4fa619d8761 port/foh/flows/f05-vs-g03.flow reviewed-go .loop/review-92-1.log-GO-r4-FOH-host-arc-closure-driver-FOH-ARC-CLOSED-AGENT-LOG-14707+bytes-entered-at-round-2-7f42cc7-iter-90-byte-hunks-.loop/review-90-diff.txt+no-commit-since
+08ef135e2d7c94e93a85172be9102d37495d2870c2686cf721dfc4be353cc279 port/foh/flows/f05-vs-g03.expect reviewed-go .loop/review-92-1.log-GO-r4-FOH-host-arc-closure-driver-FOH-ARC-CLOSED-AGENT-LOG-14707+bytes-entered-at-round-2-7f42cc7-iter-90-byte-hunks-.loop/review-90-diff.txt+no-commit-since
+37f10388f604e4d26c453320f5fc908620f33e45a5fbfaebd57572fc9a58142f port/foh/flows/f05-vs-g03.bstate.expect reviewed-go .loop/review-92-1.log-GO-r4-FOH-host-arc-closure-driver-FOH-ARC-CLOSED-AGENT-LOG-14707+bytes-entered-at-round-2-7f42cc7-iter-90-byte-hunks-.loop/review-90-diff.txt+no-commit-since
+
+abae2d9fd5b188042e96f5da6b3753e3d559d3adfede87c1c2290a507881015d port/foh/flows/f04-nav.flow reviewed-go .loop/review-105-1.log-GO-r4-task-12-arc-closure-driver-TASK-12-ARC-CLOSED-AGENT-LOG-18791+bytes-frozen-5441d59-iter-99-byte-hunks-.loop/review-99-diff.txt+no-commit-since
+db98dc01aed6c902f5c528c4a666e073cca748d620d7c04500a098679ff4390e port/foh/flows/f04-nav.expect reviewed-go .loop/review-105-1.log-GO-r4-task-12-arc-closure-driver-TASK-12-ARC-CLOSED-AGENT-LOG-18791+bytes-frozen-5441d59-iter-99-byte-hunks-.loop/review-99-diff.txt+no-commit-since
+fa9a4c2b13322dd2af2b9568c518f48729948a18d26f25a57c33fa43b6c09f13 port/foh/flows/f06-target-t01.flow reviewed-go .loop/review-105-1.log-GO-r4-task-12-arc-closure-driver-TASK-12-ARC-CLOSED-AGENT-LOG-18791+bytes-frozen-5441d59-iter-99-byte-hunks-.loop/review-99-diff.txt+no-commit-since
+344bbc379f767c59a83a215cdef1864df82cdd9bdb44ae77e0fb0c0fa862c1c9 port/foh/flows/f06-target-t01.expect reviewed-go .loop/review-105-1.log-GO-r4-task-12-arc-closure-driver-TASK-12-ARC-CLOSED-AGENT-LOG-18791+bytes-frozen-5441d59-iter-99-byte-hunks-.loop/review-99-diff.txt+no-commit-since
+28d584f23b580ddec53ad8f4fd6dc4af5237ebea38e7aff3b33729e0acf47690 port/foh/flows/f06-target-t01.bstate.expect reviewed-go .loop/review-105-1.log-GO-r4-task-12-arc-closure-driver-TASK-12-ARC-CLOSED-AGENT-LOG-18791+bytes-frozen-5441d59-iter-99-byte-hunks-.loop/review-99-diff.txt+no-commit-since
+2943f030205fa2c49c4c65dfcbcaa343824a4c5f1768778955eb5a4a03dd4fee port/foh/flows/f07-target-t02.flow reviewed-go .loop/review-105-1.log-GO-r4-task-12-arc-closure-driver-TASK-12-ARC-CLOSED-AGENT-LOG-18791+bytes-frozen-5441d59-iter-99-byte-hunks-.loop/review-99-diff.txt+no-commit-since
+346e29fdcf21f8bf772dfdcbdde36b1f289d21b171845cfe2213351cfab94932 port/foh/flows/f07-target-t02.expect reviewed-go .loop/review-105-1.log-GO-r4-task-12-arc-closure-driver-TASK-12-ARC-CLOSED-AGENT-LOG-18791+bytes-frozen-5441d59-iter-99-byte-hunks-.loop/review-99-diff.txt+no-commit-since
+6887d64a13a1ee19201f5ad36d08ba147c28e69f900aa68dfd20e11dea86feb3 port/foh/flows/f07-target-t02.bstate.expect reviewed-go .loop/review-105-1.log-GO-r4-task-12-arc-closure-driver-TASK-12-ARC-CLOSED-AGENT-LOG-18791+bytes-frozen-5441d59-iter-99-byte-hunks-.loop/review-99-diff.txt+no-commit-since
+
+5499a3dd5fc374d6ed988faf0bef6fa2e189eb314e892bdd83c7534dc0865c94 port/gfx/gfxdata-frozen.txt reviewed-go .loop/review-118-prov-1.log-GO-consolidated-frozen-plane-provenance-arc-driver-ruling-1-iter-118-no-High-or-Medium-findings-independent-format-validation-of-all-three-planes+gfxdata-bytes-942e01e-vfx-pair-bdc4781-no-commit-since
+545015a3d7e3bc138059fcb9711040758e729a7d21aac650b009ed7fdb5bd662 port/gfx/vfxdata-frozen.txt reviewed-go .loop/review-118-prov-1.log-GO-consolidated-frozen-plane-provenance-arc-driver-ruling-1-iter-118-no-High-or-Medium-findings-independent-format-validation-of-all-three-planes+gfxdata-bytes-942e01e-vfx-pair-bdc4781-no-commit-since
+8926cab4d648579d099053994bf309943b5a6bc3c5abf733af9ac6b71f3cbbeb port/gfx/vfxglyphs-frozen.txt reviewed-go .loop/review-118-prov-1.log-GO-consolidated-frozen-plane-provenance-arc-driver-ruling-1-iter-118-no-High-or-Medium-findings-independent-format-validation-of-all-three-planes+gfxdata-bytes-942e01e-vfx-pair-bdc4781-no-commit-since
+
+# --- LEG 1 GROUND TRUTH: oracle/goldens (HARD RULE 3, oracle-frozen) ---
+# Added iter 118 per review-118-delta-3-opus [M4]. Read at judgement time
+# by check-device-fullgame.sh, check-device-foh.sh and check-device-opk.sh.
+# Never edited since the M0 golden freeze; HARD RULE 3 forbids editing them.
+
+344a0d669420edb957f52288083a9b447e48f3125a484f044eade7cec1ee4b62 oracle/goldens/manifest.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+6426169198c7cf27ce9889a66e83e55f1bcd253837b7497babe9be19e0dd4e85 oracle/goldens/g01-fox-marth-battlefield.sha256.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+1c8432eb9b635b0bed76880416290b464fa1a1c245b4fc24e1d0b21628d4c05b oracle/goldens/g02-falco-puff-ystory.sha256.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+760c99dfdceb6fa3ef6ff05eb3879f22b5cc5f9ceb53526524b7d863cf649d21 oracle/goldens/g03-falcon-fox-pstadium.sha256.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+1d7eeb6807524a86f34fca91c0b88f0c764f96187a267313f0537fb240b84c4a oracle/goldens/g04-puff-falcon-dreamland.sha256.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+6b32b5c5ecba698b0be7f62a2c76104b071de27131c10fee3cd399cf85abc47b oracle/goldens/g05-marth-falco-fdest.sha256.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+16c0017bf75ad2642207217d16f0b46a9308ff8df2146ee5a7537a42de062b23 oracle/goldens/g06-falcon-marth-fountain.sha256.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+9580e25b5e52b835cd7eac0d43e5c78235166b06566822b973d7fe877d144797 oracle/goldens/g07-falco-falcon-battlefield.sha256.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+a49e8913315354d08328107006045da864945c3a1e43c88fdff5366f3b72391e oracle/goldens/g08-fox-puff-fdest.sha256.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+60c332c5b65cf08c0b2e2530425b03111054916c378bca03ba501eb000aa20b9 oracle/goldens/g01-fox-marth-battlefield.trace.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+468806c6bcaf56df739dff64afaeed73e7cdaf56676e25de32cfb1831da23dc3 oracle/goldens/g02-falco-puff-ystory.trace.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+d8ec9cc26c717e7bc2f74b84914e2b43dbebf9fb6f398e7668d9d46bd7615a3a oracle/goldens/g03-falcon-fox-pstadium.trace.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+bcc8f686d1242d79541b01bdfbda835d003bc34e5ede62479d6f8093b84961d4 oracle/goldens/g04-puff-falcon-dreamland.trace.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+313e5b8508385d092ac852f4077aaee4e2a826bade1c667285a9a14340f1f44e oracle/goldens/g05-marth-falco-fdest.trace.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+50e06b634300bf2fbe900be86d236093ded0243fee9bb3843da1984179a648d0 oracle/goldens/g06-falcon-marth-fountain.trace.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+1d4463d9aeee50e607774ba9ce13ebb3ee970848680a62bbd7a51a3ee39a223e oracle/goldens/g07-falco-falcon-battlefield.trace.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+04273b28f39e9a1dbbed1cccf8534ad28f4d88419cc7af60af67715f421e7d03 oracle/goldens/g08-fox-puff-fdest.trace.json oracle-frozen M0-task7-HARD-RULE-3-frozen-golden-set-unchanged-since-38d6733-iter-8-proven-by-the-M0-EXIT-GATE-oracle/verify_goldens.sh+newly-pinned-per-.loop/review-118-delta-3-opus-M4-leg-1-ground-truth
+
+# --- TRANSITIVE DECISION INPUTS (iter 118, review-118-delta-3-codex [M]) ---
+# Bytes a PINNED producer reads or imports, which could therefore change a
+# gate decision while every existing pin stayed green.
+# STILL UNPINNED and REGISTERED for a driver status ruling:
+#   pipeline/lib/tables-schema.js — NOW PINNED as `arc-pending` (below),
+#     per review-118-delta-4-codex [M]: prose registration was the wrong
+#     instrument. Its bytes MOVED in M4 task 11 (927294e), so
+#     `grandfathered-m1` would be a FALSE era claim (the exact defect
+#     ruling 2 corrected) and no verified anchored GO cite for those bytes
+#     exists; deferring it in a comment would have let [0b] report every
+#     producer closed, after the four planned flips, while the gate
+#     executed decision-bearing bytes carrying no status at all. It is
+#     therefore an UNRESOLVED ROW: the gate keeps refusing until it gets a
+#     real arc. Lever: tables-schema.js:18 defines CHAR_NAMES, which the
+#     pinned tables-anim-xref.js:39 maps over — shrinking that array
+#     vacuously shrinks the xref's reconciliation coverage.
+#   port/goldens-m4/gen-t0{1,2}-trace.js, port/foh/check-foh-flows.sh,
+#     port/gfx/check-device-music.sh — executed/parsed by engines; round 3
+#     judged the first two transitively sealed (traceSha256 inside the
+#     pinned stream files) and the third parsed only for a sha witness
+#     already pinned elsewhere. Registered, not blocking.
+
+cdc48d11014a41aec99bbbd47f534b16b8b4a8bf060dbf1a75918e86a7c1bd10 oracle/CHECKSUM.md oracle-frozen M0-task4-FROZEN-checksum-spec-unchanged-since-81a6753-iter-5-HARD-RULE-3+parsed-by-pinned-oracle/harness/streamlib.js-for-the-specVersion-pin+newly-pinned-per-.loop/review-118-delta-3-codex-M5
+63107cb140f2f63977c2b2f65994ef4628da09d454b20227f5d7cb14852170f1 pipeline/lib/animbin.js grandfathered-m1 M1-task1-ANIM1-decoder-unchanged-since-f9340ba-iter-9-proven-by-the-M1-EXIT-GATE-PIPELINE-OK+required-by-pinned-pipeline/lib/tables-anim-xref.js-line-20+newly-pinned-per-.loop/review-118-delta-3-codex-M5
+
+31199acd496efa519ef793717e9ff41ea92bc33da0e5727c1fa62601b19feca8 pipeline/lib/tables-schema.js arc-pending imported-by-pinned-pipeline/lib/tables-anim-xref.js-line-21-CHAR_NAMES+bytes-moved-in-M4-task-11-927294e-so-grandfathered-m1-would-be-a-false-era-claim+NO-verified-anchored-GO-cite-found+promoted-from-prose-to-a-real-unresolved-row-per-.loop/review-118-delta-4-codex-M

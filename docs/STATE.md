@@ -30,7 +30,23 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-27, iter 117 — jrt arc GO (judge frozen 4b68fba5, 5 false greens rejected, 100/100 zero-cost) + plib CLOSED (3 GOs); delta arc r1 NO-GO (23 unpinned frozen artifacts + status-token + 2 gate-grammar Ms); M3 leg-1 re-validated 8/8 on hardware, leg-2 red = known audio-TU gap; 4 rulings issued)
+## Live right now (updated: 2026-07-27, iter 118 — universe 87 producers all pinned; 3 more gate false-greens fixed (NUL/binary-grep/tear); delta arc OPEN at r4 (codex Highs genuine, serial-codex rule adopted); M3 audio wired but perf-red 17.444 ms → deferred post-gate; queue = delta r5 → tables-schema arc → flips → GATE)
+
+- **Iter 118 DONE** (commit 2c027ec). All four iter-117 rulings
+  executed; ruling-4's premise was false (engine needed full
+  data-plane wiring; now measures the modern renderer in a
+  pre-iter-113 rig config → known-class attribution deferred
+  post-gate, M3 refuses honestly, M4 unblocked). Serial-codex
+  standing rule (concurrent codex sessions were being spliced — our
+  bug, not caching). Delta arc continues: r4 fixes unreviewed, r5
+  mandatory, §3 cap at ~8, Highs never capped.
+- **Queue:** delta r5+ (serial) → tables-schema.js Tier A arc → flip
+  5 rows → final anchors/self-checks → **M4 GATE live legs** → LOOP
+  STOP: m4-complete → Chase playthrough → post-gate window: jitter
+  increment (§rulings) + M3 audio attribution/green + present-column
+  judge arm + plib deferral Low.
+
+## [superseded by iter-118] (updated: 2026-07-27, iter 117 — jrt arc GO (judge frozen 4b68fba5, 5 false greens rejected, 100/100 zero-cost) + plib CLOSED (3 GOs); delta arc r1 NO-GO (23 unpinned frozen artifacts + status-token + 2 gate-grammar Ms); M3 leg-1 re-validated 8/8 on hardware, leg-2 red = known audio-TU gap; 4 rulings issued)
 
 - **Iter 117 DONE (3 writer sessions).** Judge hardened through 9
   rounds + regression/falsification (10 code lines total, both

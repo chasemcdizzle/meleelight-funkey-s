@@ -18,7 +18,8 @@
 #       re-pinned by a REVIEWED change (update path: manifest header).
 #   [0b] REVIEW-CLOSURE STATUS ENFORCEMENT: in AUTHORITATIVE mode (the
 #       default) every producer's manifest status must be ∈
-#       {reviewed-go, oracle-frozen, grandfathered-m2} BEFORE any leg
+#       {reviewed-go, oracle-frozen, grandfathered-m1,
+#       grandfathered-m2} BEFORE any leg
 #       runs; any arc-in-flight/arc-pending producer = HARD REFUSAL
 #       naming the producers. MLFK_M4_DEV=1 bypasses ONLY this status
 #       enforcement (byte pins, the anchor, and the grammar stay
@@ -108,7 +109,7 @@ mkdir -p "$VDIR"
 # line (a full-byte self-row plus this anchor would be a two-unknown
 # hash fixed point with no solution); the excluded line is protected
 # by the anchor equality itself — a wrong literal IS a refusal.
-MANIFEST_SHA256=0a7b1a74687e4dece62c0e38644454fe3fdb669c1ff296078adebde031301dbb
+MANIFEST_SHA256=ab4dd41a3d942fb642c171ba8ce208a69f0adaa841583c8b487b3944aee1f82b
 
 # AUTHORITATIVE — computed ONCE, then readonly (the sentinel lockout).
 # Any dev/canned-evidence signal zeroes it; the `M4 GATE OK` sentinel
@@ -145,6 +146,37 @@ relay_lines() { sed 's/^/  | /'; }
 
 # The pinned producer set: the manifest must list EXACTLY these paths
 # (a truncated manifest can never silently narrow gate coverage).
+#
+# FROZEN REFERENCE DATA IS A PRODUCER (review-117-delta-1 [H1], iter
+# 118): the set below covers not only the code that GENERATES evidence
+# but the frozen data the judges compare that evidence AGAINST. Before
+# this extension, 23 such artifacts sat outside the universe:
+#   port/gfx/{gfxdata,vfxdata,vfxglyphs}-frozen.txt — the three frozen
+#     graphics planes, previously only EXISTENCE-checked
+#     (check-device-fullgame.sh:973 is `[ -f "$f" ] || fail`, no hash);
+#   port/foh/flows/*.{flow,expect,bstate.expect} — all 20 files: the
+#     flow SCRIPTS leg 2 drives and the frozen transition/button-state
+#     EXPECTATIONS leg 2 judges the resulting traces against.
+# A hash pin on the engines alone does not close this: an edit that
+# changes a flow's expectation AND the trace it is compared to moves
+# both sides of the comparison together, so leg 2 stays green while the
+# thing it proves silently shrinks. That is common-mode drift, and only
+# pinning the reference itself detects it. These rows are DATA — they
+# have no logic to review — so their arc is a provenance/freeze-
+# integrity review, and their statuses cite it like any other row.
+#
+# LEG 1's OWN GROUND TRUTH (review-118-delta-3-opus [M4], iter 118):
+# the same argument applies with more force to oracle/goldens/ —
+# manifest.json DECIDES which goldens leg 1 runs and with what params,
+# and the 8 *.sha256.json ARE the frozen per-frame streams leg 1's
+# entire conformance claim is judged against. The engines pin the
+# golden ID SET and verify-stream.js checks each file's internal
+# streamSha256 seal, but both are recomputable by whoever edits a
+# golden — exactly the common-mode drift a reviewed pin exists to
+# catch. All 17 (manifest + 8 streams + 8 traces) are HARD RULE 3
+# surfaces, untouched since 38d6733 (iter 8) and proven by the M0 exit
+# gate, so they carry `oracle-frozen` — same status and cite shape as
+# the existing oracle/harness rows.
 REQUIRED_PRODUCERS="port/sim/device/adbsh.sh
 port/sim/device/riglib.sh
 port/sim/device/percentiles.js
@@ -155,6 +187,9 @@ port/goldens-m4/wrap-target.js
 port/goldens-m4/validate-target-manifest.js
 port/goldens-m4/json-dup-key-scan.js
 pipeline/lib/tables-anim-xref.js
+oracle/CHECKSUM.md
+pipeline/lib/animbin.js
+pipeline/lib/tables-schema.js
 port/goldens-m4/manifest.json
 port/goldens-m4/manifest-target.json
 port/goldens-m4/m01-falcon-marth-d1-ystory.sha256.json
@@ -170,10 +205,50 @@ port/foh/judge-foh-trace.js
 port/foh/normalize-foh-trace.js
 port/foh/flow-to-fkscript.js
 port/foh/keymap-frozen.txt
+port/foh/flows/f01-vs-g01.flow
+port/foh/flows/f01-vs-g01.expect
+port/foh/flows/f01-vs-g01.bstate.expect
+port/foh/flows/f02-cpu-m01.flow
+port/foh/flows/f02-cpu-m01.expect
+port/foh/flows/f02-cpu-m01.bstate.expect
+port/foh/flows/f03-options.flow
+port/foh/flows/f03-options.expect
+port/foh/flows/f03-options.bstate.expect
+port/foh/flows/f04-nav.flow
+port/foh/flows/f04-nav.expect
+port/foh/flows/f05-vs-g03.flow
+port/foh/flows/f05-vs-g03.expect
+port/foh/flows/f05-vs-g03.bstate.expect
+port/foh/flows/f06-target-t01.flow
+port/foh/flows/f06-target-t01.expect
+port/foh/flows/f06-target-t01.bstate.expect
+port/foh/flows/f07-target-t02.flow
+port/foh/flows/f07-target-t02.expect
+port/foh/flows/f07-target-t02.bstate.expect
 port/gfx/judge-shot.js
 port/gfx/judge-render-timing.js
 port/gfx/judge-audio-summary.js
 port/gfx/pack-snd.js
+port/gfx/gfxdata-frozen.txt
+port/gfx/vfxdata-frozen.txt
+port/gfx/vfxglyphs-frozen.txt
+oracle/goldens/manifest.json
+oracle/goldens/g01-fox-marth-battlefield.sha256.json
+oracle/goldens/g02-falco-puff-ystory.sha256.json
+oracle/goldens/g03-falcon-fox-pstadium.sha256.json
+oracle/goldens/g04-puff-falcon-dreamland.sha256.json
+oracle/goldens/g05-marth-falco-fdest.sha256.json
+oracle/goldens/g06-falcon-marth-fountain.sha256.json
+oracle/goldens/g07-falco-falcon-battlefield.sha256.json
+oracle/goldens/g08-fox-puff-fdest.sha256.json
+oracle/goldens/g01-fox-marth-battlefield.trace.json
+oracle/goldens/g02-falco-puff-ystory.trace.json
+oracle/goldens/g03-falcon-fox-pstadium.trace.json
+oracle/goldens/g04-puff-falcon-dreamland.trace.json
+oracle/goldens/g05-marth-falco-fdest.trace.json
+oracle/goldens/g06-falcon-marth-fountain.trace.json
+oracle/goldens/g07-falco-falcon-battlefield.trace.json
+oracle/goldens/g08-fox-puff-fdest.trace.json
 port/gfx/check-device-opk.sh
 port/gfx/opk/mlfk-foh.sh
 port/gfx/opk/meleelight-foh.funkey-s.desktop
@@ -252,7 +327,7 @@ while IFS= read -r mline || [ -n "$mline" ]; do
   case "$mline" in
     '#'*|'') continue ;;
   esac
-  if ! [[ "$mline" =~ ^[0-9a-f]{64}\ [A-Za-z0-9._/-]+\ (reviewed-go|oracle-frozen|grandfathered-m2|arc-in-flight|arc-pending)\ [A-Za-z0-9._/:+-]+$ ]]; then
+  if ! [[ "$mline" =~ ^[0-9a-f]{64}\ [A-Za-z0-9._/-]+\ (reviewed-go|oracle-frozen|grandfathered-m1|grandfathered-m2|arc-in-flight|arc-pending)\ [A-Za-z0-9._/:+-]+$ ]]; then
     echo "M4 GATE REFUSED: manifest line fails the anchored grammar: '$mline'" >&2
     exit 1
   fi
@@ -297,7 +372,15 @@ while IFS= read -r prod; do
   fi
   # status collection for [0b]
   case "$mstatus" in
-    reviewed-go|oracle-frozen|grandfathered-m2) : ;;
+    # grandfathered-m1 (iter-118, review-117-delta-1 [H2] + r9b [L]
+    # dissolved by TRUTHFUL VOCABULARY): the pre-PROCESS grandfather
+    # token was M2-only, so pinning an M1-era checker forced a choice
+    # between a false era label and a false refusal. The era is now
+    # named accurately instead — an M1-era surface proven by the M1
+    # EXIT GATE (PIPELINE OK) rather than the M2 exit corpus. Same
+    # closure semantics, same enforcement strength; only the cite's
+    # era claim changes, and it changes to the true one.
+    reviewed-go|oracle-frozen|grandfathered-m1|grandfathered-m2) : ;;
     *)
       n_unresolved=$((n_unresolved + 1))
       UNRESOLVED="$UNRESOLVED  $prod ($mstatus)"$'\n'
@@ -316,7 +399,7 @@ if [ "$n_unresolved" != 0 ]; then
     echo "WARN: MLFK_M4_DEV=1 — status enforcement BYPASSED for $n_unresolved producer(s) (engineering run; outcome will be NON-AUTHORITATIVE + nonzero):" >&2
     printf '%s' "$UNRESOLVED" | relay_lines >&2
   else
-    echo "M4 GATE REFUSED: $n_unresolved producer(s) lack review closure — status not in {reviewed-go, oracle-frozen, grandfathered-m2}:" >&2
+    echo "M4 GATE REFUSED: $n_unresolved producer(s) lack review closure — status not in {reviewed-go, oracle-frozen, grandfathered-m1, grandfathered-m2}:" >&2
     printf '%s' "$UNRESOLVED" | relay_lines >&2
     echo "  Review closure (PROCESS §3 arc -> §4 reviewed pin) is required BEFORE any leg" >&2
     echo "  runs in AUTHORITATIVE mode. Close the arcs and flip the manifest statuses" >&2
@@ -373,21 +456,90 @@ run_engine() { # <name> <script> [KEY=VAL ...] — runs (or replays) an
 # (each producer emits its prefix exactly once, as the full verdict),
 # so a genuine log can never false-reject while a truncated/torn
 # duplicate is corruption death. Echoes the matched line on stdout.
+# EVERY grep BELOW IS `-a` (review-118-delta-3-opus [H1]): this host's
+# grep treats a file containing ANY NUL byte as binary, and then the
+# non-counting form returns `Binary file X matches` (or nothing) INSTEAD
+# of the matched line. The -c forms still count, so the two count guards
+# below stayed green while `line` became garbage — which silently
+# disabled the proper-prefix tear loop (nothing can be a prefix of
+# `Binary file ... matches`). Legs 1-3 then died late in p99 extraction,
+# but the OPK leg has no p99 call, so a torn OPK verdict reached
+# `M4 GATE OK`. A leg log picks up NULs from relayed device bytes, so
+# this needs no adversary. -a forces the text path unconditionally.
 expect_grammar() {
   local logf="$1" full="$2" resem="$3" label="$4" c r line
-  c="$(grep -cE "$full" "$logf")" || true
+  # TORN FINAL WRITE (review-117-delta-1 [M1]): `grep` treats EOF as a
+  # line terminator, so a log whose LAST line was written without its
+  # newline — the exact byte signature of a truncated/killed write —
+  # still matches the full grammar and passes every guard below. A
+  # genuine engine log always ends in LF (every producer's verdict is
+  # the final `echo`, and the canned-replay path is a byte `cp`), so a
+  # missing final LF is CORRUPT evidence, never ignorable. Asserted
+  # BEFORE any grep so no torn log is ever parsed at all.
+  if [ ! -s "$logf" ]; then
+    echo "M4 GATE FAIL: $logf is empty — no $label evidence to judge" >&2
+    exit 1
+  fi
+  # NO CONTROL CHARACTERS except TAB and LF (review-118-delta-3-codex
+  # [H] then review-118-delta-4-codex [H] — the SECOND generalisation).
+  # Every guard below reasons about LINES, and a control byte breaks line
+  # reasoning in ways no line-level guard can see. MEASURED, all three
+  # ACCEPTED before this check existed:
+  #   \0OPK FOH LAUNCH  — NUL-prefixed torn duplicate
+  #   \rOPK FOH LAUNCH  — CR-prefixed  (SOH and ESC behave identically)
+  # A junk-PREFIXED tear defeats both guards at once: it does not match
+  # the ^-anchored resemblance grammar (the line no longer starts with
+  # the verdict's first character), and it is not a proper PREFIX of the
+  # verdict either (the verdict starts with 'O'), so the tear loop skips
+  # it. NUL additionally desyncs grep (binary mode) and `$( )` vs
+  # `read -r`. The first fix here refused NUL only — that closed the
+  # instance, not the CLASS, which is exactly what round 4 demonstrated.
+  # A control byte in a TEXT evidence log is corruption by definition, so
+  # the whole class is refused once, up front, before anything parses it.
+  # TAB and LF are the only control bytes a producer legitimately emits.
+  # MEASURED SAFE: every archived genuine leg log contains ZERO control
+  # bytes other than LF/TAB (0 CR, 0 ESC, 0 other), so this cannot
+  # false-reject. Non-ASCII/UTF-8 is deliberately still allowed — the
+  # engines' own messages contain em-dashes.
+  if [ "$(LC_ALL=C tr -d '\000-\010\013-\037\177' < "$logf" | wc -c | tr -d ' ')" \
+     != "$(wc -c < "$logf" | tr -d ' ')" ]; then
+    echo "M4 GATE FAIL: $logf contains control byte(s) other than TAB/LF — a text evidence log with embedded control bytes is CORRUPT ($label); such bytes defeat line-oriented verdict parsing (junk-prefixed torn writes)" >&2
+    exit 1
+  fi
+  # BYTE-EXACT, never via `$(...)` emptiness: bash's command substitution
+  # DROPS NUL bytes, so `[ -n "$(tail -c 1 f)" ]` passes a log whose final
+  # byte is NUL — the exact padding a truncated write leaves behind. (zsh
+  # keeps the NUL, so the naive test only looks correct interactively;
+  # measured both ways.) Compare the final byte's hex to 0a instead.
+  if [ "$(tail -c 1 "$logf" | od -An -tx1 | tr -d ' \n')" != 0a ]; then
+    echo "M4 GATE FAIL: $logf does not end with a newline — its final line is a torn/truncated write, which is CORRUPT $label evidence, never ignorable" >&2
+    exit 1
+  fi
+  c="$(grep -acE "$full" "$logf")" || true
   if [ "$c" != 1 ]; then
     echo "M4 GATE FAIL: expected exactly 1 $label verdict line matching the pinned grammar in $logf, found $c" >&2
     echo "  grammar: $full" >&2
     echo "  — an engine that exits 0 without its exact verdict is CORRUPT evidence" >&2
     exit 1
   fi
-  r="$(grep -cE "$resem" "$logf")" || true
+  r="$(grep -acE "$resem" "$logf")" || true
   if [ "$r" != 1 ]; then
     echo "M4 GATE FAIL: $logf carries $r lines matching the verdict-resemblance grammar '$resem' but exactly 1 full-grammar verdict — a verdict-RESEMBLING malformed line (truncated/torn duplicate) is CORRUPTION, never ignorable" >&2
     exit 1
   fi
-  line="$(grep -E "$full" "$logf")"
+  line="$(grep -aE "$full" "$logf")" || {
+    echo "M4 GATE FAIL: could not re-read the $label verdict line from $logf after counting it — an evidence read that fails mid-judgement is CORRUPT evidence, never ignorable" >&2
+    exit 1
+  }
+  # BOTH round-4 reviewers, independently: the extracting grep runs in a
+  # command substitution where bash disables errexit, and an empty `line`
+  # silently DISABLES the proper-prefix loop below (nothing is a prefix of
+  # ""). Legs 1-3 would still die in p99_under_budget, but the OPK leg has
+  # no p99 call, so an empty line there reached the sentinel.
+  if [ -z "$line" ]; then
+    echo "M4 GATE FAIL: the $label verdict line re-read as EMPTY from $logf despite a count of 1 — CORRUPT evidence" >&2
+    exit 1
+  fi
   # TORN-DUPLICATE CLOSURE BY CONSTRUCTION (review-108-2 H3): a prefix
   # ANCHOR can only ever catch tears longer than the anchor itself —
   # `FULLGAME CONF` slips under `^FULLGAME CONFORMS`, and lengthening or
@@ -464,10 +616,60 @@ p99_under_budget() {
 # fixed literal sequences in a fixed order (check-device-target.sh:320,
 # check-device-foh.sh:374), so the exact ids are pinned in that order
 # and a dropped/duplicated flow now dies here.
-FULLGAME_RE='^FULLGAME CONFORMS 12/12 \(render\+sfx\+music live; live-ai=g07,g08,m01,m02 p99=[0-9]{1,3}\.[0-9]{3}ms skips=0 underruns=0 starves=0 presentfails=0 teeth=21\)$'
-TARGET_RE='^DEVICE TARGET CONFORMS \(goldens=2 flows=2 shots=4 fbwit=[0-9]{1,6} p99=[0-9]{1,3}\.[0-9]{3}ms skips=0 underruns=0 starves=0 starts f06-target-t01=[0-9]{1,6} f07-target-t02=[0-9]{1,6} sfxpin=[0-9]{1,6}/[0-9]{1,6} music=menu>targettest:[0-9]{1,2}/5 teeth=[0-9]{1,3}\)$'
-FOH_RE='^DEVICE FOH OK \(flows=5 shots=[0-9]{1,4} bridge=1 states=3 opk=evidence fbwit=[0-9]{1,6} p99=[0-9]{1,3}\.[0-9]{3}ms skips=0 underruns=0 starves=0 starts f01-vs-g01=[0-9]{1,6} f02-cpu-m01=[0-9]{1,6} f03-options=[0-9]{1,6} f04-nav=[0-9]{1,6} f05-vs-g03=[0-9]{1,6} teeth=[0-9]{1,3}\)$'
-OPKFOH_RE='^OPK FOH LAUNCH OK \(frontend-launched via gmenu2x into the FOH, boot marker bin-sha == stamp, evidence rc=0, [0-9]{1,3} transitions vs frozen, shot structural\)$'
+#
+# CONSTANT-VALUED FIELDS ARE PINNED AS LITERALS, NOT WILDCARDS
+# (review-117-delta-1 [M2]): a numeric wildcard on a field the producer
+# emits as a CONSTANT accepts output the producer is structurally
+# incapable of producing — i.e. it accepts only corruption, at the cost
+# of the whole field's evidentiary value. Two were measured against the
+# live emitters and are now literal:
+#   shots=13   — check-device-foh.sh:1801 hardcodes `shots=13` in the
+#                verdict string itself (not a variable).
+#   1 transitions — check-device-opk.sh:1279 likewise emits the count as
+#                a string literal in the OPK-FOH verdict.
+#   starts f06-target-t01=15 f07-target-t02=31, sfxpin=15/31 —
+#                check-device-target.sh:148 freezes SFX_STARTS_PIN=(15
+#                31) and :1031 hard-fails unless the measured starts
+#                EQUAL that pin, before :1240 emits them; so all three
+#                fields are producer constants too. (FOH's `starts` are
+#                deliberately NOT pinned: check-device-foh.sh:1277
+#                asserts them against a HOST-TWIN MEASUREMENT, not a
+#                frozen literal, so they legitimately vary.)
+#                These four were missed by the first pass, which claimed
+#                a complete sweep it had not performed — found by
+#                review-118-delta-3-opus [M3].
+#   fbwit / teeth — SECOND sweep (both round-3 reviewers, independently):
+#                fbwit is a pure sum over each engine's FIXED literal
+#                FLOW_SHOTS array (target 2+2=4, FOH 13+2=15) and teeth
+#                is a count of UNCONDITIONAL column-0 `teeth=$((teeth+1))`
+#                sites (target 6, FOH 15 — none inside a loop or
+#                conditional). Three-way agreed: two independent static
+#                counts plus the archived passing output (fbwit=4/teeth=6
+#                and fbwit=15/teeth=15). FULLGAME_RE already pinned
+#                teeth=21 literally, so this makes the family uniform.
+#   music=menu>targettest:5/5 — check-device-target.sh:1239 hard-fails
+#                (`mustrack leg coverage ... != 5`) BEFORE the verdict
+#                echo, so the only value that can ever reach the log
+#                through a passing run is 5/5. The old N/5 wildcard
+#                admitted 0/5..9/5, every one of which means the
+#                producer's own coverage assertion was bypassed.
+#
+# NO LEADING ZEROS IN ANY NUMERIC FIELD (review-117-delta-1 [M2], class
+# fix): `[0-9]{1,6}` accepts `000042` and `007.950`, which no shell
+# `printf %d`/`%.3f` emitter can produce — again a pattern matching only
+# malformed output. Every variable numeric field below is therefore
+# `(0|[1-9][0-9]{0,N})`: bare zero, or a nonzero leading digit. The
+# FRACTIONAL part of p99 keeps `[0-9]{3}` — leading zeros there are
+# genuine digits (7.045 ms), not a malformed integer. OPKFOH_RE's
+# transition count is the same class and is fixed with it rather than
+# left as the one remaining hole (HARD RULE 8: class fix over one-off).
+# Every change in this block is strictly NARROWING: the accepted
+# language is a proper subset of what it was, so no run that passed
+# before on genuine producer output can fail now.
+FULLGAME_RE='^FULLGAME CONFORMS 12/12 \(render\+sfx\+music live; live-ai=g07,g08,m01,m02 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=0 underruns=0 starves=0 presentfails=0 teeth=21\)$'
+TARGET_RE='^DEVICE TARGET CONFORMS \(goldens=2 flows=2 shots=4 fbwit=4 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=0 underruns=0 starves=0 starts f06-target-t01=15 f07-target-t02=31 sfxpin=15/31 music=menu>targettest:5/5 teeth=6\)$'
+FOH_RE='^DEVICE FOH OK \(flows=5 shots=13 bridge=1 states=3 opk=evidence fbwit=15 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=0 underruns=0 starves=0 starts f01-vs-g01=(0|[1-9][0-9]{0,5}) f02-cpu-m01=(0|[1-9][0-9]{0,5}) f03-options=(0|[1-9][0-9]{0,5}) f04-nav=(0|[1-9][0-9]{0,5}) f05-vs-g03=(0|[1-9][0-9]{0,5}) teeth=15\)$'
+OPKFOH_RE='^OPK FOH LAUNCH OK \(frontend-launched via gmenu2x into the FOH, boot marker bin-sha == stamp, evidence rc=0, 1 transitions vs frozen, shot structural\)$'
 
 # RESEMBLANCE discriminators (review-108-1 H3): these must be STRICTLY
 # LOOSER than the full grammars, or a torn line cannot be seen. The
