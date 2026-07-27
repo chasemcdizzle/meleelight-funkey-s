@@ -1955,3 +1955,20 @@ overruns):
   row-count-gated single-valued test (POP_MIN_ROWS design), own arc +
   teeth + 5-site re-pin fan-out; schedule post-gate with the jitter
   increment. Evidence: .loop/review-117-triage.md §9.
+
+## M4 ACCEPTANCE PUNCH LIST (owner playthrough 2026-07-27; ratification pending; AGENT-LOG iter-120)
+- A1 (P0) FOH look-fidelity: menus match upstream meleelight (ikneedata
+  look) at 240×240 — reference-capture every upstream screen via the
+  browser harness first, then per-screen restyle with side-by-side
+  judges; flows/judges/manifest re-arcs + re-pins ride each increment.
+- A2 (P0) target-test launch crash from the PLAY path (evidence flows
+  were green — play-OPK-specific). Diagnose from device, fix, arc.
+- A3 (P1) L shoulder = shield/air-dodge (currently unbound).
+- A4 (P1) control-style system: box + normal, switchable, normal
+  default (owner ratified semantics 2026-07-27).
+- A5 (P1) Controls screen selection wired (candidate: style selector).
+- A6 (P2) Audio options tab functional.
+- A7 (P2) Credits functional.
+- A8 (P2) reuse audit report to owner.
+Sequence: punch list → owner re-play/ratification → post-gate window
+(jitter LAST per §rulings).

@@ -19656,3 +19656,51 @@ attribution→green, present-column judge arm, grok-M ||-true sites,
 Opus-L1 duplicate check, plib deferral Low.
 
 LOOP STOP: m4-complete — awaiting Chase acceptance playthrough
+
+---
+
+iter 120 · 2026-07-27 · phase M4 (HUMAN GATE) · **CHASE ACCEPTANCE PLAYTHROUGH: AMENDMENTS ISSUED — gate NOT ratified yet** · provisioning completed (play data + FOH OPK on device) · punch list opened
+
+**Provisioning (driver):** /mnt/mlfk-data populated + sha-verified
+(simdata, 5 anim banks, 3 gfx planes, sndpack, music manifest, 8 PCM
+tracks ~193 MB); old M3 direct-match meleelight.opk identified as the
+boots-into-a-match confusion (Jul 17 install, gate evidence OPKs are
+removed by design); FOH play OPK installed by Chase via `!` after the
+permission classifier blocked the driver's swap commands.
+**ACCEPTANCE FEEDBACK (owner, verbatim points):**
+- A1 (P0, "first & foremost"): FOH menus must MATCH the actual game's
+  look (upstream meleelight as hosted on ikneedata — which looks like
+  original Melee) — or carry a good reason. DRIVER ANSWER given: the
+  MACHINERY rewrite was forced (upstream menus are jQuery/DOM/CSS
+  hybrids at 1200×750 — not portable code; fix_plan §M4 conventions),
+  but the LOOK was rebuilt simpler under a PROVISIONAL auto-adopted
+  decision whose own text deferred visual-look authority to THIS
+  playthrough. Authority exercised: restyle to match. (His "am I
+  wrong?" — half: no reusable menu code existed; the look divergence
+  was ours and provisional.)
+- A2 (P0): target-test LAUNCH FROM THE PLAY PATH CRASHES (gate flows
+  f06/f07 were green through their own evidence invocation — the
+  defect is play-OPK-path-specific).
+- A3 (P1): L shoulder currently does NOTHING in air — must be
+  shield/air-dodge.
+- A4 (P1): control-style SYSTEM: box-style (the original first
+  scheme) AND normal, both available, switchable; normal stays
+  default.
+- A5 (P1): Controls options screen enters but cannot select
+  controller/keyboard — wire selection (candidate: repurpose as the
+  A4 style selector, faithful to upstream semantics where sensible).
+- A6 (P2, "fine for now"): Audio options tab non-functional.
+- A7 (P2, "fine for now"): Credits non-functional.
+- A8 (P2): REUSE AUDIT — sweep for any other surface rebuilt where
+  upstream source existed and reusable; report to owner. (Driver's
+  standing answer: engine/data/audio are executed-from-upstream and
+  checksum-proven; renderer forced by canvas→framebuffer; AI
+  structure-parallel capture-verified; S1 input has no upstream
+  equivalent; FOH look = the one deliberate divergence, now
+  overruled.)
+**SEQUENCE (owner order preserved):** punch list → Chase re-play /
+ratification → THEN the post-gate window (jitter increment stays
+LAST per the 2026-07-26 ruling; M3-audio + judge-arm + hardening Lows
+ride the window). M4 mechanical gate stands (fe885bd evidence);
+FROZEN surfaces stay frozen — FOH/menu work re-runs the affected
+check arcs + re-pins per the established discipline.
