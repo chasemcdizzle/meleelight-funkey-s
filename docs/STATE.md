@@ -30,7 +30,24 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-26, iter 115 — **GATE LEG 3 GREEN: OPK FOH LAUNCH OK via real gmenu2x, driver-cold rc 0**; pace regressions foh/target/render green; m3 manifest 23/23 truthful, zero arc-pending; audio-check stale-TU registered)
+## Live right now (updated: 2026-07-26, iter 116 — m4 manifest assembled (33 rows, truthful) + universe extended; gate CORRECTLY REFUSES [0b] on 6 unclosed rows; arcs proved a jrt FALSE-GREEN (p99 13.9→7.1 rc 0) + fail-open plib plane; 5 driver rulings queued for iter 117)
+
+- **Iter 116 DONE.** Manifest + universe 25→33 (8 omitted
+  decision-bearing producers); statuses honest; driver cold refusal
+  rc 1 naming exactly the six unclosed rows
+  (.loop/driver-cold-t116-refusal.log). Tier A+ arcs: jrt codex NO-GO
+  + Opus-5 NO-GO (demonstrated sim-column false green on the gate's
+  headline p99; 29-judgment byte-identity PASSED), plib codex 4H +
+  grok 2H independently reproduced (vacuous pass on empty set;
+  self-derived contract). Cached-codex instances #6/#7 discarded.
+  Full trail AGENT-LOG iter-116 incl. the 5 rulings.
+- **Queue (iter 117):** jrt unfreeze-fix + plib hardening + goldens-m4
+  plane pinning + correlate-skips pin/comment + self-row arc → all 33
+  rows closed → re-anchor → delta GO → **M4 GATE RUN (legs live)** →
+  LOOP STOP: m4-complete → Chase playthrough → FINAL jitter increment
+  (§rulings) + audio-check TU repair.
+
+## [superseded by iter-116] (updated: 2026-07-26, iter 115 — **GATE LEG 3 GREEN: OPK FOH LAUNCH OK via real gmenu2x, driver-cold rc 0**; pace regressions foh/target/render green; m3 manifest 23/23 truthful, zero arc-pending; audio-check stale-TU registered)
 
 - **Iter 115 DONE.** MLFK_OPK_FOH arm (arc GO codex r3, 8 findings
   fixed; .desktop trailing-line defect fixed; three measured

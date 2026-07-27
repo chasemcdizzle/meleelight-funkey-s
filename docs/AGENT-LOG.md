@@ -19451,3 +19451,62 @@ port/sim/device/m4-freeze-manifest.txt (25 producers; re-cite the
 .desktop via review-115-3; check-device-opk.sh row now reviewed-go)
 + verify_m4.sh MANIFEST_SHA256 anchor → **M4 GATE RUN** → sentinel
 `LOOP STOP: m4-complete — awaiting Chase acceptance playthrough`.
+
+---
+
+iter 116 · 2026-07-26 · phase M4 · task 14: m4-freeze-manifest ASSEMBLED (33 producers) + gate universe extended (driver-sanctioned strengthen-only) · gate CORRECTLY REFUSES at [0b] — the arcs found REAL fail-open holes in the evidence chain · driver rulings for iter 117
+
+**Writers:** two claude-opus-5 sessions (original survived a
+session-limit kill and completed; respawn extended). Pre-reg
+.loop/m4-t116-prereg.md.
+**Built:** m4-freeze-manifest.txt (NEW, 33 rows, cite discipline
+byte-bound not mtime-bound — the round-1 [M] correction);
+verify_m4.sh REQUIRED_PRODUCERS 25→33 (the eight decision-bearing
+producers round-1 [H] measured reachable: streamlib.js,
+dump-sim-data.js, keymap-frozen.txt, json-dup-key-scan.js, 3×
+pipeline/lib/*.js, pipeline/expected.json) + anchor; statuses all
+truthful (22 reviewed-go / 2 oracle-frozen / 2 grandfathered-m2 / 5
+arc-pending / self-row arc-in-flight).
+**Arcs run (verdicts driver-read):** manifest r1 codex NO-GO (the
+good one — universe hole [H], jrt stale-cite [H], mtime-freshness
+[M]); a killed-log GO VOIDED + a 6th AND 7th proven cached-codex
+instance discarded; delta r2 = Opus 5 fallback NO-GO (2 fixed, 2
+escalated). Tier A+ arcs over the pending producers: **jrt** codex
+NO-GO (2M) + Opus-5 second NO-GO — **DEMONSTRATED FALSE GREEN on the
+gate's headline perf number**: judge-render-timing.js:74 guards a
+zero render column but NOT sim — zeroing col 1 of a real artifact
+moved full_p99_ms 13.903→7.147 with rc 0 + judge_complete=1 through
+all three consumers (bar-(a) class; grok aborted ×3, moot — NO-GO
+primary); byte-identity regression on 29 archived judgments PASSED.
+**plib** codex NO-GO (4H) + grok NO-GO (2H) INDEPENDENTLY reproducing:
+verify-artifacts.js passes VACUOUSLY on an empty artifact set,
+check-expected.js derives its contract FROM the file it checks (a
+deleted section is never asserted). **Gate:** driver COLD
+.loop/driver-cold-t116-refusal.log rc 1 — [0] 33/33 pins green,
+[0b] refuses naming exactly the six unclosed rows. Zero device time.
+The refusal IS the system working: an unapproved judge and fail-open
+M1 machinery cannot underwrite an M4 pass.
+**DRIVER RULINGS (iter-117 brief; all strengthen-only):**
+1. judge-render-timing.js UNFROZEN for the fix set: sim-column
+   zero/absurdity guard on rendered frames (the false-green hole) +
+   the 2 codex Ms (leading-zero token rejection, checked 3-term sum).
+   Then Tier A+ re-arc (codex primary; failure → grok+Opus BOTH per
+   §11) + the 29-judgment byte-identity regression MUST still pass.
+2. pipeline plib plane HARDENED same iteration (fail-closed on empty
+   artifact set; check-expected asserts a contract list pinned
+   INDEPENDENT of the checked file; the codex Hs' fix guidance).
+   Tier A+ re-arc. M1 gate re-run (verify_pipeline.sh) to prove no
+   regression on genuine data.
+3. port/goldens-m4/ FROZEN PLANE PINNED (the Opus-5 escalation): the
+   *.sha256.json streams + manifests join REQUIRED_PRODUCERS +
+   manifest rows (status per provenance: record-m4.sh arcs), so leg-1's
+   comparison basis can no longer drift unpinned. Strengthen-only
+   universe extension #2, same sanction shape as #1 was.
+4. check-device-fullgame.sh:2335 false "UNCHANGED pinned judge" claim
+   about correlate-skips.js corrected + correlate-skips.js/
+   validate-ev.js/sk_sampler.c pinned (armed-mode diagnostics, but the
+   comment must not lie and pinning is cheap).
+5. verify_m4.sh self-row: the cumulative iter-116+117 gate delta gets
+   ONE arc to GO → row flips reviewed-go with that cite.
+**Next (iter 117):** rulings 1-5 → all rows closed → manifest
+re-anchor → delta arc GO → **M4 GATE RUN (legs live)**.

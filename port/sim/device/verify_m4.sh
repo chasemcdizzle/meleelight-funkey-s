@@ -108,7 +108,7 @@ mkdir -p "$VDIR"
 # line (a full-byte self-row plus this anchor would be a two-unknown
 # hash fixed point with no solution); the excluded line is protected
 # by the anchor equality itself — a wrong literal IS a refusal.
-MANIFEST_SHA256=0000000000000000000000000000000000000000000000000000000000000000
+MANIFEST_SHA256=4da832d047e76df05cb4c231deea9f55d3a887ba8f3d795dfebdfbca22548eca
 
 # AUTHORITATIVE — computed ONCE, then readonly (the sentinel lockout).
 # Any dev/canned-evidence signal zeroes it; the `M4 GATE OK` sentinel
@@ -153,10 +153,12 @@ port/sim/target/check-device-target.sh
 port/goldens-m4/verify-target-stream.js
 port/goldens-m4/wrap-target.js
 port/goldens-m4/validate-target-manifest.js
+port/goldens-m4/json-dup-key-scan.js
 port/foh/check-device-foh.sh
 port/foh/judge-foh-trace.js
 port/foh/normalize-foh-trace.js
 port/foh/flow-to-fkscript.js
+port/foh/keymap-frozen.txt
 port/gfx/judge-shot.js
 port/gfx/judge-render-timing.js
 port/gfx/judge-audio-summary.js
@@ -168,7 +170,13 @@ port/gfx/opk/icon32.png
 port/tools/fk_input.c
 port/sim/sim/wrap-run.js
 port/sim/sim/trace-to-txt.js
+port/sim/calib/dump-sim-data.js
 oracle/harness/verify-stream.js
+oracle/harness/streamlib.js
+pipeline/lib/manifest.js
+pipeline/lib/verify-artifacts.js
+pipeline/lib/check-expected.js
+pipeline/expected.json
 port/sim/device/verify_m4.sh"
 
 # gate_norm_sha256 — sha256 of THIS script's bytes EXCLUDING the single

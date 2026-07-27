@@ -1,0 +1,221 @@
+# port/sim/device/m4-freeze-manifest.txt — M4 EXIT GATE freeze manifest
+# (PROCESS §4 reviewed-pin rule; assembled iter 116, the m3 manifest's
+# format and status vocabulary inherited verbatim).
+#
+# Record grammar (verify_m4.sh parses it anchored, fail-closed):
+#   <sha256> <path> <status> <cite>
+# status tokens:
+#   reviewed-go      — surface closed a Tier-A arc at VERDICT: GO (or a
+#                      driver-recorded CAPPED-CLOSED; cite = the arc's
+#                      verdict log and/or the driver AGENT-LOG entry)
+#   oracle-frozen    — HARD RULE 3 surface (never edited since freeze)
+#   grandfathered-m2 — M2-era judge-path tool predating PROCESS
+#                      adoption; proven by the M2 exit gate corpus
+#   arc-in-flight / arc-pending — grammar-legal, but verify_m4.sh [0b]
+#                      HARD-REFUSES them in AUTHORITATIVE mode. Rows
+#                      carrying one are listed in the UNCLOSED ROWS
+#                      block below; while any remains, an AUTHORITATIVE
+#                      run REFUSES before leg 1.
+#
+# The producer set is EXACTLY verify_m4.sh's REQUIRED_PRODUCERS literal
+# (33 paths, same order). verify_m4.sh HARD-REFUSES to run any leg when
+# a producer's current bytes mismatch its pin, when a row is missing or
+# duplicated, or when an extra row appears ("hashes prove identity, not
+# approval" — a producer change invalidates prior gate evidence).
+#
+# CITE DISCIPLINE (iter 116): every cite names evidence verified by
+# reading the log's LAST anchored `^VERDICT: GO` line, or a driver
+# CAPPED-CLOSED AGENT-LOG entry. Two measured traps are avoided by
+# construction: `.loop/review-96-aplus-1.log`'s `**VERDICT: GO**` is
+# bold markdown, NOT anchored-parseable, and is never cited; prompt-text
+# occurrences of the verdict format are not verdicts (the reviewer's
+# verdict is the LAST anchored line).
+#
+# BYTE COVERAGE (corrected in round 1, review-116-1 [M]): a cite must
+# show the arc reviewed the producer's CURRENT bytes. TIMESTAMPS DO NOT
+# SHOW THIS and are not used as the binding evidence — a review normally
+# PRECEDES the commit it closes, so a cite log legitimately predates its
+# producer's commit (measured: review-113-7.log 15:58:42 vs c587390
+# 16:05:34; review-115-3.log 19:49:19 vs adf072a 20:08:19). What binds
+# instead, per row, is the arc's own evidence packet naming the file:
+#   check-device-fullgame.sh  -> .loop/review-113-7-diff.txt (sole file)
+#   check-device-opk.sh, .desktop -> .loop/review-115-3-diff-cumulative.txt
+#   verify_m4.sh (teeth=21)   -> .loop/review-109-10-diff.txt hunk
+# plus, for unchanged-since-GO rows, the fact that the producer has had
+# NO commit since the cited closure. The one row where NO evidence of
+# either kind exists is judge-render-timing.js — see the next block.
+#
+# UPDATE PATH (reviewed change only): a producer edit lands through its
+# review arc; the SAME commit re-pins it here by regenerating its line:
+#   shasum -a 256 <path>   -> replace the record's sha field
+# (iter-115's riglib.sh row went stale exactly because a commit touching
+# a pinned producer did not re-pin in the same commit.)
+#
+# INTEGRITY ANCHOR: THIS FILE's own sha256 is pinned as the
+# MANIFEST_SHA256= literal inside verify_m4.sh, verified BEFORE any row
+# is trusted. UPDATE DISCIPLINE (binding): ANY edit to this file — any
+# row, any comment byte — requires updating that literal in
+# port/sim/device/verify_m4.sh IN THE SAME COMMIT:
+#   shasum -a 256 port/sim/device/m4-freeze-manifest.txt
+# NORMALIZED SELF-REFERENCE: the verify_m4.sh row below pins sha256 of
+# that file's bytes EXCLUDING its single ^MANIFEST_SHA256= line
+# (compute: grep -v '^MANIFEST_SHA256=' port/sim/device/verify_m4.sh |
+# shasum -a 256) — a full-byte self-row plus the anchor would be a
+# two-unknown fixed point with no solution; the excluded line is
+# protected by the anchor equality itself.
+#
+# UNCLOSED ROWS — six producers are unresolved (five `arc-pending`
+# plus verify_m4.sh itself, `arc-in-flight`), which makes verify_m4.sh
+# [0b] HARD-REFUSE in AUTHORITATIVE mode. verify_m4.sh is unresolved
+# because THIS iteration's driver-sanctioned universe extension changed
+# its bytes and its delta arc has not reached GO
+# (.loop/review-116-2o.log, VERDICT: NO-GO); carrying `reviewed-go`
+# there would be inherited approval applied to later bytes — the exact
+# class round 1 raised as [H] against judge-render-timing.js. This is the
+# truthful status and the refusal is a correct outcome, not a defect.
+# Each was given a Tier A+ arc over its CURRENT bytes (PROCESS §3:
+# judge/verify paths take an independent second reviewer as well). Both
+# arcs RAN in iter 116 and both returned NO-GO with Medium+ findings, so
+# no row flips. A row flips to `reviewed-go` only when its findings are
+# fixed and BOTH reviewers reach an anchored VERDICT: GO — never by
+# re-citing an older log, and never by driver-capping an arc that has
+# not converged.
+#   port/gfx/judge-render-timing.js
+#     -> .loop/review-116-jrt-1.log (codex) VERDICT: NO-GO — two [M]:
+#        leading-zero numeric tokens accepted (grammar, PROCESS §3
+#        resembles-but-doesn't-match) and an unchecked 3-term integer
+#        sum that can leave full_p99_ns inexact while still emitting
+#        judge_complete=1. The arc's positive results are recorded too:
+#        every vacuous-pass class fails closed, percentiles matched an
+#        independent BigInt oracle over all 61 real artifacts, and the
+#        Tier A+ byte-identity regression PASSED (current bytes
+#        reproduced all 29 archived judgments byte-for-byte). The file's
+#        bytes are driver-frozen for iter 116, so the two [M] fixes are
+#        a DRIVER decision, not a writer one.
+#     -> .loop/review-116-jrt-2o.log (fresh Opus 5, the independent
+#        second under the PROCESS §11 owner ruling of 2026-07-26 — grok
+#        aborted three times without emitting a verdict, see
+#        .loop/review-116-jrt-2-grok-aborted*.log) VERDICT: NO-GO, and
+#        it found the STRONGEST defect against this row, worse than
+#        either codex [M]: a DEMONSTRATED FALSE GREEN on the gate's own
+#        headline PERF number. judge-render-timing.js:74 hard-fails a
+#        row whose render column is 0 (a zero-cost render is a recording
+#        bug) but NO equivalent guard exists for the sim column, which
+#        :79 (full[i] = s + r + p) consumes as the dominant term of the
+#        gated value. Measured: zeroing column 1 of g01.dev-tim.txt moves
+#        full_p99_ms 13.903 -> 7.147 with rc 0 and judge_complete=1, and
+#        the output still passes all three consumers' 23-key whitelists
+#        unchanged (check-device-fullgame.sh:1160-1162,
+#        check-device-target.sh:1078-1080, check-device-foh.sh:1336-1340)
+#        because every consumer discards the sim keys. Leg [1]'s
+#        "p99 frame < 16.67 ms" certification is therefore forgeable by a
+#        recording-side defect the judge cannot see.
+#        CLOSURE BAR (PROCESS §11): this row flips only when the false
+#        green AND both codex [M]s are fixed and BOTH seconds reach an
+#        anchored VERDICT: GO — resolving the two codex [M]s alone is NOT
+#        sufficient, and the byte-identity regression passing does NOT
+#        offset it (the archived judgments were all replayed against
+#        honest recordings).
+#   pipeline/lib/manifest.js, pipeline/lib/verify-artifacts.js,
+#   pipeline/lib/check-expected.js, pipeline/expected.json
+#     -> .loop/review-116-plib-1.log (codex) VERDICT: NO-GO — four [H]
+#        + four [M], and .loop/review-116-plib-2-grok.log (grok, the
+#        independent second) VERDICT: NO-GO — two [H], INDEPENDENTLY
+#        REPRODUCED: verify-artifacts.js passes vacuously on an empty
+#        artifact set (live repro: `{"stages":{}}` prints
+#        "0 artifact(s) OK", exit 0), and check-expected.js derives its
+#        required contract FROM the file it is checking, so a deleted
+#        expected.json section is simply never asserted. Codex adds that
+#        non-audio artifact identity is self-referential (the M4 path
+#        runs only that self-check) and that audio shape validation is
+#        skippable/coercive. These are real fail-open holes in M1-gate
+#        machinery; closing them changes the M1 contract and the M4
+#        composition, which is its own task with its own arcs.
+#
+# port/gfx/judge-render-timing.js — why it is here:
+#   - No VERDICT: GO has ever NAMED this file (iter-108 ledger §"Weakest
+#     row", .loop/m4-t14-producer-status.md, which records that
+#     `arc-pending` "would also be honest").
+#   - Round 1 of this manifest's own arc ruled the inherited
+#     `reviewed-go` UNSUPPORTABLE ([H], .loop/review-116-1.log): the
+#     cited .loop/review-61-1.log is an audio arc scoped to
+#     check-device-audio.sh + platform_audio_sdl.h (its own line 14), so
+#     its GO does not approve this judge; and a task-4 cap that PREDATES
+#     the iter-62 bytes cannot approve them.
+#   - PROCESS §3 puts judge paths at Tier A+ (independent second
+#     reviewer + byte-identity regression on archived results), which
+#     this file has never had.
+# Restoring `reviewed-go` requires that Tier A+ arc — NOT a re-cite.
+# The M3 manifest keeps its own inherited status for this file; it is
+# driver-owned and untouched here (m3 is ratified; this gate does not
+# get to rewrite it, and does not inherit its approval either).
+# --- UNIVERSE EXTENSION (iter 116, driver-sanctioned strengthen-only gate
+# edit). Round 1 of this manifest's own arc (.loop/review-116-1.log,
+# finding 1 [H]) measured EIGHT decision-bearing producers reachable from
+# the gate's four engines that the frozen REQUIRED_PRODUCERS literal did
+# not name: they were pinned only by the ENGINES ("the engine's own
+# guarantee, not the gate's" — check-device-fullgame.sh:718-721 says so in
+# terms and asks for exactly this), so they carried NO [0b] approval
+# status and could not refuse before a leg. The driver reopened the frozen
+# verify_m4.sh for the single purpose of ADDING them to the universe
+# (strengthen-only: rows added to the refusal set, no grammar/refusal/
+# sentinel arm relaxed). Reachability was re-measured for this change, not
+# inherited; each row's status below is the honest outcome of its own
+# evidence search, not a promotion.
+#
+# Settled by their own evidence (no new arc needed):
+#   json-dup-key-scan.js — reviewed by .loop/review-98-1.log in full (its
+#     prompt scope names it, the diff carries its hunk, and a finding
+#     cites json-dup-key-scan.js:45); that log's LAST anchored verdict is
+#     GO, and its arc covered commit a3fc74d = the file's current bytes.
+#   keymap-frozen.txt — its content diff landed in the .loop/review-95-1
+#     -> .loop/review-97-1 arc, which closed GO; BYTE-BOUND, not
+#     mtime-bound: the current sha256 2b208cfe… appears verbatim in both
+#     .loop/review-95-1.log and .loop/review-97-1.log, so the reviewed
+#     bytes and the pinned bytes are provably the same bytes.
+#   dump-sim-data.js — M2 task 17 (commit 24c59a7), untouched since,
+#     proven by the M2 exit-gate corpus exactly as trace-to-txt.js is;
+#     same status token, same basis, no stronger claim made.
+#   streamlib.js — oracle/ HARD RULE 3 surface, M0 task 5 (commit
+#     b32e06c), untouched since freeze; identical basis to the
+#     verify-stream.js row that already carries oracle-frozen (it is the
+#     module verify-stream.js requires).
+#
+# Opened as their own Tier A+ arcs (PROCESS §3: verification/comparison
+# logic), because the evidence search found NO arc that ever reviewed
+# their content — every log naming them ends NO-GO, and the GO logs that
+# mention them do so only as pin rows or as call sites inside another
+# file's diff. See the UNCLOSED ROWS block.
+7b031055e2329269e4e207012202cd772a75b604bd37ab3df8de9db325e4a254 port/sim/device/adbsh.sh reviewed-go task-4-arc-CAPPED-CLOSED-driver-accepted-AGENT-LOG-2026-07-17+rounds-.loop/review-52-1.log-.loop/review-55-1.log
+0c9126aa1789ad575a76f4e725b231a64cd3d792397aefc9a47dc39801213752 port/sim/device/riglib.sh reviewed-go .loop/review-109-9.log-capped-driver-accepted-AGENT-LOG-iter-109+delta-GOs-.loop/review-110-5.log-.loop/review-113-7.log
+4034ad81601de4e25b85658095ebfd38de2cc813fad594164afb563d6deb81ad port/sim/device/percentiles.js reviewed-go .loop/review-45-1.log+r3-closure-.loop/review-47-1.log
+5520fe4f59ffa5098395420ca13fd4411bdcf2154bea1e4059b28e7c179b5bbf port/sim/device/check-device-fullgame.sh reviewed-go .loop/review-113-7.log-r7-GO-final-bytes+iter-109-arc-capped-driver-accepted-AGENT-LOG-iter-109+delta-GOs-.loop/review-110-5.log-.loop/review-111-4.log-.loop/review-112-5.log
+c9b088c48747362a337a2add299807f9671aed8992b68ea65f6d2ccd39449eff port/sim/target/check-device-target.sh reviewed-go .loop/review-101-1.log+r4-closure-.loop/review-105-1.log
+415335239fcc04df97eba07298a1fa521602d5ea45b087aa8d7d40bd740c122a port/goldens-m4/verify-target-stream.js reviewed-go .loop/review-98-1.log
+2cf5c5a532207372b70c4cee57412c7ac65643ac4f4066c745d9eb7fe4aa0e9b port/goldens-m4/wrap-target.js reviewed-go .loop/review-98-1.log
+6b1b6b5be3700c51dfae8c0c4cb1f012e5b61239394ae4146c2e5e19cc4fcc47 port/goldens-m4/validate-target-manifest.js reviewed-go .loop/review-98-1.log
+624956898890e749170a4768af0f8ef86e05ce4dd75046d084701747c9d9121f port/goldens-m4/json-dup-key-scan.js reviewed-go .loop/review-98-1.log-full-review-of-commit-a3fc74d-current-bytes
+8597a1583cc10e51af23bc7ddff29d394588769835f111006d4cf271f93a70ca port/foh/check-device-foh.sh reviewed-go .loop/review-97-1.log+iter101-delta-in-.loop/review-101-1.log+r4-closure-.loop/review-105-1.log
+2267f8b796b1881d6ef749b5931a5fb08ae9f914b7a67a0e2608d4cada99616e port/foh/judge-foh-trace.js reviewed-go .loop/review-101-1.log+r4-closure-.loop/review-105-1.log
+b2e814821a809a6cb5772c51587b1e49a87dab6438156f984e8ec07e59ab2141 port/foh/normalize-foh-trace.js reviewed-go .loop/review-99-1.log+r4-closure-.loop/review-105-1.log
+b0c6ac328d6b87f9ff0c58562c880336eccb98a3053a4fdaadfb71e59e810186 port/foh/flow-to-fkscript.js reviewed-go .loop/review-95-1.log+r3-closure-.loop/review-97-1.log
+2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e port/foh/keymap-frozen.txt reviewed-go .loop/review-95-1.log+r3-closure-.loop/review-97-1.log-BYTE-BOUND-current-sha-appears-in-both-logs
+de32dffbe43423bee43f67516007d4039abbd80237a626aec81e54fd7dc4ca68 port/gfx/judge-shot.js reviewed-go .loop/review-73-1.log+r4-closure-.loop/review-80-1.log
+e034539d69e1f55338e87f89c8c6573410c40a5bcd8dbc91066751f60c9c9fd4 port/gfx/judge-render-timing.js arc-pending NO-GO-ever-named-this-file-per-.loop/review-116-1.log-H2+iter-108-ledger-weakest-row+needs-PROCESS-3-Tier-A-plus-arc
+8ceaf028fe5740a1c0bb384e2eae113996bdb5c3db5720f1337af068266b966f port/gfx/judge-audio-summary.js reviewed-go .loop/review-59-1.log+r3-.loop/review-61-1.log
+bf29fa7cba83708cfff093195f48ad20a8eda2ad794fe25b270f211b08876eee port/gfx/pack-snd.js reviewed-go .loop/review-57-1.log+r2r3-closure-.loop/review-61-1.log
+d43628d4a22e278ebffa8e3116709cff52933332a51a926fb28c3cfa4ad0dbc4 port/gfx/check-device-opk.sh reviewed-go .loop/review-115-3.log-r3-GO+r1-.loop/review-115-1.log+r2-.loop/review-115-2.log
+d761707065185bf49078c44c83a111558b6bebfbf7dba3e8625eff5951385dec port/gfx/opk/mlfk-foh.sh reviewed-go .loop/review-93-1.log+r3-closure-.loop/review-97-1.log
+3b4289d640bbe7df0e4d065d909f2b46aef9b7e4d7622a90e4f7021fd801dbea port/gfx/opk/meleelight-foh.funkey-s.desktop reviewed-go .loop/review-115-3.log-r3-GO-current-bytes+prior-arc-.loop/review-93-1.log+r3-closure-.loop/review-97-1.log
+efea406086050d51b3894692c6030afef1b0cc7ed06de442b728ef2e6072fe99 port/gfx/opk/icon32.png reviewed-go .loop/review-58-1.log+r2-.loop/review-60-1.log+gate-closure-.loop/review-62-grok-go.log
+05ced80f57e993541f6da8b647e63abcac4163cd6e5b275f2a811a49c2faeb76 port/tools/fk_input.c reviewed-go .loop/review-53-1.log
+b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wrap-run.js reviewed-go .loop/review-81-1.log+r3-closure-.loop/review-86-1.log
+4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js grandfathered-m2 M2-exit-gate-SIM-CONFORMS
+7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js grandfathered-m2 M2-exit-gate-SIM-CONFORMS
+f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js oracle-frozen M0-task5-HARD-RULE-3
+0bc801ea46b06a63e79377aae164636a5e9f649ee45835748e5f2387b9e04281 oracle/harness/streamlib.js oracle-frozen M0-task5-HARD-RULE-3
+679a1763e232fe7f2e8ab8994c865e145efad9b3e96ed274f24e8dcff3083e74 pipeline/lib/manifest.js arc-pending no-GO-ever-reviewed-this-file-per-.loop/review-116-1.log-H1+Tier-A-plus-arc-.loop/review-116-plib-1.log
+df557422ee30b0db18aff710916c383a4b453bb66a8e309bfc22f14de9a8db6c pipeline/lib/verify-artifacts.js arc-pending no-GO-ever-reviewed-this-file-per-.loop/review-116-1.log-H1+Tier-A-plus-arc-.loop/review-116-plib-1.log
+95c9fbc4a49d74434ce6f66b32e66a8c75e902cb94c08756667a6bb0457af1cf pipeline/lib/check-expected.js arc-pending no-GO-ever-reviewed-this-file-per-.loop/review-116-1.log-H1+Tier-A-plus-arc-.loop/review-116-plib-1.log
+c7d85936db09c6b59dbc25b016567195e433c43228114e01830e14c269550191 pipeline/expected.json arc-pending no-GO-ever-reviewed-this-file-per-.loop/review-116-1.log-H1+Tier-A-plus-arc-.loop/review-116-plib-1.log
+b592e8c089bba9507a9b39f6a495668bf86add3f37e38e89d3f0c8647b7121f8 port/sim/device/verify_m4.sh arc-in-flight iter-116-universe-extension-bytes-UNREVIEWED-delta-arc-.loop/review-116-2o.log-NO-GO+codex-round-.loop/review-116-2-cached-DISCARDED.log-cmp-proven-byte-identical-to-.loop/review-116-plib-1.log+prior-bytes-only-.loop/review-108-4.log-r4-GO
