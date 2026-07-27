@@ -5,6 +5,14 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## §rulings (standing owner directives, day-tagged)
 
+- **2026-07-26 — Codex-failure fallback = grok + Opus 5, BOTH
+  (PROCESS §11):** when a codex round is proven failed (cached/wedged/
+  verdict-less), replace it with TWO independent reviews — grok and a
+  fresh Opus 5 reviewer (never the writer's own session), separate
+  logs + verdict lines; GO requires both; either's Medium+ findings
+  bind; driver arbitrates splits. Codex stays primary. Supersedes the
+  grok-only fallback.
+
 - **2026-07-26 — Post-gate jitter removal (FINAL scheduled work):**
   after the M4 gate + Chase's acceptance playthrough: SCHED_FIFO RT
   priority for the frame loop (audio ranked above, music reader CFS)

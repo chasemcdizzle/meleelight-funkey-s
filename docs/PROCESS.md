@@ -219,13 +219,25 @@ events and genuine decisions, not progress noise.
   is warranted per the existing bar (Medium+ fixed; Lows dispositioned
   in writing) → repeat to VERDICT: GO or the §3 cap — all in ONE writer
   session, no driver round-trip per round.
-- **Reviewer = Codex** (unchanged §3; fallback `grok`): every change
-  still gets at least one review round — the §3 tiers already guarantee
-  this (Tier B is never wholly skippable). §3's contract is unchanged
-  by writer-invoked review: prompt + full log under
+- **Reviewer = Codex** (unchanged §3): every change still gets at
+  least one review round — the §3 tiers already guarantee this (Tier B
+  is never wholly skippable). §3's contract is unchanged by
+  writer-invoked review: prompt + full log under
   `.loop/review-<iter>-<n>.log`, exact verdict line, and the DRIVER
   reads verdicts from the log files cold at ground-truth time (§5),
   never from the writer's summary. Driver arbitrates disputes and caps.
+- **Codex-failure fallback (owner ruling 2026-07-26): grok AND an
+  Opus 5 reviewer, BOTH.** When a codex round is proven failed (cached
+  output cmp-proven, wedge, no verdict), the replacement round is TWO
+  independent reviews — `grok` and a fresh `claude --model
+  claude-opus-5` reviewer subagent (reviewer ≠ the writer's own
+  session; same prompt, separate logs `.loop/review-<iter>-<n>{g,o}.log`,
+  each with its own exact verdict line). Medium+ findings from EITHER
+  are fixed/dispositioned; the round counts as GO only if BOTH end GO;
+  disagreement → driver arbitrates. This supersedes the earlier
+  grok-only fallback and the "no claude reviewers" rulings FOR THE
+  FALLBACK PATH ONLY — codex remains the primary; Opus never reviews
+  while codex is healthy.
 
 ## Explicitly NOT adopted (with reasons; reopen only with new evidence)
 
