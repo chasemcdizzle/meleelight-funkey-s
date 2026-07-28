@@ -153,6 +153,7 @@
 #include "../sim/ml_ser.h"
 #include "../sim/sim/sim.h"
 #include "foh.h"
+#include "foh_pause.h"   // A11/A12: the in-match pause overlay (live only)
 #include "foh_persist.h" // M4 task 13: the ONE persistence chokepoint
 
 #define ML_BOOT_DRAWS 465 // the qjs boot pin (oracle/qjs/replay.sh)
@@ -1858,6 +1859,11 @@ int main(int argc, char **argv) {
   fbwit_flush(flowId);
 
   long matchSkips = 0, matchPresentFails = 0;
+  // A11/A12: process exit code. 0 = normal end (the OPK launcher returns
+  // the player to the frontend); FOH_PAUSE_RC_MENU = "quit to menu", which
+  // the launcher answers by running the app again — the app boots into the
+  // FOH, so a relaunch IS the menus. Only the live play path can set it.
+  int quitRc = 0;
   long matchFrames = 0; // frames ACTUALLY ticked (a live target
                         // quit/finish exit runs fewer than `frames`)
   uint64_t matchWallMs = 0;
@@ -1877,6 +1883,13 @@ int main(int argc, char **argv) {
     // made "Target Test" quit the app at the launch seam (punch-list
     // A2; the app exited rc 4 the instant TLAUNCH happened).
     const bool tgtLive = brLive && foh.targetMode;
+    // A11/A12 — THE pause-overlay install site, and the only one. The hook
+    // is NULL by default (foh_pause.c), so every evidence bridge (state/
+    // verify/tstate/tverify) leaves the overlay branches in both match
+    // loops structurally unreachable: a flow- or trace-fed run cannot enter
+    // the overlay, exactly as tp_endgame_hook keeps its live-only arm out
+    // of the evidence legs (below). Not a runtime flag anyone can flip.
+    if (brLive) foh_pause_hook = foh_pause_open;
     // launch-kind cross-guards (fail closed; the --cpu-live class).
     // The EVIDENCE bridges keep refusing: each carries a pinned witness
     // grammar plus a frozen expectation set for exactly one launch kind.
@@ -2003,14 +2016,44 @@ int main(int argc, char **argv) {
         // Seeding with `frames` would under-report `ticked` and desync
         // rec.json from keys.txt. Identical on the brTVerify arm, where
         // loopMax == frames.
+        // Set when the pause overlay asked to leave (review-a11-3 L2): the
+        // player has already chosen to go, so the completion HOLD must not
+        // keep them for up to 2.5 s more and the post-loop banner present
+        // must not put the overlay frame back on screen.
+        int pauseQuit = 0;
         long framesRun = loopMax;  // RECORDED rows (the replay prefix)
         long ticked = loopMax;     // frames actually TICKED (>= framesRun)
         uint64_t tfinDeadline = 0; // set once, at the finish frame
         size_t recMark = 0;        // rec.len before this frame's row
-        PlatformInput pin;
-        const uint64_t tStart = now_ns();
+        PlatformInput pin, prevPause;
+        memset(&prevPause, 0, sizeof prevPause);
+        if (foh_pause_hook) platform_poll(&prevPause); // VS arm's note
+        uint64_t tStart = now_ns(); // NOT const: the overlay shifts it
         for (long f = 0; f < loopMax; f++) {
           platform_poll(&pin); // live: THE input; tverify: backend pump
+          // A12: MENU opens the same overlay here. START does NOT — in
+          // target mode it is upstream's own endGame quit (main.js:1013
+          // -1015) via tp_endgame_hook, which is faithful and already
+          // works; the overlay must not shadow it. NULL hook on tverify.
+          // `!pin.start` (review-a11-3 L1): on a SIMULTANEOUS MENU+START
+          // edge the overlay would open first and its release drain would
+          // then swallow the START, shadowing that faithful arm. START wins.
+          if (foh_pause_hook && pin.menu && !prevPause.menu && !pin.start) {
+            uint64_t pausedNs = 0;
+            const FohPauseResult pr =
+                foh_pause_hook(&g_gfx.rz, &pausedNs, &matchPresentFails);
+            tStart += pausedNs;
+            if (pr != FOH_PAUSE_RESUME) {
+              quitRc = (pr == FOH_PAUSE_QUIT_MENU) ? FOH_PAUSE_RC_MENU : 0;
+              pauseQuit = 1;
+              tfinDeadline = 0; // disarm any completion hold in progress
+              ticked = f;       // frame f never ticked...
+              framesRun = f;    // ...and never entered either artifact
+              break;
+            }
+            platform_poll(&pin);
+          }
+          prevPause = pin;
           const uint64_t deadline = tStart + (uint64_t)(f + 1) * budgetNs;
           const MlInput *row0;
           if (tgtLive) {
@@ -2216,7 +2259,12 @@ int main(int argc, char **argv) {
           // COMPLETE!/FAILURE banner + declare it on stderr.
           // live already composited the banner over every held frame
           if (!tgtLive) gfx_target_banner(&g_gfx, &G, &TP, g_tfin_complete);
-          if (platform_present(g_gfx.rz.fb) != 0) matchPresentFails++;
+          // pauseQuit: the raster still holds the OVERLAY frame, so
+          // re-presenting would flash the pause menu back onto a screen
+          // the player has already chosen to leave (review-a11-3 L2).
+          if (!pauseQuit && platform_present(g_gfx.rz.fb) != 0) {
+            matchPresentFails++;
+          }
           fprintf(stderr, "foh_dev tfinish: complete=%d frame=%ld\n",
                   g_tfin_complete, g_tfin_frame);
         }
@@ -2418,24 +2466,74 @@ int main(int argc, char **argv) {
         rawKeys = malloc((size_t)frames * sizeof *rawKeys);
         if (!rawKeys) sim_fatal("oom (raw-key sidecar buffer)");
       }
-      PlatformInput pin;
-      const uint64_t tStart = now_ns();
+      // Frames actually ticked. Only the live arm can leave early (a pause-
+      // overlay quit); every evidence arm runs the full bound.
+      long vsRan = frames;
+      PlatformInput pin, prevPause;
+      // Seed the pause edge detector from the CURRENT button state: START
+      // or MENU still held from the FOH launch must not open the overlay
+      // on frame 0. platform_poll is level-based, so this loses nothing.
+      // ONLY when the hook is installed (review-a11-1 M): an evidence
+      // bridge must not gain even one extra backend event pump.
+      memset(&prevPause, 0, sizeof prevPause);
+      if (foh_pause_hook) platform_poll(&prevPause);
+      // NOT const: the overlay freezes wall clock, and every deadline below
+      // is derived from tStart. Without the shift, resuming would leave the
+      // whole rest of the match "late" and the catch-up arm would skip
+      // every render (matchSkips == frames, a black screen).
+      uint64_t tStart = now_ns();
       for (long f = 0; f < frames; f++) {
         // FIRST statement of the body, i.e. OUTSIDE the t0..t3 brackets
         // below: the instrument can consume pacing slack but can never
         // inflate a number judge-render-timing.js computes.
         if (attrib) attrib_sample(&attrib[f]);
         platform_poll(&pin);
+        // A11/A12: START or MENU opens the modal pause overlay. NULL hook
+        // on every evidence bridge, so this is dead code for flow/trace-fed
+        // runs by construction (install site above).
+        if (foh_pause_hook &&
+            ((pin.start && !prevPause.start) || (pin.menu && !prevPause.menu))) {
+          uint64_t pausedNs = 0;
+          const FohPauseResult pr =
+              foh_pause_hook(&g_gfx.rz, &pausedNs, &matchPresentFails);
+          tStart += pausedNs; // the pace epoch owes the player that time
+          if (pr != FOH_PAUSE_RESUME) {
+            quitRc = (pr == FOH_PAUSE_QUIT_MENU) ? FOH_PAUSE_RC_MENU : 0;
+            vsRan = f; // rows 0..f-1 are recorded; frame f never ticked
+            break;
+          }
+          platform_poll(&pin); // post-overlay state, not the stale edge
+        }
+        prevPause = pin;
         const uint64_t deadline = tStart + (uint64_t)(f + 1) * budgetNs;
         const MlInput *rows[4];
         if (brLive) {
-          liveRow = s1_input_row(&pin);
+          // START is the PORT-LOCAL pause button (foh_pause.h), so it never
+          // reaches the sim's own pause machine. Feeding it would be strictly
+          // harmful: sim_tick.c has no `playing || frameByFrame` gate, so a
+          // START press could only reach interpretInputs' pastOffset arm
+          // (ai_input.h:198-204) and FREEZE the 20-field input history until
+          // START is pressed a second time, with no pause to compensate it.
+          // Masked, `playing` stays true and pastOffset stays 1 — i.e. exactly
+          // an upstream match in which nobody pressed pause, which is what an
+          // out-of-sim frozen loop is equivalent to.
+          //
+          // Masked on ONE local copy feeding BOTH the S1 row and the raw-key
+          // sidecar, so judge-s1-coverage.js:240-245's pairing invariant
+          // (sidecar bit8 == the recorded row's `.s`, "copied verbatim from
+          // the pin into the S1 row") still holds frame-by-frame. `pin`
+          // itself keeps the true button state — the pause edge detector
+          // above reads it. MENU is not masked: s1_input_row never reads it
+          // and no pairing asserts it, so its raw bit stays honest.
+          PlatformInput gpin = pin;
+          gpin.start = false;
+          liveRow = s1_input_row(&gpin);
           rows[0] = &liveRow;
           rows[1] = &neutralRow;
           rows[2] = 0;
           rows[3] = 0;
           rec_frame(&rec, f == 0, &liveRow, &neutralRow);
-          rawKeys[f] = pin_bits(&pin);
+          rawKeys[f] = pin_bits(&gpin); // gpin, not pin — see the mask note
         } else {
           const long idx = f < g_trace_len - 1 ? f : g_trace_len - 1;
           const TraceRow *row = &g_trace[idx];
@@ -2475,7 +2573,7 @@ int main(int argc, char **argv) {
       if (attrib) attrib_sample(&attrib[frames]); // tail row
       matchWallMs = (tEnd - tStart) / 1000000ull;
       ranMatch = true;
-      matchFrames = frames;
+      matchFrames = vsRan;
 
       const uint32_t total = draws_between(G.rngStateAtReset, G.rng.a);
       const uint32_t outside =
@@ -2520,6 +2618,12 @@ int main(int argc, char **argv) {
       }
       free(attrib);
       if (brLive) {
+        // Same honesty as the target arm: a pause-overlay quit on frame 1
+        // leaves an EMPTY prefix, which load_trace rejects. Say so.
+        if (vsRan == 0) {
+          fprintf(stderr, "foh_dev: live VS quit on frame 1 — the recorded "
+                          "capture is EMPTY (not replayable)\n");
+        }
         ml_sb_puts(&rec, "\n]\n");
         FILE *rf = fopen(recordPath, "w");
         if (!rf) sim_fatal("cannot open --record-trace for writing");
@@ -2529,7 +2633,9 @@ int main(int argc, char **argv) {
         if (fclose(rf) != 0) sim_fatal("--record-trace close/flush failed");
         FILE *kf = fopen(keysPath, "w");
         if (!kf) sim_fatal("cannot open --record-keys for writing");
-        for (long f = 0; f < frames; f++) {
+        // vsRan, not frames: a pause-overlay quit leaves the tail of
+        // rawKeys[] uninitialised, and rec.json already stopped there.
+        for (long f = 0; f < vsRan; f++) {
           if (fprintf(kf, "%04x\n", (unsigned)rawKeys[f]) < 0) {
             sim_fatal("--record-keys write failed");
           }
@@ -2593,5 +2699,5 @@ int main(int argc, char **argv) {
             (unsigned)SND_MUSIC_CHUNK_FRAMES);
   }
   ml_sb_free(&g_tr);
-  return 0;
+  return quitRc;
 }

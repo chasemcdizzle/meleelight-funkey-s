@@ -119,6 +119,19 @@ ssb64-funkey-s (sibling project, same owner) — process prior art
 --------------------------------------------------------------------------------
   CLAUDE.md hard rules, docs/LOOP.md, docs/loop/*, scripts/loop.sh, the SDL
   platform-seam policy, and the OPK/ADB recipes are adapted from
-  ~/code_projects/ssb64-funkey-s (private). Discipline adapted, no code
-  copied yet; anything lifted later (e.g. port/gfx backends, fk_input.c)
-  gets its own entry here when it lands.
+  ~/code_projects/ssb64-funkey-s (private). Discipline adapted; anything
+  lifted later (e.g. port/gfx backends, fk_input.c) gets its own line here
+  when it lands.
+
+  LANDED: port/foh/foh_pause.c + foh_pause.h (punch-list A11/A12, the
+  in-match pause overlay) follow the DESIGN of that project's
+  port/gfx/fk_menu.c + port/include/fk_menu.h (MIT, same owner) —
+  owner-directed reference: a modal in-game menu drawn over the current
+  frame that blocks the game loop until dismissed and returns a
+  quit/continue verdict, opened by the FunKey MENU button (keysym 'q'),
+  with the snapshot + halve-every-565-channel dim and the seeded edge
+  detector taken from it. No source lines were copied: fk_menu.c draws
+  through SDL_ttf/SDL_image onto an SDL_Surface and shells out to the
+  FunKey OS volume/brightness/powerdown helpers, while foh_pause.c draws
+  through THIS port's Raster + platform seam and its own 6x9 face, and
+  has different entries. Attribution kept in the foh_pause.h header.

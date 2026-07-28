@@ -502,7 +502,8 @@ rm -f "$BUILD/raster.o" "$BUILD/foh_dev_headless"
 cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$BUILD/raster.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/foh_dev_headless" \
   "$BUILD/raster.o" "$FOH/foh_dev.c" "$FOH/foh.c" "$FOH/foh_font.c" \
-  "$FOH/foh_render.c" "$FOH/foh_persist.c" "$GFX/platform_headless.c" \
+  "$FOH/foh_render.c" "$FOH/foh_persist.c" "$FOH/foh_pause.c" \
+  "$GFX/platform_headless.c" \
   "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_target.c" \
   "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
   "$TGT/target_play.c" \
