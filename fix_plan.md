@@ -2234,3 +2234,18 @@ Everything below is functionality/fidelity, not styling.
   upstream). **+ DEFERRED ITEM WJ-later (do at the END): make it actually
   work** — an explicit, owner-sanctioned DEVIATION from upstream, to be
   designed and registered as such rather than smuggled in.
+- **C4-C RULING (Chase, 2026-07-28): TAKE FIX C — the stage-preview
+  brightness lift.** Value γ0.75 (driver's recommended row 4; the owner
+  said "C please" against a sheet whose recommended row was 0.75).
+  **THIS IS AN OWNER-SANCTIONED DEVIATION FROM UPSTREAM (HARD RULE 5).**
+  Justification on the record: upstream's own art is near-black (bf mean
+  9.18/255, byte-identical to upstream's browser render) and readable
+  only because upstream draws it 800x300 on a 1200x750 canvas; at
+  130x48 on a 240x240 panel the faithful bytes are, in the owner's
+  words, "SUPER dim, can barely see them" — i.e. faithfulness to the
+  bytes defeats the purpose the art serves. Scope is NARROW: the
+  stagePreview class ONLY (not portraits, not cursors, not any judged
+  render surface). γ MUST live behind a NAMED CONSTANT so the value is
+  a one-token change after the owner sees it on hardware (row 5 =
+  γ0.65 is the next stop if 0.75 reads too dark in the hand).
+  Rides the A+B arc + re-freeze (one artifact regeneration, one re-pin).
