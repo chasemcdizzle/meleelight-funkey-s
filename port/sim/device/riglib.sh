@@ -1784,6 +1784,7 @@ rig_arm_build() {
         port/foh/foh_dev.c port/foh/foh.c port/foh/foh_font.c \
         port/foh/foh_render.c port/foh/foh_persist.c \
         port/foh/foh_pause.c \
+        port/gfx/img1.c \
         port/sim/target/target_play.c \
         "$GFX/platform_sdl1.c" \
         "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_target.c" \

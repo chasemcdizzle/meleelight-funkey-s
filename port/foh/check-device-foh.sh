@@ -574,7 +574,7 @@ build_foh_headless() { # <foh_dev_src> <out> [extra cc args...]
   shift 2
   cc -O2 "${CFLAGS_COMMON[@]}" "$@" -o "$out" \
     "$BUILD/raster.o" "$src" "$FOH/foh.c" "$FOH/foh_font.c" \
-    "$FOH/foh_render.c" "$FOH/foh_persist.c" "$FOH/foh_pause.c" \
+    "$FOH/foh_render.c" "$FOH/foh_persist.c" "$FOH/foh_pause.c" "$GFX/img1.c" \
     "$GFX/platform_headless.c" \
     "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_target.c" \
     "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \

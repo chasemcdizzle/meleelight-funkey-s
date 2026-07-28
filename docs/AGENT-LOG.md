@@ -19864,3 +19864,67 @@ exists) → §11 fallback **grok GO + Opus 5 GO**.
 **Budget overrun declared** (device 11/8, rebuilds 6/4, host 7/4) —
 caused by the second independent P0 surfacing after the first was fixed;
 accepted.
+
+---
+
+iter 124-125 · 2026-07-28 · phase M4 (punch list) · **A11/A12 pause overlay SHIPPED (device-verified) + A1 Phase 1 (CSS/SSS + real artwork) MERGED** · NEW BLOCKER B9: the 1-frame FOH skip margin drifted back AT HEAD (control-proven pre-existing)
+
+**A11/A12 (iter 124, commit 433ebb6; device lane).** Modal pause overlay
+over the frozen match frame — RESUME / QUIT TO MENU / QUIT TO OS — after
+the owner's ssb64 `fk_menu.c` pattern (NOTICES provenance entry +
+header attribution). New port/foh/foh_pause.{c,h}; foh_dev.c hook +
+both match-loop sites + `.s` mask; mlfk-foh.sh rc-70 relaunch loop.
+**FAITHFULNESS (the constraint I set):** pause lives OUTSIDE the sim —
+upstream's `playing` gate skips the ENTIRE sim branch (main.js:1045-1146:
+no physics, no RNG) and CHECKSUM.md §2's allow-list has no pause field,
+so freezing the driver loop is behaviourally equivalent for everything
+hashed; ZERO checksummed TUs edited. Live-play-only is STRUCTURAL:
+foh_pause_hook is NULL by default, installed at exactly one site inside
+the `--bridge live` arm (the tp_endgame_hook pattern) — evidence/flow/
+trace runs cannot reach it. **ROOT-CAUSE BONUS:** START previously DID
+reach the sim, and since sim_tick.c has no `playing` gate it hit the
+pastOffset freeze — silently jamming input history until START was
+pressed again. That latent bug is now masked. Proofs: driver-cold
+`SIM CONFORMS` 8/8 (.loop/driver-cold-a11-sim.log) · `FOH FLOWS OK …
+teeth=21` · hardware: both buttons open the overlay, B resumes (1981
+frames, 0 render skips, wall 33016 ms ≈ 1981×16.667 across two pause
+windows — pace epoch honest), QUIT TO MENU relaunches into the FOH
+title, QUIT TO OS rc 0 (.loop/a11-demo/). Arc: codex r1/r2 NO-GO → r3
+GO, non-replay cmp-proven per round.
+**A1 Phase 1 (iter 125, merged this commit; host worktree lane).** CSS +
+SSS restyled with REAL IMG1 artwork — portraits in port panels and row
+cells, stage art 1x thumbs / 2x big preview, hand_point cursor, READY TO
+FIGHT swoosh, MELEE plate + VS badge, HMN/CPU/N-A tabs, CPU-level box
+with gradient track, 8-frame pink thumb flash, orange RANDOM. Arc GO
+(grok + Opus 5 ×2 + grok confirmation; codex r2 cmp-DISQUALIFIED —
+findings byte-identical to r1 citing lines that now hold unrelated
+code). Deliberately NOT used: img1_blit (routes through the B1-buggy
+blend565; the cursors carry AA alpha) and stage_random (upstream uses it
+only as an onerror fallback — FOH RANDOM stays text). Opus 5 overturned
+the writer's "register, don't touch" call on riglib.sh:1447 — it hashes
+every port/foh/*.c into the shared ARM stamp, so omitting img1.c would
+have broken ALL device rigs, not just the FOH lane.
+**DRIVER MERGE (sole-merger duty, the parallel-lane ruling's cost paid
+exactly once):** both lanes edited FIVE shared files; all five conflicts
+were the SAME shape — each lane appending its own TU to the same build
+list — resolved by UNION (foh_pause.c AND img1.c), `bash -n` clean on
+all five, cold `FOH FLOWS OK … teeth=21` on the merged tree
+(.loop/driver-cold-p1-merged-flows.log).
+**B9 BLOCKER (pre-existing, control-proven — NOT caused by either
+lane):** check-device-foh.sh and check-device-target.sh fail on
+`1 FOH render skips (want 0)`. The A11 writer built a DETACHED CONTROL
+WORKTREE AT HEAD 8859ddc and ran it: **it fails identically** (control
+702 ticks/1 skip; its own tree 697 ticks/1 skip; both matches 3600
+frames/0 skips). iter 123 drove this exact counter 66→3→1→0 — the margin
+is ONE FRAME WIDE and has drifted back on the current device state. That
+is the honest reading of iter-123's own registered risk: the FOH title
+path was optimized to the edge, not under it. Fix must buy real headroom
+(the driver's registered levers: the B1 blend565 fix + a
+rast_blit_565a8 batch primitive, and/or reducing title-path composites),
+NOT another single-frame trim.
+**Registered for the driver:** re-pin m4-freeze-manifest.txt (mlfk-foh.sh,
+foh_dev.c, riglib.sh, the 4 check scripts, + 2 new rows: foh_pause.c,
+img1.c); check-device-{persist,fullgame}.sh got the same one-line TU
+edit but were NOT run (device-cost); quit-to-menu is a process relaunch,
+not in-process FOH re-entry (`ponytail:` marked, upgrade path noted);
+Restart deliberately skipped (upstream has no restart-match semantics).

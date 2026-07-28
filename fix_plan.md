@@ -2147,3 +2147,19 @@ Sequence: punch list → owner re-play/ratification → post-gate window
   plane is missing. Then run the Phase-1 DEVICE PERF LEG (CSS/SSS p99 +
   skips; writer's estimate ~1.5-3.5 ms/frame, comparable to the title
   screen at p99 13.99 — UNMEASURED).
+- A11/A12 DONE (iter 124, device-verified). A1 Phase 1 MERGED (iter 125).
+- **B9 (P0, BLOCKER) FOH render-skip margin regressed AT HEAD**: device
+  FOH + TARGET checks fail `1 FOH render skips (want 0)`; PROVEN
+  pre-existing by a detached control worktree at 8859ddc (control 702
+  ticks/1 skip). iter-123 optimized this counter 66→3→1→0 — the margin
+  is one frame wide. Fix must buy REAL headroom, not another trim:
+  candidate levers = the B1 blend565 fix + a rast_blit_565a8 batch
+  primitive (also retires the A9 per-pixel deferral), and/or cutting
+  title-path composites. Needs the device; blocks Phase-1 device
+  verification (A17) and any device re-pin.
+- A18 (P1, driver) m4-freeze-manifest re-pin after B9 clears:
+  mlfk-foh.sh, foh_dev.c, riglib.sh, check-device-{foh,persist,target,
+  fullgame}.sh + NEW rows foh_pause.c, img1.c; then the anchor.
+- A19 (P2) quit-to-menu is a process relaunch, not in-process FOH
+  re-entry (`ponytail:` marked). Restart deliberately skipped —
+  upstream has no restart-match semantics.

@@ -710,14 +710,19 @@ Which numbers are DERIVED and which are CHOSEN, stated plainly:
 | class | width | derived or chosen | emitted |
 |---|---|---|---|
 | portrait | 58 | **derived**: the sources' own width, so there is NO GEOMETRIC SCALING — each destination pixel covers exactly one source pixel (4 across = 232 px still fits 240). Not "untouched": alpha-0 pixels are normalized to (0,0,0,0) and colour is 565-quantized, as for every image | 58x40/37/40/45/43 |
-| stagePreview | 65 | **derived** from the target element: the FOH SSS cell is 65x44 with its cursor frame drawn OUTSIDE it (`port/foh/foh_render.c:139`), so 65 fills the cell exactly; the 800x300 source aspect then leaves 24 px, 20 px free for the label | 65x24 |
+| stagePreview | 65 | **derived** from the target element: the FOH SSS thumbnail's inner area is 65 px wide with its border drawn OUTSIDE it (`render_sss`, `port/foh/foh_render.c`), so 65 fills the cell exactly; the 800x300 source aspect then leaves 24 px, and the A1 Phase 1 restyle spends the remaining 10 px of the cell on the black name strip | 65x24 |
 | cursor | 24 | **chosen**: upstream's 101x133 on a 1200x750 canvas is 8.4% of width / 17.7% of height, which at 240 would be 20x27 — too small to read as a hand. 24 is ~10% of screen width; the height follows the source aspect | 24x32 |
 
-Note the FOH has no portrait slot at all today (`render_css` is a
-four-row text list) and no hand cursor — 58 and 24 are sized for the
-restyle that will consume them, not for an element that exists. Native
-size is the conservative choice there: a consumer can letterbox or
-crop, it cannot un-blur.
+Both slots are now CONSUMED (A1 restyle Phase 1, `render_css` /
+`render_sss` in `port/foh/foh_render.c`): portraits appear twice — cropped
+into each 44 px character-row cell (centred in x, TOP-aligned in y so the
+head fills the cell) and full-width in the port panels, which are one
+portrait wide by construction — and `hand_point`
+is the CSS cursor. The 58 px "native size is the conservative choice"
+bet paid off exactly as stated: the panel use needs the full width and
+the cell use crops it, and a consumer that could only letterbox or crop
+never had to un-blur. Stage previews are used at 1x in the thumbnails
+and integer-2x in the big preview.
 
 Re-sizing is a one-line edit in `stages/assets.js` (`CLASSES[].width`)
 plus an `expected-assets.json` re-freeze.

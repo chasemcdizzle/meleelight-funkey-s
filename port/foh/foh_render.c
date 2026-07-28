@@ -19,7 +19,10 @@
 static float fd_cosf(float x) { return (float)fd_cos((double)x); }
 static float fd_sinf(float x) { return (float)fd_sin((double)x); }
 #include <stdio.h>  // snprintf (the task-13 records line)
+#include <stdlib.h> // getenv (the menu.img1 path resolution below)
 #include <string.h> // memcpy (the backdrop cache)
+
+#include "../gfx/img1.h" // A9 menu artwork (portraits / stage previews / hands)
 
 // Labels: faithful strings from the upstream tables (cited), uppercased
 // for the 5x7 font. These are UI text of a rewritten non-checksummed
@@ -37,6 +40,19 @@ static const char *kMenuText[4][4] = {
 static const char *kCharNames[5] = {
     // characters.js:2-8 order == the oracle char ids
     "MARTH", "JIGGLYPUFF", "FOX", "FALCO", "CAPTAIN FALCON"};
+// The CSS cells and port name-plates are 44 / 58 px wide, so they carry
+// upstream's OWN abbreviated CSS labels (css.js draws "JIGGLY-PUFF" /
+// "C.FALCON" in the cell strips) shortened again to fit the 5x7 face.
+static const char *kCharShort[5] = {"MARTH", "PUFF", "FOX", "FALCO",
+                                    "FALCON"};
+// IMG1 directory names (pipeline `assets` stage), indexed by the SAME ids.
+static const char *kCharArt[5] = {"marth", "puff", "fox", "falco", "falcon"};
+static const char *kStageArt[6] = {"stage_bf", "stage_ys", "stage_ps",
+                                   "stage_dl", "stage_fd", "stage_fod"};
+// The SSS thumb strips are 65 px wide == 11 glyphs; these are upstream's own
+// thumbnail labels (stageselect.js name row), not new prose.
+static const char *kStageShort[6] = {"BATTLEFIELD", "Y-STORY", "P-STADIUM",
+                                     "DREAMLAND", "F-DEST", "FOUNTAIN"};
 static const char *kStageNames[7] = {
     // stageselect.js:13-29 order == the oracle stage ids; slot 6 = the
     // visible-but-refusing RANDOM slot (registered exclusion, foh.h)
@@ -255,6 +271,23 @@ static int iround(float v) { return (int)((double)v + 1024.5) - 1024; }
 // makes adjacent spans tile without sharing a pixel — and a shared pixel is a
 // real defect here, because partial-alpha source-over is not idempotent.
 static void span8(Raster *rz, int xa, int xb, int y, RastCol c, unsigned a) {
+  // FULL-ROW OPAQUE FAST PATH (review-p1 fallback round, [M]). A backdrop
+  // ramp is 240 of these spans and nothing else, i.e. 57,600 cross-TU
+  // rast_blend_px calls per frame from an -O2 TU — the same per-pixel cost
+  // class as the title screen, which took five optimisations to reach
+  // skips == 0 against the 16.67 ms deadline (AGENT-LOG iter 123). The
+  // raster's own batch primitive already exists for exactly this
+  // (raster.h:58-64, M4 task 3): the loop moves into the -O3 raster TU with
+  // "arithmetic EXACTLY rast_blend_px's (bit-identical by construction)".
+  // Guarded on a FULL row and a == 256 because those are the only
+  // conditions under which rast_fill_row_opaque is the same operation;
+  // every other span keeps the general path. Byte-identity of the CSS/SSS
+  // and Phase-0 shots across this change is the standing proof.
+  if (a == 256 && c.a256 == 256 && xa <= 0 && xb >= RAST_W && y >= 0 &&
+      y < RAST_H) {
+    rast_fill_row_opaque(rz, y, c);
+    return;
+  }
   for (int x = xa; x < xb; x++) px8_over(rz, x, y, c, a);
 }
 
@@ -410,14 +443,29 @@ static void poly8(Raster *rz, const float *xy, int n, RastCol c, unsigned a) {
 // sweep over the grid reads the same and is a pure function of `frame`.
 #define FOH_GRID_PITCH 14
 
-static void grid_shine(Raster *rz, int frame) {
-  const RastCol line = {255, 255, 255, 256};
+// `line`/`base`/`sweep` are parameters because upstream uses this layer twice
+// in two palettes and only ONE of them moves: white at 0.13 with the travelling
+// highlight behind the main menu (menu.js:296-305), and a STATIC magenta
+// lattice behind the SSS (stageselect.js backdrop — measured on the reference
+// captures: no moving highlight). sweep == 0 skips the highlight arm whole,
+// which also removes its per-pixel divide from the SSS frame (review-p1 round
+// 1, [M]) — VDIV is a ~14-cycle blocking op on the Cortex-A7. The menu path
+// (sweep == 1) is arithmetically untouched.
+static void grid_shine(Raster *rz, int frame, RastCol line, unsigned base,
+                       int sweepOn) {
   // The sweep runs over the x+y diagonal (0..478) and BOUNCES back, so the
   // cycle closes without the teleport a saw wave would give at its wrap. One
   // leg is ~530 frames, the same order as upstream's 600-frame
   // menuGlobalTimer wrap (menu.js:311).
-  const int ph = frame % 1060;
-  const float sweep = (float)(ph < 530 ? ph : 1060 - ph) * 0.905f;
+  // Computed ONLY when it is used: a reader auditing "which screens read
+  // the look plane" (the canonical-shot invariant) sees `frame` flow into
+  // the SSS backdrop call and should not have to read this body to learn it
+  // is inert there (review-p1 fallback round, [L]).
+  float sweep = 0.0f;
+  if (sweepOn) {
+    const int ph = frame % 1060;
+    sweep = (float)(ph < 530 ? ph : 1060 - ph) * 0.905f;
+  }
   // The pixel SET and its order are exactly the old `if (x % P && y % P)
   // continue` sweep over all 57600 pixels — a grid ROW is every x, any other
   // row is every P-th x — but only the ~8160 pixels that survive are visited.
@@ -425,9 +473,11 @@ static void grid_shine(Raster *rz, int frame) {
   for (int y = 0; y < RAST_H; y++) {
     const int step = (y % FOH_GRID_PITCH == 0) ? 1 : FOH_GRID_PITCH;
     for (int x = 0; x < RAST_W; x += step) {
-      const float d = fabsf((float)(x + y) - sweep);
-      unsigned a = 33; // 0.13 * 256
-      if (d < 46.0f) a += (unsigned)(54.0f * (1.0f - d / 46.0f));
+      unsigned a = base; // menu: 33 == 0.13 * 256
+      if (sweepOn) {
+        const float d = fabsf((float)(x + y) - sweep);
+        if (d < 46.0f) a += (unsigned)(54.0f * (1.0f - d / 46.0f));
+      }
       px8_over(rz, x, y, line, a);
     }
   }
@@ -581,6 +631,206 @@ static void bg_end(Raster *rz, FohBgId id) {
   memcpy(g_bg[id], rz->fb, sizeof g_bg[id]);
   g_bg_ready[id] = 1;
   rast_ink_enable(1);
+}
+
+// --- prim 5: the A9 menu artwork (IMG1) ------------------------------------
+// The pipeline `assets` stage packs upstream's OWN menu art — 5 character
+// portraits (58 px wide), 6 VS-stage previews (65x24) and 3 hand cursors
+// (24x32) — into one deterministic file (port/gfx/img1.h, FORMATS.md §7).
+// PROVENANCE: Nintendo-derived, PRIVATE USE ONLY, gitignored build output;
+// never committed, never distributed.
+//
+// Loaded ONCE, at the top of foh_render, so the read can never land inside a
+// paced frame: the first FOH frame is the startup screen (no frame budget)
+// and foh_render_warm hits it earlier still on both app paths.
+//
+// Determinism is unaffected. The set is a pure function of the pipeline's
+// byte-stable output (its sha256 is pinned by pipeline/check-assets.sh), so
+// it behaves exactly like the compile-time constants the backdrop cache
+// already relies on: frame 1 and frame N — and host and device — render the
+// same bytes from the same machine state.
+//
+// A MISSING file is FATAL, not a fallback (HARD RULE 2). A target that
+// quietly rendered the portrait-less CSS would diverge from its twin on
+// every shot — precisely the judge-defeating class B3 closed.
+static Img1Set g_art;
+static int g_art_ready;
+
+// gfx_fatal takes one string, so the loud paths build their message here.
+// Static because gfx_fatal is noreturn — nothing outlives the call.
+static char g_art_msg[640];
+
+// `reason` is img1_error() ONLY where an img1_open actually ran: on the
+// truncation arm no open has happened, so img1_error() would report either
+// the empty initial string or, worse, a STALE reason from an earlier failed
+// open (review-p1 fallback round, [L]).
+static void art_die(const char *why, const char *path, const char *reason) {
+  snprintf(g_art_msg, sizeof g_art_msg,
+           "foh_render: %s (%s): %s — menu.img1 is produced by `node "
+           "pipeline/run.js --only assets` and must be provisioned next to "
+           "the run's data dir",
+           why, path, reason);
+  gfx_fatal(g_art_msg);
+}
+
+// EXPLICIT OVERRIDES ARE AUTHORITATIVE (review-p1 round 1, [H]).
+// If MLFK_MENU_IMG1 — or, failing that, MLFK_DATA_DIR — names a file, that
+// file is the ONLY candidate: falling through to a mount point or the cwd
+// after a failed open could load DIFFERENT artwork than the operator asked
+// for, and two targets rendering different artwork is precisely the twin
+// divergence the fail-loud rule exists to prevent. This is the same
+// discipline the OPK launchers already state for the data dir ("explicit
+// data dir must qualify; fallback chain not consulted",
+// port/gfx/opk/mlfk-foh.sh:48). The unguided chain below is only reached
+// when NEITHER variable is set.
+static void art_load(void) {
+  if (g_art_ready) return;
+  const char *env = getenv("MLFK_MENU_IMG1");
+  if (env != NULL && *env != '\0') {
+    if (img1_open(&g_art, env) != 0)
+      art_die("MLFK_MENU_IMG1 unusable", env, img1_error());
+    g_art_ready = 1;
+    return;
+  }
+  const char *dd = getenv("MLFK_DATA_DIR");
+  if (dd != NULL && *dd != '\0') {
+    char buf[512];
+    const int n = snprintf(buf, sizeof buf, "%s/assets/menu.img1", dd);
+    if (n < 0 || n >= (int)sizeof buf) {
+      // A truncated path names a DIFFERENT file; never open it.
+      art_die("MLFK_DATA_DIR path too long", dd,
+              "snprintf truncated the path (no open attempted)");
+    }
+    if (img1_open(&g_art, buf) != 0)
+      art_die("MLFK_DATA_DIR artwork unusable", buf, img1_error());
+    g_art_ready = 1;
+    return;
+  }
+  // Unguided: the two device mount points the launchers search, then the
+  // cwd. First one that OPENS wins; none opening is fatal.
+  static const char *const cand[3] = {"/mnt/mlfk-scratch/assets/menu.img1",
+                                      "/mnt/mlfk-data/assets/menu.img1",
+                                      "assets/menu.img1"};
+  for (int k = 0; k < 3; k++) {
+    if (img1_open(&g_art, cand[k]) == 0) {
+      g_art_ready = 1;
+      return;
+    }
+  }
+  art_die("menu.img1 not found (set MLFK_MENU_IMG1 or MLFK_DATA_DIR)", cand[2],
+          img1_error());
+}
+
+static const Img1Image *art(const char *name) {
+  const Img1Image *im = img1_find(&g_art, name);
+  if (im == NULL) {
+    // Name the missing image: a renamed or dropped asset is otherwise
+    // unlocalisable from the message alone (review-p1 fallback round, [L]).
+    snprintf(g_art_msg, sizeof g_art_msg,
+             "foh_render: menu.img1 has no image named '%s' — the `assets` "
+             "stage's directory and this renderer have drifted",
+             name);
+    gfx_fatal(g_art_msg);
+  }
+  return im;
+}
+
+// Integer-scale source-over blit.
+//
+// NOT img1_blit: that composites through rast_blend_px, i.e. through the
+// blend565 blue-spill bug this whole file routes around (see px8_over). The
+// hand cursors carry ANTIALIASED alpha, so the defect would sit on every
+// cursor edge of every frame; the portraits' binary alpha would escape it,
+// but there is no reason to keep two blit paths. a8 == 255 is promoted to
+// 256 so opaque source pixels take px8_over's store-only fast path.
+// Sub-rect variant: the CSS row cells are 44 px wide and the portraits are
+// 58, so the cells carry a centred CROP of the same art (upstream's cells
+// crop too — its 85x85 cell is squarer than the source portrait).
+static void blit_img_rect(Raster *rz, const Img1Image *im, int x0, int y0,
+                          int sx, int sy, int sw, int sh, int sc) {
+  if (sc < 1) gfx_fatal("foh_render: image scale must be >= 1");
+  if (sx < 0 || sy < 0 || sw < 0 || sh < 0 || sx + sw > im->w ||
+      sy + sh > im->h) {
+    gfx_fatal("foh_render: image sub-rect outside the source image");
+  }
+  for (int y = sy; y < sy + sh; y++) {
+    for (int x = sx; x < sx + sw; x++) {
+      const size_t idx = (size_t)y * (size_t)im->w + (size_t)x;
+      const unsigned a = im->a8[idx];
+      if (a == 0) continue;
+      const uint16_t p = im->rgb565[idx];
+      const unsigned r5 = (unsigned)((p >> 11) & 0x1F);
+      const unsigned g6 = (unsigned)((p >> 5) & 0x3F);
+      const unsigned b5 = (unsigned)(p & 0x1F);
+      RastCol c;
+      c.r = (uint8_t)((r5 << 3) | (r5 >> 2));
+      c.g = (uint8_t)((g6 << 2) | (g6 >> 4));
+      c.b = (uint8_t)((b5 << 3) | (b5 >> 2));
+      c.a256 = 256;
+      // ALPHA CONVERSION, identical to img1.c:171's `(a8 * 256) / 255` (and
+      // therefore to rast_blit_rgba's) — proved, not approximated: for every
+      // a in 0..254, (a * 256) / 255 == a + a / 255 == a in integer division,
+      // and a == 255 is the 256 case spelled out here. Written this way to
+      // keep a DIVIDE off the per-pixel blit path (review-p1 fallback round,
+      // [L]: parity was the concern, and it already holds exactly).
+      const unsigned a256 = a >= 255u ? 256u : a;
+      for (int py = 0; py < sc; py++) {
+        for (int px = 0; px < sc; px++) {
+          px8_over(rz, x0 + (x - sx) * sc + px, y0 + (y - sy) * sc + py, c,
+                   a256);
+        }
+      }
+    }
+  }
+}
+
+static void blit_img(Raster *rz, const Img1Image *im, int x0, int y0,
+                     int sc) {
+  blit_img_rect(rz, im, x0, y0, 0, 0, im->w, im->h, sc);
+}
+
+// --- prim 6: rounded rects -------------------------------------------------
+// Upstream's CSS cells, port panels and SSS boxes are all roundRect fills
+// with a vertical two-stop gradient (css.js / stageselect.js). ONE half-open
+// span per row keeps the one-composite-per-pixel invariant the fills above
+// establish; the only sqrt is per ROW of the corner arc, never per pixel.
+#define FOH_RR_MAX 10
+
+static void rrect_v(Raster *rz, int x, int y, int w, int h, int r,
+                    RastCol c0, RastCol c1) {
+  if (w <= 0 || h <= 0) return;
+  if (r < 0) r = 0;
+  if (r > FOH_RR_MAX) gfx_fatal("foh_render: rounded-rect radius overflow");
+  if (r * 2 > w) r = w / 2;
+  if (r * 2 > h) r = h / 2;
+  int ins[FOH_RR_MAX];
+  for (int k = 0; k < r; k++) {
+    const float dy = (float)r - 0.5f - (float)k;
+    float t = (float)r * (float)r - dy * dy;
+    if (t < 0.0f) t = 0.0f;
+    ins[k] = r - iround(sqrtf(t));
+    if (ins[k] < 0) ins[k] = 0;
+  }
+  for (int k = 0; k < h; k++) {
+    int in = 0;
+    if (k < r) in = ins[k];
+    else if (k >= h - r) in = ins[h - 1 - k];
+    const float t = h > 1 ? (float)k / (float)(h - 1) : 0.0f;
+    const RastCol c = lerp_col(c0, c1, t);
+    span8(rz, x + in, x + w - in, y + k, c, c.a256);
+  }
+}
+
+// Flat rounded rect (the gradient's degenerate case, spelled out at the
+// call sites that want a border colour rather than a ramp).
+static void rrect(Raster *rz, int x, int y, int w, int h, int r, RastCol c) {
+  rrect_v(rz, x, y, w, h, r, c, c);
+}
+
+// Text centred inside [x, x+w) using the 5x7 face.
+static void text_in(Raster *rz, int x, int w, int y, int scale, const char *s,
+                    RastCol c) {
+  foh_text(rz, x + (w - foh_text_width(s, scale)) / 2, y, scale, s, c);
 }
 
 // ===========================================================================
@@ -776,7 +1026,10 @@ static void render_menu(const FohState *s, Raster *rz) {
     grad_linear(rz, 0.0f, 0.0f, 240.0f, 240.0f, b0, b1);
     bg_end(rz, BG_MENU);
   }
-  grid_shine(rz, s->frame);
+  {
+    const RastCol white = {255, 255, 255, 256};
+    grid_shine(rz, s->frame, white, 33, 1); // menu.js:296-305 (0.13 alpha)
+  }
 
   const RastCol hueLine = hsl_col(s->menuHue, 60.0, 41.0, 256);
   menu_chrome(s, rz, hueLine);
@@ -954,12 +1207,21 @@ void foh_anim_tick(FohState *s) {
 // first non-neutral input; the earlier ones are tick-INDEXED on both targets
 // (foh_dev.c's split), so they keep proving the animated look renders
 // identically on device — the coverage that falsified the libm suspicion.
-// WHAT THIS STOPS COMPARING cross-target, stated plainly for the next reader:
-// on the four MENU shots only (every other screen reads no look-plane field
-// at all), the PHASE of grid_shine's sweep, the menuTimer ring pulse, the
-// menu_chrome travelling dot, and a mid-flight hue lerp. The layers still
-// draw, at phase 0, so their arithmetic is still judged; it is the phase
-// VALUES that are not. Recording the device's own look plane and injecting it
+// WHAT THIS STOPS COMPARING cross-target, stated plainly for the next reader
+// (UPDATED by the A1 Phase 1 restyle — CSS and SSS now read the look plane
+// too, so the elided set grew; review-p1 round 1, [L]):
+//   - the four MENU shots: the PHASE of grid_shine's sweep, the menuTimer
+//     ring pulse, the menu_chrome travelling dot, and a mid-flight hue lerp;
+//   - the CSS shots: the phase of the READY TO FIGHT ribbon's hsl pulse
+//     (render_css, `s->frame % 60`);
+//   - the SSS shots: the phase of the hovered thumb's 8-frame border flash
+//     and the RANDOM box's (render_sss, `(s->frame / 8) % 2`).
+// Every one of those is a pure function of `frame`, which this function
+// pins to 0 — that is the whole reason the new animation was put on the
+// LOOK plane rather than on any machine field. The remaining screens
+// (startup/match/tmatch/options/target-select) read no look-plane field at
+// all. The layers still draw, at phase 0, so their arithmetic is still
+// judged; it is the phase VALUES that are not. Recording the device's own look plane and injecting it
 // into the host twin would restore even those (the project's oracle-fed-seam
 // idiom) — that is the preferred end state, and it is registered for the
 // driver because it changes two GATE scripts and revisits the iter-93 design.
@@ -993,64 +1255,419 @@ static void row_label(Raster *rz, int y, int row, int curRow,
   foh_text(rz, 24, y, 1, label, row == curRow ? kText : kDim);
 }
 
-static void render_css(const FohState *s, Raster *rz) {
-  header(rz, "CHARACTER SELECT");
-  const int ys[4] = {50, 90, 130, 160};
-  row_label(rz, ys[0], 0, s->cssRow, "P1");
-  foh_text(rz, 60, ys[0], 1, kCharNames[s->p1Char], kAccent);
-  row_label(rz, ys[1], 1, s->cssRow, "P2");
-  foh_text(rz, 60, ys[1], 1, kCharNames[s->p2Char], kAccent);
-  row_label(rz, ys[2], 2, s->cssRow, "P2 TYPE");
-  foh_text(rz, 100, ys[2], 1, s->p2Type == 0 ? "HMN" : "CPU", kAccent);
-  row_label(rz, ys[3], 3, s->cssRow, "CPU LEVEL");
-  // slider look: 4 ticks (the upstream slider's 1..4 domain), current
-  // level filled; dimmed entirely while P2 is human.
-  for (int k = 0; k < 4; k++) {
-    const RastCol c = (s->p2Type == 1 && k < s->difficulty) ? kAccent : kPanel;
-    fill_rect(rz, 100 + k * 18, ys[3], 12, 8, c);
+// --- CHARACTER SELECT (upstream menus/css.js, re-authored) -----------------
+// A1 restyle Phase 1. Upstream's CSS is its densest screen: a silver header
+// carrying the MELEE plate + VS badge + mode ribbon + BACK wedge, a row of
+// five 85x85 rounded portrait cells at a 95 px pitch (rgb(41,47,68) ->
+// rgb(85,95,128) gradient, black name strip), four 225 px-pitch port panels
+// with HMN/CPU/NET/N-A type tabs, per-port tints, name plates, a CPU-level
+// slider on the gradient track with its r17 knob, the port tokens, the hand
+// cursor and the READY TO FIGHT ribbon.
+//
+// RE-AUTHORED, never scaled: 1200x750 -> 240x240 is 0.20 in x and 0.32 in y,
+// so a uniform scale would put 31 px labels at 6 px. Every rhythm below is
+// upstream's (five cells, four ports, tab-then-portrait-then-plate stack, the
+// ribbon across the middle); every NUMBER is ours, chosen so the smallest
+// legible unit — a 5x7 glyph — still fits. The one geometric coincidence
+// worth naming: the A9 portraits are 58 px wide, which is exactly a quarter
+// of the screen less the gaps, so a port panel is one portrait wide.
+//
+// SCOPE (foh.h rewrite deltas): the machine has TWO ports (P1 human, P2
+// human-or-CPU) and no free-roaming pointer. Ports 3/4 therefore render as
+// upstream's N-A panels — that is what upstream shows for an unjoined port,
+// not a placeholder — and the hand cursor marks the cssRow the d-pad is on.
+// NET is not drawn because the network arm is scope-excluded (foh.h), so a
+// NET tab would name an unreachable state.
+#define CSS_CELL_W 44
+#define CSS_CELL_H 30
+#define CSS_CELL_PITCH 46
+#define CSS_CELL_X0 6
+#define CSS_CELL_Y 32
+#define CSS_PANEL_W 58
+#define CSS_PANEL_PITCH 60
+#define CSS_PANEL_X0 1
+#define CSS_PANEL_Y 96
+#define CSS_TAB_H 11
+
+static int css_cell_x(int k) { return CSS_CELL_X0 + CSS_CELL_PITCH * k; }
+static int css_panel_x(int k) { return CSS_PANEL_X0 + CSS_PANEL_PITCH * k; }
+
+// The per-port tints (spec §3.3; upstream's own port colours).
+static const RastCol kPortTint[4] = {{218, 51, 51, 256},
+                                     {51, 53, 218, 256},
+                                     {226, 218, 34, 256},
+                                     {44, 217, 29, 256}};
+
+// The silver header: MELEE plate, VS badge, mode ribbon, BACK wedge.
+static void css_header(Raster *rz) {
+  const RastCol h0 = {150, 156, 172, 256}, h1 = {70, 76, 98, 256};
+  rrect_v(rz, 0, 0, RAST_W, 26, 0, h0, h1);
+  // the black slab the BACK wedge sits on (css.js draws it as a skewed quad)
+  {
+    const RastCol blk = {10, 10, 16, 256};
+    const float q[8] = {184.0f, 0.0f, 240.0f, 0.0f, 240.0f, 26.0f, 194.0f,
+                        26.0f};
+    poly8(rz, q, 4, blk, 256);
   }
   {
-    const char lvl[2] = {(char)('0' + s->difficulty), 0};
-    foh_text(rz, 180, ys[3], 1, lvl, s->p2Type == 1 ? kText : kDim);
+    const RastCol ink = {16, 16, 24, 256};
+    foh_text2(rz, 3, 4, 2, 1, "MELEE", ink); // 68 px + the italic lean
   }
-  text_center(rz, 200, 1, "START: STAGE SELECT", kDim);
-  text_center(rz, 215, 1, "HOLD B: BACK", kDim);
+  // the VS badge (a filled disc under a lighter ring)
+  {
+    const RastCol disc = {58, 62, 78, 256}, ring = {166, 171, 186, 256};
+    const RastCol tx = {228, 230, 238, 256};
+    disc8(rz, 91.0f, 13.0f, 9.0f, disc, 256);
+    ring8(rz, 91.0f, 13.0f, 9.0f, 2.0f, ring, 256);
+    foh_text(rz, 86, 10, 1, "VS", tx);
+  }
+  // the mode ribbon: a chevron-capped plate (css.js flanks its blurb with
+  // two arrow caps), carrying upstream's own label for this mode.
+  {
+    const RastCol pl = {26, 28, 42, 256}, ed = {150, 155, 172, 256};
+    const RastCol tx = {236, 238, 246, 256};
+    const float p[12] = {110.0f, 4.0f,  172.0f, 4.0f,  178.0f, 13.0f,
+                         172.0f, 22.0f, 110.0f, 22.0f, 104.0f, 13.0f};
+    poly8(rz, p, 6, pl, 256);
+    stroke_closed(rz, p, 6, 1.0f, ed, 256);
+    text_in(rz, 104, 74, 10, 1, "VS. MELEE", tx);
+  }
+  // BACK: gold text behind a red arrow head (css.js:back button)
+  {
+    const RastCol gold = {247, 208, 32, 256}, red = {214, 26, 26, 256};
+    const float a[6] = {198.0f, 13.0f, 206.0f, 6.0f, 206.0f, 20.0f};
+    poly8(rz, a, 3, red, 256);
+    foh_text(rz, 210, 10, 1, "BACK", gold);
+  }
 }
 
-static void render_sss(const FohState *s, Raster *rz) {
-  header(rz, "STAGE SELECT");
-  // 3x2 grid of stage tiles, ids 0..5
-  for (int k = 0; k < 6; k++) {
-    const int col = k % 3, row = k / 3;
-    const int x = 10 + col * 75, y = 50 + row * 60;
-    fill_rect(rz, x, y, 65, 44, kPanel);
-    if (k == s->sssCursor) {
-      // cursor frame (4 edges)
-      fill_rect(rz, x - 2, y - 2, 69, 2, kCursor);
-      fill_rect(rz, x - 2, y + 44, 69, 2, kCursor);
-      fill_rect(rz, x - 2, y, 2, 44, kCursor);
-      fill_rect(rz, x + 65, y, 2, 44, kCursor);
-    }
-    const char num[2] = {(char)('0' + k), 0};
-    foh_text(rz, x + 4, y + 4, 1, num, kDim);
-  }
-  // The RANDOM slot (cursor 6): visible but REFUSING (registered
-  // exclusion — upstream's arm draws from the seeded stream,
-  // stageselect.js:80-84; foh.h header note). Rendered as a wide
-  // dimmed tile below the grid.
+// One 44x30 character cell: the upstream gradient body with its black name
+// strip. The strip is what makes the row read as upstream's at this size.
+static void css_cell(Raster *rz, int k, int hot) {
+  const RastCol c0 = {41, 47, 68, 256}, c1 = {85, 95, 128, 256};
+  const RastCol strip = {6, 6, 10, 256}, name = {214, 216, 226, 256};
+  const RastCol edge = {120, 128, 156, 256}, hotEdge = {254, 238, 27, 256};
+  const int x = css_cell_x(k), y = CSS_CELL_Y;
+  rrect_v(rz, x, y, CSS_CELL_W, CSS_CELL_H, 4, c0, c1);
+  // the portrait, centre-cropped to the cell: 58 px of art into a 44 px
+  // cell, top-aligned so the head fills it (upstream crops its cells too).
   {
-    const int x = 60, y = 172, w = 120, h = 16;
-    fill_rect(rz, x, y, w, h, kPanel);
-    if (s->sssCursor == 6) {
-      fill_rect(rz, x - 2, y - 2, w + 4, 2, kCursor);
-      fill_rect(rz, x - 2, y + h, w + 4, 2, kCursor);
-      fill_rect(rz, x - 2, y, 2, h, kCursor);
-      fill_rect(rz, x + w, y, 2, h, kCursor);
-    }
-    foh_text(rz, x + 6, y + 4, 1, "RANDOM", kDim);
+    const Img1Image *im = art(kCharArt[k]);
+    const int sw = CSS_CELL_W - 4, sh = CSS_CELL_H - 12;
+    blit_img_rect(rz, im, x + 2, y + 1, (im->w - sw) / 2, 0, sw, sh, 1);
   }
-  text_center(rz, 194, 1, kStageNames[s->sssCursor], kAccent);
-  text_center(rz, 208, 1, "A: FIGHT   B: BACK", kDim);
+  rrect(rz, x + 1, y + CSS_CELL_H - 10, CSS_CELL_W - 2, 9, 2, strip);
+  text_in(rz, x, CSS_CELL_W, y + CSS_CELL_H - 9, 1, kCharShort[k], name);
+  // 1 px outline, brightened while the d-pad row owns this cell.
+  {
+    const float b[8] = {(float)x,
+                        (float)y,
+                        (float)(x + CSS_CELL_W - 1),
+                        (float)y,
+                        (float)(x + CSS_CELL_W - 1),
+                        (float)(y + CSS_CELL_H - 1),
+                        (float)x,
+                        (float)(y + CSS_CELL_H - 1)};
+    stroke_closed(rz, b, 4, 1.0f, hot ? hotEdge : edge, 256);
+  }
+}
+
+// One port token: the disc upstream drops on the cell a port has picked.
+static void css_token(Raster *rz, int cell, int port, int slot) {
+  const float cx = (float)(css_cell_x(cell) + 12 + 20 * slot);
+  const float cy = (float)(CSS_CELL_Y + 11);
+  const RastCol rim = {250, 250, 252, 256}, tx = {255, 255, 255, 256};
+  const char lbl[3] = {'P', (char)('1' + port), 0};
+  disc8(rz, cx, cy, 9.0f, kPortTint[port], 256);
+  ring8(rz, cx, cy, 9.0f, 1.0f, rim, 256);
+  foh_text(rz, (int)cx - 5, (int)cy - 3, 1, lbl, tx);
+}
+
+// One port panel. `type`: 0 human, 1 cpu, -1 unoccupied (upstream N-A).
+static void css_panel(const FohState *s, Raster *rz, int port, int type,
+                      int chr, int hotTab, int hotCpu) {
+  const int x = css_panel_x(port), y = CSS_PANEL_Y;
+  const int h = 120;
+  const RastCol tint = kPortTint[port];
+  const RastCol dim = {56, 58, 72, 256};
+  const RastCol empty0 = {34, 36, 46, 256}, empty1 = {16, 17, 24, 256};
+  RastCol b0, b1, edge;
+  if (type < 0) {
+    b0 = empty0;
+    b1 = empty1;
+    edge = dim;
+  } else {
+    // the port tint at ~30%, ramped to near-black (css.js panel gradient)
+    b0.r = (uint8_t)(tint.r / 3 + 14);
+    b0.g = (uint8_t)(tint.g / 3 + 14);
+    b0.b = (uint8_t)(tint.b / 3 + 14);
+    b0.a256 = 256;
+    b1 = (RastCol){10, 10, 16, 256};
+    edge = tint;
+  }
+  rrect_v(rz, x, y + CSS_TAB_H - 1, CSS_PANEL_W, h - CSS_TAB_H + 1, 4, b0, b1);
+
+  // the type tab: a chevron-capped tag at the panel's top-left (css.js).
+  {
+    const char *lbl = type < 0 ? "N-A" : (type == 1 ? "CPU" : "HMN");
+    const RastCol na = {82, 81, 81, 256};   // spec §3.3 N-A grey
+    const RastCol cpu = {91, 91, 91, 256};  // spec §3.3 CPU grey
+    const RastCol hmn = {44, 42, 14, 256};
+    const RastCol fill = type < 0 ? na : (type == 1 ? cpu : hmn);
+    const RastCol tx = type == 0 ? (RastCol){254, 238, 27, 256}
+                                 : (RastCol){222, 222, 228, 256};
+    const float t[10] = {(float)x,      (float)y,
+                         (float)(x + 30), (float)y,
+                         (float)(x + 36), (float)(y + 5),
+                         (float)(x + 30), (float)(y + CSS_TAB_H),
+                         (float)x,        (float)(y + CSS_TAB_H)};
+    poly8(rz, t, 5, fill, 256);
+    stroke_closed(rz, t, 5, 1.0f, hotTab ? (RastCol){254, 238, 27, 256} : edge,
+                  256);
+    foh_text(rz, x + 5, y + 2, 1, lbl, tx);
+  }
+
+  if (type < 0) {
+    // upstream's empty-port watermark: the big slashed circle plus the
+    // dot row along the bottom.
+    const RastCol wm = {48, 50, 62, 256};
+    const float cx = (float)(x + CSS_PANEL_W / 2), cy = (float)(y + 58);
+    ring8(rz, cx, cy, 17.0f, 2.0f, wm, 256);
+    line8(rz, cx - 12.0f, cy + 12.0f, cx + 12.0f, cy - 12.0f, wm, 256);
+    for (int k = 0; k < 6; k++) {
+      disc8(rz, (float)(x + 8 + k * 9), (float)(y + h - 8), 2.0f, wm, 256);
+    }
+  } else {
+    // the portrait (58 px wide == the panel width, so it bleeds edge to
+    // edge exactly as upstream's silhouettes do), then the name plate.
+    const Img1Image *im = art(kCharArt[chr]);
+    blit_img(rz, im, x, y + CSS_TAB_H + 1, 1);
+    {
+      const RastCol pl = {4, 4, 8, 256}, tx = {240, 242, 250, 256};
+      rrect(rz, x + 2, y + 62, CSS_PANEL_W - 4, 12, 2, pl);
+      text_in(rz, x + 2, CSS_PANEL_W - 4, y + 64, 1, kCharShort[chr], tx);
+    }
+    // the ghost port letters upstream watermarks under the plate. Suppressed
+    // on a CPU port: the slider box owns that space (upstream has 285 px of
+    // panel to stack both; this one has 120).
+    if (type != 1) {
+      const RastCol gh = {70, 72, 88, 256};
+      const char g[3] = {'P', (char)('1' + port), 0};
+      foh_text2(rz, x + 16, y + h - 22, 2, 1, g, gh);
+    }
+  }
+
+  // the CPU-level slider: upstream's gradient track with the round knob
+  // carrying the level (css.js:316-329 — the 1..4 domain, foh.h delta).
+  if (type == 1) {
+    const RastCol box = {22, 24, 32, 256}, lab = {206, 208, 216, 256};
+    const RastCol hotE = {254, 238, 27, 256};
+    rrect(rz, x + 2, y + 78, CSS_PANEL_W - 4, 26, 3, box);
+    if (hotCpu) {
+      const float b[8] = {(float)(x + 2),
+                          (float)(y + 78),
+                          (float)(x + CSS_PANEL_W - 3),
+                          (float)(y + 78),
+                          (float)(x + CSS_PANEL_W - 3),
+                          (float)(y + 103),
+                          (float)(x + 2),
+                          (float)(y + 103)};
+      stroke_closed(rz, b, 4, 1.0f, hotE, 256);
+    }
+    text_in(rz, x + 2, CSS_PANEL_W - 4, y + 81, 1, "CPU LV", lab);
+    // the track: blue -> red across 38 px, one lerp per column.
+    {
+      const RastCol t0 = {40, 60, 220, 256}, t1 = {220, 40, 40, 256};
+      for (int k = 0; k < 38; k++) {
+        const RastCol c = lerp_col(t0, t1, (float)k / 37.0f);
+        span8(rz, x + 10 + k, x + 11 + k, y + 92, c, 256);
+        span8(rz, x + 10 + k, x + 11 + k, y + 93, c, 256);
+        span8(rz, x + 10 + k, x + 11 + k, y + 94, c, 256);
+      }
+    }
+    {
+      const float kx = (float)(x + 11 + (s->difficulty - 1) * 12);
+      const RastCol knob = {228, 54, 54, 256}, rim = {252, 252, 254, 256};
+      const RastCol tx = {255, 255, 255, 256};
+      const char d[2] = {(char)('0' + s->difficulty), 0};
+      disc8(rz, kx, (float)(y + 93), 6.0f, knob, 256);
+      ring8(rz, kx, (float)(y + 93), 6.0f, 1.0f, rim, 256);
+      foh_text(rz, (int)kx - 2, y + 90, 1, d, tx);
+    }
+  }
+}
+
+static void render_css(const FohState *s, Raster *rz) {
+  // BG: upstream's dark blue body under the silver header. A VERTICAL ramp
+  // (one lerp per row, then a full-row span) instead of grad_linear's
+  // per-pixel diagonal projection — same look at this size, and it reduces
+  // to 240 rast_fill_row_opaque calls via span8's fast path. NOTE the
+  // absence of a per-pixel divide is NOT by itself why this needs no
+  // backdrop-cache slot (it is a constant image redrawn every frame, which
+  // a cache would still skip) — what makes redrawing it acceptable is the
+  // batched row fill above (review-p1 fallback round, [L]). If this screen
+  // ever misses the device budget, a BG_CSS slot is the next lever.
+  {
+    const RastCol b0 = {14, 16, 38, 256}, b1 = {4, 4, 12, 256};
+    rrect_v(rz, 0, 0, RAST_W, RAST_H, 0, b0, b1);
+  }
+  css_header(rz);
+
+  // the five character cells + the two port tokens
+  for (int k = 0; k < 5; k++) {
+    const int hot = (s->cssRow == 0 && k == s->p1Char) ||
+                    (s->cssRow == 1 && k == s->p2Char);
+    css_cell(rz, k, hot);
+  }
+  css_token(rz, s->p1Char, 0, 0);
+  css_token(rz, s->p2Char, 1, 1);
+
+  // READY TO FIGHT (css.js:446-451 — both ports are always occupied in this
+  // machine, so the ribbon is always up; START is the launch edge). The text
+  // pulses hsl(52,85%,25-50%) exactly as upstream does, off the LOOK plane's
+  // frame counter, so foh_look_canonical pins it at phase 0 for every shot.
+  {
+    const RastCol out = {196, 22, 30, 256}, in = {14, 6, 14, 256};
+    const float o[8] = {0.0f, 66.0f, 240.0f, 62.0f, 240.0f, 88.0f, 0.0f, 92.0f};
+    const float i[8] = {0.0f, 69.0f, 240.0f, 65.0f, 240.0f, 85.0f, 0.0f, 89.0f};
+    poly8(rz, o, 4, out, 256);
+    poly8(rz, i, 4, in, 256);
+    const int ph = s->frame % 60;
+    const int tri = ph < 30 ? ph : 60 - ph; // 0..30, no transcendental
+    // Upstream pulses 25%..50% lightness; this is 35%..60% — the WHOLE
+    // band is shifted +10 points, not just the floor, for the same reason
+    // every other number on this screen is re-authored: at 240x240 the
+    // judged shots render at the look plane's canonical phase
+    // (frame == 0 — foh_look_canonical), which is the trough, and a 25%
+    // yellow on black is barely a shape at 2 px stroke weight. Amplitude
+    // (25 points) is upstream's; only the offset moved.
+    const RastCol lit = hsl_col(52.0, 85.0, 35.0 + (double)tri * (25.0 / 30.0),
+                                256);
+    const int w = foh_text2_width("READY TO FIGHT", 2);
+    foh_text2(rz, (RAST_W - w) / 2, 68, 2, 1, "READY TO FIGHT", lit);
+  }
+
+  // the four port panels (ports 3/4 unoccupied — upstream's N-A)
+  css_panel(s, rz, 0, 0, s->p1Char, 0, 0);
+  css_panel(s, rz, 1, s->p2Type, s->p2Char, s->cssRow == 2,
+            s->cssRow == 3 && s->p2Type == 1);
+  css_panel(s, rz, 2, -1, 0, 0, 0);
+  css_panel(s, rz, 3, -1, 0, 0, 0);
+
+  // the hand cursor (A9 handpoint art). Its fingertip is the sprite's
+  // TOP-LEFT and the glove hangs down-right, so it is anchored just past
+  // each target: the row it marks stays readable underneath.
+  {
+    int hx = 0, hy = 0;
+    switch (s->cssRow) {
+      case 0: hx = css_cell_x(s->p1Char) + 26; hy = CSS_CELL_Y + 6; break;
+      case 1: hx = css_cell_x(s->p2Char) + 26; hy = CSS_CELL_Y + 6; break;
+      case 2: hx = css_panel_x(1) + 36; hy = CSS_PANEL_Y + 6; break;
+      default:
+        // row 3 is the CPU level. While P2 is HUMAN there is no slider to
+        // point at (foh.c keeps the row reachable and the value inert), so
+        // the hand rests on the port panel that owns the setting rather than
+        // on empty pixels.
+        hx = css_panel_x(1) + CSS_PANEL_W - 2;
+        hy = CSS_PANEL_Y + (s->p2Type == 1 ? 86 : 60);
+        break;
+    }
+    blit_img(rz, art("hand_point"), hx, hy, 1);
+  }
+
+  {
+    const RastCol hint = {150, 152, 168, 256};
+    text_center(rz, 228, 1, "L/R: CHANGE   START: FIGHT", hint);
+  }
+}
+
+// --- STAGE SELECT (upstream stages/stageselect.js, re-authored) ------------
+// A1 restyle Phase 1. Upstream: a magenta lattice over a dark violet field,
+// one 800x300 preview boxed in light grey with the stage name set large
+// inside it, six 150x90 thumbnails on a 175 px pitch (black name strip each,
+// the hovered one's border FLASHING rgb(251,116,155)/rgb(255,182,204) on an
+// 8-frame cycle) and the orange RANDOM box below.
+//
+// RE-AUTHORED at 240x240: the A9 stage previews are 65x24, so the "big"
+// preview is the SAME artwork blitted 2x (130x48) — an integer scale, no
+// resampler, no new blend math. The thumbs keep upstream's six-up shape but
+// as 3x2, because the machine's cursor IS a 3x2 grid (foh.h rewrite delta);
+// a single row of six would leave the d-pad's up/down arms unexplained.
+// RANDOM stays TEXT: upstream only ever shows stage_random.png as an onerror
+// fallback, and the slot REFUSES here anyway (foh.h — its upstream arm draws
+// from the seeded RNG stream).
+#define SSS_THUMB_W 69
+#define SSS_THUMB_H 38
+#define SSS_THUMB_X0 11
+#define SSS_THUMB_Y0 92
+#define SSS_THUMB_PX 74
+#define SSS_THUMB_PY 46
+
+static void render_sss(const FohState *s, Raster *rz) {
+  const int cur = s->sssCursor;
+  // The 8-frame border flash, off the LOOK plane (foh_look_canonical pins
+  // frame == 0 for every judged shot, so this is target-independent).
+  const int flash = (s->frame / 8) % 2;
+  const RastCol pink = flash ? (RastCol){251, 116, 155, 256}
+                             : (RastCol){255, 182, 204, 256};
+  const RastCol orange = flash ? (RastCol){245, 144, 61, 256}
+                               : (RastCol){251, 195, 149, 256};
+  const RastCol idle = {96, 100, 118, 256};
+  const RastCol strip = {6, 6, 10, 256}, name = {228, 230, 238, 256};
+
+  // BG: the violet field + the magenta lattice (one lerp per row + the
+  // grid's ~8k surviving pixels; no per-pixel transcendental).
+  {
+    const RastCol v0 = {30, 10, 44, 256}, v1 = {62, 16, 62, 256};
+    rrect_v(rz, 0, 0, RAST_W, RAST_H, 0, v0, v1);
+    const RastCol lat = {236, 120, 220, 256};
+    grid_shine(rz, s->frame, lat, 20, 0); // static lattice: no sweep, no VDIV
+  }
+
+  // the big preview box
+  {
+    const RastCol edge = {190, 192, 202, 256}, inner = {10, 8, 20, 256};
+    rrect(rz, 20, 12, 200, 72, 4, edge);
+    rrect(rz, 22, 14, 196, 68, 3, inner);
+    if (cur <= 5) {
+      blit_img(rz, art(kStageArt[cur]), 55, 16, 2); // 130x48
+      foh_text2(rz, 26, 68, 1, 0, kStageNames[cur], name);
+    } else {
+      // the refusing RANDOM slot's preview: upstream's own "?" panel.
+      // The name comes from kStageNames[6] like every other slot's, so the
+      // table stays the single source of screen names (review-p1 [L]).
+      foh_text2(rz, 108, 26, 3, 0, "?", orange);
+      foh_text2(rz, 26, 68, 1, 0, kStageNames[6], orange);
+    }
+  }
+
+  // the six thumbnails (3x2 == the machine's cursor grid)
+  for (int k = 0; k < 6; k++) {
+    const int x = SSS_THUMB_X0 + (k % 3) * SSS_THUMB_PX;
+    const int y = SSS_THUMB_Y0 + (k / 3) * SSS_THUMB_PY;
+    rrect(rz, x, y, SSS_THUMB_W, SSS_THUMB_H, 3, k == cur ? pink : idle);
+    rrect(rz, x + 2, y + 2, 65, 34, 2, strip);
+    blit_img(rz, art(kStageArt[k]), x + 2, y + 2, 1);
+    text_in(rz, x + 2, 65, y + 27, 1, kStageShort[k], name);
+  }
+
+  // the RANDOM box (cursor 6): VISIBLE but refusing (foh.h note) — drawn in
+  // upstream's orange, flashing on the same 8-frame cycle when hovered.
+  {
+    const RastCol box = {18, 10, 22, 256};
+    const RastCol ed = cur == 6 ? orange : idle;
+    const RastCol tx = cur == 6 ? orange : (RastCol){170, 172, 186, 256};
+    rrect(rz, 74, 182, 92, 24, 3, ed);
+    rrect(rz, 76, 184, 88, 20, 2, box);
+    ring8(rz, 100.0f, 194.0f, 8.0f, 2.0f, ed, 256);
+    foh_text2(rz, 97, 189, 1, 0, "?", tx);
+    foh_text(rz, 120, 191, 1, "RANDOM", tx);
+  }
+
+  {
+    const RastCol hint = {198, 170, 210, 256};
+    text_center(rz, 214, 1, "A: FIGHT   B: BACK", hint);
+  }
 }
 
 static void render_opt_gameplay(const FohState *s, Raster *rz) {
@@ -1169,6 +1786,10 @@ void foh_render_warm(Raster *rz) {
 }
 
 void foh_render(const FohState *s, Raster *rz) {
+  // One-time, guarded by a flag: the artwork read lands on the FIRST FOH
+  // frame (the startup screen, before any paced loop) on every app path,
+  // never inside a frame budget. See art_load's header note.
+  art_load();
   rast_clear(rz, kBg.r, kBg.g, kBg.b, 0, RAST_H);
   switch (s->screen) {
     case FOH_STARTUP: render_startup(s, rz); break;

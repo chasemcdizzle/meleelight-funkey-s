@@ -371,9 +371,19 @@ echo "[0] pins OK: producers 9, manifests 8+4+target, flows 7, LAUNCH cross-bind
 echo "=== [1] data planes (fresh tables + simdata x2)"
 rm -rf "$TABLES"
 { bash pipeline/extractor/build-extractor.sh; } 2>&1 | relay_lines
-{ node pipeline/run.js --only animations,tables,stages,targets --out "$TABLES"; } 2>&1 | relay_lines
+{ node pipeline/run.js --only animations,tables,stages,targets,assets --out "$TABLES"; } 2>&1 | relay_lines
 made "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" "$TABLES/ml_tables.h" \
      "$TABLES/ml_stages.h" "$TABLES/ml_targets.c" "$TABLES/ml_targets.h"
+# A1 restyle Phase 1: the CSS/SSS renders consume the `assets` stage's IMG1
+# menu artwork (port/gfx/img1.h). foh_render resolves it from MLFK_MENU_IMG1
+# first (art_load), and a MISSING file is fatal there by design — a target
+# that silently rendered the portrait-less CSS would diverge from its twin.
+# Pointing it at THIS run's freshly regenerated file keeps the check hermetic
+# for the artwork plane exactly as it already is for tables/stages/targets.
+# (The artifact's own byte-stability + sha pins live in
+# pipeline/check-assets.sh; they are not re-derived here.)
+made "$TABLES/assets/menu.img1"
+export MLFK_MENU_IMG1="$PWD/$TABLES/assets/menu.img1"
 rm -rf "$B"
 mkdir -p "$B"
 node "$CAL/dump-sim-data.js" --out "$B/simdata.txt" 2>&1 | relay_lines
@@ -387,8 +397,11 @@ echo "=== [2] build foh_app"
 CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror
   -I"$TABLES" -Iport/ryu -Iport/sim -Ioracle/qjs)
 rm -f "$B/raster.o" "$B/platform_headless.o" "$B/foh.o" "$B/foh_font.o" \
-      "$B/foh_render.o" "$B/foh_persist.o" "$B/foh_app.o" "$B/foh_app"
+      "$B/foh_render.o" "$B/foh_persist.o" "$B/foh_app.o" "$B/img1.o" \
+      "$B/foh_app"
 cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$B/raster.o"
+# A1 restyle Phase 1: the IMG1 menu-artwork loader (port/gfx/img1.h).
+cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/img1.c" -o "$B/img1.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/platform_headless.c" -o "$B/platform_headless.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh.c" -o "$B/foh.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_font.c" -o "$B/foh_font.o"
@@ -398,7 +411,7 @@ cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_app.c" -o "$B/foh_app.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -o "$B/foh_app" \
   "$B/foh.o" "$B/foh_font.o" "$B/foh_render.o" "$B/foh_persist.o" \
   "$B/foh_app.o" \
-  "$B/raster.o" "$B/platform_headless.o" \
+  "$B/raster.o" "$B/img1.o" "$B/platform_headless.o" \
   "$SIM/sim_boot.c" "$SIM/sim_tick.c" "$SIM/sim_ser.c" \
   "$SIM/sim_data.c" "$SIM/sim_ai_live.c" \
   "$CAL/canon.c" "$CAL/player_canon.c" \
