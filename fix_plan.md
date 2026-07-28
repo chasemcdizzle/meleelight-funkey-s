@@ -2032,3 +2032,33 @@ Sequence: punch list → owner re-play/ratification → post-gate window
   capture (one call) + extend the IoU mask; own arc + re-pin.
 - U2 (P2) gfx_target.c target-stage rasterization is judged
   twin-vs-device (two copies of the same C agreeing), not vs browser.
+
+## A1 PHASE-0 LANDED (iter 121) — registered follow-ups
+- A14 CORRECTED (measured by the Phase-0 writer, supersedes the audit's
+  assumption): vfxglyphs-frozen.txt (VFXGLYPHS1) contains ONLY digits
+  0-9 plus `:`, `%`, space — **ZERO letters** across the 4 specs at
+  gfx-pagelib.js:183-186. The swap therefore CANNOT land as-is. Correct
+  sequence (Phase-1 task): add A-Z + `.,!?&'` to the `chars` of specs
+  0/3 in port/gfx/gfx-pagelib.js → browser re-capture → re-freeze
+  vfxglyphs-frozen.txt (a DEVICE-consumed artifact: check-device-foh.sh
+  :1216 pushes it via --glyphs) → re-run check-render.sh + the device
+  legs → swap foh_text2 → gfx_glyphs_load() with foh_font.c face 2 as a
+  LOUD fallback → delete the 6x9 face once green. Spec 3 is literally
+  `italic 700 70px Arial` = upstream's menu weight, and captured heights
+  (5/7/9/12-14 px) suit 240x240. NOTE: hand-authoring more glyphs is
+  forbidden in the meantime (that is the debt A8-F2 named).
+- B1 (P1, NEW — pre-existing, found by the Phase-0 arc) **raster.c:69
+  blend565() corrupts blue on EVERY partial-alpha blend**: it packs r+b
+  into one field and the red term's low bits spill into blue (verified
+  rgb(147,14,42) at a=87 over rgb(39,0,91) → blue 25, correct 9; up to
+  24/255 error). Affects every anti-aliased edge the GAME renders, not
+  just menus. Deferred by the writer (out of lane: -O3 sim TU behind
+  frozen ink pins) and all three reviewers called the deferral
+  defensible; new FOH drawing routes around it via px8_over. Fix needs
+  its own arc + re-pin + a render-parity re-judge.
+- B2 (P1, device-gated) Phase-0 render cost UNVERIFIED on hardware:
+  an Opus reviewer estimated the uncached title path >20 ms vs the
+  16.67 ms FOH budget (device legs fail on skips != 0). The writer
+  cached frame-invariant gradients (~150k per-pixel sqrt+divide
+  removed); the RESIDUAL needs measurement by the device lane before
+  check-device-foh.sh re-runs. Measure BEFORE Phase 1 adds CSS/SSS art.

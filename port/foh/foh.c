@@ -50,6 +50,14 @@ void foh_init(FohState *s) {
   for (int c = 0; c < 5; c++) {
     for (int t = 0; t < 10; t++) s->targetRecords[c][t] = -1.0;
   }
+  // LOOK plane (A1 restyle Phase 0; foh.h). menuColours / menuCurColour
+  // literals are menu.js:34-35 — presentation constants of a rewritten,
+  // non-checksummed surface, not engine data.
+  s->menuHue = 238.0;
+  s->menuColours[0] = 238.0;
+  s->menuColours[1] = 358.0;
+  s->menuColours[2] = 117.0;
+  s->menuColours[3] = 55.0;
 }
 
 static void ev_push(FohState *s, FohEvent e) {
@@ -520,4 +528,8 @@ void foh_tick(FohState *s, const PlatformInput *in) {
     default: gfx_fatal("foh: tick on an invalid screen");
   }
   s->prev = *in;
+  // LOOK plane only (A1 restyle Phase 0) — advanced after navigation has
+  // settled so the hue chases the NEW selection. Reads/writes nothing the
+  // flow graph, the event list or the launch record can observe.
+  foh_anim_tick(s);
 }

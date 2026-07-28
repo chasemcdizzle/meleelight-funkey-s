@@ -202,6 +202,25 @@ typedef struct {
   int tssStage;
   bool targetMode;
   bool launched;
+  // --- LOOK / ANIMATION PLANE (M4 A1 restyle, Phase 0) -------------------
+  // The FOH was static: foh_render is a pure function of FohState and the
+  // shot byte-stability x2 arm depends on that staying true. Upstream's
+  // menus animate off frame counters (menuGlobalTimer/menuTimer/menuCycle,
+  // menu.js:37-40; angB/angR/mlPos, startscreen.js:5-10), so the port needs
+  // a counter too — and it must be a COUNTER, never a clock: `frame` is the
+  // tick index, so two runs of the same flow render the same bytes. These
+  // fields are advanced by foh_anim_tick (below) and READ by foh_render;
+  // no flow edge, selection, or event ever reads them.
+  int frame;          // ticks since foh_init (grid shine, rays, wordmark bob)
+  double menuHue;     // menu.js menuCurColour (init 238, menu.js:35)
+  double menuHueOff;  // menu.js menuColourOffset (menu.js:33)
+  double menuColours[4]; // menu.js:34 — MUTABLE, see menu.js:243-252
+  int menuTimer;      // menu.js menuTimer, 0..60 (ring pulse phase)
+  int menuCycle;      // menu.js menuCycle, 0/1 (second ring on/off)
+  int menuPrevSel;    // previous menuSelected — drives the reset-on-move arm
+  int menuPrevScreen; // previous screen — a B-back can land on the SAME row
+                      // number (battle 0 -> top 0), which upstream still
+                      // treats as a menuMove (menu.js:233-235)
   // edge detection
   PlatformInput prev;
   // events emitted by the last tick
@@ -224,9 +243,22 @@ const char *foh_screen_token(FohScreen sc);
 // deterministic — no RNG, no clock).
 void foh_render(const FohState *s, Raster *rz);
 
+// foh_render.c: advance the LOOK plane one tick (menu hue lerp, ring pulse,
+// global frame counter). Called once per foh_tick, AFTER navigation has
+// settled, so the hue chases the new selection. Touches only the fields in
+// the "look / animation plane" block above — it can never change a flow
+// edge, an event, or a launch record.
+void foh_anim_tick(FohState *s);
+
 // foh_font.c: self-authored 5x7 font (scale = integer pixel multiplier).
 void foh_text(Raster *rz, int x, int y, int scale, const char *s,
               RastCol col);
 int foh_text_width(const char *s, int scale);
+
+// foh_font.c: the self-authored 6x9 heavy display face; italic != 0 shears
+// it (synthetic oblique). Advance 7 px per glyph at scale 1.
+void foh_text2(Raster *rz, int x, int y, int scale, int italic,
+               const char *s, RastCol col);
+int foh_text2_width(const char *s, int scale);
 
 #endif // FOH_FOH_H
