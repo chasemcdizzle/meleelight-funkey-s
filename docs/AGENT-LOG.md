@@ -19709,3 +19709,12 @@ check arcs + re-pins per the established discipline.
 (portraits reuse; network-entry decision deferred post-A1; pause/quit
 via START = P0 with ssb64-funkey-s fk_menu.{c,h} as the owner-directed
 reference/copy source; MENU/HOME button wired to the overlay).
+
+**iter-120 addendum 2 (owner ruling, 2026-07-27): PARALLEL LANES
+AUTHORIZED for the punch list** — the PROCESS "parallel writers
+rejected" stance is amended per its own narrowed exception: a second
+writer lane runs in an ISOLATED WORKTREE, DRIVER AS SOLE MERGER, and
+the device stays owned by exactly ONE lane at a time (crash writer
+now). Restyle lane (A1 Phase 0) is host-only until merge. Commits
+remain driver-made, one atomic merge per landed increment on
+agent/auto.
