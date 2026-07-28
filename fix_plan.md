@@ -2178,3 +2178,38 @@ Sequence: punch list → owner re-play/ratification → post-gate window
 - B11 (P2) check-device-{persist,fullgame}.sh wired for artwork +
   syntax-checked but NOT run; fullgame's PRODUCER_PINS 12→14 verified
   only by static count.
+
+## OWNER PLAYTHROUGH #2 (Chase, 2026-07-28) — design approved, MECHANICS + FIDELITY are the theme
+Verdict on look: main menu GOOD · CSS design GOOD · SSS design GOOD.
+Everything below is functionality/fidelity, not styling.
+- **C1 (P0, CRASH) the game crashed while sitting on CSS too long.**
+  Root-cause required (no reroll, no guess). Suspects to MEASURE:
+  the CSS animation/look plane (hue lerp, ribbon pulse, cursor anim
+  counters) overflowing or indexing out of range over long dwell;
+  art/IMG1 lifetime (art_load per screen — leak or double-free over
+  re-entry); the 57 MB RAM ceiling; timer wrap. Capture on device with
+  the app's own log + any core, and reproduce deterministically before
+  fixing.
+- **C2 (P0) CSS FUNCTIONALITY IS NOT FAITHFUL — spec required first.**
+  Upstream CSS is a FREE-MOVING HAND CURSOR, not discrete rows:
+  the hand moves anywhere and can click anything; B (funkey face
+  button) RETRIEVES your token back to the hand; you then DROP it on
+  any character; HMN/CPU is a clickable toggle; **P1 can be set to
+  CPU**; a CPU token can also be picked up; and there is currently NO
+  way for Chase to select his own character. DESIGN IS KEPT — only the
+  interaction model changes. Deliverable order: SPEC first (measured
+  from upstream src/menus/css.js), then implementation.
+- **C3 (P1) EVERY menu must be as faithful as possible.** Named:
+  GAMEPLAY OPTIONS is missing "everyone walljumps" AND is not faithful
+  in shape; CREDITS does not work; CONTROLS enters but cannot select
+  controller/keyboard. (A16 already measured these as TRANSLITERATIONS
+  — upstream audiomenu.js/credits.js/keytest.js/keyboardmenu.js are
+  zero-DOM canvas code, not rewrites.)
+- **C4 (P1) stage-select previews are FAR TOO DIM** on device — can
+  barely see them. Investigate the IMG1 emission path (800x300 → 65x24
+  area-average downscale; RGB565 quantization; any alpha/darkening at
+  blit) and fix at the correct layer.
+- **C5 (P1, owner ruling) HIDE Spectate / P2P / Server** (A10 decided),
+  and **VS MELEE goes straight to local VS** for now. Implement behind
+  a NAMED FLAG/constant so the battle-mode submenu can be restored
+  later without archaeology (a single documented switch, not deletions).
