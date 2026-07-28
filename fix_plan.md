@@ -2118,3 +2118,32 @@ Sequence: punch list → owner re-play/ratification → post-gate window
   tooth: perturb menuSelected on a CANONICAL shot and assert the bytes
   change — guards the risk that canonicalization makes shots blind to
   menu state. Ledger 21 → 22.
+- A1 PHASE 1 COMPLETE IN WORKTREE agent-ac57efe4e1014b4da (NOT yet
+  merged — deliberate): CSS + SSS restyled with real IMG1 artwork
+  (portraits in port panels + row cells, stage art 1x in thumbs / 2x in
+  the big preview, hand_point cursor, READY TO FIGHT swoosh, MELEE
+  plate + VS badge, HMN/CPU/N-A tabs, CPU-level box, 8-frame pink thumb
+  flash, orange RANDOM). check-foh-flows.sh green, ledger UNCHANGED
+  (teeth=21), Phase-0 shots byte-identical. Arc GO (grok + Opus 5 x2 +
+  grok confirmation; codex r2 cmp-disqualified). Side-by-sides:
+  <worktree>/.loop/restyle-p1/sxs-{css,css-cpu,css-p2,sss,sss-ystory,
+  sss-pstadium}.png. Deliberately NOT used: img1_blit (routes through
+  the B1-buggy blend565 — cursors carry AA alpha) and stage_random
+  (RANDOM stays text). Opus 5 caught that riglib.sh:1447 hashes every
+  port/foh/*.c into the shared ARM stamp, so omitting img1.c would have
+  broken ALL device rigs — correction taken.
+  **MERGE HELD**: the A11/A12 pause lane is live in the main tree and
+  both lanes edited FIVE of the same files (check-device-foh.sh,
+  check-device-persist.sh, check-device-fullgame.sh, riglib.sh,
+  check-device-target.sh) — almost certainly additive entries to the
+  same build/pin lists. Driver merges BOTH after the pause lane lands,
+  resolving the overlapping hunks (sole-merger rule). Do not merge
+  piecemeal.
+- A17 (P0, driver-owned, BLOCKING Phase-1 device verification) provision
+  menu.img1: generate into the device data dir, push, OPK-stage, and
+  export MLFK_MENU_IMG1 (or MLFK_DATA_DIR) from the launcher —
+  foh_render calls art_load() on EVERY screen, so the persist/target
+  device checks need it too. Link graph already fixed; only the data
+  plane is missing. Then run the Phase-1 DEVICE PERF LEG (CSS/SSS p99 +
+  skips; writer's estimate ~1.5-3.5 ms/frame, comparable to the title
+  screen at p99 13.99 — UNMEASURED).
