@@ -449,8 +449,24 @@ int main(int argc, char **argv) {
   // at a fresh dir so flows start from defaults.
   foh_persist_load(&g_persist);
   foh_persist_apply(&g_persist, &foh);
+  foh_render_warm(&g_rz); // cold caches off the frame budget (foh_render.c)
   long transitions = 0;
   long launchFrame = 0;
+  // CANONICAL SHOT PHASE (foh_look_canonical, foh_render.c): same split as
+  // foh_dev.c — SHOT rows before the flow's FIRST NON-NEUTRAL input row are
+  // tick-indexed on every target and judge the live animated frame; later
+  // rows are the ones the device captures on a wall-clock q edge, so they
+  // render at the look plane's resting phase on BOTH sides.
+  long firstInputFrame = 0;
+  for (int k = 0; k < g_nrows; k++) {
+    const PlatformInput *r = &g_rows[k].in;
+    if (r->up || r->down || r->left || r->right || r->a || r->b || r->x ||
+        r->y || r->start || r->l || r->r || r->menu) {
+      firstInputFrame = g_rows[k].frame;
+      break;
+    }
+  }
+  if (firstInputFrame == 0) firstInputFrame = g_flow_frames + 1;
   int rowIdx = 0, shotIdx = 0;
   PlatformInput cur;
   memset(&cur, 0, sizeof cur);
@@ -503,7 +519,14 @@ int main(int argc, char **argv) {
         if (w < 0) sim_fatal("--flow-out write failed");
       }
     }
-    foh_render(&foh, &g_rz);
+    if (shotsDir && shotIdx < g_nshots && g_shots[shotIdx].frame == f &&
+        g_shots[shotIdx].frame >= firstInputFrame) {
+      FohState look = foh;
+      foh_look_canonical(&look);
+      foh_render(&look, &g_rz);
+    } else {
+      foh_render(&foh, &g_rz);
+    }
     if (platform_present(g_rz.fb) != 0) {
       sim_fatal("platform_present failed during a FOH frame");
     }

@@ -2103,3 +2103,18 @@ Sequence: punch list → owner re-play/ratification → post-gate window
   Add a play-path leg that drives the INSTALLED OPK through in-app input
   to each launch kind (VS + target), so the seam between "target plane
   tested" and "OPK tested" cannot hide another rc-4 class.
+- B3 DONE (iter 123): device divergence root-caused to the free-running
+  animation tick (NOT libm — falsified); foh_look_canonical() makes
+  shots a pure function of machine state on every target; masked
+  render-skip regression 66 → 0 via five byte-identical optimizations.
+  Device FOH + TARGET green at the pre-restyle baseline ledgers.
+- B7 (P1) look-plane INJECTION end state: record the DEVICE look plane
+  and inject it into the host twin (oracle-fed-seam idiom), restoring
+  cross-target comparison of the four menu shots' animation phase.
+  Removes the interim canonical-phase seam (one 12-line fn, one seam).
+  Changes two GATE scripts + revisits the iter-93 shot-judge design +
+  introduces a device→host dependency in a judge → own Tier A+ arc.
+- B8 (P1, required, rides the next FOH increment's arc) machine-plane
+  tooth: perturb menuSelected on a CANONICAL shot and assert the bytes
+  change — guards the risk that canonicalization makes shots blind to
+  menu state. Ledger 21 → 22.

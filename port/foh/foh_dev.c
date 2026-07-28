@@ -1569,7 +1569,7 @@ int main(int argc, char **argv) {
       break;
     }
   }
-  if (inPoll && firstInputFrame == 0) firstInputFrame = g_flow_frames + 1;
+  if (firstInputFrame == 0) firstInputFrame = g_flow_frames + 1;
 
   if (bridge) {
     sim_boot_page(&G);
@@ -1603,6 +1603,14 @@ int main(int argc, char **argv) {
 
   ml_sb_init(&g_tr);
   tr_line("FOHTRACE1 flow=%s", flowId);
+
+  // Backdrop caches built BEFORE the READY handshake and only when there is
+  // a FOH phase to serve: `direct` mode runs zero FOH ticks (fohLimit below),
+  // so warming there would dirty ~564 KiB of backdrop/LUT pages for nothing,
+  // right before the memory-sensitive full-game match loop. Warming ahead of
+  // READY also keeps the marker's meaning honest — the rig starts its
+  // wall-clock fk schedule on it, so nothing costly may follow it.
+  if (!direct) foh_render_warm(&g_rz);
 
   // ready marker: written right before the FOH loop — the rig launches
   // fk_input only after it appears (check-device-input.sh handshake).
@@ -1772,11 +1780,27 @@ int main(int argc, char **argv) {
     } else if (shotsDir) {
       if (shotIdx < g_nshots && g_shots[shotIdx].frame == t) shotDue = true;
     }
+    // CANONICAL SHOT PHASE (foh_look_canonical, foh_render.c): the pending
+    // shot ROW decides. Rows before the flow's first non-neutral input are
+    // tick-indexed — the same tick on both targets, so they keep judging the
+    // live animated frame; every later row is a q-marker shot whose device
+    // tick is wall-clock-derived, so it renders at the resting look phase.
+    // The predicate is the row's frame, identical in flow and poll mode.
+    int pendShot = -1;
+    if (shotDue) pendShot = (inPoll && qEdge) ? markerIdx : shotIdx;
+    const bool canonShot =
+        shotDue && g_shots[pendShot].frame >= firstInputFrame;
 
     const uint64_t tNow = now_ns();
     const bool skip = pace == 1 && tNow > deadline && !shotDue;
     if (!skip) {
-      foh_render(&foh, &g_rz);
+      if (canonShot) {
+        FohState look = foh;
+        foh_look_canonical(&look);
+        foh_render(&look, &g_rz);
+      } else {
+        foh_render(&foh, &g_rz);
+      }
       if (platform_present(g_rz.fb) != 0) fohPresentFails++;
     } else {
       fohSkips++;

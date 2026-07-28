@@ -19788,3 +19788,79 @@ and therefore uncovered.
 m4-freeze-manifest.txt:339 check-device-target.sh row (0f7982a0 → new
 sha + status), verify_m4.sh TARGET_RE (extended for live=/bound=), and
 the MANIFEST_SHA256 anchor recompute.
+
+---
+
+iter 123 · 2026-07-28 · phase M4 (punch list) · **B3 CLOSED — device divergence was the CLOCK, not libm (driver hypothesis FALSIFIED)** + a masked second P0 (66 FOH render skips → 0) · 4 driver rulings
+
+**Writer:** claude-opus-5, device-owning. **MY PRIME SUSPECT WAS WRONG
+AND THE WRITER PROVED IT**: startup/title device shots are BYTE-IDENTICAL
+to their host twins, so fdlibm, both gradients, poly8/ring8/disc8/line8,
+the 6x9 face and text2_outlined all agree bit-exactly on armv7 — the
+unsafe-FP libm class is NOT implicated. (Retained tick-indexed shots are
+what made that falsification possible; keep such controls.)
+**ROOT CAUSE — the clock.** The restyle made menus a pure function of a
+FREE-RUNNING tick (FohState.frame/menuTimer/menuHue). The host twin
+(`--input flow`) applies inputs at LOGICAL frame numbers; the device
+(`--input poll`) receives real uinput keysyms on a WALL-CLOCK schedule.
+Measured: device `SHOT 593 menu-top` vs twin `SHOT 378`; differing pixels
+were grid_shine's sweep band, peak host 344 / device 423 = exactly
+378×0.905 and (1060−593)×0.905; plus the menuTimer ring pulse 10 vs 3.
+This violated the shot judge's OWN pre-registered contract (foh_dev.c
+header, iter 93: "captured on the q edge with the machine state settled
+— byte-identical to the twin's shot of the same state") — a device tick
+at a q-marker is a real-time artifact, which is why the device TRACE is
+judged with frame fields elided.
+**CLASS FIX:** `foh_look_canonical()` — a shot renders from a COPY of the
+state with the look plane at its canonical phase, so a shot is a pure
+function of MACHINE state on every target by construction. Applied only
+at/after the flow's first non-neutral input; earlier shots stay
+tick-indexed on both targets (the retained coverage above). Proven
+target-independent WITHOUT hardware: replaying f01 at ~3x-stretched
+device-like tick spacing yields byte-identical shots, while moving the
+tick-indexed title shot 13 ticks changes 164,231 bytes.
+**MASKED SECOND P0:** with shots passing, the check reached a gate it had
+never reached — **66 FOH render skips** (pre-restyle baseline 0).
+Profiled: the title is 3.2x the menu and its centre radial bloom was 50%
+of the frame (57,600 per-pixel sqrtf+divide per frame with CONSTANT args;
+VSQRT/VDIV ~14-cycle blocking on A7). Five BYTE-IDENTICAL fixes
+(px8_over opaque fast path, grid_shine 8,160 visits not 57,600,
+grad_radial per-frame memo, bloom row-spans, backdrop warm-up before the
+paced loop): skips 66 → 3 → 1 → **0**.
+**VERDICTS (final tree):** `DEVICE FOH OK (… p99=13.991ms skips=0 …
+teeth=15)` · `DEVICE TARGET CONFORMS (… p99=14.086ms skips=0 … teeth=6)`
+· driver-cold `FOH FLOWS OK (… teeth=21)` (.loop/driver-cold-b3-flows.log
+— ledger unchanged; 17 shots byte-identical to the pre-optimization
+render across 7 runs). Both device ledgers match the PRE-RESTYLE baseline
+(p99 13.960 skips=0). No judge weakened, no shot re-frozen. LIVE LOOK
+UNCHANGED — only what a captured SHOT contains moved (menu shots capture
+phase 0). **Arc:** codex r1 NO-GO (1 BLOCKER/3 MAJOR; warm-up MAJOR
+fixed), codex r2 PROVEN MALFUNCTION (byte-identical transcript to r1,
+same token count 230,566, cites foh_dev.c:1647 code that no longer
+exists) → §11 fallback **grok GO + Opus 5 GO**.
+**DRIVER RULINGS on the writer's four escalations:**
+1. **Look-plane INJECTION (device look plane recorded and fed into the
+   host twin — the oracle-fed-seam idiom) is the better end state and is
+   REGISTERED (B7), not required now.** The interim is provably sound
+   (pure function of machine state, target-independent by construction,
+   proven without hardware) and Opus 5 measured it trivially removable
+   (one 12-line function, one seam). Injection changes TWO GATE SCRIPTS,
+   revisits a pre-registered iter-93 design, and puts a device→host
+   dependency inside a judge — that is its own arc, not a rider.
+2. **Tier A+ SATISFIED, ratified.** A+ requires an independent second
+   reviewer + byte-identity regression on archived results: the §11
+   fallback supplied TWO independent reviewers (grok + Opus 5, both GO),
+   and the byte-identity regression exists — 17 shots byte-identical to
+   the pre-optimization render across 7 runs, both device ledgers equal
+   to the pre-restyle baseline.
+3. **One-task-per-iteration: RATIFIED as one iteration.** The perf defect
+   was MASKED by B3 and only reachable after it; splitting would have
+   meant shipping a knowingly-red device check. Both are recorded here.
+4. **Deferred tooth ACCEPTED as required (B8, P1):** a tooth proving a
+   CANONICAL shot is still sensitive to the MACHINE plane (perturb
+   menuSelected → bytes must change). This guards the exact risk
+   canonicalization introduces — that a shot stops distinguishing menu
+   states. Ledger moves 21→22, so it rides the next FOH increment's arc.
+**Budget overrun declared** (device 11/8, rebuilds 6/4, host 7/4) —
+caused by the second independent P0 surfacing after the first was fixed;
+accepted.

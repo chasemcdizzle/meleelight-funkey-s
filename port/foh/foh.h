@@ -249,6 +249,15 @@ void foh_render(const FohState *s, Raster *rz);
 // the "look / animation plane" block above — it can never change a flow
 // edge, an event, or a launch record.
 void foh_anim_tick(FohState *s);
+// Puts the LOOK plane at its resting phase on a COPY of the state, so a
+// captured shot is a pure function of the MACHINE state on every target
+// (the device's tick number at a q-marker shot is a wall-clock artefact —
+// full derivation at the definition in foh_render.c). Shot paths only.
+void foh_look_canonical(FohState *s);
+// Builds the backdrop caches off the frame budget (call once, before any
+// paced loop). Bit-identical to letting them build lazily — see the
+// definition in foh_render.c.
+void foh_render_warm(Raster *rz);
 
 // foh_font.c: self-authored 5x7 font (scale = integer pixel multiplier).
 void foh_text(Raster *rz, int x, int y, int scale, const char *s,
