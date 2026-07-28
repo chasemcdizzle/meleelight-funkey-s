@@ -2213,3 +2213,24 @@ Everything below is functionality/fidelity, not styling.
   and **VS MELEE goes straight to local VS** for now. Implement behind
   a NAMED FLAG/constant so the battle-mode submenu can be restored
   later without archaeology (a single documented switch, not deletions).
+
+## OWNER DECISIONS on MENU-SPEC deviations (Chase, 2026-07-28) — BINDING
+- **D6 ACCEPTED** (ports 3 & 4 stay N/A for now) **+ DEFERRED ITEM D6-later:
+  make ports 3 & 4 work as CPUs.** Owner flagged the right risk unprompted:
+  a 3/4-participant match is unverified against the oracle AND untested for
+  frame budget — 4 players = more sim + more render per frame against a
+  measured match p99 ~14.2/16.67 ms. D6-later must therefore carry BOTH a
+  conformance leg (goldens/traces at 3-4 players) and a perf leg (p99 +
+  skips), not just the menu change.
+- **D8 PARTIAL ACCEPTED** (keep random-tag + clear-tag click widgets; no
+  text entry) **+ DEFERRED ITEM D8-later: a faithful NAME-ENTRY screen**
+  modeled on meleelight's/real Melee's name-entry UI (an on-screen
+  character grid driven by the d-pad — the faithful device analogue of
+  upstream's browser text input).
+- **D1/D3/D4/D7/D9/D10 ACCEPTED** (device-physics deviations, not choices).
+- **D2/D5/D11/D12/D13 ACCEPTED** ("consequences of decisions already made").
+- **WALLJUMP: option A ACCEPTED** — implement `Everyone Walljumps` as the
+  faithful DEAD toggle (row + persisted bit + zero readers, exactly as
+  upstream). **+ DEFERRED ITEM WJ-later (do at the END): make it actually
+  work** — an explicit, owner-sanctioned DEVIATION from upstream, to be
+  designed and registered as such rather than smuggled in.
