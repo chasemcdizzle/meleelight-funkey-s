@@ -19928,3 +19928,24 @@ img1.c); check-device-{persist,fullgame}.sh got the same one-line TU
 edit but were NOT run (device-cost); quit-to-menu is a process relaunch,
 not in-process FOH re-entry (`ponytail:` marked, upgrade path noted);
 Restart deliberately skipped (upstream has no restart-match semantics).
+
+**iter-125 addendum — OWNER RULING (Chase, 2026-07-28): "one dropped
+frame at menu is fine."** Scope change on B9. IMPORTANT DISTINCTION this
+ruling rests on: the failing counter is the FOH **menu-phase** render
+skip, NOT the MATCH skip pin. Match legs remain 0/3600 skips in every
+run and that pin is untouched and non-negotiable (gameplay + the M4
+leg-1 contract). A menu-phase dropped frame is cosmetic.
+MECHANICS (why "fine" still needs an action): check-device-foh.sh and
+check-device-target.sh assert skips==0, and verify_m4.sh's FOH_RE/
+TARGET_RE pin `skips=0` in the verdict grammar — so the gate stays RED
+until either the render buys margin OR the pin is formally amended.
+DRIVER DECISION: keep the in-flight B9 lane, but REFRAME — take cheap
+REAL wins (the rast_blit_565a8 batch primitive is genuinely wanted now
+that CSS/SSS blit artwork every frame, and it retires the A9 per-pixel
+deferral), do NOT grind for heroics, and if the cheap wins don't reach a
+comfortable margin, STOP and hand back an AMENDMENT PACKAGE instead
+(menu-phase skip allowance, its rationale, the pin + gate-grammar
+changes, and the re-arc) — a gate relaxation is the owner's to make and
+goes through the evidence-package path, never a quiet edit. Priority
+order shifts: get the artwork provisioned and a PLAYABLE build with the
+restyled menus + pause overlay into Chase's hands FIRST.
