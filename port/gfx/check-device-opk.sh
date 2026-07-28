@@ -661,11 +661,20 @@ fi
 bash pipeline/extractor/build-extractor.sh
 rm -f "$TABLES/ml_tables.c" "$TABLES/ml_tables.h" \
   "$TABLES/ml_stages.c" "$TABLES/ml_stages.h" \
-  "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2"
-node pipeline/run.js --only animations,tables,stages --out "$TABLES"
+  "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2" \
+  "$TABLES/assets/menu.img1"
+node pipeline/run.js --only animations,tables,stages,assets --out "$TABLES"
 made "$TABLES/ml_tables.c" "$TABLES/ml_tables.h" \
   "$TABLES/ml_stages.c" "$TABLES/ml_stages.h" \
   "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2"
+# A1 restyle Phase 1 (review-b9-1-codex [H]): mlfk-foh.sh's data dir must
+# QUALIFY, and qualifying now means simdata.txt AND assets/menu.img1 — the
+# FOH's CSS/SSS render real artwork and foh_render's art_load is fatal
+# without it. This leg wipes $DSD and provisions it from scratch, so
+# without the pack here the FOH launcher would refuse its own data dir and
+# exit 8 (or, worse, silently fall through to a STALE /mnt/mlfk-data).
+# PROVENANCE: Nintendo-derived, private use only, gitignored build output.
+made "$TABLES/assets/menu.img1"
 rm -f "$DEVB/simdata.txt"
 node "$CAL/dump-sim-data.js" --out "$DEVB/simdata.txt"
 made "$DEVB/simdata.txt"
@@ -820,6 +829,16 @@ adb -s "$DEV" push "$DEVB/simdata.txt" "$DEVB/g01.trace.txt" \
   "$GFXDATA_FROZEN" "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" \
   "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2" \
   "$BUILD/sndpack.bin" "$DSD/" >/dev/null
+# artwork lives in a SUBDIR of the data dir (art_load looks for
+# "$DATA/assets/menu.img1"), so it is pushed separately from the flat set.
+dsh "mkdir -p $DSD/assets"
+adb -s "$DEV" push "$TABLES/assets/menu.img1" "$DSD/assets/" >/dev/null
+ahsum="$(rig_host_sha256 "$TABLES/assets/menu.img1")" || exit 1
+adsum="$(rig_dev_sha256 "$DSD/assets/menu.img1")" || exit 1
+if [ "$adsum" != "$ahsum" ]; then
+  echo "DEVICE FAIL: pushed menu.img1 device sha ($adsum) != host sha ($ahsum)" >&2
+  exit 1
+fi
 for hf in "$DEVB/simdata.txt" "$DEVB/g01.trace.txt" "$GFXDATA_FROZEN" \
           "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" \
           "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2" "$BUILD/sndpack.bin"; do

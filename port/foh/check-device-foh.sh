@@ -439,15 +439,27 @@ bash pipeline/extractor/build-extractor.sh
 rm -f "$TABLES/ml_tables.c" "$TABLES/ml_tables.h" \
   "$TABLES/ml_stages.c" "$TABLES/ml_stages.h" \
   "$TABLES/ml_targets.c" "$TABLES/ml_targets.h" \
-  "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2"
+  "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2" \
+  "$TABLES/assets/menu.img1"
 # targets stage added iter 100: the host twin recipe links foh_dev.c,
 # which consumes target_play/gfx_target since iter 99 (paired
 # mechanical repair, registered — task 14 owns the cold rerun).
-node pipeline/run.js --only animations,tables,stages,targets --out "$TABLES"
+node pipeline/run.js --only animations,tables,stages,targets,assets --out "$TABLES"
 made "$TABLES/ml_tables.c" "$TABLES/ml_tables.h" \
   "$TABLES/ml_stages.c" "$TABLES/ml_stages.h" \
   "$TABLES/ml_targets.c" "$TABLES/ml_targets.h" \
   "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2"
+# A1 restyle Phase 1: CSS/SSS render REAL upstream artwork from the `assets`
+# stage's IMG1 pack (port/gfx/img1.h). foh_render's art_load resolves
+# MLFK_MENU_IMG1 first and a MISSING file is FATAL there by design, so both
+# sides of this check must be pointed at THIS run's freshly regenerated file:
+# the host twin via the exported var below, the device leg via its launcher
+# env (both sha-verified against the same bytes further down). Same wiring,
+# same reason, as port/foh/check-foh-flows.sh:378-386. PROVENANCE: the pack
+# is Nintendo-derived, private-use-only, gitignored build output — generated
+# per run, never committed, never distributed (the audio-blob precedent).
+made "$TABLES/assets/menu.img1"
+export MLFK_MENU_IMG1="$PWD/$TABLES/assets/menu.img1"
 rm -f "$BUILD/simdata.txt"
 node "$CAL/dump-sim-data.js" --out "$BUILD/simdata.txt"
 made "$BUILD/simdata.txt"
@@ -1092,6 +1104,7 @@ adb -s "$DEV" push "$DEVB/foh_device" "$DEVB/fk_input" \
   "$BUILD/simdata.txt" "$BUILD/g01.trace.txt" \
   "$GFXDATA_FROZEN" "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" \
   "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2" \
+  "$TABLES/assets/menu.img1" \
   "$BUILD/foh-music-dev.txt" "$DTMP/" >/dev/null
 for k in 0 1 2 3 4; do
   id="${FLOW_IDS[$k]}"
@@ -1101,11 +1114,17 @@ adb -s "$DEV" push "$BUILD/sndpack.bin" \
   "$AUDIO_OUT/audio/music/menu.pcm" \
   "$AUDIO_OUT/audio/music/battlefield.pcm" \
   "$BUILD/simdata.txt" "$DSD/" >/dev/null
+# The OPK data dir must QUALIFY for mlfk-foh.sh, which since the A1 restyle
+# means simdata.txt AND assets/menu.img1 (the launcher refuses a dir with
+# only one). Subdir, so it is pushed separately from the flat set above.
+dsh "mkdir -p $DSD/assets"
+adb -s "$DEV" push "$TABLES/assets/menu.img1" "$DSD/assets/" >/dev/null
 rig_push_provenance "$DTMP" foh_device fk_input
 dsh "chmod +x $DTMP/foh_device $DTMP/fk_input"
 for hf in "$BUILD/simdata.txt" "$BUILD/g01.trace.txt" "$GFXDATA_FROZEN" \
           "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" \
-          "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2" "$BUILD/foh-music-dev.txt"; do
+          "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2" "$TABLES/assets/menu.img1" \
+          "$BUILD/foh-music-dev.txt"; do
   bn="$(basename "$hf")"
   hsum="$(rig_host_sha256 "$hf")" || exit 1
   dsum="$(rig_dev_sha256 "$DTMP/$bn")" || exit 1
@@ -1127,6 +1146,10 @@ for hf in "$BUILD/sndpack.bin" "$AUDIO_OUT/audio/music/menu.pcm" \
   dsum="$(rig_dev_sha256 "$DSD/$bn")" || exit 1
   [ "$dsum" = "$hsum" ] || fail "pushed $bn device sha ($dsum) != host sha ($hsum)"
 done
+hsum="$(rig_host_sha256 "$TABLES/assets/menu.img1")" || exit 1
+dsum="$(rig_dev_sha256 "$DSD/assets/menu.img1")" || exit 1
+[ "$dsum" = "$hsum" ] || fail "pushed menu.img1 (OPK data dir) device sha ($dsum) != host sha ($hsum)"
+ART_SHA="$hsum"
 dsh "sync" # writeback BEFORE the paced legs (the iter-73 mitigation)
 echo "   pushed + sha-verified (binaries via stamp provenance; committed flow bytes == device bytes)"
 
@@ -1237,7 +1260,7 @@ mkdir -p $id-shots
 # task 13 hermeticity (iter 100): fresh tmpfs persist dir per leg —
 # flows start from defaults and the f03 save never sits on the SD
 # inside the paced loop.
-setsid sh -c 'date +%s > $DTMP/app.start.ts; MLFK_PERSIST_DIR=$DTMP/$id-persist ./foh_device $args \\
+setsid sh -c 'date +%s > $DTMP/app.start.ts; MLFK_PERSIST_DIR=$DTMP/$id-persist MLFK_MENU_IMG1=$DTMP/menu.img1 ./foh_device $args \\
   2> $DTMP/$id.applog.txt & \\
   echo \$! > $DTMP/foh.pid.$DM_NONCE; \\
   wait \$!; arc=\$?; \\

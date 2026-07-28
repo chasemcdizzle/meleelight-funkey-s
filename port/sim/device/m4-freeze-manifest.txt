@@ -28,7 +28,7 @@
 #                      run REFUSES before leg 1.
 #
 # The producer set is EXACTLY verify_m4.sh's REQUIRED_PRODUCERS literal
-# (87 paths). What is asserted is SET equality, not row order: the gate
+# (89 paths). What is asserted is SET equality, not row order: the gate
 # proves equality by per-required-producer cardinality plus a total record
 # count, which implies
 # count AND identity without constraining the order rows appear in
@@ -130,6 +130,50 @@
 # defect. A row flips to `reviewed-go` only when its findings are fixed
 # and the arc reaches an anchored VERDICT: GO — never by re-citing an
 # older log, and never by driver-capping an arc that has not converged.
+#
+# SUPERSEDED BY THE B9 ARC (the iter-118 paragraph ABOVE is retained as the
+# historical record; this paragraph is the CURRENT state of record).
+# EIGHT rows are `arc-in-flight`:
+#     port/foh/check-device-foh.sh
+#     port/sim/target/check-device-target.sh
+#     port/sim/device/check-device-fullgame.sh
+#     port/gfx/check-device-opk.sh
+#     port/gfx/opk/mlfk-foh.sh
+#     pipeline/lib/check-assets-expected.js   (NEW row)
+#     pipeline/expected-assets.json           (NEW row)
+#     port/sim/device/verify_m4.sh            (B9 edited it: REQUIRED_PRODUCERS
+#                                              87 -> 89 + anchor; a
+#                                              `reviewed-go` claim citing only
+#                                              the pre-B9 arc would be FALSE —
+#                                              .loop/review-b9-3-codex.log [M])
+# While any remains, an AUTHORITATIVE run REFUSES before leg 1 — the
+# truthful outcome until the B9 arc reaches an anchored VERDICT: GO.
+# Rounds so far, every finding fixed: .loop/review-b9-1-codex.log (NO-GO;
+# 1 [H] + 3 [M] + 1 [L]), .loop/review-b9-2-codex.log (NO-GO; 1 [M] +
+# 2 [L]), .loop/review-b9-3-codex.log (NO-GO; 1 [H] + 1 [M] + 1 [L] — the
+# [H] was a regression introduced by the round-2 fix), and
+# .loop/review-b9-4-codex.log (NO-GO; 2 [M] + 1 [L], no [H]).
+#
+# The two NEW rows joined the universe (87 -> 89, REQUIRED_PRODUCERS updated
+# in the same edit) because the artwork plane became decision-bearing on the
+# gate path: check-device-fullgame.sh now pins artwork identity with
+# check-assets-expected.js against expected-assets.json (expected.json
+# carries no "assets" section and check-expected.js refuses one), so an
+# unpinned reader or contract could certify wrong artwork
+# (.loop/review-b9-2-codex.log [M]).
+#
+# PRE-EXISTING DRIFT REPAIRED HERE (NOT caused by the B9 change).
+# TWO rows were already stale at HEAD, from DIFFERENT commits — measured,
+# not assumed (.loop/review-b9-4-codex.log [L] corrected an earlier draft
+# of this paragraph that blamed both on cdad905):
+#   port/sim/device/riglib.sh   — last changed by cdad905 (A1 Phase 1
+#     merge, arc GO); a 1-line RIG_SCRIPTS addition, row never re-pinned.
+#   port/gfx/opk/mlfk-foh.sh    — last changed by 433ebb6 (A11/A12 pause
+#     overlay, arc GO codex r3), NOT by cdad905; its row has been stale
+#     since 433ebb6 and remained stale through cdad905.
+# So this manifest ALREADY refused at HEAD, before B9 existed. riglib.sh is
+# re-pinned against the A1 cite; mlfk-foh.sh carries the B9 cite because B9
+# edited it further (the qualify predicate and the RC=8 diagnostic).
 #
 # NOT in the unresolved set (both closed this iteration):
 #   - the three frozen graphics planes port/gfx/{gfxdata,vfxdata,
@@ -333,10 +377,10 @@
 # what is true, and cites the measurements above. ESCALATED TO DRIVER as
 # an explicit deviation from ruling 4's second half, with the evidence.
 7b031055e2329269e4e207012202cd772a75b604bd37ab3df8de9db325e4a254 port/sim/device/adbsh.sh reviewed-go task-4-arc-CAPPED-CLOSED-driver-accepted-AGENT-LOG-2026-07-17+rounds-.loop/review-52-1.log-.loop/review-55-1.log
-0c9126aa1789ad575a76f4e725b231a64cd3d792397aefc9a47dc39801213752 port/sim/device/riglib.sh reviewed-go .loop/review-109-9.log-capped-driver-accepted-AGENT-LOG-iter-109+delta-GOs-.loop/review-110-5.log-.loop/review-113-7.log
+57687de52055a29eae6a5f27ef46446ceb4e472a0441360c735f948f5337e3db port/sim/device/riglib.sh reviewed-go A1-Phase-1-merge-cdad905-arc-GO-1-line-RIG_SCRIPTS-addition-repin-was-omitted-in-that-commit-restored-here+PRIOR-CLOSURE-.loop/review-109-9.log-capped-driver-accepted-AGENT-LOG-iter-109+delta-GOs-.loop/review-110-5.log-.loop/review-113-7.log
 4034ad81601de4e25b85658095ebfd38de2cc813fad594164afb563d6deb81ad port/sim/device/percentiles.js reviewed-go .loop/review-45-1.log+r3-closure-.loop/review-47-1.log
-9729925904adfdeaa74902e853d23590575a51002be167581b12a6d7929124fb port/sim/device/check-device-fullgame.sh reviewed-go iter-119-delta-arc-CLOSED-r7-codex-PROVEN-FAILED-3-malfunctions-PROCESS-11-fallback-DUAL-GO-grok-.loop/review-119-delta-7-grok2.log-GO+opus5-.loop/review-119-delta-7-opus.log-GO-prior-rounds-.loop/review-119-delta-5b-codex.log-NO-GO+.loop/review-119-delta-6b-codex.log-NO-GO-all-Highs-FIXED-with-teeth+earlier-.loop/review-113-7.log-r7-GO
-0f7982a068a57ff78fbffc89fcb978014d22d4a2dc2a12df87bdd0bc0af6e95c port/sim/target/check-device-target.sh reviewed-go iter-119-delta-arc-CLOSED-r7-codex-PROVEN-FAILED-3-malfunctions-PROCESS-11-fallback-DUAL-GO-grok-.loop/review-119-delta-7-grok2.log-GO+opus5-.loop/review-119-delta-7-opus.log-GO-prior-rounds-.loop/review-119-delta-5b-codex.log-NO-GO+.loop/review-119-delta-6b-codex.log-NO-GO-all-Highs-FIXED-with-teeth+earlier-.loop/review-105-1.log
+3d88ceacc83e97dee7de0af6d9005bd2e153a7c02becbbb9a1c0e98abdbe4ccd port/sim/device/check-device-fullgame.sh arc-in-flight B9-headroom+artwork-arc-IN-FLIGHT-.loop/review-b9-1-codex.log-NO-GO-all-5-fixed+.loop/review-b9-2-codex.log-NO-GO-all-3-fixed-rounds-1-4-all-findings-fixed-arc-not-yet-at-GO+PRIOR-CLOSURE-iter-119-delta-arc-CLOSED-r7-codex-PROVEN-FAILED-3-malfunctions-PROCESS-11-fallback-DUAL-GO-grok-.loop/review-119-delta-7-grok2.log-GO+opus5-.loop/review-119-delta-7-opus.log-GO-prior-rounds-.loop/review-119-delta-5b-codex.log-NO-GO+.loop/review-119-delta-6b-codex.log-NO-GO-all-Highs-FIXED-with-teeth+earlier-.loop/review-113-7.log-r7-GO
+61ddbe12ca453691f10ad9f3a016834bce42d9bd47defa2d0c7693ffe9e12fe7 port/sim/target/check-device-target.sh arc-in-flight B9-headroom+artwork-arc-IN-FLIGHT-.loop/review-b9-1-codex.log-NO-GO-all-5-fixed+.loop/review-b9-2-codex.log-NO-GO-all-3-fixed-rounds-1-4-all-findings-fixed-arc-not-yet-at-GO+PRIOR-CLOSURE-iter-119-delta-arc-CLOSED-r7-codex-PROVEN-FAILED-3-malfunctions-PROCESS-11-fallback-DUAL-GO-grok-.loop/review-119-delta-7-grok2.log-GO+opus5-.loop/review-119-delta-7-opus.log-GO-prior-rounds-.loop/review-119-delta-5b-codex.log-NO-GO+.loop/review-119-delta-6b-codex.log-NO-GO-all-Highs-FIXED-with-teeth+earlier-.loop/review-105-1.log
 415335239fcc04df97eba07298a1fa521602d5ea45b087aa8d7d40bd740c122a port/goldens-m4/verify-target-stream.js reviewed-go .loop/review-98-1.log
 2cf5c5a532207372b70c4cee57412c7ac65643ac4f4066c745d9eb7fe4aa0e9b port/goldens-m4/wrap-target.js reviewed-go .loop/review-98-1.log
 6b1b6b5be3700c51dfae8c0c4cb1f012e5b61239394ae4146c2e5e19cc4fcc47 port/goldens-m4/validate-target-manifest.js reviewed-go .loop/review-98-1.log
@@ -351,7 +395,7 @@ a48c47b0bc682abbade75d38ec00832d4235f6f22dd7e5015eba516213688b6b port/goldens-m4
 677c81e677ece8dc2442ab340a7227bfb4ce44d416348d357327db76f4032daf port/goldens-m4/t01-fox-lasers-tstage1.target.sha256.json reviewed-go .loop/review-98-1.log-GO-target-rig-arc-closure-scanned-every-goldens-m4-json+round-.loop/review-94-1.log-NO-commit-since-927294e
 6e4116060b6e81fa57313c6fe08544201edfa23a7eb4d8b5f2e0362f3e906afb port/goldens-m4/t02-falcon-melee-tstage2.sha256.json reviewed-go .loop/review-98-1.log-GO-target-rig-arc-closure-scanned-every-goldens-m4-json+round-.loop/review-94-1.log-NO-commit-since-927294e
 d0718dd760ffa802326f2de42078bd8cc55de75440113fa0b7d34e676a757e30 port/goldens-m4/t02-falcon-melee-tstage2.target.sha256.json reviewed-go .loop/review-98-1.log-GO-target-rig-arc-closure-scanned-every-goldens-m4-json+round-.loop/review-94-1.log-NO-commit-since-927294e
-247c1f5257c19daac3d33cc176ab4ae0a4157b08d140b48024be2ccd396246b2 port/foh/check-device-foh.sh reviewed-go iter-119-delta-arc-CLOSED-r7-codex-PROVEN-FAILED-3-malfunctions-PROCESS-11-fallback-DUAL-GO-grok-.loop/review-119-delta-7-grok2.log-GO+opus5-.loop/review-119-delta-7-opus.log-GO-prior-rounds-.loop/review-119-delta-5b-codex.log-NO-GO+.loop/review-119-delta-6b-codex.log-NO-GO-all-Highs-FIXED-with-teeth+earlier-.loop/review-105-1.log
+0510064c411eb024ef9da620bea894de2b39bbc9b4374230bf435e6e97c80d5b port/foh/check-device-foh.sh arc-in-flight B9-headroom+artwork-arc-IN-FLIGHT-.loop/review-b9-1-codex.log-NO-GO-all-5-fixed+.loop/review-b9-2-codex.log-NO-GO-all-3-fixed-rounds-1-4-all-findings-fixed-arc-not-yet-at-GO+PRIOR-CLOSURE-iter-119-delta-arc-CLOSED-r7-codex-PROVEN-FAILED-3-malfunctions-PROCESS-11-fallback-DUAL-GO-grok-.loop/review-119-delta-7-grok2.log-GO+opus5-.loop/review-119-delta-7-opus.log-GO-prior-rounds-.loop/review-119-delta-5b-codex.log-NO-GO+.loop/review-119-delta-6b-codex.log-NO-GO-all-Highs-FIXED-with-teeth+earlier-.loop/review-105-1.log
 2267f8b796b1881d6ef749b5931a5fb08ae9f914b7a67a0e2608d4cada99616e port/foh/judge-foh-trace.js reviewed-go .loop/review-101-1.log+r4-closure-.loop/review-105-1.log
 b2e814821a809a6cb5772c51587b1e49a87dab6438156f984e8ec07e59ab2141 port/foh/normalize-foh-trace.js reviewed-go .loop/review-99-1.log+r4-closure-.loop/review-105-1.log
 b0c6ac328d6b87f9ff0c58562c880336eccb98a3053a4fdaadfb71e59e810186 port/foh/flow-to-fkscript.js reviewed-go .loop/review-95-1.log+r3-closure-.loop/review-97-1.log
@@ -360,8 +404,8 @@ de32dffbe43423bee43f67516007d4039abbd80237a626aec81e54fd7dc4ca68 port/gfx/judge-
 4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js reviewed-go iter-117-Tier-A-plus-arc-CLOSED-VERDICT-GO-.loop/review-117-jrt-9b.log+independent-second-.loop/review-117-jrt-8o.log+byte-identity-regression-100-of-100-.loop/review-117-jrt-regression-r7.log-R12
 8ceaf028fe5740a1c0bb384e2eae113996bdb5c3db5720f1337af068266b966f port/gfx/judge-audio-summary.js reviewed-go .loop/review-59-1.log+r3-.loop/review-61-1.log
 bf29fa7cba83708cfff093195f48ad20a8eda2ad794fe25b270f211b08876eee port/gfx/pack-snd.js reviewed-go .loop/review-57-1.log+r2r3-closure-.loop/review-61-1.log
-d43628d4a22e278ebffa8e3116709cff52933332a51a926fb28c3cfa4ad0dbc4 port/gfx/check-device-opk.sh reviewed-go .loop/review-115-3.log-r3-GO+r1-.loop/review-115-1.log+r2-.loop/review-115-2.log
-d761707065185bf49078c44c83a111558b6bebfbf7dba3e8625eff5951385dec port/gfx/opk/mlfk-foh.sh reviewed-go .loop/review-93-1.log+r3-closure-.loop/review-97-1.log
+db002a2c7076f1a38daf158627aa8b26a823e6379f8dbb11af1b98a09b68c05d port/gfx/check-device-opk.sh arc-in-flight B9-headroom+artwork-arc-IN-FLIGHT-.loop/review-b9-1-codex.log-NO-GO-all-5-fixed+.loop/review-b9-2-codex.log-NO-GO-all-3-fixed-rounds-1-4-all-findings-fixed-arc-not-yet-at-GO+PRIOR-CLOSURE-.loop/review-115-3.log-r3-GO+r1-.loop/review-115-1.log+r2-.loop/review-115-2.log
+c50b9c33a0c3daab1c0c9a94d36c9ba4d1a0b5d08b9c8c20ebb2ebca0505e54f port/gfx/opk/mlfk-foh.sh arc-in-flight B9-headroom+artwork-arc-IN-FLIGHT-.loop/review-b9-1-codex.log-NO-GO-all-5-fixed+.loop/review-b9-2-codex.log-NO-GO-all-3-fixed-rounds-1-4-all-findings-fixed-arc-not-yet-at-GO+PRIOR-CLOSURE-.loop/review-93-1.log+r3-closure-.loop/review-97-1.log
 3b4289d640bbe7df0e4d065d909f2b46aef9b7e4d7622a90e4f7021fd801dbea port/gfx/opk/meleelight-foh.funkey-s.desktop reviewed-go .loop/review-115-3.log-r3-GO-current-bytes+prior-arc-.loop/review-93-1.log+r3-closure-.loop/review-97-1.log
 efea406086050d51b3894692c6030afef1b0cc7ed06de442b728ef2e6072fe99 port/gfx/opk/icon32.png reviewed-go .loop/review-58-1.log+r2-.loop/review-60-1.log+gate-closure-.loop/review-62-grok-go.log
 05ced80f57e993541f6da8b647e63abcac4163cd6e5b275f2a811a49c2faeb76 port/tools/fk_input.c reviewed-go .loop/review-53-1.log
@@ -375,7 +419,7 @@ f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/
 ec578b42d0490448d61bef3f21c958105a48d99c4cc1a5d403a742e7627b8e18 pipeline/lib/check-expected.js reviewed-go .loop/review-117-plib-4o.log-GO-closure-round+.loop/review-117-plib-2o.log-GO+NO-GO-rounds-.loop/review-116-plib-1.log-.loop/review-116-plib-2-grok.log-.loop/review-117-plib-1.log+PROCESS-11-Opus-5-second-codex-aborted-x3-cyberfilter-grok-x3-no-verdict
 31e5946a0269095f7895b01aaf7f78e9c3496aae75c638b8cd1b4a678c4bd29b pipeline/expected.json reviewed-go .loop/review-117-plib-4o.log-GO-closure-round+.loop/review-117-plib-2o.log-GO+NO-GO-rounds-.loop/review-116-plib-1.log-.loop/review-116-plib-2-grok.log-.loop/review-117-plib-1.log+PROCESS-11-Opus-5-second-codex-aborted-x3-cyberfilter-grok-x3-no-verdict
 a574fec40685b6770e85d55ee1aaabd35553caab00c9aeadec0ea234b4173590 pipeline/lib/tables-anim-xref.js grandfathered-m1 M1-era-checker-unchanged-since-iter10-21da425-proven-by-the-M1-EXIT-GATE-PIPELINE-OK+newly-pinned-per-.loop/review-117-jrt-8.log-H+era-token-corrected-m2-to-m1-per-iter-118-driver-ruling-2-dissolving-review-117-delta-1-H2-vs-jrt-9b-L
-7727cb2ad58386541983fb8614301d85b67c02a4e758c6364f4d25a0f5bf63de port/sim/device/verify_m4.sh reviewed-go iter-119-delta-arc-CLOSED-r7-codex-PROVEN-FAILED-3-malfunctions-PROCESS-11-fallback-DUAL-GO-grok-.loop/review-119-delta-7-grok2.log-GO+opus5-.loop/review-119-delta-7-opus.log-GO-prior-rounds-.loop/review-119-delta-5b-codex.log-NO-GO+.loop/review-119-delta-6b-codex.log-NO-GO-all-Highs-FIXED-with-teeth+earlier-.loop/review-108-4.log-r4-GO
+09afa397b98e0a9e650517071d6a60c6cf04bd2ba52bfed415d48232ca1c8b42 port/sim/device/verify_m4.sh arc-in-flight B9-headroom+artwork-arc-IN-FLIGHT-REQUIRED_PRODUCERS-87-to-89+anchor-recomputed-.loop/review-b9-3-codex.log-M-status-claim-corrected+PRIOR-CLOSURE-iter-119-delta-arc-CLOSED-r7-codex-PROVEN-FAILED-3-malfunctions-PROCESS-11-fallback-DUAL-GO-grok-.loop/review-119-delta-7-grok2.log-GO+opus5-.loop/review-119-delta-7-opus.log-GO-prior-rounds-.loop/review-119-delta-5b-codex.log-NO-GO+.loop/review-119-delta-6b-codex.log-NO-GO-all-Highs-FIXED-with-teeth+earlier-.loop/review-108-4.log-r4-GO
 
 # --- FROZEN REFERENCE DATA (added iter 118, review-117-delta-1 [H1]) ---
 # The 23 artifacts the M4 judges compare evidence AGAINST, previously
@@ -463,3 +507,5 @@ cdc48d11014a41aec99bbbd47f534b16b8b4a8bf060dbf1a75918e86a7c1bd10 oracle/CHECKSUM
 63107cb140f2f63977c2b2f65994ef4628da09d454b20227f5d7cb14852170f1 pipeline/lib/animbin.js grandfathered-m1 M1-task1-ANIM1-decoder-unchanged-since-f9340ba-iter-9-proven-by-the-M1-EXIT-GATE-PIPELINE-OK+required-by-pinned-pipeline/lib/tables-anim-xref.js-line-20+newly-pinned-per-.loop/review-118-delta-3-codex-M5
 
 31199acd496efa519ef793717e9ff41ea92bc33da0e5727c1fa62601b19feca8 pipeline/lib/tables-schema.js reviewed-go iter-119-Tier-A-arc-CLOSED-PROCESS-11-fallback-DUAL-GO-opus5-.loop/review-119-tsch-1-opus.log-GO+grok-.loop/review-119-tsch-grok.log-GO-CHAR_NAMES-vacuity-lever-closed-4-independent-ways-7-mutations-all-caught-by-pinned-assertions-before-any-green
+2b41e0a9bea6802665d4dfa6f2ae7c838550e9d774e1d26b0661ac52441704ca pipeline/lib/check-assets-expected.js arc-in-flight B9-headroom+artwork-arc-IN-FLIGHT-.loop/review-b9-1-codex.log-NO-GO-all-5-fixed+.loop/review-b9-2-codex.log-NO-GO-all-3-fixed-rounds-1-4-all-findings-fixed-arc-not-yet-at-GO
+35c321232436c668c2178c2d349cda806cc0befbd634092c5bd3ceb5307c5aa4 pipeline/expected-assets.json arc-in-flight B9-headroom+artwork-arc-IN-FLIGHT-.loop/review-b9-1-codex.log-NO-GO-all-5-fixed+.loop/review-b9-2-codex.log-NO-GO-all-3-fixed-rounds-1-4-all-findings-fixed-arc-not-yet-at-GO

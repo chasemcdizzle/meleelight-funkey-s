@@ -41,16 +41,27 @@ LOG="$EV/mlfk-foh.log"
 
 DATA="${MLFK_DATA_DIR:-}"
 DATA_ERR=""
+# QUALIFY = simdata.txt AND assets/menu.img1 (A1 restyle Phase 1). The FOH's
+# CSS/SSS screens render REAL upstream artwork from the IMG1 pack and
+# foh_render's art_load treats a missing pack as FATAL, so a data dir without
+# it cannot serve this launcher. Folding artwork into the EXISTING qualify
+# predicate (rather than adding a late check) keeps one rule, one pair of exit
+# codes, and — the point — makes the fallback chain pick a dir that has BOTH:
+# a dir with simdata but no artwork must not win and then die mid-boot, and
+# the sim plane and the artwork plane must never come from DIFFERENT mounts.
 if [ -n "$DATA" ]; then
   # explicit selection must qualify itself; NEVER falls through to the
   # chain (the mlfk.sh iter-60 review-58 L2 rule)
   if [ ! -f "$DATA/simdata.txt" ]; then
     DATA_ERR="MLFK_DATA_DIR=$DATA is set but $DATA/simdata.txt is missing — refusing (explicit data dir must qualify; fallback chain not consulted)"
     DATA=""
+  elif [ ! -f "$DATA/assets/menu.img1" ]; then
+    DATA_ERR="MLFK_DATA_DIR=$DATA is set but $DATA/assets/menu.img1 is missing — refusing (menu artwork is required; produced by \`node pipeline/run.js --only assets\`)"
+    DATA=""
   fi
 else
   for d in /mnt/mlfk-scratch /mnt/mlfk-data; do
-    if [ -f "$d/simdata.txt" ]; then DATA="$d"; break; fi
+    if [ -f "$d/simdata.txt" ] && [ -f "$d/assets/menu.img1" ]; then DATA="$d"; break; fi
   done
 fi
 
@@ -77,11 +88,21 @@ if [ -n "$DATA_ERR" ]; then
   exit 7
 fi
 if [ -z "$DATA" ]; then
-  echo "mlfk-foh.sh: no data dir found (MLFK_DATA_DIR / /mnt/mlfk-scratch / /mnt/mlfk-data need simdata.txt)" >> "$LOG"
+  # The message must name the WHOLE qualify predicate: after the A1 restyle
+  # a dir with simdata.txt but no artwork is silently skipped, and a
+  # diagnostic naming only simdata.txt sends the reader looking for a file
+  # that is already there (review-b9-2-codex [L]).
+  echo "mlfk-foh.sh: no data dir found (MLFK_DATA_DIR / /mnt/mlfk-scratch / /mnt/mlfk-data each need BOTH simdata.txt AND assets/menu.img1)" >> "$LOG"
   echo "RC=8" > "$EV/opk.rc"
   exit 8
 fi
-echo "mlfk-foh.sh: mode=$MODE data=$DATA bin=$BINSHA" >> "$LOG"
+# Artwork comes from the SAME qualified data dir as everything else — set
+# explicitly so art_load never consults its own mount-point fallback chain and
+# cannot pair this run's simdata with some other mount's artwork.
+MLFK_MENU_IMG1="$DATA/assets/menu.img1"
+export MLFK_MENU_IMG1
+
+echo "mlfk-foh.sh: mode=$MODE data=$DATA bin=$BINSHA art=$MLFK_MENU_IMG1" >> "$LOG"
 
 rc=0
 if [ "$MODE" = evidence ]; then

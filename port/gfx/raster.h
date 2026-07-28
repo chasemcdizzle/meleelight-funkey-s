@@ -62,6 +62,24 @@ void rast_blend_px(Raster *rz, int x, int y, RastCol col, unsigned a256);
 //   rast_blit_a8mask     — the glyph-mask loop (a8 alpha, 0 skipped).
 //   rast_blit_rgba       — the sprite loop (RGBA rows, alpha 0 skipped).
 void rast_fill_row_opaque(Raster *rz, int y, RastCol col);
+// B9 run primitives — the same class one caller further out, for
+// foh_render.c's px8_over (which composites in 8-bit and stores OPAQUE, so
+// it never touches blend565). Both replicate px8_over's arithmetic EXACTLY
+// and clip against BOTH [0,RAST_H) and [clipY0,clipY1), as the px8_over ->
+// rast_blend_px pair did. See the block comment in raster.c.
+//   rast_fill_run  == for x in [xa,xb): px8_over(rz, x, y, col, a)
+//   rast_blend_run == for x in [xa,xb): c = row[x]; if (!c.a256) continue;
+//                                       px8_over(rz, x, y, c, c.a256)
+// `row` is indexed by ABSOLUTE x (RAST_W-strided source row base).
+void rast_fill_run(Raster *rz, int y, int xa, int xb, RastCol col,
+                   unsigned a);
+void rast_blend_run(Raster *rz, int y, int xa, int xb, const RastCol *row);
+// Run form of rast_blend_px ITSELF (blend565 path) — for callers that use
+// rast_blend_px directly, i.e. the font blitters. NOT interchangeable with
+// rast_fill_run: they differ whenever col.a256 < 256.
+//   rast_blend_px_run == for x in [xa,xb): rast_blend_px(rz, x, y, col, a256)
+void rast_blend_px_run(Raster *rz, int y, int xa, int xb, RastCol col,
+                       unsigned a256);
 void rast_blit_a8mask(Raster *rz, const uint8_t *mask, int w, int h,
                       int x0, int y0, RastCol col);
 void rast_blit_rgba(Raster *rz, const uint8_t *rgba, int w, int h,

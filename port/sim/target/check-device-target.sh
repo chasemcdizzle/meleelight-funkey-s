@@ -379,10 +379,20 @@ bash pipeline/extractor/build-extractor.sh
 rm -f "$TABLES/ml_tables.c" "$TABLES/ml_tables.h" \
   "$TABLES/ml_stages.c" "$TABLES/ml_stages.h" \
   "$TABLES/ml_targets.c" "$TABLES/ml_targets.h" \
-  "$TABLES/$ANIM_T01" "$TABLES/$ANIM_T02"
-node pipeline/run.js --only animations,tables,stages,targets --out "$TABLES"
+  "$TABLES/$ANIM_T01" "$TABLES/$ANIM_T02" \
+  "$TABLES/assets/menu.img1"
+node pipeline/run.js --only animations,tables,stages,targets,assets --out "$TABLES"
 made "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" "$TABLES/ml_targets.c" \
   "$TABLES/ml_targets.h" "$TABLES/$ANIM_T01" "$TABLES/$ANIM_T02"
+# A1 restyle Phase 1: the FOH's CSS/SSS screens render REAL upstream artwork
+# from the `assets` stage's IMG1 pack, and foh_render's art_load treats a
+# missing pack as FATAL. Both sides must be pointed at THIS run's freshly
+# regenerated file: the host side via the exported var, the device side via
+# its launcher env (sha-verified below). Mirrors
+# port/foh/check-device-foh.sh. PROVENANCE: Nintendo-derived, private use
+# only, gitignored build output — never committed, never distributed.
+made "$TABLES/assets/menu.img1"
+export MLFK_MENU_IMG1="$PWD/$TABLES/assets/menu.img1"
 rm -f "$BUILD/simdata.txt"
 node "$CAL/dump-sim-data.js" --out "$BUILD/simdata.txt"
 made "$BUILD/simdata.txt"
@@ -869,6 +879,7 @@ adb -s "$DEV" push "$DEVB/foh_device" "$DEVB/fk_input" \
   "$BUILD/simdata.txt" "$BUILD/t01.trace.txt" "$BUILD/t02.trace.txt" \
   "$GFXDATA_FROZEN" "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" \
   "$TABLES/$ANIM_T01" "$TABLES/$ANIM_T02" \
+  "$TABLES/assets/menu.img1" \
   "$BUILD/mus-dev.txt" "$DTMP/" >/dev/null
 for k in 0 1; do
   id="${FLOW_IDS[$k]}"
@@ -881,7 +892,8 @@ rig_push_provenance "$DTMP" foh_device fk_input
 dsh "chmod +x $DTMP/foh_device $DTMP/fk_input"
 for hf in "$BUILD/simdata.txt" "$BUILD/t01.trace.txt" "$BUILD/t02.trace.txt" \
           "$GFXDATA_FROZEN" "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" \
-          "$TABLES/$ANIM_T01" "$TABLES/$ANIM_T02" "$BUILD/mus-dev.txt"; do
+          "$TABLES/$ANIM_T01" "$TABLES/$ANIM_T02" "$TABLES/assets/menu.img1" \
+          "$BUILD/mus-dev.txt"; do
   bn="$(basename "$hf")"
   hsum="$(rig_host_sha256 "$hf")" || exit 1
   dsum="$(rig_dev_sha256 "$DTMP/$bn")" || exit 1
@@ -999,7 +1011,7 @@ cd $DTMP || exit 9
 rm -rf $id.apprc $id.ready $id-shots $id-persist foh.pid.$DM_NONCE app.start.ts app.end.ts
 mkdir -p $id-shots
 # task 13 hermeticity (iter 100): fresh tmpfs persist dir per leg
-setsid sh -c 'date +%s > $DTMP/app.start.ts; MLFK_PERSIST_DIR=$DTMP/$id-persist ./foh_device $args \\
+setsid sh -c 'date +%s > $DTMP/app.start.ts; MLFK_PERSIST_DIR=$DTMP/$id-persist MLFK_MENU_IMG1=$DTMP/menu.img1 ./foh_device $args \\
   2> $DTMP/$id.applog.txt & \\
   echo \$! > $DTMP/foh.pid.$DM_NONCE; \\
   wait \$!; arc=\$?; \\
@@ -1253,7 +1265,7 @@ cd $DTMP || exit 9
 rm -rf $LIVE_ID.apprc $LIVE_ID.ready $LIVE_ID-persist foh.pid.$DM_NONCE
 rm -f app.start.ts app.end.ts
 rm -f $LIVE_ID.trace.txt $LIVE_ID.bstate.txt $LIVE_ID.rec.json $LIVE_ID.keys.txt
-setsid sh -c 'date +%s > $DTMP/app.start.ts; MLFK_PERSIST_DIR=$DTMP/$LIVE_ID-persist ./foh_device $largs \\
+setsid sh -c 'date +%s > $DTMP/app.start.ts; MLFK_PERSIST_DIR=$DTMP/$LIVE_ID-persist MLFK_MENU_IMG1=$DTMP/menu.img1 ./foh_device $largs \\
   2> $DTMP/$LIVE_ID.applog.txt & \\
   echo \$! > $DTMP/foh.pid.$DM_NONCE; \\
   wait \$!; arc=\$?; \\
@@ -1448,7 +1460,7 @@ cd $DTMP || exit 9
 rm -rf $BND_ID.apprc $BND_ID.ready $BND_ID-persist foh.pid.$DM_NONCE
 rm -f app.start.ts app.end.ts
 rm -f $BND_ID.trace.txt $BND_ID.bstate.txt $BND_ID.rec.json $BND_ID.keys.txt
-setsid sh -c 'date +%s > $DTMP/app.start.ts; MLFK_PERSIST_DIR=$DTMP/$BND_ID-persist ./foh_device $bargs \\
+setsid sh -c 'date +%s > $DTMP/app.start.ts; MLFK_PERSIST_DIR=$DTMP/$BND_ID-persist MLFK_MENU_IMG1=$DTMP/menu.img1 ./foh_device $bargs \\
   2> $DTMP/$BND_ID.applog.txt & \\
   echo \$! > $DTMP/foh.pid.$DM_NONCE; \\
   wait \$!; arc=\$?; \\

@@ -111,6 +111,149 @@ void rast_fill_row_opaque(Raster *rz, int y, RastCol col) {
   if (g_ink_on) memset(&rz->ink[(size_t)y * RAST_W], 1, RAST_W);
 }
 
+// --- B9: the px8_over run primitives ---------------------------------------
+// SAME CLASS, SAME DISCIPLINE as the three above, one caller further out.
+// foh_render.c's px8_over (foh_render.c:102) composites in 8-bit against the
+// UNPACKED framebuffer and then stores through rast_blend_px OPAQUE — the one
+// path that dodges blend565's blue spill. That is correct but it pays a
+// cross-TU call PER PIXEL from an -O2 TU, and the FOH's two biggest per-frame
+// loops are exactly that call in a row-shaped loop:
+//
+//   span8        (foh_render.c:273) — every poly8/disc8/fill span
+//   grad_radial  (foh_render.c:245) — the LUT replay of the cached radial
+//
+// MEASURED on the FunKey-S (Cortex-A7, .loop/b9 layer bench, N=200, title
+// screen): the cached radial's replay alone cost 5.59 ms of a 16.67 ms frame
+// and the 30-wedge fan 3.59 ms, with the whole title render at 16.96 ms —
+// i.e. ABOVE the frame budget on its own, which is what the standing
+// "1 FOH render skip" was: a ~0.3 ms/frame drift that trips the valve once
+// every ~50 title ticks and is repaid by the skipped frame.
+//
+// Both take the loop into this -O3 TU and hoist the invariants (clip test,
+// row base, ink flag, the source colour's pre-multiplied terms) out of the
+// per-pixel body, replicating px8_over's arithmetic EXACTLY — same integer
+// ops, same order, same skip and clamp conditions, same uint8_t narrowing —
+// so the composited bytes are unchanged by construction. Proven mechanically
+// by pre/post byte-identical shot cmp across all five FOH flows.
+//
+// CLIP: px8_over tests y against [0,RAST_H) and rast_blend_px then tests it
+// against [clipY0,clipY1); a pixel had to pass BOTH, so both are kept.
+
+// One row run [xa,xb) at y, CONSTANT colour, alpha `a` (0..256, clamped):
+// exactly the loop `for x in [xa,xb): px8_over(rz, x, y, col, a)`.
+// NOTE col.a256 is deliberately unread — px8_over ignores it too (it stores
+// through an o.a256 == 256 colour), so `a` is the only alpha in play.
+void rast_fill_run(Raster *rz, int y, int xa, int xb, RastCol col,
+                   unsigned a) {
+  if (a == 0) return;
+  if (a > 256) a = 256;
+  if (y < 0 || y >= RAST_H || y < rz->clipY0 || y >= rz->clipY1) return;
+  if (xa < 0) xa = 0;
+  if (xb > RAST_W) xb = RAST_W;
+  if (xa >= xb) return;
+  const size_t base = (size_t)y * RAST_W;
+  uint16_t *const fb = &rz->fb[base];
+  uint8_t *const ink = &rz->ink[base];
+  if (a == 256) {
+    // px8_over's opaque fast path: the destination cannot influence the
+    // result, so this is the same store, not an approximation.
+    const uint16_t c565 = pack565(col.r, col.g, col.b);
+    for (int x = xa; x < xb; x++) fb[x] = c565;
+    if (g_ink_on) memset(&ink[xa], 1, (size_t)(xb - xa));
+    return;
+  }
+  // Hoisted: col.X * a is loop-invariant. Integer +, so regrouping the sum
+  // `(c.X * a + dX * (256 - a)) >> 8` around a precomputed `c.X * a` is
+  // value-identical, not an approximation.
+  const unsigned na = 256 - a;
+  const unsigned cr = (unsigned)col.r * a;
+  const unsigned cg = (unsigned)col.g * a;
+  const unsigned cb = (unsigned)col.b * a;
+  for (int x = xa; x < xb; x++) {
+    const uint16_t d = fb[x];
+    // Low-bit replication, exactly px8_over's (foh_render.c:119-126).
+    const unsigned r5 = (unsigned)((d >> 11) & 0x1F);
+    const unsigned g6 = (unsigned)((d >> 5) & 0x3F);
+    const unsigned b5 = (unsigned)(d & 0x1F);
+    const unsigned dr = (r5 << 3) | (r5 >> 2);
+    const unsigned dg = (g6 << 2) | (g6 >> 4);
+    const unsigned db = (b5 << 3) | (b5 >> 2);
+    fb[x] = pack565((uint8_t)((cr + dr * na) >> 8),
+                    (uint8_t)((cg + dg * na) >> 8),
+                    (uint8_t)((cb + db * na) >> 8));
+    if (g_ink_on) ink[x] = 1;
+  }
+}
+
+// One row run [xa,xb) at y from a PER-PIXEL colour row (each entry carries
+// its own a256, 0 = skip): exactly the loop
+//   `for x in [xa,xb): c = row[x]; if (!c.a256) continue;
+//                      px8_over(rz, x, y, c, c.a256)`.
+// `row` is indexed by ABSOLUTE x, like rz->fb — callers pass the row base of
+// a RAST_W-strided source (grad_radial's LUT is exactly that shape).
+void rast_blend_run(Raster *rz, int y, int xa, int xb, const RastCol *row) {
+  if (!row) return;
+  if (y < 0 || y >= RAST_H || y < rz->clipY0 || y >= rz->clipY1) return;
+  if (xa < 0) xa = 0;
+  if (xb > RAST_W) xb = RAST_W;
+  const size_t base = (size_t)y * RAST_W;
+  uint16_t *const fb = &rz->fb[base];
+  uint8_t *const ink = &rz->ink[base];
+  for (int x = xa; x < xb; x++) {
+    const RastCol c = row[x];
+    unsigned a = (unsigned)c.a256;
+    if (a == 0) continue;
+    if (a > 256) a = 256;
+    if (a == 256) {
+      fb[x] = pack565(c.r, c.g, c.b);
+    } else {
+      const unsigned na = 256 - a;
+      const uint16_t d = fb[x];
+      const unsigned r5 = (unsigned)((d >> 11) & 0x1F);
+      const unsigned g6 = (unsigned)((d >> 5) & 0x3F);
+      const unsigned b5 = (unsigned)(d & 0x1F);
+      const unsigned dr = (r5 << 3) | (r5 >> 2);
+      const unsigned dg = (g6 << 2) | (g6 >> 4);
+      const unsigned db = (b5 << 3) | (b5 >> 2);
+      fb[x] = pack565((uint8_t)(((unsigned)c.r * a + dr * na) >> 8),
+                      (uint8_t)(((unsigned)c.g * a + dg * na) >> 8),
+                      (uint8_t)(((unsigned)c.b * a + db * na) >> 8));
+    }
+    if (g_ink_on) ink[x] = 1;
+  }
+}
+
+// One row run [xa,xb) at y through rast_blend_px's OWN arithmetic (i.e.
+// through blend565, NOT px8_over's 8-bit composite): exactly the loop
+//   `for x in [xa,xb): rast_blend_px(rz, x, y, col, a256)`.
+// The font blitters (foh_font.c) call rast_blend_px directly rather than
+// px8_over, so they need this variant and NOT rast_fill_run — the two differ
+// whenever col.a256 < 256, and silently swapping one for the other would
+// change every partial-alpha glyph. `a` is loop-invariant here, so the alpha
+// product, the 565 pack and the ink fill all hoist out of the pixel body.
+// MEASURED on device: "MELEE" at scale 5 (the title wordmark) 2.75 -> 0.55 ms.
+void rast_blend_px_run(Raster *rz, int y, int xa, int xb, RastCol col,
+                       unsigned a256) {
+  if (y < rz->clipY0 || y >= rz->clipY1) return;
+  unsigned a = (a256 * col.a256) >> 8;
+  if (!a) return;
+  if (a > 256) a = 256;
+  if (xa < 0) xa = 0;
+  if (xb > RAST_W) xb = RAST_W;
+  if (xa >= xb) return;
+  const uint16_t c565 = pack565(col.r, col.g, col.b);
+  const size_t base = (size_t)y * RAST_W;
+  uint16_t *const fb = &rz->fb[base];
+  if (a >= 256) {
+    for (int x = xa; x < xb; x++) fb[x] = c565;
+  } else {
+    for (int x = xa; x < xb; x++) fb[x] = blend565(fb[x], c565, a);
+  }
+  // rast_blend_px sets ink for every pixel it does NOT early-return on, and
+  // `a` is constant across the run, so the whole run inks or none of it does.
+  if (g_ink_on) memset(&rz->ink[base + (size_t)xa], 1, (size_t)(xb - xa));
+}
+
 // A8 mask blit: exactly gfx_overlay.c's blit_mask loop —
 //   for y,x: a8 = mask[y*w+x]; if (!a8) continue;
 //            rast_blend_px(rz, x0+x, y0+y, col, (a8*256)/255)

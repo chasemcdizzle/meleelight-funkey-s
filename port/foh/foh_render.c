@@ -242,12 +242,14 @@ static void grad_radial(Raster *rz, float cx, float cy, float rad,
     g_grKey.c0 = c0; g_grKey.c1 = c1;
     g_grReady = 1;
   }
+  // REPLAY (B9): one call per row into the -O3 raster TU instead of one
+  // cross-TU rast_blend_px per pixel. rast_blend_run IS this loop — same
+  // arithmetic, same skip/clamp conditions, same clip pair (raster.c) — so
+  // the composited bytes are unchanged. MEASURED on device: 5.59 -> 1.09 ms
+  // for the title's centre bloom, the single biggest FOH frame cost.
   for (int y = 0; y < RAST_H; y++) {
-    for (int x = g_grLo[y]; x < g_grHi[y]; x++) {
-      const RastCol c = g_grLut[(size_t)y * RAST_W + (size_t)x];
-      if (c.a256 == 0) continue;
-      px8_over(rz, x, y, c, c.a256);
-    }
+    rast_blend_run(rz, y, g_grLo[y], g_grHi[y],
+                   &g_grLut[(size_t)y * RAST_W]);
   }
 }
 
@@ -288,7 +290,13 @@ static void span8(Raster *rz, int xa, int xb, int y, RastCol c, unsigned a) {
     rast_fill_row_opaque(rz, y, c);
     return;
   }
-  for (int x = xa; x < xb; x++) px8_over(rz, x, y, c, a);
+  // B9: the general path is now ONE call per span, not one per pixel.
+  // rast_fill_run IS `for x in [xa,xb): px8_over(rz, x, y, c, a)` with the
+  // clip test, row base and ink flag hoisted (raster.c) — bit-identical, and
+  // it subsumes the fast path above for every PARTIAL span too, which is what
+  // the 30-wedge title fan and every rounded rect actually draw. MEASURED on
+  // device: the wedge fan 3.59 -> 1.31 ms.
+  rast_fill_run(rz, y, xa, xb, c, a);
 }
 
 // Exact filled disc: ONE half-open span per row, so every destination pixel is
@@ -426,7 +434,14 @@ static void poly8(Raster *rz, const float *xy, int n, RastCol c, unsigned a) {
       int xa = iround(xs[i]), xb = iround(xs[i + 1]);
       if (xa < 0) xa = 0;
       if (xb > RAST_W) xb = RAST_W;
-      for (int x = xa; x < xb; x++) px8_over(rz, x, y, c, a);
+      // B9 (review-b9-4-codex [M]): poly8 keeps its OWN span emit rather than
+      // calling span8, so the span8 rewire did not reach it — which is why
+      // the title's 30-wedge fan stayed at 3.56 ms while everything else
+      // fell. This run is a CONSTANT colour and alpha over [xa,xb), i.e.
+      // exactly rast_fill_run's contract; the clamps above are the same
+      // clamps rast_fill_run applies, so passing the already-clamped range
+      // through is bit-identical (and idempotent).
+      rast_fill_run(rz, y, xa, xb, c, a);
     }
   }
 }

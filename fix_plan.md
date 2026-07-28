@@ -2163,3 +2163,18 @@ Sequence: punch list → owner re-play/ratification → post-gate window
 - A19 (P2) quit-to-menu is a process relaunch, not in-process FOH
   re-entry (`ponytail:` marked). Restart deliberately skipped —
   upstream has no restart-match semantics.
+- B9 DONE (iter 126): title render 16.96→9.06 ms, margin −0.29→+7.61 ms
+  via three bit-identical -O3 raster run-primitives; menu skips 0. NO
+  gate relaxation needed — the owner's "one frame is fine" allowance was
+  not spent. A17 DONE (artwork provisioned, playable restyled OPK
+  installed + boot-tested). A18 DONE (89 producers, anchor verified).
+- B10 (P1) B9 review arc round 5 → GO, then flip the 12 arc-in-flight
+  manifest rows. verify_m4.sh correctly refuses until then.
+- A13 + check-device-opk.sh inventory: SAME ROOT — the check's frontend
+  inventory pin expects the retired /mnt/Applications/meleelight.opk
+  while the device carries meleelight-foh.opk. Do the title rename and
+  the NAV_LINK/OPK_INVENTORY_PIN re-measure TOGETHER as one reviewed
+  change.
+- B11 (P2) check-device-{persist,fullgame}.sh wired for artwork +
+  syntax-checked but NOT run; fullgame's PRODUCER_PINS 12→14 verified
+  only by static count.

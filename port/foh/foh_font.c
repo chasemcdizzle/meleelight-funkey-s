@@ -167,15 +167,24 @@ void foh_text(Raster *rz, int x, int y, int scale, const char *s,
   int penX = x;
   for (const char *p = s; *p; p++) {
     const FohGlyph *g = glyph_for(*p);
+    // B9: emit RUNS, not pixels. Adjacent set columns in a glyph row are
+    // merged, so one row of a run of `n` set columns is a single
+    // n*scale-wide rast_blend_px_run instead of n*scale*scale cross-TU
+    // rast_blend_px calls. Every pixel is still visited exactly once, with
+    // the same colour and the same alpha, so the composited bytes are
+    // unchanged (partial-alpha source-over is not idempotent, which is why
+    // "exactly once" is the property that matters — runs never overlap).
     for (int r = 0; r < 7; r++) {
-      for (int c = 0; c < 5; c++) {
-        if (!(g->rows[r] & (0x10u >> c))) continue;
+      int c = 0;
+      while (c < 5) {
+        if (!(g->rows[r] & (0x10u >> c))) { c++; continue; }
+        int c2 = c;
+        while (c2 < 5 && (g->rows[r] & (0x10u >> c2))) c2++;
+        const int xa = penX + c * scale, xb = penX + c2 * scale;
         for (int sy = 0; sy < scale; sy++) {
-          for (int sx = 0; sx < scale; sx++) {
-            rast_blend_px(rz, penX + c * scale + sx, y + r * scale + sy, col,
-                          col.a256);
-          }
+          rast_blend_px_run(rz, y + r * scale + sy, xa, xb, col, col.a256);
         }
+        c = c2;
       }
     }
     penX += 6 * scale;
@@ -209,15 +218,20 @@ void foh_text2(Raster *rz, int x, int y, int scale, int italic,
   for (const char *p = s; *p; p++) {
     const FohGlyph2 *g = glyph2_for(*p);
     for (int r = 0; r < 9; r++) {
+      // B9 run emission — see foh_text. `lean` is constant across the row,
+      // so merged columns stay contiguous under the synthetic oblique too.
       const int lean = italic ? ((8 - r) / 3) * scale : 0;
-      for (int c = 0; c < 6; c++) {
-        if (!(g->rows[r] & (0x20u >> c))) continue;
+      int c = 0;
+      while (c < 6) {
+        if (!(g->rows[r] & (0x20u >> c))) { c++; continue; }
+        int c2 = c;
+        while (c2 < 6 && (g->rows[r] & (0x20u >> c2))) c2++;
+        const int xa = penX + lean + c * scale;
+        const int xb = penX + lean + c2 * scale;
         for (int sy = 0; sy < scale; sy++) {
-          for (int sx = 0; sx < scale; sx++) {
-            rast_blend_px(rz, penX + lean + c * scale + sx,
-                          y + r * scale + sy, col, col.a256);
-          }
+          rast_blend_px_run(rz, y + r * scale + sy, xa, xb, col, col.a256);
         }
+        c = c2;
       }
     }
     penX += 7 * scale;

@@ -763,6 +763,8 @@ ec578b42d0490448d61bef3f21c958105a48d99c4cc1a5d403a742e7627b8e18 pipeline/lib/ch
 31e5946a0269095f7895b01aaf7f78e9c3496aae75c638b8cd1b4a678c4bd29b pipeline/expected.json
 624956898890e749170a4768af0f8ef86e05ce4dd75046d084701747c9d9121f port/goldens-m4/json-dup-key-scan.js
 a574fec40685b6770e85d55ee1aaabd35553caab00c9aeadec0ea234b4173590 pipeline/lib/tables-anim-xref.js
+2b41e0a9bea6802665d4dfa6f2ae7c838550e9d774e1d26b0661ac52441704ca pipeline/lib/check-assets-expected.js
+35c321232436c668c2178c2d349cda806cc0befbd634092c5bd3ceb5307c5aa4 pipeline/expected-assets.json
 EOF
 )"
 nprod=0
@@ -776,7 +778,7 @@ while IFS=' ' read -r want p extra; do
     || fail "producer $p is NOT the reviewed bytes (got $got, pinned $want) — a decision-bearing tool changed; re-pin only after its review reaches GO"
   nprod=$((nprod + 1))
 done <<< "$PRODUCER_PINS"
-[ "$nprod" = 12 ] || fail "producer pin table has $nprod rows (want 12)"
+[ "$nprod" = 14 ] || fail "producer pin table has $nprod rows (want 14)"
 echo "   $nprod decision-bearing producers sha256-verified against their reviewed pins"
 
 # per-golden params, parsed by a no-eval strict line parser
@@ -849,7 +851,16 @@ bash pipeline/extractor/build-extractor.sh >/dev/null
 ANIM_BINS="anim_0_marth.bin anim_1_puff.bin anim_2_fox.bin anim_3_falco.bin anim_4_falcon.bin"
 GEN_TABLES="ml_tables.c ml_tables.h ml_stages.c ml_stages.h ml_targets.c ml_targets.h"
 rm -rf "$TABLES"
-node pipeline/run.js --only animations,tables,stages,targets --out "$TABLES" >/dev/null
+node pipeline/run.js --only animations,tables,stages,targets,assets --out "$TABLES" >/dev/null
+# A1 restyle Phase 1: the FOH's CSS/SSS screens render REAL upstream artwork
+# from the `assets` stage's IMG1 pack, and foh_render's art_load treats a
+# missing pack as FATAL. Both sides must be pointed at THIS run's freshly
+# regenerated file: the host side via the exported var, the device side via
+# its launcher env (sha-verified below). Mirrors
+# port/foh/check-device-foh.sh. PROVENANCE: Nintendo-derived, private use
+# only, gitignored build output — never committed, never distributed.
+made "$TABLES/assets/menu.img1"
+export MLFK_MENU_IMG1="$PWD/$TABLES/assets/menu.img1"
 for g in $GEN_TABLES $ANIM_BINS manifest.json; do made "$TABLES/$g"; done
 node pipeline/lib/verify-artifacts.js "$TABLES" >/dev/null \
   || fail "generated tables/animations fail their own pipeline manifest re-hash"
@@ -863,6 +874,15 @@ node pipeline/lib/verify-artifacts.js "$TABLES" >/dev/null \
 # reconciliation pins, which no other arm on this path ever read.
 node pipeline/lib/check-expected.js "$TABLES" "${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}" animations,tables,stages,targets >/dev/null \
   || fail "generated tables/animations fail the frozen pipeline coverage contract (pipeline/expected.json)"
+# review-b9-1-codex [M4]: the run above now produces FIVE stages, so the
+# external pin must cover five. `assets` keeps its contract in its OWN
+# pinned reader (pipeline/lib/check-assets-expected.js — expected.json has
+# no "assets" section, and check-expected.js refuses one), which is the
+# same reader pipeline/check-assets.sh:52 uses. Without this the artwork
+# plane was the one generated stage with no external identity pin, so a
+# deterministic artwork regression would ride through unseen.
+node pipeline/lib/check-assets-expected.js "$TABLES" "${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}" >/dev/null \
+  || fail "generated menu artwork fails the frozen assets coverage contract"
 node pipeline/lib/tables-anim-xref.js "$TABLES" >/dev/null \
   || fail "generated tables fail the frozen framesData/ECB <-> ANIM1 reconciliation pins"
 rm -f "$BUILD/simdata.txt"
@@ -1427,7 +1447,8 @@ dsh "rm -rf $DTMP $DSD && mkdir -p $DTMP $DSD"
 # Resident tmpfs plane is therefore ~3.2 MB (binary + frozen planes + one
 # trace + outputs) against the 33.96 MB this section used to push.
 push_files=("$DEVB/foh_device" "$GFXDATA_FROZEN"
-  "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" "$BUILD/mus-dev.txt")
+  "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN" "$TABLES/assets/menu.img1"
+  "$BUILD/mus-dev.txt")
 push_sd=("$BUILD/simdata.txt")
 for id in $PINNED_GOLDEN_SET; do
   push_sd+=("$BUILD/traces/$id.trace.txt")
@@ -1462,7 +1483,7 @@ fi
 # relocation above changes WHERE a byte lands, never WHETHER it is verified:
 # each artifact keeps its device-side sha comparison, at its new path.
 for f in "$GFXDATA_FROZEN" "$VFXDATA_FROZEN" \
-         "$VFXGLYPHS_FROZEN" "$BUILD/mus-dev.txt"; do
+         "$VFXGLYPHS_FROZEN" "$TABLES/assets/menu.img1" "$BUILD/mus-dev.txt"; do
   hsum="$(rig_host_sha256 "$f")" || exit 1
   dsum="$(rig_dev_sha256 "$DTMP/${f##*/}")" || exit 1
   [ "$dsum" = "$hsum" ] || fail "pushed ${f##*/} sha mismatch"
@@ -2109,7 +2130,7 @@ setsid ./sk_sampler --out $DTMP/$id.sampler.txt --pid-file $DTMP/sk.pid \\
 cd $DTMP || exit 9
 rm -rf $id.apprc $id.ready $id-persist foh.pid.$DM_NONCE app.start.ts app.end.ts
 $SAMPLER_LINES
-setsid sh -c 'date +%s > $DTMP/app.start.ts; MLFK_PERSIST_DIR=$DTMP/$id-persist ./foh_device $args \\
+setsid sh -c 'date +%s > $DTMP/app.start.ts; MLFK_PERSIST_DIR=$DTMP/$id-persist MLFK_MENU_IMG1=$DTMP/menu.img1 ./foh_device $args \\
   2> $DTMP/$id.applog.txt & \\
   echo \$! > $DTMP/foh.pid.$DM_NONCE; \\
   wait \$!; arc=\$?; \\

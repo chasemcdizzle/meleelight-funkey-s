@@ -19949,3 +19949,92 @@ changes, and the re-arc) — a gate relaxation is the owner's to make and
 goes through the evidence-package path, never a quiet edit. Priority
 order shifts: get the artwork provisioned and a PLAYABLE build with the
 restyled menus + pause overlay into Chase's hands FIRST.
+
+---
+
+iter 126 · 2026-07-28 · phase M4 (punch list) · **B9 CLOSED FAR PAST THE OWNER'S BAR (no amendment needed) + A17 artwork provisioned + PLAYABLE RESTYLED BUILD INSTALLED + A18 re-pin (89 producers)** · arc left honestly OPEN at r4
+
+**Owner ruling honored:** re-ordered A17 → A18 → B9; B9 then closed on
+its own merits, so NO gate relaxation is requested and the pin stays 0.
+**DISTINCTION KEPT THROUGHOUT:** the failing counter was the FOH
+MENU-PHASE render skip (foh_dev.c:1796 valve). The MATCH pin was never
+touched and reads `skips 0/3600` in every run (two independent sources).
+**B9 ROOT CAUSE (device bench, Cortex-A7, N=200, .loop/b9/bench.c
+cross-built with the SDK and run ON HARDWARE):** the TITLE screen's
+foh_render cost **16.96 ms against a 16.67 ms budget** — over the WHOLE
+budget by itself, before present (1.82 ms). A ~0.3 ms/frame drift trips
+the valve once per ~50 title ticks: exactly the standing 1-skip
+signature. iter-123's "0 skips" was therefore never margin, it was the
+valve repaying a deficit — the registered risk, now measured.
+**FIX:** three batch primitives in raster.c (the one -O3 TU), following
+the existing rast_fill_row_opaque/rast_blit_* convention, replacing
+per-pixel CROSS-TU calls with one call per row — `rast_fill_run`
+(← span8 + poly8's own emit), `rast_blend_run` (← grad_radial's LUT
+replay), `rast_blend_px_run` (← the font blitters). blend565 (B1)
+deliberately UNTOUCHED per the ruling.
+| screen | before | after |
+| TITLE | 16.96 ms | **9.06 ms** (−47%) |
+| SSS | 12.10 | 5.41 (−55%) |
+| CSS | 8.88 | 4.63 (−48%) |
+Title margin −0.29 ms → **+7.61 ms** (+5.8 ms even counting present) —
+wider than pace.h's documented 1.24-5.16 ms nanosleep overruns, so this
+is real headroom, not a one-frame trim.
+**CORRECTNESS PROVEN TWO INDEPENDENT WAYS, both with teeth:** (1)
+screen-level — all 12 FohScreen values × 6 animation phases (72
+renders), fb AND ink dumped, `cmp` vs a HEAD build → BIT-IDENTICAL;
+(2) primitive-level (.loop/b9/primdiff.c, written AFTER codex showed the
+screen dump could not reach the clip band because foh_render opens with
+rast_clear) — each primitive vs the exact per-pixel loop it replaces
+over identical randomized state, **60,000 iterations × 3 primitives,
+PRIMDIFF OK**, covering 48,116 non-full clip bands, 17,991
+empty/inverted, 11,225 negative-x, 5,751 x>RAST_W, 16,367 alpha>256;
+teeth: deleting the clip test and deleting the x clamp are both caught.
+**A17 (artwork + playable build):** menu.img1 75,720 B sha 68916973…
+(reproducible), pushed to /mnt/mlfk-data/assets/ sha-verified
+device==host; launcher's data-dir QUALIFY predicate now requires
+simdata.txt AND assets/menu.img1 and exports MLFK_MENU_IMG1 (the sim
+plane and artwork plane can never come from different mounts); OPK
+repackaged with SDK mksquashfs 4.4 only, installed sha 0c77dca8…,
+boot-tested live. **THIS ALSO REPAIRED MY OWN MERGE DEFECT:** at HEAD
+the device checks HARD-FAILED at the host twin with `SIM FATAL frame 0:
+foh_render: menu.img1 not found` — the iter-125 A1 merge made artwork
+MANDATORY without wiring it into any device check. Driver merge lesson,
+2nd instance this week: a merge that adds a runtime data dependency must
+verify the dependency is wired into every consumer, not just that the
+code compiles.
+**Chase's deliverable:** in-app hardware screenshots .loop/b9/shots/
+{css,sss,title,menu-top,css-p2}.png — CSS shows portraits in all five
+cells, P1/P2 tokens, hand cursor, both port panels; SSS shows all six
+stage previews.
+**A18 re-pin:** `freeze manifest OK: 89 producers, all bytes match their
+pins (manifest anchor verified)`; REQUIRED_PRODUCERS 87→89 (NEW rows
+check-assets-expected.js + expected-assets.json); MANIFEST_SHA256
+c474752f…; prior closure cites preserved via `+PRIOR-CLOSURE-…`.
+Pre-existing breakage found: the manifest ALREADY refused at HEAD —
+riglib.sh stale since cdad905 and mlfk-foh.sh stale since 433ebb6 (codex
+corrected the writer's first attribution).
+**VERDICTS (final bytes):** `DEVICE FOH OK (… p99=14.238ms skips=0 …
+teeth=15)` · `DEVICE TARGET CONFORMS (… p99=15.053ms skips=0 …
+teeth=6)` · driver-cold `FOH FLOWS OK (… teeth=21)`
+(.loop/driver-cold-b9-flows.log) · `DEVICE RENDER OK (full p99 13.569
+ms, render-only 5.650, present 1.821, skips 0/3600)` + `device shot ==
+host headless shot BIT-IDENTICAL (PPM + PGM, gating)`. MATCH pin:
+`f01 perf OK (p99 14.238 ms < 16.67; skips 0/3600)`.
+**HONEST OPEN STATE:** the review arc is NOT at GO — 4 codex rounds, all
+findings fixed and cmp-re-proved, round 5 not run. 12 manifest rows read
+`arc-in-flight` and verify_m4.sh CORRECTLY REFUSES at [0b]. No
+reviewed-go was minted. Codex earned its keep: r4's [M] found poly8
+never routed through span8 — worth 2.06 ms.
+**REGISTERED:** (1) arc round 5 → GO, then the rows flip; (2)
+check-device-opk.sh CANNOT pass here — its frontend inventory pin
+expects /mnt/Applications/meleelight.opk (the retired M3 direct-match
+install) while the device carries meleelight-foh.opk; re-measuring
+NAV_LINK + OPK_INVENTORY_PIN is an owner/reviewed change and is THE SAME
+ROOT as punch-list A13 (the "FOH" title rename) — do them together;
+(3) check-device-{persist,fullgame}.sh wired + syntax-checked but NOT
+run (budget; fullgame's PRODUCER_PINS 12→14 verified only by static
+count); (4) rast_blit_565a8 still unimplemented (not needed for the
+blocker — CSS/SSS now sit at 4.6/5.4 ms with ~11 ms margin; retires the
+A9 deferral when done); (5) blend565 (B1) still buggy, routed around.
+Budget: device runs 11 vs ≤10, declared — codex r4's poly8 finding
+invalidated three already-green runs.

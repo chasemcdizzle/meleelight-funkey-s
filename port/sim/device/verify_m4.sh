@@ -109,7 +109,7 @@ mkdir -p "$VDIR"
 # line (a full-byte self-row plus this anchor would be a two-unknown
 # hash fixed point with no solution); the excluded line is protected
 # by the anchor equality itself — a wrong literal IS a refusal.
-MANIFEST_SHA256=88d33afd9559dae82a6a6d1149fb10390923772d8dfe28792fef7015b28e3537
+MANIFEST_SHA256=c474752f33d22a2fd8250d052133bbf1b9930bfcb9107ee280ef6bc8b6581a2e
 
 # AUTHORITATIVE — computed ONCE, then readonly (the sentinel lockout).
 # Any dev/canned-evidence signal zeroes it; the `M4 GATE OK` sentinel
@@ -263,6 +263,8 @@ pipeline/lib/manifest.js
 pipeline/lib/verify-artifacts.js
 pipeline/lib/check-expected.js
 pipeline/expected.json
+pipeline/expected-assets.json
+pipeline/lib/check-assets-expected.js
 port/sim/device/verify_m4.sh"
 
 # gate_norm_sha256 — sha256 of THIS script's bytes EXCLUDING the single

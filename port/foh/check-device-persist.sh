@@ -407,8 +407,18 @@ c="$(grep -cF "$JUDGE_SHA port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh"
 bash pipeline/extractor/build-extractor.sh
 rm -f "$TABLES/ml_tables.c" "$TABLES/ml_tables.h" \
   "$TABLES/ml_stages.c" "$TABLES/ml_stages.h" \
-  "$TABLES/ml_targets.c" "$TABLES/ml_targets.h"
-node pipeline/run.js --only animations,tables,stages,targets --out "$TABLES"
+  "$TABLES/ml_targets.c" "$TABLES/ml_targets.h" \
+  "$TABLES/assets/menu.img1"
+node pipeline/run.js --only animations,tables,stages,targets,assets --out "$TABLES"
+# A1 restyle Phase 1: the FOH's CSS/SSS screens render REAL upstream artwork
+# from the `assets` stage's IMG1 pack, and foh_render's art_load treats a
+# missing pack as FATAL. Both sides must be pointed at THIS run's freshly
+# regenerated file: the host side via the exported var, the device side via
+# its launcher env (sha-verified below). Mirrors
+# port/foh/check-device-foh.sh. PROVENANCE: Nintendo-derived, private use
+# only, gitignored build output — never committed, never distributed.
+made "$TABLES/assets/menu.img1"
+export MLFK_MENU_IMG1="$PWD/$TABLES/assets/menu.img1"
 made "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" "$TABLES/ml_targets.c" \
   "$TABLES/ml_targets.h"
 echo "   judge twin pin OK; tables fresh"
@@ -1237,13 +1247,14 @@ rig_arm_build
 rig_stamp_rehash foh_device
 dsh "rm -rf $DTMP $DSD && mkdir -p $DTMP $DSD"
 provision() { # push binary + flows into a fresh $DTMP (rerun post-reboot)
-  adb -s "$DEV" push "$DEVB/foh_device" \
+  adb -s "$DEV" push "$DEVB/foh_device" "$TABLES/assets/menu.img1" \
     "$FLOWD/p00-persist-probe.flow" "$FLOWD/p01-persist-edit.flow" \
     "$FLOWD/p02-persist-verify.flow" "$DTMP/" >/dev/null
   rig_push_provenance "$DTMP" foh_device
   dsh "chmod +x $DTMP/foh_device"
   local hf bn hsum dsum
-  for hf in "$FLOWD/p00-persist-probe.flow" "$FLOWD/p01-persist-edit.flow" \
+  for hf in "$TABLES/assets/menu.img1" \
+            "$FLOWD/p00-persist-probe.flow" "$FLOWD/p01-persist-edit.flow" \
             "$FLOWD/p02-persist-verify.flow"; do
     bn="$(basename "$hf")"
     hsum="$(rig_host_sha256 "$hf")" || exit 1
@@ -1353,7 +1364,7 @@ run_leg() {
 cd $DTMP || exit 9
 rm -rf $leg.apprc $leg-shots foh.pid.$DM_NONCE
 mkdir -p $leg-shots
-setsid sh -c './foh_device --flow $DTMP/$id.flow --input flow \\
+setsid sh -c 'MLFK_MENU_IMG1=$DTMP/menu.img1 ./foh_device --flow $DTMP/$id.flow --input flow \\
   --flow-out $DTMP/$leg.trace.txt --shots-dir $DTMP/$leg-shots --pace 0 \\
   2> $DTMP/$leg.applog.txt & \\
   echo \$! > $DTMP/foh.pid.$DM_NONCE; \\
@@ -1425,7 +1436,7 @@ cmp "$BUILD/pull1.dat" "$FILE_P01" \
   || fail "device persist file (pull #1) != the host p01 reference — the format is not byte-deterministic cross-platform (refutation shape (d): STOP)"
 echo "   dp01 OK: device file BYTE-IDENTICAL to the host reference"
 # the record arm ON DEVICE (no SDL — plain RC-echo dsh run)
-dsh "cd $DTMP && ./foh_device --tooth-persist-finish $REC_CHAR $REC_TSTAGE $REC_BITS 2> $DTMP/arm.applog.txt" \
+dsh "cd $DTMP && MLFK_MENU_IMG1=$DTMP/menu.img1 ./foh_device --tooth-persist-finish $REC_CHAR $REC_TSTAGE $REC_BITS 2> $DTMP/arm.applog.txt" \
   || { dsh "cat $DTMP/arm.applog.txt" >&2 || true; fail "device record arm failed"; }
 pullv "$DTMP/arm.applog.txt" "$BUILD/arm.dev-applog.txt"
 [ "$(count_xl "$BUILD/arm.dev-applog.txt" "foh_persist: loaded")" = 1 ] \
