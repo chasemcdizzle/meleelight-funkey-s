@@ -334,6 +334,7 @@ void tp_setup_target(GameState *g, int charId, int tstageId) {
 // --- finishGame, target arm (main.js:1420-1476) — REAL since iter 99 ------------
 
 void (*tp_finish_hook)(GameState *g, bool complete) = 0;
+void (*tp_endgame_hook)(GameState *g) = 0;
 
 void tp_finish_game(GameState *g) {
   TP.endTargetGame = false; // :1421 setEndTargetGame(false)
@@ -411,12 +412,19 @@ void tp_game_tick_target(GameState *g, const MlInput *traceRow0) {
       }
     }
     // if (input[tb][0].s && !input[tb][1].s) endGame(input) (:1013-1015):
-    // the quit path is menu plane AND outside the golden quality domain
-    // (generators never press START) — loud trap (registered: no
-    // coverage; acceptance/task-14 surface).
+    // the quit path is MENU plane, so the sim owns only the edge test —
+    // what "leaving" means belongs to the driver, exactly like the
+    // tp_finish_hook seam above. Default (NULL hook) is the unchanged
+    // loud trap: every trace-fed replay keeps it, because those goldens
+    // never press START, so a START there really is a domain break. The
+    // FOH live PLAY driver installs a hook instead (punch-list A2 — the
+    // acceptance surface this trap was registered against).
     if (g->curBuf[tb].slot[0].s && !g->curBuf[tb].slot[1].s) {
-      sim_fatal("endGame — START pressed in target mode (outside the "
-                "target-golden quality domain)");
+      if (tp_endgame_hook == 0) {
+        sim_fatal("endGame — START pressed in target mode (outside the "
+                  "target-golden quality domain)");
+      }
+      tp_endgame_hook(g);
     }
     // frameByFrame bookkeeping (:1016-1021) — the input cluster's
     // end-of-tick contract (the VS arm's twin block).

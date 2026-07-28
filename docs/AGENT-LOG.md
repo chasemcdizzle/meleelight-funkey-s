@@ -19718,3 +19718,73 @@ the device stays owned by exactly ONE lane at a time (crash writer
 now). Restyle lane (A1 Phase 0) is host-only until merge. Commits
 remain driver-made, one atomic merge per landed increment on
 agent/auto.
+
+---
+
+iter 121-122 · 2026-07-27 · phase M4 (punch list) · **A2 TARGET-TEST CRASH FIXED + device-verified (Chase can play it now)** · A1 Phase 0 + A9 merged · **NEW BLOCKER: the merged restyle is DEVICE-DIVERGENT**
+
+**A2 ROOT CAUSE (foh_dev.c:1792 pre-fix):** the launch-kind cross-guard
+`if ((brState||brVerify||brLive) && foh.targetMode) return 4;` — the play
+OPK passes ONE fixed argv (`--bridge live`) but the PLAYER chooses the
+launch kind at the menus; the instant targetMode went true the app
+exited rc 4, indistinguishable from a crash. **GATE-BLINDNESS (A8
+relevance):** the two coverage sets are disjoint EXACTLY where the play
+path lives — check-device-target.sh drove f06/f07 with `--bridge
+tverify` running foh_device directly from /tmp/mlfk; check-device-opk.sh
+drove the REAL installed OPK but pinned FOH_FLOW_ID=f01-vs-g01 (a VS
+flow) with zero in-app input injection. No rig ever combined
+`--bridge live` with a TARGET launch. Two further defects on the same
+path, reachable only once the first was fixed: (1) target_play.c:417
+sim_fatal on START (s1_input_row maps START to in.s) — quitting a target
+match was a hard abort, previously registered as "no coverage —
+acceptance surface", and this WAS that surface; (2) device-only: the
+provisioned /mnt/mlfk-data/foh-music.txt carried menu + 6 VS rows and NO
+targettest row → RC=2 (the play data plane had been provisioned for the
+VS path only — driver provisioning defect, repaired on device).
+**FIX:** `--bridge live` serves both launch kinds, dispatching on
+foh.targetMode; evidence bridges keep their guards; the target bridge
+gained a live arm (s1_input_row, 1-slot recording, targettest music,
+per-frame banner composite, upstream's 2500 ms hold with music stopped);
+tp_endgame_hook NULL-default so every trace-fed replay keeps the trap
+byte-identical; FOH options reapplied after tp_setup_target (live only —
+it zeroes tapJumpOff).
+**Evidence:** BEFORE .loop/review-121-BEFORE-* (cross-guard, RC=4, binary
+6d7d60bc = the exact bytes in Chase's install); AFTER
+.loop/review-121-AFTER-* (RC=0, menu→targettest, 352 frames ended by
+START, TLAUNCH on a VS flow file). Play OPK 5b658e9c installed +
+sha-verified; /mnt/mlfk-data repaired.
+**Arc:** r1/r2 codex NO-GO (1H/6M/2L each, all fixed); r3 codex PROVEN
+MALFUNCTION (re-reported r1 findings against ABSENT code — cited
+TFIN_HOLD_FRAMES at :1111 and called the options reapply "missing" while
+present at :1909-1912 and device-proven; child hung 10+ min past a
+static log); §11 fallback: **grok NO-GO** — found the hole codex never
+did: TARGET_RE pins the summary grammar, so the new `live=` field would
+have made the M4 gate REJECT the target leg after a green re-pin (all 3
+fixed); **Opus 5 GO** (1M/5L fixed incl. a second leg for the
+--frames-bound exit).
+**A1 Phase 0 merged (327a253)** — 4 shared primitives + title/menu/3
+submenus restyled, host flows green with a baseline-identical ledger,
+arc GO. **A9 merged (3240860)** — IMG1 asset stage + loader, ASSETS OK,
+arc GO codex r6, no pinned producer touched.
+**BLOCKER (driver-owned, my merge call):** the Phase-0 restyle is
+**DEVICE-DIVERGENT** — with the arm binary correctly rebuilt from
+327a253, the device shot differs from its own HOST TWIN by 9,080/172,815
+bytes (5.25%, from ~row 28). check-device-foh.sh (`shot
+f01-vs-g01/menu-top`) and check-device-target.sh (`shot
+f06-target-t01/menu-targettest`) both FAIL on MENU shots; both were
+GREEN at pre-restyle HEAD with the A2 changes. The Phase-0 arc was
+HOST-ONLY (its `FOH FLOWS OK` is a host judge) — I merged on host
+evidence for a surface that has a device judge. Prime suspect class
+(CLAUDE.md M3 task 1): the SDK's musl libm was built with unsafe-FP
+optimizations — any new float math in the primitives (gradients/rings/
+shine use sqrt + divides) can differ device-vs-host unless it routes
+through the fdlibm strong overrides or integer arithmetic.
+**Registered under BLOCKERS (writer-reported, barred from this file):**
+(1) target-match exit returns to the FRONTEND rather than the FOH menus;
+(2) upstream endGame's state resets are unapplied on that path;
+(3) the target FINISH arm (all 10 targets destroyed) is unscriptable
+and therefore uncovered.
+**Outstanding re-pins (deferred until the divergence clears):**
+m4-freeze-manifest.txt:339 check-device-target.sh row (0f7982a0 → new
+sha + status), verify_m4.sh TARGET_RE (extended for live=/bound=), and
+the MANIFEST_SHA256 anchor recompute.

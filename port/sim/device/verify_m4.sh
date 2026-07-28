@@ -745,7 +745,7 @@ p99_under_budget() {
 # language is a proper subset of what it was, so no run that passed
 # before on genuine producer output can fail now.
 FULLGAME_RE='^FULLGAME CONFORMS 12/12 \(render\+sfx\+music live; live-ai=g07,g08,m01,m02 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=0 underruns=0 starves=0 presentfails=0 teeth=21\)$'
-TARGET_RE='^DEVICE TARGET CONFORMS \(goldens=2 flows=2 shots=4 fbwit=4 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=0 underruns=0 starves=0 starts f06-target-t01=15 f07-target-t02=31 sfxpin=15/31 music=menu>targettest:5/5 teeth=6\)$'
+TARGET_RE='^DEVICE TARGET CONFORMS \(goldens=2 flows=2 shots=4 fbwit=4 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=0 underruns=0 starves=0 starts f06-target-t01=15 f07-target-t02=31 sfxpin=15/31 music=menu>targettest:5/5 live=f08-live-target:(0|[1-9][0-9]{0,5})f/(0|[1-9][0-9]{0,5})rows/opts-ok bound=f09-live-bound:(0|[1-9][0-9]{0,5})f/(0|[1-9][0-9]{0,5})rows teeth=6\)$'
 FOH_RE='^DEVICE FOH OK \(flows=5 shots=13 bridge=1 states=3 opk=evidence fbwit=15 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=0 underruns=0 starves=0 starts f01-vs-g01=(0|[1-9][0-9]{0,5}) f02-cpu-m01=(0|[1-9][0-9]{0,5}) f03-options=(0|[1-9][0-9]{0,5}) f04-nav=(0|[1-9][0-9]{0,5}) f05-vs-g03=(0|[1-9][0-9]{0,5}) teeth=15\)$'
 OPKFOH_RE='^OPK FOH LAUNCH OK \(frontend-launched via gmenu2x into the FOH, boot marker bin-sha == stamp, evidence rc=0, 1 transitions vs frozen, shot structural\)$'
 

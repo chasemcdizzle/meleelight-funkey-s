@@ -103,13 +103,26 @@ void tp_target_timer_tick(GameState *g);
 extern void (*tp_finish_hook)(GameState *g, bool complete);
 void tp_finish_game(GameState *g);
 
+// endGame's START-quit edge (main.js:1013-1015). NULL default keeps the
+// loud trap in tp_game_tick_target — trace-fed replays never press
+// START, so a START there is a domain break, not a quit. The FOH live
+// PLAY driver installs a hook; what "leaving the match" means is the
+// driver's, not the sim's (the tp_finish_hook split, verbatim). The
+// hook fires INSIDE the tick: upstream does not return from gameTick
+// here, so the remaining tick body still runs on the quitting frame.
+extern void (*tp_endgame_hook)(GameState *g);
+
 // main.js:987-1044 gameTick's gameMode == 5 arm under the harness step
 // semantics (the sim_game_tick twin): endTargetGame -> finishGame is
 // REAL (tp_finish_game above; iter 99); post-finish ticks mirror
 // :991/:1041-1044 exactly (playing false + gameEnd true -> the whole
 // body is skipped; playing false WITHOUT gameEnd stays a loud trap).
-// START-quit endGame stays TRAPPED (registered: no coverage —
-// acceptance/task-14 surface). traceRow0 = the injected pollInputs
+// START-quit endGame TRAPS for every caller that leaves
+// tp_endgame_hook NULL — which is every trace-fed/evidence caller
+// (target_main.c, foh_app.c, the probes): their goldens never press
+// START, so a START edge there is a domain break, not a quit. ONLY the
+// FOH live PLAY driver may install the hook and handle the edge; see
+// the tp_endgame_hook note below. traceRow0 = the injected pollInputs
 // result for slot 0 (the only active slot).
 void tp_game_tick_target(GameState *g, const MlInput *traceRow0);
 

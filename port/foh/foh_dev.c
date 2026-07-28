@@ -765,6 +765,33 @@ static void rec_frame(MlSb *sb, bool first, const MlInput *p0,
   ml_sb_puts(sb, ",null,null]");
 }
 
+// Target mode has ONE active port (targetbuilder.js:25 slot 0), so its
+// recording is the 1-slot row — the SHAPE load_trace's slot-1..3
+// assertion demands. Precisely: the artifact is the recorder's JSON, so
+// replaying a live target session through --bridge tverify still needs
+// the ordinary trace-to-txt.js conversion (load_trace parses the text
+// form); what the 1-slot row buys is that the converted trace is
+// ACCEPTED rather than rejected at that assertion.
+static void rec_frame_solo(MlSb *sb, bool first, const MlInput *p0) {
+  if (!first) ml_sb_puts(sb, ",\n");
+  ml_sb_putc(sb, '[');
+  rec_input(sb, p0);
+  ml_sb_puts(sb, ",null,null,null]");
+}
+
+// Raw-key sidecar bit layout (paired with judge-s1-coverage.js). ONE
+// definition for both live arms — the expression is load-bearing and
+// was previously written out per arm.
+static uint16_t pin_bits(const PlatformInput *p) {
+  return (uint16_t)((p->up ? 1u : 0u) | (p->down ? 2u : 0u) |
+                    (p->left ? 4u : 0u) | (p->right ? 8u : 0u) |
+                    (p->a ? 16u : 0u) | (p->b ? 32u : 0u) |
+                    (p->x ? 64u : 0u) | (p->y ? 128u : 0u) |
+                    (p->start ? 256u : 0u) | (p->l ? 512u : 0u) |
+                    (p->r ? 1024u : 0u) | (p->menu ? 2048u : 0u) |
+                    (p->quit ? 4096u : 0u));
+}
+
 // --- audio wiring (gfx_app.c shape) --------------------------------------------
 
 static Gfx g_gfx;   // big (framebuffer + anim tables); static, not stack
@@ -1084,6 +1111,29 @@ static void shot_capture(const char *name, const uint16_t *fb, long tick) {
 static int g_tfin_fired;
 static int g_tfin_complete;
 static long g_tfin_frame;
+// Upstream finishGame (main.js:1499-1502) ends with
+//   MusicManager.stopWhatisPlaying();
+//   setTimeout(function() { endGame(input) }, 2500);
+// so the banner is held for 2500 ms of WALL CLOCK with the music
+// already stopped. Carried verbatim as a monotonic deadline (not a
+// frame count — a skipped frame must not shorten the hold).
+#define TFIN_HOLD_NS 2500000000ull
+// The live arm may tick a BOUNDED TAIL past --frames so that a finish in
+// the closing moments still gets its full wall-clock hold (upstream's
+// timeout is wall-clock, not frame-budget). Every per-frame buffer in the
+// target loop is sized for frames + this tail, so the tail is explicitly
+// accounted for rather than silently truncated. 180 frames = 3 s >= 2.5 s.
+#define TFIN_TAIL_FRAMES 180
+// endGame (main.js:1013-1015) on the LIVE target path: the START-quit
+// arm target_play.c traps by default is real here — the acceptance
+// surface the trap was registered against. The hook only raises a flag;
+// the driver's loop owns leaving, so the rest of upstream's tick body
+// still runs on the quitting frame.
+static int g_tquit;
+static void tdev_endgame_hook(GameState *g) {
+  (void)g;
+  g_tquit = 1;
+}
 static void tdev_finish_hook(GameState *g, bool complete) {
   g_tfin_fired++;
   g_tfin_complete = complete ? 1 : 0;
@@ -1438,6 +1488,11 @@ int main(int argc, char **argv) {
       // produce nothing, so it is rejected instead.
       (attribPath && !brVerify) ||
       (!brLive && (recordPath || keysPath || tapJumpOffP1)) ||
+      // live consumes NO golden trace and writes NO evidence sink: it
+      // records instead. Accepting these silently would let a malformed
+      // invocation look successful while the requested input was never
+      // read and the requested output never written.
+      (brLive && (tracePath || outPath || timingPath)) ||
       (cpuLive && !brVerify) ||
       (pace != 0 && pace != 1) || budgetNs == 0 ||
       (audioSamplesGiven && !sndpackPath) ||
@@ -1779,6 +1834,8 @@ int main(int argc, char **argv) {
   fbwit_flush(flowId);
 
   long matchSkips = 0, matchPresentFails = 0;
+  long matchFrames = 0; // frames ACTUALLY ticked (a live target
+                        // quit/finish exit runs fewer than `frames`)
   uint64_t matchWallMs = 0;
   bool ranMatch = false;
 
@@ -1788,8 +1845,18 @@ int main(int argc, char **argv) {
                       "launched\n");
       return 4;
     }
-    // launch-kind cross-guards (fail closed; the --cpu-live class)
-    if ((brState || brVerify || brLive) && foh.targetMode) {
+    // --bridge live is THE PLAY PATH: the launch kind is chosen by the
+    // PLAYER at the real menus, not by a pinned flow, so live serves
+    // BOTH kinds and dispatches on foh.targetMode (below). The OPK
+    // launcher passes one fixed argv for a session in which the player
+    // may pick VS *or* TARGET TEST — refusing one of them here is what
+    // made "Target Test" quit the app at the launch seam (punch-list
+    // A2; the app exited rc 4 the instant TLAUNCH happened).
+    const bool tgtLive = brLive && foh.targetMode;
+    // launch-kind cross-guards (fail closed; the --cpu-live class).
+    // The EVIDENCE bridges keep refusing: each carries a pinned witness
+    // grammar plus a frozen expectation set for exactly one launch kind.
+    if ((brState || brVerify) && foh.targetMode) {
       fprintf(stderr, "foh_dev: --bridge %s but the flow performed a "
                       "TARGET launch (cross-guard)\n", bridge);
       return 4;
@@ -1806,14 +1873,14 @@ int main(int argc, char **argv) {
     }
     if (brVerify || brTVerify) load_trace(tracePath);
 
-    if (brTState || brTVerify) {
+    if (brTState || brTVerify || tgtLive) {
       // --- the TARGET launch bridge (target_main.c boot parity;
       // foh_app.c tstate/tverify twin with the LIVE render plane) ------
       ml_active_rng = &G.rng;
       ml_rng_seed(&G.rng, seed);
       for (int k = 0; k < ML_BOOT_DRAWS; k++) (void)ml_rng_next(&G.rng);
       G.rngStateAtReset = G.rng.a;
-      if (brTVerify) {
+      if (brTVerify || tgtLive) {
         gfx_data_load(&g_gfx.data, gfxdataPath);
         gfx_load_anim(&g_gfx, animDir, foh.p1Char);
         gfx_vfx_load(vfxdataPath);
@@ -1827,8 +1894,26 @@ int main(int argc, char **argv) {
         gfx_vfx_install(&g_gfx); // BEFORE setup (boot entrance/start vfx)
       }
       tp_finish_hook = tdev_finish_hook;
+      // The START-quit arm is REAL only on the live PLAY path; every
+      // evidence bridge keeps target_play.c's loud trap (its goldens
+      // never press START, so a START there is a genuine domain break).
+      if (tgtLive) tp_endgame_hook = tdev_endgame_hook;
       // THE BRIDGE POINT: char + tstage from the FOH state, never CLI.
       tp_setup_target(&G, foh.p1Char, foh.tssStage);
+      // tp_setup_target installs the harness cookie-domain gameSettings
+      // DEFAULTS (target_play.c:319-325 zeroes lCancelType/turbo and all
+      // four tapJumpOff slots). On the PLAY path those are the player's
+      // settings, so the FOH options plane is reapplied exactly as the
+      // VS arm does after sim_setup_match — otherwise the launcher's
+      // mandatory --tapjump-off-p1 (the S1 contract) is silently
+      // dropped and target controls differ from VS controls.
+      // EVIDENCE arms are left on the defaults their frozen
+      // TBRIDGE-STATE witness and target goldens were recorded against.
+      if (tgtLive) {
+        G.sim.turbo = foh.turbo != 0;
+        G.sim.lCancelType = foh.lCancelType;
+        for (int i = 0; i < 4; i++) G.sim.tapJumpOff[i] = foh.tapJumpOff[i];
+      }
       G.rngStateAtFrame1 = G.rng.a;
       // TBRIDGE-STATE witness (read back from GameState + the target
       // module — foh_app.c's exact emission; frozen-cmp'd by the check)
@@ -1844,9 +1929,17 @@ int main(int argc, char **argv) {
                     G.starting ? 1 : 0, (int)G.sim.player[0].stocks) < 0) {
           sim_fatal("--bstate-out write failed");
         }
+        if (tgtLive &&
+            fprintf(bf,
+                    "TBRIDGE-OPTS turbo=%d lcancel=%d tapjump=%d,%d,%d,%d\n",
+                    G.sim.turbo ? 1 : 0, (int)G.sim.lCancelType,
+                    (int)G.sim.tapJumpOff[0], (int)G.sim.tapJumpOff[1],
+                    (int)G.sim.tapJumpOff[2], (int)G.sim.tapJumpOff[3]) < 0) {
+          sim_fatal("--bstate-out options write failed");
+        }
         if (fclose(bf) != 0) sim_fatal("--bstate-out close/flush failed");
       }
-      if (brTVerify) {
+      if (brTVerify || tgtLive) {
         // MUSIC SWITCH at the launch seam: the targettest track
         // (music.js:102-113; the REGISTERED delta — upstream switches
         // at the menu.js:82 entry, the device app at TLAUNCH so the SD
@@ -1857,26 +1950,67 @@ int main(int argc, char **argv) {
           mus_reader_start();
         }
         typedef struct { uint64_t sim, render, present; uint8_t skipped; } TFrameNs;
-        TFrameNs *tim = malloc((size_t)frames * sizeof *tim);
-        if (!tim) sim_fatal("oom (timing buffer)");
-        const size_t streamCap = (size_t)frames * 160 + 160;
+        // brTVerify writes --timing and --out; the live PLAY arm writes
+        // neither (brLive's contract, argv-enforced) and RECORDS instead.
+        TFrameNs *tim = 0;
+        if (brTVerify) {
+          tim = malloc((size_t)frames * sizeof *tim);
+          if (!tim) sim_fatal("oom (timing buffer)");
+        }
+        // live may tick a bounded post-finish tail; buffers cover it
+        const long loopMax = frames + (tgtLive ? TFIN_TAIL_FRAMES : 0);
+        const size_t streamCap = (size_t)loopMax * 160 + 160;
         char *stream = malloc(streamCap);
         if (!stream) sim_fatal("oom (stream buffer)");
         size_t streamLen = 0;
         char hex[65], thex[65];
+        MlSb rec;
+        ml_sb_init(&rec);
+        uint16_t *rawKeys = 0;
+        MlInput liveRow;
+        if (tgtLive) {
+          ml_sb_puts(&rec, "[\n");
+          rawKeys = malloc((size_t)loopMax * sizeof *rawKeys);
+          if (!rawKeys) sim_fatal("oom (raw-key sidecar buffer)");
+        }
+        // Initialised to loopMax, NOT frames: if the loop runs to the very
+        // end (a hold still pending at the tail's last frame) no break arm
+        // executes, and loopMax rows have been appended to BOTH artifacts.
+        // Seeding with `frames` would under-report `ticked` and desync
+        // rec.json from keys.txt. Identical on the brTVerify arm, where
+        // loopMax == frames.
+        long framesRun = loopMax;  // RECORDED rows (the replay prefix)
+        long ticked = loopMax;     // frames actually TICKED (>= framesRun)
+        uint64_t tfinDeadline = 0; // set once, at the finish frame
+        size_t recMark = 0;        // rec.len before this frame's row
         PlatformInput pin;
         const uint64_t tStart = now_ns();
-        for (long f = 0; f < frames; f++) {
-          platform_poll(&pin); // pump the backend (input unused: trace-fed)
+        for (long f = 0; f < loopMax; f++) {
+          platform_poll(&pin); // live: THE input; tverify: backend pump
           const uint64_t deadline = tStart + (uint64_t)(f + 1) * budgetNs;
-          const long idx = f < g_trace_len - 1 ? f : g_trace_len - 1;
-          const TraceRow *row = &g_trace[idx];
-          if (row->present[1] || row->present[2] || row->present[3]) {
-            sim_fatal("target trace with a non-null slot 1-3 row");
+          const MlInput *row0;
+          if (tgtLive) {
+            liveRow = s1_input_row(&pin);
+            row0 = &liveRow;
+            // slot 0 is the ONLY active port in target mode, so the
+            // recording carries [p0,null,null,null] — exactly the shape
+            // load_trace + the slot-1..3 assertion below accept, i.e. a
+            // recorded live target session replays through --bridge
+            // tverify unmodified.
+            recMark = rec.len;
+            rec_frame_solo(&rec, f == 0, &liveRow);
+            rawKeys[f] = pin_bits(&pin);
+          } else {
+            const long idx = f < g_trace_len - 1 ? f : g_trace_len - 1;
+            const TraceRow *row = &g_trace[idx];
+            if (row->present[1] || row->present[2] || row->present[3]) {
+              sim_fatal("target trace with a non-null slot 1-3 row");
+            }
+            row0 = row->present[0] ? &row->in[0] : 0;
           }
           G.frame = f + 1;
           const uint64_t t0 = now_ns();
-          tp_game_tick_target(&G, row->present[0] ? &row->in[0] : 0);
+          tp_game_tick_target(&G, row0);
           sim_frame_hash(&G, hex);
           tp_target_frame_hash(&G, thex);
           const uint64_t t1 = now_ns();
@@ -1884,16 +2018,29 @@ int main(int argc, char **argv) {
           uint64_t t2 = t1, t3 = t1;
           if (!skip) {
             gfx_target_frame(&g_gfx, &G, &TP);
+            // Post-finish the sim body is skipped (target_play.h
+            // :991/:1041-1044) and gfx_target_frame would redraw the
+            // scene over the result, so the banner TEXT is composited
+            // over every frame of the hold — the player SEES COMPLETE!/
+            // FAILURE, not a frozen stage. gfx_target_banner is NOT used
+            // here: it re-renders the whole frame first (gfx_target.c:
+            // 206), which would double the render cost of every held
+            // frame against a 16.67 ms budget.
+            if (tgtLive && g_tfin_fired) {
+              gfx_target_banner_text(&g_gfx.rz, g_tfin_complete);
+            }
             t2 = now_ns();
             if (platform_present(g_gfx.rz.fb) != 0) matchPresentFails++;
             t3 = now_ns();
           } else {
             matchSkips++;
           }
-          tim[f].sim = t1 - t0;
-          tim[f].render = t2 - t1;
-          tim[f].present = t3 - t2;
-          tim[f].skipped = skip ? 1 : 0;
+          if (tim) {
+            tim[f].sim = t1 - t0;
+            tim[f].render = t2 - t1;
+            tim[f].present = t3 - t2;
+            tim[f].skipped = skip ? 1 : 0;
+          }
           const int w = snprintf(stream + streamLen, streamCap - streamLen,
                                  "F %ld %s\nT %ld %s\n", f + 1, hex, f + 1,
                                  thex);
@@ -1902,10 +2049,81 @@ int main(int argc, char **argv) {
           }
           streamLen += (size_t)w;
           if (pace == 1) pace_sleep_until_ns(deadline);
+          // LIVE EXITS. Both are the app-boundary form of upstream's
+          // "leave the target match": this build's match phase is
+          // terminal (the VS live arm exits after its frame bound too),
+          // so ending the run returns the player to the frontend rather
+          // than to the FOH menus. A bounded deviation for the DRIVER to
+          // register under BLOCKERS in docs/AGENT-LOG.md — this file must
+          // not claim its own registration. ALSO unapplied: upstream
+          // endGame (main.js:1372-1396) resets gameEnd/lost-stock/phantom/
+          // article state, sets playing=false and changeGamemode(4); the
+          // hook applies none of it, unobservable ONLY because the driver
+          // leaves the match on the next statement. Re-entering the menus
+          // needs the FOH/match outer loop no play arm has.
+          //   (1) START while playing -> upstream endGame (main.js:1013
+          //       -1015) via tp_endgame_hook. The terminating row is
+          //       ROLLED BACK out of both artifacts: replaying it would
+          //       re-enter the START edge with tp_endgame_hook NULL,
+          //       which is target_play.c's loud trap by design. What is
+          //       kept is exactly the prefix that replays.
+          //   (2) the target game finished -> upstream stops the music
+          //       and leaves 2500 ms later (main.js:1499-1502).
+          if (tgtLive && g_tquit) {
+            rec.len = recMark; // roll the START row back out
+            ticked = f + 1;    // this frame ran: ticked, rendered, paced
+            framesRun = f;     // ...but it is NOT part of the replayable
+                               // prefix (replaying it re-enters the START
+                               // edge, which traps with a NULL hook)
+            break;
+          }
+          if (tgtLive && g_tfin_fired && tfinDeadline == 0) {
+            // MusicManager.stopWhatisPlaying() — the lock-bracketed flag
+            // flip (the menu-music precedent); mus_reader_stop() joins a
+            // thread and must never run inside the paced loop.
+            if (g_have_music) {
+              platform_audio_lock();
+              g_mix.music.on = 0;
+              platform_audio_unlock();
+              // muting the mixer alone would leave mus_reader_main doing
+              // SD refills for the whole hold; upstream's
+              // stopWhatisPlaying() stops the source. Setting the quit
+              // atomic is lock-free and safe here — the JOIN stays in
+              // teardown's mus_reader_stop(), never inside the paced loop.
+              atomic_store_explicit(&g_mus_quit, 1, memory_order_release);
+            }
+            tfinDeadline = now_ns() + TFIN_HOLD_NS;
+          }
+          if (tgtLive && tfinDeadline != 0 && now_ns() >= tfinDeadline) {
+            ticked = f + 1;
+            framesRun = f + 1;
+            break;
+          }
+          // the ORDINARY --frames bound for live: the tail above exists
+          // only to finish a hold already in progress.
+          if (tgtLive && tfinDeadline == 0 && f + 1 >= frames) {
+            ticked = f + 1;
+            framesRun = f + 1;
+            break;
+          }
+        }
+        // The hold is WALL-CLOCK (upstream's setTimeout), but the frame
+        // tail above is frame-COUNTED. Under catch-up pace_sleep_until_ns
+        // is a no-op and post-finish ticks are nearly free, so the tail
+        // can be spent in well under 2.5 s. Finish the hold here: the
+        // banner is already presented and post-finish ticks are inert
+        // (target_play.h :991/:1041-1044), so waiting is equivalent to
+        // ticking and cannot truncate the banner the player sees.
+        while (tgtLive && tfinDeadline != 0 && now_ns() < tfinDeadline) {
+          struct timespec hs;
+          hs.tv_sec = 0;
+          hs.tv_nsec = 4000000L; // 4 ms
+          nanosleep(&hs, 0);
         }
         const uint64_t tEnd = now_ns();
         matchWallMs = (tEnd - tStart) / 1000000ull;
         ranMatch = true;
+        matchFrames = ticked;
         const uint32_t total = draws_between(G.rngStateAtReset, G.rng.a);
         const uint32_t outside =
             draws_between(G.rngStateAtReset, G.rngStateAtFrame1);
@@ -1920,29 +2138,60 @@ int main(int argc, char **argv) {
           }
           streamLen += (size_t)w;
         }
-        FILE *of = fopen(outPath, "w");
-        if (!of) sim_fatal("cannot open --out for writing");
-        if (fwrite(stream, 1, streamLen, of) != streamLen) {
-          sim_fatal("--out write failed");
-        }
-        if (fclose(of) != 0) sim_fatal("--out close/flush failed");
-        FILE *tf2 = fopen(timingPath, "w");
-        if (!tf2) sim_fatal("cannot open --timing for writing");
-        for (long f = 0; f < frames; f++) {
-          if (fprintf(tf2, "%" PRIu64 " %" PRIu64 " %" PRIu64 " %u\n",
-                      tim[f].sim, tim[f].render, tim[f].present,
-                      (unsigned)tim[f].skipped) < 0) {
-            sim_fatal("--timing write failed");
+        if (brTVerify) {
+          FILE *of = fopen(outPath, "w");
+          if (!of) sim_fatal("cannot open --out for writing");
+          if (fwrite(stream, 1, streamLen, of) != streamLen) {
+            sim_fatal("--out write failed");
           }
+          if (fclose(of) != 0) sim_fatal("--out close/flush failed");
+          FILE *tf2 = fopen(timingPath, "w");
+          if (!tf2) sim_fatal("cannot open --timing for writing");
+          for (long f = 0; f < frames; f++) {
+            if (fprintf(tf2, "%" PRIu64 " %" PRIu64 " %" PRIu64 " %u\n",
+                        tim[f].sim, tim[f].render, tim[f].present,
+                        (unsigned)tim[f].skipped) < 0) {
+              sim_fatal("--timing write failed");
+            }
+          }
+          if (fclose(tf2) != 0) sim_fatal("--timing close/flush failed");
         }
-        if (fclose(tf2) != 0) sim_fatal("--timing close/flush failed");
+        if (tgtLive) {
+          // the brLive mandatory-record contract, target shape
+          if (framesRun == 0) {
+            // START on the very first frame: the rolled-back prefix is
+            // EMPTY. `[]` is the honest capture (nothing was played), but
+            // it is not a replayable trace — load_trace rejects an empty
+            // one — so say so instead of implying otherwise.
+            fprintf(stderr, "foh_dev: live target quit on frame 1 — the "
+                            "recorded capture is EMPTY (not replayable)\n");
+          }
+          ml_sb_puts(&rec, "\n]\n");
+          FILE *rf = fopen(recordPath, "w");
+          if (!rf) sim_fatal("cannot open --record-trace for writing");
+          if (fwrite(rec.buf, 1, rec.len, rf) != rec.len) {
+            sim_fatal("--record-trace write failed");
+          }
+          if (fclose(rf) != 0) sim_fatal("--record-trace close/flush failed");
+          FILE *kf = fopen(keysPath, "w");
+          if (!kf) sim_fatal("cannot open --record-keys for writing");
+          for (long f = 0; f < framesRun; f++) {
+            if (fprintf(kf, "%04x\n", (unsigned)rawKeys[f]) < 0) {
+              sim_fatal("--record-keys write failed");
+            }
+          }
+          if (fclose(kf) != 0) sim_fatal("--record-keys close/flush failed");
+        }
         free(tim);
         free(stream);
+        free(rawKeys);
+        ml_sb_free(&rec);
         if (g_tfin_fired) {
           // the finish seam fired mid-replay (live/acceptance surface;
           // never on the committed legs — header note): show the
           // COMPLETE!/FAILURE banner + declare it on stderr.
-          gfx_target_banner(&g_gfx, &G, &TP, g_tfin_complete);
+          // live already composited the banner over every held frame
+          if (!tgtLive) gfx_target_banner(&g_gfx, &G, &TP, g_tfin_complete);
           if (platform_present(g_gfx.rz.fb) != 0) matchPresentFails++;
           fprintf(stderr, "foh_dev tfinish: complete=%d frame=%ld\n",
                   g_tfin_complete, g_tfin_frame);
@@ -2162,15 +2411,7 @@ int main(int argc, char **argv) {
           rows[2] = 0;
           rows[3] = 0;
           rec_frame(&rec, f == 0, &liveRow, &neutralRow);
-          rawKeys[f] = (uint16_t)((pin.up ? 1u : 0u) | (pin.down ? 2u : 0u) |
-                                  (pin.left ? 4u : 0u) |
-                                  (pin.right ? 8u : 0u) | (pin.a ? 16u : 0u) |
-                                  (pin.b ? 32u : 0u) | (pin.x ? 64u : 0u) |
-                                  (pin.y ? 128u : 0u) |
-                                  (pin.start ? 256u : 0u) |
-                                  (pin.l ? 512u : 0u) | (pin.r ? 1024u : 0u) |
-                                  (pin.menu ? 2048u : 0u) |
-                                  (pin.quit ? 4096u : 0u));
+          rawKeys[f] = pin_bits(&pin);
         } else {
           const long idx = f < g_trace_len - 1 ? f : g_trace_len - 1;
           const TraceRow *row = &g_trace[idx];
@@ -2210,6 +2451,7 @@ int main(int argc, char **argv) {
       if (attrib) attrib_sample(&attrib[frames]); // tail row
       matchWallMs = (tEnd - tStart) / 1000000ull;
       ranMatch = true;
+      matchFrames = frames;
 
       const uint32_t total = draws_between(G.rngStateAtReset, G.rng.a);
       const uint32_t outside =
@@ -2306,7 +2548,7 @@ int main(int argc, char **argv) {
     fprintf(stderr,
             "foh_dev match: %ld frames, %ld render skips, %ld failed "
             "presents, wall %" PRIu64 " ms, pace=%ld budget=%" PRIu64 " ns\n",
-            frames, matchSkips, matchPresentFails, matchWallMs, pace,
+            matchFrames, matchSkips, matchPresentFails, matchWallMs, pace,
             budgetNs);
   }
   if (sndpackPath) {

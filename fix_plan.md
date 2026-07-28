@@ -2085,3 +2085,21 @@ Sequence: punch list → owner re-play/ratification → post-gate window
   trigger = measurement once the FOH actually draws these;
   (d) stage_random is emitted for completeness but upstream uses that
   icon only as an onerror fallback — the FOH RANDOM slot stays text.
+- A2 DONE (iter 121, device-verified; play OPK 5b658e9c installed).
+- **B3 (P0, BLOCKER, driver-owned) Phase-0 restyle is DEVICE-DIVERGENT**:
+  device shot != host twin by 5.25% from ~row 28; check-device-foh.sh +
+  check-device-target.sh fail on MENU shots at 327a253 (both green at
+  pre-restyle HEAD). Root-cause suspect: device-libm unsafe-FP class
+  (CLAUDE.md M3 task 1) vs the new gradient/ring/shine float math. Fix =
+  make the primitives device/host-identical (route through fdlibm or
+  integer math), re-verify BOTH device checks green, then the A2 lane's
+  ~2 device runs + manifest re-pins + final both-GO.
+- B4 (P1) target-match exit returns to the FRONTEND, not the FOH menus;
+  upstream endGame's state resets unapplied on that path.
+- B5 (P2) target FINISH arm (all 10 targets destroyed) is unscriptable →
+  uncovered by any rig.
+- B6 (P1) GATE-BLINDNESS CLASS (A2's lesson, generalize): no rig
+  combined the PLAY argv (`--bridge live`) with a non-VS launch kind.
+  Add a play-path leg that drives the INSTALLED OPK through in-app input
+  to each launch kind (VS + target), so the seam between "target plane
+  tested" and "OPK tested" cannot hide another rc-4 class.
