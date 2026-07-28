@@ -2005,3 +2005,30 @@ Sequence: punch list → owner re-play/ratification → post-gate window
   distinct title (e.g. "MeleeLight EV"). Both .desktop files are
   PINNED m4 producers (+ nav pins in check-device-opk.sh): the change
   carries its own arc + re-pin + one device nav verification.
+
+## A8 AUDIT CONSEQUENCES (iter 120; evidence .loop/reuse-audit/REPORT.md)
+- A14 (P0, folded into A1) glyph-atlas swap: menus must draw with the
+  BROWSER-RASTERIZED VFXGLYPHS1 atlas (port/gfx/vfxglyphs-frozen.txt,
+  captured gfx-pagelib.js:17,179, already judged every run and consumed
+  by the HUD) instead of the hand-authored 5x7 foh_font.c — extend
+  __gfxDumpGlyphs() coverage for menu strings, point foh_render.c at
+  gfx_glyphs_load(), keep foh_font.c as a LOUD fallback. Audit F2: the
+  largest single look win, and it reuses machinery already shipped.
+- A15 (P1, folded into A1) menu-look ORACLE: capture upstream menu draw
+  output through the EXISTING browser rig (port/gfx/capture-canvas.js +
+  gfx-pagelib.js:402-408 already drive drawStage/renderPlayer/
+  renderOverlay; menu draws are ordinary canvas fns on the same layers)
+  so the restyle is judged, not eyeballed. Audit F4 — the "nothing to
+  diff against" claim was circular.
+- A16 (P2) re-frame A6/A7: audiomenu.js (223, zero DOM), credits.js
+  (422, zero DOM), keytest.js (260 pure data), keyboardmenu.js (611,
+  DOM only in a debug print) are TRANSLITERATIONS, not new features.
+- U1 (P1, registered) port/gfx/gfx_bg.c — 236 lines translating
+  stagerender.js drawBackground/drawStars — is the ONLY translated
+  drawing TU with NO browser-parity check (gfx-pagelib.js:29 excludes
+  bg from the judged mask; iou.js:5 judges fg1|fg2|UI only). Two-run
+  byte-stability proves determinism, NOT fidelity — and it is what the
+  player sees behind every match. Fix: enable drawBackground in the
+  capture (one call) + extend the IoU mask; own arc + re-pin.
+- U2 (P2) gfx_target.c target-stage rasterization is judged
+  twin-vs-device (two copies of the same C agreeing), not vs browser.

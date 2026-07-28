@@ -236,6 +236,18 @@ as an emitted sound-event queue (also gives us an extra checksum stream).
 - Per-frame silhouettes are unique (no skeletal reuse): asset pipeline must
   handle ~27.9k paths; budget flash, not RAM.
 
+> **CORRECTION (A8 audit, 2026-07-27):** this bullet is FALSE as measured
+> — 8 of 13 upstream menu files contain ZERO `document.` and ZERO jQuery
+> (the 9th has one `console.log(document.cookie)`); the entire live DOM
+> surface is 3 out-of-scope features (controller SVG calibration, css tag
+> input, targetselect paste box) plus one DEAD file (startScreenPrompt.js,
+> 0 importers); and the HUD half is disproven inside our own tree by
+> gfx_overlay.c, which WAS transliterated using browser-captured glyphs.
+> This bullet must NOT be cited as a rewrite justification (it was, at
+> fix_plan.md §M4 conventions and port/foh/foh.h:3-5). Evidence:
+> .loop/reuse-audit/REPORT.md.
+
+
 ## 9. Pointers index (quick reference)
 
 - Loop: `src/main/main.js:909` (`gameTick`), `:1138` (`setTimeout 16`),
