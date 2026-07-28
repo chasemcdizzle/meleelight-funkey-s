@@ -1994,3 +1994,14 @@ Sequence: punch list → owner re-play/ratification → post-gate window
 - A12 (P1) HOME/MENU button (keysym q) does nothing — wire to the
   same fk_menu-style overlay (quit-to-frontend at minimum), matching
   the ssb64 port's behavior.
+- A13 (P2, owner 2026-07-27; do LAST, after testing/fixes settle) app
+  title on the FunKey home screen must not read "FOH": the play
+  install currently ships meleelight-foh.funkey-s.desktop
+  `Name=MeleeLight FOH`. NOTE the constraint that produced it — the
+  iter-73 stale-nav class needs the EVIDENCE OPK and the PLAY install
+  to carry DISTINCT titles (check-device-opk.sh navigates by title).
+  Correct end state: PLAY install `Name=MeleeLight` (its own desktop,
+  the meleelight.funkey-s.desktop lineage), EVIDENCE OPK keeps a
+  distinct title (e.g. "MeleeLight EV"). Both .desktop files are
+  PINNED m4 producers (+ nav pins in check-device-opk.sh): the change
+  carries its own arc + re-pin + one device nav verification.
