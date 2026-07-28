@@ -2062,3 +2062,26 @@ Sequence: punch list → owner re-play/ratification → post-gate window
   cached frame-invariant gradients (~150k per-pixel sqrt+divide
   removed); the RESIDUAL needs measurement by the device lane before
   check-device-foh.sh re-runs. Measure BEFORE Phase 1 adds CSS/SSS art.
+- A9 LANDED (iter 122): `assets` pipeline stage → one 74 KB IMG1
+  (`assets/menu.img1`: 5 portraits at native 58 px, 6 stage previews +
+  RANDOM at 65x24, 3 hand cursors at 24x32; RGB565 + full A8 plane —
+  alpha decided by MEASUREMENT: cursors carry 24-34% partial pixels so
+  a 1-bit colorkey cannot cover the domain). Loader `port/gfx/img1.{c,h}`
+  (img1_open/find/at/blit/close), blit proven bit-identical to
+  rast_blit_rgba over 360 cases. `bash pipeline/check-assets.sh` →
+  `ASSETS OK`. Arc GO codex r6 (after 5 NO-GO; review caught a
+  vertically-flipped resampler self-test and a hidden-white identity
+  fast path). NO pinned producer touched — pins live in the SIBLING
+  pipeline/expected-assets.json by design.
+  FOLLOW-UPS: (a) P2 driver-owned one-commit promotion of the sibling
+  pins into pipeline/expected.json + re-pin of expected.json/
+  check-expected.js rows (deferred: both are reviewed-go pinned and
+  were being edited by another lane at delivery time); (b) DEVICE PATH
+  DECISION + provisioning of menu.img1 alongside the other private
+  blobs (never committed/distributed — same handling as audio);
+  (c) registered deferral: img1_blit makes per-pixel rast_blend_px
+  calls from an -O2 TU — upgrade path is a rast_blit_565a8 batch
+  primitive in raster.c (pairs naturally with the B1 blend565 fix),
+  trigger = measurement once the FOH actually draws these;
+  (d) stage_random is emitted for completeness but upstream uses that
+  icon only as an onerror fallback — the FOH RANDOM slot stays text.

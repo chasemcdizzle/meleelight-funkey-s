@@ -9,8 +9,9 @@
 #      artifact byte-identical across the two runs) and rejects strays,
 #   b. every task-level stage check still passes UNCHANGED
 #      (check-animations / check-tables / check-stages / check-audio /
-#      check-targets — the last joined at M4 task 11, gate EXTENDED —
-#      each with its own fresh double-run and stage-specific gates),
+#      check-targets — joined at M4 task 11 — and check-assets, joined at
+#      M4 task A9; gate EXTENDED, never weakened — each with its own fresh
+#      double-run and stage-specific gates),
 #   c. the FULL pinned coverage contract pipeline/expected.json holds on
 #      the integrated run (check-expected.js default = every pinned
 #      section: 5 chars / 744 states / 27,808 paths / the live 754-file
@@ -41,7 +42,7 @@ bash extractor/build-extractor.sh
 # (check-targets.sh joined at M4 task 11 — the gate contract EXTENDED
 # measured-then-frozen per fix_plan §M4 conventions, never weakened.)
 for chk in check-animations.sh check-tables.sh check-stages.sh check-audio.sh \
-           check-targets.sh; do
+           check-targets.sh check-assets.sh; do
   echo "=== gate: $chk ==="
   bash "$chk"
 done
@@ -61,6 +62,13 @@ node lib/verify-artifacts.js build/gate-b
 
 # ---- (c) FULL coverage contract (default: every pinned section) ----------
 node lib/check-expected.js build/gate-a "$DIST"
+# The M4 `assets` stage is registered in run.js, so it runs in the double
+# run above and must be asserted on the INTEGRATED artifacts too — otherwise
+# a completely transparent menu.img1 reaches PIPELINE OK (review-a9-1 [H]).
+# Its contract lives in expected-assets.json rather than expected.json
+# because the latter and lib/check-expected.js are sha256-pinned
+# reviewed-go in port/sim/device/m4-freeze-manifest.txt (FORMATS.md §7.4).
+node lib/check-assets-expected.js build/gate-a "$DIST"
 
 # ---- (d) round-trips against the integrated run's own artifacts ----------
 echo "=== gate: compiled round-trips on gate-a ==="

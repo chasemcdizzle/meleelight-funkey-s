@@ -24,6 +24,7 @@ const STAGES = [
   require("./stages/stages"),
   require("./stages/audio"),
   require("./stages/targets"),
+  require("./stages/assets"),
 ];
 
 function arg(name, dflt) {

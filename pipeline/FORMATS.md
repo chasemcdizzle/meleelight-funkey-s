@@ -550,3 +550,258 @@ Coverage pins live in `pipeline/expected.json` `targets` (10 stages, 90
 targets — targetstage6 has 9, targetstage9 has 1; 85 boxes; per-stage
 counts). On disagreement between code and spec, the spec + regenerated
 artifacts win.
+
+## 7. IMG1 — pre-scaled RGB565 menu artwork
+
+Artifacts per pipeline run: `assets/menu.img1` (ONE packed file holding
+every menu image) and `assets/README.md` (provenance notice). Generator:
+`pipeline/stages/assets.js`; codecs `pipeline/lib/png.js` (decode) and
+`pipeline/lib/img1.js` (resample / encode / read / dump). C loader:
+`port/gfx/img1.{c,h}`.
+
+Source: upstream's own menu artwork under `dist/assets/` — 5 character
+portraits (`css/{marth,puff,fox,falco,falcon}.png`), 6 VS-stage previews
+(`stage-icons/{bf,ys,ps,dl,fd,fod}.png`, in oracle `--stage` id order)
+plus the RANDOM icon (`stage-icons/Icon_Transparent_Question.png`), and
+3 hand cursors (`hand/{handpoint,handopen,handgrab}.png`). Unlike
+CTAB1/STAB1/TTAB1 no JS is executed: these are content files, converted
+like §5's audio.
+
+**PROVENANCE / DISTRIBUTION:** all §7 artwork is Nintendo-derived
+(ripped Melee character/stage art). PRIVATE USE ONLY, never distributed;
+`menu.img1` exists only in gitignored build output (`build*/`) — the repo
+commits hashes, never bytes. The manifest stage entry carries an explicit
+`provenance` field and `check-assets.sh` enforces the no-commit guard.
+
+### 7.1 Container layout
+
+Little-endian throughout (§0). All offsets are absolute file offsets.
+
+```
+0   4   magic "IMG1"
+4   4   u32 imageCount
+8   4   u32 fileBytes            (== the file's actual length)
+12  ..  directory: imageCount x 24 bytes, in the pinned order below
+          0   char name[16]      NUL-terminated, [a-z0-9_], NUL-padded
+          16  u16 w
+          18  u16 h
+          20  u32 dataOff        multiple of 4
+then, per image, at dataOff:
+          w*h x u16   RGB565 pixels, row-major, top-left origin
+          w*h x u8    alpha, same order
+        each image's block padded to the next multiple of 4
+```
+
+`dataOff` is 4-aligned so the 565 plane can be read as `uint16_t*`
+directly out of the loaded file (§0 grammar: LE targets only —
+`img1_open` refuses on a big-endian host rather than swapping colours
+silently). The loader enforces the WHOLE grammar above, not merely the
+parts that would crash it — name charset, NUL termination, zero padding
+after the terminator, name uniqueness, `dataOff` 4-aligned AND after the
+directory AND non-overlapping with the previous image, plus every length
+against `fileBytes`. `check-assets.sh` proves rejection with one
+corrupted copy per arm — 15, and the count itself is asserted: file
+shorter than the header, bad magic, truncated, zero count, count whose
+directory overruns the file, unterminated name, empty name, illegal name
+byte, non-zero name padding, duplicate name, zero dimension, misaligned
+`dataOff`, `dataOff` 0 aliasing the header, overlapping blocks,
+out-of-file `dataOff`. Each tooth asserts the arm's COMPLETE diagnostic
+by string equality: rejection alone is not enough (a tooth that corrupts
+the wrong bytes is rejected by a different arm and leaves the intended
+one untested — measured, two teeth did exactly that), and a substring
+match is not enough either (a fragment can be satisfied by another arm's
+longer message).
+
+The directory ORDER is pinned in `expected-assets.json`
+(`assets.directory`) and `lib/img1-dump-order.js` compares the order the
+C loader actually observes against it, because nothing else binds them —
+the C and JS dumps agree with each other whatever the order is, and
+`perImage` is keyed by name. A file with two names swapped against their
+pixels is structurally legal, loads fine, and is caught only here; the
+check proves that both ways. That parser validates EVERY dump line
+against an anchored grammar (PROCESS §3's whitelist rule) rather than
+filtering on a line prefix, so malformed records and unexpected trailing
+data fail instead of being skipped.
+
+PROVENANCE ENFORCEMENT (`lib/assets-nocommit-guard.js`) is by CONTENT and
+covers BOTH git planes: the forbidden set is the 15 source PNG sha256s
+plus the emitted `menu.img1` sha256, taken from the run manifest, and
+every stage-0 INDEX blob (via `git cat-file --batch`) as well as every
+tracked working-tree file is hashed against it. Name-based scanning was
+insufficient (a renamed copy passed), and hashing working-tree bytes for
+index paths was insufficient too (a blob staged and then removed from
+disk stayed commit-ready and invisible). A tracked path that cannot be
+read fails unless git itself reports it deleted.
+
+Directory order is pinned and is the consumer's index space:
+
+| idx | name | idx | name | idx | name |
+|---|---|---|---|---|---|
+| 0 | `marth` | 5 | `stage_bf` | 11 | `stage_random` |
+| 1 | `puff` | 6 | `stage_ys` | 12 | `hand_point` |
+| 2 | `fox` | 7 | `stage_ps` | 13 | `hand_open` |
+| 3 | `falco` | 8 | `stage_dl` | 14 | `hand_grab` |
+| 4 | `falcon` | 9 | `stage_fd` | | |
+| | | 10 | `stage_fod` | | |
+
+0..4 is the oracle `--p1/--p2` character id order and 5..10 the
+`--stage` id order (CLAUDE.md §Commands), so a caller may index directly;
+`img1_find()` by name is the alternative.
+
+### 7.2 Pixels: 565 + an 8-bit alpha plane (the MEASURED decision)
+
+Pixel format is the device framebuffer's: RGB565, quantized by
+TRUNCATION — exactly `raster.c pack565()`'s `((r>>3)<<11)|((g>>2)<<5)|
+(b>>3)`. Rounding would be marginally more accurate (truncation biases
+the mean by about -3/255 on the 5-bit channels, measured), but an image
+pixel and a vector fill of the same RGB888 must land on the SAME 565
+value or they seam by one step where art meets UI; truncation guarantees
+that, and at 16 bpp the bias is invisible. `img1_blit` expands 565 back
+to 888 by bit replication, which round-trips through `pack565` exactly.
+
+Alpha is a full 8-bit plane for EVERY image. The alternatives were
+measured on the sources, not guessed:
+
+| class | measured | images |
+|---|---|---|
+| opaque (a==255 everywhere) | colour type 2, no alpha channel at all | bf, ys, ps, dl, fd |
+| binary (only 0 and 255) | a 1-bit colour key would suffice | all 5 portraits |
+| aa (partial alpha present) | 24.53 / 33.92 / 28.35% of pixels partial (handgrab / handopen / handpoint), 4.45% (RANDOM icon), 0.91% (fod) | hands, fod, stage_random |
+
+A 1-bit colour key therefore does **not** cover the domain: the three
+hand cursors alone are a quarter to a third partial-alpha pixels, and no
+threshold recovers an anti-aliased edge. Per-image before/after classes
+are pinned in `pipeline/expected-assets.json` and re-derived from the
+emitted artifact, so this stays measured rather than remembered.
+
+BEWARE the self-inflicted version of this argument: an earlier revision
+emitted portraits at 56 px (from 58 px sources) and observed that all
+five came out `aa`, citing that as further proof. It was circular — the
+3.4% downscale created the partial alpha (0% → 6.04% on marth, measured;
+no destination column was a pure source copy). Portraits are now emitted
+at their native 58 px, keep their `binary` class, and the encoding
+decision rests where it always genuinely rested: on the cursors and the
+RANDOM icon.
+
+One encoding with one loader path was chosen over three variants. The
+honest cost: all-255 planes for the 5 opaque previews (7,800 B) plus
+8-bit planes where 1 bit would do for the 5 binary portraits (11,890 B
+vs ~1,640 B) — about 18 KB of the 74 KB file. Three decode paths to
+recover 18 KB on a device that streams music off SD is not a trade worth
+making; if it ever is, the format gains a per-image class byte.
+
+Transparent-pixel colour is not incidental: the portraits store WHITE
+under their transparent pixels, so the resampler averages PREMULTIPLIED
+RGB and divides the summed alpha back out. Straight averaging paints a
+white halo around every character.
+
+### 7.3 Sizes: what is derived and what is chosen
+
+Upstream's canvas is 1200x750 (`dist/meleelight.html:218-222`), so a
+literal scale to 240x240 maps its 81x58 portrait
+(`src/menus/css.js:635`) to 16x12 device pixels — useless. The FOH is a
+native 240x240 UI whose elements are proportionally much larger. So the
+ONLY hand-chosen number per class is a target WIDTH; each height is
+DERIVED from the measured source dimensions at the source's own aspect
+ratio, and `lib/img1.js` hard-throws if that ever implies an upscale.
+
+Which numbers are DERIVED and which are CHOSEN, stated plainly:
+
+| class | width | derived or chosen | emitted |
+|---|---|---|---|
+| portrait | 58 | **derived**: the sources' own width, so there is NO GEOMETRIC SCALING — each destination pixel covers exactly one source pixel (4 across = 232 px still fits 240). Not "untouched": alpha-0 pixels are normalized to (0,0,0,0) and colour is 565-quantized, as for every image | 58x40/37/40/45/43 |
+| stagePreview | 65 | **derived** from the target element: the FOH SSS cell is 65x44 with its cursor frame drawn OUTSIDE it (`port/foh/foh_render.c:139`), so 65 fills the cell exactly; the 800x300 source aspect then leaves 24 px, 20 px free for the label | 65x24 |
+| cursor | 24 | **chosen**: upstream's 101x133 on a 1200x750 canvas is 8.4% of width / 17.7% of height, which at 240 would be 20x27 — too small to read as a hand. 24 is ~10% of screen width; the height follows the source aspect | 24x32 |
+
+Note the FOH has no portrait slot at all today (`render_css` is a
+four-row text list) and no hand cursor — 58 and 24 are sized for the
+restyle that will consume them, not for an element that exists. Native
+size is the conservative choice there: a consumer can letterbox or
+crop, it cannot un-blur.
+
+Re-sizing is a one-line edit in `stages/assets.js` (`CLASSES[].width`)
+plus an `expected-assets.json` re-freeze.
+
+### 7.4 Determinism, contract and round trip
+
+No external tool participates: decode is stdlib zlib plus the PNG spec's
+filter reconstruction, and resampling is an exact-coverage box filter in
+INTEGER arithmetic (destination pixel i covers source interval
+`[i*src/dst, (i+1)*src/dst)`; multiplying by `dst` makes every endpoint
+an integer, so per-axis weights are exact and sum to `src`). Byte
+stability is therefore a property of the code, not of a pinned tool
+version — contrast §5.2, where the pin exists because resampler bytes
+are an ffmpeg-build property. `check-assets.sh` still runs the decoder
+against ffmpeg's independent decoder on all 15 sources (PNG decoding is
+lossless: disagreement would be a bug, not a version difference).
+
+The resampler has no external partner, so `lib/assets-selftest.js`
+supplies its own — and note WHY its primary check is a second
+implementation rather than a list of invariants. The first version of
+this section asserted weight sums, constant-colour reproduction and an
+axis-aligned halo boundary; review then showed a VERTICALLY FLIPPED
+resampler and a STRAIGHT-alpha resampler both passed all of it.
+Symmetries and sums are not correctness. So:
+
+- **Primary:** `oracleResize`, an independent exact-rational (BigInt)
+  area-average sharing no code with `lib/img1.js` — not even
+  `axisWeights` — must agree BYTE-FOR-BYTE with the production
+  resampler on six real source images at their real target sizes.
+- Supporting: axis weights swept for every used (src,dst) pair and all
+  `src <= 120, dst <= src` (each destination cell sums to exactly `src`,
+  each source index contributes exactly `dst`); an IMPULSE must land in
+  the one covering destination cell and a monotone GRADIENT must map
+  exactly (both detect flip/transpose/offset); the halo boundary now
+  falls INSIDE a destination cell, where straight-alpha averaging
+  visibly fails; round-half-up is pinned at exact ties for colour and
+  alpha (real artwork never produces a .5 quotient, so nothing else
+  constrains the rounding mode); constant-colour and fully-transparent
+  fixtures; and one tooth per decoder rejection branch plus the upscale
+  hard-throw.
+
+Without this, `artifactsSha256` would only freeze whatever the first run
+produced — stability, not correctness.
+
+`resizeRgba` has NO identity fast path, deliberately: `dw===sw` is exact
+through the general path, and copying is NOT equivalent to it — copying
+preserves whatever RGB hides under fully transparent pixels (the
+portraits' white), while the general path emits `(0,0,0,0)` there. The
+shortcut therefore made portraits carry hidden white while every other
+image carried black; the oracle differential found it. One path, one
+behaviour.
+
+Coverage pins live in `pipeline/expected-assets.json` (15 images: 5
+portraits / 7 stage previews / 3 cursors; per image the measured source
+size, PNG colour type and before/after alpha class next to the emitted
+size; the directory order; the IMG1 layout arithmetic; and an aggregate
+sha256 over path+sha256 of every artifact). The checker also pins the
+manifest stage's exact FIELD SET and re-hashes every recorded source
+from disk, so provenance cannot be dropped or falsified — an earlier
+version validated neither, and a stage returning `sources: []` printed
+`ASSETS OK`. It sits BESIDE `pipeline/expected.json`
+rather than inside it because that file and `lib/check-expected.js` are
+sha256-pinned `reviewed-go` in `port/sim/device/m4-freeze-manifest.txt`;
+`lib/check-assets-expected.js` carries the same two closed-schema arms
+(contract WIDTH and full leaf-shape DEPTH pinned in code, not in the
+data), so nothing is weakened. Promotion into `expected.json` is a
+driver-owned re-pin.
+
+Round trip: `port/gfx/img1_check --dump` (the C loader) and
+`pipeline/lib/img1-dump.js` (an independent JS reader) emit the same
+canonical text — one `row <img> <y> <565 hex> <alpha hex>` line per image
+row — and `check-assets.sh` cmp(1)s them byte-for-byte. `img1_blit`
+claims to be bit-identical to the raster's own `rast_blit_rgba` rather
+than new blend math (it unpacks 565 and calls `rast_blend_px`, the same
+entry point, with the same `(a*256)/255` conversion); `img1_check
+--blit` proves it by memcmp of both the framebuffer AND the ink plane
+over every image at 6 offsets (origin, interior, negative origin,
+off-right/bottom, and two straddling the clip band's own edges) x 2 clip
+bands x ink enabled and suppressed = 360 cases, each additionally
+required to be NON-VACUOUS at the origin (the framebuffer and the ink
+plane must both differ from a fresh clear, so a no-op blit cannot pass
+by matching a no-op comparison). The same binary exercises the lookup
+API in both directions (`img1_find` <-> `img1_at` for every entry) and
+its out-of-domain answers (absent name, name PREFIX, negative index,
+index == count, NULL set) — all of which a deliberately broken
+`img1_find` used to survive. On disagreement between code and spec, the
+spec + regenerated artifacts win.

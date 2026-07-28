@@ -99,6 +99,24 @@ A new device = write one new backend TU (+ audio open params).
   (`--dump-keymap`), and asserted against the platform backend's poll
   table — a new target re-freezes THIS file (+ its check pins), never
   scattered per-tool tables.
+- Menu artwork pre-scale + pixel format (`pipeline/stages/assets.js`,
+  format IMG1, FORMATS.md §7; iter A9). TWO device-tuned things, both
+  re-measure-and-re-freeze on a new target: (1) the per-class target
+  WIDTHS `CLASSES[].width` — portrait 58 / stagePreview 65 / cursor 24 —
+  sized for THIS 240x240 panel (65 is the FOH SSS cell width; the source
+  aspect ratio then derives every height, so only the widths are tuned);
+  (2) the pixel format, RGB565 + an 8-bit alpha plane, quantized by
+  raster.c `pack565`'s truncation so images and vector fills land on the
+  same value — a target with a different framebuffer format re-emits the
+  stage, and `pipeline/expected-assets.json` is re-frozen in the same
+  change. PORTABLE (Layer 0, no port cost): the PNG decoder
+  (`pipeline/lib/png.js`), the exact-integer area-average resampler and
+  the IMG1 container (`pipeline/lib/img1.js`, LE per FORMATS.md §0), the
+  loader/blitter `port/gfx/img1.c` (it blits through the raster seam, so
+  it follows the renderer core), and every check in
+  `pipeline/check-assets.sh`. The ARTWORK ITSELF is Nintendo-derived,
+  private use only, gitignored build output — it never ships anywhere,
+  on any target.
 
 ## Layer 3 — device-bound machinery (rewrite per target)
 

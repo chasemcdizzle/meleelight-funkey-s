@@ -1,0 +1,204 @@
+{
+  "_comment": "Pinned coverage contract for the M4 `assets` pipeline stage (upstream menu artwork -> IMG1; pipeline/FORMATS.md \u00a77). Every value here is MEASURED-THEN-FROZEN from a real run against the upstream pin \u2014 none is hand-invented. Note what that does and does not claim: the pins RECORD what the stage produced; one input to the stage, the per-class target WIDTH, is a hand-chosen layout decision documented in FORMATS.md \u00a77.3 (portrait 58 and stagePreview 65 are derived from the sources and from the FOH SSS cell respectively; cursor 24 is chosen outright). Asserted by pipeline/lib/check-assets-expected.js, whose code pins this file's key set AND its complete leaf shape, so a pin cannot be silently retired. perImage records each image's measured source size / PNG colour type / alpha class before and after scaling next to the emitted size. artifactsSha256 is an aggregate over path+sha256 of every asset artifact: this stage uses NO external tool (stdlib zlib decode + exact integer resampling), so a byte change is a CODE change and must FAIL here loudly \u2014 re-freeze deliberately per FORMATS.md \u00a77. It lives beside pipeline/expected.json rather than inside it because that file and its checker are sha256-pinned reviewed-go in port/sim/device/m4-freeze-manifest.txt; promotion is a driver-owned re-pin.",
+  "upstreamPinPrefix": "27af171d983184c7100be87d4c5ba30c0e35a5ae",
+  "assets": {
+    "artifactsSha256": "50028565ebffe54c27efd1a725a34892fcf6feede1a37f4d9ece085ade2496e0",
+    "artifactsTotal": 2,
+    "coverage": {
+      "cursors": 3,
+      "images": 15,
+      "img1Bytes": 75720,
+      "pixels": 25114,
+      "portraits": 5,
+      "stagePreviews": 7
+    },
+    "directory": [
+      "marth",
+      "puff",
+      "fox",
+      "falco",
+      "falcon",
+      "stage_bf",
+      "stage_ys",
+      "stage_ps",
+      "stage_dl",
+      "stage_fd",
+      "stage_fod",
+      "stage_random",
+      "hand_point",
+      "hand_open",
+      "hand_grab"
+    ],
+    "perImage": {
+      "falco": {
+        "alpha": "binary",
+        "h": 45,
+        "kind": "portrait",
+        "source": "assets/css/falco.png",
+        "srcAlpha": "binary",
+        "srcColorType": 6,
+        "srcH": 45,
+        "srcW": 58,
+        "w": 58
+      },
+      "falcon": {
+        "alpha": "binary",
+        "h": 43,
+        "kind": "portrait",
+        "source": "assets/css/falcon.png",
+        "srcAlpha": "binary",
+        "srcColorType": 6,
+        "srcH": 43,
+        "srcW": 58,
+        "w": 58
+      },
+      "fox": {
+        "alpha": "binary",
+        "h": 40,
+        "kind": "portrait",
+        "source": "assets/css/fox.png",
+        "srcAlpha": "binary",
+        "srcColorType": 6,
+        "srcH": 40,
+        "srcW": 58,
+        "w": 58
+      },
+      "hand_grab": {
+        "alpha": "aa",
+        "h": 32,
+        "kind": "cursor",
+        "source": "assets/hand/handgrab.png",
+        "srcAlpha": "aa",
+        "srcColorType": 6,
+        "srcH": 95,
+        "srcW": 72,
+        "w": 24
+      },
+      "hand_open": {
+        "alpha": "aa",
+        "h": 32,
+        "kind": "cursor",
+        "source": "assets/hand/handopen.png",
+        "srcAlpha": "aa",
+        "srcColorType": 6,
+        "srcH": 95,
+        "srcW": 72,
+        "w": 24
+      },
+      "hand_point": {
+        "alpha": "aa",
+        "h": 32,
+        "kind": "cursor",
+        "source": "assets/hand/handpoint.png",
+        "srcAlpha": "aa",
+        "srcColorType": 6,
+        "srcH": 95,
+        "srcW": 72,
+        "w": 24
+      },
+      "marth": {
+        "alpha": "binary",
+        "h": 40,
+        "kind": "portrait",
+        "source": "assets/css/marth.png",
+        "srcAlpha": "binary",
+        "srcColorType": 6,
+        "srcH": 40,
+        "srcW": 58,
+        "w": 58
+      },
+      "puff": {
+        "alpha": "binary",
+        "h": 37,
+        "kind": "portrait",
+        "source": "assets/css/puff.png",
+        "srcAlpha": "binary",
+        "srcColorType": 6,
+        "srcH": 37,
+        "srcW": 58,
+        "w": 58
+      },
+      "stage_bf": {
+        "alpha": "opaque",
+        "h": 24,
+        "kind": "stagePreview",
+        "source": "assets/stage-icons/bf.png",
+        "srcAlpha": "opaque",
+        "srcColorType": 2,
+        "srcH": 300,
+        "srcW": 800,
+        "w": 65
+      },
+      "stage_dl": {
+        "alpha": "opaque",
+        "h": 24,
+        "kind": "stagePreview",
+        "source": "assets/stage-icons/dl.png",
+        "srcAlpha": "opaque",
+        "srcColorType": 2,
+        "srcH": 300,
+        "srcW": 800,
+        "w": 65
+      },
+      "stage_fd": {
+        "alpha": "opaque",
+        "h": 24,
+        "kind": "stagePreview",
+        "source": "assets/stage-icons/fd.png",
+        "srcAlpha": "opaque",
+        "srcColorType": 2,
+        "srcH": 300,
+        "srcW": 800,
+        "w": 65
+      },
+      "stage_fod": {
+        "alpha": "aa",
+        "h": 24,
+        "kind": "stagePreview",
+        "source": "assets/stage-icons/fod.png",
+        "srcAlpha": "aa",
+        "srcColorType": 6,
+        "srcH": 300,
+        "srcW": 800,
+        "w": 65
+      },
+      "stage_ps": {
+        "alpha": "opaque",
+        "h": 24,
+        "kind": "stagePreview",
+        "source": "assets/stage-icons/ps.png",
+        "srcAlpha": "opaque",
+        "srcColorType": 2,
+        "srcH": 300,
+        "srcW": 800,
+        "w": 65
+      },
+      "stage_random": {
+        "alpha": "aa",
+        "h": 24,
+        "kind": "stagePreview",
+        "source": "assets/stage-icons/Icon_Transparent_Question.png",
+        "srcAlpha": "aa",
+        "srcColorType": 6,
+        "srcH": 300,
+        "srcW": 800,
+        "w": 65
+      },
+      "stage_ys": {
+        "alpha": "opaque",
+        "h": 24,
+        "kind": "stagePreview",
+        "source": "assets/stage-icons/ys.png",
+        "srcAlpha": "opaque",
+        "srcColorType": 2,
+        "srcH": 300,
+        "srcW": 800,
+        "w": 65
+      }
+    },
+    "provenance": {
+      "contentOrigin": "Nintendo-derived (Super Smash Bros. Melee menu artwork, ripped upstream)",
+      "use": "PRIVATE USE ONLY - never distributed"
+    }
+  }
+}
