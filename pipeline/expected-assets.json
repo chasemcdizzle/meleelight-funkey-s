@@ -2,7 +2,7 @@
   "_comment": "Pinned coverage contract for the M4 `assets` pipeline stage (upstream menu artwork -> IMG1; pipeline/FORMATS.md \u00a77). Every value here is MEASURED-THEN-FROZEN from a real run against the upstream pin \u2014 none is hand-invented. Note what that does and does not claim: the pins RECORD what the stage produced; one input to the stage, the per-class target WIDTH, is a hand-chosen layout decision documented in FORMATS.md \u00a77.3 (portrait 58 and stagePreview 65 are derived from the sources and from the FOH SSS cell respectively; cursor 24 is chosen outright). Asserted by pipeline/lib/check-assets-expected.js, whose code pins this file's key set AND its complete leaf shape, so a pin cannot be silently retired. perImage records each image's measured source size / PNG colour type / alpha class before and after scaling next to the emitted size. artifactsSha256 is an aggregate over path+sha256 of every asset artifact: this stage uses NO external tool (stdlib zlib decode + exact integer resampling), so a byte change is a CODE change and must FAIL here loudly \u2014 re-freeze deliberately per FORMATS.md \u00a77. It lives beside pipeline/expected.json rather than inside it because that file and its checker are sha256-pinned reviewed-go in port/sim/device/m4-freeze-manifest.txt; promotion is a driver-owned re-pin.",
   "upstreamPinPrefix": "27af171d983184c7100be87d4c5ba30c0e35a5ae",
   "assets": {
-    "artifactsSha256": "50028565ebffe54c27efd1a725a34892fcf6feede1a37f4d9ece085ade2496e0",
+    "artifactsSha256": "ab78273390c0b665a1c6351dbc6eb5b2d0144b2e1c491936303277099926737e",
     "artifactsTotal": 2,
     "coverage": {
       "cursors": 3,

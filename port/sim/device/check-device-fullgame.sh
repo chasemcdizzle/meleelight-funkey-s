@@ -764,7 +764,7 @@ ec578b42d0490448d61bef3f21c958105a48d99c4cc1a5d403a742e7627b8e18 pipeline/lib/ch
 624956898890e749170a4768af0f8ef86e05ce4dd75046d084701747c9d9121f port/goldens-m4/json-dup-key-scan.js
 a574fec40685b6770e85d55ee1aaabd35553caab00c9aeadec0ea234b4173590 pipeline/lib/tables-anim-xref.js
 2b41e0a9bea6802665d4dfa6f2ae7c838550e9d774e1d26b0661ac52441704ca pipeline/lib/check-assets-expected.js
-35c321232436c668c2178c2d349cda806cc0befbd634092c5bd3ceb5307c5aa4 pipeline/expected-assets.json
+1ffc6909b1939be163b7effad40cd89db3efee4fe10d655ec9117cd2d782b6d6 pipeline/expected-assets.json
 EOF
 )"
 nprod=0

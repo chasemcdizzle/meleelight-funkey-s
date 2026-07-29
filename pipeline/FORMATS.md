@@ -650,14 +650,158 @@ Directory order is pinned and is the consumer's index space:
 
 ### 7.2 Pixels: 565 + an 8-bit alpha plane (the MEASURED decision)
 
-Pixel format is the device framebuffer's: RGB565, quantized by
-TRUNCATION — exactly `raster.c pack565()`'s `((r>>3)<<11)|((g>>2)<<5)|
-(b>>3)`. Rounding would be marginally more accurate (truncation biases
-the mean by about -3/255 on the 5-bit channels, measured), but an image
-pixel and a vector fill of the same RGB888 must land on the SAME 565
-value or they seam by one step where art meets UI; truncation guarantees
-that, and at 16 bpp the bias is invisible. `img1_blit` expands 565 back
-to 888 by bit replication, which round-trips through `pack565` exactly.
+Pixel format is the device framebuffer's: RGB565. `img1_blit` expands 565
+back to 888 by BIT REPLICATION, so the values a stored pixel can actually
+take are `rep(k) = (k<<3)|(k>>2)` (5-bit) and `(k<<2)|(k>>4)` (6-bit).
+The encoder stores the code whose `rep(k)` is NEAREST to the source byte,
+ties to the brighter code (`lib/img1.js quant565`, exhaustive integer
+search over the lattice). Averaging happens in LINEAR LIGHT, not in
+gamma-encoded sRGB codes — see the transfer tables below.
+
+CORRECTION (2026-07-28, measured — this section previously said the
+opposite). Until now the encoder quantized by TRUNCATION, `raster.c
+pack565()` byte-for-byte, and this paragraph justified it: "rounding
+would be marginally more accurate (truncation biases the mean by about
+-3/255 on the 5-bit channels, measured), but an image pixel and a vector
+fill of the same RGB888 must land on the SAME 565 value or they seam by
+one step where art meets UI; truncation guarantees that, and at 16 bpp
+the bias is invisible." The last clause is FALSE on this artwork, and
+the -3/255 was the right number read the wrong way:
+
+- Over all 256 codes, bit-replicated truncation is unbiased — the
+  replicated low bits pay the debt back at the top of each 4-code group
+  (mean signed error 0.000, measured). That average is what "invisible"
+  was reading. Restricted to the DARK end the debt is never paid: over
+  codes 0..15 the mean signed error is exactly **-3.5/255 per 5-bit
+  channel** (nearest: +0.5), and the stage previews live there.
+- Battlefield's source art has mean Y **9.18/255**. A near-constant
+  -1.8/255 of luminance is therefore **20% of the whole image**.
+  Measured share of source mean Y retained through quantization alone:
+  bf 79.7% · ps 87.9% · fd 86.8% · fod 89.5% · dl 91.6% · ys 93.5%.
+  Nothing about that is invisible; it is the single largest attributable
+  loss in the asset path (`.loop/c4-dim/REPORT.md` hop 3).
+
+THE COST, stated plainly: the seam invariant above is now WEAKER, though
+not void. A representable colour ALWAYS agrees (truncating and rounding
+both return its own code). A non-representable one usually agrees too —
+truncation and nearest pick the same code for 196 of 256 five-bit values
+and 194 of 256 six-bit values (measured); for the remaining 60 / 62 they
+differ by exactly ONE code (~8/255 on a 5-bit channel, ~4/255 on the
+6-bit) — 48 / 32 of those because nearest is strictly closer, the other
+12 / 30 because an exact tie is resolved to the brighter code. They
+differ because the fill still goes through `pack565`'s truncation while
+the stored pixel is rounded. Second, smaller cost: because ties go to the
+brighter code, nearest carries a small UPWARD bias averaged over all 256
+codes (+0.375/255 on 5-bit, +0.469/255 on 6-bit) where truncation
+averages 0.000 — a deliberate trade against truncation's -3.5/255 where
+the art actually lives. `pack565` itself is unchanged and every stored code is
+one of its fixed points (asserted in `lib/assets-selftest.js`), so the
+two quantizers still share one lattice — they can only disagree about
+which rung of it a given RGB888 belongs on. MEASURED rather than argued:
+the SSS panel is where art meets fill most directly (`foh_render.c`
+render_sss — the big preview sits on `inner` {10,8,20}, each thumbnail on
+the `strip` {6,6,10} that carries its label), and ZERO pixels of the
+seven emitted stage previews carry either of those exact RGB888 values,
+so no pixel we ship can seam. The truncation loss, by contrast, hit every
+dark pixel of every image.
+
+LINEAR-LIGHT AVERAGING (same change, second half). The box filter of §7.4
+used to average 8-bit sRGB CODES. Codes are gamma-encoded, so their
+average is not the average of the light: it is systematically darker, and
+the error grows with the contrast inside the box — which is exactly the
+thin bright platform rims that make a 65x24 thumbnail readable. Measured
+share of the source's mean LINEAR light retained by the old path: bf
+66.8% · fd 72.7% · ps 76.4% · fod 84.8% · ys 85.9% · dl 87.0%; bf's p95
+fell from a source 16.11 to 15.76. The resampler now converts to linear
+light, averages premultiplied, and converts back (`SRGB_TO_LIN` /
+`LIN_TO_SRGB` in `lib/img1.js`): light retained becomes 102.3% / 105.5% /
+108.2% / 102.3% / 101.5% / 104.4% and bf's p95 rises to 30.06.
+
+The >100% is quantization, not a brightness lift: rounding is very nearly
+unbiased in sRGB code space (its own small upward tie bias is +0.375/255
+on 5-bit and +0.469/255 on 6-bit, disclosed above — far too small to
+explain a 2-8% light gain), and the code lattice is CONVEX in light, so at
+the dark end the two nearest codes average brighter in light than the
+value between them. That convexity is the term that matters here.
+It is a property of 565 on near-black art, not a gamma knob: NEITHER of
+the two fixes in this section departs from upstream's pixels on purpose —
+both only stop the encoder from losing what is there. (The stagePreview
+lift in §7.2.1 below IS such a departure; it is ruled, scoped and labelled
+there, and it is the only one in §7.)
+
+Both tables are INTEGER, built at load with BigInt exact-rational
+arithmetic — never `Math.pow`. `LIN[c] = round(4095*EOTF(c/255))` for the
+IEC 61966-2-1 EOTF, solved as an exact integer inequality (the exponent
+2.4 = 12/5, so a fifth power clears it); the inverse is the nearest code
+in linear distance, ties bright, derived from the forward table so that
+`LIN_TO_SRGB[SRGB_TO_LIN[c]] === c` for every code. That identity is what
+keeps an image emitted at its SOURCE size (the 58 px portraits, one
+source pixel per destination pixel) bit-identical through the round trip
+— measured, not assumed. Determinism therefore remains a property of the
+arithmetic, exactly as §7.4 claims, with no libm anywhere on the path.
+`lib/assets-selftest.js` re-derives both tables independently and
+compares them entry for entry.
+
+### 7.2.1 DELIBERATE DEVIATION — the stagePreview brightness lift
+
+Everything else in §7 is a faithfulness argument: emit upstream's pixels,
+lose nothing to the encoding. This is not. **Owner ruling 2026-07-28
+(relayed by the driver): lift the stage previews with gamma 0.75.** It is
+recorded here as a DEVIATION under HARD RULE 5 — upstream ships this art
+raw and we are departing from it on purpose. Nobody should later read
+this as a bug fix, and nobody should extend it without another ruling.
+
+What was measured before the ruling (`.loop/c4-dim/REPORT.md`):
+
+- The source art is genuinely near-black — `bf.png` mean Y **9.18/255**
+  (3.6%), whole-image p95 16/255. That is not our loss: upstream's own
+  browser render of that PNG is **byte-identical** to the source bytes
+  (verified pixel-for-pixel against a captured upstream stage-select
+  frame), so there is no brightness "supposed to be there" that the
+  pipeline ate. Fixes A and B above recover what the pipeline DID eat;
+  after them the previews carry 101-108% of the source's light.
+- It is legible upstream anyway because upstream draws it **800x300 on a
+  1200x750 canvas**. The FOH draws it **130x48 on a 240x240 panel** — 3%
+  of the linear size. Detail loss at that scale is not a brightness
+  problem and no lift fixes it, but the CONTRAST problem is real: on
+  device the SSS wallpaper measures mean Y 15.19 and the left gutter
+  18.15, so an un-lifted bf preview (10.47) reads as a black hole inside
+  a brighter frame — which is what "can barely see them" meant.
+
+Scope and shape of the deviation, all deliberate:
+
+- **stagePreview CLASS ONLY**, structurally enforced rather than by
+  convention: `stages/assets.js` hangs `gamma` on the CLASS (so no image
+  is special-cased by name) and HARD-THROWS if any other class carries it,
+  so portraits and cursors take the identity path by construction. (The
+  stronger byte-level claim — that they are bit-identical to an un-lifted
+  build — is measured in the change's evidence, not by a committed check:
+  no committed check builds an un-lifted artifact to compare against.)
+- **Named constant** `STAGE_PREVIEW_GAMMA = [3, 4]` (= 0.75). The
+  alternative the owner asked to see is `[13, 20]` (= 0.65); switching is
+  a one-line edit plus an `expected-assets.json` re-freeze.
+- **Integer table, no `Math.pow`** — `lib/img1.js gammaTable` is the same
+  exact-rational BigInt discipline as the transfer tables, so §7.4's
+  determinism-by-construction survives intact.
+- Applied AFTER the light-correct resample and BEFORE quantization, to
+  RGB only: alpha, and therefore every pinned alpha class, is untouched.
+
+Measured effect on mean Y (emitted bytes, not simulation) — source ·
+current · A+B · A+B+0.75 (shipped) · A+B+0.65:
+
+| stage | src | current | A+B | **+γ0.75** | +γ0.65 |
+|---|---|---|---|---|---|
+| bf  | 9.18  | 7.31  | 10.47 | **19.52** | 25.90 |
+| ys  | 24.82 | 23.20 | 26.18 | **42.53** | 52.46 |
+| ps  | 13.03 | 11.45 | 14.61 | **24.34** | 30.84 |
+| dl  | 24.19 | 22.16 | 25.64 | **41.98** | 51.32 |
+| fd  | 11.11 | 9.64  | 12.53 | **22.97** | 29.93 |
+| fod | 17.54 | 15.70 | 18.76 | **31.11** | 39.73 |
+
+Against the device-measured wallpaper (15.19) the shipped lift puts every
+preview ABOVE its surround: bf 1.29x, fd 1.51x, ps 1.60x, fod 2.05x, dl
+2.76x, ys 2.80x — versus 0.48x for bf today. Final judgement is the
+owner's on hardware.
 
 Alpha is a full 8-bit plane for EVERY image. The alternatives were
 measured on the sources, not guessed:
@@ -733,7 +877,9 @@ No external tool participates: decode is stdlib zlib plus the PNG spec's
 filter reconstruction, and resampling is an exact-coverage box filter in
 INTEGER arithmetic (destination pixel i covers source interval
 `[i*src/dst, (i+1)*src/dst)`; multiplying by `dst` makes every endpoint
-an integer, so per-axis weights are exact and sum to `src`). Byte
+an integer, so per-axis weights are exact and sum to `src`) over
+LINEAR-LIGHT samples taken from the integer transfer tables of §7.2 —
+BigInt exact-rational at build, no `Math.pow`, no float. Byte
 stability is therefore a property of the code, not of a pinned tool
 version — contrast §5.2, where the pin exists because resampler bytes
 are an ffmpeg-build property. `check-assets.sh` still runs the decoder
@@ -750,8 +896,12 @@ Symmetries and sums are not correctness. So:
 
 - **Primary:** `oracleResize`, an independent exact-rational (BigInt)
   area-average sharing no code with `lib/img1.js` — not even
-  `axisWeights` — must agree BYTE-FOR-BYTE with the production
-  resampler on six real source images at their real target sizes.
+  `axisWeights`, and not the transfer tables either: it derives its own
+  pair by a different route (a monotone two-pointer scan over the exact
+  integer characterization) and asserts the production tables match
+  entry for entry, all 256 + 4096 of them — must agree BYTE-FOR-BYTE
+  with the production resampler on six real source images at their real
+  target sizes.
 - Supporting: axis weights swept for every used (src,dst) pair and all
   `src <= 120, dst <= src` (each destination cell sums to exactly `src`,
   each source index contributes exactly `dst`); an IMPULSE must land in

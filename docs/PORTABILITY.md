@@ -105,11 +105,18 @@ A new device = write one new backend TU (+ audio open params).
   WIDTHS `CLASSES[].width` — portrait 58 / stagePreview 65 / cursor 24 —
   sized for THIS 240x240 panel (65 is the FOH SSS cell width; the source
   aspect ratio then derives every height, so only the widths are tuned);
-  (2) the pixel format, RGB565 + an 8-bit alpha plane, quantized by
-  raster.c `pack565`'s truncation so images and vector fills land on the
-  same value — a target with a different framebuffer format re-emits the
-  stage, and `pipeline/expected-assets.json` is re-frozen in the same
-  change. PORTABLE (Layer 0, no port cost): the PNG decoder
+  (2) the pixel format, RGB565 + an 8-bit alpha plane, quantized to the
+  NEAREST bit-replicable code (FORMATS.md §7.2 — not raster.c `pack565`'s
+  truncation, which cost 20% of the mean luminance on the near-black stage
+  art; an image pixel and a vector fill of the same RGB888 are GUARANTEED
+  to agree on a representable colour and usually agree otherwise —
+  measured, they differ for 60 of 256 five-bit and 62 of 256 six-bit
+  values, always by exactly one code) — a target with a different framebuffer format
+  re-emits the stage, and `pipeline/expected-assets.json` is re-frozen in
+  the same change; (2b) the stagePreview gamma lift
+  `STAGE_PREVIEW_GAMMA`, a deliberate deviation for THIS panel
+  (FORMATS.md §7.2.1, owner ruling 2026-07-28) that a different display
+  would re-judge. PORTABLE (Layer 0, no port cost): the PNG decoder
   (`pipeline/lib/png.js`), the exact-integer area-average resampler and
   the IMG1 container (`pipeline/lib/img1.js`, LE per FORMATS.md §0), the
   loader/blitter `port/gfx/img1.c` (it blits through the raster seam, so

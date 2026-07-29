@@ -20150,3 +20150,84 @@ mlfk-foh.sh row flipped arc-in-flight → **reviewed-go**; MANIFEST_SHA256
 → ad0a2112; full manifest self-check ALL ROWS + ANCHOR GREEN.
 C8 stands registered as a PROCESS lesson (tee fallback-reviewer output to
 .loop AT RUN TIME), not as an open defect.
+
+---
+
+iter 128 · 2026-07-28 · phase M4 (punch list) · **C4 A+B+C MERGED — stage previews fixed at the pipeline layer; bf mean Y 7.31 → 19.52, p95 15.76 → 50.13** · owner-ruled γ0.75 DEVIATION documented · 6th proven codex replay
+
+**A (nearest-565) + B (linear-light box filter) + C (owner-ruled γ0.75
+stagePreview lift).** Measured from the ACTUAL emitted artifacts, never a
+simulation. Per-stage mean Y: current → A+B → **γ0.75 shipped** — bf 7.31
+→ 10.47 → **19.52**; ys 23.20 → 26.18 → 42.53; ps 11.45 → 14.61 → 24.34;
+dl 22.16 → 25.64 → 41.98; fd 9.64 → 12.53 → 22.97; fod 15.70 → 18.76 →
+31.11. p95 (the rim outlines that make a 65x24 thumb readable): bf 15.76
+→ 30.06 → **50.13**.
+**Baseline reproduced EXACTLY** (79.7/93.5/87.9/91.6/86.8/89.5, bf p95
+15.76) — independent confirmation of the C4 diagnosis. Fix A measured
+BETTER than predicted (bf 101.9% vs 94.6%) because the report simulated
+rounding in the IDEAL lattice while the implementation rounds to the
+nearest BIT-REPLICATED value — what img1_blit actually displays. Better
+construction, not a discrepancy; direction and magnitude agree.
+**Honest >100%:** linear light retained 66.8-87.0% → 101.5-108.2% under
+A+B. The 1-8% overshoot is 565 quantization on near-black art (the code
+lattice is convex in light), not a lift — documented in §7.2 with the
+ties-bright bias disclosed separately.
+**INTEGER-DETERMINISTIC LUTs (the part that keeps FORMATS §7.4):**
+SRGB_TO_LIN (256) and LIN_TO_SRGB (4096) built at load with BigInt
+EXACT-RATIONAL arithmetic — no Math.pow, no float on the pixel path;
+L = round(4095·EOTF) is the unique integer satisfying an exact integer
+comparison. The inverse is derived FROM the forward table, so
+LIN_TO_SRGB[SRGB_TO_LIN[c]] === c BY CONSTRUCTION — which is why the
+58 px portraits (1 source px per dest px) are BIT-IDENTICAL under B,
+measured. gammaTable([p,q]) uses the same discipline.
+**C IS A DEVIATION, NOT A FIX** — FORMATS.md §7.2.1 carries the
+owner's ruling date, the measured justification, the narrow scope
+(stagePreview class ONLY — the 8 portraits/cursors proven bit-identical
+to an un-lifted build), and the named constant STAGE_PREVIEW_GAMMA=[3,4]
+so γ0.65 is a one-token change if the owner wants it after hardware.
+**§7.2 CORRECTION (the honest part):** §7.2 previously justified
+truncation with "at 16 bpp the bias is invisible". Now marked
+**CORRECTION (2026-07-28, measured — this section previously said the
+opposite)** WITH the explanation of why it was wrong: averaged over all
+256 codes bit-replicated truncation is unbiased (mean signed error
+0.000 — that average is what "invisible" was reading), but restricted to
+codes 0-15 where the stage art lives it is exactly −3.5/255 per 5-bit
+channel = 20% of bf's whole image. The weakened seam invariant is stated
+with measured numbers (60/256 five-bit and 62/256 six-bit codes differ,
+always by one; 48/32 strictly closer, 12/30 tie-to-bright) and the
+decisive fact that ZERO shipped stage-preview pixels carry either FOH
+fill colour, so no shipped pixel can seam.
+**Does A+B alone clear the wallpaper bar? NO — that is the data that
+justified the ruling.** Against the device-measured SSS wallpaper (15.19):
+under A+B bf sits at 10.47 = 1.45x DARKER than its own background, fd
+1.21x, ps 1.04x — three of six still at or below the surround. With
+γ0.75 every preview is ABOVE it (bf 1.29x … ys 2.80x). γ0.65 takes ys/dl
+to ~3.4x where the bright stages start to wash.
+**ARC:** r1 codex died mid-round (no RC, no verdict) · r2 NO-GO (2M+2L
+fixed) · r3 NO-GO (6 findings; the writer mis-triaged 3 as stale) · r4
+NO-GO (re-raised them correctly, all 5 fixed) · **r5 VOID — 6th PROVEN
+REPLAY**: findings block byte-identical to r4 (both sha256 057586bc…,
+2400 B, cmp clean), reported r4's frozen diff hash while the live diff
+differed, cited code removed in the round under review, and the CLI
+emitted its own dedup markers · **r6 §11 fallback: grok GO + Opus 5 GO**
+(3+2 Lows, all applied, BYTE-NEUTRAL — menu.img1 unchanged).
+**WRITER SELF-CORRECTION WORTH KEEPING:** it initially called r3 a
+replay too; it was NOT — r3 cited line numbers that only exist in the
+post-r2 tree, so it demonstrably read the new bytes. Three of its
+findings were real and got dismissed, then re-raised correctly by r4.
+The writer flagged its own r4 prompt's "STALE" section as partly
+mistaken and noted it cost a round. Distinguishing "replay" from
+"findings I already fixed" from "findings I wrongly dismissed" is now a
+named discipline.
+**DRIVER MERGE + RE-PINS (both sites, same commit — codex found the
+second):** expected-assets.json 35c32123 → **1ffc6909** in BOTH
+m4-freeze-manifest.txt:511 AND check-device-fullgame.sh:767 (missing
+either hard-fails the fullgame check); editing that script invalidated
+its OWN manifest row, so it was re-pinned too; MANIFEST_SHA256 →
+380ea19b → final. Driver cold: `ASSETS OK` rc 0
+(.loop/driver-cold-c4-assets.log) + manifest self-check ALL ROWS +
+ANCHOR GREEN. artifactsSha256 = ab782733…; menu.img1 = 9c6b0947….
+**Note:** the writer's worktree was created at 2a2870d (M0-era, no
+pipeline/ at all) rather than a161b88; it moved it with `git merge
+--ff-only` — a clean fast-forward, nothing discarded. Worktree-base
+selection is worth watching.

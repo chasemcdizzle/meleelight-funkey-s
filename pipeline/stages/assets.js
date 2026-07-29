@@ -15,9 +15,11 @@
 // no-commit guard.
 //
 // DETERMINISM: no external tool is involved. PNG decode is stdlib zlib +
-// the spec's filter reconstruction (lib/png.js), resampling and 565
-// quantization are exact integer arithmetic (lib/img1.js), so two fresh
-// runs are byte-identical by construction rather than by a version pin.
+// the spec's filter reconstruction (lib/png.js), resampling (in linear
+// light) and 565 quantization are exact integer arithmetic (lib/img1.js —
+// the sRGB transfer tables are BigInt exact-rational, never Math.pow), so
+// two fresh runs are byte-identical by construction rather than by a
+// version pin.
 // Output bytes are frozen as expected-assets.json assets.artifactsSha256
 // (a sibling of expected.json — see lib/check-assets-expected.js for why).
 
@@ -25,7 +27,7 @@ const fs = require("fs");
 const path = require("path");
 const { sha256, sha256File } = require("../lib/manifest");
 const { decodePng } = require("../lib/png");
-const { resizeRgba, encodeImg1 } = require("../lib/img1");
+const { resizeRgba, encodeImg1, gammaTable, mapRgb } = require("../lib/img1");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 
@@ -63,13 +65,27 @@ const REPO_ROOT = path.join(__dirname, "..", "..");
 //              is ~10% of screen width at the source's aspect ratio.
 //
 // Re-sizing is a one-line edit here plus an expected-assets.json re-freeze.
+//
+// STAGE_PREVIEW_GAMMA — a DELIBERATE DEVIATION from upstream's pixels
+// (owner ruling 2026-07-28, relayed by the driver; HARD RULE 5 territory,
+// so it is documented as a deviation in FORMATS.md §7.2, not as a fix).
+// Upstream's stage art is genuinely near-black (bf mean Y 9.18/255, and the
+// SOURCE PNG PIXELS are byte-identical to upstream's own browser render —
+// .loop/c4-dim/REPORT.md hop 1; the emitted IMG1 bytes are of course resized,
+// tone-mapped and 565-quantized); it reads in a browser only because it is
+// drawn 800x300 on a 1200x750 canvas. At 130x48 on a 240x240 panel it does
+// not. The lift is scoped to the stagePreview CLASS only — never portraits,
+// never cursors — and lives here, on the class, so no image is special-cased
+// by name. It is an exact rational so the table stays integer: [3,4] = 0.75;
+// the alternative the owner asked to see is [13,20] = 0.65.
+const STAGE_PREVIEW_GAMMA = [3, 4];
 const CLASSES = [
   { dir: "css", width: 58, kind: "portrait",
     files: [["marth", "marth"], ["puff", "puff"], ["fox", "fox"],
             ["falco", "falco"], ["falcon", "falcon"]] },
   // Stage order is the oracle --stage id order (0 battlefield .. 5 fountain,
   // CLAUDE.md §Commands), then the RANDOM icon.
-  { dir: "stage-icons", width: 65, kind: "stagePreview",
+  { dir: "stage-icons", width: 65, kind: "stagePreview", gamma: STAGE_PREVIEW_GAMMA,
     files: [["bf", "stage_bf"], ["ys", "stage_ys"], ["ps", "stage_ps"],
             ["dl", "stage_dl"], ["fd", "stage_fd"], ["fod", "stage_fod"],
             ["Icon_Transparent_Question", "stage_random"]] },
@@ -89,8 +105,9 @@ Bros. Melee character and stage art), decoded and pre-scaled for the
   docs/LICENSING.md).
 - Generated build output (gitignored via build*/): only manifests and
   hashes are committed, never these bytes.
-- Format: IMG1 — RGB565 (little-endian, raster.c pack565 quantization)
-  plus an 8-bit alpha plane per image (pipeline/FORMATS.md section 7).
+- Format: IMG1 — RGB565 (little-endian, quantized to the nearest
+  bit-replicable code, lib/img1.js quant565) plus an 8-bit alpha plane
+  per image (pipeline/FORMATS.md section 7).
   Loader: port/gfx/img1.c.
 `;
 
@@ -124,6 +141,15 @@ function run(ctx) {
   const counts = { portrait: 0, stagePreview: 0, cursor: 0 };
   let pixels = 0;
   for (const cls of CLASSES) {
+    // one table per CLASS, built once: the hook is the class, never a name.
+    // The owner's ruling scoped the lift to stagePreview ONLY, so that scope
+    // is ENFORCED here rather than left to convention (review-c4-3 [L]):
+    // hanging `gamma` on the portrait or cursor class fails the run loudly.
+    if (cls.gamma && cls.kind !== "stagePreview") {
+      throw new Error(`assets: the gamma deviation is scoped to stagePreview ` +
+        `by owner ruling (FORMATS.md §7.2.1); class ${cls.kind} may not carry it`);
+    }
+    const tone = cls.gamma ? gammaTable(cls.gamma) : null;
     for (const [stem, name] of cls.files) {
       const rel = `assets/${cls.dir}/${stem}.png`; // POSIX literal, see above
       const abs = path.join(ctx.distRoot, "dist", "assets", cls.dir, stem + ".png");
@@ -134,7 +160,10 @@ function run(ctx) {
       // Height derives from the MEASURED source aspect, never typed in.
       const w = cls.width;
       const h = Math.round((w * src.h) / src.w);
-      const rgba = resizeRgba(src, w, h);
+      const scaled = resizeRgba(src, w, h);
+      // tone map AFTER the (light-correct) resample and BEFORE quantization,
+      // RGB only — alpha, and therefore the pinned alpha class, is untouched
+      const rgba = tone ? mapRgb(scaled, tone) : scaled;
 
       images.push({ name, w, h, rgba });
       counts[cls.kind]++;

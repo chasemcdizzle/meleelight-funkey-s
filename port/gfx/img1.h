@@ -3,8 +3,12 @@
 // IMG1 is the pipeline `assets` stage's output (pipeline/FORMATS.md §7):
 // upstream's own menu artwork — 5 character portraits, 6 VS-stage previews
 // + the RANDOM icon, 3 hand cursors — decoded, pre-scaled for 240x240 and
-// packed into ONE file as RGB565 (little-endian, raster.c pack565
-// quantization) plus an 8-bit alpha plane per image.
+// packed into ONE file as RGB565 (little-endian) plus an 8-bit alpha plane
+// per image. The ENCODER stores the NEAREST bit-replicable code, not
+// raster.c pack565's truncation (FORMATS.md §7.2, changed 2026-07-28): every
+// stored code is still a pack565 fixed point, so this loader is unaffected,
+// but an image pixel and a vector fill of the same RGB888 may now land one
+// code apart when that colour is not exactly representable.
 //
 // The blitter is deliberately NOT new blend math: img1_blit unpacks 565 to
 // RGB888 (bit-replication, which round-trips through pack565 exactly) and

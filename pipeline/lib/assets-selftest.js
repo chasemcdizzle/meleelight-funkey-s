@@ -12,7 +12,8 @@
 
 const assert = require("assert");
 const { decodePng } = require("./png");
-const { resizeRgba, axisWeights, pack565 } = require("./img1");
+const { resizeRgba, axisWeights, divRound, pack565, quant565, gammaTable, mapRgb,
+  SRGB_TO_LIN, LIN_TO_SRGB, LIN_MAX } = require("./img1");
 
 let checks = 0;
 const ok = (what) => { checks++; void what; };
@@ -110,6 +111,75 @@ mustThrow("unknown row filter rejected", () => decodePng(makePng((o) => {
 // over the source rectangle, sharing NO code with lib/img1.js (not even
 // axisWeights) — run over the REAL source images at the REAL target sizes.
 //
+// The sRGB transfer tables get the same treatment: this file derives its own
+// pair from the IEC 61966-2-1 definition by an independent route (a monotone
+// two-pointer scan over the exact-integer characterization, not img1.js's
+// per-code binary search) and asserts the production tables are identical,
+// entry for entry. The characterization is complete, so agreement is proof of
+// correctness and not just of mutual consistency: with s = c/255,
+// (s+0.055)/1.055 = N/D for N = 1000c+14025, D = 269025, and 2.4 = 12/5, so
+// L = round(4095*(N/D)^(12/5)) is the UNIQUE integer with
+//     (2L-1)^5 * D^12  <=  32 * 4095^5 * N^12  <  (2L+1)^5 * D^12.
+const O_LIN_MAX = 4095;
+const oS2L = (() => {
+  const D12 = 269025n ** 12n, K = 32n * 4095n ** 5n;
+  const t = new Array(256);
+  let L = 0;
+  for (let c = 0; c <= 255; c++) {
+    if (c <= 10) { // toe: L = round(4095 * (c/255)/12.92)
+      t[c] = Number((2n * 4095n * BigInt(c) * 1000n + 3294600n) / (2n * 3294600n));
+      L = t[c];
+      continue;
+    }
+    const lhs = K * BigInt(1000 * c + 14025) ** 12n;
+    while (BigInt(2 * L + 1) ** 5n * D12 <= lhs) L++; // monotone in c
+    t[c] = L;
+  }
+  return t;
+})();
+// inverse: nearest code in LINEAR distance, ties to the brighter code
+const oL2S = (() => {
+  const t = new Array(O_LIN_MAX + 1);
+  for (let L = 0; L <= O_LIN_MAX; L++) {
+    let best = 0, bestErr = Infinity;
+    for (let c = 0; c < 256; c++) {
+      const e = Math.abs(oS2L[c] - L);
+      if (e <= bestErr) { best = c; bestErr = e; }
+    }
+    t[L] = best;
+  }
+  return t;
+})();
+assert.strictEqual(LIN_MAX, O_LIN_MAX, "LIN_MAX drifted");
+assert.deepStrictEqual([...SRGB_TO_LIN], oS2L,
+  "sRGB->linear table disagrees with the independent exact-rational derivation");
+assert.deepStrictEqual([...LIN_TO_SRGB], oL2S,
+  "linear->sRGB table is not the nearest-code inverse (ties bright)");
+for (let c = 0; c < 256; c++) {
+  assert.strictEqual(oL2S[oS2L[c]], c, `transfer round trip broken at code ${c}`);
+  if (c) assert(oS2L[c] > oS2L[c - 1], `transfer table not strictly increasing at ${c}`);
+}
+// A SECOND, differently-derived partner for the forward table (review-c4-6o
+// [L]): the BigInt derivation above is a rewrite of the same algebraic
+// reduction, so a shared misreading of the spec (wrong toe threshold, wrong
+// exponent) would agree with itself. Float Math.pow — legal here, this is the
+// validator, never the pixel path — reads the EOTF straight off the standard
+// and must land within half a step of every entry.
+{
+  let worst = 0;
+  for (let c = 0; c < 256; c++) {
+    const s = c / 255;
+    const f = s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    const d = Math.abs(SRGB_TO_LIN[c] - O_LIN_MAX * f);
+    assert(d <= 0.5 + 1e-9, `SRGB_TO_LIN[${c}] = ${SRGB_TO_LIN[c]} is ${d} from the EOTF`);
+    worst = Math.max(worst, d);
+  }
+  assert(worst > 0.4, `EOTF differential never approached a half step (worst ${worst}) ` +
+    `— the comparison is too loose to detect an off-by-one`);
+  ok(`sRGB transfer tables == independent exact-integer derivation AND within ` +
+    `half a step of the float EOTF (worst ${worst.toFixed(4)})`);
+}
+
 // oracleResize: for destination pixel (x,y), the source rectangle is
 // [x*sw/dw, (x+1)*sw/dw) x [y*sh/dh, (y+1)*sh/dh). Coverage of source
 // pixel (j,i) is the exact overlap length product, kept as an exact
@@ -139,18 +209,18 @@ function oracleResize(src, dw, dh) {
           if (!wx) continue;
           const p = (i * sw + j) * 4;
           const wa = BigInt(wx) * BigInt(wy) * BigInt(rgba[p + 3]);
-          sr += BigInt(rgba[p]) * wa;
-          sg += BigInt(rgba[p + 1]) * wa;
-          sb += BigInt(rgba[p + 2]) * wa;
+          sr += BigInt(oS2L[rgba[p]]) * wa;
+          sg += BigInt(oS2L[rgba[p + 1]]) * wa;
+          sb += BigInt(oS2L[rgba[p + 2]]) * wa;
           sa += wa;
         }
       }
       const o = (y * dw + x) * 4;
       out[o + 3] = Number(half(sa, total));
       if (sa > 0n) {
-        out[o] = Number(half(sr, sa));
-        out[o + 1] = Number(half(sg, sa));
-        out[o + 2] = Number(half(sb, sa));
+        out[o] = oL2S[Number(half(sr, sa))];
+        out[o + 1] = oL2S[Number(half(sg, sa))];
+        out[o + 2] = oL2S[Number(half(sb, sa))];
       }
     }
   }
@@ -185,6 +255,41 @@ for (const [s, d] of [[800, 65], [300, 24], [72, 24], [95, 32], [58, 58], [45, 4
 }
 for (let s = 1; s <= 120; s++) for (let d = 1; d <= s; d++) sweepWeights(s, d);
 ok("axis weights exact over used pairs + all (src<=120, dst<=src)");
+
+// divRound must be EXACT over the whole accepted domain, not just over the
+// magnitudes the real assets reach (review-c4-4 [M]). The old
+// floor((2n+d)/(2d)) form doubled first and lost a unit above 2^52; this
+// asserts the exact BigInt answer on that counterexample and on a
+// deterministic sweep (a fixed LCG — never Math.random: this file must give
+// the same verdict on every run).
+{
+  const exact = (n, d) => Number((2n * BigInt(n) + BigInt(d)) / (2n * BigInt(d)));
+  const cases = [[9003899914072156, 2199560257499], [0, 1], [1, 2], [3, 2],
+    [Number.MAX_SAFE_INTEGER, 1], [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
+    [Number.MAX_SAFE_INTEGER - 1, 2], [501289200000, 240000]];
+  let seed = 0x5eed1234;
+  const next = () => (seed = (seed * 1103515245 + 12345) >>> 0);
+  for (let i = 0; i < 20000; i++) {
+    const d = 1 + (next() % 1000003);
+    const n = next() * 4194304 + (next() % 4194304); // up to ~2^54, clamped below
+    cases.push([Math.min(n, Number.MAX_SAFE_INTEGER), d]);
+  }
+  for (const [n, d] of cases) {
+    assert.strictEqual(divRound(n, d), exact(n, d), `divRound(${n}, ${d})`);
+  }
+  assert.strictEqual(divRound(9003899914072156, 2199560257499), 4093,
+    "the review-c4-4 counterexample regressed");
+  ok(`divRound exact vs BigInt on ${cases.length} pairs incl. the 2^52 counterexample`);
+}
+
+// axisWeights' domain is closed too — the exactness of every weight rests on
+// srcN*dstN staying a safe integer (review-c4-4 [M]).
+mustThrow("axisWeights rejects an unsafe axis product",
+  () => axisWeights(1 << 27, 1 << 27), /out of domain/);
+mustThrow("axisWeights rejects a fractional axis",
+  () => axisWeights(10, 2.5), /out of domain/);
+mustThrow("axisWeights rejects a zero axis",
+  () => axisWeights(10, 0), /out of domain/);
 
 const constImg = (w, h, r, g, b, a) => {
   const rgba = Buffer.alloc(w * h * 4);
@@ -243,8 +348,9 @@ for (const [a, label] of [[255, "opaque"], [128, "partial alpha"], [1, "near-tra
 // ROUNDING MODE, pinned at an exact TIE. Real artwork essentially never
 // produces a .5 quotient, so half-up vs half-down is unobservable on it —
 // a rounding-mode change would slip through every other fixture here.
-// These two hit ties dead on: colour 10 and 11 average to 10.5, alpha 0
-// and 1 average to 0.5. Both must round UP.
+// These two hit ties dead on: codes 10 and 11 sit at linear 12 and 14, whose
+// average 13 is equidistant from both (the tie now lands on the inverse
+// table's tie rule), and alpha 0 and 1 average to 0.5. Both must round UP.
 {
   const rgba = Buffer.from([10, 10, 10, 255, 11, 11, 11, 255]);
   const out = resizeRgba({ w: 2, h: 1, rgba }, 1, 1);
@@ -256,7 +362,8 @@ for (const [a, label] of [[255, "opaque"], [128, "partial alpha"], [1, "near-tra
   const out = resizeRgba({ w: 2, h: 1, rgba }, 1, 1);
   assert.strictEqual(out[3], 1, "alpha tie 0.5 did not round half UP");
 }
-ok("round-half-up pinned at exact ties (colour and alpha)");
+ok("tie handling pinned: the colour case is the INVERSE TABLE's midpoint tie " +
+  "(linear 12/14 -> 13 -> code 11), the alpha case is a true divRound .5 — both up");
 
 // ASYMMETRIC fixtures: a single bright source pixel, and a monotone
 // gradient. Both detect a flipped, transposed or offset resampler — which
@@ -271,7 +378,12 @@ ok("round-half-up pinned at exact ties (colour and alpha)");
   for (let i = 0; i < 6 * 4; i++) if (out[i * 4] !== 0) red.push(i);
   assert.deepStrictEqual(red, [(0 * 6) + 1],
     `impulse landed at ${JSON.stringify(red)}, expected destination cell (1,0)`);
-  assert.strictEqual(out[((0 * 6) + 1) * 4], Math.round(255 / 4),
+  // A quarter of the LIGHT of a full-intensity pixel, re-encoded: 4095/4
+  // rounds to linear 1024, which is sRGB 137 — NOT 64. sRGB-space averaging
+  // (the old behaviour) would give 64 and throw away 46% of the light.
+  const quarter = oL2S[Number((2n * BigInt(oS2L[255]) + 4n) / 8n)];
+  assert.strictEqual(quarter, 137, "quarter-light reference value drifted");
+  assert.strictEqual(out[((0 * 6) + 1) * 4], quarter,
     "impulse energy was not spread over exactly the covering cell");
   ok("impulse lands in the correct destination cell (detects flip/transpose)");
 }
@@ -283,10 +395,20 @@ ok("round-half-up pinned at exact ties (colour and alpha)");
     rgba[i] = x * 16; rgba[i + 1] = y * 16; rgba[i + 2] = 0; rgba[i + 3] = 255;
   }
   const out = resizeRgba({ w, h, rgba }, 4, 4);
+  // Each destination cell averages 4 source steps IN LIGHT; the expected
+  // value is derived from the independent tables, never typed in. Red must
+  // depend only on x and green only on y — that is the flip/transpose tooth.
+  const band = (k) => {
+    let s = 0n;
+    for (let j = 0; j < 4; j++) s += BigInt(oS2L[(k * 4 + j) * 16]);
+    return oL2S[Number((2n * s + 4n) / 8n)];
+  };
+  const wantBand = [0, 1, 2, 3].map(band);
+  assert.deepStrictEqual(wantBand, [29, 90, 153, 217], "gradient band reference drifted");
   for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) {
     const i = (y * 4 + x) * 4;
-    assert.strictEqual(out[i], x * 64 + 24, `gradient red drifted at (${x},${y})`);
-    assert.strictEqual(out[i + 1], y * 64 + 24, `gradient green drifted at (${x},${y})`);
+    assert.strictEqual(out[i], wantBand[x], `gradient red drifted at (${x},${y})`);
+    assert.strictEqual(out[i + 1], wantBand[y], `gradient green drifted at (${x},${y})`);
   }
   ok("monotone gradient maps exactly (detects flip/transpose/offset)");
 }
@@ -328,6 +450,20 @@ mustThrow("upscale hard-throws",
   () => resizeRgba(constImg(10, 10, 1, 2, 3, 255), 11, 10), /upscaling is out of/);
 mustThrow("upscale hard-throws (height)",
   () => resizeRgba(constImg(10, 10, 1, 2, 3, 255), 10, 11), /upscaling is out of/);
+// the resampler's numeric DOMAIN is closed too (review-c4-2 [M]): fractional
+// or non-integer sizes used to be accepted and produce a garbage buffer, and
+// the exactness of the integer accumulators is a bounded claim, not a hope.
+mustThrow("fractional destination width rejected",
+  () => resizeRgba(constImg(10, 10, 1, 2, 3, 255), 1.5, 1), /dw=1.5 is out of domain/);
+mustThrow("zero destination height rejected",
+  () => resizeRgba(constImg(10, 10, 1, 2, 3, 255), 5, 0), /dh=0 is out of domain/);
+mustThrow("NaN size rejected",
+  () => resizeRgba(constImg(10, 10, 1, 2, 3, 255), NaN, 5), /dw=NaN is out of domain/);
+mustThrow("rgba length mismatch rejected",
+  () => resizeRgba({ w: 10, h: 10, rgba: Buffer.alloc(4) }, 5, 5), /bytes != 10\*10\*4/);
+mustThrow("accumulator-overflowing source rejected", () => resizeRgba(
+  { w: 1 << 24, h: 1 << 24, rgba: { length: (1 << 24) * (1 << 24) * 4 } }, 2, 2),
+/would exceed exact integer range/);
 
 // ---- 3. 565 quantization is pack565's truncation -------------------------
 {
@@ -341,5 +477,110 @@ mustThrow("upscale hard-throws (height)",
   ok("565 quantization is truncation on all 256 channel values");
 }
 
+// ---- 3b. the ENCODER stores the NEAREST representable 565 ----------------
+// pack565 (above) is the RENDERER's quantizer and stays truncation. The
+// encoder must instead pick the code whose bit-replicated expansion — what
+// img1_blit actually puts on screen — is closest to the source byte, because
+// truncation is a one-sided ~-3.5/255 loss per 5-bit channel that costs 20%
+// of the mean luminance on near-black stage art (.loop/c4-dim/REPORT.md).
+// Asserted as the DEFINING property (nearest over the whole lattice, ties to
+// the brighter code), not by re-running the production search.
+{
+  const rep5 = (k) => (k << 3) | (k >> 2), rep6 = (k) => (k << 2) | (k >> 4);
+  let strictlyBetter = 0;
+  const darkNear = { 5: 0, 6: 0 }, darkTrunc = { 5: 0, 6: 0 };
+  for (let v = 0; v < 256; v++) {
+    const code = quant565(v, v, v);
+    const got = { 5: [(code >> 11) & 31, code & 31], 6: [(code >> 5) & 63] };
+    assert.strictEqual(got[5][0], got[5][1], `red/blue 5-bit codes disagree at ${v}`);
+    for (const [bits, rep, n] of [[5, rep5, 32], [6, rep6, 64]]) {
+      const k = got[bits][0], e = Math.abs(rep(k) - v);
+      for (let j = 0; j < n; j++) {
+        const ej = Math.abs(rep(j) - v);
+        assert(ej > e || (ej === e && j <= k),
+          `${bits}-bit code for ${v} is ${k} (err ${e}), but ${j} has err ${ej}`);
+      }
+      // never worse than the truncating renderer, and strictly better often
+      const t = v >> (8 - bits), et = Math.abs(rep(t) - v);
+      assert(e <= et, `nearest ${bits}-bit code for ${v} is worse than truncation`);
+      assert(e <= (bits === 5 ? 4 : 2), `${bits}-bit error ${e} at ${v} exceeds half a step`);
+      if (e < et) strictlyBetter++;
+      if (v < 16) { darkNear[bits] += rep(k) - v; darkTrunc[bits] += rep(t) - v; }
+    }
+    // FIXED POINT: what is stored is still a code the renderer can produce,
+    // so an image pixel and a vector fill of the SAME 565 code still agree.
+    assert.strictEqual(pack565(rep5(got[5][0]), rep6(got[6][0]), rep5(got[5][1])), code,
+      `stored code for ${v} is not a pack565 fixed point`);
+  }
+  // THE MEASUREMENT THAT MATTERS. Averaged over all 256 codes, bit-replicated
+  // truncation is unbiased (the replicated low bits pay the debt back at the
+  // top of each 4-code group) — which is how FORMATS.md §7.2 talked itself
+  // into "invisible". Restricted to the DARK end, where the stage art
+  // actually lives, the debt is never paid: truncation runs -3.5/255 per
+  // 5-bit channel, exactly the constant §7.2 measured and dismissed.
+  assert.strictEqual(darkTrunc[5] / 16, -3.5, "dark-end truncation bias drifted");
+  assert.strictEqual(darkNear[5] / 16, 0.5, "dark-end nearest bias drifted");
+  assert(Math.abs(darkNear[6] / 16) < Math.abs(darkTrunc[6] / 16),
+    "nearest did not reduce the dark-end 6-bit bias");
+  assert(strictlyBetter === 80, `nearest-565 differs from truncation on ` +
+    `${strictlyBetter} of 512 (v,channel) pairs, expected 80`);
+  ok(`encoder stores nearest representable 565 (dark-end bias -3.5 -> +0.5 per ` +
+    `5-bit channel, every code a pack565 fixed point)`);
+}
+
+// ---- 4. the stagePreview tone map (a DEVIATION, held to the same bar) ---
+// gammaTable is the one place where we deliberately depart from upstream's
+// pixels (FORMATS.md §7.2, owner ruling 2026-07-28). It still has to be an
+// exact integer table: asserted here against the defining inequality
+// (2L-1)^q <= 2^q * 255^(q-p) * v^p < (2L+1)^q, computed independently.
+{
+  for (const [p, q] of [[3, 4], [13, 20], [1, 1]]) {
+    const t = gammaTable([p, q]);
+    assert.strictEqual(t.length, 256, `gammaTable(${p}/${q}) length`);
+    assert.strictEqual(t[0], 0, `gammaTable(${p}/${q})[0]`);
+    assert.strictEqual(t[255], 255, `gammaTable(${p}/${q})[255]`);
+    for (let v = 0; v < 256; v++) {
+      const L = BigInt(t[v]);
+      const mid = 2n ** BigInt(q) * 255n ** BigInt(q - p) * BigInt(v) ** BigInt(p);
+      // L=0 has its OWN lower arm: for even q the (2L-1)^q form evaluates to
+      // 1 and would be a false bound, so it is stated as M(v) < 1, i.e. v=0
+      // (review-c4-3 [L]: the masked exception was hiding a real hole).
+      if (t[v] === 0) {
+        assert(mid < 1n, `gammaTable(${p}/${q})[${v}] = 0 but M(${v}) = ${mid} >= 1`);
+        assert.strictEqual(v, 0, `gammaTable(${p}/${q}) zeroed a non-zero input ${v}`);
+      } else {
+        assert((2n * L - 1n) ** BigInt(q) <= mid,
+          `gammaTable(${p}/${q})[${v}] = ${t[v]} is too high`);
+      }
+      assert(mid < (2n * L + 1n) ** BigInt(q),
+        `gammaTable(${p}/${q})[${v}] = ${t[v]} is too low`);
+      if (v) assert(t[v] >= t[v - 1], `gammaTable(${p}/${q}) not monotone at ${v}`);
+      assert(t[v] >= v, `gammaTable(${p}/${q})[${v}] darkens (${t[v]} < ${v})`);
+      // second, independent partner: plain float Math.pow (legal HERE — this
+      // is the validator, not the pixel path) must agree within half a step
+      assert(Math.abs(t[v] - 255 * Math.pow(v / 255, p / q)) <= 0.5 + 1e-9,
+        `gammaTable(${p}/${q})[${v}] = ${t[v]} disagrees with Math.pow`);
+    }
+  }
+  // identity must be exactly identity, so "no gamma" and "gamma 1" agree
+  assert.deepStrictEqual([...gammaTable([1, 1])], [...Array(256).keys()],
+    "gammaTable(1/1) is not the identity");
+  // the shipped lift, at the luminance the stage art actually lives at
+  const g = gammaTable([3, 4]);
+  assert.strictEqual(g[9], 21, "gamma 0.75 at the stage art's mean Y drifted");
+  // alpha must survive a tone map untouched (alpha classes are pinned)
+  const rgba = Buffer.from([9, 9, 9, 0, 9, 9, 9, 128, 9, 9, 9, 255]);
+  const mapped = mapRgb(rgba, g);
+  assert.deepStrictEqual([...mapped], [21, 21, 21, 0, 21, 21, 21, 128, 21, 21, 21, 255],
+    "mapRgb touched alpha or missed a channel");
+  ok("stagePreview tone map: exact integer table, identity at 1/1, alpha untouched");
+}
+mustThrow("darkening gamma is out of domain",
+  () => gammaTable([5, 4]), /out of domain/);
+mustThrow("non-integer gamma is out of domain",
+  () => gammaTable([0.75, 1]), /out of domain/);
+
 console.log(`assets self-test: ${checks} property groups OK ` +
-  `(decoder rejection domain, exact resample weights, premultiplied alpha, 565 truncation)`);
+  `(decoder rejection domain, exact resample weights, premultiplied alpha, ` +
+  `linear-light transfer tables, 565 truncation + nearest-565 encoding, ` +
+  `stagePreview tone map)`);
