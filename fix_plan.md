@@ -2467,3 +2467,21 @@ Everything below is functionality/fidelity, not styling.
   lane drains the queue per session. PROCESS §9's batching applied ACROSS
   lanes. Avoids N lock cycles / N frontend park-restore cycles / N cold
   builds for N host lanes.
+- **C24 (P1, DEFECT — cost the owner a hung device 2026-07-29) the
+  frontend-park deadman does not cover a HOST-side death.** A device
+  lane died during the API/classifier outage before its cleanup ran, so
+  `/mnt/disable_frontend` stayed on the SD card and EVERY subsequent
+  boot deliberately declined to launch gmenu2x — indistinguishable from
+  a hang at the splash screen. The owner had a bricked-looking device
+  until the driver removed the marker and rebooted. The existing
+  deadman (`rig_deadman_quiesce`, the qd claim/reassert machinery)
+  guards against the DEVICE-side process dying; it does not fire when
+  the HOST agent dies mid-run. Fix candidates: (a) make the park marker
+  self-expiring — write it with a deadline the device checks at boot and
+  clears (the boot path already reads it, so a stale marker can be
+  detected there); (b) an unconditional boot-time reaper that clears any
+  park marker older than N minutes; (c) at minimum, a driver pre-flight
+  in every device brief that clears stale markers before work starts.
+  (a) or (b) is the class fix — (c) is discipline and discipline is what
+  just failed. NOTE the marker is a PLAY-PATH hazard, not just a rig
+  one: it makes the device look broken to the owner.
