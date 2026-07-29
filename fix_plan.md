@@ -2416,3 +2416,20 @@ Everything below is functionality/fidelity, not styling.
   layout with our bitmap font while still using the OS artwork; copying
   his MIT code is preferred over re-inventing, with the NOTICES entry
   landing BEFORE the code (docs/LICENSING.md).
+- **OWNER RATIFICATION (Chase, 2026-07-29) on the two overlays:**
+  (a) the GAME pause overlay is APPROVED AS-IS ("good and correct") —
+  no redesign; the ONLY addition is C19's "quit back to the VS screen".
+  (b) MENU/HOME = the FunKey SYSTEM menu, and the owner explicitly
+  authorized **pulling his own ssb64 implementation**: "which ssb64 port
+  I made — you can pull that from there, adjust anything if needed."
+  So fk_menu.{c,h} is COPIED (MIT, his code) rather than re-authored;
+  "adjust anything if needed" = permission to ADAPT to our platform seam
+  (renderer/present path, input struct, logging), NOT to redesign —
+  VOLUME/BRIGHTNESS/QUIT/POWER OFF, the /usr/games/menu_resources
+  artwork, the safe-no-op and dimmed-frame fallbacks and the
+  "A: select   B: back" hint all stay. NOTICES entry + header
+  attribution land BEFORE the code (docs/LICENSING.md; foh_pause.h is
+  the in-tree precedent). Device pre-flight required: volume/brightness/
+  powerdown tools present, menu_resources present, SDL_ttf + font load —
+  any absence degrades to his own safe-no-op contract, never a faked
+  menu.
