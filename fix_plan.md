@@ -2433,3 +2433,14 @@ Everything below is functionality/fidelity, not styling.
   powerdown tools present, menu_resources present, SDL_ttf + font load —
   any absence degrades to his own safe-no-op contract, never a faked
   menu.
+- **C20 (P1, instrument) DERIVE the file→check consumption map.** PROCESS
+  §12.2(4) says re-run the checks whose inputs a merge touched — that
+  decision must be mechanical, not a driver judgment call. Write a script
+  that parses each check script's source/TU/pin lists (they already
+  enumerate them: `rig_srchash`'s find roots, per-check TU arrays,
+  PRODUCER_PINS tables, `--anim-dir`/`--gfxdata`/`--glyphs` argv) and
+  emits `path → [checks that consume it]`. **DERIVED, never
+  hand-maintained** — C13 recorded exactly this failure mode (manifest
+  prose enumerations going stale relative to the rows they describe,
+  three consecutive review rounds). Consumers: the driver's post-merge
+  re-run set, and writer briefs ("your change invalidates X, Y").

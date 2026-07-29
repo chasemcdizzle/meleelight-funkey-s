@@ -316,3 +316,68 @@ version of it.
   `arc-in-flight` until a round covers the MERGED bytes, or the driver
   records why the existing GO still binds (mtime/diff proof, as at
   iter-132).
+
+### 12.1 Reconciliation with the protected files (read this before "fixing" a rule)
+
+CLAUDE.md HARD RULES and `docs/LOOP.md` are **protected by HARD RULE 3** —
+the driver may not edit them. This section is a READING that reconciles
+§12 with them, never an override (PROCESS supplements; stricter wins).
+
+- **HARD RULE 4 "ONE branch `agent/auto`; ONE atomic commit per completed
+  iteration; clean tree between."** Worktree lanes are COMPATIBLE, not in
+  tension: lanes never commit, so `agent/auto` remains the only branch
+  that receives commits and the one-atomic-commit-per-increment invariant
+  is unchanged. Lane branches (`worktree-agent-*`) are ephemeral
+  scaffolding for uncommitted work.
+- **HARD RULE 4 "never delete branches."** Stricter reading adopted: a
+  lane worktree/branch is pruned ONLY after its work is merged AND
+  committed to `agent/auto`. Until then it is the only copy of that work
+  — and it has already saved us once (iter-133: a lane's transcript was
+  unrecoverable after a session-limit death while its worktree held 25
+  modified files and four review rounds; a fresh writer resumed from the
+  worktree with nothing lost).
+- **LOOP.md §A.2 "clean tree or STOP."** Worktrees-by-default RESTORES
+  this invariant rather than straining it: lanes-in-the-main-tree are
+  what make it dirty. With every lane in a worktree, the main tree is
+  clean between driver commits, which is exactly what the guard wants.
+  If the owner ever wants HARD RULE 4's literal text amended to name
+  worktrees, that is HIS edit to make; nothing requires it.
+
+### 12.2 Operating procedure (measured against this week's actual costs)
+
+1. **Base freshness.** Every lane worktree is created from CURRENT HEAD,
+   the brief states that commit, and the lane VERIFIES it (`git rev-parse
+   HEAD`) before its first edit. Measured cost of not doing this: one
+   lane's worktree was created at an M0-era commit with no `pipeline/`
+   directory at all and had to be fast-forwarded mid-arc.
+2. **Rebase-before-handoff, not merge-after-report.** A finishing lane
+   rebases onto current HEAD and re-runs its OWN done-check before
+   reporting. Then the bytes it hands over are the bytes it tested. If
+   the rebase moves bytes its review arc covered, it says so — the arc
+   needs a delta round, or the driver records why the GO still binds
+   (mtime/diff proof, iter-132 precedent).
+3. **Batch merges that touch pinned producers.** Every manifest edit
+   forces a MANIFEST_SHA256 recompute + full self-check; N merges = N
+   cycles. Merge the pending lanes first, then do ONE re-pin pass. (Cost
+   measured: five separate re-pin cycles in one day, each recompute +
+   verify, all avoidable.)
+4. **Re-run by consumption, not by ritual.** After a merge, re-run the
+   checks whose INPUTS the merge touched — not everything, not a guess.
+   This wants a DERIVED map (see C20), never a hand-maintained list:
+   C13 already burned us on a hand-maintained enumeration going stale.
+5. **Fingerprint, don't trust the tool.** Verify a content fingerprint of
+   each merged file (line count / pinned token). `git apply` prints
+   per-file success and can still roll back atomically (iter-131).
+6. **Semantic coupling is the real merge risk — git cannot see it.**
+   Registry of measured instances, to be named in briefs:
+   flows/`.expect` ↔ the injector cadence and `--foh-max` derivations ·
+   rendered pixels ↔ device screenshot evidence (U4) · any pinned
+   producer ↔ the manifest row + anchor · the checksummed sim surface ↔
+   anything under `port/sim/` (proof is always `SIM CONFORMS`).
+7. **Singletons stay serialized regardless of worktrees:** the physical
+   device (one lane at a time), the manifest/anchor (driver-only), and
+   docker builds (SERIAL, CLAUDE.md note).
+8. **Accept the cold-build cost.** A fresh worktree has no arm-build
+   stamp and no `pipeline/build/` artifacts, so the first device-facing
+   build in a lane is cold. That is minutes, and it is cheaper than the
+   contamination risk of sharing build dirs across lanes.
