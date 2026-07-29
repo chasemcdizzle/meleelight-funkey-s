@@ -2378,8 +2378,8 @@ Everything below is functionality/fidelity, not styling.
   — the KEYBOARD arm reads the bank's `s` by truthiness), so the exit
   paths must stay outside the sim exactly as A11's pause overlay does
   (NULL-default hook, live-play only).
-- **A12b (P1, owner-reported 2026-07-29, routed to the match-exit lane)
-  MENU/HOME does nothing in the MENU phase.** Diagnosed read-only:
+- **A12b [SUPERSEDED by A12c — the driver misread the report; kept for
+  the record] MENU/HOME does nothing in the MENU phase.** Diagnosed read-only:
   foh_dev.c:2221 wires pin.menu → foh_pause_hook but that site is INSIDE
   THE MATCH LOOP, so the overlay only exists during a match. In the FOH
   phase pin.menu drives `qEdge`, the evidence rig's screenshot-marker
@@ -2393,3 +2393,26 @@ Everything below is functionality/fidelity, not styling.
   from deeper screens). Discriminator already in the file: arm the
   overlay on the MENU edge only when `shotsDir` is UNSET, so the rig's
   q-marker semantics stay byte-identical.
+- **A12c (P1, owner-clarified 2026-07-29 — SUPERSEDES A12b) the FUNKEY
+  SYSTEM MENU was never implemented.** The owner's "home button bringing
+  up the funkey menu" means the STANDARD OS-STYLE overlay, not our pause
+  menu. Evidence = his own ssb64 donor
+  (~/code_projects/ssb64-funkey-s/port/gfx/fk_menu.c, MIT, the file he
+  told us to copy): entries `{VOLUME, BRIGHTNESS, QUIT, POWER OFF}`
+  (:146), volume/brightness through the OS shell tools
+  (`volume get|set`, `brightness get|set`, :102-103/:117-125), POWER OFF
+  → `powerdown handle` (:129), drawn with the **OS's OWN resources**
+  /usr/games/menu_resources/{zone_bg.png,arrow_top.png,arrow_bottom.png,
+  OpenSans-Bold.ttf} (:27-31) — which is why it LOOKS like the real
+  FunKey overlay — hint "A: select   B: back" (:161), safe no-op if
+  SDL_ttf/font missing, dimmed-frame fallback if zone_bg is missing
+  (:87). **A11's writer recorded "Skipped: volume/brightness from
+  fk_menu (not asked)" — correct against the DRIVER'S BRIEF, which was
+  wrong.** END STATE = TWO overlays, as ssb64 has: START → the GAME's
+  pause menu (Resume / Quit to VS screen / Quit to menu / Quit to OS);
+  MENU/HOME → the FUNKEY SYSTEM menu, available EVERYWHERE (match AND
+  FOH menus). Open design calls routed to the lane: whether to link
+  SDL_ttf + the OS font (verify presence on device first) vs render the
+  layout with our bitmap font while still using the OS artwork; copying
+  his MIT code is preferred over re-inventing, with the NOTICES entry
+  landing BEFORE the code (docs/LICENSING.md).
