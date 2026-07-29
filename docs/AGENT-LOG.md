@@ -20284,3 +20284,93 @@ field. Class fix: derive it or delete it.
 **Rows NOT flipped** — flipping on a NO-GO is exactly the un-converged-arc
 capping the manifest's cite discipline forbids. Path: fix C12's three
 driver-side items, route the fourth to the CSS lane, run round 6.
+
+---
+
+iter 130 · 2026-07-29 · phase M4 · **U1 CLOSED — gfx_bg.c now has a browser-parity check; found a truncate-vs-round CLASS bug AND a judge-design false-green (whole-plane aggregate passed at 0.9927 with EVERY STAR DELETED)**
+
+**WHY THE BG PLANE WAS EXCLUDED — measured, and the stated reason was
+circular.** gfx-pagelib.js:29 said "bg planes are not in the mask". The
+REAL reason: upstream's drawStars consumes Math.random EVERY FRAME (18
+draws walking the two mountains' bezier control points + 3 per star
+respawn) and the capture runs render under a NON-SEEDED native RNG
+(renderTick disabled via __harnessNoRender — bg randomness is not on the
+checksum surface). The two sides walked INDEPENDENT random trajectories,
+so frame-by-frame pairing was IMPOSSIBLE, not merely unjudged. A real
+reason — and it changed the fix's shape (mirror the RNG, don't just
+enable the mask).
+**TWO STRUCTURAL FACTS THAT CONTRADICTED MY BRIEF'S PREMISE:**
+(1) background is **per-SEED, not per-stage** — main.js:1322
+`setBackgroundType(Math.round(Math.random()))`, ONE seeded draw at
+startGame (the rngCallsOutsideStep==1 draw). Measured across committed
+goldens: 8 of 10 → type 0; **g04 (7344) and m01 (8114) → type 1**. So
+"all 6 VS stages" was the WRONG AXIS; both background TYPES was the
+right one. (2) drawTunnel (type 1) consumes NO randomness — always
+pairable, simply unreachable from the single golden this rig replays.
+**FIDELITY VERDICT: our background MATCHES upstream** — with the same
+mulberry32 and start state, the starfield and both mountain beziers
+track draw-for-draw for 3599 frames, BG2 IoU min 0.9944. TWO REAL
+DIVERGENCES FOUND AND FIXED: the BG1 gradient TRUNCATED where canvas
+ROUNDS (`(uint8_t)(24*(1-t))` biased every row low by up to 1), and —
+HARD RULE 8 class fix — the SAME bug one file over: hsl_rgb's callers
+(star colours, mountain fills) truncated while Chrome parses hsl() by
+rounding. Both routed through col8().
+Registered NOT silently fixed: drawTunnel strokes a flat 0.15 vs
+upstream's radial gradient (alpha-only; over-brightens the inner
+tunnel) — a silhouette judge cannot see it, so fixing blind would be
+unverified. getTransparency()===false arms and boxFillBG registered as
+unreachable/consumer-less rather than reading as oversights.
+**THE JUDGE-DESIGN FINDING (the durable lesson, and it generalizes):**
+**an aggregate threshold over a whole plane cannot see a feature that is
+entirely missing from it.** Deleting EVERY STAR left the aggregate BG2
+leg at **0.9927 — PASSING its 0.99 floor** — because stars draw only on
+6 of 24 frames and contribute 27-67 device cells against a ~16,000-cell
+union dominated by two mountain fills. The plane was "judged" and the
+feature was invisible. FIX: **per-feature planes, not per-plane
+aggregates** — gfx_bg.c fires a star sink BETWEEN the star circles and
+the mountains (no clear between, so the BG2 plane is unchanged) and the
+browser mirrors upstream's own bg2.arc()+fill() onto a scratch layer
+(drawStars is the only bg code issuing arc+fill). A first attempt judged
+"the rows no mountain can reach" — that still let a renderer clipping
+only the LOWER stars pass. **Measuring the feature's own plane needs no
+geometric argument at all**, and more than doubled the judged star cells
+(27-67 → 120-161). Anything rendering nothing now scores 0.0000.
+**THE PERMANENT CHECK — 4 judgments every run, thresholds
+measured-then-frozen, three-way twin-pinned by exact value:** BG2 plane
+0.99 (measured 0.9944) · **starfield own plane 0.78 (0.7888, 6
+star-bearing frames, count pinned)** · tunnel 0.81 (0.8202, standalone
+deterministic leg) · BG1 gradient max channel delta 1 (measured 1,
+cross-checked against the RGB565 the loop wrote). The 0.81 tunnel floor
+is METHODOLOGY not error (5x5 any-ink downscale makes a W-canvas-px
+stroke cover ceil(W/5)+1 cells vs the C's W/5; ring radii match). Plus
+backgroundType dispatch agreement and a NATURAL type-1 witness (g04
+drives seed → gfx_init → readback with no forcing, so a hard-wired
+selector dies).
+**TEETH (each applied, measured, reverted; the pre-existing fg IOU MIN
+was UNCHANGED in every one — proving the old judge structurally
+blind):** starless → starfield 0.0000 FAIL while aggregate 0.9927
+PASSES · lower-stars-clipped 0.1615-0.4214 FAIL · grad-endpoint 24→25
+maxdelta 2>1 FAIL · no-grad-rows dies in C rc 3 · star-offset +3px
+0.0000 FAIL.
+**ARC (Tier A+, serial codex, cmp-proved every round):** r1-r7 NO-GO
+(42 findings, all fixed — headlines: starless-passes-aggregate, the ±1
+band passing all perturbations, lower stars unjudged, digest fail-open,
+sealing gaps) · **r8 REPLAY PROVEN** (findings byte-identical to r6, sha
+f1dca93fd246, all already fixed) → §11 **grok GO + Opus 5 GO**. No
+threshold was EVER loosened; TWO were TIGHTENED on measurement (star
+0.75→0.78; gradient 1→0→1 as the comparison became observational).
+**Before/after:** baseline `IOU MIN 0.9077 threshold 0.88` with the bg
+plane not judged at all → after: 4 bg judgments green + `IOU MIN 0.9065
+threshold 0.88` (pre-existing fg judge UNWEAKENED). Byte-stable ×2,
+121/121 bg artifacts byte-identical across independent captures.
+**FOR THE DEVICE LANE (carried, not buried):** background PIXELS CHANGED
+on shipped output — col8() rounding shifts packed RGB565 on 24 gradient
+rows plus star/mountain colours by ≤1. Intentional faithfulness fixes,
+but **any device evidence pinning background pixels (screenshots, shot
+bit-compares) must be RE-TAKEN**. The seams are inert when unarmed (no
+inking, no observation stores, no artifacts).
+**Merge:** 8 modified + 1 NEW UNTRACKED file (port/gfx/parse-bg-stderr.js
+— a HARD DEPENDENCY of the verdict path; a clean checkout cannot run the
+check without it). No freeze-manifest row touched (all 9 files checked —
+none appear in m4-freeze-manifest.txt). servedDistSha256 re-pinned twice,
+legitimately (the served main.js now carries the background hooks).

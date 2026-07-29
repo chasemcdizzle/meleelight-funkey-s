@@ -2298,3 +2298,21 @@ Everything below is functionality/fidelity, not styling.
   (hand-maintained enumeration; any lane may flip a status). Zero
   enforcement weight — the gate parses the status field, never the
   prose. CLASS FIX: derive the enumeration or delete it.
+- U1 DONE (iter 130): gfx_bg.c browser-parity check landed (4 frozen
+  judgments incl. a STAR-ONLY plane); truncate-vs-round class bug fixed
+  in the gradient AND star/mountain colours; drawTunnel's flat-0.15 vs
+  upstream's radial gradient REGISTERED (alpha-only, invisible to a
+  silhouette judge — needs its own observational leg before fixing).
+- **U3 (P1, CLASS — the durable judge-design lesson) audit every
+  aggregate visual threshold for the same false-green.** U1 proved a
+  whole-plane aggregate passes at 0.9927 with a FEATURE ENTIRELY
+  DELETED. Any judge that scores a union of features can be blind to a
+  missing one. Sweep: the fg IoU leg (players/articles/vfx/overlay all
+  share one mask), judge-shot.js's structural judges, the target-plane
+  verifier. Fix shape: per-feature planes, not per-plane aggregates —
+  measuring a feature's own plane needs no geometric argument.
+- U4 (P2, device-gated, from U1) background PIXELS CHANGED (col8()
+  rounding: 24 gradient rows + star/mountain colours ≤1). Any device
+  evidence pinning background pixels must be RE-TAKEN — check-device-
+  render.sh shot compares, any screenshot-pinning leg. Do it in the
+  next device session alongside C6's proofs.

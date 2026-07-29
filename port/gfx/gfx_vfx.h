@@ -110,4 +110,38 @@ void gfx_bg_reset(void);
 // polygon pass reads it (gfx_render.c).
 RastCol gfx_bg_box_fill(void);
 
+// U1 browser-parity seams (gfx_bg.c note). All default to NULL, and every
+// shipped build (device, FOH) leaves them there: unarmed, no plane is
+// inked, no observation is recorded (the gradient bookkeeping is gated on
+// the sink, review-u1 r5) and no artifact is written — the only residue
+// is the hoisted NULL test per pass.
+//
+// SCOPE OF THAT CLAIM (review-u1 r4): it covers the SEAMS only. U1 also
+// changed the gradient itself, deliberately — gfx_bg.c's grad8() now
+// ROUNDS where a cast truncated, matching how canvas composites, which
+// shifts the packed RGB565 value on 24 device rows of the shipped
+// output. That is an intentional faithfulness fix, not a no-op, and any
+// device evidence that pins background pixels must be re-taken.
+//   gfx_bg_ink_sink   arms the BG2 (drawStars/drawTunnel) pass to ink,
+//                     hands the mask to fn once per frame, then wipes
+//                     the ink plane before the caller's fg passes.
+//   gfx_bg_grad_sink  fires straight after the BG1 gradient rows are
+//                     laid down, while the framebuffer holds the
+//                     gradient and nothing else, so fn observes the
+//                     REAL shipped output (row loop + canvas->device
+//                     mapping + clip + RGB565 write).
+void gfx_bg_ink_sink(void (*fn)(Gfx *));
+void gfx_bg_grad_sink(void (*fn)(Gfx *));
+// Fired between the star circles and the mountains, so fn sees the
+// STARFIELD ALONE; the bg2 sink above still sees the whole plane.
+void gfx_bg_star_sink(void (*fn)(Gfx *));
+
+// The 8-bit row colours the gradient row loop ACTUALLY passed to the
+// rasterizer on its last run, and the device-row range it covered. The
+// framebuffer alone is RGB565 (only ~4 distinct red levels across the
+// band), too coarse to judge the gradient's accuracy; this carries the
+// 8-bit values, and the judge cross-checks them against the framebuffer
+// the same loop wrote, so it stays an observation of the real path.
+void gfx_bg_grad_observed(int *lo, int *hi, const uint8_t (**rows)[3]);
+
 #endif // GFX_GFX_VFX_H

@@ -68,12 +68,15 @@ const STAGES = arg("stages", "");
 const STAGE_IDX = arg("stage", "");
 const EXPECTED = arg("expected", "");
 const REPORT = arg("report", "");
+const BG_TUNNEL = arg("bg-tunnel", "");     // C tunnel-leg pgm dir (U1)
+const BG_GRAD_C = arg("bg-grad-c", "");     // C BGGRAD1 dump (U1)
 if (!CANVAS || !RENDER || !EXPECTED || CANVAS === true || RENDER === true || EXPECTED === true ||
     !RENDER_NOINJ || RENDER_NOINJ === true || !RENDER_LOO || RENDER_LOO === true ||
     !VFXDATA || VFXDATA === true ||
+    !BG_TUNNEL || BG_TUNNEL === true || !BG_GRAD_C || BG_GRAD_C === true ||
     !STAGES || STAGES === true || STAGE_IDX === "" || STAGE_IDX === true ||
     !/^[0-9]+$/.test(String(STAGE_IDX))) {
-  console.error("iou: --canvas, --render, --render-noinject, --render-loo, --vfxdata, --stages, --stage, --expected are required");
+  console.error("iou: --canvas, --render, --render-noinject, --render-loo, --vfxdata, --bg-tunnel, --bg-grad-c, --stages, --stage, --expected are required");
   process.exit(1);
 }
 
@@ -101,6 +104,36 @@ if (!Array.isArray(exp.sampledFrames) || !Number.isInteger(exp.sampledFrameCount
 }
 if (typeof exp.iouThreshold !== "number" || exp.iouThreshold <= 0 || exp.iouThreshold > 1) {
   console.error("iou: expected-render.json iouThreshold malformed");
+  process.exit(1);
+}
+
+// U1 background pins, JUDGE SIDE (twin-pin class, third independent
+// copy alongside check-render.sh and capture-canvas.js). The bg
+// thresholds are measured-then-frozen and are floors, never dials: both
+// sides run the same mirrored stream from the same start state, so a
+// real translation bug shows up as a large drop, not a nudge.
+// EXACT pins, not shape checks (review-u1 r1 M3): a shape check would
+// accept a tunnel corpus shrunk to [1] or thresholds loosened to
+// 0.01/0.01/8 and still print RENDER OK. These are the reviewed frozen
+// values, hard-coded here and independently in check-render.sh and
+// capture-canvas.js; changing any of them means changing all the copies,
+// which is a reviewed repo change, never a runtime degradation.
+if (!Array.isArray(exp.bgTunnelFrames) ||
+    exp.bgTunnelFrames.join(",") !== "1,2,3,41,81,121,161,200,201,202,240") {
+  console.error("iou: bgTunnelFrames pin violated — [" +
+    String(exp.bgTunnelFrames) + "] != the hard-pinned reviewed 11-frame list");
+  process.exit(1);
+}
+if (exp.bgIouThreshold !== 0.99 || exp.bgStarIouThreshold !== 0.78 ||
+    exp.bgTunnelIouThreshold !== 0.81 || exp.bgGradMaxChannelDelta !== 1) {
+  console.error("iou: background threshold pin violated — got " +
+    [exp.bgIouThreshold, exp.bgStarIouThreshold, exp.bgTunnelIouThreshold,
+     exp.bgGradMaxChannelDelta].join("/") +
+    ", pinned 0.99/0.78/0.81/1 (measured-then-frozen floors; never loosened)");
+  process.exit(1);
+}
+if (!Number.isInteger(exp.bgStarFrameCount) || exp.bgStarFrameCount !== 6) {
+  console.error("iou: bgStarFrameCount pin violated — want exactly 6 star-bearing sampled frames");
   process.exit(1);
 }
 
@@ -529,6 +562,274 @@ for (const f of exp.sampledFrames) {
   console.log(`IOU f${tag} ${iou.toFixed(4)} (${inter}/${union}) ${pass ? "PASS" : "FAIL"}`);
 }
 
+// --- U1: the BACKGROUND planes -------------------------------------------
+//
+// Same downscale/band methodology as the fg above, applied to the BG2
+// plane (browser f<tag>.bg.bin = layers.BG2 alpha; C f<tag>.bg.pgm = the
+// ink laid down by drawStars/drawTunnel alone). Both sides walk the same
+// mirrored mulberry32 from the same start state (gfx-pagelib.js
+// __gfxBgInit / gfx_bg.c gfx_bg_reset), so this is a real geometry
+// comparison, not a statistical one.
+function bandIou(src, cink, what) {
+  let inter = 0, union = 0;
+  for (let Y = 0; Y < BAND_H; Y++) {
+    for (let X = 0; X < W; X++) {
+      let a = 0;
+      for (let dy = 0; dy < 5 && !a; dy++) {
+        const row = (Y * 5 + dy) * SRC_W + X * 5;
+        for (let dx = 0; dx < 5; dx++) {
+          if (src[row + dx]) { a = 1; break; }
+        }
+      }
+      const b = cink[(Y + BAND_Y0) * W + X] ? 1 : 0;
+      if (a & b) inter++;
+      if (a | b) union++;
+    }
+  }
+  if (union === 0) {
+    console.error(`iou: ${what}: both background masks empty — degenerate sample`);
+    process.exit(1);
+  }
+  return { iou: inter / union, inter: inter, union: union };
+}
+
+function bgLeg(label, pairs, threshold) {
+  let min = Infinity, bad = 0;
+  for (const [what, maskFp, pgmFp] of pairs) {
+    if (!fs.existsSync(maskFp) || fs.statSync(maskFp).size === 0) {
+      console.error(`iou: ${maskFp}: missing or empty background mask`);
+      process.exit(1);
+    }
+    const src = fs.readFileSync(maskFp);
+    if (src.length !== SRC_W * SRC_H) {
+      console.error(`iou: ${maskFp}: ${src.length} bytes (want ${SRC_W * SRC_H})`);
+      process.exit(1);
+    }
+    const cink = loadPgm(pgmFp);
+    for (let y = 0; y < 240; y++) {
+      if (y >= BAND_Y0 && y < BAND_Y0 + BAND_H) continue;
+      for (let x = 0; x < W; x++) {
+        if (cink[y * W + x]) {
+          console.error(`iou: ${what}: C background ink outside the letterbox band at (${x},${y})`);
+          process.exit(1);
+        }
+      }
+    }
+    const r = bandIou(src, cink, what);
+    if (r.iou < min) min = r.iou;
+    const pass = r.iou >= threshold;
+    if (!pass) bad++;
+    bgResults.push({ leg: label, frame: what, iou: r.iou, pass: pass });
+    console.log(`BG ${label} ${what} ${r.iou.toFixed(4)} (${r.inter}/${r.union}) ${pass ? "PASS" : "FAIL"}`);
+  }
+  console.log(`BG ${label} MIN ${min.toFixed(4)} threshold ${threshold} frames ${pairs.length}`);
+  return bad;
+}
+
+const bgResults = [];
+let bgFail = 0;
+
+bgFail += bgLeg("stars", exp.sampledFrames.map((f) => {
+  const tag = String(f).padStart(4, "0");
+  return [`f${tag}`, path.join(CANVAS, `f${tag}.bg.bin`), path.join(RENDER, `f${tag}.bg.pgm`)];
+}), exp.bgIouThreshold);
+
+// H1 (review-u1 r1): the aggregate stars-leg IoU above is DOMINATED by
+// the two mountain fills — measured, a mountains-only render with all 20
+// star circles deleted still scores >= 0.9927 on every sampled frame,
+// because stars draw only on bgSparkle==0 frames (6 of the 24) and
+// contribute 27-67 device cells against a ~16,000-cell union. An
+// aggregate threshold over a whole plane cannot see a feature that is
+// entirely missing from it. So the starfield gets its OWN judge.
+//
+// It compares a STAR-ONLY PLANE captured on both sides over the whole
+// letterbox band: gfx_bg.c fires its star sink between the circles and
+// the mountains, and the browser mirrors upstream's own bg2.arc()+fill()
+// calls onto a scratch layer. The first version instead judged the rows
+// no mountain can reach ([45,114) after the overshoot correction), which
+// review-u1 r4 showed still left a hole — stars draw below that line
+// too, so clipping only the lower ones passed. Measuring the plane
+// directly needs no row argument at all.
+{
+  let starFrames = 0, min = Infinity;
+  for (const f of exp.sampledFrames) {
+    const tag = String(f).padStart(4, "0");
+    const src = fs.readFileSync(path.join(CANVAS, `f${tag}.star.bin`));
+    if (src.length !== SRC_W * SRC_H) {
+      console.error(`iou: f${tag}.star.bin: ${src.length} bytes (want ${SRC_W * SRC_H})`);
+      process.exit(1);
+    }
+    const cink = loadPgm(path.join(RENDER, `f${tag}.star.pgm`));
+    // same band-leak guard the fg loop and bgLeg carry: the star plane is
+    // the one place a retarget bug would land outside the compared window
+    for (let y = 0; y < 240; y++) {
+      if (y >= BAND_Y0 && y < BAND_Y0 + BAND_H) continue;
+      for (let x = 0; x < W; x++) {
+        if (cink[y * W + x]) {
+          console.error(`iou: BG starfield f${tag}: C star ink outside the letterbox band at (${x},${y})`);
+          process.exit(1);
+        }
+      }
+    }
+    let inter = 0, union = 0, bi = 0, ci = 0;
+    for (let Y = 0; Y < BAND_H; Y++) {
+      for (let X = 0; X < W; X++) {
+        let a = 0;
+        for (let dy = 0; dy < 5 && !a; dy++) {
+          const row = (Y * 5 + dy) * SRC_W + X * 5;
+          for (let dx = 0; dx < 5; dx++) {
+            if (src[row + dx]) { a = 1; break; }
+          }
+        }
+        const b = cink[(Y + BAND_Y0) * W + X] ? 1 : 0;
+        if (a) bi++;
+        if (b) ci++;
+        if (a & b) inter++;
+        if (a | b) union++;
+      }
+    }
+    if (bi === 0) {
+      // no stars visible this frame; the C must not invent any either
+      if (ci !== 0) {
+        console.error(`iou: BG starfield f${tag}: C drew ${ci} star cells where the browser drew none`);
+        process.exit(1);
+      }
+      continue;
+    }
+    starFrames++;
+    const iou = inter / union;
+    if (iou < min) min = iou;
+    const pass = iou >= exp.bgStarIouThreshold;
+    if (!pass) bgFail++;
+    bgResults.push({ leg: "starfield", frame: `f${tag}`, iou: iou, pass: pass });
+    console.log(`BG starfield f${tag} ${iou.toFixed(4)} (${inter}/${union}) ` +
+      `browser=${bi} C=${ci} ${pass ? "PASS" : "FAIL"}`);
+  }
+  // A starless renderer must not pass by simply never producing a
+  // star-bearing frame: the COUNT is pinned.
+  if (starFrames !== exp.bgStarFrameCount) {
+    console.error(`iou: BG starfield pin violated — ${starFrames} star-bearing frames, pinned ${exp.bgStarFrameCount}`);
+    process.exit(1);
+  }
+  console.log(`BG starfield MIN ${min.toFixed(4)} threshold ${exp.bgStarIouThreshold} ` +
+    `frames ${starFrames} (of ${exp.sampledFrames.length} sampled; star-only plane, full band)`);
+}
+
+bgFail += bgLeg("tunnel", exp.bgTunnelFrames.map((f) => {
+  const tag = String(f).padStart(4, "0");
+  return [`t${tag}`, path.join(CANVAS, `t${tag}.bg.bin`), path.join(BG_TUNNEL, `f${tag}.bg.pgm`)];
+}), exp.bgTunnelIouThreshold);
+
+// The BG1 gradient, judged by COLOUR (its silhouette is all-ones on both
+// sides — drawBackgroundInit fills the layer opaque edge to edge — so a
+// mask would judge nothing).
+//
+// Browser: layers.BG1 read back per canvas row. C: the REAL rendered
+// framebuffer, observed by gfx_bg.c right after the gradient rows land
+// (review-u1 r1 H2 — an earlier version called the colour function
+// directly, so deleting the row loop kept this green). The C side is
+// therefore reported per device row in TWO forms: the RGB565 framebuffer
+// value (proving the row loop wrote it) and the 8-bit colour the loop
+// handed the rasterizer. gfx_replay hard-fails if those two disagree, so
+// the 8-bit plane is an observation of the real path, not a second
+// opinion about it. GFX_K is exactly 0.2, so device row y is canvas row
+// (y - 45) * 5 with no resampling slack.
+//
+// WHY 8-BIT AND NOT THE FRAMEBUFFER (review-u1 r2 M1 / r3 L1, measured).
+// Every MAGNITUDE statistic over the RGB565 rows fails to separate a
+// correct gradient from a wrong one, because red has only ~4 distinct
+// levels across the band. Measured, true renderer vs perturbations:
+// an existential +-1 band passes endpoint 24->25, 17->18 and denominator
+// 500->510 alike (delta 0 for all); a single-row or 5-row-mean reference
+// gives delta 8 for ALL of them including the true one; least-squares
+// fitting the quantized rows gives the TRUE renderer maxdA 3.59 vs
+// 3.18-3.64 for the perturbations — no separation.
+// SCOPE OF THAT CLAIM (r3 L1): it is about magnitude statistics, NOT a
+// proof that RGB565 carries no signal. A COUNTING metric does separate —
+// mismatch-count against a browser-fit reference measures TRUE 10 vs
+// 16-26 for the perturbations. It was not adopted because its margin is
+// a chosen cut between two nonzero counts that would have to be frozen
+// against Chrome's dithering across cold captures, whereas the 8-bit
+// comparison below is exact-by-construction against a bound (+-1) that
+// is a measured property of the reference. Registered as the better
+// upgrade path if the sub-2% slope blind spot ever needs closing.
+//
+// RESIDUAL, REGISTERED: Chrome DITHERS canvas gradients by +-1 (BG1 row 0
+// reads darker than row 1 — non-monotonic) and its rendered ramp is not
+// exactly the ideal line (least-squares over 500 rows: intercept 23.87,
+// zero crossing at y~496 rather than 24 and 500). So this comparison
+// cannot resolve differences below ~1 in 8-bit: a slope error under about
+// 2% would pass. It DOES catch endpoint errors and any structural break.
+// That bound is a property of the reference, not a dial.
+function q565(c) {
+  return [(c[0] >> 3) << 3, (c[1] >> 2) << 2, (c[2] >> 3) << 3];
+}
+
+// Strict BGGRAD1 parser (review-u1 r1 M4). Browser rows carry 3 channels,
+// C rows carry 6 (framebuffer triple + observed 8-bit triple).
+function loadGrad(fp, what, first, count, chans) {
+  const txt = fs.readFileSync(fp, "utf8");
+  if (!txt.endsWith("\n")) {
+    console.error(`iou: ${fp}: ${what} dump does not end with a newline`);
+    process.exit(1);
+  }
+  const lines = txt.slice(0, -1).split("\n");
+  if (lines.length !== count + 2 || lines[0] !== "BGGRAD1" ||
+      lines[lines.length - 1] !== "END") {
+    console.error(`iou: ${fp}: ${what} dump is not BGGRAD1 + ${count} rows + END ` +
+      `(got ${lines.length} lines)`);
+    process.exit(1);
+  }
+  // canonical decimals only (review-u1 r6): `00` is not a form the
+  // producer can emit, so accepting it would accept impossible evidence
+  const D = "(?:0|[1-9][0-9]*)";
+  const re = new RegExp("^R (" + D + ")" + (" (" + D + ")").repeat(chans) + "$");
+  const rows = [];
+  for (let i = 1; i < lines.length - 1; i++) {
+    const m = re.exec(lines[i]);
+    if (!m) {
+      console.error(`iou: ${fp}: unparseable ${what} row '${lines[i]}'`);
+      process.exit(1);
+    }
+    if (Number(m[1]) !== first + rows.length) {
+      console.error(`iou: ${fp}: ${what} rows out of order at '${lines[i]}' ` +
+        `(want index ${first + rows.length})`);
+      process.exit(1);
+    }
+    const ch = m.slice(2).map(Number);
+    if (ch.some((v) => v < 0 || v > 255)) {
+      console.error(`iou: ${fp}: ${what} channel out of range at '${lines[i]}'`);
+      process.exit(1);
+    }
+    rows.push(ch);
+  }
+  return rows;
+}
+
+const gradB = loadGrad(path.join(CANVAS, "bg1-grad.txt"), "browser gradient", 0, SRC_H, 3);
+const gradC = loadGrad(BG_GRAD_C, "C gradient", BAND_Y0, BAND_H, 6);
+let gradMax = 0, gradMaxRow = -1;
+for (let y = BAND_Y0; y < BAND_Y0 + BAND_H; y++) {
+  const canvasRow = (y - BAND_Y0) * 5; // GFX_K == 0.2 exactly
+  const want = gradB[canvasRow];
+  const row = gradC[y - BAND_Y0];
+  const fb = row.slice(0, 3), obs = row.slice(3, 6);
+  // re-check the C's own framebuffer/observation agreement judge-side too
+  const qo = q565(obs);
+  for (let c = 0; c < 3; c++) {
+    if (qo[c] !== fb[c]) {
+      console.error(`iou: C gradient row ${y}: observed 8-bit ${obs} does not quantize to framebuffer ${fb}`);
+      process.exit(1);
+    }
+    const d = Math.abs(want[c] - obs[c]);
+    if (d > gradMax) { gradMax = d; gradMaxRow = y; }
+  }
+}
+const gradPass = gradMax <= exp.bgGradMaxChannelDelta;
+console.log(`BG GRAD maxdelta ${gradMax} (device row ${gradMaxRow}) ` +
+  `limit ${exp.bgGradMaxChannelDelta} ${gradPass ? "PASS" : "FAIL"}`);
+if (!gradPass) bgFail++;
+
 // --- per-effect injection assertions (review-65 M2, iter 67) ---------------
 // Runs AFTER the frame loop so the injection frame's aggregate IoU line
 // is already on record: a missing effect small enough to pass the
@@ -657,10 +958,22 @@ if (REPORT && REPORT !== true) {
     minIou: minIou,
     inject: { frame: INJ.frame, effects: injResults },
     frames: results,
+    background: {
+      bgIouThreshold: exp.bgIouThreshold,
+      bgTunnelIouThreshold: exp.bgTunnelIouThreshold,
+      bgGradMaxChannelDelta: exp.bgGradMaxChannelDelta,
+      gradMaxDelta: gradMax,
+      gradMaxRow: gradMaxRow,
+      samples: bgResults,
+    },
   }, null, 2) + "\n");
 }
 if (fail > 0) {
   console.error(`iou: ${fail} frame(s) below threshold`);
+  process.exit(1);
+}
+if (bgFail > 0) {
+  console.error(`iou: ${bgFail} background judgment(s) below threshold`);
   process.exit(1);
 }
 console.log("IOU OK");

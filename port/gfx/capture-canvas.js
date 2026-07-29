@@ -115,6 +115,16 @@ const CHUNK = 120;
 // capture immediately.
 const EXPECTED_RENDER = JSON.parse(
   fs.readFileSync(CLOSURE["port/gfx/expected-render.json"], "utf8"));
+// U1 tunnel-leg corpus (frozen in expected-render.json; iou.js and
+// check-render.sh carry their own independent copies of this assert —
+// the twin-pin class, so a silently shrunk list dies on every side).
+const TUNNEL_FRAMES = EXPECTED_RENDER.bgTunnelFrames;
+if (!Array.isArray(TUNNEL_FRAMES) || TUNNEL_FRAMES.join(",") !== "1,2,3,41,81,121,161,200,201,202,240") {
+  console.error("capture-canvas: bgTunnelFrames pin violated — [" +
+    String(TUNNEL_FRAMES) + "] != the hard-pinned reviewed 11-frame list");
+  process.exit(1);
+}
+
 const CONSOLE_ALLOW = EXPECTED_RENDER.consoleErrorAllowlist;
 if (!Array.isArray(CONSOLE_ALLOW) || CONSOLE_ALLOW.length === 0) {
   console.error("capture-canvas: consoleErrorAllowlist missing/malformed in expected-render.json");
@@ -214,6 +224,43 @@ const MIME = {
 const BOOT_LINE = "var installedModules = {};";
 const BOOT_HOOK = BOOT_LINE + " window.__wpCache = installedModules;";
 
+// U1: a SECOND served-bytes hook, same mechanism and same
+// unique-match-or-die discipline. stagerender.js keeps its background
+// state module-private (bgStars / bgPos / direction / circleSize /
+// bgSparkle / ang are bare `var`s, none exported), and pairing our
+// renderer against it needs both a read of that state and an in-place
+// re-seed of bgStars. The accessor is appended after the LAST of those
+// declarations so every one of them is in scope; it is quote-free and
+// backslash-free because the module body is carried inside a webpack
+// eval() string literal in the served bytes.
+const BG_LINE = "var backgroundType = exports.backgroundType = 0;";
+const BG_HOOK = BG_LINE +
+  " window.__bgState = function(){return [bgStars, bgPos, direction, circleSize, bgSparkle, ang, backgroundType];};";
+
+// U1 / review-u1 r1 M1: re-seeding bgStars needs stagerender.js:16-19's
+// star-initialisation loop as a CALLABLE. Restating those two position
+// expressions in our own code would make the judge blind to a matching
+// error in gfx_bg.c's copy of them, so instead we SOURCE-TRANSFORM: copy
+// the loop's exact served bytes into a function body. Zero transcription
+// — the same "extract the reference from the oracle's own bytes, never
+// retype it" rule the ml_fmt/ml_ser differential follows. The `var
+// bgStars = [];` declaration is deliberately NOT included: re-declaring
+// it inside the function would shadow the module array instead of
+// re-seeding it.
+const RESEED_FROM = "for (var p = 0; p < 20; p++) {";
+const RESEED_TO = "var bgSparkle = 3;";
+
+function reseedHook(src) {
+  const a = src.indexOf(RESEED_FROM);
+  const b = src.indexOf(RESEED_TO);
+  if (a === -1 || src.indexOf(RESEED_FROM, a + 1) !== -1 ||
+      b === -1 || src.indexOf(RESEED_TO, b + 1) !== -1 || b <= a) {
+    return null;
+  }
+  const block = src.slice(a, b); // upstream's own bytes, verbatim
+  return { at: b, line: "", hook: " window.__bgReseed = function(){ " + block + " };" };
+}
+
 const servedSha = {}; // urlPath -> sha256 hex of the exact bytes sent
 
 function servedDigest() {
@@ -239,8 +286,27 @@ function serve(root) {
           res.end("capture: webpack bootstrap line not found exactly once in main.js");
           return;
         }
-        const hooked = Buffer.from(
-          src.slice(0, i) + BOOT_HOOK + src.slice(i + BOOT_LINE.length), "utf8");
+        const j = src.indexOf(BG_LINE);
+        if (j === -1 || src.indexOf(BG_LINE, j + 1) !== -1) {
+          res.writeHead(500);
+          res.end("capture: stagerender bg-state line not found exactly once in main.js");
+          return;
+        }
+        const rs = reseedHook(src);
+        if (!rs) {
+          res.writeHead(500);
+          res.end("capture: stagerender star-init block not found exactly once in main.js");
+          return;
+        }
+        // Apply every hook by DESCENDING offset so an earlier edit cannot
+        // shift a later one's index.
+        let patched = src;
+        for (const [at, line, hook] of [[i, BOOT_LINE, BOOT_HOOK], [j, BG_LINE, BG_HOOK],
+                                        [rs.at, rs.line, rs.hook]]
+               .sort((a, b) => b[0] - a[0])) {
+          patched = patched.slice(0, at) + hook + patched.slice(at + line.length);
+        }
+        const hooked = Buffer.from(patched, "utf8");
         servedSha[urlPath] = sha256Hex(hooked);
         res.writeHead(200, { "Content-Type": "text/javascript" });
         res.end(hooked);
@@ -254,6 +320,8 @@ function serve(root) {
     srv.listen(0, "127.0.0.1", () => resolve(srv));
   });
 }
+
+let pageErrored = false;
 
 async function main() {
   if (!fs.existsSync(path.join(DIST_ROOT, "dist", "meleelight.html"))) {
@@ -273,7 +341,11 @@ async function main() {
   const context = await browser.newContext();
   await context.route(/\/(sfx|music)\//, (r) => r.abort());
   const page = await context.newPage();
-  page.on("pageerror", (e) => { console.error("[pageerror]", e.message); process.exitCode = 1; });
+  page.on("pageerror", (e) => {
+    console.error("[pageerror]", e.message);
+    process.exitCode = 1;
+    pageErrored = true; // and the sidecar is withheld (review-u1 r6)
+  });
   // Fail-closed console policy (review-44 fix 4): a caught render error or
   // missing render asset surfaces as console.error while masks stay
   // structurally valid — so ONLY the frozen allowlist (CLAUDE.md's
@@ -331,6 +403,23 @@ async function main() {
     });
   }, { trace, p1: g.p1, p2: g.p2, stage: g.stage, cpu: g.cpu, difficulty: g.difficulty || 5 });
 
+  // U1: seed the mirrored background stream and put stagerender's bg
+  // module state where gfx_bg_reset() leaves the C. Post-setupMatch (so
+  // startGame's setBackgroundType/drawBackgroundInit have run) and
+  // BEFORE the first render.
+  await page.evaluate(() => window.__gfxBgInit());
+  const bgGrad = await page.evaluate(() => window.__gfxBgGradColumn());
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  fs.writeFileSync(path.join(OUT_DIR, "bg1-grad.txt"), bgGrad);
+  // M2: the type the PAGE selected, through upstream's own seeded
+  // startGame draw. check-render.sh asserts the C selected the same.
+  const bgType = await page.evaluate(() => window.__gfxBgType());
+  if (bgType !== 0 && bgType !== 1) {
+    console.error(`capture-canvas: page backgroundType is ${bgType} (want 0 or 1)`);
+    process.exit(1);
+  }
+  fs.writeFileSync(path.join(OUT_DIR, "bg-type.txt"), String(bgType) + "\n");
+
   // GFXDATA1 (post-setup: actionStates registries are live)
   const gfxdata = await page.evaluate(() => window.__gfxDumpData());
   fs.mkdirSync(path.dirname(path.resolve(GFXDATA)), { recursive: true });
@@ -374,6 +463,10 @@ async function main() {
     for (const f of Object.keys(captured)) {
       const m = decodeMask(captured[f].mask, `frame ${f} mask`);
       fs.writeFileSync(path.join(OUT_DIR, `f${String(f).padStart(4, "0")}.mask.bin`), m);
+      fs.writeFileSync(path.join(OUT_DIR, `f${String(f).padStart(4, "0")}.bg.bin`),
+        decodeMask(captured[f].bg, `frame ${f} bg mask`));
+      fs.writeFileSync(path.join(OUT_DIR, `f${String(f).padStart(4, "0")}.star.bin`),
+        decodeMask(captured[f].star, `frame ${f} star mask`));
       const png = captured[f].png;
       const pfx = "data:image/png;base64,";
       if (!png.startsWith(pfx)) {
@@ -495,7 +588,9 @@ async function main() {
       // free and every loo baseline shares the canonical trajectory)
       restore(null);
       window.__nativeRandom = mk(o.seed);
-      window.__gfxRender();
+      // bg:false — U1: only the canonical render of a frame may advance
+      // the mirrored background stream (see gfx-pagelib.js __gfxRender).
+      window.__gfxRender({ bg: false });
       det = window.__gfxCaptureMask().mask;
       if (det !== canonical.mask) {
         throw new Error("gfx-capture: det replay mask != canonical mask at the injection frame " +
@@ -505,7 +600,7 @@ async function main() {
       for (const nm of o.inkNames) {
         restore(nm);
         window.__nativeRandom = mk(o.seed);
-        window.__gfxRender();
+        window.__gfxRender({ bg: false });
         loo[nm] = window.__gfxCaptureMask().mask;
       }
     } finally {
@@ -543,6 +638,33 @@ async function main() {
     process.exit(1);
   }
 
+  // U1 tunnel leg (backgroundType 1). The type is one seeded draw at
+  // startGame, i.e. a per-SEED coin flip, not a stage property. MEASURED
+  // over the committed goldens: g01/g02/g03/g05/g06/g07/g08/m02 select type 0 while g04 (seed
+  // 7344) and m01 (seed 8114) select type 1.
+  // This rig replays g01 only, so drawTunnel is unreachable from the
+  // match above. It consumes no randomness, so it pairs with the C exactly
+  // from pristine module state. Runs LAST: the checksum stream, every
+  // sampled mask and the run JSON inputs are already collected, and
+  // setBackgroundType/drawBackgroundInit only touch render state.
+  {
+    const tSampled = {};
+    for (const v of TUNNEL_FRAMES) tSampled[v] = true;
+    const tOut = await page.evaluate(
+      (o) => window.__gfxBgTunnel(o.frames, o.sampled),
+      { frames: TUNNEL_FRAMES[TUNNEL_FRAMES.length - 1], sampled: tSampled });
+    let n = 0;
+    for (const f of Object.keys(tOut)) {
+      fs.writeFileSync(path.join(OUT_DIR, `t${String(f).padStart(4, "0")}.bg.bin`),
+        decodeMask(tOut[f], `tunnel frame ${f} bg mask`));
+      n++;
+    }
+    if (n !== TUNNEL_FRAMES.length) {
+      console.error(`capture-canvas: tunnel leg wrote ${n} masks, wanted ${TUNNEL_FRAMES.length}`);
+      process.exit(1);
+    }
+  }
+
   // Reuse-hatch INPUT-CLOSURE binding (review-44 fix 3, widened by
   // review-46 fix 2; snapshot-verified per review-48 round 3, iter 49):
   // record, alongside the cached masks, the PRE-CONSUMPTION sha256 of
@@ -565,12 +687,15 @@ async function main() {
       process.exit(1);
     }
   }
-  fs.writeFileSync(path.join(OUT_DIR, "capture.digests.json"), JSON.stringify({
-    closure: CLOSURE_SNAP,
-    gfxdata: sha256Hex(fs.readFileSync(path.resolve(GFXDATA))),
-    vfxdata: sha256Hex(fs.readFileSync(path.resolve(VFXDATA))),
-    glyphs: sha256Hex(fs.readFileSync(path.resolve(GLYPHS))),
-  }, null, 2) + "\n");
+  // The sidecar is published at the very END of this function — after the
+  // last page call, the run JSON, and the browser/server shutdown — and
+  // only if no page error has occurred by then (review-u1 r7). Publishing
+  // it earlier let a LATE page error leave a sidecar behind that a later
+  // MLFK_GFX_REUSE_CANVAS run would accept, laundering a failed capture
+  // into RENDER OK. Anything that fails before that point leaves NO
+  // sidecar, so reuse cannot proceed at all.
+  const sidecarPath = path.join(OUT_DIR, "capture.digests.json");
+  fs.rmSync(sidecarPath, { force: true });
 
   const coverage = await page.evaluate(() => window.__coverage());
   fs.writeFileSync(OUT_RUN, JSON.stringify({
@@ -589,11 +714,37 @@ async function main() {
     frames,
   }));
 
-  console.log(`${g.id}: ${g.frames} frames rendered+stepped in ${wall}ms; ` +
-    `${masksWritten} sampled masks -> ${OUT_DIR}`);
-
   await browser.close();
   srv.close();
+
+  // PUBLICATION, last of all (review-u1 r7). Every page call is done and
+  // the browser is closed, so `pageErrored` is now final. Only a clean
+  // run gets a sidecar, and it is written after the artifacts it hashes.
+  if (pageErrored) {
+    console.error("capture-canvas: page error(s) occurred — no sidecar published, " +
+      "so this capture cannot be reused");
+    process.exit(1);
+  }
+  const artifacts = {};
+  for (const name of fs.readdirSync(OUT_DIR).sort()) {
+    if (name === "capture.digests.json") continue;
+    artifacts[name] = sha256Hex(fs.readFileSync(path.join(OUT_DIR, name)));
+  }
+  fs.writeFileSync(sidecarPath, JSON.stringify({
+    artifacts: artifacts,
+    closure: CLOSURE_SNAP,
+    gfxdata: sha256Hex(fs.readFileSync(path.resolve(GFXDATA))),
+    vfxdata: sha256Hex(fs.readFileSync(path.resolve(VFXDATA))),
+    glyphs: sha256Hex(fs.readFileSync(path.resolve(GLYPHS))),
+  }, null, 2) + "\n");
+
+  console.log(`${g.id}: ${g.frames} frames rendered+stepped in ${wall}ms; ` +
+    `${masksWritten} sampled masks -> ${OUT_DIR}`);
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => {
+  // never leave a sidecar from a failed run (review-u1 r7)
+  try { fs.rmSync(path.join(OUT_DIR, "capture.digests.json"), { force: true }); } catch (_) {}
+  console.error(e);
+  process.exit(1);
+});

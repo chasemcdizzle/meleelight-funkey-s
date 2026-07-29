@@ -26,10 +26,43 @@
 //     for humans) on sampled frames.
 //
 // Render sequence = the FULL gameMode-3 renderTick branch
-// (main.js:1243-1261) MINUS drawBackground (bg planes are not in the
-// mask on either side; the C compositor draws them ink-suppressed):
-//   clearScreen -> drawStage -> renderPlayer x4 -> renderArticles ->
-//   renderVfx() -> renderOverlay(true)
+// (main.js:1243-1261), drawBackground INCLUDED (U1):
+//   clearScreen -> drawBackground (isShowSFX gate, upstream's own) ->
+//   drawStage -> renderPlayer x4 -> renderArticles -> renderVfx() ->
+//   renderOverlay(true)
+//
+// U1 — why drawBackground used to be excluded, and what makes it
+// includable now. drawStars consumes Math.random EVERY frame (18 draws
+// for the two mountains' control points, +3 per star respawn), so under
+// the native-RNG swap below the browser walks a random trajectory the C
+// cannot follow: pairing the BG2 plane frame-by-frame was impossible,
+// not merely unjudged. The fix is the project's own sweep discipline
+// (fix_plan §M2 rules 11/12): give BOTH sides the SAME stream and the
+// SAME start state.
+//   - stream: a mulberry32 seeded with gfx_bg.c's own render-local
+//     constant, installed as Math.random for the duration of
+//     drawBackground ONLY (the rest of the render keeps the native swap,
+//     so nothing else changes);
+//   - start state: bgPos/direction/circleSize/bgSparkle/ang are still at
+//     their stagerender.js module literals when the capture begins
+//     (renderTick is disabled via __harnessNoRender, so drawBackground
+//     has never run) — asserted, not assumed, by __gfxBgInit. bgStars is
+//     the one piece that is NOT (its 20 stars are built at bundle-eval
+//     time from the seeded BOOT stream), so __gfxBgInit re-seeds it in
+//     place by calling window.__bgReseed under the mirrored stream.
+// gfx_bg_reset() performs exactly that same 6-draws-per-star sequence
+// from the same seed, so the two starfields and both mountains then
+// advance draw-for-draw together for the whole run.
+//
+// NO SELF-REFERENCE: every line the judge compares is upstream's own
+// executed code. bgStar(), drawStars(), drawTunnel(), drawBackgroundInit()
+// and the bezier fills run from the bundle; the star-initialisation loop
+// (stagerender.js:16-19), which is a module-level statement rather than a
+// callable, is SOURCE-TRANSFORMED into window.__bgReseed by copying its
+// exact served bytes (capture-canvas.js reseedHook), never retyped.
+// (review-u1 r1 M1 — an earlier version restated its two position
+// expressions, which would have mirrored a matching error in gfx_bg.c.)
+//
 // Guards that keep the sim stream clean, PROVEN by the run's
 // verify-stream STREAM MATCH:
 //   - Math.random is swapped to the harness's stashed native RNG for the
@@ -369,8 +402,137 @@
     return lines.join("\n") + "\n";
   };
 
+  // --- U1 background parity -------------------------------------------------
+  // gfx_bg.c's render-local seed, mirrored bit-for-bit (ml_rng.h
+  // mulberry32 == oracle/harness/init.js's algorithm).
+  const BG_SEED = 0xBADD00D5;
+  let bgRandom = null;
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function eqArr(a, b) {
+    if (!Array.isArray(a) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (Array.isArray(b[i])) { if (!eqArr(a[i], b[i])) return false; }
+      else if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
+
+  // Seeds the mirrored stream and puts stagerender's bg module state in
+  // the exact state gfx_bg_reset() leaves the C in. Hard-fails if the
+  // page is not where we believe it is.
+  window.__gfxBgInit = function () {
+    if (typeof window.__bgState !== "function") {
+      throw new Error("gfx-capture: __bgState hook missing (served-bytes bg injection)");
+    }
+    const st = window.__bgState();
+    const stars = st[0], pos = st[1], dir = st[2], circ = st[3];
+    const sparkle = st[4], ang = st[5];
+    // Pristine-state assertions: everything except bgStars must still be
+    // at its stagerender.js literal, or drawBackground has already run
+    // and the two sides cannot be paired.
+    if (!eqArr(pos, [[-30, 500, 300, 500, 900, 500, 1230, 450, 358],
+                     [-30, 400, 300, 400, 900, 400, 1230, 350, 179]])) {
+      throw new Error("gfx-capture: bgPos is not at its module literal (drawBackground already ran?)");
+    }
+    if (!eqArr(dir, [[1, -1, 1, -1, 1, -1, 1, -1, 1],
+                     [-1, 1, -1, 1, -1, 1, -1, 1, -1]])) {
+      throw new Error("gfx-capture: direction is not at its module literal");
+    }
+    if (!eqArr(circ, [0, 40, 80, 120, 160])) {
+      throw new Error("gfx-capture: circleSize is not at its module literal");
+    }
+    if (sparkle !== 3 || ang !== 0) {
+      throw new Error("gfx-capture: bgSparkle/ang are not at their module literals");
+    }
+    if (!Array.isArray(stars) || stars.length !== 20) {
+      throw new Error("gfx-capture: bgStars is not the 20-element module array");
+    }
+    // Re-run stagerender.js:16-19 over the mirrored stream by calling
+    // UPSTREAM'S OWN BYTES: __bgReseed is that loop source-transformed
+    // into a function by the served-bytes hook (capture-canvas.js
+    // reseedHook), so nothing about the star initialisation is restated
+    // on our side and a matching error in gfx_bg.c cannot hide.
+    if (typeof window.__bgReseed !== "function") {
+      throw new Error("gfx-capture: __bgReseed hook missing (served-bytes reseed injection)");
+    }
+    bgRandom = mulberry32(BG_SEED);
+    const saved = Math.random;
+    Math.random = bgRandom;
+    try {
+      window.__bgReseed();
+    } finally {
+      Math.random = saved;
+    }
+    if (window.__bgState()[0] !== stars || stars.length !== 20) {
+      throw new Error("gfx-capture: __bgReseed replaced the bgStars array instead of re-seeding it");
+    }
+    return true;
+  };
+
+  // --- star-only plane (review-u1 r4) ---------------------------------------
+  // The starfield needs judging over the WHOLE letterbox band, not just the
+  // rows mountains cannot reach: stars draw below that line too, so a
+  // renderer clipping only the lower ones would otherwise pass. drawStars
+  // is the only background code that issues bg2.arc()+fill() (the
+  // mountains use bezierCurveTo/lineTo, drawTunnel strokes), so mirroring
+  // exactly those calls onto a scratch layer isolates the starfield with
+  // upstream's own centre, radius, fillStyle and globalAlpha.
+  let starLayer = null, starCtx = null;
+
+  function hookStarCapture() {
+    const bg2 = mods.main.layers.BG2.getContext("2d");
+    if (!starLayer) {
+      starLayer = document.createElement("canvas");
+      starLayer.width = mods.main.layers.BG2.width;
+      starLayer.height = mods.main.layers.BG2.height;
+      starCtx = starLayer.getContext("2d");
+    }
+    starCtx.clearRect(0, 0, starLayer.width, starLayer.height);
+    const realArc = bg2.arc, realFill = bg2.fill;
+    let pending = null;
+    bg2.arc = function (x, y, r, a0, a1, ccw) {
+      pending = [x, y, r, a0, a1, ccw];
+      return realArc.call(this, x, y, r, a0, a1, ccw);
+    };
+    bg2.fill = function () {
+      if (pending) {
+        starCtx.globalAlpha = this.globalAlpha;
+        starCtx.fillStyle = this.fillStyle;
+        starCtx.beginPath();
+        realArc.apply(starCtx, pending);
+        realFill.call(starCtx);
+        pending = null;
+      }
+      return realFill.apply(this, arguments);
+    };
+    return function () {
+      delete bg2.arc;
+      delete bg2.fill;
+      if (bg2.arc !== realArc || bg2.fill !== realFill) {
+        throw new Error("gfx-capture: failed to restore BG2 arc/fill after star capture");
+      }
+    };
+  }
+
   // --- render + mask capture ------------------------------------------------
-  window.__gfxRender = function () {
+  // opts.bg === false skips drawBackground. The injection frame renders
+  // SEVEN times (canonical + det + 5 leave-one-out) and the bg stream
+  // must advance exactly ONCE per game frame to stay in step with the C,
+  // so only the canonical render of any frame draws the background. The
+  // fg1|fg2|UI mask those extra renders exist to compare is untouched by
+  // the bg pass (different canvas layers), and boxFill only changes fg2
+  // COLOUR, never its alpha — so the fg judgments are unaffected.
+  window.__gfxRender = function (opts) {
+    const withBg = !(opts && opts.bg === false);
     const M = mods.main, S = mods.stage, R = mods.render, A = mods.article;
     const H = window.__harness;
     const players = H.getPlayers();
@@ -399,6 +561,17 @@
     Math.random = window.__nativeRandom;
     try {
       M.clearScreen();
+      if (withBg && mods.vfx.isShowSFX()) {
+        // upstream's own gate (main.js:1249-1251). The bg gets the
+        // MIRRORED stream, everything else keeps the native swap.
+        if (!bgRandom) throw new Error("gfx-capture: __gfxBgInit was never run");
+        Math.random = bgRandom;
+        const unhook = hookStarCapture();
+        try { S.drawBackground(); } finally {
+          unhook();
+          Math.random = window.__nativeRandom;
+        }
+      }
       S.drawStage();
       for (let i = 0; i < 4; i++) {
         if (ptype[i] > -1) R.renderPlayer(i);
@@ -461,6 +634,24 @@
     for (let i = 0; i < w * h; i++) {
       m[i] = (d1[i * 4 + 3] > 0 || d2[i * 4 + 3] > 0 || d3[i * 4 + 3] > 0) ? 1 : 0;
     }
+    // U1: the BG2 plane, judged separately. BG1 is deliberately NOT in
+    // it — drawBackgroundInit fills BG1 opaque edge to edge, so its
+    // silhouette is all-ones on both sides and would judge nothing; the
+    // gradient is judged by colour instead (__gfxBgGradColumn).
+    // SILHOUETTE ONLY (alpha > 0), matching the fg mask and the C ink
+    // plane: star/mountain COLOURS and opacity magnitudes are not judged
+    // here (review-u1 r1 L1). The BG1 gradient is the colour-judged part.
+    if (l.BG2.width !== w || l.BG2.height !== h) {
+      throw new Error("gfx-capture: BG2 layer size mismatch");
+    }
+    const db = l.BG2.getContext("2d").getImageData(0, 0, w, h).data;
+    const mb = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) mb[i] = db[i * 4 + 3] > 0 ? 1 : 0;
+    const ms = new Uint8Array(w * h);
+    if (starCtx) {
+      const ds = starCtx.getImageData(0, 0, w, h).data;
+      for (let i = 0; i < w * h; i++) ms[i] = ds[i * 4 + 3] > 0 ? 1 : 0;
+    }
     // composite PNG (ui over fg2 over fg1 on black) — human debugging only
     const c = document.createElement("canvas");
     c.width = w; c.height = h;
@@ -470,7 +661,61 @@
     ctx.drawImage(l.FG1, 0, 0);
     ctx.drawImage(l.FG2, 0, 0);
     ctx.drawImage(l.UI, 0, 0);
-    return { mask: b64(m), png: c.toDataURL("image/png") };
+    return { mask: b64(m), bg: b64(mb), star: b64(ms), png: c.toDataURL("image/png") };
+  };
+
+  // The type the PAGE selected, from upstream's own seeded startGame
+  // draw (main.js:1322). Read through __bgState so it is the live module
+  // variable, not a stale export snapshot.
+  window.__gfxBgType = function () {
+    return window.__bgState()[6];
+  };
+
+  // The BG1 gradient as one RGB triplet per canvas row, read out of the
+  // live layer at mid-canvas (the gradient is vertical, so any column
+  // carries it). Compared against the 8-bit row colours the C's gradient
+  // loop actually handed the rasterizer, which gfx_replay cross-checks
+  // against the RGB565 framebuffer that same loop wrote.
+  window.__gfxBgGradColumn = function () {
+    const l = mods.main.layers;
+    const d = l.BG1.getContext("2d").getImageData(600, 0, 1, l.BG1.height).data;
+    const lines = ["BGGRAD1"];
+    for (let y = 0; y < l.BG1.height; y++) {
+      if (d[y * 4 + 3] !== 255) {
+        throw new Error("gfx-capture: BG1 is not opaque at row " + y +
+          " (drawBackgroundInit never ran?)");
+      }
+      lines.push(`R ${y} ${d[y * 4]} ${d[y * 4 + 1]} ${d[y * 4 + 2]}`);
+    }
+    lines.push("END");
+    return lines.join("\n") + "\n";
+  };
+
+  // The standalone tunnel leg (backgroundType 1). The type is a per-SEED
+  // coin flip at startGame; MEASURED over the committed goldens,
+  // g01/g02/g03/g05/g06/g07/g08/m02 select type 0 while g04 (seed
+  // 7344) and m01 (seed 8114) select type 1.
+  // This rig replays g01 (type 0) only, so drawTunnel is unreachable
+  // from its match — but it is half of gfx_bg.c and consumes no
+  // randomness, so it pairs exactly from pristine module state. Runs AFTER the match, driving
+  // upstream's own drawBackground through upstream's own type-1 init.
+  window.__gfxBgTunnel = function (frames, sampled) {
+    const M = mods.main, S = mods.stage;
+    const out = {};
+    S.setBackgroundType(1);
+    S.drawBackgroundInit(); // installs the radial gridGrad strokeStyle
+    const saved = Math.random;
+    Math.random = window.__nativeRandom;
+    try {
+      for (let f = 1; f <= frames; f++) {
+        M.clearScreen();
+        S.drawBackground();
+        if (sampled[f]) out[f] = window.__gfxCaptureMask().bg;
+      }
+    } finally {
+      Math.random = saved;
+    }
+    return out;
   };
 
   window.__gfxCaptured = {};

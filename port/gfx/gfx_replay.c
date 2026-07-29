@@ -191,6 +191,112 @@ static int is_dump_frame(long f) {
   return 0;
 }
 
+// The tunnel leg keeps its own sample list (its frame numbers index a
+// standalone deterministic animation, not the match).
+static long g_tdump[MAX_DUMP];
+static int g_ntdump;
+
+static long parse_tunnel_frames(const char *s) {
+  long last = 0;
+  g_ntdump = 0;
+  while (*s) {
+    char *end;
+    const long v = strtol(s, &end, 10);
+    if (end == s || v <= last) sim_fatal("--bg-tunnel-frames: not strictly ascending positives");
+    if (g_ntdump >= MAX_DUMP) sim_fatal("--bg-tunnel-frames: too many frames");
+    g_tdump[g_ntdump++] = v;
+    last = v;
+    s = end;
+    if (*s == ',') s++;
+    else if (*s != 0) sim_fatal("--bg-tunnel-frames: bad separator");
+  }
+  if (g_ntdump == 0) sim_fatal("--bg-tunnel-frames: empty list");
+  return last; // run length = the highest sampled frame
+}
+
+static int is_tunnel_dump_frame(long f) {
+  for (int k = 0; k < g_ntdump; k++) {
+    if (g_tdump[k] == f) return 1;
+  }
+  return 0;
+}
+
+// --- U1 background-parity dumps -------------------------------------------------------
+//
+// The BG2 (drawStars/drawTunnel) plane is inked and handed to bg_sink by
+// gfx_bg.c once per frame; we write it out on the sampled frames only,
+// as fNNNN.bg.pgm — same P5 240x240 grammar as the fg .pgm, so iou.js
+// judges it with the same downscale/band machinery.
+static const char *g_bgOut;   // NULL = sink not armed
+static long g_bgFrame;        // frame number the sink is currently serving
+static int g_bgTunnelLeg;     // 1 while the standalone tunnel leg runs
+
+static void star_sink(Gfx *g) {
+  if (!g_bgOut || g_bgTunnelLeg) return; // stars exist only on type 0
+  if (!is_dump_frame(g_bgFrame)) return;
+  char path[1200];
+  snprintf(path, sizeof path, "%s/f%04ld.star.pgm", g_bgOut, g_bgFrame);
+  gfx_dump_ink_pgm(g, path);
+}
+
+static void bg_sink(Gfx *g) {
+  if (!g_bgOut) return;
+  if (!(g_bgTunnelLeg ? is_tunnel_dump_frame(g_bgFrame) : is_dump_frame(g_bgFrame))) return;
+  char path[1200];
+  snprintf(path, sizeof path, "%s/f%04ld.bg.pgm", g_bgOut, g_bgFrame);
+  gfx_dump_ink_pgm(g, path);
+}
+
+// The BG1 gradient, judged by COLOUR and OBSERVATIONALLY: gfx_bg.c fires
+// this straight after the gradient rows are laid down, while the
+// framebuffer holds the gradient and nothing else, so what we dump is
+// the real shipped output — row loop, canvas->device mapping, clip
+// range and RGB565 packing included (review-u1 r1 H2). One line per
+// DEVICE row of the letterbox band; GFX_K is exactly 0.2, so device row
+// y is canvas row (y - GFX_DY) * 5 with no resampling slack.
+static const char *g_gradPath;
+
+static void grad_sink(Gfx *g) {
+  if (!g_gradPath) return;
+  FILE *f = fopen(g_gradPath, "wb");
+  if (!f) sim_fatal("gfx_replay: cannot open --bg-grad for writing");
+  int lo = 0, hi = 0;
+  const uint8_t (*obs)[3] = 0;
+  gfx_bg_grad_observed(&lo, &hi, &obs);
+  if (lo != g->rz.clipY0 || hi != g->rz.clipY1) {
+    sim_fatal("gfx_replay: gradient row loop did not cover the clip range");
+  }
+  fprintf(f, "BGGRAD1\n");
+  for (int y = g->rz.clipY0; y < g->rz.clipY1; y++) {
+    const uint16_t p = g->rz.fb[(size_t)y * RAST_W + (RAST_W / 2)];
+    // the row must be uniform: rast_fill_row_opaque covers [0,RAST_W),
+    // so sampling one column is representative only if it really did
+    for (int x = 0; x < RAST_W; x++) {
+      if (g->rz.fb[(size_t)y * RAST_W + (size_t)x] != p) {
+        sim_fatal("gfx_replay: BG1 gradient row is not uniform across x");
+      }
+    }
+    const unsigned fr = (unsigned)(uint8_t)(((p >> 11) & 31) << 3);
+    const unsigned fg = (unsigned)(uint8_t)(((p >> 5) & 63) << 2);
+    const unsigned fb = (unsigned)(uint8_t)((p & 31) << 3);
+    // CROSS-CHECK: the 8-bit colour the row loop reported must be exactly
+    // what the framebuffer it wrote quantizes to. This is what keeps the
+    // 8-bit plane an OBSERVATION of the real path rather than a second,
+    // unverified opinion about it (review-u1 r1 H2 / r2 M1).
+    if (((unsigned)(obs[y][0] >> 3) << 3) != fr ||
+        ((unsigned)(obs[y][1] >> 2) << 2) != fg ||
+        ((unsigned)(obs[y][2] >> 3) << 3) != fb) {
+      sim_fatal("gfx_replay: observed gradient row disagrees with the framebuffer it wrote");
+    }
+    // "R <device row> <fb r> <fb g> <fb b> <obs r> <obs g> <obs b>"
+    fprintf(f, "R %d %u %u %u %u %u %u\n", y, fr, fg, fb,
+            (unsigned)obs[y][0], (unsigned)obs[y][1], (unsigned)obs[y][2]);
+  }
+  fprintf(f, "END\n");
+  if (fclose(f) != 0) sim_fatal("gfx_replay: --bg-grad close failed");
+  g_gradPath = 0; // first frame only; the gradient is static per match
+}
+
 // --- timing ---------------------------------------------------------------------------
 
 static uint64_t now_ns(void) {
@@ -214,6 +320,8 @@ int main(int argc, char **argv) {
   const char *tracePath = 0, *simdataPath = 0, *bridgePath = 0;
   const char *gfxdataPath = 0, *animDir = 0, *renderOut = 0;
   const char *vfxdataPath = 0, *glyphsPath = 0, *injectPath = 0;
+  const char *bgGradPath = 0, *bgTunnelOut = 0;
+  long bgTunnelFrames = 0;
   long seed = -1, p1 = -1, p2 = -1, stage = -1, frames = -1, difficulty = 3;
   bool cpu = false;
   for (int i = 1; i < argc; i++) {
@@ -228,6 +336,11 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--anim-dir") == 0 && hasV) animDir = argv[++i];
     else if (strcmp(a, "--render-out") == 0 && hasV) renderOut = argv[++i];
     else if (strcmp(a, "--render-frames") == 0 && hasV) parse_render_frames(argv[++i]);
+    else if (strcmp(a, "--bg-out") == 0 && hasV) g_bgOut = argv[++i];
+    else if (strcmp(a, "--bg-grad") == 0 && hasV) bgGradPath = argv[++i];
+    else if (strcmp(a, "--bg-tunnel-out") == 0 && hasV) bgTunnelOut = argv[++i];
+    else if (strcmp(a, "--bg-tunnel-frames") == 0 && hasV)
+      bgTunnelFrames = parse_tunnel_frames(argv[++i]);
     else if (strcmp(a, "--ai-bridge") == 0 && hasV) bridgePath = argv[++i];
     else if (strcmp(a, "--seed") == 0 && hasV) seed = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--p1") == 0 && hasV) p1 = strtol(argv[++i], 0, 10);
@@ -244,13 +357,15 @@ int main(int argc, char **argv) {
   if (!tracePath || !simdataPath || !gfxdataPath || !animDir ||
       !vfxdataPath || !glyphsPath || seed < 0 ||
       p1 < 0 || p2 < 0 || stage < 0 || frames <= 0 || (cpu && !bridgePath) ||
-      (g_ndump > 0 && !renderOut)) {
+      (g_ndump > 0 && !renderOut) || (g_bgOut && g_ndump == 0) ||
+      ((bgTunnelOut != 0) != (bgTunnelFrames > 0))) {
     fprintf(stderr,
             "usage: gfx_replay --trace t.txt --simdata s.txt --gfxdata g.txt "
             "--vfxdata v.txt --glyphs gl.txt "
             "--anim-dir D --seed N --p1 N --p2 N --stage N --frames N "
             "[--cpu --difficulty N --ai-bridge f] [--inject i.txt] "
-            "[--render-frames a,b --render-out D]\n");
+            "[--render-frames a,b --render-out D] "
+            "[--bg-out D] [--bg-grad f] [--bg-tunnel-out D --bg-tunnel-frames N]\n");
     return 1;
   }
 
@@ -291,6 +406,10 @@ int main(int argc, char **argv) {
   // upstream's vfxQueue carries them into frame 1's render.
   gfx_init(&g_gfx, (int)stage, backgroundType);
   gfx_vfx_install(&g_gfx);
+  // U1: arm the BG2 ink sink before the first render. Unarmed the
+  // background pass is ink-suppressed exactly as before.
+  if (g_bgOut) { gfx_bg_ink_sink(bg_sink); gfx_bg_star_sink(star_sink); }
+  if (bgGradPath) { g_gradPath = bgGradPath; gfx_bg_grad_sink(grad_sink); }
 
   sim_setup_match(&G, (int)p1, (int)p2, cpu ? 1 : 0, (int)difficulty,
                   (int)stage);
@@ -311,6 +430,7 @@ int main(int argc, char **argv) {
 
     gfx_vfx_inject_fire(f + 1); // synthetic coverage (post-tick, pre-render;
                                 // the browser capture injects at the same point)
+    g_bgFrame = f + 1; // which frame bg_sink is serving
     const uint64_t t0 = now_ns();
     gfx_render_frame(&g_gfx, &G); // every frame (perturbation exposure + timing)
     rns[f] = now_ns() - t0;
@@ -340,9 +460,45 @@ int main(int argc, char **argv) {
           rns[(long)((double)frames * 0.99)], rns[frames - 1], frames);
   free(rns);
 
+  // review-u1 r2 M4: read this back OUT OF THE RENDERER after init, so it
+  // is the value the render path will actually dispatch on, not the
+  // local we intended to pass it.
+  fprintf(stderr, "bg selected backgroundType %d\n", g_gfx.backgroundType);
+
   const uint32_t total = draws_between(G.rngStateAtReset, G.rng.a);
   const uint32_t outside = draws_between(G.rngStateAtReset, G.rngStateAtFrame1);
   printf("RNG %" PRIu32 " %" PRIu32 "\n", total, outside);
+
+  // U1 tunnel leg. backgroundType is drawn from the seeded stream at
+  // startGame (main.js:1322 setBackgroundType(Math.round(Math.random()))),
+  // so which background a match gets is a per-SEED coin flip, not a stage
+  // property. MEASURED over the committed goldens: g01/g02/g03/g05/g06/
+  // g07/g08/m02 select type 0 and g04 (seed 7344) and m01 (seed 8114)
+  // select type 1 — but this rig replays g01 only, so drawTunnel is
+  // unreachable from the golden it runs. It consumes NO randomness (only
+  // ang and circleSize advance), so a standalone leg pairs it with the
+  // browser exactly from pristine module state. REGISTERED RESIDUAL:
+  // because both sides are FORCED to type 1 here, this leg proves
+  // drawTunnel's GEOMETRY, not the type-1 dispatch; the dispatch is
+  // checked separately by the browser-vs-C backgroundType equality
+  // assert on the live golden. Runs after the match so nothing above can
+  // see it; the stream and every fg artifact are already written.
+  if (bgTunnelOut) {
+    g_gfx.backgroundType = 1;
+    gfx_bg_reset();
+    g_bgOut = bgTunnelOut;
+    g_bgTunnelLeg = 1;
+    gfx_bg_ink_sink(bg_sink);
+    for (long f = 1; f <= bgTunnelFrames; f++) {
+      g_bgFrame = f;
+      rast_clear(&g_gfx.rz, 0, 0, 0, (int)GFX_DY, (int)(GFX_DY + 750.0 * GFX_K));
+      gfx_render_background(&g_gfx);
+    }
+    // stderr: stdout is the checksum stream (wrap-run.js parses it, and
+    // check-render.sh cmp's it a-vs-b) and must stay byte-unchanged.
+    fprintf(stderr, "bg tunnel leg: %ld frames, %d sampled\n", bgTunnelFrames, g_ntdump);
+  }
+
   printf("SIM OK\n");
   return 0;
 }

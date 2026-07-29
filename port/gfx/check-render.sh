@@ -19,7 +19,22 @@
 #   5. the C render-on replay's stream passes verify-stream.js vs the
 #      frozen golden (the renderer must not perturb the sim);
 #   6. silhouette IoU (iou.js, frozen methodology) >= the frozen
-#      threshold in expected-render.json on every sampled frame.
+#      threshold in expected-render.json on every sampled frame;
+#   7. THE BACKGROUND PLANES (U1). The reference sequence now runs
+#      upstream's drawBackground under its own isShowSFX gate, and all
+#      three background surfaces are judged every run:
+#        - BG2 silhouette (drawStars) on all 24 sampled frames, and
+#          (drawTunnel) on the frozen bgTunnelFrames corpus, each vs the
+#          C's bg ink plane at the frozen bgIouThreshold /
+#          bgTunnelIouThreshold;
+#        - the BG1 gradient by COLOUR, browser layer read-back vs the
+#          8-bit row colours the C's gradient loop actually emitted
+#          (cross-checked against the framebuffer it wrote), at the
+#          frozen bgGradMaxChannelDelta.
+#      Both sides walk the SAME mirrored mulberry32 from the same start
+#      state, so these are geometry comparisons, not statistics — see
+#      gfx-pagelib.js's __gfxBgInit note for why the plane used to be
+#      excluded and what made it includable.
 #
 # Tier-A hygiene (PROCESS §3 review bar, iter-42 class rule): every
 # produced artifact is rm-before-produce + made()-asserted; every
@@ -75,6 +90,34 @@ for (const v of f) {
 }
 '
 echo "corpus pin OK (24 unique sampled frames)"
+
+# U1 background pin (twin-pin class: capture-canvas.js and iou.js carry
+# their own independent copies). The tunnel corpus and the three
+# background thresholds are frozen repo state, asserted BEFORE any
+# build/capture work; the thresholds are measured-then-frozen FLOORS and
+# a change to any of them is a reviewed repo change, never a runtime
+# degradation.
+node -e '
+const e = require("./'"$EXP"'");
+const t = e.bgTunnelFrames;
+if (!Array.isArray(t) || t.join(",") !== "1,2,3,41,81,121,161,200,201,202,240") {
+  console.error("check-render: bgTunnelFrames pin violated — [" + String(t) +
+    "] != the hard-pinned reviewed 11-frame list");
+  process.exit(1);
+}
+if (e.bgIouThreshold !== 0.99 || e.bgStarIouThreshold !== 0.78 ||
+    e.bgTunnelIouThreshold !== 0.81 || e.bgGradMaxChannelDelta !== 1) {
+  console.error("check-render: background threshold pin violated — got " +
+    [e.bgIouThreshold, e.bgStarIouThreshold, e.bgTunnelIouThreshold,
+     e.bgGradMaxChannelDelta].join("/") + ", pinned 0.99/0.78/0.81/1");
+  process.exit(1);
+}
+if (e.bgStarFrameCount !== 6) {
+  console.error("check-render: bgStarFrameCount pin violated (want exactly 6)");
+  process.exit(1);
+}
+'
+echo "background pin OK (exact 11-frame tunnel corpus + 4 frozen background thresholds + star-frame count)"
 
 # injection-set pin (review-65 M1, iter 67): the RUNTIME inject table must
 # equal the frozen reviewed injectPin — exact ordered name list,
@@ -221,6 +264,83 @@ node port/sim/calib/dump-sim-data.js --out "$BUILD/simdata.txt"
 made "$BUILD/simdata.txt"
 
 # --- 2. build (rm-before-produce; -O3 ONLY on the raster TU) ---------------------
+# SOURCE closure digest, taken BEFORE anything is compiled (review-u1 r3
+# M2). Mechanical and broad on purpose — every compile input (gfx, sim,
+# fdlibm, ryu, the qjs sha256, the generated tables) and every artifact
+# that can change the VERDICT (the judge, its frozen planes, the trace and
+# stream helpers, this script). A per-file list would rot; a find-based
+# sweep cannot silently omit a new file.
+# NUL-safe, failure-propagating, and wide: every compile input, every
+# generated table, the pipeline that produces them, the judge and its
+# frozen planes, the oracle inputs the verdict leans on, and this script.
+# No `|| true` anywhere — a hashing failure must kill the run, not be
+# silently absorbed into the digest (review-u1 r4 M1).
+#
+# REGISTERED RESIDUAL: this detects a member edited at any point during
+# the run, which is the accident it exists to catch. It cannot detect a
+# source edited, compiled, and restored WITHIN the run — only building
+# from an immutable snapshot would, and the build is a full
+# rm-before-produce rebuild each run, so that sequence requires deliberate
+# concurrent tampering rather than a stray editor save.
+# FAIL-CLOSED (review-u1 r5 M1): a brace group in a pipeline runs in a
+# subshell where `set -e` does not abort the enclosing script, so an early
+# hashing failure used to be masked by the later successful ones. Build the
+# manifest into a file with individually status-checked commands FIRST,
+# and only hash it once every command has succeeded.
+digest_manifest() {
+  local out=$1
+  : > "$out" || return 1
+  find port/gfx port/sim port/fdlibm port/ryu pipeline oracle/qjs oracle/harness \
+       -type f \
+       \( -name '*.c' -o -name '*.h' -o -name '*.js' -o -name '*.sh' \
+          -o -name '*.json' -o -name '*.txt' \) \
+       -not -path 'port/gfx/build/*' -not -path '*/node_modules/*' \
+       -not -path 'pipeline/build/*' -print0 > "$out.list" || return 1
+  LC_ALL=C sort -z < "$out.list" | xargs -0 shasum -a 256 >> "$out" || return 1
+  shasum -a 256 oracle/goldens/manifest.json "$FROZEN" >> "$out" || return 1
+  rm -f "$out.list"
+}
+
+source_digest() {
+  digest_manifest "$BUILD/.srcman" || return 1
+  shasum -a 256 < "$BUILD/.srcman" | cut -d' ' -f1
+}
+
+# GENERATED decision inputs (review-u1 r5 M3): the artifacts the C runs and
+# the judge actually consume, which no source hash covers — the M1 data
+# plane, the executed sim-data/gfx-data planes, and the emitted trace and
+# injection tables. Snapshotted after production, re-verified before the
+# verdict, so both C runs cannot quietly consume the same corrupted input
+# and the judge cannot read an altered stages.json.
+generated_digest() {
+  local man=$BUILD/.genman
+  : > "$man" || return 1
+  shasum -a 256 "$TABLES"/ml_tables.c "$TABLES"/ml_tables.h \
+                "$TABLES"/ml_stages.c "$TABLES"/ml_stages.h \
+                "$TABLES"/stages.json "$TABLES"/tables.json \
+                "$BUILD"/simdata.txt "$BUILD"/gfxdata.txt "$BUILD"/vfxdata.txt \
+                "$BUILD"/vfxglyphs.txt "$BUILD"/inject.txt \
+                "$BUILD"/g01.trace.txt >> "$man" || return 1
+  # the per-effect leave-one-out tables the attribution assertions consume
+  find "$BUILD" -maxdepth 1 -name 'inject-loo-*.txt' -print0 | LC_ALL=C sort -z |
+    xargs -0 shasum -a 256 >> "$man" || return 1
+  find "$TABLES" -name 'anim_*.bin' -print0 | LC_ALL=C sort -z |
+    xargs -0 shasum -a 256 >> "$man" || return 1
+  shasum -a 256 < "$man" | cut -d' ' -f1
+}
+SOURCE_SNAP=$(source_digest) || {
+  echo "check-render: source digest failed" >&2; exit 1; }
+[ -n "$SOURCE_SNAP" ] || { echo "check-render: source digest empty" >&2; exit 1; }
+# The generated tables are COMPILER inputs, so they are sealed here —
+# before anything is compiled — not after (review-u1 r6 M2).
+tables_digest() {
+  shasum -a 256 "$TABLES"/ml_tables.c "$TABLES"/ml_tables.h \
+                "$TABLES"/ml_stages.c "$TABLES"/ml_stages.h || return 1
+}
+TABLES_SNAP=$(tables_digest | shasum -a 256 | cut -d' ' -f1) || {
+  echo "check-render: generated-table digest failed" >&2; exit 1; }
+[ -n "$TABLES_SNAP" ] || { echo "check-render: generated-table digest empty" >&2; exit 1; }
+
 CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror
   -I"$TABLES" -Iport/ryu -Iport/sim -Ioracle/qjs)
 rm -f "$BUILD/raster.o" "$BUILD/anim1.o" "$BUILD/gfx_render.o" \
@@ -263,6 +383,16 @@ cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/gfx_replay" \
   oracle/qjs/sha256.c port/fdlibm/fdlibm.c -lm
 made "$BUILD/gfx_replay"
 echo "build OK: $BUILD/gfx_replay (raster TU -O3, all else -O2; -ffp-contract=off everywhere)"
+
+# BINARY digest (review-u1 r2 M3 / r3 M2): paired with the SOURCE digest
+# taken before compilation, so a perturbation that was reverted after
+# compiling cannot leave a stale binary sitting behind clean source hashes.
+binary_digest() {
+  shasum -a 256 "$BUILD/gfx_replay" | cut -d' ' -f1
+}
+BINARY_SNAP=$(binary_digest)
+[ -n "$BINARY_SNAP" ] || { echo "check-render: binary digest failed" >&2; exit 1; }
+echo "build/judge closure snapshotted (sources pre-compile, binary post-link)"
 
 # --- 3. browser reference capture (STREAM-MATCH guarded) --------------------------
 NEED_CAPTURE=1
@@ -373,10 +503,47 @@ node "$GFX/glyph-compare.js" --judge "$GFX/vfxglyphs-frozen.txt" \
   exit 1
 }
 echo "captured VFXGLYPHS matches the committed frozen artifact (glyph-compare contract)"
+# ARTIFACT-MAP verification (review-u1 r5 M2): the judged masks must be
+# exactly the bytes the capture wrote, on the fresh path and — the case
+# that matters — on the reuse path, where the files have sat on disk
+# between runs. Same-size corruption that the IoU downscale would tolerate
+# dies here instead.
+node -e '
+const fs = require("fs"), crypto = require("crypto"), path = require("path");
+const dir = process.argv[1];
+const side = JSON.parse(fs.readFileSync(path.join(dir, "capture.digests.json"), "utf8"));
+if (!side.artifacts || typeof side.artifacts !== "object" || Array.isArray(side.artifacts)) {
+  console.error("check-render: capture sidecar carries no artifact map");
+  process.exit(1);
+}
+const want = Object.keys(side.artifacts).sort();
+const got = fs.readdirSync(dir).filter((n) => n !== "capture.digests.json").sort();
+if (want.join("\n") !== got.join("\n")) {
+  console.error("check-render: capture artifact SET drift (sidecar " + want.length +
+    " files, on disk " + got.length + ")");
+  process.exit(1);
+}
+for (const n of want) {
+  const h = crypto.createHash("sha256").update(fs.readFileSync(path.join(dir, n))).digest("hex");
+  if (h !== side.artifacts[n]) {
+    console.error("check-render: capture artifact " + n + " does not match its recorded digest");
+    process.exit(1);
+  }
+}
+console.log("capture artifact map verified (" + want.length + " files)");
+' "$CANVAS"
+
 IFS=',' read -r -a SAMPLED <<< "$FRAMES_LIST"
 for f in "${SAMPLED[@]}"; do
   tag=$(printf 'f%04d' "$f")
-  made "$CANVAS/$tag.mask.bin" "$CANVAS/$tag.png"
+  made "$CANVAS/$tag.mask.bin" "$CANVAS/$tag.png" "$CANVAS/$tag.bg.bin" "$CANVAS/$tag.star.bin"
+done
+# U1: the browser background reference — per-frame BG2 masks come from
+# the same capture, the tunnel leg's masks and the BG1 gradient column
+# are one-per-run.
+made "$CANVAS/bg1-grad.txt" "$CANVAS/bg-type.txt"
+for f in $(node -p "require('./$EXP').bgTunnelFrames.join(' ')"); do
+  made "$CANVAS/$(printf 't%04d' "$f").bg.bin"
 done
 
 # oracle build digest pin (review-44 fix 2, asserted BEFORE any judging):
@@ -478,10 +645,23 @@ for (const nm of pin.inkNames) {
 '
 made "$BUILD/inject.txt"
 
+# U1 background legs ride run-a/run-b: --bg-out drops the BG2 ink mask
+# next to each sampled frame's fg .pgm, --bg-grad dumps the BG1 gradient
+# as it renders them (framebuffer + 8-bit, cross-checked), and
+# --bg-tunnel-* runs the standalone
+# backgroundType-1 animation after the match (stdout untouched — the
+# leg's only stdout-visible effect would break wrap-run.js, so its
+# marker goes to stderr). x2 covers all of it for free.
+GENERATED_SNAP=$(generated_digest) || {
+  echo "check-render: generated-input digest failed" >&2; exit 1; }
+[ -n "$GENERATED_SNAP" ] || { echo "check-render: generated-input digest empty" >&2; exit 1; }
+
+TUNNEL_LIST=$(node -p "require('./$EXP').bgTunnelFrames.join(',')")
+IFS=',' read -r -a TSAMPLED <<< "$TUNNEL_LIST"
 for side in a b; do
-  rm -rf "$BUILD/render-$side"
-  rm -f "$BUILD/g01.gfx-out-$side.txt"
-  mkdir -p "$BUILD/render-$side"
+  rm -rf "$BUILD/render-$side" "$BUILD/tunnel-$side"
+  rm -f "$BUILD/g01.gfx-out-$side.txt" "$BUILD/bg1-grad-$side.txt"
+  mkdir -p "$BUILD/render-$side" "$BUILD/tunnel-$side"
   "$BUILD/gfx_replay" \
     --trace "$BUILD/g01.trace.txt" --simdata "$BUILD/simdata.txt" \
     --gfxdata "$BUILD/gfxdata.txt" --vfxdata "$BUILD/vfxdata.txt" \
@@ -490,21 +670,138 @@ for side in a b; do
     --seed "$G_SEED" --p1 "$G_P1" --p2 "$G_P2" --stage "$G_STAGE" \
     --frames "$G_FRAMES" \
     --render-frames "$FRAMES_LIST" --render-out "$BUILD/render-$side" \
+    --bg-out "$BUILD/render-$side" --bg-grad "$BUILD/bg1-grad-$side.txt" \
+    --bg-tunnel-out "$BUILD/tunnel-$side" --bg-tunnel-frames "$TUNNEL_LIST" \
     > "$BUILD/g01.gfx-out-$side.txt" \
     2> "$BUILD/g01.gfx-rtiming-$side.txt"
-  made "$BUILD/g01.gfx-out-$side.txt"
+  made "$BUILD/g01.gfx-out-$side.txt" "$BUILD/bg1-grad-$side.txt"
   for f in "${SAMPLED[@]}"; do
     tag=$(printf 'f%04d' "$f")
-    made "$BUILD/render-$side/$tag.ppm" "$BUILD/render-$side/$tag.pgm"
+    made "$BUILD/render-$side/$tag.ppm" "$BUILD/render-$side/$tag.pgm" \
+         "$BUILD/render-$side/$tag.bg.pgm" "$BUILD/render-$side/$tag.star.pgm"
+  done
+  for f in "${TSAMPLED[@]}"; do
+    tag=$(printf 'f%04d' "$f")
+    made "$BUILD/tunnel-$side/$tag.bg.pgm"
   done
 done
 cmp "$BUILD/g01.gfx-out-a.txt" "$BUILD/g01.gfx-out-b.txt"
+cmp "$BUILD/bg1-grad-a.txt" "$BUILD/bg1-grad-b.txt"
 for f in "${SAMPLED[@]}"; do
   tag=$(printf 'f%04d' "$f")
   cmp "$BUILD/render-a/$tag.ppm" "$BUILD/render-b/$tag.ppm"
   cmp "$BUILD/render-a/$tag.pgm" "$BUILD/render-b/$tag.pgm"
+  cmp "$BUILD/render-a/$tag.bg.pgm" "$BUILD/render-b/$tag.bg.pgm"
+  cmp "$BUILD/render-a/$tag.star.pgm" "$BUILD/render-b/$tag.star.pgm"
 done
-echo "x2 C renders byte-identical (stream + all PPM/PGM)"
+for f in "${TSAMPLED[@]}"; do
+  tag=$(printf 'f%04d' "$f")
+  cmp "$BUILD/tunnel-a/$tag.bg.pgm" "$BUILD/tunnel-b/$tag.bg.pgm"
+done
+echo "x2 C renders byte-identical (stream + all PPM/PGM incl. background planes)"
+
+# C-side evidence digest, snapshotted the moment it is final (review-u1 r6 M4)
+c_evidence_digest() {
+  local man=$BUILD/.cevman
+  : > "$man" || return 1
+  find "$BUILD/render-a" "$BUILD/render-b" "$BUILD/tunnel-a" "$BUILD/tunnel-b" \
+       "$BUILD/render-noinject" "$BUILD"/render-loo-* \
+       -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 >> "$man" || return 1
+  shasum -a 256 "$BUILD/bg1-grad-a.txt" "$BUILD/bg1-grad-b.txt" \
+                "$BUILD/g01.gfx-out-a.txt" "$BUILD/g01.gfx-out-b.txt" >> "$man" || return 1
+  # the stderr artifacts that carry the SELECTOR verdicts: without these a
+  # 0 -> 1 byte flip could defeat the natural type-1 witness while the
+  # reseal stayed green (review-u1 r7)
+  shasum -a 256 "$BUILD/g01.gfx-rtiming-a.txt" "$BUILD/g01.gfx-rtiming-b.txt" >> "$man" || return 1
+  shasum -a 256 "$BUILD/g04.natural.txt" >> "$man" || return 1
+  shasum -a 256 < "$man" | cut -d' ' -f1
+}
+
+
+# U1 / review-u1 r1 M2: backgroundType is ONE seeded draw at startGame
+# (main.js:1322), i.e. a per-seed coin flip, and the C recovers it from a
+# COPY of the RNG state. The two standalone tunnel legs FORCE type 1, so
+# they prove drawTunnel's geometry but not the selector. This asserts the
+# selector itself: the type the C picked must equal the type the PAGE
+# picked through upstream's own draw, on the live golden.
+# Fail-closed grammar on BOTH sides (review-u1 r3 M3): command
+# substitution would have swallowed a trailing blank line, and a bare
+# `sed -n p` ignores malformed neighbours as long as one good line exists.
+# Require the browser file to be EXACTLY "0\n" or "1\n", and require
+# exactly ONE well-formed type line in the C's stderr with no near-miss
+# lines beside it.
+BG_TYPE_B=$(node -e '
+const fs = require("fs");
+const t = fs.readFileSync(process.argv[1], "utf8");
+if (t !== "0\n" && t !== "1\n") {
+  console.error("browser bg-type.txt is not exactly 0 or 1 followed by one newline");
+  process.exit(1);
+}
+process.stdout.write(t.trim());
+' "$CANVAS/bg-type.txt") || {
+  echo "check-render: browser backgroundType readback malformed" >&2; exit 1; }
+BG_TYPE_C=$(node "$GFX/parse-bg-stderr.js" "$BUILD/g01.gfx-rtiming-a.txt" g01) || {
+  echo "check-render: C backgroundType readback malformed" >&2; exit 1; }
+if [ "$BG_TYPE_B" != "$BG_TYPE_C" ]; then
+  echo "check-render: backgroundType DISPATCH mismatch — page selected $BG_TYPE_B, C selected $BG_TYPE_C" >&2
+  exit 1
+fi
+echo "backgroundType dispatch agrees (page and C both selected $BG_TYPE_B from the seeded startGame draw)"
+
+# NATURAL TYPE-1 WITNESS (review-u1 r3 M1). g01 naturally selects type 0
+# and the tunnel legs FORCE type 1, so everything above would still pass
+# if the selector — or gfx_init — were hard-wired to 0. g04 (seed 7344)
+# is a committed golden whose startGame draw is 0.787359, i.e. it selects
+# type 1 naturally. Drive the REAL path for it: manifest seed -> the
+# peeked startGame draw -> gfx_init -> read the type back out of the
+# renderer. No forcing anywhere. A hard-wired selector dies here.
+# REGISTERED RESIDUAL: this is the C side only — pairing g04's tunnel
+# against the browser would need a second full capture, which this check
+# does not run; the browser-vs-C type agreement is proved on g01 above
+# and drawTunnel's geometry is proved by the forced legs.
+unset nseed np1 np2 nstage ntrace
+nparams="$(node -e "
+  const m=require('./oracle/goldens/manifest.json');
+  const g=m.goldens.find(x=>x.id==='g04');
+  if(!g) throw new Error('g04 missing from manifest');
+  console.log('nseed='+g.seed); console.log('np1='+g.p1); console.log('np2='+g.p2);
+  console.log('nstage='+g.stage); console.log('ntrace='+g.trace);
+")" || { echo "check-render: g04 manifest extraction failed" >&2; exit 1; }
+while IFS='=' read -r nk nv; do
+  case "$nk" in
+    ntrace)
+      [[ "$nv" =~ ^[a-z0-9][a-z0-9-]*\.trace\.json$ ]] || {
+        echo "check-render: g04 trace name fails validation" >&2; exit 1; }
+      ntrace=$nv ;;
+    nseed|np1|np2|nstage)
+      [[ "$nv" =~ ^[0-9]+$ ]] || {
+        echo "check-render: g04 $nk not a decimal integer" >&2; exit 1; }
+      printf -v "$nk" '%s' "$nv" ;;
+    *) echo "check-render: unexpected g04 extraction line '$nk=$nv'" >&2; exit 1 ;;
+  esac
+done <<< "$nparams"
+: "$nseed" "$np1" "$np2" "$nstage" "$ntrace"
+made "oracle/goldens/$ntrace"
+rm -f "$BUILD/g04.trace.txt"
+node "$GFX/../sim/sim/trace-to-txt.js" "oracle/goldens/$ntrace" "$BUILD/g04.trace.txt"
+made "$BUILD/g04.trace.txt"
+rm -f "$BUILD/g04.natural.txt"
+"$BUILD/gfx_replay" \
+  --trace "$BUILD/g04.trace.txt" --simdata "$BUILD/simdata.txt" \
+  --gfxdata "$BUILD/gfxdata.txt" --vfxdata "$BUILD/vfxdata.txt" \
+  --glyphs "$BUILD/vfxglyphs.txt" --anim-dir "$TABLES" \
+  --seed "$nseed" --p1 "$np1" --p2 "$np2" --stage "$nstage" --frames 2 \
+  > /dev/null 2> "$BUILD/g04.natural.txt"
+made "$BUILD/g04.natural.txt"
+BG_TYPE_NAT=$(node "$GFX/parse-bg-stderr.js" "$BUILD/g04.natural.txt" g04) || {
+  echo "check-render: g04 backgroundType readback malformed" >&2; exit 1; }
+if [ "$BG_TYPE_NAT" != "1" ]; then
+  echo "check-render: g04 (seed $nseed) must NATURALLY select backgroundType 1," >&2
+  echo "  got $BG_TYPE_NAT — the selector or gfx_init is not honouring the seeded draw" >&2
+  exit 1
+fi
+echo "natural type-1 witness OK (g04 seed $nseed selected backgroundType 1 through the real path)"
+
 
 # NO-INJECT baseline render (review-65 M2, iter 67): a third replay,
 # identical to run-a but WITHOUT --inject, rendering ONLY the injection
@@ -603,9 +900,18 @@ echo "C render-on replay stream verified (renderer does not perturb the sim)"
 # transform — never hand-retyped engine values).
 made "$TABLES/stages.json"
 rm -f "$BUILD/iou-report.json"
+# C evidence sealed HERE, immediately before judging: every C artifact —
+# the x2 renders, the tunnel legs, both gradient dumps, both streams, both
+# selector stderr files, and the no-inject / leave-one-out renders — now
+# exists and is final (review-u1 r7 + fallback round).
+C_EVIDENCE_SNAP=$(c_evidence_digest) || {
+  echo "check-render: C evidence digest failed" >&2; exit 1; }
+[ -n "$C_EVIDENCE_SNAP" ] || { echo "check-render: C evidence digest empty" >&2; exit 1; }
+
 node "$GFX/iou.js" --canvas "$CANVAS" --render "$BUILD/render-a" \
   --render-noinject "$BUILD/render-noinject" \
   --render-loo "$BUILD/render-loo" \
+  --bg-tunnel "$BUILD/tunnel-a" --bg-grad-c "$BUILD/bg1-grad-a.txt" \
   --vfxdata "$GFX/vfxdata-frozen.txt" \
   --stages "$TABLES/stages.json" --stage "$G_STAGE" \
   --expected "$EXP" --report "$BUILD/iou-report.json"
@@ -657,5 +963,64 @@ for (const [key, fp] of [["gfxdata", "'"$BUILD"'/gfxdata.txt"],
 }
 '
 echo "final closure identity verified (no post-capture drift)"
+
+# ...and the build/judge side of the same window (review-u1 r2 M3 / r3 M2):
+# the sources as they were BEFORE compilation, and the binary as it was
+# after linking. Both must still be identical now.
+if [ "$(source_digest)" != "$SOURCE_SNAP" ]; then
+  echo "check-render: source closure changed mid-run (a C source, the judge, a" >&2
+  echo "  frozen plane or this script was edited after the build) — no verdict" >&2
+  exit 1
+fi
+if [ "$(binary_digest)" != "$BINARY_SNAP" ]; then
+  echo "check-render: the replay binary changed after it was built — no verdict" >&2
+  exit 1
+fi
+GENERATED_NOW=$(generated_digest) || {
+  echo "check-render: generated-input digest failed at verdict time" >&2; exit 1; }
+if [ "$GENERATED_NOW" != "$GENERATED_SNAP" ]; then
+  echo "check-render: a GENERATED decision input (data plane, sim/gfx data, trace" >&2
+  echo "  or inject table) changed after it was produced — no verdict" >&2
+  exit 1
+fi
+TABLES_NOW=$(tables_digest | shasum -a 256 | cut -d' ' -f1) || {
+  echo "check-render: generated-table digest failed at verdict time" >&2; exit 1; }
+if [ "$TABLES_NOW" != "$TABLES_SNAP" ]; then
+  echo "check-render: a generated TABLE changed after it was compiled in — no verdict" >&2
+  exit 1
+fi
+
+# EVIDENCE RE-SEAL (review-u1 r6 M4). The artifact map is checked before the
+# C runs, and the C outputs are cmp'd a-vs-b, but nothing re-checked either
+# AFTER iou.js read them. Re-verify the browser map and re-hash the C
+# evidence now, so the bytes that produced this verdict are provably the
+# bytes still on disk.
+node -e '
+const fs = require("fs"), crypto = require("crypto"), path = require("path");
+const dir = process.argv[1];
+const side = JSON.parse(fs.readFileSync(path.join(dir, "capture.digests.json"), "utf8"));
+const want = Object.keys(side.artifacts).sort();
+const got = fs.readdirSync(dir).filter((n) => n !== "capture.digests.json").sort();
+if (want.join("\n") !== got.join("\n")) {
+  console.error("check-render: browser evidence set changed during judging — no verdict");
+  process.exit(1);
+}
+for (const n of want) {
+  const h = crypto.createHash("sha256").update(fs.readFileSync(path.join(dir, n))).digest("hex");
+  if (h !== side.artifacts[n]) {
+    console.error("check-render: browser evidence " + n + " changed during judging — no verdict");
+    process.exit(1);
+  }
+}
+' "$CANVAS" || exit 1
+C_EVIDENCE_NOW=$(c_evidence_digest) || {
+  echo "check-render: C evidence digest failed at verdict time" >&2; exit 1; }
+if [ "$C_EVIDENCE_NOW" != "$C_EVIDENCE_SNAP" ]; then
+  echo "check-render: C evidence (rendered PPM/PGM/background planes, gradient" >&2
+  echo "  dumps) changed during judging — no verdict" >&2
+  exit 1
+fi
+echo "evidence re-seal verified (browser + C artifacts unchanged across judging)"
+echo "build/judge closure identity verified (pre-compile sources + post-link binary unchanged)"
 
 echo "RENDER OK"
