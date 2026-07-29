@@ -2378,3 +2378,18 @@ Everything below is functionality/fidelity, not styling.
   — the KEYBOARD arm reads the bank's `s` by truthiness), so the exit
   paths must stay outside the sim exactly as A11's pause overlay does
   (NULL-default hook, live-play only).
+- **A12b (P1, owner-reported 2026-07-29, routed to the match-exit lane)
+  MENU/HOME does nothing in the MENU phase.** Diagnosed read-only:
+  foh_dev.c:2221 wires pin.menu → foh_pause_hook but that site is INSIDE
+  THE MATCH LOOP, so the overlay only exists during a match. In the FOH
+  phase pin.menu drives `qEdge`, the evidence rig's screenshot-marker
+  trigger, armed only with --shots-dir; foh_dev.c:1907-1911 says it
+  outright: "the OPK PLAY path runs without it, so the player's MENU
+  button is a no-op there." NOT the marker-mismatch sim_fatal (that
+  death is correctly rig-only). **A12 was under-specified by the driver**
+  — the ruling was "matching the ssb64 port", and ssb64's fk_menu opens
+  from MENU wherever you are. FIX: MENU opens an overlay in the FOH
+  phase too (Resume / Quit to OS at minimum; "Back to title" optional
+  from deeper screens). Discriminator already in the file: arm the
+  overlay on the MENU edge only when `shotsDir` is UNSET, so the rig's
+  q-marker semantics stay byte-identical.
