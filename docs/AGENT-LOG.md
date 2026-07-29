@@ -20124,3 +20124,29 @@ the C half of this fix is invisible to the manifest while a shell
 comment blocks the gate.
 **Ledger:** device runs 10/10, arm rebuilds 4/4, host checks 3/4 — no
 overrun.
+
+**iter-127 addendum — C8 §11 GAP CLOSED PROPERLY (case A).** The writer
+answered the honest question honestly: the Opus 5 fallback WAS a real
+independent subagent run (Agent tool, model=opus, background; agentId
+aa59d25283d1c6a1e; 163,015 tokens / 61 tool uses / ~23.8 min; a 178-line
+JSONL transcript on disk under the session's subagents/ dir) — it simply
+was never tee'd to .loop, so the verdict lived only in a summary. The
+writer closed it by **EXTRACTING, NOT RETYPING**: programmatically pulling
+the last assistant text block (8,340 chars) out of that JSONL, so the log
+body is verbatim reviewer output with an auditable chain rather than a
+reconstruction. Verified body byte-identical to the raw extraction;
+`VERDICT: GO` is the last non-empty line; 5 [SEVERITY] findings present;
+the distinctive markers the writer had reported ([6b]/[6c] citation
+correction, kTrTrunc, "only changed cell", record-trace) all present.
+Kept deliberately VISIBLE rather than hidden: a PROVENANCE header stating
+the log was materialized post-hoc on 2026-07-28 with the re-extraction
+command, plus self-evident mtimes (grok.log 13:21 during the arc,
+opus.log 21:30 after). **This is the right shape for post-hoc evidence
+and is now the precedent**: extract from the machine record, never
+retype; state the post-hoc status in the artifact itself; leave the raw
+extraction beside it (.loop/review-c1-opus-extracted.txt). Driver
+cold-read both verdicts from disk: grok GO + opus GO ⇒ §11 satisfied.
+mlfk-foh.sh row flipped arc-in-flight → **reviewed-go**; MANIFEST_SHA256
+→ ad0a2112; full manifest self-check ALL ROWS + ANCHOR GREEN.
+C8 stands registered as a PROCESS lesson (tee fallback-reviewer output to
+.loop AT RUN TIME), not as an open defect.
