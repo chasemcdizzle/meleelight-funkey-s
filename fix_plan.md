@@ -2345,3 +2345,20 @@ Everything below is functionality/fidelity, not styling.
   upstream's finishGame/results screen (a real feature, and the same
   family as B4's "target-match exit returns to the frontend"). Do them
   together.
+- **C15 RULED (Chase, 2026-07-29): OPTION A — one hand, both tokens.**
+  Ratifies what the CSS-mechanics lane built: ONE hand cursor (honest —
+  one physical device) with BOTH ports treated as attached, so port 2 can
+  be HMN and the single hand may grab/drop EITHER port's token.
+  **This is an owner-sanctioned DEVIATION (HARD RULE 5)** from upstream's
+  `playerType[j]==1 || i==j` guard, which forbids touching another
+  human's token. Justification on the record: that guard exists to stop
+  one player stealing another player's pick; with a single physical
+  device there is no second player to steal from, and the literal
+  reading (`ports=1`) makes port 2 permanently CPU — which would make
+  human-vs-human matches unreachable from the menus AND leave the
+  two-human goldens unlaunchable, i.e. faithfulness to the guard would
+  break faithfulness to the game. Upgrade path recorded: Option C
+  (a shoulder button hands control to the other port's own cursor) is a
+  clean later refinement — the token model is already per-port
+  underneath — and would restore the guard verbatim. Must be documented
+  in MENU-SPEC §2 as a numbered DEVIATION alongside D1-D13.
