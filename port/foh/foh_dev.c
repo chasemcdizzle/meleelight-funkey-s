@@ -1342,6 +1342,9 @@ int main(int argc, char **argv) {
   unsigned dmSeen = 0; // bits 0..4 == --p1 --p2 --p2type --difficulty --stage
   const unsigned DM_ALL = 0x1fu;
   bool fohMaxGiven = false;
+  // Presence, not value: --frames absent is the PLAY path's opt-in to an
+  // unbounded match (punch-list C6). Written at exactly one site, below.
+  bool framesGiven = false;
   // review-100 M1 witness (--tooth-finish-at <frame> <char> <tstage>
   // <hex16>): fire the crafted tp_finish_game chain MID-FLOW at <frame>
   // (flow mode, no bridge), driving the REAL finishGame -> hook ->
@@ -1402,7 +1405,7 @@ int main(int argc, char **argv) {
       seedGiven = true;
     }
     else if (strcmp(a, "--trace") == 0 && hasV) tracePath = argv[++i];
-    else if (strcmp(a, "--frames") == 0 && hasV) ARGN(frames);
+    else if (strcmp(a, "--frames") == 0 && hasV) { ARGN(frames); framesGiven = true; }
     else if (strcmp(a, "--out") == 0 && hasV) outPath = argv[++i];
     else if (strcmp(a, "--timing") == 0 && hasV) timingPath = argv[++i];
     else if (strcmp(a, "--attrib") == 0 && hasV) attribPath = argv[++i];
@@ -1527,10 +1530,27 @@ int main(int argc, char **argv) {
       ((brVerify || brTVerify) &&
        (!tracePath || frames <= 0 || !outPath || !timingPath ||
         !gfxdataPath || !vfxdataPath || !glyphsPath || !animDir)) ||
-      // live needs render data + bounded frames + mandatory recording
-      (brLive && (!recordPath || !keysPath || frames <= 0 || !gfxdataPath ||
-                  !vfxdataPath || !glyphsPath || !animDir || pace != 1 ||
-                  cpuLive || !inPoll)) ||
+      // Live needs render data. The FRAME BOUND and the RECORDING are ONE
+      // decision, and it is made by ABSENCE — the C1 --foh-max rule, one
+      // screen later (punch-list C6, class instance #3):
+      //   --frames GIVEN   => bounded match, recording MANDATORY (unchanged;
+      //                       every evidence leg passes a bound, and a bounded
+      //                       run is exactly what can be sized in RAM);
+      //   --frames OMITTED => unbounded match, recording REFUSED.
+      // REFUSED rather than silently dropped, because it cannot be honoured:
+      // rec.json is a RAM buffer measured at ~444 B/frame and MlSb doubles, so
+      // the peak is ~2x that — it eats this device's ~37 MB MemAvailable after
+      // ~41,700 frames (~11.6 min). Accepting "unbounded + recording" would
+      // trade the 3:00 exit the player saw for an OOM kill at ~12 min.
+      // `--bridge live` alone must NOT mean unbounded: check-device-target.sh
+      // [6b]/[6c] drive live play WITH a bound on purpose and [6b] IS the A2
+      // regression guard. So, exactly as with --foh-max, the play path is
+      // distinguished by what it does NOT pass, and a bound that IS handed
+      // over is always honoured (`--frames 0` stays the rejection it was).
+      (brLive && ((framesGiven ? (frames <= 0 || !recordPath || !keysPath)
+                               : (recordPath || keysPath)) ||
+                  !gfxdataPath || !vfxdataPath || !glyphsPath || !animDir ||
+                  pace != 1 || cpuLive || !inPoll)) ||
       (!brVerify && !brLive && !brTVerify &&
        (tracePath || frames > 0 || outPath || timingPath || gfxdataPath ||
         vfxdataPath || glyphsPath || animDir || legible || attribPath)) ||
@@ -1568,8 +1588,10 @@ int main(int argc, char **argv) {
             " [verify: --trace t --frames N --out o --timing tim"
             " --gfxdata g --vfxdata v --glyphs gl --anim-dir D [--legible]"
             " [--cpu-live] [--attrib a.txt]]"
-            " [live: --frames N --record-trace t.json --record-keys k.txt"
-            " --gfxdata ... [--legible] [--tapjump-off-p1]]"
+            " [live: --gfxdata ... [--legible] [--tapjump-off-p1]"
+            " (bounded+recorded: --frames N --record-trace t.json"
+            " --record-keys k.txt — ALL THREE or NONE; omitting all three"
+            " means an unbounded, unrecorded match: the play path)]"
             " [--sndpack p [--audio-samples N]] [--music-manifest m.txt]"
             " [--fb-witness w.txt [--fb-witness-raw D]]"
             " [flow: --tooth-finish-at F C S hex16 (M1 witness)]"
@@ -1749,10 +1771,19 @@ int main(int argc, char **argv) {
   // and nothing here grows per tick to justify one: the FOH loop allocates
   // nothing, and its only RAM writer (tr_line -> g_tr) fires on transitions,
   // never per tick — which is exactly what the flat 18000-tick MemAvailable
-  // trace measures. The match loop KEEPS its `--frames` bound because that
-  // one IS load-bearing (attrib_alloc and the mandatory --record-trace
-  // buffer are frames-proportional); removing it would trade this crash for
-  // an OOM, so it is left alone and reported separately.
+  // trace measures.
+  //
+  // THIRD instance, and it was the very next screen: the MATCH loop carried
+  // the same shape of bound (`--frames 10800` = exactly 180 s), so any match
+  // past 3:00 ended and dropped the player back to the frontend. Closed as
+  // punch-list C6, in the ORDER this comment used to say was required —
+  // recording made opt-in FIRST, then the bound dropped. (The claim this
+  // comment previously made about `attrib_alloc` was WRONG and is corrected
+  // here for the record: `--attrib` is argv-restricted to `--bridge verify`
+  // (see the validation above), so attrib_alloc never ran on the play path
+  // at all. The frames-proportional buffers that DID run there were the
+  // rec/rawKeys recording — ~444 B/frame, real — and the `--out` stream
+  // buffer, which live wrote every frame and then freed UNREAD.)
   //
   // SCOPE, stated exactly: the ONLY invocation whose behaviour changes is
   // poll + `--bridge live` + NO `--foh-max` — which argv validation above
@@ -1982,6 +2013,11 @@ int main(int argc, char **argv) {
     // made "Target Test" quit the app at the launch seam (punch-list
     // A2; the app exited rc 4 the instant TLAUNCH happened).
     const bool tgtLive = brLive && foh.targetMode;
+    // C6: the live arms record only when a --frames bound sized the
+    // buffers. argv above makes recordPath, keysPath and framesGiven
+    // stand or fall together under --bridge live, so this ONE predicate
+    // governs every rec/rawKeys site in both match arms.
+    const bool recording = recordPath != 0;
     // A11/A12 — THE pause-overlay install site, and the only one. The hook
     // is NULL by default (foh_pause.c), so every evidence bridge (state/
     // verify/tstate/tverify) leaves the overlay branches in both match
@@ -2093,18 +2129,32 @@ int main(int argc, char **argv) {
           tim = malloc((size_t)frames * sizeof *tim);
           if (!tim) sim_fatal("oom (timing buffer)");
         }
-        // live may tick a bounded post-finish tail; buffers cover it
-        const long loopMax = frames + (tgtLive ? TFIN_TAIL_FRAMES : 0);
-        const size_t streamCap = (size_t)loopMax * 160 + 160;
-        char *stream = malloc(streamCap);
-        if (!stream) sim_fatal("oom (stream buffer)");
+        // live may tick a bounded post-finish tail; buffers cover it.
+        // No --frames => no bound (C6): LONG_MAX - 1, never LONG_MAX, so the
+        // loop's own `f++` cannot sign-overflow (the C1 --foh-max form).
+        // ~414 days at 60 fps on the 32-bit target. Every exit from an
+        // unbounded target loop is a break arm, and each one sets both
+        // `ticked` and `framesRun`, so the loopMax seeding below stays honest.
+        const long loopMax =
+            framesGiven ? frames + (tgtLive ? TFIN_TAIL_FRAMES : 0)
+                        : LONG_MAX - 1;
+        // The --out stream is a frames-SIZED RAM buffer that ONLY --bridge
+        // tverify flushes (below). On the live arm it was allocated, written
+        // every frame and then freed UNREAD, so it is now gated exactly like
+        // the --timing buffer it sits beside: no bound, no buffer.
+        const size_t streamCap = brTVerify ? (size_t)loopMax * 160 + 160 : 0;
+        char *stream = 0;
+        if (brTVerify) {
+          stream = malloc(streamCap);
+          if (!stream) sim_fatal("oom (stream buffer)");
+        }
         size_t streamLen = 0;
         char hex[65], thex[65];
         MlSb rec;
         ml_sb_init(&rec);
         uint16_t *rawKeys = 0;
         MlInput liveRow;
-        if (tgtLive) {
+        if (tgtLive && recording) {
           ml_sb_puts(&rec, "[\n");
           rawKeys = malloc((size_t)loopMax * sizeof *rawKeys);
           if (!rawKeys) sim_fatal("oom (raw-key sidecar buffer)");
@@ -2163,9 +2213,11 @@ int main(int argc, char **argv) {
             // load_trace + the slot-1..3 assertion below accept, i.e. a
             // recorded live target session replays through --bridge
             // tverify unmodified.
-            recMark = rec.len;
-            rec_frame_solo(&rec, f == 0, &liveRow);
-            rawKeys[f] = pin_bits(&pin);
+            if (recording) {
+              recMark = rec.len;
+              rec_frame_solo(&rec, f == 0, &liveRow);
+              rawKeys[f] = pin_bits(&pin);
+            }
           } else {
             const long idx = f < g_trace_len - 1 ? f : g_trace_len - 1;
             const TraceRow *row = &g_trace[idx];
@@ -2207,13 +2259,15 @@ int main(int argc, char **argv) {
             tim[f].present = t3 - t2;
             tim[f].skipped = skip ? 1 : 0;
           }
-          const int w = snprintf(stream + streamLen, streamCap - streamLen,
-                                 "F %ld %s\nT %ld %s\n", f + 1, hex, f + 1,
-                                 thex);
-          if (w < 0 || (size_t)w >= streamCap - streamLen) {
-            sim_fatal("stream buffer overflow");
+          if (stream) {
+            const int w = snprintf(stream + streamLen, streamCap - streamLen,
+                                   "F %ld %s\nT %ld %s\n", f + 1, hex, f + 1,
+                                   thex);
+            if (w < 0 || (size_t)w >= streamCap - streamLen) {
+              sim_fatal("stream buffer overflow");
+            }
+            streamLen += (size_t)w;
           }
-          streamLen += (size_t)w;
           if (pace == 1) pace_sleep_until_ns(deadline);
           // LIVE EXITS. Both are the app-boundary form of upstream's
           // "leave the target match": this build's match phase is
@@ -2266,8 +2320,12 @@ int main(int argc, char **argv) {
             break;
           }
           // the ORDINARY --frames bound for live: the tail above exists
-          // only to finish a hold already in progress.
-          if (tgtLive && tfinDeadline == 0 && f + 1 >= frames) {
+          // only to finish a hold already in progress. `framesGiven` — with
+          // no bound this arm is the C6 symptom itself (the match ends and
+          // the player is dropped back to the frontend mid-play); unbounded,
+          // a target match ends on its own finish hold or on the pause
+          // overlay's QUIT, which is what the player asked for.
+          if (framesGiven && tgtLive && tfinDeadline == 0 && f + 1 >= frames) {
             ticked = f + 1;
             framesRun = f + 1;
             break;
@@ -2293,7 +2351,7 @@ int main(int argc, char **argv) {
         const uint32_t total = draws_between(G.rngStateAtReset, G.rng.a);
         const uint32_t outside =
             draws_between(G.rngStateAtReset, G.rngStateAtFrame1);
-        {
+        if (stream) {
           const int w = snprintf(stream + streamLen, streamCap - streamLen,
                                  "RNG %" PRIu32 " %" PRIu32 "\nTFIN %d %s\n"
                                  "SIM OK\n",
@@ -2322,7 +2380,7 @@ int main(int argc, char **argv) {
           }
           if (fclose(tf2) != 0) sim_fatal("--timing close/flush failed");
         }
-        if (tgtLive) {
+        if (tgtLive && recording) {
           // the brLive mandatory-record contract, target shape
           if (framesRun == 0) {
             // START on the very first frame: the rolled-back prefix is
@@ -2550,9 +2608,15 @@ int main(int argc, char **argv) {
         attrib = attrib_alloc(frames); // allocates AND pre-faults
         if (!attrib) sim_fatal("oom (attrib buffer)");
       }
-      const size_t streamCap = (size_t)frames * 80 + 128;
-      char *stream = malloc(streamCap);
-      if (!stream) sim_fatal("oom (stream buffer)");
+      // Gated like the --timing buffer above, for the same reason as the
+      // target arm's copy: ONLY --bridge verify flushes this, and it is
+      // frames-SIZED, so an unbounded live match cannot carry one (C6).
+      const size_t streamCap = brVerify ? (size_t)frames * 80 + 128 : 0;
+      char *stream = 0;
+      if (brVerify) {
+        stream = malloc(streamCap);
+        if (!stream) sim_fatal("oom (stream buffer)");
+      }
       size_t streamLen = 0;
       char hex[65];
       MlSb rec;
@@ -2560,14 +2624,19 @@ int main(int argc, char **argv) {
       uint16_t *rawKeys = 0;
       const MlInput neutralRow = nullInput();
       MlInput liveRow;
-      if (brLive) {
+      if (brLive && recording) {
         ml_sb_puts(&rec, "[\n");
         rawKeys = malloc((size_t)frames * sizeof *rawKeys);
         if (!rawKeys) sim_fatal("oom (raw-key sidecar buffer)");
       }
+      // No --frames => no bound (C6). LONG_MAX - 1, never LONG_MAX, so the
+      // loop's own `f++` cannot sign-overflow — the C1 --foh-max form,
+      // ~414 days at 60 fps on the 32-bit target. An unbounded VS match ends
+      // the way the player ends it: the pause overlay's RESUME/QUIT.
+      const long matchMax = framesGiven ? frames : LONG_MAX - 1;
       // Frames actually ticked. Only the live arm can leave early (a pause-
       // overlay quit); every evidence arm runs the full bound.
-      long vsRan = frames;
+      long vsRan = matchMax;
       PlatformInput pin, prevPause;
       // Seed the pause edge detector from the CURRENT button state: START
       // or MENU still held from the FOH launch must not open the overlay
@@ -2581,7 +2650,7 @@ int main(int argc, char **argv) {
       // whole rest of the match "late" and the catch-up arm would skip
       // every render (matchSkips == frames, a black screen).
       uint64_t tStart = now_ns();
-      for (long f = 0; f < frames; f++) {
+      for (long f = 0; f < matchMax; f++) {
         // FIRST statement of the body, i.e. OUTSIDE the t0..t3 brackets
         // below: the instrument can consume pacing slack but can never
         // inflate a number judge-render-timing.js computes.
@@ -2631,8 +2700,10 @@ int main(int argc, char **argv) {
           rows[1] = &neutralRow;
           rows[2] = 0;
           rows[3] = 0;
-          rec_frame(&rec, f == 0, &liveRow, &neutralRow);
-          rawKeys[f] = pin_bits(&gpin); // gpin, not pin — see the mask note
+          if (recording) {
+            rec_frame(&rec, f == 0, &liveRow, &neutralRow);
+            rawKeys[f] = pin_bits(&gpin); // gpin, not pin — see the mask note
+          }
         } else {
           const long idx = f < g_trace_len - 1 ? f : g_trace_len - 1;
           const TraceRow *row = &g_trace[idx];
@@ -2660,12 +2731,14 @@ int main(int argc, char **argv) {
           tim[f].present = t3 - t2;
           tim[f].skipped = skip ? 1 : 0;
         }
-        const int w = snprintf(stream + streamLen, streamCap - streamLen,
-                               "F %ld %s\n", f + 1, hex);
-        if (w < 0 || (size_t)w >= streamCap - streamLen) {
-          sim_fatal("stream buffer overflow");
+        if (stream) {
+          const int w = snprintf(stream + streamLen, streamCap - streamLen,
+                                 "F %ld %s\n", f + 1, hex);
+          if (w < 0 || (size_t)w >= streamCap - streamLen) {
+            sim_fatal("stream buffer overflow");
+          }
+          streamLen += (size_t)w;
         }
-        streamLen += (size_t)w;
         if (pace == 1) pace_sleep_until_ns(deadline);
       }
       const uint64_t tEnd = now_ns();
@@ -2677,7 +2750,7 @@ int main(int argc, char **argv) {
       const uint32_t total = draws_between(G.rngStateAtReset, G.rng.a);
       const uint32_t outside =
           draws_between(G.rngStateAtReset, G.rngStateAtFrame1);
-      {
+      if (stream) {
         const int w = snprintf(stream + streamLen, streamCap - streamLen,
                                "RNG %" PRIu32 " %" PRIu32 "\nSIM OK\n", total,
                                outside);
@@ -2716,7 +2789,7 @@ int main(int argc, char **argv) {
         }
       }
       free(attrib);
-      if (brLive) {
+      if (brLive && recording) {
         // Same honesty as the target arm: a pause-overlay quit on frame 1
         // leaves an EMPTY prefix, which load_trace rejects. Say so.
         if (vsRan == 0) {

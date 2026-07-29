@@ -1287,25 +1287,25 @@ static void row_label(Raster *rz, int y, int row, int curRow,
 // worth naming: the A9 portraits are 58 px wide, which is exactly a quarter
 // of the screen less the gaps, so a port panel is one portrait wide.
 //
-// SCOPE (foh.h rewrite deltas): the machine has TWO ports (P1 human, P2
-// human-or-CPU) and no free-roaming pointer. Ports 3/4 therefore render as
-// upstream's N-A panels — that is what upstream shows for an unjoined port,
-// not a placeholder — and the hand cursor marks the cssRow the d-pad is on.
-// NET is not drawn because the network arm is scope-excluded (foh.h), so a
-// NET tab would name an unreachable state.
-#define CSS_CELL_W 44
-#define CSS_CELL_H 30
-#define CSS_CELL_PITCH 46
-#define CSS_CELL_X0 6
-#define CSS_CELL_Y 32
-#define CSS_PANEL_W 58
-#define CSS_PANEL_PITCH 60
-#define CSS_PANEL_X0 1
-#define CSS_PANEL_Y 96
-#define CSS_TAB_H 11
+// SCOPE (foh.h): the machine gives ONE hand to port 0 (one input device) and
+// two toggleable ports. Ports 3/4 render as upstream's N-A panels — that is
+// what upstream shows for an unjoined port, not a placeholder (DEVIATION D6).
+// NET is not drawn because the network arm is scope-excluded (DEVIATION D5),
+// so a NET tab would name an unreachable state.
+//
+// EVERY rectangle on this screen is a FOH_CSS_* constant in foh.h, shared
+// verbatim with foh.c's hit tests: DEVIATION D4 requires the hit region and
+// the drawn extent to be the same rectangle, and two files with two copies of
+// the numbers is exactly how that stops being true.
+#define CSS_CELL_W FOH_CSS_CELL_W
+#define CSS_CELL_H FOH_CSS_CELL_H
+#define CSS_CELL_Y FOH_CSS_CELL_Y
+#define CSS_PANEL_W FOH_CSS_PANEL_W
+#define CSS_PANEL_Y FOH_CSS_PANEL_Y
+#define CSS_TAB_H FOH_CSS_TAB_H
 
-static int css_cell_x(int k) { return CSS_CELL_X0 + CSS_CELL_PITCH * k; }
-static int css_panel_x(int k) { return CSS_PANEL_X0 + CSS_PANEL_PITCH * k; }
+static int css_cell_x(int k) { return foh_css_cell_x(k); }
+static int css_panel_x(int k) { return foh_css_panel_x(k); }
 
 // The per-port tints (spec §3.3; upstream's own port colours).
 static const RastCol kPortTint[4] = {{218, 51, 51, 256},
@@ -1387,20 +1387,25 @@ static void css_cell(Raster *rz, int k, int hot) {
   }
 }
 
-// One port token: the disc upstream drops on the cell a port has picked.
-static void css_token(Raster *rz, int cell, int port, int slot) {
-  const float cx = (float)(css_cell_x(cell) + 12 + 20 * slot);
-  const float cy = (float)(CSS_CELL_Y + 11);
+// One port token: the disc upstream drops on the cell a port has picked —
+// drawn wherever the machine says it is (foh_css_token_pos), which is the
+// hand itself while that token is being carried.
+static void css_token(Raster *rz, double x, double y, int port) {
+  const float cx = (float)x;
+  const float cy = (float)y;
   const RastCol rim = {250, 250, 252, 256}, tx = {255, 255, 255, 256};
   const char lbl[3] = {'P', (char)('1' + port), 0};
-  disc8(rz, cx, cy, 9.0f, kPortTint[port], 256);
-  ring8(rz, cx, cy, 9.0f, 1.0f, rim, 256);
+  disc8(rz, cx, cy, (float)FOH_CSS_TOKEN_R, kPortTint[port], 256);
+  ring8(rz, cx, cy, (float)FOH_CSS_TOKEN_R, 1.0f, rim, 256);
   foh_text(rz, (int)cx - 5, (int)cy - 3, 1, lbl, tx);
 }
 
 // One port panel. `type`: 0 human, 1 cpu, -1 unoccupied (upstream N-A).
-static void css_panel(const FohState *s, Raster *rz, int port, int type,
-                      int chr, int hotTab, int hotCpu) {
+// `diff` is that port's own CPU level (1..4) — P1 can be CPU too now — and
+// `knobX` is the machine's continuous slider position for this port.
+static void css_panel(Raster *rz, int port, int type, int chr, int nameChr,
+                      int diff,
+                      double knobX, int hotTab, int hotCpu) {
   const int x = css_panel_x(port), y = CSS_PANEL_Y;
   const int h = 120;
   const RastCol tint = kPortTint[port];
@@ -1431,11 +1436,18 @@ static void css_panel(const FohState *s, Raster *rz, int port, int type,
     const RastCol fill = type < 0 ? na : (type == 1 ? cpu : hmn);
     const RastCol tx = type == 0 ? (RastCol){254, 238, 27, 256}
                                  : (RastCol){222, 222, 228, 256};
-    const float t[10] = {(float)x,      (float)y,
-                         (float)(x + 30), (float)y,
-                         (float)(x + 36), (float)(y + 5),
-                         (float)(x + 30), (float)(y + CSS_TAB_H),
-                         (float)x,        (float)(y + CSS_TAB_H)};
+    // The chevron's tip is FOH_CSS_TAB_W: the hit rect in foh.c is the tab's
+    // full drawn width, so the constant must be the SAME one (D4).
+    const float t[10] = {(float)x,
+                         (float)y,
+                         (float)(x + FOH_CSS_TAB_W - 6),
+                         (float)y,
+                         (float)(x + FOH_CSS_TAB_W),
+                         (float)(y + 5),
+                         (float)(x + FOH_CSS_TAB_W - 6),
+                         (float)(y + CSS_TAB_H),
+                         (float)x,
+                         (float)(y + CSS_TAB_H)};
     poly8(rz, t, 5, fill, 256);
     stroke_closed(rz, t, 5, 1.0f, hotTab ? (RastCol){254, 238, 27, 256} : edge,
                   256);
@@ -1453,14 +1465,19 @@ static void css_panel(const FohState *s, Raster *rz, int port, int type,
       disc8(rz, (float)(x + 8 + k * 9), (float)(y + h - 8), 2.0f, wm, 256);
     }
   } else {
-    // the portrait (58 px wide == the panel width, so it bleeds edge to
-    // edge exactly as upstream's silhouettes do), then the name plate.
+    // The portrait (58 px wide == the panel width, so it bleeds edge to edge
+    // exactly as upstream's silhouettes do), then the name plate. These read
+    // DIFFERENT planes upstream and so do we: the preview model comes from
+    // `characterSelections[i]` (css.js:889) while the name plate switches on
+    // `chosenChar[i]` (css.js:986). They only diverge once something writes
+    // the shared plane without the CSS's own — which target-select's shoulder
+    // arms do (targetselect.js:60-69 calls setCS alone).
     const Img1Image *im = art(kCharArt[chr]);
     blit_img(rz, im, x, y + CSS_TAB_H + 1, 1);
     {
       const RastCol pl = {4, 4, 8, 256}, tx = {240, 242, 250, 256};
       rrect(rz, x + 2, y + 62, CSS_PANEL_W - 4, 12, 2, pl);
-      text_in(rz, x + 2, CSS_PANEL_W - 4, y + 64, 1, kCharShort[chr], tx);
+      text_in(rz, x + 2, CSS_PANEL_W - 4, y + 64, 1, kCharShort[nameChr], tx);
     }
     // the ghost port letters upstream watermarks under the plate. Suppressed
     // on a CPU port: the slider box owns that space (upstream has 285 px of
@@ -1501,13 +1518,16 @@ static void css_panel(const FohState *s, Raster *rz, int port, int type,
       }
     }
     {
-      const float kx = (float)(x + 11 + (s->difficulty - 1) * 12);
+      // The knob's centre is the machine's continuous slider position — the
+      // same value foh.c hit-tests and drags (D4).
+      const float kx = (float)knobX;
+      const float ky = (float)(y + FOH_CSS_RAIL_Y);
       const RastCol knob = {228, 54, 54, 256}, rim = {252, 252, 254, 256};
       const RastCol tx = {255, 255, 255, 256};
-      const char d[2] = {(char)('0' + s->difficulty), 0};
-      disc8(rz, kx, (float)(y + 93), 6.0f, knob, 256);
-      ring8(rz, kx, (float)(y + 93), 6.0f, 1.0f, rim, 256);
-      foh_text(rz, (int)kx - 2, y + 90, 1, d, tx);
+      const char d[2] = {(char)('0' + diff), 0};
+      disc8(rz, kx, ky, (float)FOH_CSS_KNOB_R, knob, 256);
+      ring8(rz, kx, ky, (float)FOH_CSS_KNOB_R, 1.0f, rim, 256);
+      foh_text(rz, (int)kx - 2, (int)ky - 3, 1, d, tx);
     }
   }
 }
@@ -1528,20 +1548,44 @@ static void render_css(const FohState *s, Raster *rz) {
   }
   css_header(rz);
 
+  // Which widget the hand is over. HOVER, not a row index — every "hot"
+  // below is the same point-in-rect test foh.c acts on (D4).
+  const double hx = s->cssHandX, hy = s->cssHandY;
+  const int inBand =
+      hy < (double)FOH_CSS_BAND_BOT && hy > (double)FOH_CSS_BAND_TOP;
+  const int overCells = hy > (double)CSS_CELL_Y &&
+                        hy < (double)(CSS_CELL_Y + CSS_CELL_H);
+
   // the five character cells + the two port tokens
   for (int k = 0; k < 5; k++) {
-    const int hot = (s->cssRow == 0 && k == s->p1Char) ||
-                    (s->cssRow == 1 && k == s->p2Char);
+    const int hot = overCells && hx > (double)css_cell_x(k) &&
+                    hx < (double)(css_cell_x(k) + CSS_CELL_W);
     css_cell(rz, k, hot);
   }
-  css_token(rz, s->p1Char, 0, 0);
-  css_token(rz, s->p2Char, 1, 1);
+  // Tokens, carried-on-top: the carried one rides the hand, so it must draw
+  // over the resting one when they overlap. A port with no type has no token
+  // — upstream guards both of its token passes on `playerType[i] > -1`
+  // (css.js:1018 and css.js:1077). NOTE this does NOT make D4 true in both
+  // directions: your OWN token stays grabbable at N/A while undrawn, because
+  // upstream's grab guard is `playerType[j] == 1 || i == j` (css.js:300).
+  // That asymmetry is upstream's and is carried — foh.h D4 exception (b).
+  for (int pass = 0; pass < 2; pass++) {
+    for (int k = 0; k < 2; k++) {
+      if (foh_css_port_type(s, k) < 0) continue;
+      if ((s->cssCarry == k) != pass) continue;
+      double tx, ty;
+      foh_css_token_pos(s, k, &tx, &ty);
+      css_token(rz, tx, ty, k);
+    }
+  }
 
-  // READY TO FIGHT (css.js:446-451 — both ports are always occupied in this
-  // machine, so the ribbon is always up; START is the launch edge). The text
-  // pulses hsl(52,85%,25-50%) exactly as upstream does, off the LOOK plane's
-  // frame counter, so foh_look_canonical pins it at phase 0 for every shot.
-  {
+  // READY TO FIGHT (css.js:1167-1181): drawn IFF at least two ports are not
+  // N/A and no participating port's token is held. Picking up a token
+  // un-readies the screen — this ribbon is the feedback channel for the whole
+  // CSS, so it is gated, never decorative. The text pulses
+  // hsl(52,85%,25-50%) exactly as upstream does, off the LOOK plane's frame
+  // counter, so foh_look_canonical pins it at phase 0 for every shot.
+  if (s->cssReady) {
     const RastCol out = {196, 22, 30, 256}, in = {14, 6, 14, 256};
     const float o[8] = {0.0f, 66.0f, 240.0f, 62.0f, 240.0f, 88.0f, 0.0f, 92.0f};
     const float i[8] = {0.0f, 69.0f, 240.0f, 65.0f, 240.0f, 85.0f, 0.0f, 89.0f};
@@ -1562,37 +1606,44 @@ static void render_css(const FohState *s, Raster *rz) {
     foh_text2(rz, (RAST_W - w) / 2, 68, 2, 1, "READY TO FIGHT", lit);
   }
 
-  // the four port panels (ports 3/4 unoccupied — upstream's N-A)
-  css_panel(s, rz, 0, 0, s->p1Char, 0, 0);
-  css_panel(s, rz, 1, s->p2Type, s->p2Char, s->cssRow == 2,
-            s->cssRow == 3 && s->p2Type == 1);
-  css_panel(s, rz, 2, -1, 0, 0, 0);
-  css_panel(s, rz, 3, -1, 0, 0, 0);
+  // the four port panels (ports 3/4 pinned N/A by D6 — upstream's N-A panel)
+  for (int k = 0; k < 4; k++) {
+    const int type = foh_css_port_type(s, k);
+    const int px = css_panel_x(k);
+    const int hotTab = k < 2 && !inBand && hy > (double)CSS_PANEL_Y &&
+                       hy < (double)(CSS_PANEL_Y + CSS_TAB_H) &&
+                       hx > (double)px && hx < (double)(px + FOH_CSS_TAB_W);
+    const int diff = foh_css_port_diff(s, k);
+    // The knob is drawn at the CONTINUOUS slider position the machine holds,
+    // which is also what foh.c hit-tests (D4) — not re-derived from the level.
+    const double kx = k < 2 ? foh_css_knob_x(s, k) : 0.0;
+    const double ky = foh_css_knob_y();
+    const int hotCpu = type == 1 && (s->cssCpuCarry == k ||
+                                     (hy >= ky - FOH_CSS_KNOB_R &&
+                                      hy <= ky + FOH_CSS_KNOB_R &&
+                                      hx >= kx - FOH_CSS_KNOB_R &&
+                                      hx <= kx + FOH_CSS_KNOB_R));
+    css_panel(rz, k, type, k == 0 ? s->p1Char : s->p2Char,
+              k < 2 ? s->cssChar[k] : 0, diff, kx, hotTab,
+              hotCpu);
+  }
 
-  // the hand cursor (A9 handpoint art). Its fingertip is the sprite's
-  // TOP-LEFT and the glove hangs down-right, so it is anchored just past
-  // each target: the row it marks stays readable underneath.
+  // The hand cursor at its own position (css.js:1135-1143 picks the sprite
+  // from handType). Upstream draws a 101x133 sprite at (x-40, y-30), i.e. the
+  // logical hot spot sits 39.6% across and 22.6% down the sprite, at the
+  // pointed fingertip — on this 24x32 asset that is (10, 7).
   {
-    int hx = 0, hy = 0;
-    switch (s->cssRow) {
-      case 0: hx = css_cell_x(s->p1Char) + 26; hy = CSS_CELL_Y + 6; break;
-      case 1: hx = css_cell_x(s->p2Char) + 26; hy = CSS_CELL_Y + 6; break;
-      case 2: hx = css_panel_x(1) + 36; hy = CSS_PANEL_Y + 6; break;
-      default:
-        // row 3 is the CPU level. While P2 is HUMAN there is no slider to
-        // point at (foh.c keeps the row reachable and the value inert), so
-        // the hand rests on the port panel that owns the setting rather than
-        // on empty pixels.
-        hx = css_panel_x(1) + CSS_PANEL_W - 2;
-        hy = CSS_PANEL_Y + (s->p2Type == 1 ? 86 : 60);
-        break;
-    }
-    blit_img(rz, art("hand_point"), hx, hy, 1);
+    static const char *const kHand[3] = {"hand_point", "hand_open",
+                                         "hand_grab"};
+    const int px = (int)(hx + 0.5) - 10, py = (int)(hy + 0.5) - 7;
+    blit_img(rz, art(kHand[foh_css_hand_type(s)]), px, py, 1);
   }
 
   {
+    // The hint names the gestures that exist. There is no value stepper on
+    // this screen any more, so the old "L/R: CHANGE" line would be a lie.
     const RastCol hint = {150, 152, 168, 256};
-    text_center(rz, 228, 1, "L/R: CHANGE   START: FIGHT", hint);
+    text_center(rz, 228, 1, "B TOKEN  A GRAB/DROP  START FIGHT", hint);
   }
 }
 

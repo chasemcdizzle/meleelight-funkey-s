@@ -82,12 +82,24 @@ A new device = write one new backend TU (+ audio open params).
   Re-derive if the ring, source rate, or storage latency class
   changes on a new target. foh_dev.c carries the same reader (iter 93).
 - FOH device-flow injection timing (`port/foh/flow-to-fkscript.js`,
-  iter 93): LEAD 8200 ms + 50 ms per flow frame (3x the 60 fps tick) —
-  tuned to THIS device's fk_input/uinput launch latency and SDL poll
-  cadence; re-measure per target input path. The BOUNDED-DELTA trace
+  iter 93): LEAD 8200 ms + ONE device frame (1000/60 ms) per flow frame,
+  i.e. a 1:1 scale. It was 3x until the CSS free cursor landed
+  (docs/MENU-SPEC.md items 1+2+4): a direction is now LEVEL-driven — the
+  hand integrates it every frame it is HELD (css.js:195-196) — so its
+  duration is semantic and cannot be stretched. Presses of EDGE-read
+  keys are still widened to >= 3 polls; a direction press shorter than
+  that is refused rather than guessed at. LEAD is tuned to THIS device's
+  fk_input/uinput launch latency and SDL poll cadence; re-measure per
+  target input path. The BOUNDED-DELTA trace
   judgment (`normalize-foh-trace.js --bounded`, iter 95) freezes
-  measured bounds over the SAME model (anchor offset 40..240 ticks,
-  in-run deviation -90..+30) — re-measure + re-freeze per target.
+  bounds (anchor offset 40..240 ticks, in-run deviation -90..+30) —
+  re-measure + re-freeze per target. **Those numbers were measured
+  under the RETIRED 3x cadence and are INHERITED, not re-measured, on
+  the 1:1 model**: the CSS-mechanics arc that changed the scale was
+  host-only and had no device. They were deliberately left untouched
+  rather than widened, so a cadence that no longer fits them FAILS
+  LOUD on the first device run instead of drifting — but until that
+  run they are an unvalidated envelope, not a calibrated one.
 - Input: the S1 chord table (PLAN §6) maps the FunKey's EXACT control
   set (d-pad + 8 buttons, letter keysyms u/d/l/r/a/b/x/y/s/k/n/q).
   A device with real analog or more buttons gets a NEW mapping table

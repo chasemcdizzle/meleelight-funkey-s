@@ -2,16 +2,45 @@
 // flow-to-fkscript.js — mechanical FLOW1 -> fk_input script derivation
 // (fix_plan §M4 task 10; pre-registration AGENT-LOG iter 93).
 //
-// Timing model (pre-registered): t(F) = LEAD_MS + (F - 370) * STEP_MS
-// for every flow frame F >= 371 (all committed flows' first inputs sit
-// at 375+ — asserted). LEAD_MS = 8200 (the FunKey title screen appears
-// at tick 370 = ~6.2 s; the fk_input launch handshake is strictly
-// ADDITIVE latency, so inputs can only land LATER than nominal — safe
-// for the tick-indexed title shot at 373). STEP_MS = 50 (SCALE 3: one
-// flow frame = ~3 device frames — presses span >= 3 polled frames,
-// gaps >= 200 ms, the f04 30-frame B-hold becomes 1.5 s which the
-// bhold counter reads as >= 30 held frames; the FOH machine is
-// edge-driven, so longer presses never double-step).
+// Timing model: t(F) = LEAD_MS + round((F - 370) * FRAME_MS) for every
+// flow frame F >= 371 (all committed flows' first inputs sit at 375+ —
+// asserted). LEAD_MS = 8200 (the FunKey title screen appears at tick
+// 370 = ~6.2 s; the fk_input launch handshake is strictly ADDITIVE
+// latency, so inputs can only land LATER than nominal — safe for the
+// tick-indexed title shot at 373).
+//
+// SCALE IS 1:1 (changed with the CSS mechanics arc, MENU-SPEC items
+// 1+2+4). The pre-registered model used STEP_MS = 50, i.e. one flow
+// frame = ~3 device frames, and justified it with "the FOH machine is
+// edge-driven, so longer presses never double-step". That justification
+// DIED when the CSS became a free cursor: the hand integrates the d-pad
+// every frame it is HELD (css.js:195-196), so a direction is now
+// LEVEL-driven and a 3x scale moves the cursor three times as far. A
+// 43-frame UP hold became ~129 device frames and slammed the cursor
+// into the top clamp, which silently broke every gesture after it.
+//
+// So one flow frame is now exactly one device frame (FRAME_MS =
+// 1000/60), scheduled ABSOLUTELY from the frame index so rounding error
+// stays under 1 ms instead of accumulating. A held direction therefore
+// lasts N device frames +/- 1 for an N-frame flow hold; the committed
+// flows are authored against that tolerance (every cursor stop is
+// approached from a screen CLAMP, which absorbs overshoot entirely, and
+// then held a counted number of frames to a target with more than one
+// frame of slack on each side).
+//
+// Presses of non-direction keys are WIDENED to MIN_PRESS_MS so a single
+// flow-frame press still spans several polls. That is safe precisely
+// where the old model's claim was true: A/B/X/Y/START/L/R are read as
+// EDGES, so a longer press yields the same single rising edge. B also
+// feeds the CSS/bhold hold counter, which fires on an equality
+// (`bHold == 30`, css.js:188) and so is unharmed by a couple of extra
+// frames; committed flows give that counter slack anyway.
+//
+// DIRECTIONS ARE NEVER WIDENED — a too-short one is REFUSED. Their held
+// duration is semantic on the free-pointer screens, and nothing in FLOW1
+// syntax distinguishes a menu edge-step from a cursor nudge, so guessing
+// would silently stretch a real cursor move. Every direction press must
+// therefore be AUTHORED at least MIN_PRESS_MS long.
 //
 // Keys map onto the FunKey letter keysyms through the FROZEN KEYMAP
 // SSOT (iter 95, review-93 H2): port/foh/keymap-frozen.txt is THE
@@ -57,8 +86,18 @@ const keymapPath =
     : path.join(__dirname, "keymap-frozen.txt");
 
 const LEAD_MS = 8200;
-const STEP_MS = 50;
+const FRAME_MS = 1000 / 60; // one device frame; the flow's own unit
+const MIN_PRESS_MS = 50;    // >= 3 polls for edge-read keys
 const Q_PRESS_MS = 40;
+// The SHOT marker's physical keysym. ONE constant for both the overlap
+// validation and the emitted ops: they were `LETTER["Q"]` and a literal "q",
+// which agree under the committed keymap but would diverge under the check's
+// override-keymap tooth — the validator would police one key while the script
+// pressed another, and an authored Q could silently swallow a marker edge.
+const MARKER_SYM = "q";
+// The level-driven keys: their held DURATION is semantic (the CSS hand
+// integrates them per frame), so they are never widened.
+const LEVEL_KEYS = new Set(["U", "D", "L", "R"]);
 
 // KEYMAP1 (the frozen SSOT): header + exactly 12 `map <logical>
 // <FLOWLETTER> <keysym>` rows in the pinned logical order; anything
@@ -165,31 +204,120 @@ if (firstInput < 375) {
 const events = []; // {ms, ops:[..]}
 function tOf(frame) {
   if (frame <= 370) die("input/marker event at frame " + frame + " <= 370");
-  return LEAD_MS + (frame - 370) * STEP_MS;
+  return LEAD_MS + Math.round((frame - 370) * FRAME_MS);
 }
+// Per-key press INTERVALS, so a press can be widened without disturbing the
+// down time of anything else. Down times are exact; up times are widened for
+// edge-read keys only (see the header note).
+const presses = []; // {key, downMs, upMs}
+const open = new Map(); // key -> index into presses
 let held = new Set();
 for (const r of rows) {
   if (r.held.size === 0 && held.size === 0) continue; // neutral no-op row
-  const ops = [];
   for (const c of held) {
-    if (!r.held.has(c)) ops.push("u " + LETTER[c]);
+    if (!r.held.has(c)) {
+      presses[open.get(c)].upMs = tOf(r.frame);
+      open.delete(c);
+    }
   }
   for (const c of r.held) {
-    if (!held.has(c)) ops.push("d " + LETTER[c]);
+    if (!held.has(c)) {
+      open.set(c, presses.length);
+      presses.push({ key: c, downMs: tOf(r.frame), upMs: -1 });
+    }
   }
-  if (ops.length > 0) events.push({ ms: tOf(r.frame), ops });
   held = r.held;
 }
-if (held.size > 0) {
+for (const [c, idx] of open) {
   // release anything still held at END (fk_input also releases all
   // defensively; the explicit release keeps the schedule total)
-  const ops = [];
-  for (const c of held) ops.push("u " + LETTER[c]);
-  events.push({ ms: tOf(endFrame), ops });
+  presses[idx].upMs = tOf(endFrame);
+  open.delete(c);
+}
+for (const p of presses) {
+  if (p.upMs <= p.downMs) die("press with a non-positive span (schedule bug)");
+  // A too-short press of an EDGE-read key is widened: at 1:1 it would span
+  // ~17 ms, and platform_sdl1.c's poll samples FINAL key state, so it could
+  // vanish between two polls entirely. Widening restores the >= 3-poll press
+  // the previous 3x-scale model gave every tap for free, and is safe because
+  // those keys yield the same single rising edge however long they are held.
+  // A too-short DIRECTION is REFUSED instead — see below.
+  const span = p.upMs - p.downMs;
+  if (span < MIN_PRESS_MS) {
+    // A DIRECTION is never inferred to be a tap. Duration cannot classify it
+    // from FLOW1 syntax alone — the same `I n R` / `I n+1 -` pair is a menu
+    // edge-step on one screen and a 2.40 px cursor nudge on another — so
+    // guessing would silently stretch a free-pointer move. Instead the flow
+    // must AUTHOR every direction press at least this long, and anything
+    // shorter dies here. Widening then applies only to keys whose reading is
+    // unambiguously an edge.
+    if (LEVEL_KEYS.has(p.key)) {
+      die("direction '" + p.key + "' at t=" + p.downMs + " ms is held " +
+          span + " ms (" + Math.round(span / FRAME_MS) + " flow frames) — " +
+          "shorter than the " + Math.ceil(MIN_PRESS_MS / FRAME_MS) +
+          "-frame minimum. A direction's DURATION is semantic on the " +
+          "free-pointer screens (css.js:195-196), so this translator will " +
+          "not stretch it: author the press as at least " +
+          Math.ceil(MIN_PRESS_MS / FRAME_MS) + " flow frames.");
+    }
+    p.upMs = p.downMs + MIN_PRESS_MS;
+  }
+}
+// Collect every interval that will be EMITTED, keyed by the PHYSICAL keysym.
+// Overlap is checked after that mapping, not on the flow's letters, because
+// two different authored things can land on one physical key: a `Q` press in
+// an `I` row and a SHOT marker are both `q`. Validating them separately left
+// a hole where `I 375 Q` + `SHOT 376 ...` emitted `d q` twice with no release
+// between — the marker's edge vanishes and its `u q` truncates the hold.
+const intervals = []; // {sym, downMs, upMs, what}
+for (const p of presses) {
+  intervals.push({ sym: LETTER[p.key], downMs: p.downMs, upMs: p.upMs,
+                   what: "press " + p.key });
+}
+{
+  const byMs = new Map();
+  const push = (ms, op) => {
+    if (!byMs.has(ms)) byMs.set(ms, []);
+    byMs.get(ms).push(op);
+  };
+  for (const p of presses) {
+    push(p.downMs, "d " + LETTER[p.key]);
+    push(p.upMs, "u " + LETTER[p.key]);
+  }
+  for (const [ms, ops] of byMs) events.push({ ms, ops });
+}
+// Markers are `q` presses Q_PRESS_MS wide — same physical key as an authored
+// `Q`, so they join the same interval set and are checked together below.
+for (const s of shots) {
+  if (s.frame >= firstInput) {
+    intervals.push({ sym: MARKER_SYM, downMs: tOf(s.frame),
+                     upMs: tOf(s.frame) + Q_PRESS_MS,
+                     what: "marker " + s.name });
+  }
+}
+{
+  const bySym = new Map();
+  for (const iv of intervals) {
+    if (!bySym.has(iv.sym)) bySym.set(iv.sym, []);
+    bySym.get(iv.sym).push(iv);
+  }
+  for (const [sym, list] of bySym) {
+    list.sort((a, b) => a.downMs - b.downMs);
+    for (let i = 1; i < list.length; i++) {
+      if (list[i].downMs < list[i - 1].upMs) {
+        die("keysym '" + sym + "' intervals overlap: " + list[i - 1].what +
+            " [" + list[i - 1].downMs + "," + list[i - 1].upMs + ") then " +
+            list[i].what + " [" + list[i].downMs + "," + list[i].upMs +
+            ") — the second press would emit a down edge with no release " +
+            "between. Separate them by at least " +
+            Math.ceil(MIN_PRESS_MS / FRAME_MS) + " flow frames.");
+      }
+    }
+  }
 }
 for (const s of shots) {
   if (s.frame >= firstInput) {
-    events.push({ ms: tOf(s.frame), ops: ["d q"], qup: tOf(s.frame) + Q_PRESS_MS });
+    events.push({ ms: tOf(s.frame), ops: ["d " + MARKER_SYM], qup: tOf(s.frame) + Q_PRESS_MS });
   } else if (s.frame >= 375) {
     die("tick-indexed shot at frame " + s.frame + " >= 375 (split rule violated)");
   }
@@ -198,19 +326,46 @@ for (const s of shots) {
 const expanded = [];
 for (const e of events) {
   expanded.push({ ms: e.ms, ops: e.ops });
-  if (e.qup) expanded.push({ ms: e.qup, ops: ["u q"] });
+  if (e.qup) expanded.push({ ms: e.qup, ops: ["u " + MARKER_SYM] });
 }
 expanded.sort((a, b) => a.ms - b.ms);
-for (let i = 1; i < expanded.length; i++) {
-  if (expanded[i].ms === expanded[i - 1].ms) {
-    die("two events collide at t=" + expanded[i].ms +
-        " ms (input row and SHOT share a frame — not a committed-flow shape)");
+// MERGE same-instant events deterministically instead of refusing them.
+// Widening a press can legitimately land its RELEASE on a marker's PRESS
+// instant (f01's START release and the frame-378 SHOT marker both fall at
+// 8333 ms), and those two operations do not conflict — they touch different
+// keys. What WOULD be corruption is two operations on the SAME key at the
+// same instant, so that is what still dies. Ordering inside an instant is
+// fixed: every release first, then every press, each alphabetically, so the
+// emitted script is a pure function of the flow.
+{
+  const merged = [];
+  for (const e of expanded) {
+    if (merged.length > 0 && merged[merged.length - 1].ms === e.ms) {
+      merged[merged.length - 1].ops.push(...e.ops);
+    } else {
+      merged.push({ ms: e.ms, ops: [...e.ops] });
+    }
   }
+  for (const e of merged) {
+    const keys = new Set();
+    for (const op of e.ops) {
+      const k = op.slice(2);
+      if (keys.has(k)) {
+        die("two operations on key '" + k + "' collide at t=" + e.ms + " ms");
+      }
+      keys.add(k);
+    }
+    e.ops.sort((a, b) =>
+      a[0] !== b[0] ? (a[0] === "u" ? -1 : 1) : a.localeCompare(b));
+  }
+  expanded.length = 0;
+  expanded.push(...merged);
 }
 
 const out = [];
 out.push("# generated by flow-to-fkscript.js from " + flowPath);
-out.push("# LEAD_MS=" + LEAD_MS + " STEP_MS=" + STEP_MS + " (AGENT-LOG iter 93)");
+out.push("# LEAD_MS=" + LEAD_MS + " FRAME_MS=1000/60 MIN_PRESS_MS=" +
+         MIN_PRESS_MS + " (1:1 scale — the CSS cursor is level-driven)");
 let cur = 0;
 for (const e of expanded) {
   let gap = e.ms - cur;

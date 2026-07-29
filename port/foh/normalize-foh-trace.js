@@ -20,9 +20,12 @@
 // clean inside the leg's 600-tick total allowance. This mode judges the
 // device ticks against the flow script's expected injection cadence
 // (flow-to-fkscript.js's pinned model): an event caused by flow frame F
-// is injected at LEAD_MS + (F-370)*STEP_MS wall ms, i.e. expected
-// device tick T^(F) = 3F - 618 at 60 Hz; events BEFORE the flow's
-// first non-neutral input row are tick-indexed (T == F).
+// is injected at LEAD_MS + round((F-370)*1000/60) wall ms, i.e. expected
+// device tick T^(F) = F + 122 at 60 Hz. It was `3F - 618` until the CSS
+// free cursor made a direction's DURATION semantic (css.js:195-196) and
+// the injector's scale went from 3 device frames per flow frame to 1:1.
+// Events BEFORE the flow's first non-neutral input row are tick-indexed
+// (T == F).
 // MEASURED-THEN-FROZEN bounds (iter 95, from the iter-93 archived green
 // device traces — measurement recorded in AGENT-LOG iter 95; measured
 // values: identity-phase |T-F| = 0 everywhere; run anchors delta1 in
@@ -75,8 +78,15 @@ function boundDie(msg) {
 const NUM = "(0|[1-9][0-9]*)";
 const RE_HDR = /^FOHTRACE1 flow=([a-z0-9-]+)$/;
 const RE_T = new RegExp("^T " + NUM + " ([a-z-]+ [a-z-]+ (?:timer|start|a|b|bhold|launch))$");
-const RE_S = new RegExp("^S " + NUM + " ((?:p1char|p2char|p2type|difficulty|turbo|lcancel|tapjump[1-4]) [0-9]|refused [a-z0-9]+)$");
+// MENU-SPEC items 2/3/4 (CSS mechanics): the type fields gained N/A (-1,
+// DEVIATION D5's 3-cycle), P1 gained its own type + CPU level (upstream has
+// no port-0 special case, main.js:504-520), and `carry` is
+// whichTokenGrabbed[0] (css.js:68) — the token-gesture state, -1 or a port.
+const RE_S = new RegExp("^S " + NUM + " ((?:p1char|p2char|p1difficulty|difficulty|turbo|lcancel|tapjump[1-4]) [0-9]|(?:p1type|p2type|carry) (?:-1|[01])|refused [a-z0-9]+)$");
 const RE_SHOT = new RegExp("^SHOT " + NUM + " ([a-z0-9-]{1,32})$");
+// UNCHANGED by the CSS mechanics arc: the launch plane only supports a human
+// port 0, so foh.c refuses any other port configuration and the record never
+// needs p1type/p1difficulty columns (see judge-foh-trace.js's note).
 const RE_LAUNCH = new RegExp("^LAUNCH " + NUM + " (p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] tapjump=[01],[01],[01],[01] versus=0)$");
 // iter 99 (M4 task 12): the target-mode launch record — same
 // END==launch-tick semantics as LAUNCH in bounded mode.
@@ -157,11 +167,23 @@ if (process.argv[2] === "--bounded") {
   const DEV_NEG = 90;
   const DEV_POS = 30;
   const LEAD_MS = 8200;
-  const STEP_MS = 50;
-  // T^(F) = (LEAD_MS + (F-370)*STEP_MS) ms * 60/1000 = 3F - 618 at the
-  // pinned LEAD/STEP (flow-to-fkscript.js's model, restated)
+  // flow-to-fkscript.js's timing model, restated. It changed with the CSS
+  // mechanics arc: the CSS cursor is LEVEL-driven (the hand integrates the
+  // d-pad every frame it is held, css.js:195-196), so one flow frame is now
+  // one DEVICE frame, not three. The old restatement here was `3F - 618`,
+  // i.e. STEP_MS = 50; leaving it would have made this judge model a cadence
+  // the injector no longer produces.
+  //
+  // The BOUNDS above (DEV_NEG/DEV_POS, measured on hardware at iter 95) are
+  // deliberately NOT touched. They were measured under the 3x cadence and
+  // this arc has no device to re-measure them on, so they stay exactly as
+  // frozen: if the 1:1 cadence needs a different envelope, the device leg
+  // FAILS LOUDLY and gets re-measured, which is the honest outcome.
+  // Loosening them here to make a device run pass would be the defect this
+  // whole judge exists to prevent.
+  const FRAME_MS = 1000 / 60;
   const model = (F) =>
-    Math.round(((LEAD_MS + (F - 370) * STEP_MS) * 60) / 1000);
+    Math.round(((LEAD_MS + Math.round((F - 370) * FRAME_MS)) * 60) / 1000);
 
   // first non-neutral input row from the flow (strict FLOW1 subset)
   const rawFlow = fs.readFileSync(flowPath, "utf8");

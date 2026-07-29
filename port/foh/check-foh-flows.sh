@@ -85,11 +85,17 @@
 #   [6] hygiene: build outputs are git-ignored (rc case-split).
 #
 # Prints `FOH FLOWS OK (flows=7 shots=17 bridges=3 tbridges=2 states=4
-# tstates=2 diverge=1 control=1 teeth=18)`, exit 0; ANY divergence,
+# tstates=2 diverge=1 control=1 banner=1 teeth=26)`, exit 0; ANY divergence,
 # off-graph transition, pin mismatch, count disagreement, or missing
 # artifact -> nonzero. (iter 99, M4 task 12: flows 5->7 — the
 # target-select screen + f06/f07 target bridges judged by BOTH
-# verifiers; the [4t] leg; teeth 16->18.)
+# verifiers; the [4t] leg; teeth 16->18. CSS mechanics arc, MENU-SPEC
+# items 1+2+3+4: teeth 21->26 — T19 a CPU P1 is reachable on the CSS and
+# refuses at the launch seam, T20 a too-short direction press is refused
+# by the device translator rather than silently widened, T21 two
+# intervals on one physical keysym are refused (T21b through a swapped keymap), T22 a token held across
+# CSS->SSS->CSS un-readies the screen on return — plus a standing assert
+# that all 7 committed flows translate to fk_input scripts.)
 #
 # HONEST EXPOSURE (PROCESS §8): the frozen traces prove the REWRITTEN
 # machine's flow graph and selection semantics against the
@@ -188,7 +194,7 @@ b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wr
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-2267f8b796b1881d6ef749b5931a5fb08ae9f914b7a67a0e2608d4cada99616e port/foh/judge-foh-trace.js
+4f0cf650978e871f442e28e2612307215cdeabf34d55126faea4d99f6f7198e8 port/foh/judge-foh-trace.js
 2cf5c5a532207372b70c4cee57412c7ac65643ac4f4066c745d9eb7fe4aa0e9b port/goldens-m4/wrap-target.js
 415335239fcc04df97eba07298a1fa521602d5ea45b087aa8d7d40bd740c122a port/goldens-m4/verify-target-stream.js
 6b1b6b5be3700c51dfae8c0c4cb1f012e5b61239394ae4146c2e5e19cc4fcc47 port/goldens-m4/validate-target-manifest.js
@@ -307,6 +313,10 @@ for tv in "$T01_FRAMES" "$T01_SEED" "$T01_CHAR" "$T01_TSTAGE" "$T01_MIN" \
 done
 
 # --- [0d] bridge param CROSS-BIND: frozen LAUNCH lines == manifest params ----
+# UNCHANGED by the CSS mechanics arc: p1type/p1difficulty are machine state
+# and appear as S events, but never on this line — foh.c refuses to launch any
+# port configuration the launch plane cannot honour (sim_setup_match pins a
+# human port 0), so the record's shape is provably the same one.
 LAUNCH_RE='^LAUNCH [0-9]+ p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] tapjump=[01],[01],[01],[01] versus=0$'
 for exf in "$FLOWS/f01-vs-g01.expect" "$FLOWS/f02-cpu-m01.expect" \
            "$FLOWS/f05-vs-g03.expect"; do
@@ -351,6 +361,15 @@ read -r G03_SEED G03_P1 G03_P2 G03_STAGE G03_FRAMES G03_TRACE <<< "$g03line"
 [ "$G03_P2" != 0 ] || fail "cross-bind — g03 manifest p2 is 0; f05 exists to make p2Char != 0 load-bearing"
 [ "$(get_launch_field "$FLOWS/f05-vs-g03.expect" stage)" = "$G03_STAGE" ] || fail "cross-bind — f05 LAUNCH stage != g03 manifest stage"
 [ "$(get_launch_field "$FLOWS/f05-vs-g03.expect" p2type)" = 0 ] || fail "cross-bind — f05 LAUNCH p2type != 0 (g03 is human/human)"
+# Every bridged golden has a HUMAN port 0, and the launch plane only supports
+# that (sim_setup_match pins types[0]=0). foh.c enforces it with a loud
+# `refused portconfig` arm, and T19 below proves the arm fires — so the frozen
+# traces must carry exactly zero such refusals.
+for exf in "$FLOWS/f01-vs-g01.expect" "$FLOWS/f02-cpu-m01.expect" \
+           "$FLOWS/f05-vs-g03.expect"; do
+  c="$(count_e "$exf" '^S [0-9]+ refused portconfig$')"
+  [ "$c" = 0 ] || fail "cross-bind — $exf carries $c portconfig refusals; a bridged flow must launch cleanly"
+done
 # TLAUNCH cross-bind (iter 99): the frozen target-flow launch records
 # must equal the target-manifest rows (no independent literals).
 TLAUNCH_RE='^TLAUNCH [0-9]+ char=[0-4] tstage=[0-9]$'
@@ -823,7 +842,11 @@ mkdir -p "$WIT"
 # Check-owned synthetic flow (NOT a committed flow — the [0c] inventory
 # pin stays 5): options detour turns lcancel 0->1 (ONE A press on the
 # lcancel row, gameplaymenu.js:44-48), then g01's exact selections
-# (fox via two RIGHTs, P2 default marth, battlefield default).
+# (fox via the CSS token gesture, P2 toggled to HMN, battlefield default).
+# The CSS leg was re-authored with the CSS mechanics arc (MENU-SPEC items
+# 1+2+3+4) — it is f01's leg verbatim, so the two stay in step; only the
+# frames after the options detour moved, which is why the lcancel witness
+# below still pins frame 415.
 # review-91 H: the treatment and control share ONE basename (wit-g01),
 # disambiguated by the sibling dirs wit/ vs ctrl/ only — the observable
 # flow id is identical between the legs, so no bridge/sim path keying
@@ -861,15 +884,29 @@ I 435 A
 I 436 -
 I 440 A
 I 441 -
-I 445 R
-I 446 -
-I 450 R
-I 451 -
-I 455 S
-I 456 -
-I 460 A
-I 461 -
-END 465
+I 445 U
+I 515 -
+I 520 D
+I 532 -
+I 535 B
+I 538 -
+I 545 R
+I 583 -
+I 603 A
+I 606 -
+I 615 LD
+I 720 -
+I 725 R
+I 758 -
+I 763 U
+I 799 -
+I 805 A
+I 808 -
+I 820 S
+I 823 -
+I 830 A
+I 833 -
+END 840
 WEOF
 fresh_persist # defaults domain (task 13; the wit leg saves lcancel=1)
 "$B/foh_app" --flow "$WIT/wit-g01.flow" --flow-out "$WIT/trace.txt" \
@@ -879,7 +916,7 @@ fresh_persist # defaults domain (task 13; the wit leg saves lcancel=1)
 made "$WIT/trace.txt" "$WIT/stream.txt" "$WIT/bstate.txt"
 { node "$FOH/judge-foh-trace.js" "$WIT/trace.txt" wit-g01 1; } 2>&1 | relay_lines
 # LAUNCH line EXACT: g01 cross-bound params + lcancel=1 (nothing else).
-witlaunch="LAUNCH 460 p1=$G01_P1 p2=$G01_P2 p2type=0 difficulty=3 stage=$G01_STAGE turbo=0 lcancel=1 tapjump=0,0,0,0 versus=0"
+witlaunch="LAUNCH 830 p1=$G01_P1 p2=$G01_P2 p2type=0 difficulty=3 stage=$G01_STAGE turbo=0 lcancel=1 tapjump=0,0,0,0 versus=0"
 c="$(count_xl "$WIT/trace.txt" "$witlaunch")"
 [ "$c" = 1 ] || fail "witness — LAUNCH line != g01-params-plus-lcancel=1 (count $c/1)"
 # The settings-edit line itself (the control derivation below deletes
@@ -960,11 +997,11 @@ made "$CTRL/trace.txt" "$CTRL/stream.txt" "$CTRL/bstate.txt"
 # lcancel field 1->0 — nothing else, header included, may differ
 # between the two runs' emitted machines.
 sed -e '/^S 415 lcancel 1$/d' \
-    -e '/^LAUNCH 460 /s/ lcancel=1 / lcancel=0 /' \
+    -e '/^LAUNCH 830 /s/ lcancel=1 / lcancel=0 /' \
   "$WIT/trace.txt" > "$CTRL/trace-want.txt"
 made "$CTRL/trace-want.txt"
 cmp "$CTRL/trace.txt" "$CTRL/trace-want.txt" || fail "control — trace != witness-trace-minus-the-lcancel-edit (the treatment and control did NOT share the options path)"
-ctrllaunch="LAUNCH 460 p1=$G01_P1 p2=$G01_P2 p2type=0 difficulty=3 stage=$G01_STAGE turbo=0 lcancel=0 tapjump=0,0,0,0 versus=0"
+ctrllaunch="LAUNCH 830 p1=$G01_P1 p2=$G01_P2 p2type=0 difficulty=3 stage=$G01_STAGE turbo=0 lcancel=0 tapjump=0,0,0,0 versus=0"
 c="$(count_xl "$CTRL/trace.txt" "$ctrllaunch")"
 [ "$c" = 1 ] || fail "control — LAUNCH line != g01-params-with-lcancel=0 (count $c/1)"
 # Pure-defaults GameState: byte-equal to the FROZEN f01 witness.
@@ -989,7 +1026,7 @@ control=1
 echo "    -> CONTROL OK: the same options path with lcancel=0 fully MATCHES frozen g01 (whole-log byte-exact)"
 
 # --- [5] TEETH (standing; generated variants/copies only) ----------------------
-echo "=== [5] teeth (pre-registered T1-T10 AGENT-LOG iter 90; T11-T14 iter 91; T15-T16 iter 92)"
+echo "=== [5] teeth (pre-registered T1-T10 AGENT-LOG iter 90; T11-T14 iter 91; T15-T16 iter 92; T17-T18 iter 99; T19-T22 the CSS mechanics arc)"
 teeth=0
 run_variant() { # <flow-file> <out-trace>
   rm -f "$2"
@@ -1027,10 +1064,14 @@ node -e '
 ' "$FLOWS/f01-vs-g01.expect" "$B/t1.trace.txt" || fail "T1 — first-divergent-line witness failed"
 echo "    T1 OK: same header, first divergent pair = injected-DOWN transition (T 380 menu-battle vs target-select — the iter-99 real entry)"
 teeth=$((teeth + 1))
-# T2 char variant: a third RIGHT on the P1 row -> p1=3 in LAUNCH
+# T2 char variant: carry the token one cell further -> p1=3 in LAUNCH.
+# Deleting the RIGHT release lets the hold run to the drop press instead
+# of stopping at fox, so the token lands on cell 3 (falco) — the same
+# assertion as before (the launch record must be selection-driven), now
+# expressed in the gesture the screen actually has (MENU-SPEC §2.5).
 mkdir -p "$B/t2"
-mkvariant "$FLOWS/f01-vs-g01.flow" "$B/t2/f01-vs-g01.flow" insert-after \
-  "I 396 -" "I 397 R" "I 398 -"
+mkvariant "$FLOWS/f01-vs-g01.flow" "$B/t2/f01-vs-g01.flow" delete \
+  "I 528 -"
 run_variant "$B/t2/f01-vs-g01.flow" "$B/t2.trace.txt"
 rc=0; cmp -s "$B/t2.trace.txt" "$FLOWS/f01-vs-g01.expect" || rc=$?
 [ "$rc" = 1 ] || fail "T2 — char-variant trace cmp rc $rc, want exactly 1"
@@ -1115,11 +1156,24 @@ c="$(count_x "$B/t5c.log" "shot header is not exactly")"
 [ "$c" = 1 ] || fail "T5c — header death message class missing"
 echo "    T5 OK: flip/truncate/dims copies all die in the PRODUCTION judge_shot_pair"
 teeth=$((teeth + 1))
-# T6 difficulty variant: drop the 435+440 LEFT pairs -> d2 (the 440
-# clamp press absorbs a single removal — measured; AGENT-LOG iter 88)
+# T6 difficulty variant: end the knob drag early -> d2. Inserting a release
+# 6 frames into the LEFT hold stops the hand at x = 81.60 — inside level 2's
+# band [78,90) and deliberately NOT on level 2's stop (84.00).
+#
+# HONEST LIMIT (do not restate this as a continuity witness): landing off-stop
+# does NOT prove the slider is continuous. This tooth judges the structural
+# trace, and an implementation that snapped x = 81.60 to the level-2 stop at
+# 84.00 would produce the identical trace and launch record. The slider's
+# continuity (css.js:324 stores the raw hand x) is implemented and reviewed
+# but is NOT witnessed by any host check here — it is a render-plane position,
+# and the shot arm only compares run A against run B, never against a frozen
+# reference. Registered as an unwitnessed property for the device lane. The
+# flow's own later release then does nothing. Same assertion as before — the
+# slider must be load-bearing on the launch record — in the drag gesture
+# (MENU-SPEC §2.8, DEVIATION D7).
 mkdir -p "$B/t6"
-mkvariant "$FLOWS/f02-cpu-m01.flow" "$B/t6/f02-cpu-m01.flow" delete \
-  "I 435 L" "I 436 -" "I 440 L" "I 441 -"
+mkvariant "$FLOWS/f02-cpu-m01.flow" "$B/t6/f02-cpu-m01.flow" insert-after \
+  "I 980 L" "I 986 -"
 run_variant "$B/t6/f02-cpu-m01.flow" "$B/t6.trace.txt"
 rc=0; cmp -s "$B/t6.trace.txt" "$FLOWS/f02-cpu-m01.expect" || rc=$?
 [ "$rc" = 1 ] || fail "T6 — difficulty-variant trace cmp rc $rc, want exactly 1"
@@ -1140,12 +1194,12 @@ c="$(count_x "$B/t7.out" "divergence witness UNSOUND")"
 echo "    T7 OK: a MATCH fed to the witness judge dies with the UNSOUND class"
 teeth=$((teeth + 1))
 # T8 (review-88 M1): delete the f04 sss->css B press -> the frozen
-# 15th-edge line 'T 565 sss css b' is the first divergent frozen line.
+# 15th-edge line 'T 785 sss css b' is the first divergent frozen line.
 # (Anchors moved iter 93: the f04 sss segment gained the RANDOM-slot
 # traversal — designed re-freeze channel, AGENT-LOG iter 93.)
 mkdir -p "$B/t8"
 mkvariant "$FLOWS/f04-nav.flow" "$B/t8/f04-nav.flow" delete \
-  "I 565 B" "I 566 -"
+  "I 785 B" "I 788 -"
 run_variant "$B/t8/f04-nav.flow" "$B/t8.trace.txt"
 rc=0; cmp -s "$B/t8.trace.txt" "$FLOWS/f04-nav.expect" || rc=$?
 [ "$rc" = 1 ] || fail "T8 — sss->css edge variant trace cmp rc $rc, want exactly 1"
@@ -1156,18 +1210,233 @@ node -e '
   if (a[0] !== b[0]) { console.error("headers differ (L1 class)"); process.exit(1); }
   let i = 0;
   while (i < a.length && i < b.length && a[i] === b[i]) i++;
-  if (a[i] !== "T 565 sss css b") {
+  if (a[i] !== "T 785 sss css b") {
     console.error("first divergent frozen line is not the 15th edge: " +
                   JSON.stringify(a[i]));
     process.exit(1);
   }
 ' "$FLOWS/f04-nav.expect" "$B/t8.trace.txt" || fail "T8 — first-divergent-line witness failed"
-echo "    T8 OK: dropping the B press diverges exactly at the frozen 'T 565 sss css b' edge"
+echo "    T8 OK: dropping the B press diverges exactly at the frozen 'T 785 sss css b' edge"
 teeth=$((teeth + 1))
-# T9 (review-88 M2): extra RIGHT on the f05 P2 row -> p2=3 in LAUNCH
+# T19 (CSS mechanics arc): P1 CAN be set to CPU on the CSS — togglePort has
+# no port-0 special case (main.js:504-520) — but the LAUNCH plane cannot honour
+# it (sim_setup_match pins types[0]=0), so START must REFUSE loudly instead of
+# booting a human P1 while the record claims otherwise. This tooth proves the
+# guard fires, and it is what lets the LAUNCH grammar keep its [01] type
+# columns: an unlaunchable port configuration never reaches the record.
+# Check-owned flow (not a committed one — the [0c] inventory pin is untouched);
+# the committed flows have no room to insert a 25-frame cursor move.
+mkdir -p "$B/t19"
+cat > "$B/t19/t19-p1cpu.flow" << 'T19EOF'
+FLOW1
+# check-owned: reach the CSS, make port 2 HMN, then make port 1 CPU and
+# press START. Clamp-anchored exactly like the committed flows.
+I 1 -
+I 375 S
+I 376 -
+I 380 A
+I 381 -
+I 385 A
+I 386 -
+I 390 LD
+I 495 -
+I 500 R
+I 533 -
+I 538 U
+I 574 -
+I 580 A
+I 583 -
+I 590 L
+I 615 -
+I 620 A
+I 623 -
+I 630 S
+I 633 -
+END 640
+T19EOF
+run_variant "$B/t19/t19-p1cpu.flow" "$B/t19.trace.txt"
+# The PRODUCTION whole-trace whitelist judge runs FIRST (PROCESS §3,
+# fail-closed): counting selected lines alone would mint this tooth from a
+# trace truncated before END, or one carrying foreign/off-graph lines.
+# Launch expectation 0 — a CPU P1 must refuse, so no launch record may exist.
+{ node "$FOH/judge-foh-trace.js" "$B/t19.trace.txt" t19-p1cpu 0; } 2>&1 | relay_lines
+c="$(count_e "$B/t19.trace.txt" '^S [0-9]+ p1type 1$')"
+[ "$c" = 1 ] || fail "T19 — the flow did not set P1 to CPU (count $c/1); the port-0 type box is not clickable"
+c="$(count_e "$B/t19.trace.txt" '^S [0-9]+ refused portconfig$')"
+[ "$c" = 1 ] || fail "T19 — no 'refused portconfig' with a CPU P1 (count $c/1); the launch-plane guard is dead"
+c="$(count_x "$B/t19.trace.txt" "LAUNCH ")"
+[ "$c" = 0 ] || fail "T19 — LAUNCHED with a CPU P1 ($c launch lines); the record would lie about the match"
+c="$(count_x "$B/t19.trace.txt" "css sss start")"
+[ "$c" = 0 ] || fail "T19 — the refused START still crossed to the SSS"
+echo "    T19 OK: a CPU P1 is reachable on the CSS and refuses at the launch seam"
+teeth=$((teeth + 1))
+# T20/T21 (CSS mechanics arc): flow-to-fkscript.js's two REFUSALS must fire.
+# The device injector is wall-clock scheduled, and the free cursor made a
+# direction's held DURATION semantic, so the translator refuses (a) any
+# direction press too short to be authored safely — it must never guess that
+# one is an edge tap and stretch it — and (b) any two intervals on the same
+# PHYSICAL keysym that overlap, which is reachable because an authored `Q` and
+# a SHOT marker are both `q`. Both are generated flows; a translator that
+# accepts either has a dead guard.
+FKT="$B/fkteeth"
+rm -rf "$FKT"; mkdir -p "$FKT"
+# FAIL-CLOSED refusal assert (PROCESS §3: propagate the RC, never `|| true`,
+# and judge a FULL-LINE grammar rather than a floating substring). A refusal
+# must be all four of: exit code EXACTLY 2 (the translator's die()), NO output
+# file written at all (not merely an empty one), stderr of EXACTLY ONE line,
+# and that line anchored to the producer's own prefix carrying the class. A
+# translator that crashed, or that half-wrote a script, or that printed a
+# stack trace, would otherwise mint the tooth without refusing anything.
+# FAIL-CLOSED refusal assert (PROCESS §3: propagate the RC, never `|| true`,
+# and judge the WHOLE diagnostic, not a floating substring). A refusal must be
+# all three of: exit code EXACTLY 2 (the translator's die()), NO output file
+# written at all (not merely an empty one), and stderr BYTE-IDENTICAL to the
+# pinned diagnostic below — one line, newline-terminated, nothing around it.
+#
+# Byte equality rather than a pattern is deliberate. A `case` glob like
+# `"flow-to-fkscript: "*"$class"*` accepts unrestricted text on both sides, so
+# a refusal for the WRONG reason that merely mentions the phrase would mint
+# the tooth; and probing the final byte through `$(tail -c 1 ...)` cannot see
+# a trailing NUL and swallows a read failure. `cmp` against a file has neither
+# hole. These messages are deterministic (their numbers are pure functions of
+# the generated flow), so pinning them is the same discipline as every other
+# frozen artifact here: a reworded diagnostic fails loudly and is re-pinned.
+fk_refuses() { # <name> [keymap]
+  local rc=0
+  rm -f "$FKT/$1.fks" "$FKT/$1.err"
+  set +e
+  node "$FOH/flow-to-fkscript.js" "$FKT/$1.flow" "$FKT/$1.fks" \
+    ${2:+"$2"} >/dev/null 2>"$FKT/$1.err"
+  rc=$?
+  set -e
+  [ "$rc" = 2 ] || fail "$1 — flow-to-fkscript exited $rc, want exactly 2 (its refusal code)"
+  [ ! -e "$FKT/$1.fks" ] || fail "$1 — flow-to-fkscript WROTE an output file while refusing"
+  made "$FKT/$1.err" "$FKT/$1.want"
+  cmp "$FKT/$1.err" "$FKT/$1.want" \
+    || fail "$1 — refusal diagnostic is not byte-identical to the pinned one"
+}
+cat > "$FKT/shortdir.flow" << 'FKEOF'
+FLOW1
+I 1 -
+I 375 R
+I 377 -
+END 400
+FKEOF
+printf '%s\n' "flow-to-fkscript: direction 'R' at t=8283 ms is held 34 ms (2 flow frames) — shorter than the 3-frame minimum. A direction's DURATION is semantic on the free-pointer screens (css.js:195-196), so this translator will not stretch it: author the press as at least 3 flow frames." > "$FKT/shortdir.want"
+fk_refuses shortdir
+echo "    T20 OK: a 2-frame direction press is refused, never silently widened"
+teeth=$((teeth + 1))
+cat > "$FKT/qoverlap.flow" << 'FKEOF'
+FLOW1
+I 1 -
+I 375 Q
+I 379 -
+SHOT 376 overlap
+END 400
+FKEOF
+printf '%s\n' "flow-to-fkscript: keysym 'q' intervals overlap: press Q [8283,8350) then marker overlap [8300,8340) — the second press would emit a down edge with no release between. Separate them by at least 3 flow frames." > "$FKT/qoverlap.want"
+fk_refuses qoverlap
+echo "    T21 OK: an authored Q overlapping a SHOT marker is refused (same keysym)"
+teeth=$((teeth + 1))
+# T21b: the SAME overlap reached through a NON-default keymap. The SHOT
+# marker is always PHYSICAL q, while an authored letter goes through the
+# keymap — so validating the marker as `LETTER["Q"]` instead of the physical
+# symbol agrees with emission only under the committed mapping. With `a` and
+# `menu` swapped, an authored A IS physical q: the old code compared it
+# against LETTER["Q"] == "a", found no overlap, and emitted `d q` twice with
+# the marker's edge swallowed. This tooth is the one that separates the two
+# implementations; T21 alone cannot.
+{
+  printf 'KEYMAP1\n'
+  printf 'map up U u\nmap down D d\nmap left L l\nmap right R r\n'
+  printf 'map a A q\nmap b B b\nmap x X x\nmap y Y y\n'
+  printf 'map start S s\nmap l K k\nmap r N n\nmap menu Q a\n'
+} > "$FKT/swap-aq.keymap"
+cat > "$FKT/aqoverlap.flow" << 'FKEOF'
+FLOW1
+I 1 -
+I 375 A
+I 379 -
+SHOT 376 overlap
+END 400
+FKEOF
+printf '%s\n' "flow-to-fkscript: keysym 'q' intervals overlap: press A [8283,8350) then marker overlap [8300,8340) — the second press would emit a down edge with no release between. Separate them by at least 3 flow frames." > "$FKT/aqoverlap.want"
+fk_refuses aqoverlap "$FKT/swap-aq.keymap"
+echo "    T21b OK: under a swapped keymap the marker's PHYSICAL keysym still catches the overlap"
+teeth=$((teeth + 1))
+# And every COMMITTED flow must still translate — the guards above must not
+# have made the real scripts underivable (round-2 regression: widening put
+# f01's START release onto a marker instant and the translator exited 2).
+for fid in "${FLOW_IDS[@]}"; do
+  rm -f "$FKT/$fid.fks"
+  node "$FOH/flow-to-fkscript.js" "$FLOWS/$fid.flow" "$FKT/$fid.fks" \
+    >/dev/null 2>&1 || fail "flow $fid does not translate to an fk_input script"
+  made "$FKT/$fid.fks"
+done
+echo "    fkscript OK: all ${#FLOW_IDS[@]} committed flows translate"
+# T22 (CSS mechanics arc, review round 5): readyToFight is the DRAW pass's,
+# and the draw pass belongs to the screen the tick ENDS on — upstream's
+# drawCSS runs from a separate rAF loop dispatching on the CURRENT gameMode
+# (main.js:1153-1183 at the pin). The reachable consequence: B and START on the
+# SAME frame grabs your token AND launches on the previous frame's stale ready
+# value (css.js:209-215 then :446-451); the SSS's B-back sets mode 2, so the
+# RETURN frame's drawCSS recomputes with the token still held and the screen is
+# NOT ready — a second START must launch nothing. Getting this wrong (keeping
+# the recompute inside the CSS step) let a held token survive the round trip
+# and relaunch.
+mkdir -p "$B/t22"
+cat > "$B/t22/t22-heldtoken.flow" << 'T22EOF'
+FLOW1
+# check-owned: make port 2 HMN (ready), drop the hand into the roster band,
+# then press B+START on one frame — the token is grabbed and the stale-ready
+# START still launches. B back out of the SSS, then press START again.
+I 1 -
+I 375 S
+I 376 -
+I 380 A
+I 381 -
+I 385 A
+I 386 -
+I 390 LD
+I 495 -
+I 500 R
+I 533 -
+I 538 U
+I 574 -
+I 580 A
+I 583 -
+I 590 U
+I 660 -
+I 665 D
+I 677 -
+I 685 BS
+I 690 -
+I 700 B
+I 703 -
+I 715 S
+I 718 -
+END 730
+T22EOF
+run_variant "$B/t22/t22-heldtoken.flow" "$B/t22.trace.txt"
+# Whole-trace judge first, same reason as T19. Launch expectation 0: the
+# stale-ready START crosses to the SSS but this flow never presses A there,
+# so no LAUNCH RECORD is ever written — the thing under test is the css->sss
+# transition count, asserted below.
+{ node "$FOH/judge-foh-trace.js" "$B/t22.trace.txt" t22-heldtoken 0; } 2>&1 | relay_lines
+c="$(count_e "$B/t22.trace.txt" '^S [0-9]+ carry 0$')"
+[ "$c" = 1 ] || fail "T22 — the B+START frame did not grab a token (carry 0 count $c/1)"
+c="$(count_x "$B/t22.trace.txt" "css sss start")"
+[ "$c" = 1 ] || fail "T22 — want exactly 1 css->sss launch (the stale-ready one), got $c; a second means the return frame did NOT recompute readiness with the token held"
+c="$(count_x "$B/t22.trace.txt" "sss css b")"
+[ "$c" = 1 ] || fail "T22 — the SSS B-back did not fire (count $c/1)"
+echo "    T22 OK: a token held across CSS->SSS->CSS un-readies the screen on return"
+teeth=$((teeth + 1))
+# T9 (review-88 M2): carry P2's token one cell further -> p2=3 in LAUNCH.
+# Same shape as T2: delete the RIGHT release so the carry runs on to
+# cell 3 (falco) before the drop press.
 mkdir -p "$B/t9"
-mkvariant "$FLOWS/f05-vs-g03.flow" "$B/t9/f05-vs-g03.flow" insert-after \
-  "I 421 -" "I 422 R" "I 423 -"
+mkvariant "$FLOWS/f05-vs-g03.flow" "$B/t9/f05-vs-g03.flow" delete \
+  "I 984 -"
 run_variant "$B/t9/f05-vs-g03.flow" "$B/t9.trace.txt"
 rc=0; cmp -s "$B/t9.trace.txt" "$FLOWS/f05-vs-g03.expect" || rc=$?
 [ "$rc" = 1 ] || fail "T9 — p2-variant trace cmp rc $rc, want exactly 1"
@@ -1468,7 +1737,7 @@ rm -f "$B/banner-garble.out" "$B/banner-resemble.out"
 echo "    parser teeth OK: garbled-success + substring-resemblance verdict outputs both rejected by the anchored full-line parser"
 teeth=$((teeth + 2))
 
-[ "$teeth" = 21 ] || fail "teeth ledger — $teeth/21 fired"
+[ "$teeth" = 26 ] || fail "teeth ledger — $teeth/26 fired"
 [ "$banner" = 1 ] || fail "banner ledger — the finish-banner witness leg did not complete"
 
 # --- [6] hygiene ----------------------------------------------------------------

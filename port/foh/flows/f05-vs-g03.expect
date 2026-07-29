@@ -3,15 +3,23 @@ T 370 startup title timer
 T 375 title menu-top start
 T 380 menu-top menu-battle a
 T 385 menu-battle css a
-S 390 p1char 1
-S 395 p1char 2
-S 400 p1char 3
-S 405 p1char 4
-S 415 p2char 1
-S 420 p2char 2
-SHOT 425 css-p2
-T 430 css sss start
-SHOT 445 sss-pstadium
-T 450 sss match launch
-LAUNCH 450 p1=4 p2=2 p2type=0 difficulty=3 stage=2 turbo=0 lcancel=0 tapjump=0,0,0,0 versus=0
-END 455 transitions=6
+S 480 carry 0
+S 500 p1char 1
+S 519 p1char 2
+S 538 p1char 3
+S 557 p1char 4
+S 575 carry -1
+S 775 p2type 0
+S 785 p2type 1
+S 942 carry 1
+S 955 p2char 1
+S 974 p2char 2
+S 1003 carry -1
+S 1205 p2type -1
+S 1215 p2type 0
+SHOT 1225 css-p2
+T 1230 css sss start
+SHOT 1260 sss-pstadium
+T 1265 sss match launch
+LAUNCH 1265 p1=4 p2=2 p2type=0 difficulty=3 stage=2 turbo=0 lcancel=0 tapjump=0,0,0,0 versus=0
+END 1275 transitions=6

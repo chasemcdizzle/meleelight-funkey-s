@@ -140,9 +140,9 @@ f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/
 0bc801ea46b06a63e79377aae164636a5e9f649ee45835748e5f2387b9e04281 oracle/harness/streamlib.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-2267f8b796b1881d6ef749b5931a5fb08ae9f914b7a67a0e2608d4cada99616e port/foh/judge-foh-trace.js
-b2e814821a809a6cb5772c51587b1e49a87dab6438156f984e8ec07e59ab2141 port/foh/normalize-foh-trace.js
-b0c6ac328d6b87f9ff0c58562c880336eccb98a3053a4fdaadfb71e59e810186 port/foh/flow-to-fkscript.js
+4f0cf650978e871f442e28e2612307215cdeabf34d55126faea4d99f6f7198e8 port/foh/judge-foh-trace.js
+9dd01ce9adcf969015ac4669034275c32710705ffdcdf6487b1241ff9846a742 port/foh/normalize-foh-trace.js
+1163e9c18323ac06aaaec4ee3068691d7d67ebbf98b3500a343a69c80ca793ea port/foh/flow-to-fkscript.js
 4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js
 2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e port/foh/keymap-frozen.txt
 2cf5c5a532207372b70c4cee57412c7ac65643ac4f4066c745d9eb7fe4aa0e9b port/goldens-m4/wrap-target.js
@@ -295,9 +295,9 @@ done <<< "$PRODUCER_PINS"
 [ "$n_pins" = "$N_PINS_WANT" ] || fail "producer pin inventory — $n_pins/$N_PINS_WANT pins verified"
 # twin pins: the judge sha must sit in check-foh-flows.sh's pin table
 # exactly once; sndpack/menu.pcm must equal the sibling device checks'.
-c="$(grep -cF "2267f8b796b1881d6ef749b5931a5fb08ae9f914b7a67a0e2608d4cada99616e port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
+c="$(grep -cF "4f0cf650978e871f442e28e2612307215cdeabf34d55126faea4d99f6f7198e8 port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
 [ "$c" = 1 ] || fail "twin pin — check-foh-flows.sh does not carry the same judge-foh-trace.js sha exactly once (count $c; paired change rule)"
-c="$(grep -cF "2267f8b796b1881d6ef749b5931a5fb08ae9f914b7a67a0e2608d4cada99616e port/foh/judge-foh-trace.js" "$FOH/check-device-foh.sh")" || true
+c="$(grep -cF "4f0cf650978e871f442e28e2612307215cdeabf34d55126faea4d99f6f7198e8 port/foh/judge-foh-trace.js" "$FOH/check-device-foh.sh")" || true
 # exactly 2 there: its PRODUCER_PINS row + its own twin grep of
 # check-foh-flows.sh (both carry the sha+path pair)
 [ "$c" = 2 ] || fail "twin pin — check-device-foh.sh does not carry the same judge-foh-trace.js sha exactly twice (count $c; pin row + its twin grep)"
@@ -868,7 +868,7 @@ for k in 0 1; do
   made "$BUILD/$id.fks" "$BUILD/$id.fks.b"
   cmp "$BUILD/$id.fks" "$BUILD/$id.fks.b" || fail "fk script $id not byte-stable x2"
 done
-echo "   2 fk scripts derived (LEAD 8200 ms, 50 ms/frame)"
+echo "   2 fk scripts derived (LEAD 8200 ms, 1 device frame per flow frame)"
 
 # --- [5] arm build + push -----------------------------------------------------
 echo "== [5/8] armv7 build (shared rig stamp) + push + provenance =="
@@ -986,7 +986,11 @@ for k in 0 1; do
   id="${FLOW_IDS[$k]}"
   endf="$(grep -E '^END (0|[1-9][0-9]*)$' "$FLOWS/$id.flow" | awk '{print $2}')"
   [[ "$endf" =~ ^(0|[1-9][0-9]{0,5})$ ]] || fail "leg $id: flow END frame grammar ('$endf')"
-  fohmax=$(( (8200 + (endf - 370) * 50) * 3 / 50 + 600 ))
+  # CSS mechanics arc: the injector's scale is now 1:1 (one flow frame ==
+  # one device frame — the CSS cursor is level-driven, css.js:195-196), so
+  # this bound is LEAD in ticks + the flow's own frame span + margin. The
+  # old `*3/50` restated the retired STEP_MS=50 model.
+  fohmax=$(( (8200 * 60 / 1000) + (endf - 370) + 600 ))
   args="--flow $DTMP/$id.flow --input poll --flow-out $DTMP/$id.trace.txt"
   args="$args --shots-dir $DTMP/$id-shots --ready-file $DTMP/$id.ready"
   args="$args --foh-max $fohmax --pace 1 --budget-ns $BUDGET_NS"

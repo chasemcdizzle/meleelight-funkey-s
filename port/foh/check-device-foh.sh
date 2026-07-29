@@ -165,10 +165,16 @@ b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wr
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-2267f8b796b1881d6ef749b5931a5fb08ae9f914b7a67a0e2608d4cada99616e port/foh/judge-foh-trace.js
+4f0cf650978e871f442e28e2612307215cdeabf34d55126faea4d99f6f7198e8 port/foh/judge-foh-trace.js
 4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js
-2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e port/foh/keymap-frozen.txt"
-N_PINS_WANT=7
+2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e port/foh/keymap-frozen.txt
+9dd01ce9adcf969015ac4669034275c32710705ffdcdf6487b1241ff9846a742 port/foh/normalize-foh-trace.js
+1163e9c18323ac06aaaec4ee3068691d7d67ebbf98b3500a343a69c80ca793ea port/foh/flow-to-fkscript.js"
+# +2 (CSS mechanics arc): this check EXECUTES the normalizer (its poll-path
+# verdict is normalized-sequence equality) and the translator (it generates
+# every fk_input script it injects), so both were evidence-bearing here while
+# unpinned. check-device-target.sh already pinned all three.
+N_PINS_WANT=9
 # Audio artifact pins: sndpack + battlefield.pcm are TWIN-PINNED to the
 # reviewed literals in the sibling checks (asserted below via
 # rig_pin_assert_once — drift at either site is a loud death);
@@ -337,7 +343,7 @@ done <<< "$PRODUCER_PINS"
 # (the sibling's pin line sits inside its PRODUCER_PINS quoted block, so
 # it may carry the block's closing quote — match the exact sha+path pair
 # and require EXACTLY one occurrence)
-c="$(grep -cF "2267f8b796b1881d6ef749b5931a5fb08ae9f914b7a67a0e2608d4cada99616e port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
+c="$(grep -cF "4f0cf650978e871f442e28e2612307215cdeabf34d55126faea4d99f6f7198e8 port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
 [ "$c" = 1 ] || fail "twin pin — check-foh-flows.sh does not carry the same judge-foh-trace.js sha exactly once (count $c; paired change rule)"
 rig_pin_assert_once "$GFX/check-device-music.sh" SNDPACK_SHA256 "$SNDPACK_SHA256" || exit 1
 rig_pin_assert_once "$GFX/check-device-music.sh" MUSIC_BF_SHA256 "$MUSIC_BF_SHA256" || exit 1
@@ -1092,7 +1098,7 @@ for k in 0 1 2 3 4; do
   made "$BUILD/$id.fks" "$BUILD/$id.fks.b"
   cmp "$BUILD/$id.fks" "$BUILD/$id.fks.b" || fail "fk script $id not byte-stable x2"
 done
-echo "   5 fk scripts derived (LEAD 8200 ms, 50 ms/frame — AGENT-LOG iter 93)"
+echo "   5 fk scripts derived (LEAD 8200 ms, 1 device frame per flow frame)"
 
 # --- [6] arm build + push --------------------------------------------------------
 echo "== [6/9] armv7 build (shared rig stamp) + push + provenance =="
@@ -1219,10 +1225,17 @@ for k in 0 1 2 3 4; do
   id="${FLOW_IDS[$k]}"
   mode="${FLOW_BRIDGE[$k]}"
   seedv="${FLOW_SEED[$k]}"
-  # foh-max: LEAD + (END-370)*STEP ms -> ticks (x3/50) + 600 margin
+  # foh-max: LEAD + (END-370)*STEP ms -> ticks + 600 margin.
+  # CSS mechanics arc: flow-to-fkscript.js's scale changed from 3 device
+  # frames per flow frame to 1:1 (the CSS cursor integrates the d-pad every
+  # frame it is HELD, css.js:195-196, so a direction's DURATION is semantic
+  # and cannot be stretched). The old `*3/50` restated STEP_MS=50; the ms
+  # expression below is the injector's model restated at FRAME_MS=1000/60,
+  # and `*60/1000` converts ms to ticks. NOTE the flows also got much longer
+  # in wall-clock terms (f05 END 455 -> 1275), so this bound grew a lot.
   endf="$(grep -E '^END (0|[1-9][0-9]*)$' "$FLOWS/$id.flow" | awk '{print $2}')"
   [[ "$endf" =~ ^(0|[1-9][0-9]{0,5})$ ]] || fail "leg $id: flow END frame grammar ('$endf')"
-  fohmax=$(( (8200 + (endf - 370) * 50) * 3 / 50 + 600 ))
+  fohmax=$(( (8200 * 60 / 1000) + (endf - 370) + 600 ))
   # device argv (written to a region file so rig_argv_assert_once can
   # pin --input + poll and refuse duplicate overrides)
   args="--flow $DTMP/$id.flow --input poll --flow-out $DTMP/$id.trace.txt"
@@ -1631,7 +1644,7 @@ node "$FOH/normalize-foh-trace.js" --bounded "$BUILD/opk.bounded-want" \
 [ "$rc" = 3 ] || fail "T14a: anchor-null WITHOUT input-free rc $rc (want exactly 3 — bounded mode must never succeed silently without cadence judgment)"
 t14_end="$(grep -E '^END (0|[1-9][0-9]*)$' "$FLOWS/f01-vs-g01.flow" | awk '{print $2}')"
 [[ "$t14_end" =~ ^(0|[1-9][0-9]{0,5})$ ]] || fail "T14: f01 END grammar ('$t14_end')"
-t14_max=$(( (8200 + (t14_end - 370) * 50) * 3 / 50 + 600 ))
+t14_max=$(( (8200 * 60 / 1000) + (t14_end - 370) + 600 ))
 rc=0
 node "$FOH/normalize-foh-trace.js" --bounded "$FLOWS/f01-vs-g01.expect" \
   "$BUILD/f01-vs-g01.dev-trace.txt" "$FLOWS/f01-vs-g01.flow" "$t14_max" \
@@ -1701,7 +1714,7 @@ dsum="$(rig_dev_sha256 "$DTMP/toothswap.fks")" || exit 1
 [ "$dsum" = "$hsum" ] || fail "T-devswap: pushed tooth fks sha mismatch"
 tswap_end="$(grep -E '^END (0|[1-9][0-9]*)$' "$FLOWS/f01-vs-g01.flow" | awk '{print $2}')"
 [[ "$tswap_end" =~ ^(0|[1-9][0-9]{0,5})$ ]] || fail "T-devswap: f01 END grammar"
-tswap_max=$(( (8200 + (tswap_end - 370) * 50) * 3 / 50 + 600 ))
+tswap_max=$(( (8200 * 60 / 1000) + (tswap_end - 370) + 600 ))
 rm -f "$BUILD/toothswap-launch.sh"
 cat > "$BUILD/toothswap-launch.sh" << EOF
 #!/bin/sh
@@ -1862,7 +1875,7 @@ echo "    T10 OK: perturbed fb-witness copies (eq=0, resembling row, TORN traile
 # T11: bounded-delta teeth (COPIES of the fresh f01 device trace; the
 # review-93 M1 scenario — a mid-run stall the elision normalizes away)
 f01_end="$(grep -E '^END (0|[1-9][0-9]*)$' "$FLOWS/f01-vs-g01.flow" | awk '{print $2}')"
-f01_max=$(( (8200 + (f01_end - 370) * 50) * 3 / 50 + 600 ))
+f01_max=$(( (8200 * 60 / 1000) + (f01_end - 370) + 600 ))
 node -e '
   const fs = require("fs");
   const [src, dst, cutS, shiftS] = process.argv.slice(1);

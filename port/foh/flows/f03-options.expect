@@ -15,7 +15,8 @@ T 465 options-gameplay menu-options b
 T 470 menu-options menu-top b
 T 485 menu-top menu-battle a
 T 490 menu-battle css a
-T 495 css sss start
-T 500 sss match launch
-LAUNCH 500 p1=0 p2=0 p2type=0 difficulty=3 stage=0 turbo=1 lcancel=2 tapjump=1,1,0,0 versus=0
-END 505 transitions=10
+S 685 p2type 0
+T 695 css sss start
+T 705 sss match launch
+LAUNCH 705 p1=0 p2=0 p2type=0 difficulty=3 stage=0 turbo=1 lcancel=2 tapjump=1,1,0,0 versus=0
+END 715 transitions=10

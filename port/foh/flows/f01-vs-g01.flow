@@ -3,8 +3,26 @@ FLOW1
 # default settings; pre-registration AGENT-LOG iter 88).
 # startup runs frames 1-370 (timer transition), then: title -> START ->
 # menu-top -> A on VS. MELEE -> menu-battle -> A on LOCAL VS -> css ->
-# two RIGHTs on the P1 row (marth -> puff -> fox) -> START -> sss ->
-# A on battlefield (cursor default 0) -> LAUNCH.
+# the TOKEN GESTURE (below) -> START -> sss -> A on battlefield (cursor
+# default 0) -> LAUNCH.
+#
+# RE-AUTHORED for the CSS mechanics arc (docs/MENU-SPEC.md items 1+2+4):
+# the row cursor and its L/R stepper are gone, because upstream has no
+# value stepper on this screen at all (MENU-SPEC §2.5) — grab-token,
+# hover-cell, drop is the ONLY way to choose a character. A flow step is
+# now "hold a direction N frames"; FLOW1 already expresses that, since an
+# `I` row SETS the held input until the next `I` row, so the format is
+# unchanged. The hand moves 2.40 px/frame in x and 3.84 in y
+# (DEVIATION D3) on a 240x240 screen.
+#
+# CLAMP-ANCHORED POSITIONING. Every cursor move here is (a) hold into a
+# screen edge until the clamp absorbs the overshoot, then (b) hold a
+# counted number of frames away from that edge. The device path drives
+# these scripts through a wall-clock injector (flow-to-fkscript.js), so a
+# hold can land +/-1 device frame off; anchoring on a clamp makes leg (a)
+# exact regardless, and every target below keeps more than one frame of
+# slack on each side of leg (b). Positions are the machine's own
+# arithmetic, verified against the measured trace.
 I 1 -
 SHOT 200 startup
 SHOT 373 title
@@ -16,14 +34,52 @@ I 381 -
 SHOT 383 menu-battle
 I 385 A
 I 386 -
-I 390 R
-I 391 -
-I 395 R
-I 396 -
-SHOT 400 css
-I 405 S
-I 406 -
-SHOT 410 sss
-I 415 A
-I 416 -
-END 420
+# Anchor: UP x70 clamps y to 0 (the hand starts at y = 224.00, and
+# 240/3.84 = 62.5 frames is the whole screen). Then DOWN x12 -> y = 46.08:
+# inside the roster band (26,62) with 14 px of slack above and 16 below,
+# and inside the cell row (32,62). x is untouched at 28.00, i.e. cell 0
+# (6,50) = marth.
+I 390 U
+I 460 -
+I 465 D
+I 477 -
+# B, rising edge, in the band, P1 is HMN and empty-handed: P1's token is
+# retrieved to the hand (css.js:209-215). This also un-readies the screen
+# (occupiedToken, css.js:1176).
+I 480 B
+I 483 -
+# Carry RIGHT x38 -> x = 119.20, inside cell 2 (98,142) = fox, crossing
+# puff (cell 1) on the way. Hovering a cell SELECTS it live
+# (css.js:222-226), so p1char steps 1 then 2 as the token passes.
+# The release sits far enough before the drop that the T2 tooth can
+# delete it and carry on to cell 3 instead.
+I 490 R
+I 528 -
+# A drops the token on fox and plays its announcer (css.js:263). Deleting
+# the release above lets the carry run to here instead (58 frames,
+# x = 167.20 = cell 3), which is exactly what the T2 tooth does.
+I 548 A
+I 551 -
+# To port 2's type tab: anchor LEFT+DOWN x105 (clamps x to 0 and y to
+# 240), then RIGHT x33 -> x = 79.20 (tab spans 61..97) and UP x36 ->
+# y = 101.76 (tab spans 96..107, so this sits 5.76 px above the floor and
+# 5.24 below the ceiling — more than one frame of slack either way). The
+# clamp is what makes the T2 variant, 48 px further right, converge here.
+I 560 LD
+I 665 -
+I 670 R
+I 703 -
+I 708 U
+I 744 -
+# A on the type box runs togglePort(1) (css.js:348-357, main.js:504-520):
+# N/A -> HMN. Two non-N/A ports with nothing held is exactly READY TO
+# FIGHT (css.js:1167-1181), so START goes live on the next frame.
+I 750 A
+I 753 -
+SHOT 760 css
+I 765 S
+I 768 -
+SHOT 775 sss
+I 780 A
+I 783 -
+END 790

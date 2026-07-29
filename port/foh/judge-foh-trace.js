@@ -15,9 +15,10 @@
 //   - every T edge is in the PINNED FLOW GRAPH (the faithful edge set,
 //     upstream citations in port/foh/foh.h) — an off-graph transition
 //     is corruption, never new behavior;
-//   - S field/value domains pinned (chars 0-4, p2type 0/1, difficulty
+//   - S field/value domains pinned (chars 0-4, port types -1/0/1,
+//     carry -1/0/1, difficulty
 //     1-4 = the upstream slider domain, lcancel 0-2, tapjump/turbo 0/1,
-//     refused entries = the 9 registered tokens);
+//     refused entries = the 11 registered tokens);
 //   - LAUNCH-or-TLAUNCH at most once TOTAL, required/forbidden per
 //     argv, and IMMEDIATELY preceded by its own launch T line at the
 //     same frame (`T <f> sss match launch` for LAUNCH, `T <f>
@@ -79,13 +80,30 @@ const REFUSED = new Set([
   // the target-select "+ Add Code" slot refuses (builder/share-code
   // plane, scope-excluded — foh.h note).
   "addcode",
+  // CSS mechanics arc (MENU-SPEC items 2/3/4): the CSS can now reach port
+  // configurations the LAUNCH plane cannot honour — a CPU port 0 (togglePort
+  // has no port-0 special case, main.js:504-520) and the one-frame N/A race
+  // that upstream's draw-pass readyToFight allows (css.js:1167-1181 vs
+  // :446-451). sim_setup_match pins a human port 0, so START refuses loudly
+  // instead of booting a different match than the record claims.
+  "portconfig",
 ]);
 
 const RE_T = /^T ([0-9]+) ([a-z-]+) ([a-z-]+) (timer|start|a|b|bhold|launch)$/;
+// MENU-SPEC items 2/3/4 (CSS mechanics): `carry` is whichTokenGrabbed[0]
+// (css.js:68) — the token-gesture state; the type fields gained N/A (-1) from
+// DEVIATION D5's 3-cycle; P1 gained its own type + CPU level because
+// togglePort has no port-0 special case (main.js:504-520).
 const RE_S_NUM =
-    /^S ([0-9]+) (p1char|p2char|p2type|difficulty|turbo|lcancel|tapjump[1-4]) ([0-9])$/;
+    /^S ([0-9]+) (p1char|p2char|p1type|p2type|p1difficulty|difficulty|carry|turbo|lcancel|tapjump[1-4]) (-1|[0-9])$/;
 const RE_S_REF = /^S ([0-9]+) refused ([a-z0-9]+)$/;
 const RE_SHOT = /^SHOT ([0-9]+) ([a-z0-9-]{1,32})$/;
+// UNCHANGED by the CSS mechanics arc, deliberately. p1type/p1difficulty are
+// real machine state and are traced as S events, but they are NOT on this
+// line: the launch plane only supports a human port 0 (sim_setup_match pins
+// types[0]=0), so foh.c REFUSES a launch whose port configuration is anything
+// but (p1 HMN, p2 HMN|CPU) — the record can therefore never need the columns,
+// and the device app's independent copy of this format stays valid.
 const RE_LAUNCH =
     /^LAUNCH ([0-9]+) p1=([0-4]) p2=([0-4]) p2type=([01]) difficulty=([1-4]) stage=([0-5]) turbo=([01]) lcancel=([012]) tapjump=([01]),([01]),([01]),([01]) versus=0$/;
 // iter 99 (M4 task 12): the target-mode launch record (foh.h TLAUNCH
@@ -116,7 +134,12 @@ let prevLaunchFrame = -1;
 const shotNames = new Set();
 
 const SVAL_DOM = {
-  p1char: [0, 4], p2char: [0, 4], p2type: [0, 1], difficulty: [1, 4],
+  p1char: [0, 4], p2char: [0, 4],
+  // -1 N/A, 0 HMN, 1 CPU (main.js:504-520 with DEVIATION D5's NET dropped)
+  p1type: [-1, 1], p2type: [-1, 1],
+  // whichTokenGrabbed[0]: -1 = empty-handed, else the port whose token is held
+  carry: [-1, 1],
+  p1difficulty: [1, 4], difficulty: [1, 4],
   turbo: [0, 1], lcancel: [0, 2],
   tapjump1: [0, 1], tapjump2: [0, 1], tapjump3: [0, 1], tapjump4: [0, 1],
 };

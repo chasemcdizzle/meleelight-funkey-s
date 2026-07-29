@@ -20374,3 +20374,73 @@ inking, no observation stores, no artifacts).
 check without it). No freeze-manifest row touched (all 9 files checked —
 none appear in m4-freeze-manifest.txt). servedDistSha256 re-pinned twice,
 legitimately (the served main.js now carries the background hooks).
+
+---
+
+iter 131 · 2026-07-29 · phase M4 · **CSS MECHANICS LANDED — free hand cursor + token model + port types + ready/launch rule (MENU-SPEC §2 items 1+2+3+4)** · codex arc GO at round 11 · 3 items escalated as structurally out-of-lane
+
+**The owner's headline complaint is answered.** Upstream's CSS is a
+FREE-MOVING HAND, and the token gesture is the ONLY way to pick a
+character — our row-list stepper had REPLACED that model, which is why
+Chase reported "no way to select my own character". Now implemented per
+spec: cursor in doubles, d-pad-integrated, screen-clamped, persisting
+across entry/exit (FOH_CURSOR_SPEED knob; 2.40/3.84 px/frame, D3
+arithmetic verified) · **B retrieves your own token** (playerType[i]==0)
+· **A grabs your own OR any CPU's** (playerType[j]==1 || i==j) · carried
+token rides the hand and **hovering selects LIVE** · A drops + plays the
+announcer (all 5 SND1 names verified against sfx.js) · leaving the band
+**silently commits** · the HMN/CPU tab is CLICKABLE with the D5 3-cycle
+· **P1 CAN be CPU** (p1Type/p1Difficulty) · the CPU knob is GRAB-DRAG
+with a continuous cssSliderX (not derived) initialised at upstream's
+116/166 fraction · readyToFight verbatim, START and the banner BOTH
+gated.
+**SPEC CITE FOUND WRONG (evidence beats scripture — the writer was told
+the spec is evidence, not gospel, and used it):** §2.6's quirk Q1 says
+the two rest formulas "disagree by a few px". MEASURED: **99 px = one
+full cell.** Carried at upstream's ratios anyway (FOH_CSS_TOKEN_LB_*),
+pair-clamped so both tokens stay on-screen and distinct. Also §2.9's tag
+row omits its outer x guard. AND a citation-integrity finding worth
+acting on: **main.js line citations throughout AGENT-LOG.md and
+MENU-SPEC.md are read off the PATCHED clone and run ~6 lines high** —
+the writer corrected its own; ours need a citation-only erratum (C14).
+**The machine/look split, and codex's key correction:** cursor, carry,
+cssChar, types, slider, cssReady and hand type are MACHINE state (in
+shots); foh_look_canonical untouched. Codex caught that **readiness
+belongs to the screen a tick ENDS on** — upstream's drawCSS runs from a
+separate rAF loop against the current gameMode — so it moved into
+foh_tick. Tooth T22 kills the old placement.
+**Frozen artifacts re-frozen HONESTLY:** 5 .expect files, all MEASURED
+(never hand-written), each justified by the flow re-author; f06/f07
+.flow direction taps widened with traces byte-identical. Ledger
+**teeth=21 → 26**, every other counter unchanged: T19 (a CPU P1 refuses
+to launch), T20 (short direction refused), T21/T21b (keysym overlap,
+byte-pinned diagnostics), T22 (held token un-readies on return).
+**Arc: codex GO at round 11**, each round cmp-proven non-replay.
+**DRIVER MERGE — a real gotcha worth recording:** `git apply --3way`
+printed "Applied patch to X cleanly" for the first files and then
+ROLLED BACK ATOMICALLY on a later conflict (docs/PORTABILITY.md, which
+C4/iter-128 had also touched). The per-file success messages are NOT a
+transaction receipt. My first cold run then reported teeth=21 — the OLD
+count — and I nearly waved it through as a stale-cache artifact. The
+discrepancy between the writer's claimed 26 and the measured 21 is what
+caught it. **Lesson: after any patch-based merge, verify a CONTENT
+FINGERPRINT of the merged file (line count, a pinned token), never just
+the apply's exit messages.** Second apply landed all 23 files; driver
+cold re-run: **`FOH FLOWS OK (… teeth=26)`**
+(.loop/driver-cold-cssmech-flows2.log).
+**THREE ITEMS ESCALATED (structurally outside the lane — correctly NOT
+improvised):** (1) **P1-CPU LAUNCH** — sim_setup_match pins types[0]=0
+and both bridges carry only P2's type/level; extending them needs
+foh_dev.c, which the C6 device lane owns. It currently REFUSES LOUDLY
+(`refused portconfig`, T19) rather than booting a human P1 under a lying
+record — the right failure. (2) **The one-hand/two-attached-port model
+needs an OWNER RULING** — it matches neither upstream attachment case,
+but without it the two-human goldens cannot launch from the menu. (3)
+DEV_NEG/DEV_POS device bounds are inherited from the retired 3× cadence
+and unvalidated — left FROZEN so they fail loud rather than silently
+drifting.
+**Also flagged for the device lane:** the flows got much longer (f05 END
+455→1275) and the injector scale changed 3×→1:1, so `--foh-max` is now
+`LEAD_ticks + (END-370) + 600`; all six derivations converted.
+Independent of C1's unbounded-live-play change; no conflict, but the
+device lane should confirm.

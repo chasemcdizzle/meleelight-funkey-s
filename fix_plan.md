@@ -2316,3 +2316,21 @@ Everything below is functionality/fidelity, not styling.
   evidence pinning background pixels must be RE-TAKEN — check-device-
   render.sh shot compares, any screenshot-pinning leg. Do it in the
   next device session alongside C6's proofs.
+- CSS MECHANICS DONE (iter 131): free cursor + token model + port types
+  + ready/launch rule; teeth 21→26; arc GO codex r11.
+- **C15 (P0, OWNER RULING NEEDED) the one-hand / two-attached-port
+  model.** The CSS lane's implementation matches NEITHER upstream
+  attachment case, but without some choice here the two-human goldens
+  cannot launch from the menu. Needs Chase's call on how a single
+  physical d-pad drives what upstream gives two attached controllers.
+- **C16 (P1, device lane) P1-CPU LAUNCH**: sim_setup_match pins
+  types[0]=0 and both bridges carry only P2's type/level. The menu can
+  now SET a CPU P1; launching one needs foh_dev.c + bridge extension.
+  Currently refuses loudly (T19) rather than booting a human P1 under a
+  lying record — keep that failure until the bridge is extended.
+- C17 (P2) DEV_NEG/DEV_POS device bounds inherited from the retired 3×
+  injector cadence, unvalidated, left frozen to fail loud. Revalidate in
+  a device session.
+- C14 (P2, citation erratum) main.js line cites throughout
+  docs/AGENT-LOG.md and docs/MENU-SPEC.md are read off the PATCHED clone
+  and run ~6 lines HIGH. Citation-only correction; no behaviour.

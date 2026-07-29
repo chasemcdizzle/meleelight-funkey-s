@@ -12,34 +12,34 @@ I 1 -
 I 375 S
 I 376 -
 I 380 D
-I 381 -
+I 383 -
 I 385 D
-I 386 -
+I 388 -
 I 390 D
-I 391 -
+I 393 -
 I 395 A
 I 396 -
 I 400 A
 I 401 -
 I 405 D
-I 406 -
+I 408 -
 I 410 A
 I 411 -
 SHOT 415 options-gameplay
 I 420 A
 I 421 -
 I 425 D
-I 426 -
+I 428 -
 I 430 A
 I 431 -
 I 435 A
 I 436 -
 I 440 D
-I 441 -
+I 443 -
 I 445 A
 I 446 -
 I 450 R
-I 451 -
+I 453 -
 I 455 A
 I 456 -
 SHOT 460 options-edited
@@ -48,13 +48,28 @@ I 466 -
 I 470 B
 I 471 -
 I 480 D
-I 481 -
+I 483 -
 I 485 A
 I 486 -
 I 490 A
 I 491 -
-I 495 S
-I 496 -
-I 500 A
-I 501 -
-END 505
+# CSS mechanics arc (docs/MENU-SPEC.md item 4): START launches only while
+# READY TO FIGHT, and the CSS opens with one participant (playerType init
+# [-1,-1,-1,-1], main.js:107; P1 joins at the title). Clamp-anchored like
+# f01: LEFT+DOWN x105 pins the hand at (0, 240), then RIGHT x33 ->
+# x = 79.20 and UP x36 -> y = 101.76 puts it on port 2's type tab without
+# ever entering the roster band, and A makes it HMN. The chars stay at
+# their defaults (marth vs marth) — this flow is about the settings plane.
+I 495 LD
+I 600 -
+I 605 R
+I 638 -
+I 643 U
+I 679 -
+I 685 A
+I 688 -
+I 695 S
+I 698 -
+I 705 A
+I 708 -
+END 715

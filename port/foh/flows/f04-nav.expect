@@ -18,8 +18,9 @@ S 510 refused credits
 T 515 menu-options menu-top b
 T 535 menu-top menu-battle a
 T 540 menu-battle css a
-T 545 css sss start
-S 560 refused random
-T 565 sss css b
-T 599 css menu-battle bhold
-END 605 transitions=13
+S 735 p2type 0
+T 745 css sss start
+S 775 refused random
+T 785 sss css b
+T 824 css menu-battle bhold
+END 840 transitions=13

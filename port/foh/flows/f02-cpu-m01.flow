@@ -1,10 +1,19 @@
 FLOW1
 # f02: the CPU path -> m01 params (falcon / CPU marth d1 / ystory).
-# P1 row: four RIGHTs (marth -> ... -> falcon). Down to the P2 TYPE
-# row, A toggles HMN -> CPU. Down to the CPU LEVEL row, two LEFTs
-# (3 -> 2 -> 1) plus a THIRD left at the floor = the clamp witness
-# (no S event may appear for it; the frozen trace proves the clamp).
-# Then START -> sss, one RIGHT (battlefield -> ystory), A -> LAUNCH.
+#
+# RE-AUTHORED for the CSS mechanics arc (docs/MENU-SPEC.md items 1+2+3+4).
+# The leg exercises every gesture this screen has: token grab with B,
+# carry-and-hover across the whole roster, drop with A, the clickable port
+# type box run twice (N/A -> HMN -> CPU, css.js:348-357), and the CPU
+# level as a GRAB-DRAG KNOB rather than a stepper (css.js:316-334 /
+# 396-408, DEVIATION D7). The knob drag ends by pushing PAST the rail's
+# low end, so the x clamp (css.js:318-320) is still the witness it was:
+# the frozen trace shows difficulty settling at 1 and no further event.
+#
+# CLAMP-ANCHORED POSITIONING — see the note in f01-vs-g01.flow. Every
+# cursor stop below is reached by holding into a screen edge and then
+# counting frames away from it, so a +/-1 device-frame timing error on
+# the wall-clock injector cannot move which widget the hand is over.
 I 1 -
 I 375 S
 I 376 -
@@ -12,34 +21,74 @@ I 380 A
 I 381 -
 I 385 A
 I 386 -
-I 390 R
-I 391 -
-I 395 R
-I 396 -
-I 400 R
-I 401 -
-I 405 R
-I 406 -
-I 410 D
-I 411 -
-I 415 D
-I 416 -
-I 420 A
-I 421 -
-I 425 D
-I 426 -
-I 430 L
-I 431 -
-I 435 L
-I 436 -
-I 440 L
-I 441 -
-SHOT 445 css-cpu
-I 450 S
-I 451 -
-I 455 R
-I 456 -
-SHOT 460 sss-ystory
-I 465 A
-I 466 -
-END 470
+# Anchor UP x70 (y clamps to 0), then DOWN x12 -> y = 46.08: the roster
+# band (26,62) and the cell row (32,62), x still 28.00 = cell 0.
+I 390 U
+I 460 -
+I 465 D
+I 477 -
+# B retrieves P1's token to the hand (css.js:209-215).
+I 480 B
+I 483 -
+# Carry RIGHT x77 -> x = 212.80, inside cell 4 (190,234) = falcon. The
+# hover-select fires once per cell crossed (css.js:222-226).
+I 490 R
+I 567 -
+# A drops the token on falcon and plays its announcer (css.js:293).
+I 575 A
+I 578 -
+# To port 2's type tab: anchor LEFT+DOWN x105, then RIGHT x33 ->
+# x = 79.20 and UP x36 -> y = 101.76.
+I 585 LD
+I 690 -
+I 695 R
+I 728 -
+I 733 U
+I 769 -
+# A twice: N/A -> HMN -> CPU (togglePort, main.js:504-520 with DEVIATION
+# D5's NET dropped). The CPU panel and its level knob only exist while
+# the port is CPU (css.js:937-969), so this is what makes the knob below
+# reachable at all.
+I 775 A
+I 778 -
+I 785 A
+I 788 -
+# To the knob: anchor LEFT+DOWN x105 again, then RIGHT x40 -> x = 96.00
+# (the knob's default-level centre, +/-6 hit box) and UP x13 ->
+# y = 190.08 (the rail sits at y = 189.00).
+I 795 LD
+I 900 -
+I 905 R
+I 945 -
+I 950 U
+I 963 -
+# A grabs the knob (css.js:396-408). The hand is now LOCKED to the rail.
+I 970 A
+I 973 -
+# Drag LEFT x15. The level is re-derived from the hand position every
+# frame (css.js:325-327): 3 -> 2 -> 1, and the last frames run into the
+# rail's low clamp at x = 72.00, which produces no further event.
+I 980 L
+I 995 -
+# NOTE the drag deliberately ENDS on the clamp (x = 72.00), which is also
+# level 1's stop, so this flow's frozen shot cannot by itself witness that the
+# slider is CONTINUOUS. It cannot: level 1's band is [72,78), only 6.00 px
+# wide, while the translator's 3-frame minimum for a direction press moves the
+# hand 7.20 px — no authored press can land inside that band off its stop. The
+# slider's continuity is NOT witnessed by any host check (see the note on T6
+# in check-foh-flows.sh — the structural trace cannot see a render position,
+# and the shot arm only compares run A to run B). The clamp witness stays
+# here, where upstream's arm is (css.js:318-320).
+# A releases the knob (css.js:328-333); allowRegrab stops the same frame
+# from re-grabbing it.
+I 1005 A
+I 1008 -
+SHOT 1015 css-cpu
+I 1020 S
+I 1023 -
+I 1030 R
+I 1033 -
+SHOT 1040 sss-ystory
+I 1045 A
+I 1048 -
+END 1055
