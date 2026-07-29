@@ -270,3 +270,49 @@ events and genuine decisions, not progress noise.
   verdict may not approve its own package.
 - **DIGEST newest-on-top reordering** — AGENT-LOG stays append-at-bottom;
   STATE.md + the §1 recovery pointer cover fast, non-stale orientation.
+
+## 12. Worktrees by default for feature lanes (owner ruling 2026-07-29)
+
+**Every writer lane runs in its own git worktree.** The prior practice —
+partitioning lanes by file so they could never touch the same source —
+is retired. It bought conflict-avoidance at the cost of artificial
+serialization (whole punch-list items waited on an unrelated lane
+because they shared a file), and when conflicts did occur they were
+trivial: the iter-125 merge was five instances of two lanes appending
+their own TU to the same build list, resolved by union in seconds.
+Git's 3-way merge is built for this; hand-partitioning is a worse
+version of it.
+
+**What worktrees do NOT solve — the reason lanes still need routing:**
+1. **Semantic conflicts are invisible to git.** Two lanes can edit
+   disjoint files and still break each other. Measured instances: the
+   CSS lane changed flow scripts and the injector cadence while the
+   device lane's `--foh-max` derivation depended on them (no textual
+   conflict, real dependency); U1 changed background PIXELS, which
+   invalidated device screenshot evidence held by a different lane.
+   Routing exists for coupling, not for file collisions.
+2. **The device is a singleton.** One lane drives the FunKey at a time.
+   That is a hardware lock; worktrees are irrelevant to it.
+3. **The evidence layer is global.** m4-freeze-manifest.txt rows and
+   verify_m4.sh's MANIFEST_SHA256 anchor are single-writer by nature —
+   which is an argument FOR this model: lanes report new shas, the
+   driver re-pins centrally, and the anchor never becomes a merge
+   hotspot.
+4. **A review GO covers BYTES, not intent.** Merging changes the bytes
+   a lane's arc approved. The merge PRODUCT was reviewed by nobody.
+
+**Therefore the merge ritual is binding (driver duty):**
+- Driver remains sole merger; lanes never commit.
+- After every merge, re-run the affected checks COLD in the merged tree
+  — a lane's own green is evidence about its worktree, not about HEAD.
+- **Verify a CONTENT FINGERPRINT of each merged file** (line count, a
+  pinned token), never the patch tool's own success messages: at
+  iter-131 `git apply --3way` printed "Applied cleanly" per file and
+  then ROLLED BACK ATOMICALLY on a later conflict; the cold re-run
+  reported the pre-merge ledger and was nearly waved through as a stale
+  build. Only the disagreement between the writer's claimed count and
+  the measured one caught it.
+- Any pinned producer whose bytes moved in the merge goes back to
+  `arc-in-flight` until a round covers the MERGED bytes, or the driver
+  records why the existing GO still binds (mtime/diff proof, as at
+  iter-132).
