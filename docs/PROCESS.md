@@ -381,3 +381,65 @@ the driver may not edit them. This section is a READING that reconciles
    stamp and no `pipeline/build/` artifacts, so the first device-facing
    build in a lane is cold. That is minutes, and it is cheaper than the
    contamination risk of sharing build dirs across lanes.
+
+### 12.3 Shared scarce resources — device, docker, browser (assessed 2026-07-29)
+
+**What is genuinely scarce, and what is not.** Most of this project's
+evidence is HOST-side by design (host twins, headless backend, the
+oracle harness), and that separation is the main reason lanes can run in
+parallel at all. Hardware is required for exactly: real frame timing /
+p99 + skips, the real SDL input path, real audio, OPK/frontend launch,
+and framebuffer screenshots. Everything else already runs host-side and
+does not contend.
+
+**1. The device is a hard singleton — batch it, don't queue-jump it.**
+`riglib.sh` already carries a shared no-reclaim lock (`rig_lock_acquire`
+/ `rig_lock_release`, ownership-checked, EXIT-trap covered) plus a
+deadman that restores device state if a lane dies. That is correct and
+needs no change. What DOES change under parallel lanes: N host lanes
+each finishing with a few minutes of device work is the worst possible
+shape — N lock acquisitions, N frontend park/restore cycles, N cold arm
+builds. **Adopt device WORK ORDERS:** a host lane that needs hardware
+does not take the device; it emits a work order under `.loop/` (what to
+run, what evidence to pull, what verdict lines it expects) and the
+single device-owning lane DRAINS the queue in one session. This is
+PROCESS §9's run-batching applied across lanes instead of within one.
+
+**2. Docker/arm builds stay SERIAL (CLAUDE.md), but should be far rarer.**
+The image is amd64 under emulation; parallel builds thrash. The real
+waste is that every worktree starts with a cold `arm-build.stamp` and
+rebuilds everything even when its sources are byte-identical to a build
+that already exists in another lane. **The fix already exists in the
+codebase and only needs relocating:** `rig_srchash` computes a content
+hash over all `port/{sim,gfx,tools,foh,fdlibm,ryu}` + `oracle/qjs`
+sources, the generated `ml_tables.c`/`ml_stages.c`, every rig script,
+AND the resolved docker image id. That key is exactly a content address.
+A **content-addressed shared build cache** (`~/.cache/mlfk-arm/<srchash>/`)
+therefore cannot serve the wrong bytes by construction: a lane that
+changed any input gets a different key and builds cold; a lane that
+changed nothing gets a hit. **Non-negotiable safety conditions** — this
+is evidence machinery, so it fails closed: re-hash every artifact on
+READ before use (`rig_stamp_rehash` already does this adjacent to push),
+never populate the cache from a build that did not verify, and keep
+`MLFK_FORCE_ARM=1` as the escape hatch. Registered as C21; it touches a
+pinned producer, so it needs its own arc.
+
+**3. Pipeline artifacts are byte-stable BY PROOF — cache them the same
+way.** The M1 gate's whole contract is that two fresh runs produce
+byte-identical manifests, so sharing pipeline outputs across lanes
+changes no result. Same content-addressed discipline (key on the
+pipeline inputs + stage code), same verify-on-read. Note the live
+counter-example that proves the key must be on INPUTS, not paths: the
+C4 lane legitimately changed `img1.js` and its `menu.img1` SHOULD differ
+— a path-keyed cache would have silently served it stale bytes.
+
+**4. Browser/oracle runs are host-side and parallel-safe** (separate
+Chrome instances, separate served dirs), but they are heavy; two lanes
+capturing simultaneously is fine, four is not worth it.
+
+**5. Evidence must outlive the worktree.** Review logs and measurement
+artifacts written to a lane's `.loop/` vanish when the worktree is
+pruned — while manifest cites point AT them. Either the lane writes them
+to the main repo's `.loop/`, or the driver copies them at merge time
+(done manually at iter-132 for the CSS arc logs). This is the C8 lesson
+generalized: evidence must live where the driver reads it, permanently.

@@ -2444,3 +2444,26 @@ Everything below is functionality/fidelity, not styling.
   prose enumerations going stale relative to the rows they describe,
   three consecutive review rounds). Consumers: the driver's post-merge
   re-run set, and writer briefs ("your change invalidates X, Y").
+- **C21 (P1, instrument) content-addressed shared ARM build cache.**
+  Every worktree currently starts with a cold `arm-build.stamp` and
+  rebuilds under amd64 emulation even when its sources are byte-identical
+  to another lane's completed build. `rig_srchash` ALREADY computes the
+  right key (all port/* + oracle/qjs sources + generated ml_tables.c /
+  ml_stages.c + every rig script + the resolved docker image id) — the
+  work is relocating the stamp+binaries into `~/.cache/mlfk-arm/<key>/`
+  and looking up before building. Cannot serve wrong bytes by
+  construction (changed input ⇒ different key), but it IS evidence
+  machinery: **verify-on-read (re-hash every artifact before use, the
+  existing rig_stamp_rehash discipline), never populate from an
+  unverified build, keep MLFK_FORCE_ARM=1.** Touches riglib.sh (a pinned
+  producer) ⇒ own Tier A arc + re-pin. Same treatment applies to
+  `pipeline/build/` artifacts, whose byte-stability the M1 gate already
+  proves — key on INPUTS not paths (the C4 lane legitimately changed
+  img1.js and its menu.img1 SHOULD differ; a path-keyed cache would have
+  served stale bytes).
+- **C22 (P2, procedure) device WORK ORDERS.** Host lanes needing hardware
+  emit a work order under `.loop/` (commands, evidence to pull, expected
+  verdict lines) instead of each taking the device; one device-owning
+  lane drains the queue per session. PROCESS §9's batching applied ACROSS
+  lanes. Avoids N lock cycles / N frontend park-restore cycles / N cold
+  builds for N host lanes.
