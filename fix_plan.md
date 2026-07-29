@@ -2362,3 +2362,19 @@ Everything below is functionality/fidelity, not styling.
   clean later refinement — the token model is already per-port
   underneath — and would restore the guard verbatim. Must be documented
   in MENU-SPEC §2 as a numbered DEVIATION alongside D1-D13.
+- **C19 (P1, owner 2026-07-29) VS pause menu: add a "quit to VS screen"
+  entry.** Today the in-match pause overlay offers Resume / Quit to menu
+  / Quit to OS; the owner wants a fourth that returns to the **character
+  select (CSS)** — i.e. rematch/change-character without going all the
+  way out. NOTE the existing constraint (A19): "quit to menu" is
+  currently a PROCESS RELAUNCH, not in-process FOH re-entry, so a naive
+  copy would relaunch and land on the title screen, not CSS. Doing this
+  properly wants the in-process return A19 registered, which also fixes
+  B4 (target-match exit lands on the frontend) and pairs with C18 (no
+  finishGame/results path — a natural match end has the same "where do I
+  land" question). **Treat C18 + C19 + B4 + A19 as ONE increment: the
+  match-exit/return plane.** Faithfulness note: upstream's own pause
+  machine is on the checksum surface (CHECKSUM.md; the M2 task-16 gotcha
+  — the KEYBOARD arm reads the bank's `s` by truthiness), so the exit
+  paths must stay outside the sim exactly as A11's pause overlay does
+  (NULL-default hook, live-play only).
