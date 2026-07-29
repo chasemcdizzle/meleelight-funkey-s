@@ -1314,6 +1314,30 @@ in scope.
 | 10 | **Target select semantics** | Not measured this pass; `src/stages/targetselect.js` was not read. Our screen stands as **UNVERIFIED** rather than being declared a gap — §7. |
 | 11 | **Menu screens on the checksum surface** | Menus are not on the oracle surface at all. Two upstream input bugs (Q4 malformed diagonal guards, Q5 the 60 Hz left-repeat) are therefore *not* reproduced — D9. Faithfulness binds semantics, not typos that only degrade input. |
 
+### 11.0 OWNER RULING SUPERSEDES §11.1 (driver, 2026-07-29)
+
+**§11.1 below is EVIDENCE about upstream's shape; it is NOT the binding
+instruction, and where the two differ the OWNER RULING WINS (HARD RULE 5
+governs faithfulness to upstream; the owner governs what we ship).**
+
+§11.1 argues the three netplay rows should stay *drawn but refusing*,
+reasoning from upstream drawing them unconditionally. Chase's actual C5
+ruling (fix_plan, 2026-07-28) is different and binding:
+
+> "For now let's hide spectate / p2p / server. vs. melee should just take
+> you to local vs for now. (flag or some way smart to revert this later
+> in the future)."
+
+So the SHIPPED behaviour is: the three rows are **HIDDEN**, and **VS
+MELEE goes STRAIGHT to local VS** (no Battle-Mode submenu step). The
+"named flag" requirement in §11.1 still applies and is the part to keep:
+one documented switch that restores upstream's shape wholesale — rows
+drawn, submenu reachable, `NET` back in the port-type cycle (D5) — so
+this is revertible without archaeology. Nothing is deleted.
+
+This is a deliberate, owner-sanctioned DEVIATION from upstream's menu
+graph, recorded as such rather than smuggled in.
+
 ### 11.1 The netplay flag requirement
 
 Owner ruling: netplay stays, hidden behind a **named** flag. Concretely:
