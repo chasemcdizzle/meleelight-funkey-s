@@ -20038,3 +20038,89 @@ blocker — CSS/SSS now sit at 4.6/5.4 ms with ~11 ms margin; retires the
 A9 deferral when done); (5) blend565 (B1) still buggy, routed around.
 Budget: device runs 11 vs ≤10, declared — codex r4's poly8 finding
 invalidated three already-green runs.
+
+---
+
+iter 127 · 2026-07-28 · phase M4 (punch list) · **C1 "CRASH" ROOT-CAUSED, FIXED, SHIPPED — it was a 300-SECOND MENU TIMEOUT, not a fault** · class instance #2 confirmed + a self-caught near-regression + a 3-item sweep · §11 GAP REGISTERED (Opus fallback log missing)
+
+**REPRODUCTION (deterministic, ZERO input):** launch the play OPK, touch
+nothing, app exits at **t=294-304 s** with `RC=4` and `foh_dev: --bridge
+given but the flow never launched`. TTC is exactly **300.0 s** = 18000
+ticks at 16666667 ns. Not inferred from the owner's report: **his own
+crash left logs on the SD** (/mnt/mlfk-data/mlfk-logs/, `opk.rc` = RC=4,
+app log ending on that same stderr line) and the repro matched them
+byte-identically on the exact installed build (OPK 0c77dca8, binary
+154d074b).
+**ROOT CAUSE:** port/gfx/opk/mlfk-foh.sh passed the EVIDENCE RIGS' tick
+budget `--foh-max 18000` on the LIVE PLAY path; the FOH loop ran out,
+fell through with foh.launched==false, and the bridge arm returned 4.
+The menus had a five-minute timer. A clean diagnosed exit that reads to
+a player as a crash.
+**ALL FOUR REGISTERED SUSPECTS FALSIFIED** (the falsifications are worth
+as much as the hit): OOM — MemAvailable flat at 37,760 ±12 kB for all
+300 s, back to 46 MB on exit; artwork lifetime — art_load is
+g_art_ready-guarded one-shot, flat trace confirms; look-plane wrap —
+frame % 25440, menuTimer 0..60, CSS reads frame % 60, all bounded;
+CSS-specific — the repro never left the TITLE screen and died
+identically (screen-independent; the owner was simply sitting on CSS).
+**CLASS (HARD RULE 8), instance #2:** "an evidence-rig bound governing
+the play path" — A2 was #1 (`--bridge live` refused Target Test
+launches, same rc 4, same shape).
+**THE SELF-CATCH THAT MATTERED:** the writer's first cut REFUSED
+`--foh-max` under `--bridge live`, then grepped its own "no rig uses
+--bridge live" claim and found it FALSE — check-device-target.sh legs
+[6b]/[6c] drive live play deliberately WITH `--foh-max`, and **[6b] IS
+THE A2 REGRESSION GUARD**. The "make the next instance impossible" fix
+would have disabled the guard against the previous instance. Corrected
+shape: `--bridge live` is NOT the play path's distinguishing property —
+**the ABSENCE of a bound is**. Omitted + live ⇒ unbounded; given ⇒
+always honoured; `--foh-max 0` still rejected. Opus 5 built the full
+truth table: EXACTLY ONE CELL changes verdict — the one argv validation
+previously rejected outright — so no evidence leg can move.
+**PROOFS:** (a) dwell on SHIPPED bytes — CSS held **41,269 ticks =
+687.8 s (2.29x TTC)**, FOH ran to tick 42,270 (2.35x the old cap), then
+launched successfully; MemAvailable flat 37.64-37.73 MB. (b) `FOH FLOWS
+OK (… teeth=21)`. (c) `DEVICE FOH OK (… p99=14.140ms skips=0 …
+teeth=15)`. (+) `DEVICE TARGET CONFORMS (… live=f08-live-target:314f/
+313rows/opts-ok bound=f09-live-bound:240f/240rows … teeth=6)` — the legs
+it nearly broke. (d) OPK **5446bd25…** (binary c0d55a85), mksquashfs
+4.4, installed + sha-verified; device rebooted clean.
+**DISCLOSURE (not a reroll):** the first shipping-gate run failed
+`1 skips (want 0)` with a stale deadman (pid 15031) running DURING the
+measured match; all 9 tr_line sites are FOH-phase (lines 1140-1933; the
+match loop starts ~1990) so the diff is structurally incapable of
+executing in the match timing path. One re-run on a verified-quiet
+device: skips=0. BOTH runs reported.
+**ARC:** codex r1 NO-GO (1H/2M/1L; the H was the regression already
+self-caught) → **codex r2 VOID, PROVEN REPLAY (5th malfunction)**: r1's
+findings are a byte-PREFIX of r2 (0 removed, 0 modified), identical
+`tokens used 218,809`, r2 names r1's diff file and cites
+`(brLive && fohMaxGiven)` at :1475 which no longer exists → §11
+fallback: **grok GO** (.loop/review-c1-grok.log, 1 L fixed).
+**§11 GAP — REGISTERED, NOT PAPERED OVER:** the writer reports an
+**Opus 5 GO** (2 fixed: a wrong [7b]→[6b]/[6c] citation and a wrong
+"1400" bound; 3 registered) but **NO `.loop/review-c1-opus.log` EXISTS
+ON DISK**. §3/§11 require the verdict in a log the driver reads cold —
+an agent's summary is explicitly not evidence (this is the 2nd instance
+of this failure mode; iter-117's supplemental Opus review had the same
+shape). The fix SHIPS on its device evidence, but the mlfk-foh.sh
+manifest row is pinned **arc-in-flight**, not reviewed-go, until the log
+is materialized. Writer asked to produce it.
+**SWEEP — other rig flags reaching the play path (the ask):** THREE
+remain. (1) **`--frames 10800`** — the writer first called it
+"load-bearing"; Opus sharpened it to **the same class**: `--bridge live`
+argv-FORCES --record-trace/--record-keys and those buffers are
+frames-proportional, so the load is EVIDENCE MACHINERY, not gameplay.
+**User-visible: any match past 3:00 ends and dumps to the frontend — the
+same symptom as C1, one screen later.** Fix order: make recording
+opt-in/streaming, THEN drop the bound. (2) **`--seed 1337`** — instance
+#3; rec.json has no seed field, so record the seed BEFORE randomising.
+(3) `--flow f01-vs-g01.flow` under `--input poll` — inert (rows read
+only in the non-poll branch), cosmetic. No fourth.
+**Driver re-pin executed:** mlfk-foh.sh c50b9c33 → f5b7ac2a
+(arc-in-flight); MANIFEST_SHA256 → d9d7a432. Asymmetry worth recording:
+foh_dev.c is NOT in the producer set (C sources ride rig_srchash), so
+the C half of this fix is invisible to the manifest while a shell
+comment blocks the gate.
+**Ledger:** device runs 10/10, arm rebuilds 4/4, host checks 3/4 — no
+overrun.

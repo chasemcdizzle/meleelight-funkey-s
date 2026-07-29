@@ -1071,14 +1071,53 @@ static int mus_stage_track(int stage) {
 // --- FOH trace RAM buffer -------------------------------------------------------
 
 static MlSb g_tr; // FOHTRACE1 lines (RAM; flushed after the FOH phase)
+static int g_tr_full;
+
+// HARD CEILING (review-c1 r1 [M]). g_tr is a doubling buffer and the FOH
+// used to be capped at 18000 ticks, which bounded it implicitly. Making the
+// play path unbounded removed that bound: a player alternating between two
+// menu rows appends a ~32-byte transition per edge, so a long enough session
+// grows this without limit and could OOM a device with ~38 MiB available —
+// trading the timeout crash for a slower one, which is not a fix.
+//
+// 1 MiB is ~26k transition lines. Every rig leg writes well under 2 KiB —
+// the argument is that trace lines are per-TRANSITION, not per-tick, and no
+// leg performs thousands of transitions (the longest leg runs ~1800 ticks:
+// check-device-foh.sh derives each leg's --foh-max from its flow's END, so
+// f04-nav lands near 1797, NOT the 1400 the live legs pin). So no evidence
+// path can reach this and no trace content moves. Past the cap the recorder
+// TRUNCATES instead of growing, and says so in the file: a silently short
+// evidence sink is worse than a loud one. It must not sim_fatal — killing
+// the player's session is precisely the failure being fixed.
+//
+// The marker is the LAST line by design: g_tr_full also suppresses the
+// post-loop END line, so a capped trace is structurally invalid and both
+// consumers (judge-foh-trace.js, normalize-foh-trace.js) fail CLOSED on the
+// missing END rather than reporting the cap. Accepted, not fixed: no
+// evidence leg can reach the cap, and nothing reads the play path's trace
+// (mlfk-foh.sh's copyback does not even collect it).
+// ponytail: flat cap, not a ring — nothing reads the tail of this file.
+#define TR_MAX (1u << 20)
+
+// The marker's own bytes are RESERVED inside TR_MAX (review-c1 grok [L]).
+// Appending it without reserving room let the buffer finish at TR_MAX + 34,
+// which the doubling allocator would round to 2 MiB — a "hard ceiling" that
+// is not one. Reserving makes the worst case land on TR_MAX exactly.
+static const char kTrTrunc[] = "TRUNCATED trace buffer cap reached\n";
 
 static void tr_line(const char *fmt, ...) {
+  if (g_tr_full) return;
   char buf[256];
   va_list ap;
   va_start(ap, fmt);
   const int w = vsnprintf(buf, sizeof buf, fmt, ap);
   va_end(ap);
   if (w < 0 || w >= (int)sizeof buf) sim_fatal("trace line overflow");
+  if (g_tr.len + (size_t)w + 1 > TR_MAX - (sizeof kTrTrunc - 1)) {
+    ml_sb_puts(&g_tr, kTrTrunc);
+    g_tr_full = 1;
+    return;
+  }
   ml_sb_puts(&g_tr, buf);
   ml_sb_putc(&g_tr, '\n');
 }
@@ -1465,8 +1504,21 @@ int main(int argc, char **argv) {
        (!flowPath || !flowOut || !inputMode || (!inFlow && !inPoll))) ||
       (bridge && !brState && !brVerify && !brLive && !brTState &&
        !brTVerify) ||
-      // poll mode is wall-clock by definition and needs its tick budget
-      (inPoll && (pace != 1 || fohMax <= 0)) ||
+      // poll mode is wall-clock by definition and needs its tick budget —
+      // EXCEPT the OPK PLAY path, which OMITS `--foh-max` and runs unbounded
+      // (the fohLimit derivation below carries the measurement).
+      //
+      // ABSENCE is the opt-in, never a magic value, and a budget that IS
+      // handed over is ALWAYS honoured. Both halves are load-bearing:
+      //   - `--foh-max 0` stays rejected as the evasion it always was;
+      //   - `--bridge live` alone cannot mean "unbounded", because the device
+      //     target rig drives live play WITH a bound on purpose
+      //     (check-device-target.sh [6b]/[6c], `--foh-max 1400`) — that leg
+      //     IS the punch-list A2 regression guard, and an automated leg whose
+      //     navigation fails must still terminate rather than hang the rig.
+      // So the play path is distinguished by what it does NOT pass, which is
+      // exactly the thing the launcher can be read for.
+      (inPoll && (pace != 1 || (fohMaxGiven ? fohMax <= 0 : !brLive))) ||
       (inFlow && (fohMaxGiven || readyPath)) ||
       // bridge modes need the sim data plane + seed + the state witness
       (bridge && (!simdataPath || !seedGiven || !bstateOut)) ||
@@ -1507,7 +1559,9 @@ int main(int argc, char **argv) {
       (musicManifest && !sndpackPath)) {
     fprintf(stderr,
             "usage: foh_dev --flow f.flow --input flow|poll --flow-out t.txt"
-            " [--shots-dir D] [--ready-file f] [--foh-max N (poll)]"
+            " [--shots-dir D] [--ready-file f]"
+            " [--foh-max N (poll; required EXCEPT with --bridge live, where"
+            " omitting it means an unbounded FOH — the play path)]"
             " [--pace 0|1] [--budget-ns N]"
             " [--bridge state|verify|live --simdata s --seed N"
             " --bstate-out b]"
@@ -1673,7 +1727,52 @@ int main(int argc, char **argv) {
   // direct mode has no FOH phase at all: 0 ticks, so the loop body below
   // never executes (chosen over wrapping 140 lines in an `if` — the
   // existing FOH code stays byte-identical for every flow caller).
-  const long fohLimit = direct ? 0 : (inPoll ? fohMax : g_flow_frames);
+  // THE PLAY PATH IS UNBOUNDED (punch-list C1, measured 2026-07-27).
+  //
+  // MEASURED DEFECT this kills: the OPK play launcher handed the FOH an
+  // EVIDENCE bound (`--foh-max 18000`). At `--pace 1 --budget-ns 16666667`
+  // that is exactly 300.0 s of menus, after which this loop simply RAN OUT,
+  // fell through with `foh.launched == false`, and the bridge arm below
+  // returned 4. To the player that is the app vanishing to the frontend —
+  // reported as "the game crashed while I sat on CHARACTER SELECT". It is
+  // NOT CSS-specific and NOT a fault: reproduced with zero input on the
+  // title screen, the app exited between t=294 s and t=304 s with the same
+  // rc 4 and the same stderr line the owner's SD log carries, while
+  // MemAvailable sat flat at 37.76 MB for the whole 300 s (no leak, no OOM,
+  // no counter wrap — those suspects are falsified, not assumed).
+  //
+  // CLASS (HARD RULE 8): an evidence-run bound governing the PLAY path.
+  // Second recorded instance — punch-list A2 was the first (`--bridge live`
+  // refused TARGET launches, so Target Test exited rc 4 at the launch seam;
+  // same rc, same class, fixed the same way: live serves the player, the
+  // evidence bridges keep their bounds). A menu has no business timing out,
+  // and nothing here grows per tick to justify one: the FOH loop allocates
+  // nothing, and its only RAM writer (tr_line -> g_tr) fires on transitions,
+  // never per tick — which is exactly what the flat 18000-tick MemAvailable
+  // trace measures. The match loop KEEPS its `--frames` bound because that
+  // one IS load-bearing (attrib_alloc and the mandatory --record-trace
+  // buffer are frames-proportional); removing it would trade this crash for
+  // an OOM, so it is left alone and reported separately.
+  //
+  // SCOPE, stated exactly: the ONLY invocation whose behaviour changes is
+  // poll + `--bridge live` + NO `--foh-max` — which argv validation above
+  // used to reject outright. Every invocation that passes a budget, live or
+  // not, is bit-for-bit what it was, so no evidence leg moves.
+  //
+  // LONG_MAX - 1, i.e. ~414 days of continuous menu dwell at 60 fps. Stated
+  // plainly rather than called "infinite": it is not a wall any player
+  // reaches, and the deadline arithmetic below stays exact (t * budgetNs
+  // peaks near 3.6e16 ns, far inside uint64).
+  //
+  // The `- 1` is not cosmetic (review-c1 r1 [L]): `t <= LONG_MAX` would run
+  // the body at t == LONG_MAX and then `t++` is signed-overflow UB, so the
+  // one path that is supposed to end cleanly is the one the compiler is free
+  // to miscompile. Capping one short means the final increment lands exactly
+  // on LONG_MAX, the test fails, and the loop exits defined.
+  const long fohLimit =
+      direct ? 0
+             : (inPoll ? ((brLive && !fohMaxGiven) ? LONG_MAX - 1 : fohMax)
+                       : g_flow_frames);
   const uint64_t fohStart = now_ns();
   long endTick = 0;
   for (long t = 1; t <= fohLimit; t++) {

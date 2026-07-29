@@ -118,9 +118,22 @@ else
   # The PLAY path: poll-mode FOH (real buttons), live S1 match after
   # LAUNCH (10800 frames = 3 min, the mlfk.sh live-session bound);
   # recording goes to tmpfs (the gfx_app --live mandatory-record
-  # contract). The FOH phase gets a generous 5-minute tick budget —
-  # reaching it without launching just exits cleanly (rc 4 recorded
-  # honestly in opk.rc: --bridge given, no launch).
+  # contract).
+  #
+  # NO --foh-max HERE (punch-list C1). This branch used to pass the
+  # evidence rigs' tick budget (18000 = exactly 300 s at 60 fps), so
+  # the menus timed out: the FOH loop ran out, nothing had launched,
+  # and foh_device exited rc 4 straight back to the frontend — the
+  # owner's "crashed while sitting on CHARACTER SELECT" (their SD log
+  # carries that rc 4 and `--bridge given but the flow never
+  # launched`; reproduced with zero input in 300 s, memory flat).
+  # foh_dev reads the ABSENCE of --foh-max here (under --bridge live) as
+  # "unbounded FOH". Absence rather than a magic value, because a budget
+  # that IS passed must keep meaning what it says: check-device-target.sh's
+  # live play leg — the punch-list A2 regression guard — deliberately runs
+  # --bridge live WITH --foh-max 1400 so it terminates if its navigation
+  # fails. So: do NOT reintroduce --foh-max on this line. The evidence
+  # branch above is unaffected; it reads foh-args, which the rigs pin.
   # A11/A12 "QUIT TO MENU": the in-match pause overlay exits the app with
   # rc 70 (FOH_PAUSE_RC_MENU, port/foh/foh_pause.h) to ask for the menus
   # back. The app BOOTS into the FOH, so relaunching it IS the menus —
@@ -132,7 +145,7 @@ else
   while :; do
   # shellcheck disable=SC2086 — $SND/$MUS are word lists on purpose
   "$DIR/foh_device" --flow "$DIR/f01-vs-g01.flow" --input poll \
-    --flow-out "$EV/foh-trace.txt" --foh-max 18000 \
+    --flow-out "$EV/foh-trace.txt" \
     --pace 1 --budget-ns 16666667 \
     --bridge live --simdata "$DATA/simdata.txt" --seed 1337 \
     --bstate-out "$EV/bstate.txt" \

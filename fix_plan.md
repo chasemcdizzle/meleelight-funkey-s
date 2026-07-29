@@ -2249,3 +2249,25 @@ Everything below is functionality/fidelity, not styling.
   a one-token change after the owner sees it on hardware (row 5 =
   γ0.65 is the next stop if 0.75 reads too dark in the hand).
   Rides the A+B arc + re-freeze (one artifact regeneration, one re-pin).
+- C1 DONE (iter 127): 300 s menu timeout root-caused + fixed + shipped
+  (OPK 5446bd25). Class instance #2 of "evidence-rig bound governs the
+  play path".
+- **C6 (P1, USER-VISIBLE, class instance #3) `--frames 10800` ends any
+  match past 3:00 and dumps to the frontend** — same class as C1, one
+  screen later. NOT a simple removal: `--bridge live` argv-forces
+  --record-trace/--record-keys whose buffers are frames-proportional.
+  Fix ORDER: make recording opt-in or streaming FIRST, then drop the
+  bound.
+- C7 (P2) `--seed 1337` fixed on the play path (class instance #4 in
+  spirit): rec.json carries no seed field — record the seed BEFORE
+  randomising, or replays break.
+- C8 (P1) **§11 evidence gap**: C1's Opus 5 fallback GO exists only in
+  an agent summary — no .loop/review-c1-opus.log. mlfk-foh.sh's manifest
+  row stays `arc-in-flight` until materialized. 2nd instance of this
+  failure mode (iter-117 was the 1st) — if it recurs, the standing rule
+  needs teeth: no fallback reviewer counts without its log.
+- C9 (P2) coverage tooth for C1's changed boolean (3 exit-code
+  assertions); cheapest home is check-device-foh.sh (it already builds
+  foh_dev_headless; check-foh-flows.sh builds foh_app, not foh_dev).
+- C10 (P2) launcher grep-assert restoring the "cannot silently regrow"
+  property the refusal shape would have bought.
