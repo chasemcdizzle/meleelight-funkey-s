@@ -81,10 +81,32 @@ they are in the real game?"
    count is the named risk; that pin exists because such a shift
    silently corrupts every stream.
 
-## Open (not yet decided)
+## Decisions, continued (owner-ratified 2026-07-29)
 
-- IP posture for decomp-derived material (recommendation: never copy
-  decompiled code into the tree; use it as a reading map only, extract
-  DATA at build time from an owned game copy, gitignored and never
-  distributed — identical to the ratified audio-blob posture).
-- Where the project lives, when it starts, and what it delivers.
+7. **Lives in a SEPARATE repo** — `~/code_projects/melee-chars-research`
+   (git-init'd, no remote; charter copied as CHARTER.md). It CONSUMES
+   meleelight-funkey-s by absolute path — the pinned clone, the oracle
+   harness, the pipeline — exactly as the oracle harness already
+   consumes the upstream clone. Rationale: this project is one gate from
+   a milestone and its fix_plan / AGENT-LOG / freeze manifest already
+   carry 24 open items; folding a research project's churn into the same
+   ledgers is how the M4 close slips.
+8. **BOUNDED to the two de-risking experiments.** Deliverable is a
+   decision-grade GO/NO-GO report, NOT a character. Roy is not built
+   until the report says GO. Rationale: a report is cheap and a
+   character is not — if the Fox slice shows the translation is ad hoc,
+   the cost of learning that should be a day, not a month.
+9. **IP posture (driver recommendation, owner-accepted):** NEVER copy
+   decompiled code into any tree. The decomp is a READING MAP —
+   struct layouts and bytecode semantics — used to interpret files from
+   an owned copy of the game. Extracted DATA is build output: gitignored,
+   private use only, never committed, never distributed. This is
+   byte-for-byte the posture already ratified for the Nintendo-derived
+   audio blobs (CLAUDE.md M1 task 4: "PRIVATE USE ONLY, gitignored build
+   output only") and for the menu artwork (A9). `.gitignore` in the
+   research repo pins it: `*.dat`, `*.iso`, `clone/`, `build/`.
+
+## Still open
+
+- Nothing blocking. Post-report decisions (whether to build Roy, whether
+  to escalate to a Dolphin differential) wait on the report.
