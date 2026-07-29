@@ -20231,3 +20231,56 @@ ANCHOR GREEN. artifactsSha256 = ab782733…; menu.img1 = 9c6b0947….
 pipeline/ at all) rather than a161b88; it moved it with `git merge
 --ff-only` — a clean fast-forward, nothing discarded. Worktree-base
 selection is worth watching.
+
+---
+
+iter 129 · 2026-07-28 · phase M4 · **B10 round 5: codex NO-GO / Opus 5 GO — zero behavioural findings; the [M] is a DRIVER ERROR I made and it is now corrected on the record**
+
+**The finding, and it lands on me.** iter-127 flipped the mlfk-foh.sh
+manifest row to `reviewed-go` citing `.loop/review-c1-grok.log`. That log's
+verdict is `**VERDICT: GO**` — MARKDOWN BOLD. It has **zero** matches for
+the anchored `^VERDICT: GO$` that the manifest's own cite discipline
+requires. I produced that error by running the anchored grep, getting an
+EMPTY result, and then falling back to eyeballing a `tail` — which is
+precisely the permissive-parse failure PROCESS §3's whitelist-grammar rule
+exists to forbid, committed by the driver who enforces it. Codex caught it;
+Opus independently caught the same row from the other side (the C1 packet
+never names B9's bytes — `qualify`/`menu.img1` appear 0 times in that
+diff). **Corrected, not papered over:** the row's cite now states the
+error explicitly, names the VALID evidence (Opus's `.loop/review-c1-opus
+.log` anchored GO at line 56, plus B10's round-5 packet which reviewed
+these CURRENT bytes), and the grok log is left **UNEDITED** per the C8
+precedent — extract or re-run, never retype a verdict into a reviewer's
+log. Registered as **C11**: make cites MECHANICALLY verifiable (the
+self-check should parse each cite's `.loop/review-*.log` paths and require
+an anchored GO in each), plus a brief note telling reviewers to emit the
+verdict unadorned. A habit became a mechanism because it failed.
+**Two corrections to my own ask, both accepted:** it is **SEVEN**
+arc-in-flight rows, not twelve (my count went stale when C8 flipped
+mlfk-foh.sh); and flipping them would NOT arm the gate right now — the
+tree is dirty with the C6 lane's uncommitted mlfk-foh.sh, so verify_m4.sh
+refuses at **[0]**, before [0b] is ever reached. Prose count EIGHT→SEVEN
+fixed in the manifest header; anchor → edd21937.
+**The round is GENUINE, not a 7th replay** — cmp-proven four ways
+(findings block b1b630da vs r4's 6da41c04, zero content overlap, and the
+mandatory freshness block returned live disk values incl. one that only
+became true AFTER r4 ran). §11 did not apply: codex didn't fail. grok's
+run was launched as replay insurance and came back NARRATION ONLY, no
+findings, no verdict line — recorded as **unusable, not negative**.
+**Subject stability:** raster.c/raster.h/foh_render.c/foh_font.c are
+BYTE-UNCHANGED since 8ff1aff, so rounds 1-4 still bind; the two files that
+moved (mlfk-foh.sh via C1, one pin line in check-device-fullgame.sh via
+C4) were disclosed to the reviewers and reviewed on CURRENT bytes.
+**Opus built evidence the arc never had:** a 40,000-iteration FONTDIFF
+against the pre-change foh_font.c extracted from 4af6848, three teeth all
+caught — mechanically closing the font run-merge leg, previously the only
+argument-only part of B9's correctness proof.
+**Not capped** (round 5 of ~8; findings monotone-decreasing, severity
+falling H→none). Registered instead: **C13** — manifest state-of-record
+PROSE goes stale vs the statuses it describes, 3 consecutive rounds,
+structurally caused by a hand-maintained enumeration any lane may
+invalidate; zero enforcement weight since the gate parses the status
+field. Class fix: derive it or delete it.
+**Rows NOT flipped** — flipping on a NO-GO is exactly the un-converged-arc
+capping the manifest's cite discipline forbids. Path: fix C12's three
+driver-side items, route the fourth to the CSS lane, run round 6.

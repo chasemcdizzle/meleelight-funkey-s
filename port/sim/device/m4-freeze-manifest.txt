@@ -133,7 +133,7 @@
 #
 # SUPERSEDED BY THE B9 ARC (the iter-118 paragraph ABOVE is retained as the
 # historical record; this paragraph is the CURRENT state of record).
-# EIGHT rows are `arc-in-flight`:
+# SEVEN rows are `arc-in-flight`:
 #     port/foh/check-device-foh.sh
 #     port/sim/target/check-device-target.sh
 #     port/sim/device/check-device-fullgame.sh
@@ -268,7 +268,7 @@
 # get to rewrite it, and does not inherit its approval either).
 # --- UNIVERSE EXTENSION (iter 116, driver-sanctioned strengthen-only gate
 # edit). Round 1 of this manifest's own arc (.loop/review-116-1.log,
-# finding 1 [H]) measured EIGHT decision-bearing producers reachable from
+# finding 1 [H]) measured SEVEN decision-bearing producers reachable from
 # the gate's four engines that the frozen REQUIRED_PRODUCERS literal did
 # not name: they were pinned only by the ENGINES ("the engine's own
 # guarantee, not the gate's" — check-device-fullgame.sh:718-721 says so in
@@ -405,7 +405,7 @@ de32dffbe43423bee43f67516007d4039abbd80237a626aec81e54fd7dc4ca68 port/gfx/judge-
 8ceaf028fe5740a1c0bb384e2eae113996bdb5c3db5720f1337af068266b966f port/gfx/judge-audio-summary.js reviewed-go .loop/review-59-1.log+r3-.loop/review-61-1.log
 bf29fa7cba83708cfff093195f48ad20a8eda2ad794fe25b270f211b08876eee port/gfx/pack-snd.js reviewed-go .loop/review-57-1.log+r2r3-closure-.loop/review-61-1.log
 db002a2c7076f1a38daf158627aa8b26a823e6379f8dbb11af1b98a09b68c05d port/gfx/check-device-opk.sh arc-in-flight B9-headroom+artwork-arc-IN-FLIGHT-.loop/review-b9-1-codex.log-NO-GO-all-5-fixed+.loop/review-b9-2-codex.log-NO-GO-all-3-fixed-rounds-1-4-all-findings-fixed-arc-not-yet-at-GO+PRIOR-CLOSURE-.loop/review-115-3.log-r3-GO+r1-.loop/review-115-1.log+r2-.loop/review-115-2.log
-f5b7ac2ace5a4dd2a0f2da8d09b20a569204d7933bd516f1ebfff56da854339b port/gfx/opk/mlfk-foh.sh reviewed-go iter127-C1-crash-fix-PROCESS-11-fallback-DUAL-GO-grok-.loop/review-c1-grok.log-GO+opus5-.loop/review-c1-opus.log-GO-materialized-verbatim-from-subagent-JSONL-aa59d25283d1c6a1e-post-hoc-provenance-header-codex-r2-VOID-5th-proven-replay
+f5b7ac2ace5a4dd2a0f2da8d09b20a569204d7933bd516f1ebfff56da854339b port/gfx/opk/mlfk-foh.sh reviewed-go iter127-C1-crash-fix-CITE-CORRECTED-iter129-driver-error:the-original-cite-named-.loop/review-c1-grok.log-whose-verdict-is-MARKDOWN-BOLD-**VERDICT:GO**-NOT-anchored-0-matches-for-^VERDICT:GO$-VALID-EVIDENCE-IS:opus5-.loop/review-c1-opus.log-ANCHORED-GO-line-56+B10-round5-packet-.loop/review-b10-1-codex.log-and-.loop/review-b10-opus.log-BOTH-reviewed-these-CURRENT-bytes-grok-log-KEPT-UNEDITED-per-C8-precedent-extract-or-rerun-never-retype
 3b4289d640bbe7df0e4d065d909f2b46aef9b7e4d7622a90e4f7021fd801dbea port/gfx/opk/meleelight-foh.funkey-s.desktop reviewed-go .loop/review-115-3.log-r3-GO-current-bytes+prior-arc-.loop/review-93-1.log+r3-closure-.loop/review-97-1.log
 efea406086050d51b3894692c6030afef1b0cc7ed06de442b728ef2e6072fe99 port/gfx/opk/icon32.png reviewed-go .loop/review-58-1.log+r2-.loop/review-60-1.log+gate-closure-.loop/review-62-grok-go.log
 05ced80f57e993541f6da8b647e63abcac4163cd6e5b275f2a811a49c2faeb76 port/tools/fk_input.c reviewed-go .loop/review-53-1.log

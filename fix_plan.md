@@ -2271,3 +2271,30 @@ Everything below is functionality/fidelity, not styling.
   foh_dev_headless; check-foh-flows.sh builds foh_app, not foh_dev).
 - C10 (P2) launcher grep-assert restoring the "cannot silently regrow"
   property the refusal shape would have bought.
+- **C11 (P1, CLASS FIX — instrument, driver-registered iter 129) make
+  manifest CITES mechanically verifiable.** Root: iter-127 flipped
+  mlfk-foh.sh to `reviewed-go` citing `.loop/review-c1-grok.log`, whose
+  verdict is `**VERDICT: GO**` — MARKDOWN BOLD, zero matches for the
+  anchored `^VERDICT: GO$` the manifest's own discipline requires. The
+  DRIVER made that error by eyeballing a `tail` after an anchored grep
+  returned empty — i.e. exactly the permissive-parse failure PROCESS §3's
+  whitelist-grammar rule exists to prevent, committed by the person who
+  enforces it. B10's codex round caught it. FIX: the manifest self-check
+  should PARSE each row's cite, extract every `.loop/review-*.log` path
+  it names, and assert each names a file that exists AND contains ≥1
+  anchored `^VERDICT: GO$` — fail closed otherwise. Turns cite integrity
+  from a habit into a mechanism. (Also add to the reviewer briefs: emit
+  the verdict UNADORNED — no bold, no fence.)
+- C12 (P2) B10 residual, 4 items, none behavioural: raster.c:122 comment
+  credits span8 with "every poly8 span" (poly8 now bypasses it — r4-fix
+  residue); check-device-foh.sh:1152 `ART_SHA="$hsum"` assigned never
+  read; primdiff.c:88-97 can't distinguish the doubled clip test (guards
+  provably redundant, code right); foh_render.c:134-140,:790-796
+  fill_rect/blit_img_rect left per-pixel, unnoted (CSS lane's file).
+  Fix the first three + route the last, then round 6 → GO → flip the 7
+  rows.
+- C13 (P2, registered class — 3 consecutive rounds) manifest
+  STATE-OF-RECORD PROSE goes stale vs the row statuses it describes
+  (hand-maintained enumeration; any lane may flip a status). Zero
+  enforcement weight — the gate parses the status field, never the
+  prose. CLASS FIX: derive the enumeration or delete it.
