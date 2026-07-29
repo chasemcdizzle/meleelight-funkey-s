@@ -21,7 +21,8 @@
 #     file's bytes host+device side; the task-10 evidence run is a
 #     bounded no-input FOH leg: startup -> title, two tick shots).
 #   live (default) — the PLAY path: FOH menus on the real input, then
-#     the launched match runs LIVE (S1 chord table) for up to 3 min,
+#     the launched match runs LIVE (S1 chord table) UNBOUNDED and
+#     UNRECORDED — the player leaves via the pause overlay (C6),
 #     with audio when sndpack.bin is present and menu/stage MUSIC when
 #     foh-music.txt is present (paths inside it must resolve from $DATA
 #     — provisioned by task 13/14). --tapjump-off-p1 presets the S1
@@ -116,9 +117,23 @@ else
     MUS="--music-manifest $DATA/foh-music.txt"
   fi
   # The PLAY path: poll-mode FOH (real buttons), live S1 match after
-  # LAUNCH (10800 frames = 3 min, the mlfk.sh live-session bound);
-  # recording goes to tmpfs (the gfx_app --live mandatory-record
-  # contract).
+  # LAUNCH, for as long as the player keeps playing.
+  #
+  # NO --frames AND NO --record-trace/--record-keys HERE (punch-list C6).
+  # This branch used to pass the evidence rigs' shape — `--frames 10800`
+  # (exactly 180 s at 60 fps) plus the mandatory recording — so any match
+  # past 3:00 ENDED and dumped the player back to the frontend mid-play:
+  # the same user-visible symptom as C1, one screen later.
+  # The three flags stand or fall together and foh_dev enforces that,
+  # because the recording is a RAM buffer (~444 B/frame, MlSb doubling
+  # peak ~2x) that would exhaust this device's ~37 MB MemAvailable after
+  # ~11.6 min — dropping the bound while keeping the recording would have
+  # traded a clean 3:00 exit for an OOM kill at ~12 min. Nothing reads
+  # this path's recording: every evidence consumer drives its OWN app run
+  # with its OWN --record-trace and its OWN bound, and those are untouched
+  # (check-device-target.sh [6b]/[6c] run foh_device; check-device-input.sh
+  # runs gfx_device — different binary, same discipline).
+  # So: do NOT reintroduce --frames or the --record-* pair on this line.
   #
   # NO --foh-max HERE (punch-list C1). This branch used to pass the
   # evidence rigs' tick budget (18000 = exactly 300 s at 60 fps), so
@@ -149,8 +164,6 @@ else
     --pace 1 --budget-ns 16666667 \
     --bridge live --simdata "$DATA/simdata.txt" --seed 1337 \
     --bstate-out "$EV/bstate.txt" \
-    --frames 10800 \
-    --record-trace "$EV/live-trace.json" --record-keys "$EV/live-keys.txt" \
     --gfxdata "$DATA/gfxdata-frozen.txt" \
     --vfxdata "$DATA/vfxdata-frozen.txt" \
     --glyphs "$DATA/vfxglyphs-frozen.txt" --legible \

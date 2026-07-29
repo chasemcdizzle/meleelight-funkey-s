@@ -2334,3 +2334,14 @@ Everything below is functionality/fidelity, not styling.
 - C14 (P2, citation erratum) main.js line cites throughout
   docs/AGENT-LOG.md and docs/MENU-SPEC.md are read off the PATCHED clone
   and run ~6 lines HIGH. Citation-only correction; no behaviour.
+- C6 DONE (iter 132): 3:00 match bound GONE; recording opt-in first;
+  frame 28,890 × 3 runs, memory flat; OPK 545aae9f installed.
+- **C18 (P1, NEWLY REACHABLE) `finishGame` / results path does not
+  exist.** At the natural upstream 8-minute match end the sim hits
+  `SIM FATAL frame 28890: matchTimer expired (finishGame) — outside the
+  golden domain` (RC=3) and drops to the frontend. The 3:00 bound made
+  this unreachable; removing it exposed it. The trap is CORRECT and was
+  NOT weakened — it guards unvalidated sim behaviour. Fix = port
+  upstream's finishGame/results screen (a real feature, and the same
+  family as B4's "target-match exit returns to the frontend"). Do them
+  together.

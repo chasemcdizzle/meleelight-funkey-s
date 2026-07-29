@@ -59,11 +59,25 @@
 //                     wrap-run.js + verify-stream.js vs the frozen
 //                     golden — device leg f01).
 //   --bridge live   — the OPK PLAY path: live S1 match at the launch
-//                     seam (s1_input.h chord table over platform_poll,
-//                     recording mandatory — the gfx_app --live
-//                     contract; --tapjump-off-p1 presets the FOH
-//                     options state per the Chase-ratified S1
-//                     contract). Not driven by the mechanical check
+//                     seam (s1_input.h chord table over platform_poll;
+//                     --tapjump-off-p1 presets the FOH options state
+//                     per the Chase-ratified S1 contract).
+//                     TWO live shapes, selected by the PRESENCE of a
+//                     frame bound (punch-list C6; the C1 --foh-max rule
+//                     applied one screen later):
+//                       --frames N + --record-trace + --record-keys
+//                         = BOUNDED and RECORDED. All three or none.
+//                         The evidence shape: check-device-target.sh
+//                         [6b]/[6c] (the A2/C1 regression guards).
+//                       none of the three
+//                         = UNBOUNDED and UNRECORDED. The player's
+//                         shape: a match lasts as long as it lasts.
+//                         Recording is REFUSED here, not dropped — it
+//                         is a frames-sized RAM buffer (~444 B/frame,
+//                         MlSb doubles) that cannot be sized without a
+//                         bound and would OOM this 57 MB device at
+//                         ~11.6 min of play.
+//                     Not driven by the mechanical check
 //                     this iteration (registered; the acceptance
 //                     playthrough + task-14 gate own it).
 //
@@ -2138,20 +2152,37 @@ int main(int argc, char **argv) {
         const long loopMax =
             framesGiven ? frames + (tgtLive ? TFIN_TAIL_FRAMES : 0)
                         : LONG_MAX - 1;
-        // The --out stream is a frames-SIZED RAM buffer that ONLY --bridge
-        // tverify flushes (below). On the live arm it was allocated, written
-        // every frame and then freed UNREAD, so it is now gated exactly like
-        // the --timing buffer it sits beside: no bound, no buffer.
-        const size_t streamCap = brTVerify ? (size_t)loopMax * 160 + 160 : 0;
+        // The --out stream is a frames-SIZED RAM buffer that only --bridge
+        // tverify flushes. It is gated on framesGiven — NOT on brTVerify —
+        // and that distinction is load-bearing (review-c6 r1 HIGH): the
+        // BOUNDED LIVE legs (check-device-target.sh [6b]/[6c], the A2/C1
+        // regression guards) pass --frames, and they allocated and wrote
+        // this buffer every frame before C6. Gating on the bridge mode would
+        // have silently removed that per-frame snprintf from those legs,
+        // changing their memory pressure and timing slack — an evidence leg
+        // moving under a play-path fix. framesGiven reproduces the old
+        // behaviour EXACTLY everywhere a bound exists (i.e. everywhere the
+        // old code was reachable) and skips it only where it cannot be
+        // sized at all: the unbounded play path.
+        const size_t streamCap = framesGiven ? (size_t)loopMax * 160 + 160 : 0;
         char *stream = 0;
-        if (brTVerify) {
+        if (framesGiven) {
           stream = malloc(streamCap);
           if (!stream) sim_fatal("oom (stream buffer)");
         }
         size_t streamLen = 0;
         char hex[65], thex[65];
-        MlSb rec;
-        ml_sb_init(&rec);
+        // ml_sb_init allocates 256 bytes up front. Pre-C6 it ran
+        // UNCONDITIONALLY here, so it is gated on framesGiven — the SAME
+        // predicate as the stream buffer, and for the same reason
+        // (review-c6 r1 HIGH, restated by r3): every bounded mode, evidence
+        // AND bounded-live, must keep the exact heap behaviour it had.
+        // `recording` would have been too narrow — verify/tverify are
+        // bounded but do not record, and they allocated this before.
+        // Only the unbounded play path allocates zero recorder bytes;
+        // ml_sb_free is safe on the zeroed struct (free(NULL)).
+        MlSb rec = {0};
+        if (framesGiven) ml_sb_init(&rec);
         uint16_t *rawKeys = 0;
         MlInput liveRow;
         if (tgtLive && recording) {
@@ -2290,7 +2321,7 @@ int main(int argc, char **argv) {
           //   (2) the target game finished -> upstream stops the music
           //       and leaves 2500 ms later (main.js:1499-1502).
           if (tgtLive && g_tquit) {
-            rec.len = recMark; // roll the START row back out
+            if (recording) rec.len = recMark; // roll the START row back out
             ticked = f + 1;    // this frame ran: ticked, rendered, paced
             framesRun = f;     // ...but it is NOT part of the replayable
                                // prefix (replaying it re-enters the START
@@ -2608,19 +2639,20 @@ int main(int argc, char **argv) {
         attrib = attrib_alloc(frames); // allocates AND pre-faults
         if (!attrib) sim_fatal("oom (attrib buffer)");
       }
-      // Gated like the --timing buffer above, for the same reason as the
-      // target arm's copy: ONLY --bridge verify flushes this, and it is
-      // frames-SIZED, so an unbounded live match cannot carry one (C6).
-      const size_t streamCap = brVerify ? (size_t)frames * 80 + 128 : 0;
+      // framesGiven, not brVerify — see the target arm's note (review-c6 r1
+      // HIGH): a bound is exactly the condition under which the pre-C6 code
+      // allocated and wrote this buffer, so gating on it leaves every
+      // bounded run (evidence AND bounded-live) bit-for-bit as it was.
+      const size_t streamCap = framesGiven ? (size_t)frames * 80 + 128 : 0;
       char *stream = 0;
-      if (brVerify) {
+      if (framesGiven) {
         stream = malloc(streamCap);
         if (!stream) sim_fatal("oom (stream buffer)");
       }
       size_t streamLen = 0;
       char hex[65];
-      MlSb rec;
-      ml_sb_init(&rec);
+      MlSb rec = {0}; // see the target arm's note (review-c6 r1/r3)
+      if (framesGiven) ml_sb_init(&rec);
       uint16_t *rawKeys = 0;
       const MlInput neutralRow = nullInput();
       MlInput liveRow;

@@ -20444,3 +20444,82 @@ drifting.
 `LEAD_ticks + (END-370) + 600`; all six derivations converted.
 Independent of C1's unbounded-live-play change; no conflict, but the
 device lane should confirm.
+
+---
+
+iter 132 · 2026-07-29 · phase M4 · **C6 CLOSED — the 3-minute match bound is GONE, proven on shipped bytes (frame 28,890 = 2.67×, memory flat)** · driver re-pinned 18 rows across two arcs · TWO driver near-misses recorded
+
+**THE FIX, in the required order.** Recording made OPT-IN first, THEN
+the bound dropped. Measured: the recorded trace costs **443.7 B/frame**
+(g01's own trace file: 1,685,971 B / 3800 frames, same row format the
+recorder emits) and MlSb doubles, so peak ≈2× — exhausting the device's
+~37 MB at **~41,700 frames ≈ 11.6 min**. Dropping the bound while
+keeping recording would have traded a clean 3:00 exit for an **OOM kill
+at ~12 min**. **Streaming was rejected at rung 1, not on cost: NOTHING
+READS the play path's recording** — live-trace.json/live-keys.txt appear
+only in the launchers; every evidence consumer drives its own app run
+with its own --record-trace and its own bound. Streaming would have put
+per-frame file I/O inside the paced 16.67 ms window (which this project
+forbids) to produce an artifact with no reader. Rule follows C1 exactly:
+**absence is the opt-in** — --frames given ⇒ bounded + recording
+mandatory (unchanged); omitted ⇒ unbounded + recording REFUSED (it
+cannot be sized); 0/negative still rejected.
+**ARGV TRUTH TABLE, differential:** host twins built from pre- and
+post-change sources, identical 16-cell matrix against both
+(.loop/c6-argv-truth-table.log). **Exactly one cell moved** — live + no
+--frames + no --record-* , REJECT → ACCEPT, a cell argv previously
+rejected outright. Every evidence cell (L1 = the [6b]/[6c] shape, V1
+verify, S1 state) and every evasion (--frames 0/-1, --foh-max 0)
+byte-identical. Repo sweep: every --frames reaching a foh binary is a
+positive literal (3600/900/240); zero evidence sites omit it.
+**DEVICE EVIDENCE:** a real VS match on the installed OPK with the
+frontend PARKED so injection reached the app — **frame 28,890 = 2.67×
+the old 10,800 bound, reproduced THREE times** (pre-fix, post-fix, final
+shipped bytes). MemAvailable **flat**: 30,096 → 30,120 kB over 485 s
+(+24 kB = noise), freed to 44,492 on exit. Screenshot-verified a live
+match. **The writer caught and DISCARDED its own false green:** its
+first 9-minute dwell had the frontend UNPARKED, so fk_input drove
+gmenu2x rather than the app — it had proven C1's menu fix, not C6. The
+framebuffer dump (a gmenu2x "MOUNT USB" dialog) exposed it. That is the
+right instinct: a passing number from the wrong process is not evidence.
+**HONEST COMPLICATION, REGISTERED NOT HIDDEN:** at the match's natural
+upstream 8-minute end the sim hits `SIM FATAL frame 28890: matchTimer
+expired (finishGame) — outside the golden domain`, RC=3. The port has no
+finishGame/results path; the 3:00 bound made it unreachable. The writer
+**did not weaken that trap** — it guards genuinely unvalidated sim
+behaviour. Net for Chase: 2.67× more play and a full upstream-length
+match, same frontend endpoint. Registered as C18.
+**ARC:** r1 NO-GO (HIGH — gating the --out stream on brVerify/brTVerify
+removed per-frame snprintf from the BOUNDED-LIVE legs [6b]/[6c]) → r2
+NO-GO (3 LOW) → r3 NO-GO (HIGH — the r2 fix used `recording`, too
+narrow; bounded verify/tverify lost ml_sb_init) → **r4 GO**. Codex TWICE
+caught the same class the brief warned about — an EVIDENCE LEG moving
+under a play-path fix — which the argv table structurally could not see
+because it proves ACCEPTANCE, not runtime behaviour. Logs teed at run
+time (the C8 lesson applied).
+**Verdicts (final source):** SIM CONFORMS · FOH FLOWS OK (teeth=26 — the
+writer correctly identified this as the CSS-mechanics baseline shift
+21+5, not a regression) · DEVICE FOH OK (p99=14.077ms skips=0) · DEVICE
+TARGET CONFORMS (both A2/C1 regression guards green). OPK
+**545aae9f…** installed + sha-verified; device restored.
+**Budget: device runs ~16/10, arm rebuilds 5/4 — DECLARED**, driven by
+three NO-GOs plus the discarded false green.
+**DRIVER NEAR-MISS #1 (recorded because it is the mirror of iter-129's):**
+I re-pinned mlfk-foh.sh as `arc-in-flight` with a note asserting its
+bytes POSTDATED the r4 GO — i.e. I invented a defect. Checked mtimes
+before committing: r4's log is 04:44, mlfk-foh.sh 03:59, foh_dev.c
+04:28 — **r4 DID cover the final bytes.** Corrected to `reviewed-go`
+with the mtime proof IN the cite. iter-129 was accepting invalid
+evidence; this was nearly REFUSING valid evidence. Same root: judging
+evidence by narrative instead of mechanically. C11 (mechanical cite
+verification) now covers both directions.
+**DRIVER RE-PIN, 18 rows total:** mlfk-foh.sh (C6) + **17 rows the CSS
+mechanics lane legitimately changed** (check-device-target.sh,
+check-device-foh.sh, judge-foh-trace.js, normalize-foh-trace.js,
+flow-to-fkscript.js, and all 12 flow/.expect artifacts) — the CSS writer
+flagged these as "stale by design; only arc closure may flip their
+provenance", which was correct. Cited to the CSS arc's r11 GO
+(.loop/review-cssmech-r11.log, COPIED OUT of the worktree into .loop/ so
+the cite survives worktree cleanup — the C8 lesson generalized: evidence
+must live where the driver reads it). Full manifest self-check ALL ROWS
++ ANCHOR GREEN.
