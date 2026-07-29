@@ -30,7 +30,179 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-27, iter 119 — **M4 GATE OK — AUTHORITATIVE, TWICE (writer + driver cold)**; LOOP STOP: m4-complete — awaiting Chase acceptance playthrough)
+## Live right now (updated: 2026-07-29 — HANDOFF PAGE. Latest AGENT-LOG entry = **iter 132**. Phase: M4 mechanically PASSED; in owner-punch-list execution, NOT re-ratified)
+
+**READ ORDER for a fresh context:** CLAUDE.md → this section → `fix_plan.md`
+(the punch list, items A*/B*/C*/U*) → `docs/PROCESS.md` §11/§12 (the model
+this loop now runs under) → `docs/MENU-SPEC.md` (menu contract) →
+AGENT-LOG from iter 120 to EOF for narrative.
+
+### 1. Where the milestone actually stands
+
+**M4's mechanical gate PASSED at iter 119** (commit `fe885bd`):
+`M4 GATE OK` twice — writer run + an independent driver cold run — with
+87 producers pinned and review-closed, FULLGAME 12/12 on device, targets
+2/2, flows 7/7, OPK frontend launch. The sentinel
+`LOOP STOP: m4-complete` was written.
+
+**Then Chase played it, twice (2026-07-27 and -28), and it is NOT
+ratified.** Those playthroughs produced the whole punch list now in
+`fix_plan.md`. So: the *gate* passed; the *game* did not yet satisfy the
+owner. Do not treat M4 as closed.
+
+**verify_m4.sh currently REFUSES.** Three independent reasons, all known:
+(a) the driver wrote a **brace glob** — `.loop/c6-review-codex-r{1,2,3}.log`
+— into the `mlfk-foh.sh` cite at iter 132, and the gate's own line
+grammar rejects that form; (b) 7 rows remain `arc-in-flight` from the B9
+render-headroom arc; (c) lane work is uncommitted. All three are in
+flight in the M4-fix lane. **Nobody had re-run the gate between iters
+120-132, which is how (a) went unnoticed.**
+
+### 2. Live lanes (4) — all in worktrees per PROCESS §12
+
+| Lane | Location | State |
+|---|---|---|
+| **Controls** (A3/A4 + new owner reqs) | worktree `agent-a69eed501ead86ad5` | Was at **codex GO r8**; re-dispatched for: **Natural scheme as the fresh-install default** (modelled on ssb64's direct 1:1 mapping) + **Mod remappable between L/R shoulders**. Must independently verify the tilt/smash finding below. |
+| **Menus** (gameplay/audio/controls/target-select) | worktree `agent-a063ab1a97c0d6b57` | 25 files, **r1–r9 done** (r9 NO-GO, 2 BLOCKERs). Re-dispatched for: **wire the audio sliders to the mixer**, the **C23 sound tooth**, and recording **D14** as a ratified deviation. |
+| **M4 fix / verification debt** | worktree `agent-a849d9776416922fe` | At **NO-GO**, do not merge as-is. Owns C11 (mechanical cite verification), U3 (aggregate-threshold audit), B1 (blend565 — **fixed**, 53.3% of 708M triples were wrong, now 0), C12. Documented resume point: `bash -n verify_m4.sh` → `node .loop/measure2.js` → `.loop/repin.sh` → `.loop/cite-teeth.sh`. |
+| **Roy research** | **SEPARATE REPO** `~/code_projects/melee-chars-research` | Charter-bound, two experiments only, GO/NO-GO report as the sole deliverable. See §6. |
+
+**PLUS: the match-exit lane's work is sitting UNCOMMITTED in the main
+tree** (~12 files incl. `foh_dev.c`, `foh_pause.*`, `mlfk-foh.sh`,
+`NOTICES`, and the sim-side `finishGame` hook touching
+`moves.h`/`DEAD*.c`/`sim.h`/`sim_tick.c`). It reported four checks green
+(`SIM CONFORMS`, `FOH FLOWS OK teeth=26`, `DEVICE FOH OK p99=13.966
+skips=0`, `DEVICE TARGET CONFORMS`) and an OPK installed sha-verified
+(`a0a4376d…`). **Outstanding there:** 5 device screenshots, its Tier A
+arc, C19's quit-to-VS entry, and **A12c the FunKey SYSTEM menu**.
+
+Six further worktrees are already-merged leftovers and may be pruned
+(PROCESS §12.1 permits pruning only after merged AND committed).
+
+### 3. Owner rulings from 2026-07-29 (all binding)
+
+- **Worktrees by default** for every feature lane; file-partitioning
+  retired (PROCESS §12; reconciled against the protected HARD RULES and
+  LOOP.md in §12.1 — lanes never commit, so the one-branch invariant
+  holds and worktrees actually RESTORE LOOP.md's clean-tree guard).
+- **Natural control scheme is the fresh-install default**; Chase's own
+  device staying on Box after migration is explicitly fine.
+- **Mod must be remappable** between the shoulders (L=Mod/R=shield ↔
+  R=Mod/L=shield), switchable.
+- **Wire the audio sliders** (do not revert the screen to a refusal).
+- **D14 ratified**: the numeric volume readout stays (upstream has no
+  digits — record as an owner-sanctioned DEVIATION).
+- **Game pause overlay approved as-is**; only addition is C19
+  (quit → VS/character-select screen).
+- **MENU/HOME = the FunKey SYSTEM menu**, copied from Chase's own ssb64
+  `port/gfx/fk_menu.{c,h}` (VOLUME/BRIGHTNESS/QUIT/POWER OFF, the
+  `/usr/games/menu_resources/` artwork). "Adjust if needed" = adapt to
+  our platform seam, NOT redesign. NOTICES entry before the code.
+- **Hide Spectate/P2P/Server; VS Melee goes straight to local VS**,
+  behind a named flag (MENU-SPEC §11.0 records that this ruling
+  SUPERSEDES the spec's own §11.1 — the spec is evidence, the ruling is
+  binding).
+- **Post-gate jitter increment is the FINAL work item** (SCHED_FIFO +
+  the SPIN_NS 3→2 ms retune, with enough passes for statistical power).
+- Deferred by owner ruling: **4-player** (needs conformance AND a perf
+  leg), **real name entry** (Melee-style d-pad character grid), **making
+  the walljump toggle actually work**.
+
+### 4. Findings a successor must not re-derive
+
+- **Smash vs tilt is EDGE-TRIGGERED, not magnitude-based.**
+  `action_state_shortcuts.c:387` needs `|in[0].lsX| >= 0.79 &&
+  in[2].lsX*sign < 0.3` — full deflection NOW, near-neutral TWO FRAMES
+  AGO. Same shape at `physics.c:367` (dash, frames 0 vs 3) and `:287`
+  (fastfall). **A digital d-pad therefore produces smashes on press and
+  tilts on hold, faithfully.** The driver initially claimed the opposite
+  and the owner caught it. Natural's real losses are: no WALK (needs a
+  sustained intermediate magnitude), 8 directions at magnitude 1 only
+  (no partial DI angles), and no C-stick unless mapped.
+- **The "box style" was never missing** — what ships (S1 One-Mod +
+  C-layer) IS the box scheme, HayBox/B0XX lineage
+  (`docs/research/b0xx-mapping.md`, branch `research/b0xx-mapping`).
+  Two further prototyped-never-ported schemes exist (S2 dual-mod,
+  S3 minimal) in `prototypes/control-mapping/funkeyMapping.js:84-103`.
+- **L was never unbound**: keysym `k` → `PlatformInput.l` → S1 **Mod**,
+  which emits nothing without a direction. R already shields.
+- **Aggregate visual thresholds can be blind to a whole missing
+  feature** — proven twice: deleting every STAR passed at 0.9927/0.99
+  (U1), and deleting every ARTICLE passed at 0.8961/0.88 (U3). Fix
+  shape is per-feature planes. **`check-render.sh`'s fg IoU is also not
+  run-to-run reproducible** (0.9076/0.9038/0.9020 on identical code).
+- **The FOH trace/judge emits NO sound observation at all** (`s->snd[]`
+  never emitted) — every menu check is structurally audio-blind (C23,
+  assigned to the menus lane; ~30 lines in `check-foh-flows.sh`).
+- **"Evidence-rig bound governing the play path" is a CLASS**, three
+  instances: A2 (`--bridge live` refused target launches), C1 (300 s
+  menu timeout), C6 (3 min match cap). A fourth is registered (C7,
+  fixed seed). The discriminator is never the bridge mode — it is the
+  ABSENCE of a bound.
+- **Upstream has no results screen**: `finishGame` is a banner + 2500 ms
+  hold, then `endGame` resets and jumps to gamemode 2 (VS) / 7
+  (targets). Five `finishGame` sites exist — the timer plus all four
+  `DEAD*` KO arms.
+- **Codex produces PROVEN REPLAYS** (six-plus instances: byte-identical
+  findings blocks, identical token counts, citations to deleted code).
+  cmp-prove every round. Distinguish replay from "findings I already
+  fixed" from "findings I wrongly dismissed" — the C4 lane lost a round
+  to that confusion. **Run codex SERIALLY**: concurrent sessions get
+  their transcripts spliced by the companion (that was the root cause of
+  several early "cached" discards).
+
+### 5. Driver errors recorded (so a successor repeats none)
+
+1. **iter 127** — flipped a manifest row to `reviewed-go` citing a log
+   whose verdict was markdown-bold `**VERDICT: GO**`, i.e. ZERO anchored
+   matches. Ran the anchored grep, got nothing, then eyeballed a `tail`.
+2. **iter 132** — nearly the inverse: asserted bytes postdated a GO when
+   mtimes proved otherwise. Judging evidence by narrative, both times.
+3. **iter 132** — wrote a brace glob into a cite and **broke the gate**
+   (§1c). C11 exists to make all three impossible mechanically.
+4. **iter 131** — `git apply --3way` printed per-file success then rolled
+   back ATOMICALLY; the cold re-run reported the pre-merge ledger and was
+   nearly waved through. **Always verify a content fingerprint after a
+   patch merge**, never the tool's own messages.
+5. **2026-07-29** — a lane died in an API outage leaving
+   `/mnt/disable_frontend` set, so **every boot declined to launch the
+   frontend and the owner's device looked bricked**. Registered as C24:
+   the deadman covers a DEVICE-side death, not a HOST-side one. Fix is a
+   self-expiring marker, not more discipline.
+
+### 6. The Roy research project (separate repo, charter-bound)
+
+`~/code_projects/melee-chars-research` (git-init'd, no remote,
+`CHARTER.md`). Full decision record: `docs/RESEARCH-MELEE-CHARACTERS.md`
+here. Nine owner-ratified decisions; the load-bearing ones:
+scope is **mechanically Melee** (animation deferred); acceptance is
+**translation conformance** derived from meleelight's five existing
+characters as a **Rosetta Stone**; the **Fox calibration slice** is the
+go/no-go; **clone characters only, Roy first** (Marth's animations —
+which is why the ~1.55M-coordinate-per-character animation wall does not
+apply); Roy is authored in **meleelight JS first** against a **separate**
+oracle fork so the pinned clone stays byte-frozen; the **first
+experiment is a throwaway stub character + M0 re-verification** (the
+named risk is the boot-RNG pin of exactly 465 draws). Deliverable is a
+**report, not a character**. IP posture: the decomp is a READING MAP
+only, never vendored; extracted data is gitignored, private, undistributed.
+Key correction to carry: **"84.32% decompiled" is largely the wrong
+metric** — the per-character numbers live in the game's DAT files as
+subaction bytecode, so what matters is whether the interpretive map
+(struct layouts + bytecode semantics) is done, not code-match percent.
+
+### 7. Immediate next actions for the driver
+
+1. Drain the 4 lanes as they report; **batch the merges** that touch
+   pinned producers so the manifest+anchor cycle runs ONCE (PROCESS
+   §12.2(3)).
+2. Commit the match-exit lane's main-tree work once its arc closes.
+3. Re-pin + re-anchor, then **re-run `verify_m4.sh`**.
+4. Chase re-plays → ratification.
+5. Then, and only then, the **jitter increment** (final item by owner
+   ruling).
+
+## [superseded by the 2026-07-29 handoff] (updated: 2026-07-27, iter 119 — **M4 GATE OK — AUTHORITATIVE, TWICE (writer + driver cold)**; LOOP STOP: m4-complete — awaiting Chase acceptance playthrough)
 
 - **THE M4 EXIT GATE PASSED** (commit pending this entry): 87/87
   producers review-closed; delta arc + tables-schema both CLOSED on

@@ -20523,3 +20523,26 @@ provenance", which was correct. Cited to the CSS arc's r11 GO
 the cite survives worktree cleanup — the C8 lesson generalized: evidence
 must live where the driver reads it). Full manifest self-check ALL ROWS
 + ANCHOR GREEN.
+
+---
+
+iter 133 · 2026-07-29 · phase M4 · **HANDOFF written into docs/STATE.md** (the designated recovery page, PROCESS §1) — stale since iter 119, now current through iter 132 with the full punch-list phase, 4 live lanes, today's owner rulings, the do-not-re-derive findings, the driver-error ledger, and the Roy research charter pointer.
+
+Context was running low, so the session's knowledge was consolidated into
+the ONE page a fresh context is contracted to read (CLAUDE.md → STATE.md).
+Recovery pointer set: **latest AGENT-LOG entry = iter 132**; STATE §1-§7
+cover milestone status (M4's gate passed at fe885bd but the game is NOT
+owner-ratified — two playthroughs produced the A*/B*/C*/U* punch list),
+the three independent reasons verify_m4.sh currently refuses (incl. the
+driver's brace-glob cite), the 4 live lanes with worktree paths + resume
+state, the match-exit lane's UNCOMMITTED main-tree work, every owner
+ruling from today, the findings a successor must not re-derive (the
+edge-triggered smash/tilt mechanic the owner correctly challenged; box
+was never missing; L was never unbound; aggregate-threshold blindness
+proven twice; the audio-blind FOH judge; the evidence-rig-bound class;
+upstream having no results screen; codex replay + serial-only), the
+5-item driver-error ledger, and the separate Roy research repo.
+ZOOM OUT: the handoff itself is an instance of the project's own lesson —
+evidence and knowledge must live where the next reader is contracted to
+look, not in a transcript. Same class as C8 (a verdict living only in an
+agent summary) and PROCESS §12.3(5) (evidence must outlive the worktree).
