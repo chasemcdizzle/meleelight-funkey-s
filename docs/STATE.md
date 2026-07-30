@@ -62,19 +62,35 @@ flight in the M4-fix lane. **Nobody had re-run the gate between iters
 
 | Lane | Location | State |
 |---|---|---|
-| **Controls** (A3/A4 + new owner reqs) | worktree `agent-a69eed501ead86ad5` | Was at **codex GO r8**; re-dispatched for: **Natural scheme as the fresh-install default** (modelled on ssb64's direct 1:1 mapping) + **Mod remappable between L/R shoulders**. Must independently verify the tilt/smash finding below. |
+| ~~**Controls**~~ | **CLOSED + MERGED — commit `490467e`** | Arc GO codex r6 after FIVE genuine NO-GOs. Three styles (Natural default, Normal, Box) + orthogonal Mod-shoulder swap, MLFKPERSIST3 v1/v2 migration. **flick=>smash / hold=>tilt VERIFIED against the real sim — the owner was right and the driver was wrong.** Lane retracted its own false "loses shield-drop" claim (band `[-0.70,-0.65)` clears). **NOT REACHABLE until C30 wiring lands (match-exit lane's files).** |
 | **Menus** (gameplay/audio/controls/target-select) | worktree `agent-a063ab1a97c0d6b57` | 25 files, **r1–r9 done** (r9 NO-GO, 2 BLOCKERs). Re-dispatched for: **wire the audio sliders to the mixer**, the **C23 sound tooth**, and recording **D14** as a ratified deviation. |
 | ~~**M4 fix / verification debt**~~ | **CLOSED + MERGED — commit `b44937b`** | Arc closed on **2 independent Opus 5 GOs** (codex replayed r2, aborted r4; grok aborted r3/r3b twice). Landed: C11 mechanical cite verification in `verify_m4.sh` `[0]` (89 producers, 140 artifacts, TERMINAL anchored `^VERDICT: GO$` per reviewed-go row) + `.loop/cite-teeth.sh` **17/17 fail closed** + B1 blend565 (53.3% of 708M triples wrong → 0, **no judged output moved, no re-freeze**) + PROCESS **C11** unadorned-verdict rule. Driver re-verified both pins, cold-ran gate+teeth pre- AND post-merge, content-fingerprinted 4/4 files. Reviewer verdicts PERSISTED to `.loop/review-vdebt-r{2,5,6}-opus.log` (they existed only under `/private/tmp`). Residuals registered **C25–C29** (C25 prior-closure laundering is the real remaining hole; C28 fg-IoU is not run-to-run reproducible — the mechanism behind U3's articles hole). U3 articles fix = **gfx/render lane**. |
-| **Roy research** | **SEPARATE REPO** `~/code_projects/melee-chars-research` | Charter-bound, two experiments only, GO/NO-GO report as the sole deliverable. See §6. |
+| ~~**Roy research**~~ | **REPORT DELIVERED — `melee-chars-research` commit `b3af2db`** | **GO on translation conformance.** E1: stub 6th char passed the M0 gate 8/8 bit-exact, boot-RNG pin unmoved at 465. E2: mapping SYSTEMATIC (hitboxes 1.56%, frame data **0.00%**, attrs 3.23%) because **meleelight's author IS ikneedata.com** — values are a transcription of his own Melee tables, which already contain Roy (`Ry`, 168 rows). **Marth — what Roy clones — is cleanest at 0.65%; Fox, the charter's chosen slice, is the noisiest and alone misses the 2% bar.** No ISO needed; Dolphin escalation NOT required. Only unpriced work: Roy's 2D hitbox offsets. **Building Roy is an OWNER decision (charter decision 8) — not started.** |
 
-**PLUS: the match-exit lane's work is sitting UNCOMMITTED in the main
-tree** (~12 files incl. `foh_dev.c`, `foh_pause.*`, `mlfk-foh.sh`,
-`NOTICES`, and the sim-side `finishGame` hook touching
-`moves.h`/`DEAD*.c`/`sim.h`/`sim_tick.c`). It reported four checks green
-(`SIM CONFORMS`, `FOH FLOWS OK teeth=26`, `DEVICE FOH OK p99=13.966
-skips=0`, `DEVICE TARGET CONFORMS`) and an OPK installed sha-verified
-(`a0a4376d…`). **Outstanding there:** 5 device screenshots, its Tier A
-arc, C19's quit-to-VS entry, and **A12c the FunKey SYSTEM menu**.
+**Lanes dispatched 2026-07-29 after the first three closed:**
+
+| Lane | Where | Scope |
+|---|---|---|
+| **Match-exit closure** — CRITICAL PATH | **MAIN TREE** (its ~12 files are uncommitted there) | Its Tier A arc (**never run**), 5 device screenshots, C19 quit-to-VS, **A12c the FunKey SYSTEM menu — MENU must work EVERYWHERE, menus AND in-match** (lift `~/code_projects/ssb64-funkey-s/port/gfx/fk_menu.c`), **C30(a)+(b) the controls wiring**, then re-pin `mlfk-foh.sh` + re-derive the anchor. **SOLE manifest writer this cycle.** Holds the device. |
+| **Render-judge hardening** | worktree, host-only | U3 articles per-feature plane (fg IoU scored **0.8961 vs a 0.88 bound with articles entirely removed** — 3rd instance of the class) + C28 (fg IoU not run-to-run reproducible: 7 distinct values on identical code). Must NOT touch the manifest or verify_m4.sh. |
+| **Cite closure (C25/C26/C27)** | worktree, host-only | The structured closure record. **Design + generator + dry run ONLY — explicitly forbidden from editing the manifest or verify_m4.sh** (single-writer discipline); hands the driver an ordered application plan. |
+| **Menus** (still live from before) | worktree `agent-a063ab1a97c0d6b57` | Audio-slider wiring + C23 sound tooth + D14; **messaged with C30(c) (two Controls rows) and C31 (rename NORMAL's label only — the enum is a frozen wire format)**. |
+
+**Gate status right now:** `verify_m4.sh` refuses at the PIN stage because
+the match-exit lane's uncommitted `mlfk-foh.sh` (`c5e14d50` vs HEAD
+`0c37b702`) is a pinned producer. **Correct behaviour — the bytes are
+unreviewed. Do NOT re-pin to quiet it.** `[0]` itself is green (89
+producers, 140 cited artifacts) and `.loop/cite-teeth.sh` is 17/17.
+
+**OWNER FLAG (driver did not decide unilaterally):** the research repo
+commits `tables/*.csv` (~134 KB) whose `melee` column holds extracted
+Melee values. Charter decision 9 says extracted DATA is gitignored build
+output, never committed. These are analytical comparison/delta tables and
+the repo has **no remote**, so nothing is distributed — but it is a
+deviation from the ratified wording. Deleting them would destroy the
+report's evidence, so they were left in place and flagged. One-line
+remedy if the owner wants strictness: add `tables/*.csv` to `.gitignore`
+and `git rm --cached` them.
 
 Six further worktrees are already-merged leftovers and may be pruned
 (PROCESS §12.1 permits pruning only after merged AND committed).
