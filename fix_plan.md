@@ -2560,3 +2560,34 @@ Everything below is functionality/fidelity, not styling.
   the structural reason a 6th character cannot move the pin. HARD RULE 3
   applies (`oracle/` is read-only outside M0) — comment-only, and only
   if a future M0-touching task is already open.
+
+- **D-RULING (driver, 2026-07-29) FohPersist wire-format collision ->
+  MLFKPERSIST4.** Two lanes independently extended `FohPersist` and BOTH
+  claimed `MLFKPERSIST2` with DIFFERENT layouts (controls: 57 lines,
+  fields before the rec rows; menus: 62 lines, after). Ratified tiebreak:
+  **the controls lane's lineage SHIPPED TO A DEVICE**, so its
+  PB-preserving v1/v2/v3 migration is kept VERBATIM and the menus lane's
+  seven lines append as `MLFKPERSIST4` (64 lines, 1510 bytes). The menus
+  lane's private "v2" is deliberately NOT a migration source — no build
+  of it ever existed on hardware, so nothing can be carrying it.
+  Generalisable rule: **when two unshipped formats collide, the one that
+  reached a device wins the version number**; migration sources are
+  determined by what physically exists in the field, never by authoring
+  order. OPEN: the v3->v4 migration arm has NO tooth while every other
+  arm does (menus lane's own finding) — that gap is where a silent
+  save-wipe hides, and the owner has a real v1 save on his device.
+  `check-device-persist.sh` is updated but UNRUN (device-only).
+- **C33 (P1, CLASS — third instance, now named) LIVE STATE PLACED INSIDE
+  A STRUCTURE SOMETHING ELSE RESETS.** Measured instances: (1) the FOH
+  audio bus lived in `SndMusic`, which `snd_music_cfg` memsets on EVERY
+  track switch — volume set in the menu snapped back when a match
+  started; class fix was moving both buses to `SndMixer` scope so the
+  reset structurally cannot reach them. (2) the M4-task-5 `ml_sim_runai_live`
+  pointer seam had to live OUTSIDE GameState precisely because GameState
+  is memset (CLAUDE.md M4 task 5 gotcha 1). (3) falcon SSG
+  `canEdgeCancel` / the rule-17 charHitboxes plane had to become runtime
+  overlays rather than data for the same reason (M2 task 17 gotcha 2).
+  INSTRUMENT WORTH BUILDING: grep every `memset`/bulk-init of a struct
+  and list which live fields it reaches — this class is invisible at the
+  call site and only shows up as "the setting doesn't stick", which is
+  exactly how the owner reported it.
