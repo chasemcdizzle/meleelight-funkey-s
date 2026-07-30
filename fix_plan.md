@@ -2485,3 +2485,42 @@ Everything below is functionality/fidelity, not styling.
   (a) or (b) is the class fix — (c) is discipline and discipline is what
   just failed. NOTE the marker is a PLAY-PATH hazard, not just a rig
   one: it makes the device look broken to the owner.
+
+- **C25 (P1, CLASS — the cite layer's remaining hole) PRIOR-CLOSURE
+  laundering: a cite may carry a GO that belongs to a DIFFERENT arc.**
+  `verify_m4.sh`'s cite verification (iter 134) proves every
+  `reviewed-go` row cites a log whose TERMINAL anchored verdict is GO,
+  which closes the iter-127 adorned/non-terminal class. It does NOT prove
+  the GO was about THAT PRODUCER. MEASURED before proposing a rule: 22 of
+  59 GO-backed rows have no GO log naming their own producer, so a naive
+  "the GO log must name the producer" rule would false-reject 22 rows
+  today. Fix = a structured closure record (producer + pinned sha +
+  verdict + round) that a cite REFERENCES by id, instead of free-text
+  hyphen-soup; ~60 cites to migrate. DRIVER-OWNED (the cite corpus is the
+  driver's ledger, not a lane's). Until then the cite layer proves
+  "a real GO exists", not "this producer was reviewed".
+- **C26 (P2, tooth-resistant residual) appended-transcript / fenced GO.**
+  A GO line that is positionally terminal but semantically inert (inside a
+  fenced block, or an appended transcript) is indistinguishable from a real
+  terminal GO by any anchored grep. A tail-window rule was implemented,
+  MEASURED to miss this shape AND to false-RED real logs, and removed
+  rather than kept as decoration. Same structural fix as C25.
+- **C27 (P2) non-arc cite that DENIES its gate.** `oracle-frozen` /
+  `grandfathered-m1|m2` rows must name an exit gate, and do (measured over
+  all 24). But a cite is free text: hyphen-soup defeats any delimiter rule
+  distinguishing "proven by GATE" from "not proven by GATE". Fix = a
+  positive `PROVEN-BY-<GATE>` token form. Rolls into C25's migration.
+- **C28 (P1, JUDGE DEFECT — measured) `check-render.sh`'s fg IoU is not
+  run-to-run reproducible.** Seven distinct IOU MIN values (0.9004-0.9076)
+  across IDENTICAL code with fresh captures; stable only under a fixed
+  capture. An aggregate whose own input drifts ~0.008 cannot support a
+  tight bound, so the current threshold is loose enough to be blind (this
+  is the mechanism behind U3's articles hole: 0.8961 passed a 0.88 bound).
+  Fix: judge a FIXED capture, or find and remove the capture
+  nondeterminism, before tightening any threshold.
+- **C29 (P2, cosmetic dead code) `check-device-foh.sh:1158` `ART_SHA="$hsum"`
+  is a dead assignment** — verified the only occurrence repo-wide and
+  `$hsum` is already asserted on the preceding line. Owned by the
+  match-exit lane (its file); reported, deliberately NOT edited across a
+  lane boundary. Also: the manifest header's `UNCLOSED ROWS` narrative
+  block names the wrong rows (driver's own prose, stale since iter 132).

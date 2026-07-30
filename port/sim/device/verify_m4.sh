@@ -109,7 +109,7 @@ mkdir -p "$VDIR"
 # line (a full-byte self-row plus this anchor would be a two-unknown
 # hash fixed point with no solution); the excluded line is protected
 # by the anchor equality itself — a wrong literal IS a refusal.
-MANIFEST_SHA256=8869b3b4339ab4317b1f444a9fdc99f75c79c03fd81f0a09e504da07499dcd19
+MANIFEST_SHA256=be1d4a925826bff21e52a8344551a50ff9d2a9b0ebda337d8a1a067d032c90da
 
 # AUTHORITATIVE — computed ONCE, then readonly (the sentinel lockout).
 # Any dev/canned-evidence signal zeroes it; the `M4 GATE OK` sentinel
@@ -143,6 +143,340 @@ source port/sim/device/riglib.sh
 # unprefixed line-anchored occurrence. Any NEW relay site MUST route
 # through relay_lines.
 relay_lines() { sed 's/^/  | /'; }
+
+# --- CITE VERIFICATION (C11, iter 133) ---------------------------------
+# A cite is EVIDENCE, and evidence must be checkable by machine. Two
+# driver errors of the SAME class motivated this:
+#   iter-127  a row was flipped to `reviewed-go` citing a log whose only
+#             verdict was the markdown form `**VERDICT: GO**` — ZERO
+#             matches for the anchored `^VERDICT: GO$` the discipline
+#             requires. The anchored grep WAS run, returned nothing, and
+#             the judgement fell back to eyeballing a `tail`.
+#   iter-132  the near-inverse: a note asserting some bytes postdated a
+#             GO, when mtimes proved they did not.
+# Root cause of both: evidence judged by NARRATIVE instead of mechanism.
+# Hashes prove identity, statuses assert approval — until now NOTHING
+# proved the approval a status asserts actually exists.
+#
+# GRAMMAR (PROCESS §3 whitelist rule). Measured EMPIRICALLY from all 89
+# rows of the real manifest BEFORE enforcing, with zero false rejections
+# on genuine data. A cite is one whitespace-free token; inside it every
+# occurrence of `.loop/` MUST begin a well-formed artifact reference:
+#     .loop/<name>.log   verdict log   (can carry a VERDICT)
+#     .loop/<name>.txt   supporting artifact (diffs; no verdict)
+#     .loop/<name>.md    supporting artifact (prompts; no verdict)
+# <name> is [A-Za-z0-9._{},-]+ and may carry ONE brace group — the
+# measured multi-round form `.loop/c6-review-codex-r{1,2,3}.log`, which
+# expands to one path per alternative. TOKEN COUNT MUST EQUAL WELL-FORMED
+# REFERENCE COUNT: a truncated or typo'd path can then never be silently
+# skipped by a permissive extractor. That silent skip IS the hole — a row
+# whose only evidence path was malformed would otherwise sail through
+# carrying zero evidence.
+#
+# SCOPE — enforced on the statuses that CLAIM A REVIEW ARC (reviewed-go,
+# arc-in-flight, arc-pending; 65 of 89 rows). `oracle-frozen` and
+# `grandfathered-m{1,2}` are proven by a NAMED EXIT GATE, not by an arc:
+# their cites name that gate and mention logs only as provenance prose
+# with no extension (measured: 22 such rows, e.g. `newly-pinned-per-
+# .loop/review-118-delta-3-opus-M4-leg-1-ground-truth`). Prose is not a
+# path and is not parsed as one. [0b] already enforces those statuses.
+#
+# RULES, per arc-claiming row:
+#   (1) every referenced artifact must EXIST where the gate runs;
+#   (2) a `reviewed-go` row must be backed by >=1 cited `.log` carrying an
+#       ANCHORED `^VERDICT: GO$`. Bold, quoted, inline and parenthesised
+#       verdicts do NOT count — that is the entire point of iter-127.
+#       Intermediate NO-GO rounds inside a cite are EXPECTED and legal
+#       (measured: 29 of 56 cited logs are NO-GO rounds), so the bar is
+#       ">=1 GO among the cited logs", never "all GO". A cite naming only
+#       NO-GO logs therefore fails, which is the intended tooth.
+#   (3) the documented alternative — a driver-recorded CAPPED-CLOSED
+#       (manifest header's own status vocabulary) — is accepted in place
+#       of (2) ONLY when the cite also names an `AGENT-LOG-<YYYY-MM-DD>`
+#       date that actually occurs in docs/AGENT-LOG.md, so the escape
+#       hatch still has to point at something real.
+# NOTE: this makes the local review-log corpus (.loop/, gitignored) a
+# gate input. That is consistent — verify_m4.sh already requires the
+# physical device, ADB and the SDK container — but it means an arc's logs
+# must be COPIED into the repo-root .loop/ to count. Failing closed on
+# absent evidence is deliberate: "the log is on another machine" is
+# exactly the narrative this check exists to stop accepting.
+AGENT_LOG=docs/AGENT-LOG.md
+# BOUNDARY ANCHORING (review-vdebt r1 [M] :208): a reference must be followed
+# by one of the MEASURED separators (`+`, `-`) or end-of-cite. This closes the
+# forms that end in a DIFFERENT character class:
+# `.loop/review-c4-6g.log.bak` and `.loop/review-c4-6g.log/missing` used to
+# parse as the EXISTING `.loop/review-c4-6g.log` and pass — a cite naming a
+# nonexistent artifact while the checker verified a different one. Emitting
+# nothing for a non-boundary-terminated occurrence makes the token/reference
+# count check below refuse it (no silent skip).
+# PARTIAL, stated precisely (r3 [L], Opus 5): `-` and `+` are BOTH the measured
+# separators AND legal filename characters, so `.loop/review-98-1.log-final`
+# still resolves to `.loop/review-98-1.log`. Only the `.`- and `/`-suffixed
+# forms are actually closed. Bounded impact: the artifact verified is still a
+# real terminal-GO log, so this is naming imprecision, not fabricated
+# approval — and it cannot be fixed without giving up the trailing prose the
+# live corpus depends on (`…review-b9-3-codex.log-M-status-claim-corrected`).
+# Same root as the PROVEN-BY residual; both need the structured closure record.
+# `.md` was DROPPED (r1 [M]): the measured corpus contains only .log and .txt
+# (132 + 8); .md was speculative, and an unmeasured extension is exactly the
+# permissive-parsing hole PROCESS §3 forbids.
+cite_refs() { # <cite> -> stdout, one well-formed .loop artifact per line
+  printf '%s\n' "$1" | awk '{
+    s = $0
+    while (match(s, /\.loop\/[A-Za-z0-9._{},-]+\.(log|txt)/)) {
+      ref  = substr(s, RSTART, RLENGTH)
+      rest = substr(s, RSTART + RLENGTH)
+      nxt  = substr(rest, 1, 1)
+      if (nxt == "" || nxt == "+" || nxt == "-") print ref
+      s = rest
+    }
+  }'
+}
+cite_terminal_verdict() { # <log> -> LAST anchored verdict ("GO"/"NO-GO"/"")
+  # r1 [H] :258 — the FATAL flaw in "grep -q '^VERDICT: GO$'": a reviewer log
+  # echoes its own PROMPT, and the prompt states the required verdict grammar,
+  # so an anchored `VERDICT: GO` appears in the log of a round that ended
+  # NO-GO (measured: .loop/review-109-9.log:191 is prompt text, its terminal
+  # verdict at :13559 is NO-GO). Counting any match made a NO-GO round read as
+  # approval — the very false-green class this whole item exists to kill, and
+  # it was live in this reviewer's OWN round-1 log. The verdict is the LAST
+  # anchored occurrence (PROCESS §3: it ends the report), so parse for that.
+  # CRLF is stripped before matching: 13 logs in .loop/ already carry CR bytes,
+  # and without this a genuine GO from a CRLF-producing tool is a false RED
+  # (r2 [L], Opus 5).
+  #
+  # REGISTERED RESIDUAL (r2 [M], Opus 5) — "last verdict in the FILE" is not
+  # "last verdict in the REPORT". A NO-GO report with an appended shell
+  # transcript that ends in someone else's `VERDICT: GO` still reads as GO.
+  # This is NOT closeable by position: in that shape the pasted GO *is* the
+  # last line, so it is structurally identical to a genuine terminal GO. A
+  # tail-window rule was IMPLEMENTED AND REMOVED here because (a) it does not
+  # catch that shape, and (b) it would false-RED a real report followed by a
+  # verdict-free transcript. Multi-verdict logs cannot be refused either:
+  # measured, 44 of the 58 cited logs carry more than one anchored verdict,
+  # because reviewer logs echo their prompt (which states the grammar).
+  # The durable fix is the SAME one escalated for the PRIOR-CLOSURE residual:
+  # a structured closure record binding producer path + pinned sha + terminal
+  # verdict, which is a driver-owned change to the cite corpus, not a lane fix.
+  awk '
+    { line[NR] = $0 }
+    END {
+      v = ""
+      for (i = 1; i <= NR; i++) {
+        s = line[i]; sub(/\r$/, "", s)
+        if (s == "VERDICT: GO")    v = "GO"
+        if (s == "VERDICT: NO-GO") v = "NO-GO"
+      }
+      print v
+    }' "$1"
+}
+cite_tokens() { # <cite> -> count of `.loop/` occurrences
+  printf '%s\n' "$1" | awk '{ print gsub(/\.loop\//, "") }'
+}
+cite_brace_check() { # <ref> — REFUSES here, in the GATE'S OWN SHELL.
+  # r2 [H] (Opus 5 independent review) — these two guards used to live inside
+  # cite_expand, which is consumed as `for p in $(cite_expand "$ref")`. The
+  # WHOLE function therefore ran in a COMMAND-SUBSTITUTION SUBSHELL, so its
+  # `exit 1` killed only that subshell: the refusal message printed, then
+  # verify_cite RETURNED 0 and the row was ACCEPTED with the phantom reference
+  # never existence-checked. On an otherwise-green authoritative run the gate
+  # would have printed `M4 GATE REFUSED: ...` on stderr and then `M4 GATE OK`
+  # with exit 0 — a catastrophic false green produced BY the false-green
+  # checker. (The r1 fix moved the detection before the emit pipeline, which
+  # was never the problem: the CALL SITE is. `set -e` does not propagate a
+  # failed command substitution in a `for` word list.) Validation is pure
+  # string work on the raw ref and needs no expansion, so it belongs out here.
+  case "$1" in
+    *'{'*'}'*) : ;;
+    *'{'*|*'}'*)
+      echo "M4 GATE REFUSED: cite reference '$1' has an unbalanced brace" >&2
+      exit 1 ;;
+    *) return 0 ;;
+  esac
+  cb_pre="${1%%\{*}"; cb_rest="${1#*\{}"
+  cb_alts="${cb_rest%%\}*}"; cb_post="${cb_rest#*\}}"
+  case "$cb_pre$cb_post" in
+    *'{'*|*'}'*)
+      echo "M4 GATE REFUSED: cite reference '$1' has more than one brace group" >&2
+      exit 1 ;;
+  esac
+  # `,$alts,` makes "", ",a", "a,", "a,,b" all match ,,
+  case ",$cb_alts," in
+    *,,*)
+      echo "M4 GATE REFUSED: cite reference '$1' has an EMPTY brace alternative" >&2
+      exit 1 ;;
+  esac
+  return 0
+}
+cite_expand() { # <ref> -> one path per brace alternative (one group max)
+  # PURE emitter: every refusal lives in cite_brace_check, which the caller
+  # MUST run first (it does, immediately before expanding). Nothing in here
+  # may `exit` — it runs in a subshell and an exit would be swallowed.
+  case "$1" in
+    *'{'*'}'*)
+      ce_pre="${1%%\{*}"; ce_rest="${1#*\{}"
+      ce_alts="${ce_rest%%\}*}"; ce_post="${ce_rest#*\}}"
+      printf '%s\n' "$ce_alts" | tr ',' '\n' | while IFS= read -r ce_a; do
+        printf '%s%s%s\n' "$ce_pre" "$ce_a" "$ce_post"
+      done ;;
+    *) printf '%s\n' "$1" ;;
+  esac
+}
+CITE_REFS_OK=0
+verify_cite() { # <producer> <status> <cite> — refuses on any violation
+  vc_prod="$1"; vc_status="$2"; vc_cite="$3"
+  case "$vc_status" in
+    reviewed-go|arc-in-flight|arc-pending) : ;;
+    *)
+      # r1 [M] :231 — these statuses SKIP cite verification, and [0b] treats
+      # them as closed, so a misclassified row would be an authoritative false
+      # green with no evidence at all. They are not arc-proven but they are
+      # not unproven either: each claims a NAMED EXIT GATE. Require the cite
+      # to actually name one. MEASURED over all 24 non-arc rows; the token set
+      # is exactly what those cites carry, nothing invented.
+      # REGISTERED RESIDUAL (r2 [L], Opus 5): this is a SUBSTRING match, so a
+      # cite that DENIES its gate still passes
+      # (`this-row-is-NOT-proven-by-SIM-CONFORMS-or-anything-else`). A
+      # `+`/`-`-delimited-component rule was IMPLEMENTED AND REVERTED here
+      # because it changes nothing: the cite grammar hyphen-separates EVERY
+      # word, so `-SIM-CONFORMS-` matches inside the denial too. Closing this
+      # needs a POSITIVE cite form (e.g. `PROVEN-BY-<TOKEN>` as a fixed
+      # prefix), which is a driver-owned change to all 24 non-arc cites — not
+      # a lane fix. What this check DOES buy: a row whose cite names no gate at
+      # all (the accident class — a misclassified status with placeholder
+      # prose) is refused. Tooth T11.
+      case "$vc_cite" in
+        *HARD-RULE-3*|*M0-EXIT-GATE*|*M1-EXIT-GATE*|*M2-exit-gate*|*PIPELINE-OK*|*SIM-CONFORMS*)
+          return 0 ;;
+      esac
+      echo "M4 GATE REFUSED: $vc_prod ($vc_status) names no exit gate in its cite" >&2
+      echo "  cite: $vc_cite" >&2
+      echo "  A non-arc status is a claim that a NAMED EXIT GATE proves these bytes;" >&2
+      echo "  the cite must say which (HARD-RULE-3 / M0-EXIT-GATE / M1-EXIT-GATE /" >&2
+      echo "  M2-exit-gate / PIPELINE-OK / SIM-CONFORMS)." >&2
+      exit 1 ;;
+  esac
+  vc_tok="$(cite_tokens "$vc_cite")"
+  vc_refs="$(cite_refs "$vc_cite")"
+  if [ -z "$vc_refs" ]; then vc_n=0; else
+    vc_n="$(printf '%s\n' "$vc_refs" | wc -l | tr -d ' ')"
+  fi
+  if [ "$vc_tok" != "$vc_n" ]; then
+    echo "M4 GATE REFUSED: $vc_prod ($vc_status) cite names $vc_tok '.loop/' reference(s), only $vc_n parse as well-formed artifacts" >&2
+    echo "  cite: $vc_cite" >&2
+    echo "  A malformed/truncated evidence path must never be silently skipped (PROCESS §3)." >&2
+    exit 1
+  fi
+  vc_go=0
+  for vc_ref in $vc_refs; do
+    # MUST precede expansion: refusals cannot live inside the $( ) below.
+    cite_brace_check "$vc_ref"
+    for vc_p in $(cite_expand "$vc_ref"); do
+      # r1 [M] :249 — `-f` alone accepted SYMLINKS and EMPTY files. An empty
+      # log carries no verdict but still counted as "evidence exists", and a
+      # symlink can point outside the tree entirely. Evidence must be a real,
+      # non-empty, regular file in this repo.
+      if [ -L "$vc_p" ]; then
+        echo "M4 GATE REFUSED: $vc_prod ($vc_status) cites a SYMLINK, not evidence: $vc_p" >&2
+        exit 1
+      fi
+      if [ ! -f "$vc_p" ]; then
+        echo "M4 GATE REFUSED: $vc_prod ($vc_status) cites evidence that does not exist: $vc_p" >&2
+        echo "  cite: $vc_cite" >&2
+        echo "  A cite is only evidence if the artifact is readable where the gate runs;" >&2
+        echo "  copy the arc's logs into the repo-root .loop/ (an arc run in another" >&2
+        echo "  worktree leaves them invisible here) and re-pin." >&2
+        exit 1
+      fi
+      if [ ! -s "$vc_p" ]; then
+        echo "M4 GATE REFUSED: $vc_prod ($vc_status) cites an EMPTY artifact: $vc_p" >&2
+        exit 1
+      fi
+      case "$vc_p" in
+        *.log)
+          # TERMINAL verdict only — see cite_terminal_verdict.
+          vc_v="$(cite_terminal_verdict "$vc_p")" || {
+            echo "M4 GATE REFUSED: could not read cited log $vc_p" >&2
+            exit 1
+          }
+          if [ "$vc_v" = GO ]; then vc_go=$((vc_go + 1)); fi
+          ;;
+      esac
+      CITE_REFS_OK=$((CITE_REFS_OK + 1))
+    done
+  done
+  [ "$vc_status" = reviewed-go ] || return 0
+  [ "$vc_go" -eq 0 ] || return 0
+  case "$vc_cite" in
+    *CAPPED-CLOSED*)
+      vc_date="$(printf '%s\n' "$vc_cite" | awk '{
+        if (match($0, /AGENT-LOG-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/))
+          print substr($0, RSTART + 10, 10)
+      }')"
+      # r1 [H] :265 — "the date appears somewhere in AGENT-LOG.md" is not
+      # authentication: the live date 2026-07-17 occurs 28 times, so any
+      # unrelated entry satisfied it. BINDING (measured): AGENT-LOG.md is
+      # sectioned by `## iter N — <date> — <title>` headers, so the date must
+      # head a SECTION and that section must discuss THIS producer. A bogus
+      # date scores 0, and an unrelated producer inside a dated section scores
+      # 0 (both refuse — teeth T12/T13).
+      # MEASURED STRENGTH, stated honestly (r2 [M], Opus 5 — the first draft of
+      # this comment said "the 2026-07-17 section", singular, which overstated
+      # it): 27 `## ` headers carry 2026-07-17 and the ledger has only 7
+      # distinct header dates, so `insec` opens MANY sections and 118 of 623
+      # producer×date pairs satisfy the bind (19%). What this arm actually
+      # authenticates is therefore "some iteration logged that day mentioned
+      # this producer", NOT "this specific closure". That is weaker than a GO
+      # log by design — it is a driver-declared cap — and it is why the arm
+      # also refuses non-unique basenames below. Upgrade path unchanged: cite
+      # the `AGENT-LOG-<line>` anchor form and verify that exact line.
+      # ponytail: matched on BASENAME, not full path — the full path never
+      # appears in the ledger's prose (measured 0 occurrences), so basename is
+      # what the corpus actually supports. Ceiling: two producers sharing a
+      # basename would be interchangeable here. Upgrade path when that matters
+      # (and the durable fix generally): cite the ledger LINE anchor form the
+      # rest of the corpus already uses (`AGENT-LOG-14707`) and verify that
+      # exact line, instead of a date + section scan.
+      vc_bind=0
+      vc_base="${vc_prod##*/}"
+      # r2 [L] (Opus 5): the basename ceiling is LIVE, not hypothetical — two
+      # pinned producers share the basename `manifest.json`, and as a substring
+      # needle that would match almost any dated ledger section, making the
+      # binding vacuous. Refuse the CAPPED arm outright when the basename is
+      # not unique among the pinned producers; such a row must use a real
+      # review-log GO (or the AGENT-LOG-<line> anchor form) instead.
+      vc_dupes="$(printf '%s\n' "$REQUIRED_PRODUCERS" | awk -v b="$vc_base" \
+        '$0 != "" { n = $0; sub(/^.*\//, "", n); if (n == b) c++ } END { print c + 0 }')"
+      if [ "$vc_dupes" != 1 ]; then
+        echo "M4 GATE REFUSED: $vc_prod claims CAPPED-CLOSED but its basename '$vc_base' is not unique among pinned producers ($vc_dupes matches)" >&2
+        echo "  The ledger binding matches on basename, so it would be vacuous here." >&2
+        exit 1
+      fi
+      if [ -n "$vc_date" ] && [ -f "$AGENT_LOG" ]; then
+        vc_bind="$(awk -v d="$vc_date" -v p="$vc_base" '
+          /^## / { insec = (index($0, d) > 0) ? 1 : 0 }
+          insec && index($0, p) > 0 { n++ }
+          END { print n + 0 }' "$AGENT_LOG")"
+      fi
+      if [ -n "$vc_date" ] && [ "$vc_bind" != 0 ]; then
+        return 0
+      fi
+      echo "M4 GATE REFUSED: $vc_prod claims CAPPED-CLOSED without a bound ledger entry" >&2
+      echo "  cite: $vc_cite" >&2
+      echo "  Need a '## ... $vc_date ...' section in $AGENT_LOG that mentions" >&2
+      echo "  '${vc_prod##*/}'. A bare date is not evidence — it matches unrelated entries." >&2
+      exit 1 ;;
+  esac
+  echo "M4 GATE REFUSED: $vc_prod is reviewed-go but NO cited log carries a TERMINAL anchored 'VERDICT: GO'" >&2
+  echo "  cite: $vc_cite" >&2
+  echo "  Verdicts must be emitted UNADORNED on their own line: a '**VERDICT: GO**'," >&2
+  echo "  '(VERDICT: GO)' or quoted mention is NOT a verdict (iter-127 false green)." >&2
+  echo "  The verdict is the LAST anchored one: a reviewer log echoes its PROMPT, so" >&2
+  echo "  an early 'VERDICT: GO' can be prompt text inside a round that ended NO-GO." >&2
+  echo "  A status asserting approval requires approval that a machine can find." >&2
+  exit 1
+}
 
 # The pinned producer set: the manifest must list EXACTLY these paths
 # (a truncated manifest can never silently narrow gate coverage).
@@ -329,10 +663,25 @@ while IFS= read -r mline || [ -n "$mline" ]; do
   case "$mline" in
     '#'*|'') continue ;;
   esac
-  if ! [[ "$mline" =~ ^[0-9a-f]{64}\ [A-Za-z0-9._/-]+\ (reviewed-go|oracle-frozen|grandfathered-m1|grandfathered-m2|arc-in-flight|arc-pending)\ [A-Za-z0-9._/:+-]+$ ]]; then
+  # cite class carries `{},` (C11, iter 133): MEASURED from the real
+  # corpus, the multi-round brace form `.loop/c6-review-codex-r{1,2,3}.log`
+  # is in live use, and WITHOUT these three characters this gate refused
+  # every run at [0] on that row — a pre-existing, unnoticed hard refusal
+  # (the C6 row landed with a cite its own gate's grammar rejected, which
+  # is itself evidence nobody had re-run verify_m4.sh since). Still a
+  # closed, anchored, full-line class; the cite's SEMANTICS are now
+  # checked separately by verify_cite.
+  if ! [[ "$mline" =~ ^[0-9a-f]{64}\ [A-Za-z0-9._/-]+\ (reviewed-go|oracle-frozen|grandfathered-m1|grandfathered-m2|arc-in-flight|arc-pending)\ [A-Za-z0-9._/:{},+-]+$ ]]; then
     echo "M4 GATE REFUSED: manifest line fails the anchored grammar: '$mline'" >&2
     exit 1
   fi
+  # C11: the cite must be checkable evidence, not narrative (see the
+  # CITE VERIFICATION block above). Runs on the SAME anchored-valid line
+  # the grammar just accepted, so no row can reach the producer loop
+  # with an unverified approval claim.
+  verify_cite "$(printf '%s\n' "$mline" | awk '{print $2}')" \
+              "$(printf '%s\n' "$mline" | awk '{print $3}')" \
+              "$(printf '%s\n' "$mline" | awk '{print $4}')"
   n_data=$((n_data + 1))
 done < "$MANIFEST"
 n_req=0
@@ -394,6 +743,7 @@ if [ "$n_data" != "$n_req" ]; then
   exit 1
 fi
 echo "   freeze manifest OK: $n_req producers, all bytes match their pins (manifest anchor verified)"
+echo "   cite evidence OK: $CITE_REFS_OK referenced artifact(s) exist (non-empty, regular); every reviewed-go row cites a log whose TERMINAL anchored verdict is GO (or a section-bound CAPPED-CLOSED ledger entry)"
 
 echo "== [0b] review-closure status enforcement (refusal before any leg) =="
 if [ "$n_unresolved" != 0 ]; then

@@ -66,12 +66,30 @@ static inline uint16_t pack565(uint8_t r, uint8_t g, uint8_t b) {
   return (uint16_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
 }
 
+// B1 FIX (iter 133) — was: the two-lane trick `dst & 0xF81F` blending R and
+// B in ONE field. That is only valid while each lane's product fits below
+// the next lane's base. It does not: R sits at bit 11, so its lane may use
+// bits 11..15, but the product R*a needs 13 bits (31*256 = 7936), and after
+// `>> 8` the low 8 bits of the RED term land squarely on top of the BLUE
+// field. MEASURED: rgb(147,14,42) at a=87 over rgb(39,0,91) produced blue
+// 24 where 8 is correct — a 16/31 error in the 5-bit blue field (~24/255 in
+// 8-bit terms) on ANY partial-alpha blend, i.e. every anti-aliased edge the
+// GAME renders, not just menus. (port/foh/foh_render.c documented this bug
+// and routes around it via px8_over; that workaround is now redundant but
+// harmless, and is deliberately left alone — different lane's file.)
+//
+// Fix is the boring one: blend the three channels separately, so no lane
+// can carry into another. Each term is bounded by 31*256 / 63*256, so the
+// >> 8 results are exactly 5/6/5 bits and need no masking. Six multiplies
+// instead of four; blend565 is NOT on the measured hot path (the profiled
+// loops — span8, grad_radial, px8_over — composite in 8 bits and
+// deliberately bypass this function), so correctness wins uncontested.
 static inline uint16_t blend565(uint16_t dst, uint16_t col, unsigned a) {
-  unsigned dr = dst & 0xF81F, dg = dst & 0x07E0; // r+b packed, g
-  unsigned cr = col & 0xF81F, cg = col & 0x07E0;
-  unsigned rr = ((cr * a + dr * (256 - a)) >> 8) & 0xF81F;
-  unsigned rg = ((cg * a + dg * (256 - a)) >> 8) & 0x07E0;
-  return (uint16_t)(rr | rg);
+  const unsigned na = 256 - a;
+  const unsigned r = ((((col >> 11) & 0x1Fu) * a + ((dst >> 11) & 0x1Fu) * na) >> 8);
+  const unsigned g = ((((col >> 5) & 0x3Fu) * a + ((dst >> 5) & 0x3Fu) * na) >> 8);
+  const unsigned b = ((((col) & 0x1Fu) * a + ((dst) & 0x1Fu) * na) >> 8);
+  return (uint16_t)((r << 11) | (g << 5) | b);
 }
 
 static int g_ink_on = 1; // M4 task 2 (raster.h note): bg art suppresses ink
@@ -119,7 +137,13 @@ void rast_fill_row_opaque(Raster *rz, int y, RastCol col) {
 // cross-TU call PER PIXEL from an -O2 TU, and the FOH's two biggest per-frame
 // loops are exactly that call in a row-shaped loop:
 //
-//   span8        (foh_render.c:273) — every poly8/disc8/fill span
+//   span8        (foh_render.c:275) — the disc8/ring/bar fill spans. NOT
+//                poly8: C12 (iter 133) — poly8 (foh_render.c:396) keeps its
+//                OWN span emit and never calls span8, so the span8 rewire
+//                never reached it (foh_render.c:437 records the same fact).
+//                The earlier "every poly8/disc8/fill span" credit here was
+//                stale; the wedge fan below is poly8 work and is therefore
+//                NOT attributable to span8.
 //   grad_radial  (foh_render.c:245) — the LUT replay of the cached radial
 //
 // MEASURED on the FunKey-S (Cortex-A7, .loop/b9 layer bench, N=200, title

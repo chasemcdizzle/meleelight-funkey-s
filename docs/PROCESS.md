@@ -51,6 +51,48 @@ unavailable. Contract: prompt file + full log on disk under `.loop/`
 (`VERDICT: GO` / `VERDICT: NO-GO`), driver reads the verdict FROM THE LOG
 FILE, never from an agent's summary.
 
+**Verdicts are emitted UNADORNED (binding; C11, iter 133).** The verdict
+must occupy its own line, at column 0, with no decoration whatsoever:
+`VERDICT: GO`. NOT `**VERDICT: GO**`, not `(VERDICT: GO — 0 Highs)`, not
+indented, quoted or bulleted. The only grep any judge or driver may use
+is the ANCHORED, full-line `^VERDICT: GO$` — and every reviewer prompt
+must state this requirement to the reviewer. Rationale, paid for: at
+iter-127 a manifest row was flipped to `reviewed-go` citing a log whose
+sole verdict was the markdown-bold form, which has ZERO anchored
+matches; the anchored grep was run, returned nothing, and the judgement
+fell back to eyeballing a `tail`. An adorned verdict is NOT a verdict —
+a reviewer that emits one has failed to deliver a verdict, and the round
+is void (re-run it) rather than interpreted. This is now enforced
+mechanically: `verify_m4.sh`'s cite verification requires every
+`reviewed-go` row to cite at least one log whose **TERMINAL** anchored
+verdict is `VERDICT: GO` (or, for a driver cap, a ledger entry bound to
+that producer), so an adorned verdict can no longer be laundered into the
+freeze manifest by a human reading. "Terminal" matters and is not
+pedantry: a reviewer log echoes its own prompt, and the prompt states
+this grammar — so an anchored `VERDICT: GO` appears inside rounds that
+ended NO-GO. Taking any match, rather than the last, would have accepted
+those. Known residual, registered rather than papered over: a verdict
+quoted in a transcript appended AFTER a report is positionally
+indistinguishable from a real one, so the durable fix is a structured
+closure record binding producer path + pinned sha + verdict.
+
+**§12.3(5) is now ENFORCED for arc-claiming rows.** "Evidence must outlive
+the worktree" has a mechanical check: for every `reviewed-go` /
+`arc-in-flight` / `arc-pending` row, `verify_m4.sh`'s cite verification
+resolves each `.loop/` artifact the cite names — including every
+alternative of the `r{1,2,3}` multi-round brace form — and REFUSES if any
+is missing, empty, or a symlink. Scope stated precisely on purpose:
+`oracle-frozen` and `grandfathered-m{1,2}` rows are proven by a NAMED
+EXIT GATE rather than by an arc, their `.loop/` mentions are provenance
+prose, and their references are NOT opened — do not read this as
+evidence-survival being enforced everywhere. Found live the first time it
+ran — the
+`pipeline/expected-assets.json` row cited a `DUAL-GO` closure whose two
+logs had never left the C4 lane's worktree (the GOs were real; the
+evidence was invisible to the gate). Copy an arc's logs into the
+repo-root `.loop/` as part of closing it; a cite the gate cannot open is
+not a cite.
+
 - **Tier A (full arc to VERDICT: GO)** — every non-checksummed shipping
   surface: check scripts, device rig/hygiene scripts, renderer, input
   layer, OPK/launcher, gate-assembly scripts. Bounded convergence: past
