@@ -106,6 +106,45 @@ they are in the real game?"
    output only") and for the menu artwork (A9). `.gitignore` in the
    research repo pins it: `*.dat`, `*.iso`, `clone/`, `build/`.
 
+## STATUS 2026-07-29: report DELIVERED (GO) — project DEFERRED until M4 closes
+
+The two de-risking experiments ran and `REPORT.md` returned **GO**. Both
+new owner directions from the same session are recorded and ratified in
+the research repo:
+
+10. **DEFERRED until the M4 acceptance playthrough closes.** Nothing is
+    dispatched there until then. The report is decision-grade, so resuming
+    costs a read, not a re-derivation.
+11. **Fresh NON-CLONE characters are now an explicit goal** — this
+    supersedes decision 4's "clone characters only" as a permanent
+    ceiling. Clone-first (Roy, Ganondorf) stays the correct first
+    increment; it is no longer the limit.
+12. **Reimplementing Melee's engine in 2D is a REGISTERED OPTION** (owner:
+    "leave that as an option or potential parallel path"). Not chosen, not
+    rejected, not scheduled.
+
+**→ Everything lives in `~/code_projects/melee-chars-research`. Start with
+`ROADMAP.md`** (the three paths, their costs, the recommended sequence),
+then `REPORT.md` for the measurements.
+
+**The one thing worth knowing here:** the roadmap's load-bearing finding is
+a ZOOM OUT. Roy's unpriced 2D hitbox offsets, the ~1.55M-coordinate
+animation wall blocking every non-clone, and the ECB gap are **not three
+problems — they are one: we do not carry the skeleton.** Melee attaches
+hitboxes to bones, recomputes ECBs from bones, and ships 3D skeletal
+animation; meleelight bakes per-frame 2D world offsets whose producing tool
+exists in neither repo. Carry bone transforms and all three collapse.
+
+**And the constraint that matters to THIS project:** a Melee-engine
+reimplementation (Path C) would **retire meleelight as ground truth**, and
+with it the entire verification apparatus — the 8 frozen goldens, the
+per-frame SHA-256 streams, `verify-stream.js`, the QuickJS oracle, and
+every gate M0-M4 all validate "we match browser meleelight". It would
+require amending **HARD RULE 5** and standing up a new oracle (Dolphin
+frame-stepping or Slippi replays). That is not an argument against it — it
+is the reason it can never arrive as a quiet increment or as scope creep
+from a smaller path.
+
 ## Still open
 
 - Nothing blocking. Post-report decisions (whether to build Roy, whether
