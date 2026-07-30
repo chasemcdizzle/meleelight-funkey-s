@@ -30,7 +30,7 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   reads them cold, arbitrates, caps. Writer model recorded in each
   AGENT-LOG iter entry.
 
-## Live right now (updated: 2026-07-29 — HANDOFF PAGE. Latest AGENT-LOG entry = **iter 132**. Phase: M4 mechanically PASSED; in owner-punch-list execution, NOT re-ratified)
+## Live right now (updated: 2026-07-29 — HANDOFF PAGE. Latest AGENT-LOG entry = **iter 132**; latest COMMIT = `b44937b` (verification-debt lane merged). Phase: M4 mechanically PASSED; in owner-punch-list execution, NOT re-ratified)
 
 **READ ORDER for a fresh context:** CLAUDE.md → this section → `fix_plan.md`
 (the punch list, items A*/B*/C*/U*) → `docs/PROCESS.md` §11/§12 (the model
@@ -64,7 +64,7 @@ flight in the M4-fix lane. **Nobody had re-run the gate between iters
 |---|---|---|
 | **Controls** (A3/A4 + new owner reqs) | worktree `agent-a69eed501ead86ad5` | Was at **codex GO r8**; re-dispatched for: **Natural scheme as the fresh-install default** (modelled on ssb64's direct 1:1 mapping) + **Mod remappable between L/R shoulders**. Must independently verify the tilt/smash finding below. |
 | **Menus** (gameplay/audio/controls/target-select) | worktree `agent-a063ab1a97c0d6b57` | 25 files, **r1–r9 done** (r9 NO-GO, 2 BLOCKERs). Re-dispatched for: **wire the audio sliders to the mixer**, the **C23 sound tooth**, and recording **D14** as a ratified deviation. |
-| **M4 fix / verification debt** | worktree `agent-a849d9776416922fe` | At **NO-GO**, do not merge as-is. Owns C11 (mechanical cite verification), U3 (aggregate-threshold audit), B1 (blend565 — **fixed**, 53.3% of 708M triples were wrong, now 0), C12. Documented resume point: `bash -n verify_m4.sh` → `node .loop/measure2.js` → `.loop/repin.sh` → `.loop/cite-teeth.sh`. |
+| ~~**M4 fix / verification debt**~~ | **CLOSED + MERGED — commit `b44937b`** | Arc closed on **2 independent Opus 5 GOs** (codex replayed r2, aborted r4; grok aborted r3/r3b twice). Landed: C11 mechanical cite verification in `verify_m4.sh` `[0]` (89 producers, 140 artifacts, TERMINAL anchored `^VERDICT: GO$` per reviewed-go row) + `.loop/cite-teeth.sh` **17/17 fail closed** + B1 blend565 (53.3% of 708M triples wrong → 0, **no judged output moved, no re-freeze**) + PROCESS **C11** unadorned-verdict rule. Driver re-verified both pins, cold-ran gate+teeth pre- AND post-merge, content-fingerprinted 4/4 files. Reviewer verdicts PERSISTED to `.loop/review-vdebt-r{2,5,6}-opus.log` (they existed only under `/private/tmp`). Residuals registered **C25–C29** (C25 prior-closure laundering is the real remaining hole; C28 fg-IoU is not run-to-run reproducible — the mechanism behind U3's articles hole). U3 articles fix = **gfx/render lane**. |
 | **Roy research** | **SEPARATE REPO** `~/code_projects/melee-chars-research` | Charter-bound, two experiments only, GO/NO-GO report as the sole deliverable. See §6. |
 
 **PLUS: the match-exit lane's work is sitting UNCOMMITTED in the main
@@ -193,10 +193,16 @@ subaction bytecode, so what matters is whether the interpretive map
 
 ### 7. Immediate next actions for the driver
 
-1. Drain the 4 lanes as they report; **batch the merges** that touch
-   pinned producers so the manifest+anchor cycle runs ONCE (PROCESS
-   §12.2(3)).
+0. **DONE (b44937b): verification-debt lane merged.** 3 lanes remain.
+1. Drain the remaining 3 lanes as they report; **batch the merges** that
+   touch pinned producers so the manifest+anchor cycle runs ONCE
+   (PROCESS §12.2(3)).
 2. Commit the match-exit lane's main-tree work once its arc closes.
+   **BLOCKING FOR THE GATE:** its uncommitted `mlfk-foh.sh` (`c5e14d50`
+   vs HEAD `0c37b702`) is a PINNED producer, so `verify_m4.sh` currently
+   refuses at the pin check — EARLIER than `[0b]` — in the main tree.
+   That is correct behaviour, not a regression: the bytes are unreviewed.
+   Do NOT re-pin it to make the gate quiet; re-pin only at its closure.
 3. Re-pin + re-anchor, then **re-run `verify_m4.sh`**.
 4. Chase re-plays → ratification.
 5. Then, and only then, the **jitter increment** (final item by owner
