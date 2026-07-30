@@ -2524,3 +2524,39 @@ Everything below is functionality/fidelity, not styling.
   match-exit lane (its file); reported, deliberately NOT edited across a
   lane boundary. Also: the manifest header's `UNCLOSED ROWS` narrative
   block names the wrong rows (driver's own prose, stale since iter 132).
+
+- **C30 (P1, INTEGRATION DEBT — the controls feature is NOT REACHABLE yet)
+  wire `s1_input_row_style` + link `ctl_style.c`.** The controls lane
+  landed three styles (Natural default, Normal, Box) + the orthogonal
+  Mod-shoulder swap with MLFKPERSIST3 v1/v2 migration, arc GO codex r6,
+  and NOTHING ON THE DEVICE CHANGES until three edits land in files the
+  lane deliberately did not touch (lane-boundary discipline):
+  (a) `port/foh/foh_dev.c:2240` and `:2730` and `port/gfx/gfx_app.c:836`
+      call `s1_input_row(&pin)` -> `s1_input_row_style(&pin,
+      ctl_style_get(), ctl_mod_on_r_get())` — **match-exit lane owns
+      foh_dev.c**, so this batches with its merge;
+  (b) add `port/gfx/ctl_style.c` to the FOH/gfx link lines;
+  (c) menus lane: the Controls screen needs two rows (`ctl_style_*`,
+      `ctl_mod_*`) + the two persistence calls.
+  Until (a)+(b) land, `ctl_style_get()` has no caller and device
+  behaviour is byte-identical to today — a green check on an unreachable
+  feature. DO NOT mark the controls work done on the strength of its
+  arc GO alone.
+- **C31 (P2, copy collision) "Natural" vs "Normal" style labels read
+  almost identically** in a 240x240 menu. Codex's advice, adopted by the
+  lane: rename NORMAL's DISPLAY LABEL only (`ctl_style_name`), never
+  delete or renumber the style — the CtlStyle enum values are a FROZEN
+  WIRE FORMAT in `FohPersist.ctlStyle` and a renumber silently remaps
+  every existing save. Menus lane's call, one line.
+- **C32 (P2, doc accuracy — found by the Roy lane, zero behaviour
+  change) `oracle/qjs/replay-main.js:47-53` mis-attributes the 464
+  in-page boot draws.** The count (and the 465 pin) is CORRECT; the
+  comment credits "464x stagerender bgStar constructors". Measured
+  actual: bgStars 20x6=120 (`stages/stagerender.js:16`), credits cStars
+  100x3=300 (`menus/credits.js:265`), startscreen lightDust 20x2=40,
+  menuRandomBox 4 => 464, +1 jQuery expando = 465. Worth correcting
+  because the real structure is load-bearing for the Roy work: EVERY
+  bound is a fixed literal, NONE derives from character count, which is
+  the structural reason a 6th character cannot move the pin. HARD RULE 3
+  applies (`oracle/` is read-only outside M0) — comment-only, and only
+  if a future M0-touching task is already open.

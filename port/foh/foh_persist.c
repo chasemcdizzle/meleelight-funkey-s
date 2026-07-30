@@ -15,13 +15,17 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "../gfx/ctl_style.h" // CTL_STYLE_COUNT (enum only — no link dep)
 #include "../sim/ml_ser.h" // ml_sha256_hex (oracle/qjs/sha256.c by path)
 
 #define FP_FILE "mlfk-persist.dat"
 #define FP_TMP "mlfk-persist.tmp"
 #define FP_DEFAULT_DIR "/mnt/mlfk-data"
-// 55 lines, ~1.5 KB canonical — anything larger is not ours.
+// 57 lines, ~1.5 KB canonical — anything larger is not ours.
 #define FP_CAP 4096
+// MLFKPERSIST2's ctlstyle domain was {0 normal, 1 box} — CTL_STYLE_NATURAL
+// did not exist yet. FROZEN: never re-point this at CTL_STYLE_COUNT.
+#define FP_V2_STYLES 2
 #define FP_NEG1_BITS UINT64_C(0xbff0000000000000)
 // matchTimer cap (targetplay.js:282: capped < 6000 seconds)
 #define FP_TIME_CAP 6000.0
@@ -37,6 +41,12 @@ const char *foh_persist_dir(void) {
 
 void foh_persist_defaults(FohPersist *p) {
   memset(p, 0, sizeof *p); // settings.js:44-56 subset — all zero
+  // Owner ruling 2026-07-29: Natural is the FRESH-INSTALL default. It is
+  // assigned explicitly because CTL_STYLE_NORMAL (not NATURAL) is the
+  // zero value — the enum numbers are frozen so MLFKPERSIST2 saves keep
+  // their scheme across the v3 bump (ctl_style.h).
+  p->ctlStyle = (int)CTL_STYLE_DEFAULT;
+  p->modOnR = 0; // the M3-ratified arrangement: Mod on L, shield on R
   for (int c = 0; c < FOH_PERSIST_CHARS; c++) {
     for (int s = 0; s < FOH_PERSIST_TSTAGES; s++) {
       p->targetRecords[c][s] = -1.0; // targetplay.js:40
@@ -64,10 +74,11 @@ static double fp_double(uint64_t b) {
 static size_t fp_serialize(const FohPersist *p, char *buf, size_t cap) {
   size_t n = 0;
   int w = snprintf(buf + n, cap - n,
-                   "MLFKPERSIST1\nturbo %d\nlcancel %d\n"
-                   "tapjump %d %d %d %d\n",
+                   "MLFKPERSIST3\nturbo %d\nlcancel %d\n"
+                   "tapjump %d %d %d %d\nctlstyle %d\nmodonr %d\n",
                    p->turbo, p->lCancelType, p->tapJumpOff[0],
-                   p->tapJumpOff[1], p->tapJumpOff[2], p->tapJumpOff[3]);
+                   p->tapJumpOff[1], p->tapJumpOff[2], p->tapJumpOff[3],
+                   p->ctlStyle, p->modOnR);
   if (w < 0 || (size_t)w >= cap - n) gfx_fatal("foh_persist: serialize overflow");
   n += (size_t)w;
   for (int c = 0; c < FOH_PERSIST_CHARS; c++) {
@@ -164,15 +175,42 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
   FohPersist v;
   foh_persist_defaults(&v);
   size_t pos = 0;
-  // line 1: header. ^MLFKPERSIST[0-9]+$ with version != 1 -> version;
+  // line 1: header. ^MLFKPERSIST[0-9]+$ — version 3 is current; versions
+  // 2 and 1 MIGRATE (see below), any OTHER version -> RESET_VERSION;
   // anything else -> header corruption.
+  // Migration source version: 0 = current (v3), else the version we are
+  // upgrading FROM. Both older formats are strict PREFIXES of v3, so the
+  // shared parse below just skips the lines they lack.
+  int fromVer = 0;
   {
     size_t e = pos;
     while (e < sumStart && buf[e] != '\n') e++;
     if (e >= sumStart) return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "header");
     const size_t len = e - pos;
-    if (len == 12 && memcmp(buf + pos, "MLFKPERSIST1", 12) == 0) {
+    if (len == 12 && memcmp(buf + pos, "MLFKPERSIST3", 12) == 0) {
       // current version
+    } else if (len == 12 && memcmp(buf + pos, "MLFKPERSIST2", 12) == 0) {
+      // MIGRATION. v2 is v3 minus the `modonr` line; its ctlstyle values
+      // are the SAME numbers v3 uses (the enum is frozen for exactly
+      // this reason), so the scheme carries over UNCHANGED and only the
+      // Mod shoulder takes its ratified default.
+      fromVer = 2;
+    } else if (len == 12 && memcmp(buf + pos, "MLFKPERSIST1", 12) == 0) {
+      // MIGRATION, not a reset. v1 is identical to v2 except that it
+      // has no `ctlstyle` line, and its SUM has already been verified
+      // above by the same seal — so every setting and all 50 target
+      // records parse with the SAME code below; only the ctlstyle line
+      // is skipped. Resetting here would have silently destroyed every
+      // target-test personal best on an upgrading device.
+      //
+      // The migrated style is BOX, not the fresh-install default
+      // (review-ctl r2): a v1 file can only have been written by a build
+      // whose one and only mapping was the Chase-ratified S1 == BOX, so
+      // carrying it forward preserves the controls that device already
+      // had. NATURAL is the default for a FRESH or reset install only
+      // (owner ruling 2026-07-29) — an upgrade must not silently re-map a
+      // ratified control scheme underneath him.
+      fromVer = 1;
     } else if (len > 11 && memcmp(buf + pos, "MLFKPERSIST", 11) == 0) {
       bool digits = len > 11;
       for (size_t k = pos + 11; k < e; k++) {
@@ -212,6 +250,48 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
     v.tapJumpOff[k] = c - '0';
   }
   pos += 16;
+  // line 5: "ctlstyle [0-9]" (fix_plan A4). ABSENT in a v1 file — the
+  // migration arm assigns CTL_STYLE_BOX in the else branch below.
+  // The digit is parsed as a DECIMAL DIGIT first and only then range-
+  // checked against CTL_STYLE_COUNT: comparing the raw byte against
+  // '0' + COUNT would accept ':' and friends the moment the enum grows
+  // past 10 (review-ctl r1). The static assert keeps the single-digit
+  // encoding honest if CtlStyle ever widens.
+  if (fromVer != 1) {
+    _Static_assert((int)CTL_STYLE_COUNT <= 10,
+                   "ctlstyle is a single decimal digit; widen the line "
+                   "format (and bump MLFKPERSIST) before growing CtlStyle");
+    // Each version is validated against ITS OWN grammar (review-ctl n1).
+    // MLFKPERSIST2 predates CTL_STYLE_NATURAL, so its domain was {0,1};
+    // accepting a resealed v2 file that says `ctlstyle 2` would install a
+    // state no v2 writer could ever have produced. FP_V2_STYLES is a
+    // FROZEN historical constant — it does not track CTL_STYLE_COUNT.
+    const int styleMax = (fromVer == 2) ? FP_V2_STYLES : (int)CTL_STYLE_COUNT;
+    const char d = (sumStart - pos >= 11) ? buf[pos + 9] : 0;
+    if (sumStart - pos < 11 || memcmp(buf + pos, "ctlstyle ", 9) != 0 ||
+        d < '0' || d > '9' || (d - '0') >= styleMax ||
+        buf[pos + 10] != '\n') {
+      return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "grammar");
+    }
+    v.ctlStyle = d - '0';
+    pos += 11;
+  } else {
+    v.ctlStyle = (int)CTL_STYLE_BOX; // see the v1 migration note above
+  }
+  // line 6: "modonr [01]" (owner ruling 2026-07-29). ABSENT in v1 and
+  // v2 — both migrate to the M3-RATIFIED arrangement (Mod on L), never
+  // to a swapped one, so an upgrade cannot silently move a binding.
+  if (fromVer == 0) {
+    if (sumStart - pos < 9 || memcmp(buf + pos, "modonr ", 7) != 0 ||
+        (buf[pos + 7] != '0' && buf[pos + 7] != '1') ||
+        buf[pos + 8] != '\n') {
+      return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "grammar");
+    }
+    v.modOnR = buf[pos + 7] - '0';
+    pos += 9;
+  } else {
+    v.modOnR = 0;
+  }
   // 50 rec rows, exact canonical order: "rec <c> <s> <hex16>"
   for (int c = 0; c < FOH_PERSIST_CHARS; c++) {
     for (int s = 0; s < FOH_PERSIST_TSTAGES; s++) {
@@ -244,6 +324,9 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
   // nothing may sit between the last rec row and the SUM line
   if (pos != sumStart) return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "grammar");
   *p = v;
+  // A migrated older file is LOADED, not reset — but it says so loudly,
+  // so an upgrade is never silent. The next save republishes it as v3.
+  if (fromVer) fprintf(stderr, "foh_persist: migrated from=%d\n", fromVer);
   fprintf(stderr, "foh_persist: loaded\n");
   return FOH_PERSIST_LOADED;
 }

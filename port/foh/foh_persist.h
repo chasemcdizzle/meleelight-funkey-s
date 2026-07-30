@@ -24,12 +24,33 @@
 //     truth (medal DISPLAY = the registered iter-99 pipeline-extension
 //     deferral).
 //
-// FILE FORMAT `MLFKPERSIST1` (versioned + checksummed; exactly 55 LF
-// lines, deterministic bytes — twin checks cmp host vs device):
-//   MLFKPERSIST1
+// FILE FORMAT `MLFKPERSIST3` (versioned + checksummed; exactly 57 LF
+// lines, deterministic bytes — twin checks cmp host vs device). v2
+// added the `ctlstyle` line and v3 the `modonr` line (fix_plan A4).
+// Older files on disk are MIGRATED, never discarded (review-ctl r1/r2):
+// the checksum is verified like any other and every setting plus all 50
+// target records are carried forward, emitting
+// `foh_persist: migrated from=<1|2>` and then `loaded`. Resetting a
+// VALID older file would destroy every target-test personal best on the
+// owner's device. Both older formats are strict PREFIXES of v3, so one
+// parse serves all three and the migration only fills what is absent:
+//   from v2 — ctlStyle carries over UNCHANGED (the CtlStyle enum numbers
+//     are frozen for exactly this reason), modOnR takes the ratified 0.
+//   from v1 — no style line at all, so ctlStyle becomes BOX: a v1 file
+//     can only have come from a build whose sole mapping was the
+//     ratified S1 == BOX, so the upgrade preserves the controls that
+//     device already had. modOnR takes the ratified 0.
+// NATURAL is the default for a FRESH/reset install only, and an upgrade
+// never silently moves a binding. Each version is validated against ITS
+// OWN grammar: a v2 file's ctlstyle domain is the historical {0,1}, not
+// the current {0,1,2} (review-ctl n1). Any version >= 4 (a FUTURE format
+// this build cannot know) takes RESET_VERSION:
+//   MLFKPERSIST3
 //   turbo [01]
 //   lcancel [0-2]
 //   tapjump [01] [01] [01] [01]
+//   ctlstyle [0-2]
+//   modonr [01]
 //   rec <c> <s> <hex16>      x50, c-major (c 0..4, s 0..9, in order)
 //   SUM <sha256-lowercase-hex of ALL preceding bytes>
 // Doubles are hex16 IEEE-754 bit patterns — NO strtod on any path (the
@@ -38,9 +59,11 @@
 // (the matchTimer cap, targetplay.js:282).
 //
 // LOAD (foh_persist_load): strict anchored line-by-line parse. Missing
-// file / version mismatch / ANY grammar, order, domain, checksum,
+// file / UNSUPPORTED version (>= 4; v1 and v2 migrate, see above) / ANY
+// grammar, order, domain, checksum,
 // truncation, or size deviation = LOUD reset-to-defaults — one exact
-// stderr line per boot, NEVER silent (the qjs getCookie lesson
+// stderr line per boot (two on a migrating boot — the `migrated`
+// prelude then `loaded`), NEVER silent (the qjs getCookie lesson
 // inverted for OUR surface: absent Storage silently zeroed every
 // gameSettings entry upstream; here absence/corruption RESETS LOUDLY
 // to the authored defaults). The bad file is left in place (each boot
@@ -65,6 +88,13 @@
 // by check-device-persist.sh; committed device checks' summary parsers
 // are needle-anywhere and unaffected):
 //   foh_persist: loaded
+//   foh_persist: migrated from=<1|2>  (review-ctl r1/r2 + the 2026-07-29
+//                v3 bump: a VALID older file was carried forward —
+//                settings + all 50 records preserved; from=1 also sets
+//                ctlStyle to BOX, the only mapping a v1 build had, while
+//                from=2 keeps its ctlStyle unchanged. A PRELUDE line: it
+//                always precedes that boot's `loaded`, so a migrating
+//                boot emits two lines)
 //   foh_persist: reset cause=missing
 //   foh_persist: reset cause=version
 //   foh_persist: reset cause=corrupt detail=<open|oversize|header|
@@ -87,6 +117,25 @@ typedef struct {
   int turbo;       // settings.js:44 (0)
   int lCancelType; // settings.js:46 (0)
   int tapJumpOff[4]; // settings.js:51-54 (0,0,0,0)
+  // fix_plan A4 control style — the CtlStyle enum as a WIRE VALUE:
+  // 0 = CTL_STYLE_NORMAL, 1 = CTL_STYLE_BOX, 2 = CTL_STYLE_NATURAL.
+  // NATURAL is the fresh-install default (owner ruling 2026-07-29) but is
+  // NOT the zero value, so foh_persist_defaults() assigns it explicitly —
+  // the numbers are frozen so MLFKPERSIST2 saves keep their scheme.
+  // Data only — this TU never installs it. The FOH owns the two calls:
+  //   after load:  ctl_style_set(p.ctlStyle);
+  //   before save: p.ctlStyle = ctl_style_get();
+  // (kept out of foh_persist_apply/collect on purpose: FohState has no
+  // style field, and a call here would drag port/gfx/ctl_style.c onto
+  // every link line that already carries this TU.)
+  int ctlStyle;
+  // fix_plan A4 Mod shoulder (owner ruling 2026-07-29), ORTHOGONAL to
+  // ctlStyle: 0 = the M3-ratified arrangement (Mod on L, shield on R),
+  // 1 = swapped (Mod on R, shield on L). Only BOX is affected. Data
+  // only — same chokepoint rules as ctlStyle:
+  //   after load:  ctl_mod_on_r_set(p.modOnR != 0);
+  //   before save: p.modOnR = ctl_mod_on_r_get();
+  int modOnR;
   double targetRecords[FOH_PERSIST_CHARS][FOH_PERSIST_TSTAGES]; // -1
 } FohPersist;
 
@@ -105,7 +154,10 @@ const char *foh_persist_dir(void);
 void foh_persist_defaults(FohPersist *p);
 
 // Load <dir>/mlfk-persist.dat. On ANY reset arm, *p holds the defaults
-// on return. Emits exactly one stderr event line.
+// on return. Emits exactly one TERMINAL stderr event line (`loaded` or
+// one `reset cause=...`); a v1 OR v2 migration additionally emits the
+// `migrated from=<1|2>` PRELUDE line immediately before its `loaded`, so
+// a migrating boot emits two lines, never one.
 FohPersistStatus foh_persist_load(FohPersist *p);
 
 // Atomic save (tmp + fsync + rename). Loud death on any failure.

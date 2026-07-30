@@ -26,7 +26,8 @@
 #      load-bearing), every reference file independently
 #      grammar+SUM-verified host-side (anchored full-line; shasum
 #      recompute — the whitelist-grammar rule);
-#  [4] HOST TEETH on copies (T-H1..T-H7): corrupt-sum / version-bump /
+#  [4] HOST TEETH on copies (T-H1..T-H15): corrupt-sum / unsupported-
+#      version / v1+v2 migration / per-version grammar /
 #      NaN-domain / truncation -> the exact loud reset lines; torn
 #      .tmp beside a valid file -> loaded intact (rename-atomicity:
 #      rename is the only publish); read-only dir -> save dies LOUD
@@ -96,13 +97,15 @@ REC_BITS=402d000000000000
 REC_DISPLAY="00:14.50"
 WORSE_BITS=4030000000000000
 
-# review-102 M-b: a genuine MLFKPERSIST1 file is EXACTLY this many bytes
+# review-102 M-b: a genuine MLFKPERSIST3 file is EXACTLY this many bytes
 # (MEASURED across every archived genuine file; line-derived: header 13 +
-# turbo 8 + lcancel 10 + tapjump 16 + 50 rec rows x25 + SUM 69). A
+# turbo 8 + lcancel 10 + tapjump 16 + ctlstyle 11 + modonr 9
+# (MLFKPERSIST3,
+# fix_plan A4) + 50 rec rows x25 + SUM 69). A
 # dropped/added byte — including an embedded NUL that command
 # substitution silently swallows through the per-line sed reads — breaks
 # this reconciliation.
-PERSIST_BYTES=1366
+PERSIST_BYTES=1386
 
 DEADMAN_S="${MLFK_DEADMAN_S:-900}"
 READY_TRIES=60
@@ -584,15 +587,15 @@ run_host() {
     || grammar_die "host leg $id: the degraded 'saved-nodirsync' token appeared on a healthy leg"
 }
 
-# EXACT POSITIONAL MLFKPERSIST1 whitelist verification, INDEPENDENT of
+# EXACT POSITIONAL MLFKPERSIST3 whitelist verification, INDEPENDENT of
 # the C loader (review-100 M2 + the whitelist-grammar rule, PROCESS §3).
-# The format is a FIXED 55-line shape — so this asserts it BY POSITION:
-# final byte LF, exactly 55 lines, each line matched at its exact index
+# The format is a FIXED 57-line shape — so this asserts it BY POSITION:
+# final byte LF, exactly 57 lines, each line matched at its exact index
 # by an anchored full-line pattern, the 50 rec rows carrying the
 # canonical c-major (c 0..4, s 0..9) progression at their exact
 # position (uniqueness by position, not a global count), each rec bit
 # pattern in the C loader's domain (== the -1.0 sentinel or finite in
-# [0,6000)), and a shasum recompute of the SUM seal over lines 1..54.
+# [0,6000)), and a shasum recompute of the SUM seal over lines 1..56.
 # Binary outcome: exact match -> pass; resembles-but-doesn't -> fail
 # closed (grammar_die). NO global counts, NO permissive scan.
 hex_lt() ( LC_ALL=C; [[ "$1" < "$2" ]]; ) # fixed 16-hex: byte order == numeric order
@@ -609,14 +612,21 @@ verify_persist_file() { # <file> <ctx>
   # line-derived expectation. Catches any dropped/added byte (embedded
   # NUL, stray CR, truncation) the per-line $(sed) reads would launder.
   nbytes="$(wc -c < "$f" | tr -d ' ')"
-  [ "$nbytes" = "$PERSIST_BYTES" ] || grammar_die "$ctx: file is $nbytes bytes != $PERSIST_BYTES (MLFKPERSIST1 fixed size; byte-count reconciliation failed — dropped/added/NUL byte)"
+  [ "$nbytes" = "$PERSIST_BYTES" ] || grammar_die "$ctx: file is $nbytes bytes != $PERSIST_BYTES (MLFKPERSIST3 fixed size; byte-count reconciliation failed — dropped/added/NUL byte)"
   nl="$(grep -c "" "$f")" || grammar_die "$ctx: cannot count lines"
-  [ "$nl" = 55 ] || grammar_die "$ctx: $nl lines != 55 (MLFKPERSIST1 is exactly 55 LF lines)"
-  L="$(sed -n 1p "$f")"; [ "$L" = "MLFKPERSIST1" ] || grammar_die "$ctx: line 1 is not the exact header ('$L')"
+  [ "$nl" = 57 ] || grammar_die "$ctx: $nl lines != 57 (MLFKPERSIST3 is exactly 57 LF lines)"
+  L="$(sed -n 1p "$f")"; [ "$L" = "MLFKPERSIST3" ] || grammar_die "$ctx: line 1 is not the exact header ('$L')"
   L="$(sed -n 2p "$f")"; [[ "$L" =~ ^turbo\ [01]$ ]] || grammar_die "$ctx: line 2 turbo grammar ('$L')"
   L="$(sed -n 3p "$f")"; [[ "$L" =~ ^lcancel\ [0-2]$ ]] || grammar_die "$ctx: line 3 lcancel grammar ('$L')"
   L="$(sed -n 4p "$f")"; [[ "$L" =~ ^tapjump\ [01]\ [01]\ [01]\ [01]$ ]] || grammar_die "$ctx: line 4 tapjump grammar ('$L')"
-  ln=5
+  # line 5: ctlstyle (MLFKPERSIST2+, fix_plan A4). Domain is the CtlStyle
+  # enum {0 normal, 1 box, 2 natural} — anchored, single digit, no
+  # permissive scan.
+  L="$(sed -n 5p "$f")"; [[ "$L" =~ ^ctlstyle\ [0-2]$ ]] || grammar_die "$ctx: line 5 ctlstyle grammar ('$L')"
+  # line 6: modonr (MLFKPERSIST3, owner ruling 2026-07-29) — 0 = the
+  # ratified Mod-on-L arrangement, 1 = swapped.
+  L="$(sed -n 6p "$f")"; [[ "$L" =~ ^modonr\ [01]$ ]] || grammar_die "$ctx: line 6 modonr grammar ('$L')"
+  ln=7
   for c in 0 1 2 3 4; do
     for s in 0 1 2 3 4 5 6 7 8 9; do
       L="$(sed -n "${ln}p" "$f")"
@@ -635,14 +645,14 @@ verify_persist_file() { # <file> <ctx>
       ln=$((ln + 1))
     done
   done
-  L="$(sed -n 55p "$f")"
-  [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 55 is not the SUM line ('$L')"
+  L="$(sed -n 57p "$f")"
+  [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 57 is not the SUM line ('$L')"
   sum="${BASH_REMATCH[1]}"
   # review-102 M-b: validate the COMPLETE recomputed shasum line grammar
   # (`<64hex>  -` on stdin), never a `cut -d' ' -f1` first-field scrape —
   # a truncated line with a plausible first field is corruption.
   local sumline
-  sumline="$(head -n 54 "$f" | shasum -a 256)" || fail "$ctx: shasum failed"
+  sumline="$(head -n 56 "$f" | shasum -a 256)" || fail "$ctx: shasum failed"
   [[ "$sumline" =~ ^([0-9a-f]{64})\ \ -$ ]] || grammar_die "$ctx: recomputed shasum line is not exactly '<64hex>  -' ('$sumline')"
   want="${BASH_REMATCH[1]}"
   [ "$want" = "$sum" ] || grammar_die "$ctx: SUM seal $sum != recomputed $want (torn/corrupt file passed as evidence)"
@@ -841,10 +851,18 @@ echo "    M1 witness OK: same-process PB refresh renders the new record (tss sho
 # --- [4] host teeth (COPIES; the probe flow boots the loader) -----------------
 echo "== [4/10] host teeth =="
 tooth_boot() { # <name> <persist-dir> <want-line>
-  local nm="$1" pd="$2" wantln="$3"
+  local nm="$1" pd="$2" wantln="$3" nterm
   run_host p00-persist-probe "$HP/tooth-$nm" "$pd"
   [ "$(count_xl "$HP/tooth-$nm/log.txt" "$wantln")" = 1 ] \
     || grammar_die "$nm: expected exactly one '$wantln' line"
+  # review-ctl r4: counting only the REQUESTED event let a broken loader
+  # pass while ALSO emitting a contradictory terminal event (e.g. both a
+  # grammar reset AND `loaded`). Exactly one TERMINAL event per boot, and
+  # it must be the expected one. `migrated from=1` is a prelude, not a
+  # terminal event, so it is deliberately not counted here.
+  nterm="$(grep -c '^foh_persist: \(loaded\|reset cause=\)' "$HP/tooth-$nm/log.txt")" || true
+  [ "$nterm" = 1 ] \
+    || grammar_die "$nm: expected exactly ONE terminal loaded/reset event, saw $nterm"
 }
 # T-H1 corrupt-sum: flip one rec nibble, SUM left stale
 mk_pdir "$HP/th1" "$FILE_REC"
@@ -855,19 +873,22 @@ rc=0; cmp -s "$HP/th1/mlfk-persist.dat" "$FILE_REC" || rc=$?
 tooth_boot h1 "$PWD/$HP/th1" "foh_persist: reset cause=corrupt detail=sum"
 teeth=$((teeth + 1))
 echo "    T-H1 OK: nibble-flipped rec dies on the SUM seal (loud reset)"
-# T-H2 version bump WITH a recomputed (valid) SUM
+# T-H2 unsupported-version bump WITH a recomputed (valid) SUM.
+# review-ctl r1 / the 2026-07-29 v3 bump: v1 AND v2 are now legitimate
+# MIGRATIONS rather than resets, and v3 is the CURRENT version — so the
+# unsupported-version tooth moves to v4, a version this build cannot know.
 mk_pdir "$HP/th2" -
-{ printf 'MLFKPERSIST2\n'; tail -n +2 "$FILE_REC" | head -n 53; } > "$HP/th2/body"
+{ printf 'MLFKPERSIST4\n'; tail -n +2 "$FILE_REC" | head -n 55; } > "$HP/th2/body"
 { cat "$HP/th2/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th2/body" | cut -d' ' -f1)"; } \
   > "$HP/th2/mlfk-persist.dat"
 rm -f "$HP/th2/body"
 tooth_boot h2 "$PWD/$HP/th2" "foh_persist: reset cause=version"
 teeth=$((teeth + 1))
-echo "    T-H2 OK: version bump (checksum-valid) resets loudly"
+echo "    T-H2 OK: unsupported version (checksum-valid) resets loudly"
 # T-H3 domain: NaN record bits with a recomputed SUM
 mk_pdir "$HP/th3" -
 sed "s/^rec $REC_CHAR $REC_TSTAGE $REC_BITS\$/rec $REC_CHAR $REC_TSTAGE 7ff8000000000000/" \
-  "$FILE_REC" | head -n 54 > "$HP/th3/body"
+  "$FILE_REC" | head -n 56 > "$HP/th3/body"
 { cat "$HP/th3/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th3/body" | cut -d' ' -f1)"; } \
   > "$HP/th3/mlfk-persist.dat"
 rm -f "$HP/th3/body"
@@ -924,6 +945,161 @@ cmp "$HP/th8/mlfk-persist.dat" "$FILE_REC" \
   || fail "T-H8: the published file bytes are not exact under the degraded save"
 teeth=$((teeth + 1))
 echo "    T-H8 OK: dir-open failure -> loud saved-nodirsync (never plain saved), bytes exact"
+# T-H9 (review-ctl r2, strengthened r3): a GENUINE MLFKPERSIST1 file
+# MIGRATES — and the migration is proven BY BYTES, not by log lines. A
+# reset (or a silent field/record drop) here would destroy every
+# target-test personal best on an upgrading device, so this is a
+# data-loss tooth. Observing only `migrated`+`loaded` would still pass
+# for a loader that discarded every setting and record (review-ctl r3),
+# hence the byte-for-byte comparison below.
+#
+# Fixture: the settings lines of a real v2 file, but with ALL 50 record
+# slots SEEDED with distinct non-default values (review-ctl r4). Using
+# $FILE_P01's records directly would be a dead tooth: those are all the
+# -1 default, so a loader that discarded every record would start from
+# the same state and still produce the expected bytes. Seeded records
+# make loss detectable — 49 slots must survive untouched while one
+# improves.
+th9_rows() { # <bits for the target slot> -> the 50 canonical rec rows
+  local tb="$1" i=0 c s bits
+  for c in 0 1 2 3 4; do
+    for s in 0 1 2 3 4 5 6 7 8 9; do
+      if [ "$c" = "$REC_CHAR" ] && [ "$s" = "$REC_TSTAGE" ]; then
+        bits="$tb"
+      else
+        bits="$(printf '4031%012x' "$i")" # ~17s: finite, in [0,6000)
+      fi
+      printf 'rec %d %d %s\n' "$c" "$s" "$bits"
+      i=$((i + 1))
+    done
+  done
+}
+mk_pdir "$HP/th9" -
+{ printf 'MLFKPERSIST1\n'; sed -n '2,4p' "$FILE_P01"; th9_rows "$WORSE_BITS"; } \
+  > "$HP/th9/body"
+{ cat "$HP/th9/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th9/body" | cut -d' ' -f1)"; } \
+  > "$HP/th9/mlfk-persist.dat"
+rm -f "$HP/th9/body"
+[ "$(grep -c "" "$HP/th9/mlfk-persist.dat")" = 55 ] \
+  || fail "T-H9: the v1 fixture is not 55 lines (fixture construction broken — dead tooth)"
+[ "$(grep -c '^rec .* 4031' "$HP/th9/mlfk-persist.dat")" = 49 ] \
+  || fail "T-H9: expected 49 seeded non-target records in the fixture (dead tooth)"
+# EXPECTED post-migration save, built INDEPENDENTLY of the loader: the
+# same settings, the SAME 49 seeded records untouched, the target slot
+# improved to $REC_BITS, and ctlstyle 1 — because the migration must
+# carry the ratified BOX mapping forward rather than re-map to the
+# fresh-install NATURAL.
+{ printf 'MLFKPERSIST3\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 1\n';
+  printf 'modonr 0\n'; th9_rows "$REC_BITS"; } > "$HP/th9.expect.body"
+{ cat "$HP/th9.expect.body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th9.expect.body" | cut -d' ' -f1)"; } \
+  > "$HP/th9.expect.dat"
+rm -f "$HP/th9.expect.body"
+rc=0; cmp -s "$HP/th9/mlfk-persist.dat" "$HP/th9.expect.dat" || rc=$?
+[ "$rc" = 1 ] || fail "T-H9: fixture and expectation are already identical (dead tooth)"
+rc=0
+MLFK_PERSIST_DIR="$PWD/$HP/th9" \
+"$BUILD/foh_dev_headless" --tooth-persist-finish "$REC_CHAR" "$REC_TSTAGE" \
+  "$REC_BITS" 2> "$HP/th9.log" || rc=$?
+[ "$rc" = 0 ] || { cat "$HP/th9.log" >&2; fail "T-H9: the migrate+improve+save run failed"; }
+[ "$(count_xl "$HP/th9.log" "foh_persist: migrated from=1")" = 1 ] \
+  || grammar_die "T-H9: expected exactly one 'foh_persist: migrated from=1'"
+[ "$(count_xl "$HP/th9.log" "foh_persist: loaded")" = 1 ] \
+  || grammar_die "T-H9: a migrated v1 file must also report exactly one 'loaded'"
+c="$(grep -c '^foh_persist: reset cause=' "$HP/th9.log")" || true
+[ "$c" = 0 ] \
+  || grammar_die "T-H9: a reset occurred while migrating a VALID v1 file (PB data-loss regression)"
+verify_persist_file "$HP/th9/mlfk-persist.dat" "T-H9 migrated"
+cmp "$HP/th9/mlfk-persist.dat" "$HP/th9.expect.dat" \
+  || fail "T-H9: the migrated+saved file != the independently built v3 (settings, the 49 untouched target records, the improved slot, or the carried-forward BOX style were not preserved) — the PB data-loss regression"
+teeth=$((teeth + 1))
+echo "    T-H9 OK: genuine v1 migrates byte-for-byte (settings + 49 seeded records intact + 1 improved, style carried forward as BOX, no reset)"
+# T-H10 a v1 file that DOES carry the newer lines is not a v1 file: the
+# migration arm skips them, so the rec-row parser meets ctlstyle and the
+# file must die on grammar. (Guards the migration arms against becoming a
+# permissive "skip whatever is there" path.)
+mk_pdir "$HP/th10" -
+{ printf 'MLFKPERSIST1\n'; sed -n '2,56p' "$FILE_REC"; } > "$HP/th10/body"
+{ cat "$HP/th10/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th10/body" | cut -d' ' -f1)"; } \
+  > "$HP/th10/mlfk-persist.dat"
+rm -f "$HP/th10/body"
+tooth_boot h10 "$PWD/$HP/th10" "foh_persist: reset cause=corrupt detail=grammar"
+teeth=$((teeth + 1))
+echo "    T-H10 OK: v1 header WITH the newer lines dies on grammar"
+# T-H11 the mirror: a v3 file MISSING its ctlstyle line must die on
+# grammar too (the version arms must not be interchangeable).
+mk_pdir "$HP/th11" -
+{ printf 'MLFKPERSIST3\n'; sed -n '2,4p;6,56p' "$FILE_REC"; } > "$HP/th11/body"
+{ cat "$HP/th11/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th11/body" | cut -d' ' -f1)"; } \
+  > "$HP/th11/mlfk-persist.dat"
+rm -f "$HP/th11/body"
+tooth_boot h11 "$PWD/$HP/th11" "foh_persist: reset cause=corrupt detail=grammar"
+teeth=$((teeth + 1))
+echo "    T-H11 OK: v3 header WITHOUT a ctlstyle line dies on grammar"
+# T-H12 (owner ruling 2026-07-29): a v3 file MISSING its modonr line must
+# die on grammar — the new field is not optional in the current version.
+mk_pdir "$HP/th12" -
+{ printf 'MLFKPERSIST3\n'; sed -n '2,5p;7,56p' "$FILE_REC"; } > "$HP/th12/body"
+{ cat "$HP/th12/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th12/body" | cut -d' ' -f1)"; } \
+  > "$HP/th12/mlfk-persist.dat"
+rm -f "$HP/th12/body"
+tooth_boot h12 "$PWD/$HP/th12" "foh_persist: reset cause=corrupt detail=grammar"
+teeth=$((teeth + 1))
+echo "    T-H12 OK: v3 header WITHOUT a modonr line dies on grammar"
+# T-H13 (owner ruling 2026-07-29): a GENUINE v2 file MIGRATES to v3 by
+# BYTES — its ctlstyle carries over UNCHANGED (the enum numbers are
+# frozen) and modonr takes the ratified 0. Same data-loss shape as T-H9:
+# settings + 49 seeded records survive, one improves.
+mk_pdir "$HP/th13" -
+{ printf 'MLFKPERSIST2\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 1\n';
+  th9_rows "$WORSE_BITS"; } > "$HP/th13/body"
+{ cat "$HP/th13/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th13/body" | cut -d' ' -f1)"; } \
+  > "$HP/th13/mlfk-persist.dat"
+rm -f "$HP/th13/body"
+[ "$(grep -c "" "$HP/th13/mlfk-persist.dat")" = 56 ] \
+  || fail "T-H13: the v2 fixture is not 56 lines (fixture construction broken — dead tooth)"
+# expectation: identical to T-H9's (ctlstyle 1 preserved, modonr 0 filled)
+rc=0
+MLFK_PERSIST_DIR="$PWD/$HP/th13" \
+"$BUILD/foh_dev_headless" --tooth-persist-finish "$REC_CHAR" "$REC_TSTAGE" \
+  "$REC_BITS" 2> "$HP/th13.log" || rc=$?
+[ "$rc" = 0 ] || { cat "$HP/th13.log" >&2; fail "T-H13: the v2 migrate+improve+save run failed"; }
+[ "$(count_xl "$HP/th13.log" "foh_persist: migrated from=2")" = 1 ] \
+  || grammar_die "T-H13: expected exactly one 'foh_persist: migrated from=2'"
+[ "$(count_xl "$HP/th13.log" "foh_persist: loaded")" = 1 ] \
+  || grammar_die "T-H13: a migrated v2 file must also report exactly one 'loaded'"
+c="$(grep -c '^foh_persist: reset cause=' "$HP/th13.log")" || true
+[ "$c" = 0 ] \
+  || grammar_die "T-H13: a reset occurred while migrating a VALID v2 file (PB data-loss regression)"
+verify_persist_file "$HP/th13/mlfk-persist.dat" "T-H13 migrated"
+cmp "$HP/th13/mlfk-persist.dat" "$HP/th9.expect.dat" \
+  || fail "T-H13: the migrated v2 file != the independently built v3 (settings, the 49 untouched records, the improved slot, the PRESERVED ctlstyle, or the ratified modonr default were not carried forward)"
+teeth=$((teeth + 1))
+echo "    T-H13 OK: genuine v2 migrates byte-for-byte (ctlstyle preserved, modonr ratified default)"
+# T-H14 (review-ctl n1): a v2 file may NOT carry a v3-era style value, and
+# may NOT carry a modonr line. MLFKPERSIST2 predates CTL_STYLE_NATURAL, so
+# its ctlstyle grammar was {0,1}; accepting `ctlstyle 2` would install a
+# state no v2 writer could produce. Both fixtures are RESEALED so they die
+# on the version-specific grammar, not on the SHA gate.
+mk_pdir "$HP/th14" -
+{ printf 'MLFKPERSIST2\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 2\n';
+  th9_rows "$WORSE_BITS"; } > "$HP/th14/body"
+{ cat "$HP/th14/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th14/body" | cut -d' ' -f1)"; } \
+  > "$HP/th14/mlfk-persist.dat"
+rm -f "$HP/th14/body"
+tooth_boot h14 "$PWD/$HP/th14" "foh_persist: reset cause=corrupt detail=grammar"
+teeth=$((teeth + 1))
+echo "    T-H14 OK: v2 claiming the v3-era ctlstyle 2 dies on grammar"
+# T-H15 the mirror: a v2 header that ALSO carries a modonr line must die —
+# v2's grammar ends at ctlstyle, so the rec parser meets `modonr`.
+mk_pdir "$HP/th15" -
+{ printf 'MLFKPERSIST2\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 1\n';
+  printf 'modonr 0\n'; th9_rows "$WORSE_BITS"; } > "$HP/th15/body"
+{ cat "$HP/th15/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th15/body" | cut -d' ' -f1)"; } \
+  > "$HP/th15/mlfk-persist.dat"
+rm -f "$HP/th15/body"
+tooth_boot h15 "$PWD/$HP/th15" "foh_persist: reset cause=corrupt detail=grammar"
+teeth=$((teeth + 1))
+echo "    T-H15 OK: v2 header WITH a modonr line dies on grammar"
 # H1 standing teeth (review-100): the REAL bootid_judge body must reject
 # every non-cycle and accept a valid one (dead-tooth guard). Run in a
 # subshell (bootid_judge's fail() exits) and require the exit class.
@@ -1231,7 +1407,7 @@ mb_reject embed
 head -c $((PERSIST_BYTES - 1)) "$FILE_REC" > "$mbc/short1.dat"
 mb_reject short1
 # SUM seal mismatch at the EXACT byte length (a nibble flip in a rec row,
-# SUM left stale): 1366 bytes, final LF intact -> must reject at the seal
+# SUM left stale): $PERSIST_BYTES bytes, final LF intact -> must reject at the seal
 # recompute, not slip through a permissive field parse.
 sed "s/^rec $REC_CHAR $REC_TSTAGE $REC_BITS\$/rec $REC_CHAR $REC_TSTAGE 402e000000000000/" \
   "$FILE_REC" > "$mbc/sealmiss.dat"

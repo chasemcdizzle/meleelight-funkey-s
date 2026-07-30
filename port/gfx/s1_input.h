@@ -1,8 +1,20 @@
 // port/gfx/s1_input.h — the S1 "One-Mod + C-layer" input layer (M3
 // task 5; PLAN §6 verbatim, issues #6/#9, prototype
 // prototypes/control-mapping/funkeyMapping.js — the verified resolver
-// this header translates for scheme S1 ONLY: L=Mod, R=shield,
-// Y(hold)=C-stick layer, A=attack, B=special, X=jump, Start=pause).
+// this header owns THREE styles since fix_plan A4 (ctl_style.h):
+//   CTL_STYLE_BOX     = S1 verbatim — Mod on one shoulder, shield on the
+//                       other (SWAPPABLE since 2026-07-29),
+//                       Y(hold)=C-stick layer, A=attack, B=special,
+//                       X=jump, Start=pause. Chase-ratified 2026-07-17;
+//                       the TABLE is NOT to be changed.
+//   CTL_STYLE_NORMAL  = the same table minus the Mod family, with L
+//                       joining R as a second shield button (A3).
+//   CTL_STYLE_NATURAL = the ssb64-modelled 1:1 scheme and the DEFAULT —
+//                       full deflection, no modifiers, no C-layer,
+//                       X=Z(grab), Y=jump, both shoulders shield.
+// The pre-A4 entry points s1_resolve()/s1_input_row() stay pinned to
+// (BOX, Mod-on-L), so callers that predate the selector are
+// bit-identical.)
 //
 // DATA-DRIVEN chord table (a table, not code branches): priority-ordered
 // rows matched on {C-layer, Mod, shield, d-pad class, dy sign}; each row
@@ -35,6 +47,7 @@
 #include <stdlib.h>
 
 #include "../sim/input/input.h" // MlInput, nullInput, deaden, meleeRound
+#include "ctl_style.h"          // CtlStyle (fix_plan A4)
 #include "platform.h"           // PlatformInput
 
 // d-pad shape classes after SOCD resolution.
@@ -83,6 +96,93 @@ static inline const S1ChordRow *s1_chord_table(int *count) {
   return T;
 }
 
+// The NORMAL coordinate table (fix_plan A4) — the box table above with
+// the Mod family (rows "L+R-diagonal-wavedash", "L-diagonal-23deg",
+// "L-horizontal-walk", "L-vertical-tilt") REMOVED and the surviving
+// rows' mod requirement relaxed to "any", because in this style L is
+// not Mod at all: it is a second shield button (see ctl_roles below, and
+// fix_plan A3). Every magnitude here already appears in the
+// ratified box table — 1.0 cardinals, 0.7000 diagonals, and the 0.6875
+// shield-drop y. NO new coordinate was invented for this style.
+// Same first-match-wins order: clayer > shield-drop diagonal > plain
+// diagonal > horizontal > vertical.
+static inline const S1ChordRow *ctl_normal_chord_table(int *count) {
+  static const S1ChordRow T[] = {
+      // --- Y C-layer: identical to box (the only C-stick this device
+      //     can offer; removing it would remove functionality) --------
+      {true, -1, -1, S1_PAD_H, 0, 1.0, 0.0, "clayer-horizontal"},
+      {true, -1, -1, S1_PAD_V, 0, 0.0, 1.0, "clayer-vertical"},
+      {true, -1, -1, S1_PAD_DIAG, 0, 0.7000, 0.7000, "clayer-diagonal"},
+      // --- shield + down-diagonal = shield drop (and a legal wavedash
+      //     angle). Reached by EITHER shoulder in this style. ----------
+      {false, -1, 1, S1_PAD_DIAG, -1, 0.7000, 0.6875, "shield-down-diagonal-shield-drop"},
+      {false, -1, -1, S1_PAD_DIAG, 0, 0.7000, 0.7000, "plain-diagonal"},
+      // --- plain full-range stick: no Mod band in this style ---------
+      {false, -1, -1, S1_PAD_H, 0, 1.0, 0.0, "plain-horizontal-dash"},
+      // --- shield + straight down = (0,-1.0) spotdodge, same row -----
+      {false, -1, -1, S1_PAD_V, 0, 0.0, 1.0, "plain-vertical"},
+  };
+  *count = (int)(sizeof T / sizeof T[0]);
+  return T;
+}
+
+// The NATURAL coordinate table (owner ruling 2026-07-29) — the ssb64
+// scheme's stick plane: FULL deflection, nothing else. No Mod family and
+// no C-layer rows. There is no DEDICATED shield-drop row either, but the
+// drop is still reachable: GUARD's PASS arm needs lsY < -0.65 while its
+// spotdodge arm needs a STRICT lsY < -0.7, so the plain -0.7 diagonal
+// lands in the [-0.70,-0.65) drop band (GUARD.c:79-99; review-ctl n1
+// corrected an earlier claim that this was lost). Both shoulders shield,
+// so no row inspects mod OR shield. Every magnitude here already appears
+// in the ratified BOX table: 1.0 cardinals, 0.7000 diagonals.
+static inline const S1ChordRow *ctl_natural_chord_table(int *count) {
+  static const S1ChordRow T[] = {
+      {false, -1, -1, S1_PAD_DIAG, 0, 0.7000, 0.7000, "natural-diagonal"},
+      {false, -1, -1, S1_PAD_H, 0, 1.0, 0.0, "natural-horizontal"},
+      {false, -1, -1, S1_PAD_V, 0, 0.0, 1.0, "natural-vertical"},
+  };
+  *count = (int)(sizeof T / sizeof T[0]);
+  return T;
+}
+
+// Style -> chord table. Total over CtlStyle by construction; an
+// out-of-domain style is a caller bug, not a runtime condition
+// (ctl_style_set refuses those), so it resolves to the default.
+static inline const S1ChordRow *ctl_style_table(CtlStyle style, int *count) {
+  switch (style) {
+  case CTL_STYLE_BOX: return s1_chord_table(count);
+  case CTL_STYLE_NORMAL: return ctl_normal_chord_table(count);
+  case CTL_STYLE_NATURAL:
+  default: return ctl_natural_chord_table(count);
+  }
+}
+
+// Does this style drive the C-stick from a held Y? BOX/NORMAL yes;
+// NATURAL spends Y on jump instead (ctl_style.h).
+static inline bool ctl_style_has_clayer(CtlStyle style) {
+  return style == CTL_STYLE_BOX || style == CTL_STYLE_NORMAL;
+}
+
+// The ROLE resolution, in ONE place (fix_plan A3 + the 2026-07-29
+// Mod-shoulder swap). `modOnR` is orthogonal to style: it names which
+// shoulder carries Mod in BOX, and is a no-op in NATURAL/NORMAL where
+// both shoulders shield.
+//   BOX     : Mod on one shoulder, shield on the other (swappable).
+//   NORMAL  : no Mod; L and R BOTH shield (so L shields + air-dodges).
+//   NATURAL : no Mod, no C-layer; L and R BOTH shield.
+static inline void ctl_roles(CtlStyle style, bool modOnR,
+                             const PlatformInput *p, bool *clayer,
+                             bool *mod, bool *shield) {
+  *clayer = ctl_style_has_clayer(style) ? p->y : false;
+  if (style == CTL_STYLE_BOX) {
+    *mod = modOnR ? p->r : p->l;
+    *shield = modOnR ? p->l : p->r;
+  } else {
+    *mod = false;
+    *shield = (p->l || p->r);
+  }
+}
+
 // Resolved chord state (exposed for the unit sweep: row identity +
 // pre-deaden quantized coordinates).
 typedef struct {
@@ -95,7 +195,8 @@ typedef struct {
 // meleeRound == the 1/80 quantizer (melee_inputs.h; js_round semantics).
 static inline double s1_q(double x) { return meleeRound(x); }
 
-static inline S1Resolved s1_resolve(const PlatformInput *p) {
+static inline S1Resolved s1_resolve_style(const PlatformInput *p,
+                                          CtlStyle style, bool modOnR) {
   S1Resolved r;
   // SOCD: opposite cardinals -> NEUTRAL axis (meleelight's own keyboard
   // policy; unpressable on the physical cross d-pad).
@@ -103,9 +204,7 @@ static inline S1Resolved s1_resolve(const PlatformInput *p) {
   r.dy = (p->up ? 1 : 0) - (p->down ? 1 : 0);
   if (p->right && p->left) r.dx = 0;
   if (p->up && p->down) r.dy = 0;
-  r.clayer = p->y;
-  r.mod = p->l;
-  r.shield = p->r;
+  ctl_roles(style, modOnR, p, &r.clayer, &r.mod, &r.shield);
   r.lsX = 0.0;
   r.lsY = 0.0;
   r.csX = 0.0;
@@ -117,7 +216,7 @@ static inline S1Resolved s1_resolve(const PlatformInput *p) {
                                              : S1_PAD_V;
   const int dySign = r.dy < 0 ? -1 : (r.dy > 0 ? 1 : 0);
   int n = 0;
-  const S1ChordRow *T = s1_chord_table(&n);
+  const S1ChordRow *T = ctl_style_table(style, &n);
   for (int i = 0; i < n; i++) {
     const S1ChordRow *row = &T[i];
     if (row->clayer != r.clayer) continue;
@@ -139,26 +238,51 @@ static inline S1Resolved s1_resolve(const PlatformInput *p) {
     r.row = row->name;
     return r;
   }
-  // The table is total over {clayer} x {mod} x {pad} (the exhaustive
-  // 2048-combo sweep proves it) — reaching here is a table defect.
-  fprintf(stderr, "s1_input: no chord row matched (clayer=%d mod=%d "
-                  "shield=%d dx=%d dy=%d)\n",
-          (int)r.clayer, (int)r.mod, (int)r.shield, r.dx, r.dy);
+  // Each style's table is total over the reachable
+  // {clayer} x {mod} x {shield} x {pad} x {dySign} space (the
+  // exhaustive 2048-combo sweep, per style, proves it) — reaching here
+  // is a table defect, not a runtime condition.  NOTE the shield and
+  // dySign dimensions: the BOX shield-drop row is dySign-guarded, and
+  // NORMAL's shield dimension is fed by L||R, not R alone.
+  fprintf(stderr, "s1_input: no chord row matched (style=%d modOnR=%d "
+                  "clayer=%d mod=%d shield=%d dx=%d dy=%d)\n",
+          (int)style, (int)modOnR, (int)r.clayer, (int)r.mod, (int)r.shield,
+          r.dx, r.dy);
   abort();
+}
+
+// The ratified S1 (== BOX) resolver, pinned. Callers that predate the
+// A4 style selector keep this exact behaviour.
+static inline S1Resolved s1_resolve(const PlatformInput *p) {
+  return s1_resolve_style(p, CTL_STYLE_BOX, false);
 }
 
 // The pollInputs-seam row: a complete 22-field FINAL Melee-unit Input.
 // Mirrors the prototype funkeyPoll assembly exactly: ls/cs deadened
 // (0.28 — a structural no-op for every nonzero table value, kept for
 // parity), raw* carry the pre-deaden quantized values, digital shield
-// r=true rA=1.0, y/z/l/du/dl/dr/dd never set by S1.
-static inline MlInput s1_input_row(const PlatformInput *p) {
-  const S1Resolved r = s1_resolve(p);
+// r=true rA=1.0. l/du/dl/dr/dd are never set by ANY style; y/z are never
+// set by BOX/NORMAL and ARE set by NATURAL (jump / grab — see below).
+static inline MlInput s1_input_row_style(const PlatformInput *p,
+                                         CtlStyle style, bool modOnR) {
+  const S1Resolved r = s1_resolve_style(p, style, modOnR);
   MlInput in = nullInput();
   in.a = p->a;
   in.b = p->b;
-  in.x = p->x;
   in.s = p->start;
+  // BUTTON plane, style-aware (owner ruling 2026-07-29). BOX/NORMAL keep
+  // the ratified assignment: X = jump, Y = the C-layer modifier (read by
+  // ctl_roles, not emitted), and z/y are never set. NATURAL follows the
+  // ssb64 port instead — X = Z (grab), Y = JUMP — the one deviation from
+  // ssb64 being that Y is jump rather than C-up, because tap jump is
+  // forced off on this device and ssb64's layout would otherwise leave
+  // Natural with no jump at all (ctl_style.h).
+  if (ctl_style_has_clayer(style)) {
+    in.x = p->x;
+  } else {
+    in.z = p->x; // Z: grab (and lightshield-grab upstream)
+    in.y = p->y; // the second jump button; Melee treats X and Y alike
+  }
   in.lsX = deaden(r.lsX, ml_deadzoneConst());
   in.lsY = deaden(r.lsY, ml_deadzoneConst());
   in.csX = deaden(r.csX, ml_deadzoneConst());
@@ -174,4 +298,27 @@ static inline MlInput s1_input_row(const PlatformInput *p) {
   return in;
 }
 
+// The ratified S1 (== BOX) seam row, pinned. Every pre-A4 call site and
+// the 15 pinned PLAN §6 checks keep this exact behaviour.
+static inline MlInput s1_input_row(const PlatformInput *p) {
+  return s1_input_row_style(p, CTL_STYLE_BOX, false);
+}
+
+// --- A4 HANDOVER (Controls screen, menus lane) ------------------------
+// This header ships the MODEL only. To make the selector live:
+//   1. add port/gfx/ctl_style.c to the FOH link line(s);
+//   2. swap the two liveRow call sites in port/foh/foh_dev.c (and
+//      port/gfx/gfx_app.c) from
+//          s1_input_row(&pin)
+//      to  s1_input_row_style(&pin, ctl_style_get(), ctl_mod_on_r_get());
+//   3. Controls screen — TWO independent rows:
+//        style:    ctl_style_set(0..CTL_STYLE_COUNT-1) / ctl_style_name()
+//        shoulder: ctl_mod_on_r_set(bool) / ctl_mod_shoulder_name(bool)
+//      (the shoulder row only changes BOX; it is a no-op in the other
+//      two styles, so the screen may grey it out when style != Box);
+//   4. after foh_persist_load(&p):
+//        ctl_style_set(p.ctlStyle); ctl_mod_on_r_set(p.modOnR != 0);
+//      before foh_persist_save(&p):
+//        p.ctlStyle = (int)ctl_style_get(); p.modOnR = ctl_mod_on_r_get();
+// Until step 2 lands, behaviour on device is byte-identical to today.
 #endif // GFX_S1_INPUT_H

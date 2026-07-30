@@ -36,11 +36,32 @@ the port cost for a new target is the DEVICE-BOUND column, not the sim.
   (iter 99); the Layer-2 letterbox/legibility constants apply as for
   the VS renderer.
 - The persistence chokepoint (`port/foh/foh_persist.{h,c}`, iter
-  100): the MLFKPERSIST1 format (checksummed, hex16 bit-pattern
+  100): the MLFKPERSIST3 format (checksummed, hex16 bit-pattern
   doubles — strtod-free by design, so device-libc parse quirks are
   structurally out), the loud reset-to-defaults semantics, and the
   atomic tmp+fsync+rename save are device-agnostic (proven: host
-  arm64 macOS file bytes == armv7 musl device bytes). Only the
+  arm64 macOS file bytes == armv7 musl device bytes). **v3** (fix_plan
+  A4) is exactly 57 LF lines: v2 added `ctlstyle` as line 5 and v3
+  WIDENED its domain — v2's grammar is the FROZEN historical `[0-1]`
+  (0 = CTL_STYLE_NORMAL, 1 = CTL_STYLE_BOX), while v3 accepts `[0-2]`
+  (2 = CTL_STYLE_NATURAL; `port/gfx/ctl_style.h`). Each version is
+  validated against ITS OWN domain, so a v2 file claiming `ctlstyle 2`
+  is REFUSED rather than installing a state no v2 writer could produce.
+  v3 also added `modonr [01]` as line 6 (the
+  Mod-shoulder swap, 0 = the ratified Mod-on-L), shifting the 50 `rec`
+  rows to lines 7..56 and the `SUM` seal to line 57. Older files are
+  MIGRATED, not reset — same seal, all settings and all 50 records
+  carried forward, emitting `foh_persist: migrated from=<1|2>` before
+  `loaded`. Both older formats are strict PREFIXES of v3, so one parse
+  serves all three: from v2 the `ctlStyle` carries over UNCHANGED (the
+  CtlStyle enum numbers are FROZEN for exactly this reason — a port must
+  not renumber them), from v1 it becomes BOX (the only mapping a v1
+  build had), and `modOnR` always takes the ratified 0 so an upgrade
+  never silently moves a binding. NATURAL is the default for a
+  fresh/reset install only, and any version >= 4 still resets. A new
+  port must implement the v3 grammar AND both migration arms — dropping
+  them destroys every target-test personal best on an upgrading device.
+  Only the
   DEFAULT DIRECTORY (`/mnt/mlfk-data` — the FunKey SD data dir) and
   the dir-fsync EINVAL/ENOTSUP tolerance (FAT class) are
   target-flavored; a new target re-points the default dir
@@ -100,12 +121,20 @@ A new device = write one new backend TU (+ audio open params).
   rather than widened, so a cadence that no longer fits them FAILS
   LOUD on the first device run instead of drifting — but until that
   run they are an unvalidated envelope, not a calibrated one.
-- Input: the S1 chord table (PLAN §6) maps the FunKey's EXACT control
-  set (d-pad + 8 buttons, letter keysyms u/d/l/r/a/b/x/y/s/k/n/q).
-  A device with real analog or more buttons gets a NEW mapping table
-  (data-driven by design — `port/gfx/s1_input.h`); the S1 semantics
-  (SOCD, tap-jump-off, digital shield) are Chase-ratified for THIS
-  hardware. The logical-button → letter-keysym mapping itself is the
+- Input: the chord tables map the FunKey's EXACT control set (d-pad +
+  8 buttons, letter keysyms u/d/l/r/a/b/x/y/s/k/n/q). Since fix_plan A4
+  there are THREE selectable styles plus an orthogonal Mod-shoulder swap
+  (`port/gfx/ctl_style.h` owns the enum + cells; `port/gfx/s1_input.h`
+  owns the tables): NATURAL (the default — ssb64-modelled 1:1, full
+  deflection, X=Z, Y=jump, both shoulders shield, no C-layer), NORMAL,
+  and BOX (the Chase-ratified S1 table, PLAN §6). A device with real
+  analog or more buttons gets NEW tables (data-driven by design); the S1
+  semantics (SOCD, tap-jump-off, digital shield) are Chase-ratified for
+  THIS hardware, and the BOX table must not be changed without his
+  sign-off. NOTE the tap-jump-off coupling is load-bearing for NATURAL:
+  a digital d-pad at full deflection would tap-jump on every upward DI,
+  which is why NATURAL spends Y on a jump button rather than ssb64's
+  C-up. A target with a real analog stick can revisit that. The logical-button → letter-keysym mapping itself is the
   frozen SSOT `port/foh/keymap-frozen.txt` (iter 95): ONE file
   consumed by the flow-script generator, compiled into foh_dev
   (`--dump-keymap`), and asserted against the platform backend's poll
