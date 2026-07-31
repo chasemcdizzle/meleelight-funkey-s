@@ -21253,3 +21253,85 @@ empty, no rig lock. **C24 did not recur.**
 and **not by it** (the driver's own R4 entry, already uncommitted when it
 arrived) rather than silently working around it. Writers are barred from that
 file and it respected the bar.
+
+## driver — 2026-07-31 — R4 second Tier A+ review = NO-GO again (3 HIGH). NOT converging. Driver recommends SHELVING the judge and keeping only the producer. OWNER DECISION REQUIRED.
+
+**Verdict driver-verified cold:** `.loop/review-r4-tierA2-opus-20260731.log`,
+22,712 B, 419 lines, **0 NULs**, **0 anchored `^VERDICT: GO$`**, terminal
+`VERDICT: NO-GO` at :419 (last non-empty line). Third independent adversarial
+pass on this lane; second on the judge specifically.
+
+**THE THROUGH-LINE, and it is the finding that decides this:**
+> *"Each of the three fixes closed exactly the measured instance and left the
+> class — which is CLAUDE.md HARD RULE 8's own hierarchy inverted three times."*
+
+HARD RULE 8 (ZOOM OUT) requires fixing the CLASS, not the one-off. R4 fixed
+three measured instances and left three live classes. Measured:
+
+- **H1 (round ordering) — NARROWED, NOT CLOSED.** The original attack is now
+  refused (verified). But ordering is judged on `started-utc` ONLY; `ended-utc`
+  is parsed and **never compared across rounds**. New measured close: round 1
+  codex NO-GO (started 20:00:30, **ended 20:00:39**) + round 9 codex GO (started
+  20:00:32, **ended 20:00:33**), identical scope sha -> `ARC CLOSED`. Same-second
+  ties also close.
+- **H2 (foreign quoted GO) — PARTIALLY CLOSED, and the fix creates a PERVERSE
+  INCENTIVE.** The both-verdicts shape VOIDs correctly. But a region carrying
+  **only** a foreign anchored GO and no honest verdict yields
+  `verdict: GO, anchored-go: 1, anchored-nogo: 0` and closed an arc via §11.
+  **So the fix rewards DELETING your honest NO-GO** — keep it and you VOID,
+  strip it and the foreign GO stands. It also defeats the `no-verdict` VOID.
+- **H3 ("codex proven failed") — PARTIALLY CLOSED.** The eligibility rule is a
+  **2-item blacklist over 8 VOID reasons**. Two eligible bases manufactured in
+  **0 seconds with no repo write**: codex off PATH (rc 127, `reviewer-failed`)
+  and `decision-malformed` (rc 0) — the latter reachable from ONE PROMPT
+  SENTENCE, and the prompt-equality rule then forces that same prompt onto the
+  fallback pair. Both closed arcs via `process11-fallback-dual-go`.
+- **NEW HIGH — the binding DISCLOSURE is itself false.** FORMAT.md §7 states the
+  open output-quiescence item "produces a REFUSAL, not a false GO". **It does
+  not.** The harness waits on the reviewer's direct pid on a 0.25 s poll before
+  appending the terminator, so a background descendant writes INSIDE the verdict
+  region. **Measured 3/3: a reviewer that decided nothing produced a
+  self-consistent `verdict: GO` and closed an arc on the §11 path.** A false
+  safety disclosure is worse than the underlying bug, because the whole design
+  rests on §7 being the honest bound.
+
+**GENUINELY GOOD, and not to be lost:** nothing regressed — paste-after-run,
+NUL/truncation/seal, bundle cross-wiring, synthetic back door, reused arc id,
+VOID precedence replay all still refuse. Prior M3 (RVERDICT2 discriminator), L1,
+L3 genuinely fixed. The done-check reproduces cold in a reviewer-built repo
+(`REVIEW ARTIFACT TEETH OK (185/185 fail closed)`, rc 0) and the specimen pins
+verify. §6's RETRACTED coverage claim and the scope-membership disposition are
+**defensible and correctly caveated**. HARD RULE 3 clean.
+
+**DRIVER ASSESSMENT: this is not converging on the thing that matters.** Three
+independent adversarial passes; each found fresh false-GREEN paths into a
+**judge** that `PROCESS.md` declares the sanctioned answer. Findings went
+6H -> 3H -> 3H+1 new. The first reviewer's argument still stands and is now
+stronger: **on these shapes the mechanised answer is LESS SAFE than the human
+log-read it replaces** — a human sees the file dates and reads "blocking defect
+found" where the tool prints `ARC CLOSED`.
+
+**DRIVER RECOMMENDATION (owner decision required — the driver will not shelve a
+sanctioned tool unilaterally): SPLIT THE CHANGE.**
+- **KEEP the PRODUCER.** `review-harness.sh` writing a provenance-bound artifact
+  (arc id, reviewed scope, reviewer, times, verdict region, seal) is genuinely
+  valuable and is the part that closes the ORIGINAL five failure modes as
+  *evidence*. Recording is not the problem.
+- **DROP the JUDGE'S AUTHORITY.** `arc-closure.sh` deciding "this arc is CLOSED"
+  is the part that has failed three independent reviews. Keep it as a
+  DIAGNOSTIC that reports what it observes, and **remove the `PROCESS.md`
+  sentence making it the sanctioned answer.** Arc closure stays a driver/human
+  judgement informed by the artifacts.
+This keeps every measured win (the artifacts, the specimens, the 185 teeth, the
+honest §6 bound) and removes the only thing that can launder an approval.
+
+**Alternative if the owner wants the judge:** it needs a CLASS-level redesign,
+not a fourth instance-fix round — an allowlist of eligible closure states rather
+than a blacklist, total ordering over BOTH timestamps, "no honest verdict in
+region" treated as VOID rather than as the foreign GO, and quiescence proven by
+process-group reaping rather than a direct-pid poll. That is a new arc, and on
+this evidence it should not be attempted as a patch series.
+
+**NOT dispatched: a fourth fix round.** Three cycles without class-level
+convergence is the point at which spending more is the error, and this is an
+owner call about whether the tool ships at all.
