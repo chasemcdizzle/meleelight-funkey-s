@@ -93,3 +93,16 @@ void platform_quit(void) {
   g_ren = 0;
   g_win = 0;
 }
+
+// A12c artwork loader (platform.h): there is no OS artwork on a host run —
+// /usr/games/menu_resources/ is the FunKey OS's own directory, so only the
+// device backend has any business reading it. (The "links no SDL" reason
+// belongs to the headless backend and was copy-pasted here; this backend
+// obviously links SDL2.) The caller's documented fallback — a dimmed
+// snapshot of the live frame — is what host/CI runs therefore always render.
+int platform_image_load565(const char *path, uint16_t *out, uint8_t *opaque) {
+  (void)path;
+  (void)out;
+  (void)opaque;
+  return 0;
+}

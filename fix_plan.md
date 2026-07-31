@@ -2591,3 +2591,76 @@ Everything below is functionality/fidelity, not styling.
   and list which live fields it reaches — this class is invisible at the
   call site and only shows up as "the setting doesn't stick", which is
   exactly how the owner reported it.
+
+## OWNER RULINGS 2026-07-30 — new queued work (Chase ratified 4 decisions)
+
+Ordered. Items R1/R2 gate the merge; R3/R4 are new work created by the rulings.
+
+### R1 — menus: CAPPED closure (blocks everything else)
+Owner ruling: menus stops at round 20. **Do not open round 21.** Fix
+outstanding Medium+, disposition Lows in writing, write the §3 CAPPED record
+naming the recurring class (already measured: *the judge/normalizer surface
+admits new loosenings faster than point fixes close them* — 12 point-fix rounds
+did not converge; one class fix, freezing 22 decision-table hashes +
+`DECISION_REGION`, killed the category and defeated a constructed 5-way stack).
+Then discharge the **Tier A+** obligation (independent second reviewer — NOT
+grok, recorded unauthenticated — plus archived old-vs-new byte-identity
+regression), and close its own **BLOCKER 9** (`ctl_style.c` into the `riglib.sh`
+and `check-device-fullgame.sh` link recipes; measured 0 occurrences in both).
+Producer + judge changes land ATOMICALLY in one commit.
+`done-check:` its CAPPED record exists, Tier A+ second-reviewer log carries a
+terminal anchored verdict, `grep -c 'ctl_style.c'` >= 1 in both link recipes,
+and its own gates re-run green on final bytes.
+
+### R2 — batched merge + ONE re-pin pass (driver-only; after R1)
+Merge match-exit (main tree, AT GO), cite-closure (`agent-a7ec05a2f21b29494`,
+CAPPED), render-judge (`agent-a01a4b6eba976b930`, AT GO) and menus together, then
+re-pin ONCE (§12.2(3)). **The re-pin is FIVE rows, not the one originally
+reported** — driver-measured over all 89 rows: `riglib.sh`,
+`check-device-target.sh`, `check-device-foh.sh`, `mlfk-foh.sh` (all
+`reviewed-go`), plus `check-device-fullgame.sh` (`arc-in-flight`, B9 OPEN — it
+stays arc-in-flight). `verify_m4.sh` is NOT drifted: its row pins the sha of its
+bytes EXCLUDING the `^MANIFEST_SHA256=` line, normalized hash `ee6a9444…78975`
+matches — any drift audit must normalize that row or it cries wolf.
+Cites must name logs whose TERMINAL anchored verdict is GO
+(`.loop/review-mexit-r7g.log`, `.loop/review-mexit-r7o.log`) and **must not
+carry forward the brace glob** in the current `mlfk-foh.sh` cite (the iter-132
+error that broke the gate's line grammar). Fingerprint every merged file
+(§12.2(5)); `git apply` prints per-file success and can still roll back
+atomically. Every re-pin error mode is a REFUSAL, never a false green.
+`done-check:` `bash port/sim/device/verify_m4.sh` reaches (and passes) its PIN
+stage; `.loop/cite-teeth.sh` green with no concurrent manifest/gate reader live.
+
+### R3 — successor rig for the never-executed arms (BEFORE any M4 gate attempt)
+Owner ruling: **~232 lines have never executed anywhere** (`foh_sysmenu_open`
+~157, VS-finish block ~75), and `verify_m4.sh` **cannot reach them by
+construction** (`sysOk` requires `!shotsDir`; every committed flow leg passes
+`--shots-dir`). Build a committed rig that drives the in-match system menu and
+the VS-finish arm (`--match-timer` appears in NO script today), so their first
+execution is not the owner's acceptance playthrough.
+**PRECONDITION — fix first:** the three unbounded release drains. The new host
+injector holds keys at EOF BY DESIGN, so the rig would **HANG rather than
+fail**; a hang is strictly worse than a failure for an autonomous loop. Also
+fold in here (bytes move anyway, fresh round already owed): the ratified
+TIME!/GAME! one-frame latch IF ever fixed, `foh_dev.c:3623`'s unlatched dead
+display, the 9 drifted `main.js` citation ranges, and the `gameMode == 5`
+comment overclaim.
+`done-check:` a committed check drives both arms end-to-end and FAILS when
+either arm is broken (prove both directions); no run can hang — a stuck injector
+must time out loudly.
+
+### R4 — reviewer-harness verdict artifact (PROCESS change, owner-approved)
+The reviewing harness emits **its own** verdict artifact carrying an **arc id**,
+the **exact reviewed scope**, and **which rule closed the arc** — so arc closure
+is answered by a producer-written record, never by a reader interpreting log
+bytes. Approved on FIVE measured failure modes in one day, and derived
+INDEPENDENTLY by two lanes from unrelated evidence. Closes: foreign-GO-at-EOF
+laundering · the 19 `x-*` cross-artifact rows (no machine-readable arc identity)
+· fabricated work-status ledgers · "arc reached GO" under a two-reviewer rule
+with one reviewer · corrupt logs whose readable text contradicts their rc
+(measured: a log 44.4% NUL containing `DEVICE TARGET CONFORMS` whose run exited
+`TARGET_RC=1`).
+Supersedes cite-closure residuals 1+2 as their durable fix.
+`done-check:` a review round cannot be accepted without its harness-written
+artifact; teeth prove a quoted foreign verdict and a truncated/NUL log both FAIL
+CLOSED.

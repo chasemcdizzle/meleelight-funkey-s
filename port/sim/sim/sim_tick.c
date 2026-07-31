@@ -58,6 +58,12 @@ void sim_fatal(const char *what) {
 void (*ml_sim_runai_live)(GameState *g, int i) = 0;
 void (*ml_sim_ai_cov_dump)(void) = 0;
 
+// finishGame pointer seam (sim.h; punch-list C18): NULL unless the live PLAY
+// driver installs it. All five finishGame sites keep their verbatim
+// out-of-domain trap on the NULL arm, so every trace-, flow- and golden-fed
+// run behaves exactly as before.
+void (*ml_sim_finish_hook)(void) = 0;
+
 void mv_out_of_domain(const char *what) { sim_fatal(what); }
 void ml_phys_out_of_domain(const char *what) { sim_fatal(what); }
 void ml_hd_out_of_domain(const char *what) { sim_fatal(what); }
@@ -375,8 +381,13 @@ void sim_game_tick(GameState *g, const MlInput *traceRow[4]) {
     // matchTimerTick(input) (main.js:338-350): HUD writes are render
     g->matchTimer -= 0.016667;
     if (g->matchTimer <= 0) {
-      sim_fatal("matchTimer expired (finishGame) — outside the golden "
-                "domain (trace quality contract)");
+      // finishGame(input) (main.js:349). NULL hook = every evidence and
+      // golden run: the trap below is unchanged and still loud.
+      if (ml_sim_finish_hook == 0) {
+        sim_fatal("matchTimer expired (finishGame) — outside the golden "
+                  "domain (trace quality contract)");
+      }
+      ml_sim_finish_hook();
     }
   } else {
     g->startTimer -= 0.01666667;            // main.js:1082-1085

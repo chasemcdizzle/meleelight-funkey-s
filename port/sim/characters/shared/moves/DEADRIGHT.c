@@ -36,7 +36,11 @@ static AsTri mv_main(MlSim *S, double p, const MlInputBuffer in[4],
     if (pl->timer == 4) {
       if (mv_isFinalDeath(S)) {
         // finishGame(input): match end — task 17's lifecycle surface
-        mv_out_of_domain("DEADRIGHT: finishGame (final death)");
+        // NULL hook = every evidence/golden run: trap verbatim (C18).
+        if (ml_sim_finish_hook == 0)
+          mv_out_of_domain("DEADRIGHT: finishGame (final death)");
+        else
+          ml_sim_finish_hook();
       } else {
         mv_screenShake();
         // percentShake: no-op (native RNG)

@@ -247,6 +247,29 @@ static void bg_sink(Gfx *g) {
   gfx_dump_ink_pgm(g, path);
 }
 
+// U3 ARTICLE-ONLY plane — the foreground twin of star_sink. gfx_render.c
+// fires this with the ink plane holding exactly the renderArticles pass,
+// written out as fNNNN.art.pgm in the same P5 240x240 grammar as the
+// other planes, so iou.js judges it with the same downscale/band
+// machinery and no geometric argument about where a laser may appear.
+static const char *g_artOut; // NULL = sink not armed
+static void art_sink(Gfx *g) {
+  if (!g_artOut || !is_dump_frame(g_bgFrame)) return;
+  char path[1200];
+  snprintf(path, sizeof path, "%s/f%04ld.art.pgm", g_artOut, g_bgFrame);
+  gfx_dump_ink_pgm(g, path);
+  // review-134 indep-2 M1: also publish the SAVED pre-article plane, i.e.
+  // the ink the isolation lifted out of the live plane and must put back.
+  // Without it the C-side containment arm was a tautology (see
+  // gfx_render_article_pre's note); with it, iou.js can assert that the
+  // final fg plane still CONTAINS everything drawn before the article pass,
+  // which is false the moment the OR-back is removed or truncated.
+  const uint8_t *pre = gfx_render_article_pre();
+  if (pre == NULL) sim_fatal("gfx_replay: article sink fired with no saved plane");
+  snprintf(path, sizeof path, "%s/f%04ld.artpre.pgm", g_artOut, g_bgFrame);
+  gfx_dump_plane_pgm(pre, path);
+}
+
 // The BG1 gradient, judged by COLOUR and OBSERVATIONALLY: gfx_bg.c fires
 // this straight after the gradient rows are laid down, while the
 // framebuffer holds the gradient and nothing else, so what we dump is
@@ -409,6 +432,8 @@ int main(int argc, char **argv) {
   // U1: arm the BG2 ink sink before the first render. Unarmed the
   // background pass is ink-suppressed exactly as before.
   if (g_bgOut) { gfx_bg_ink_sink(bg_sink); gfx_bg_star_sink(star_sink); }
+  // U3: arm the article-only plane whenever fg dumps are being taken.
+  if (renderOut && g_ndump) { g_artOut = renderOut; gfx_render_article_sink(art_sink); }
   if (bgGradPath) { g_gradPath = bgGradPath; gfx_bg_grad_sink(grad_sink); }
 
   sim_setup_match(&G, (int)p1, (int)p2, cpu ? 1 : 0, (int)difficulty,

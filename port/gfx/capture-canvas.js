@@ -125,6 +125,37 @@ if (!Array.isArray(TUNNEL_FRAMES) || TUNNEL_FRAMES.join(",") !== "1,2,3,41,81,12
   process.exit(1);
 }
 
+// U3 article-plane pin (same twin-pin class; iou.js and check-render.sh
+// carry their own copies). This side produces the browser plane, so it
+// asserts the frozen values BEFORE the browser is launched.
+if (EXPECTED_RENDER.artFrameCount !== 4 ||
+    !Array.isArray(EXPECTED_RENDER.artFrames) ||
+    EXPECTED_RENDER.artFrames.join(",") !== "184,1234,1237,1238" ||
+    !EXPECTED_RENDER.artFrameFloors ||
+    typeof EXPECTED_RENDER.artFrameFloors !== "object" ||
+    Array.isArray(EXPECTED_RENDER.artFrameFloors) ||
+    JSON.stringify(EXPECTED_RENDER.artFrameFloors) !== '{"f0184":0.6707,"f1234":0.6708,"f1237":0.6455,"f1238":0.6455}') {
+  console.error("capture-canvas: article plane pin violated — got " +
+    [JSON.stringify(EXPECTED_RENDER.artFrameFloors), EXPECTED_RENDER.artFrameCount,
+     String(EXPECTED_RENDER.artFrames)].join("/") + ", pinned f0184=0.6707,f1234=0.6708,f1237=0.6455,f1238=0.6455/4/184,1234,1237,1238");
+  process.exit(1);
+}
+if (EXPECTED_RENDER.iouThreshold !== 0.92) {
+  console.error("capture-canvas: fg iouThreshold pin violated — got " +
+    String(EXPECTED_RENDER.iouThreshold) + ", pinned 0.92 (C28 re-freeze)");
+  process.exit(1);
+}
+// Browser identity pin (review-134 r1 M1). Twin-pin class: check-render.sh
+// carries its own copy and applies it to the SIDECAR, so the reuse hatch is
+// covered too.
+const BROWSER_PIN = EXPECTED_RENDER.browserPin;
+if (!BROWSER_PIN || BROWSER_PIN.name !== "chromium" || BROWSER_PIN.channel !== "chrome" ||
+    BROWSER_PIN.version !== "151.0.7922.71") {
+  console.error("capture-canvas: browserPin malformed or not the frozen value " +
+    "(chromium / chrome / 151.0.7922.71)");
+  process.exit(1);
+}
+
 const CONSOLE_ALLOW = EXPECTED_RENDER.consoleErrorAllowlist;
 if (!Array.isArray(CONSOLE_ALLOW) || CONSOLE_ALLOW.length === 0) {
   console.error("capture-canvas: consoleErrorAllowlist missing/malformed in expected-render.json");
@@ -332,11 +363,35 @@ async function main() {
   const srv = await serve(DIST_ROOT);
   const port = srv.address().port;
 
-  let browser;
-  try {
-    browser = await chromium.launch({ channel: "chrome", headless: true });
-  } catch (e) {
-    browser = await chromium.launch({ headless: true });
+  // BROWSER IDENTITY IS FROZEN (review-134 r1 M1). This used to try channel
+  // "chrome" and SILENTLY fall back to Playwright's bundled Chromium — two
+  // different rasterizers behind one browserType().name() of "chromium", so
+  // a capture could be produced by an engine nobody measured. Every bound in
+  // expected-render.json (fg 0.92, the PER-FRAME article floors
+  // artFrameFloors, the three background legs) is a measured property of ONE
+  // rasterizer, so: one launch, no fallback,
+  // and the engine's name AND EXACT version must equal the frozen pin (see
+  // the r2 M1 note below the launch — a major-version prefix is NOT enough).
+  //
+  // When Chrome updates this FIRES. That is the intended behaviour, not a
+  // nuisance: the margins are properties of the engine that produced them.
+  // The response is to re-measure (>=6 fresh captures, record the spread)
+  // and re-freeze browserPin plus any bound that actually moved — never to
+  // widen a bound to silence it.
+  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browserId = { name: browser.browserType().name(), version: browser.version() };
+  // EXACT version equality (review-134 r2 M1): Skia rasterization changes at
+  // PATCH level, and the fg margin is only 0.0008 IoU — about 3 device cells
+  // on the MIN frame, where one cell is ~0.00026 IoU (r3 M4 measurement, with
+  // the bound now at 0.92) — so a major-version prefix would have let an
+  // unmeasured rasterizer through.
+  if (browserId.name !== BROWSER_PIN.name || browserId.version !== BROWSER_PIN.version) {
+    console.error("capture-canvas: browser identity pin violated — launched " +
+      browserId.name + " " + browserId.version + ", pinned " + BROWSER_PIN.name +
+      " " + BROWSER_PIN.version + ". The render bounds were measured on the " +
+      "pinned engine; re-measure and re-freeze rather than widening them.");
+    await browser.close();
+    process.exit(1);
   }
   const context = await browser.newContext();
   await context.route(/\/(sfx|music)\//, (r) => r.abort());
@@ -467,6 +522,15 @@ async function main() {
         decodeMask(captured[f].bg, `frame ${f} bg mask`));
       fs.writeFileSync(path.join(OUT_DIR, `f${String(f).padStart(4, "0")}.star.bin`),
         decodeMask(captured[f].star, `frame ${f} star mask`));
+      // U3 article-only plane. Required on EVERY sampled frame — a null
+      // here means the render was taken without the isolation, and a
+      // missing plane must never read as "no articles this frame".
+      if (typeof captured[f].art !== "string") {
+        console.error(`capture-canvas: frame ${f} has no article plane — __gfxArticlePlane() is called unconditionally for every sampled frame, so a missing plane means the capture path changed, not that the frame has no articles`);
+        process.exit(1);
+      }
+      fs.writeFileSync(path.join(OUT_DIR, `f${String(f).padStart(4, "0")}.art.bin`),
+        decodeMask(captured[f].art, `frame ${f} article mask`));
       const png = captured[f].png;
       const pfx = "data:image/png;base64,";
       if (!png.startsWith(pfx)) {
@@ -495,27 +559,31 @@ async function main() {
   // evaluate (step -> inject -> canonical render -> mask, the
   // __gfxRunChunk shape) which ADDITIONALLY records, without stepping
   // the sim again: one full render and one leave-one-out render per
-  // inkNames effect, all under a DETERMINISTIC page-local mulberry32
-  // swapped in via window.__nativeRandom (reseeded per render — the
-  // browser twin of the C leave-one-out baselines; the gameplay chain
-  // is untouched, STREAM MATCH still gates the whole capture). The
-  // CANONICAL render itself runs on the SAME deterministic render-plane
-  // RNG (review-70 r3 fix): a native-RNG canonical render produced
-  // post-render queue state (firefoxtail.randomTail, shine star
-  // scatter) that the old finally-path re-render could not reproduce —
-  // native RNG cannot be rewound — leaving frame 150's saved mask on
-  // trajectory A while frames 151+ continued on trajectory B (measured:
-  // randomTail 0/4 components equal, .loop/m4-task2r71-probe-old.log).
-  // Now: canonical render (det seed, live queue) -> mask; snapPost =
-  // the post-canonical queue instances BY REFERENCE; det render = a
-  // strict REPLAY (pre-render JSON snapshot restored + same reseed),
-  // ASSERTED bitwise-equal to the canonical mask (iou.js re-asserts it
-  // judge-side); loo renders operate on clones only; finally restores
-  // snapPost and NEVER re-renders. Native RNG is consumed zero times at
-  // this frame, so the continuing simulation sees exactly the state the
-  // single canonical render produced: one trajectory. (Canvas pixel
-  // state needs no restore — every render begins with clearScreen.)
-  const DET_SEED = 0xC0FFEE42; // render-plane only, never the gameplay chain
+  // inkNames effect, all on the DETERMINISTIC render-plane mulberry32
+  // (gfx-pagelib.js __gfxRenderRng — the browser twin of the C
+  // leave-one-out baselines; the gameplay chain is untouched, STREAM
+  // MATCH still gates the whole capture). The CANONICAL render itself
+  // runs on that same RNG (review-70 r3 fix): a native-RNG canonical
+  // render produced post-render queue state (firefoxtail.randomTail,
+  // shine star scatter) that the old finally-path re-render could not
+  // reproduce — native RNG cannot be rewound — leaving frame 150's saved
+  // mask on trajectory A while frames 151+ continued on trajectory B
+  // (measured: randomTail 0/4 components equal,
+  // .loop/m4-task2r71-probe-old.log).
+  // Now: canonical render (live queue) -> mask; snapPost = the
+  // post-canonical queue instances BY REFERENCE; det render = a strict
+  // REPLAY (pre-render JSON snapshot restored + the render RNG REWOUND
+  // to its pre-canonical state), ASSERTED bitwise-equal to the canonical
+  // mask (iou.js re-asserts it judge-side); loo renders operate on
+  // clones only; finally restores snapPost AND the post-canonical RNG
+  // state, and NEVER re-renders. So the continuing simulation sees
+  // exactly the state the single canonical render produced: one
+  // trajectory, on one unbroken render stream. (Canvas pixel state needs
+  // no restore — every render begins with clearScreen.)
+  // C28: the rewind replaced a per-render RESEED. The render plane is
+  // now ONE chained stream for the whole replay, mirroring the C's
+  // gfx_vfx.c chain, so reseeding at frame 150 would fork the browser
+  // off the C's stream for the remaining 3450 frames.
   if (!Number.isInteger(INJECT.frame) || INJECT.frame < 1 || INJECT.frame > g.frames) {
     console.error("capture-canvas: inject.frame outside the replay range");
     process.exit(1);
@@ -557,16 +625,18 @@ async function main() {
         q.push(JSON.parse(JSON.stringify(inst)));
       }
     };
-    const mk = (seed) => {
-      let a = seed >>> 0;
-      return () => {
-        a |= 0; a = (a + 0x6D2B79F5) | 0;
-        let t = Math.imul(a ^ (a >>> 15), 1 | a);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-      };
-    };
-    const savedNative = window.__nativeRandom;
+    // C28: the render plane is one CHAINED mulberry32 for the whole
+    // replay now (gfx-pagelib.js __gfxRenderRng), mirroring the C's
+    // gfx_vfx.c stream, so the det/loo replays REWIND that chain instead
+    // of reseeding it. Reseeding here would fork the browser off the C's
+    // stream from frame 150 onward. mulberry32 state is one int32, so the
+    // rewind is exact and the contract below is unchanged.
+    const rng = window.__gfxRenderRng;
+    if (!rng || typeof rng.state !== "function" || typeof rng.setState !== "function") {
+      throw new Error("gfx-capture: __gfxRenderRng hook missing (render-plane RNG)");
+    }
+    const rngPre = rng.state();
+    let rngPost = null;
     let det = null;
     const loo = {};
     let snapPost = null;
@@ -574,37 +644,46 @@ async function main() {
       // canonical render + mask — on the deterministic render-plane RNG
       // (review-70 r3): its queue side effects ARE the trajectory that
       // frames 151+ continue from, and det below replays it exactly.
-      window.__nativeRandom = mk(o.seed);
       window.__gfxRender();
       const canonical = window.__gfxCaptureMask();
+      rngPost = rng.state(); // the trajectory frames 151+ continue from
+      // U3: the injection frame is a SAMPLED frame and owes the article
+      // plane like every other one. Taken here, AFTER __gfxCaptureMask,
+      // and it consumes no RNG (LASER.draw draws no randomness), so the
+      // rngPost snapshot above still describes the trajectory. The det
+      // replay below re-clears FG2 through clearScreen anyway.
+      canonical.art = window.__gfxArticlePlane();
       window.__gfxCaptured[r[0].f] = canonical;
       // post-canonical-render queue state, by REFERENCE (the live
       // instances this render mutated/spawned — restored in finally;
       // the det/loo renders below touch JSON clones only)
       snapPost = qmod.vfxQueue.slice();
       // det = strict replay of the canonical render: same pre-render
-      // snapshot, same reseed -> must reproduce the mask bit-for-bit
+      // snapshot, and the page-local render RNG REWOUND to the same state
+      // (rng.setState(rngPre) — a rewind of the one chained stream, NOT a
+      // reseed; reseeding would fork the browser off the C's chain, see the
+      // C28 note above) -> must reproduce the mask bit-for-bit
       // (free tooth: proves the observation machinery is side-effect-
       // free and every loo baseline shares the canonical trajectory)
       restore(null);
-      window.__nativeRandom = mk(o.seed);
+      rng.setState(rngPre);
       // bg:false — U1: only the canonical render of a frame may advance
       // the mirrored background stream (see gfx-pagelib.js __gfxRender).
       window.__gfxRender({ bg: false });
       det = window.__gfxCaptureMask().mask;
       if (det !== canonical.mask) {
         throw new Error("gfx-capture: det replay mask != canonical mask at the injection frame " +
-          "(snapshot/restore + reseed failed to reproduce the canonical render — " +
+          "(snapshot/restore + RNG rewind failed to reproduce the canonical render — " +
           "trajectory continuity broken)");
       }
       for (const nm of o.inkNames) {
         restore(nm);
-        window.__nativeRandom = mk(o.seed);
+        rng.setState(rngPre);
         window.__gfxRender({ bg: false });
         loo[nm] = window.__gfxCaptureMask().mask;
       }
     } finally {
-      window.__nativeRandom = savedNative;
+      if (rngPost !== null) rng.setState(rngPost);
       // restore the post-canonical-render trajectory; NEVER re-render
       // (a re-render here was the review-70 r3 discontinuity)
       if (snapPost !== null) {
@@ -614,7 +693,7 @@ async function main() {
       }
     }
     return { rec: r[0], det: det, loo: loo };
-  }, { inject: INJECT, inkNames: EXPECTED_RENDER.injectPin.inkNames, seed: DET_SEED });
+  }, { inject: INJECT, inkNames: EXPECTED_RENDER.injectPin.inkNames });
   frames.push(special.rec);
   {
     const tag = String(INJECT.frame).padStart(4, "0");
@@ -704,7 +783,7 @@ async function main() {
       p1: g.p1, p2: g.p2, stage: g.stage,
       seedRandom: true, fdlibm: true, cpu: g.cpu,
       difficulty: g.cpu ? g.difficulty : null, wallMs: wall,
-      browser: browser.browserType().name(), version: browser.version(),
+      browser: browserId.name, version: browserId.version,
       gfxCapture: {
         sampled: sampledList.slice().sort((a, b) => a - b),
         served: servedDigest(),
@@ -732,6 +811,12 @@ async function main() {
   }
   fs.writeFileSync(sidecarPath, JSON.stringify({
     artifacts: artifacts,
+    // The ENGINE that rasterized these artifacts (review-134 r1 M1). Bound
+    // here so MLFK_GFX_REUSE_CANVAS and check-render.sh's closure step can
+    // both refuse a capture taken on an unmeasured rasterizer — reuse never
+    // launches a browser, so without this the identity would be unknowable
+    // in exactly the mode that skips the check.
+    browser: browserId,
     closure: CLOSURE_SNAP,
     gfxdata: sha256Hex(fs.readFileSync(path.resolve(GFXDATA))),
     vfxdata: sha256Hex(fs.readFileSync(path.resolve(VFXDATA))),

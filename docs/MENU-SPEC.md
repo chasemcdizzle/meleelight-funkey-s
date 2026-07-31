@@ -412,7 +412,9 @@ Labels drawn from the same enum, `css.js:860-879`:
 `N/A → HMN → CPU → N/A` (3 states). Justification: NET requires the
 netplay/spectate stack, which is out of scope per §11 and gated behind a
 named flag; leaving a reachable NET state would produce a port that can
-never launch. When the netplay flag lands, restore the 4-cycle verbatim.
+never launch. A future netplay ARC restores the 4-cycle verbatim. Note it
+is not gated on `FOH_NETPLAY`: that flag covers the battle page only and
+this cycle is DEVIATION D5, unconditional at either flag value (§11.1).
 
 **DEVIATION D6 — ports 3 and 4 stay N/A.** Their panels render (upstream
 draws all four, `css.js:881-882`) but their type boxes do not toggle.
@@ -420,6 +422,27 @@ Justification: every frozen golden and the whole `check-sim.sh` conformance
 surface is 2-player; a 3- or 4-participant launch is unverified against the
 oracle. This is a *launch-plane* limitation, not a menu-plane one — when
 3/4-player conformance is proven, delete this deviation and nothing else.
+
+**DEVIATION D17 — a CPU in port 1 cannot LAUNCH.** The menu plane is
+faithful and unchanged: `togglePort` has no port-0 special case
+(`main.js:510-526`), port 1's type box cycles to CPU like any other port
+(§2.7), a CPU'd P1 still gets a hand (`main.js:957` gates on `i < ports`,
+not on type), and READY TO FIGHT still appears under §2.5's unmodified
+rule — two non-N/A ports, no token held. What refuses is the LAUNCH:
+`foh.c:671-685` emits `refused portconfig` for any configuration other
+than (P1 HMN, P2 HMN|CPU). Justification, and the reason this is a
+deviation rather than a bug: `sim_setup_match` takes no P1 type at all
+(`port/sim/sim/sim.h:98-100`) and pins `types[0] = 0`
+(`sim_boot.c:374-383`), so `slotIsAi[0]` can never be true — launching a
+CPU'd P1 would boot a HUMAN P1 and the LAUNCH record would describe a
+match that did not run (HARD RULE 2). Like D6 this is a *launch-plane*
+limitation, not a menu-plane one: it is the same class as D6 (the CSS can
+reach a configuration the launch plane cannot honour) but a strictly
+different scope, so it is registered separately rather than folded into
+D6's ports-3/4 wording. Closing it means giving `sim_setup_match` both
+ports' type and level and re-proving conformance — a sim-surface change,
+outside the menus lane. Until then the refusal is LOUD (`deny` + a
+`refused portconfig` trace event), never silent.
 
 ### 2.8 CPU-level widget
 
@@ -574,7 +597,7 @@ chevron (§2.9) as an A-clickable exit to the same place. A max-of-all-ports
 
 ### 2.12 CSS gap table
 
-| # | Behaviour | Spec | Our port today | Gap |
+| # | Behaviour | Spec | Our port AT ORIGINAL AUDIT | Gap |
 |---|---|---|---|---|
 | 1 | Cursor model | Free 2D hand, 12 px/frame, screen-clamped (`css.js:195-206`) | Discrete 4-row list cursor (`foh.c:270-277`); hand sprite is decoration slaved to the row | **DIFFERS** |
 | 2 | Grab own token with B | B edge in roster band (`css.js:209-215`) | No grab gesture at all (`foh.c:74-77` registers its absence) | **MISSING** |
@@ -629,9 +652,12 @@ Value strings rendered: `"On"/"Off"` for rows 0, 2, 3 (`:230`, `:236`,
 `settings.js:47-55`. `x ^= true` coerces and XORs with 1, so values stay
 integer `0`/`1`.
 
-**So we are missing rows 2 and 3, and our row order is wrong.** Our port
-renders `TURBO`, `L-CANCEL`, `TAP JUMP OFF` (`foh_render.c:1688-1708`) —
-three of five, with Tapjump promoted from index 4 to index 2.
+**AT AUDIT TIME we were missing rows 2 and 3, and our row order was
+wrong**: the port rendered `TURBO`, `L-CANCEL`, `TAP JUMP OFF` — three of
+five, with Tapjump promoted from index 4 to index 2. **CLOSED 2026-07-29**:
+all five upstream rows are present in upstream's order with upstream's own
+value strings, and Tapjump is back at index 4 with its four columns
+(`foh_render.c`; §3.1's gap table).
 
 ### 3.2 Settings with no UI row (persisted, never shown)
 
@@ -664,12 +690,14 @@ touches:
 | `turbo` | **sim** (checksum) | `physics.js:595`; `ai.js:492,494,591,593,784,786` |
 | `lCancelType` | **sim** (checksum) | `physics.js:673,696,705` |
 | `flashOnLCancel` | **render only** | `render.js:125` — a visual flash on `LANDINGATT*` |
-| **`everyCharWallJump`** | **NONE — dead setting** | zero readers anywhere in `src/` |
+| **`everyCharWallJump`** | **NONE — dead setting** | zero MECHANICS/GAMEPLAY consumers. Two DISPLAY-ONLY readers exist and are not a mechanic: `gameplaymenu.js:239` renders its own row's On/Off, and the `inServerMode` block at `css.js:1183-1191` walks `Object.keys(gameSettings)` and prints any key with a non-empty label. Nothing in the physics/sim plane reads it. |
 | `tapJumpOffp1..4` | **sim** (checksum) | `actionStateShortcuts.js:507,516,520`; `fox/moves/DOWNSPECIALAIR.js:138` |
 | `phantomThreshold` | **sim** (checksum) | `hitDetection.js:335,337,348`; `physics.js:1039-1040` |
 
 **"Everyone Walljumps" is a dead toggle upstream.** It is written by the
-menu and displayed, and nothing ever reads it. Implementing it faithfully
+menu and displayed, and NO MECHANIC ever reads it (the only readers are
+display-only: `gameplaymenu.js:239` draws its own row, and
+`css.js:1183-1191` prints it in `inServerMode`). Implementing it faithfully
 means: add the row, persist the 0/1, and wire it to nothing. That is the
 correct and cheapest outcome — the owner noticed its absence because it is
 *visible*, not because it changes play. Do not invent a walljump rule to
@@ -720,21 +748,101 @@ not on the oracle surface) and reproducing them is user-hostile.
 |---|---|---|---|
 | 1 | Row 0 `Turbo Mode`, 0/1 | `TURBO`, 0/1 (`foh_render.c:1688-1708`) | **MATCHES** |
 | 2 | Row 1 `L-Cancel`, Normal/Auto/Smash 64 | `L-CANCEL`, `NORMAL/AUTO/SMASH64` | **MATCHES** |
-| 3 | Row 2 `Flash on L-Cancel`, 0/1 | absent | **MISSING** |
-| 4 | Row 3 **`Everyone Walljumps`**, 0/1 | absent | **MISSING** |
-| 5 | Row 4 `Tapjump off`, 4 columns | present but at index 2 | **DIFFERS** (order) |
+| 3 | Row 2 `Flash on L-Cancel`, 0/1 | present, and wired: `foh_dev.c` writes it over the GFXDATA1 copy at match boot on both live paths | **CLOSED 2026-07-29** |
+| 4 | Row 3 **`Everyone Walljumps`**, 0/1 | present, faithfully DEAD (row + persisted bit, zero MECHANICS consumers; only display-only readers exist) | **CLOSED 2026-07-29** |
+| 5 | Row 4 `Tapjump off`, 4 columns | present at index 4, columns WRAP as upstream's do | **CLOSED 2026-07-29** |
 | 6 | A changes value; L/R move column only | matches | **MATCHES** |
-| 7 | Up/down wrap | clamped, no wrap (`foh.c:436-485`) | **DIFFERS** |
-| 8 | `phantomThreshold` persisted at `0.01`, hidden | not in `FohPersist` (`foh_persist.h:88-93`) | **MISSING** |
-| 9 | `blastzoneWrapping`, `dustLessPerfectWavedash` persisted at `0`, hidden | absent | **MISSING** |
+| 7 | Up/down wrap | wraps -1->4 / 5->0 with upstream's pre-wrap column clamp | **CLOSED 2026-07-29** |
+| 7b | Held direction repeats 1-then-every-10 | single step per rising edge | **DIFFERS — DEVIATION D16** (whole-FOH input model, §5.5 row 6) |
+| 8 | `phantomThreshold` persisted at `0.01`, hidden | in `FohPersist` v4 as a hex16 double, pushed to `G.sim` at launch | **CLOSED 2026-07-29** |
+| 9 | `blastzoneWrapping`, `dustLessPerfectWavedash` persisted at `0`, hidden | in `FohPersist` v4, no widget | **CLOSED 2026-07-29** |
 | 10 | B saves all keys then → main menu | B → menu-options (`foh_app.c:559-563`) | **MATCHES** |
 
 ---
 
 ## §4. Audio options (gameMode 10)
 
-Entirely **MISSING** from our port — `menu-options` row 0 emits
-`deny` + `refused audio` (`foh.c:185-188`).
+**HOST-PROVEN, DEVICE-PENDING 2026-07-29 (menu-fidelity arc).** NOT "closed":
+the mixer side is complete and proven host-side, and the SHIPPING TARGET still
+has no caller, so on the device the sliders remain inaudible until the
+`foh_dev.c` patch in the work order lands. Stated this way because the earlier
+"CLOSED / THE SLIDERS ARE AUDIBLE" heading contradicted its own pending note
+three paragraphs later (review-r13 MAJOR) — a screen is not closed because its
+host half is.
+> **THE SLIDERS ARE AUDIBLE ON THE HOST PATH; THE DEVICE CALL SITE IS PENDING.** Owner ruling 2026-07-29 ("yep wire") retired
+> the earlier hand-off: file-partitioning is gone (PROCESS §12), so the
+> engine push landed with the screen instead of behind another lane.
+> The wire, end to end: `port/foh/foh.c` edits/clamps the two doubles →
+> `port/foh/foh_persist.c` saves/loads them → the app pushes them under the
+> audio lock (at boot from the persisted plane, and on every change) →
+> `snd_bus_set` in `port/gfx/snd_mixer.h` converts each level to a Q12 bus
+> gain applied at the two accumulate sites (sfx voices, music channel).
+>
+> **ONE LINK IS A PENDING PATCH, NOT LANDED CODE — read this before
+> believing the device is done.** The app-side push (`foh_audio_bus_push` in
+> `port/foh/foh_dev.c`) is written and was green in this lane, but
+> `foh_dev.c` is SINGLE-WRITER this cycle (the match-exit closure lane holds
+> it), so the menus lane reverted its copy rather than be a second writer on
+> a file that feeds a pinned gate. The exact patch is handed over as prose in
+> `.loop/menus-p2-device-workorder-audio.md` §8 and applies after that lane
+> merges. Until it does, the levels are edited, persisted and correctly
+> converted, and the DEVICE build has no caller — the host proof below stands,
+> the device behaviour does not yet.
+>
+> **THE ONE SUBTLETY, and it is the whole correctness argument:** SND1's
+> packed `gainQ8` values ALREADY carry the 0.5/0.3 master defaults, because
+> `sfx.js:623-624` runs `changeVolume(sounds, 0.5)` /
+> `changeVolume(MusicManager, 0.3)` at load and the pipeline records the
+> POST-changeVolume `_volume` as the mixer's gain source
+> (`pipeline/lib/sounds-schema.js:12-15`). So the bus is the RATIO
+> `masterVolume / default`, never the raw level — pushing the level would
+> apply the default twice (0.5 x 0.5 at rest). At the defaults the ratio is
+> exactly 1.0, so the fill is BYTE-IDENTICAL to the pre-wire mixer and the
+> frozen `check-mixer-fidelity.sh` / `check-music-fidelity.sh` streams are
+> untouched. Above-unity gain (up to 2.0 sfx, 3.33 music) is faithful:
+> upstream at `masterVolume` 1.0 really is twice the default loudness.
+>
+> **PRECISION — measured, with the residual REGISTERED (review-r10).** The
+> bus is Q12 with round-half-up, applied PER VOICE. An earlier Q8 bus applied
+> to the summed accumulator was measurably worse and its code comment claimed
+> otherwise; both the code and the claim were corrected. Fixed: a no-overwrite
+> sample of 1000 at level 0.1 emitted 99 where exact linear is 100 (chained
+> truncation), and sum-level scaling diverged from per-voice by up to seven
+> output LSBs on polyphonic frames. **Remaining, and PRE-EXISTING:** SNDPACK1
+> stores each gain as Q8, so the authored product `default x overwrite` is
+> already quantized in the pack before any bus touches it. Worst case is the
+> smallest overwrite (`dash`, 0.3): the packed gain `round(0.5*0.3*256) = 38`
+> encodes 0.1484 rather than 0.15, so at level 1.0 a full-scale sample emits
+> 9728 where exact linear is 9830.1 — **1.04% of amplitude (~0.09 dB) at the
+> loudest rail end** (re-measured after `snd_gain_apply`; the earlier 9726 was
+> the pre-combined-multiply figure, review-r13). To be precise about WHY the frozen gates never saw it
+> (review-r11 MINOR corrected an earlier "invisible at the default level"):
+> the error is ALREADY THERE at the default — full-scale `dash` emits 4863
+> where the authored value is 4915, the same 1.06% — it is simply UNCHANGED by
+> this wire, so the old-C-versus-new-C default-level comparison the gates
+> perform cannot reveal it. Removing it means widening SNDPACK1's gain field, which
+> re-freezes a PINNED producer (the SNDPACK1 sha256, both fidelity gates and
+> the device pin) — out of this lane's scope, reported to the driver as
+> follow-up rather than silently accepted.
+>
+> **PROOF, and its honest boundary.** Host-side: `check-foh-flows.sh` leg
+> [5c] (`port/foh/foh_snd_witness.c`) drives the REAL `snd_mix_fill` and
+> asserts the levels reach the output samples — byte-identity at the
+> defaults against an independent reference formula, exact silence at 0.0,
+> authored full scale at 1.0, strict monotonicity across the rail, and the
+> `snd_bus_q12` ratio against hand-computed pins, and that the SFX bus is
+> SNAPSHOTTED per voice at play time while music applies live (howler's own
+> split — see the AUDIO BUS note); eight teeth (T27-T34) prove it bites,
+> including the literal "wired but inert" regression. NOT claimed
+> host-side: real SDL audio through a real speaker on the device. That is
+> the work order `.loop/menus-p2-device-workorder-audio.md` (PROCESS
+> §12.3), to be drained by the device lane.
+
+Was entirely missing — row 0
+emitted `deny` + `refused audio`. Now `FOH_OPT_AUDIO`: two rows, +/-0.1
+unrounded steps, [0,1] clamp, defaults 0.5/0.3, no A handler, B saves both
+levels through the persist chokepoint, and the engine push described above.
+The wedges + growing knob are carried.
 
 **State:** `masterVolume = [0.5, 0.3]` (`audiomenu.js:13`) — `[0]` sounds,
 `[1]` music; `audioMenuSelected = 0` (`:15`). Two rows only, labels
@@ -768,6 +876,27 @@ Load: `getAudioCookies()` (`:212-223`) reads both keys, guards
 Rendering is two slider wedges with a knob whose radius grows with volume
 (`:168-207`) — our own 240×240 design substitutes here per D4, but the
 **two rows, ±0.1 step, [0,1] clamp, defaults 0.5/0.3** are normative.
+
+**DEVIATION D14 — numeric readout on the audio screen.** Upstream renders NO
+number on this screen: the wedge's fill and the knob's radius ARE the
+readout. The port adds a `0.0`-`1.0` tenths readout beside each knob,
+because at 240 px the wedge is 160 px of travel for ten steps and the
+difference between 0.6 and 0.7 is 16 px of a thin triangle. Same class as
+D3/D4 — a 240x240 legibility adaptation of an upstream widget, not a new
+widget.
+
+> **RATIFIED BY THE OWNER 2026-07-29.** Presented as a choice (keep the
+> digits, or strip them for strict fidelity) with the recommendation to
+> keep; the owner accepted the recommendation. Rationale of record: a
+> 240x240 wedge is 160 px of travel for ten steps, so the difference
+> between 0.6 and 0.7 is 16 px of a thin triangle and is not readable
+> precisely — the digits are what make the value legible at this size.
+> This is therefore an OWNER-SANCTIONED DEVIATION, not an unremarked
+> addition: upstream renders wedges and a growing knob and NO number
+> (`audiomenu.js:168-207`), and we render both the wedge/knob AND a
+> `0.0`-`1.0` tenths readout. Reverting is still one block in
+> `render_opt_audio` (`foh_render.c`, the `lvl[]` snprintf) and nothing
+> else depends on it.
 
 > `ponytail:` this is the cheapest whole screen in the spec — two doubles,
 > four inputs, one persist pair. It should not be deferred behind anything.
@@ -870,7 +999,7 @@ commenting out its body*, not by a guard.
 | 3 | A dispatch table | Present; unimplemented targets emit `deny` + `refused` | **DIFFERS** (honest refusals — acceptable, see §11) |
 | 4 | B back-targets and cursor landings | `foh.c:210-228`: controls→options(0), options→top(3), battle→top(0), top→nothing | **MATCHES** |
 | 5 | Left/right, START inert on menus | inert | **MATCHES** |
-| 6 | Repeat cadence 1-then-every-10 | not implemented (single-step per edge) | **DIFFERS** |
+| 6 | Repeat cadence 1-then-every-10 | not implemented (single-step per rising edge) | **DIFFERS — DEVIATION D16**, and it applies to EVERY front-of-house screen, including the gameplay (§3) and audio (§4) menus |
 | 7 | `menuForward` on every A incl. dead rows | we play `deny` on refused rows | **DIFFERS** (deliberate: `deny` is more honest than a forward-click that does nothing) |
 
 ---
@@ -1006,13 +1135,67 @@ target-mode branch whatsoever** — the two screens are unrelated files.
 Our port implements a 2×5 grid + an `ADD CODE` slot with an L/R character
 selector and a personal-best line (`foh.c:368-434`,
 `foh_render.c:1722-1777`). That is a re-authored screen, not a measured
-port: this spec does **not** cover `targetselect.js`, because the owner's
-report did not raise target test and the file was not read for this pass.
+port. The evidence boundary is now split (§7.1): the RENDER half of
+`targetselect.js` WAS measured this pass — `drawTSSInit` (`:183-242`, whole function) and the FIRST PART of `drawTSS`
+(`:244`-~`:420` of a function that actually runs to **`:540`** — the next
+export is `getTargetStageCookies` at `:542`) were read and
+the port's look re-authored from them. The render TAIL (`:421-540`: custom-stage
+controls, character presentation, pointer and prompt) was NOT read, and the
+SEMANTICS (`tssControls`, `:43-173` — the whole function, not the `:57-146`
+this spec used to cite) remain unmeasured, so §7
+stays UNVERIFIED as a whole.
 
 **Registered as an open item**, not as a gap: before target-select is
 called faithful, `src/stages/targetselect.js` must get the same treatment
 the screens above got. Until then our implementation stands as-is and is
 marked **UNVERIFIED**.
+
+### 7.1 The LOOK, measured (menu-fidelity arc, 2026-07-29)
+
+The open item above is now **partly closed**: `drawTSSInit` (`:183-242`, whole function) and the FIRST PART of `drawTSS`
+(`:244`-~`:420` of a function that actually runs to **`:540`** — the next
+export is `getTargetStageCookies` at `:542`) were read and
+the port's look re-authored from them. The render tail `:421-540` was NOT
+read and the SEMANTICS (`tssControls`, `:43-173`) remain unmeasured, so §7
+stays
+UNVERIFIED as a whole.
+
+Measured, and it corrects a guess that had been circulating as "a brown and
+orange target grid":
+
+| Element | Upstream | Line |
+|---|---|---|
+| Backdrop | linear ramp `rgb(66,42,6)` -> `rgb(26,2,2)` (dark brown) | `:184-187` |
+| Lattice | the same white 30 px grid every other menu draws | `:257-265` |
+| Slot body | **black** `fillRect`, 250x50 at `(50 + floor(i/5)*260, 110 + (i%5)*60)` | `:196-198` |
+| Slot label | `"Target " + (i+1)`, white 0.6 | `:200-203` |
+| Slot border | `strokeRect`; idle `rgb(166,166,166)`, hovered FLASHES `rgb(251,116,155)` / `rgb(255,182,204)` on an 8-frame cycle | `:270-284` (the `strokeRect` itself is at `:284`) |
+| Info panel | black 0.5 fill + white 0.5 stroke, `(200,450,800,200)` | `:206-208` |
+| Character plate | rounded tile, ramp `rgb(41,47,68)` -> `rgb(85,95,128)`, chevron above and below | `:210-241` |
+| Personal Best | label + `--:--:--` or `0M:SS.CC` | `:404-419` |
+
+**The brown/orange is NOT the grid.** The grid is grey with a PINK hover
+flash — the same flash the SSS uses. Brown/orange is the BRONZE MEDAL
+gradient `rgb(180,123,65)` -> `rgb(236,179,120)` (`:325-327`), beside silver
+`rgb(161,161,161)` -> `rgb(246,246,246)` and gold `rgb(255,221,42)` ->
+`rgb(255,237,140)`.
+
+**REGISTERED REWRITE DELTA (chevron axis).** Upstream stacks the character
+plate's two chevrons VERTICALLY, above and below the tile (`:227-241`),
+while its own control is the SHOULDER pair (`input.l` / `input.r`,
+`:60-74`) — the arrows point along an axis nothing drives. The port draws
+them LEFT and RIGHT, on the axis the control actually uses, and caps them
+`L` and `R`. This is DEVIATION D4's rule applied to an arrow: a widget must
+point at the gesture that works it.
+
+**Medal discs, medal times and the Developer Record row are NOT portable
+yet, and that is a DATA deferral, not a styling one.** They read
+`medalTimes[][][]`, `devRecords[][]` and `medalsEarned[][][]` — authored
+upstream data the M1 pipeline does not emit (measured: no
+medalTimes/devRecords stage exists). HARD RULE 5 forbids retyping engine
+data by hand, and drawing empty medal outlines would assert "not earned"
+for a player who has earned them. The pipeline extension stays registered
+(`port/foh/foh.h`, iter 99).
 
 ---
 
@@ -1114,14 +1297,16 @@ Carried verbatim.
 The owner reports "controls can't select controller/keyboard". Measured
 topology and disposition:
 
-### 9.1 The device chooser IS implementable and IS missing
+### 9.1 The device chooser IS implementable and WAS missing (now built)
 
 Page 3 of `menu.js` (`menuMode = CONTROLLERCALIB`) titled `"Controls"`,
 rows `["Controller", "Keyboard"]` (`menu.js:22-23,29,31-32`). It is not a
 separate module — it is drawn by the same generic `drawMainMenu` and
 operated by the same `menuMove` (A confirm, B back, up/down cycle). Our
-port already renders exactly this page (`foh_render.c:37`) but **both rows
-refuse** (`foh.c:202-207`).
+port already renders exactly this page (`foh_render.c:37`). **At audit time
+both rows refused** (`foh.c:202-207`); since 2026-07-29 row 0 opens the
+no-controller state (§9.2, exited via D15) and row 1 opens the READ-ONLY
+keyboard view (§9.3) — the D13 rebinder itself is still not built.
 
 So the *chooser itself* — the thing the owner named — is a plain 2-row
 menu page we already draw, and only its two destinations are hard.
@@ -1150,9 +1335,82 @@ four-point snapshot capture) is dead by construction.
 
 **Required behaviour instead:** selecting `Controller` must show upstream's
 own honest state — `"Error: no controller detected"` — and return on B. Not
-a `deny` beep. That is faithful (it is upstream's literal string for this
-condition) and it answers the owner's complaint without building a
-calibrator for hardware that does not exist.
+a `deny` beep.
+
+> **DEVIATION D15 — added B exit on the no-controller screen.** Stated
+> plainly because it *is* a departure, and it is NOT the D9 class (D9 is
+> only about declining to reproduce gameplay-menu input bugs): upstream's
+> gameMode 14 has **no B handler at all**. It polls input and calls no
+> control function (`main.js:947-949`), and its only exit is a mouse click
+> on the `Quit` box (`gamepadCalibration.js:165-169` →
+> `controllermenu.js:37-45`) — which is why the no-pad branch dead-ends
+> unrecoverably. Our `B: BACK` is therefore an ADDED exit, not a ported
+> one. It is the minimum that keeps
+> the screen escapable on a device with no mouse; carrying upstream's
+> dead-end verbatim would strand the user with no way out but a reboot.
+>
+> Two claims, kept apart because they have opposite signs: what the screen
+> SHOWS is faithful — `Error: no controller detected` is upstream's own
+> literal string, printed in upstream's own condition
+> (`gamepadCalibration.js:71`). How the screen is LEFT is not faithful —
+> the B exit is D15, an addition with no upstream counterpart. Together they
+> answer the owner's complaint without building a calibrator for hardware
+> that does not exist.
+
+### 9.7 C30(c) — the control-style + Mod-shoulder rows (driver, 2026-07-29)
+
+**CLOSED 2026-07-29.** The controls lane shipped three control styles and an
+orthogonal Mod-shoulder swap as two process cells in `port/gfx/ctl_style.h`
+(`CtlStyle {NORMAL=0, BOX=1, NATURAL=2}`, `CTL_STYLE_DEFAULT = NATURAL`, plus
+`ctl_mod_on_r_{get,set}`) — and **nothing anywhere called them**
+(grep-measured: zero `ctl_style_set`/`ctl_style_get` callers before this
+change). A feature no user can reach is not shipped, so the driver assigned
+the UI here.
+
+**Where, and why there.** On **Controls > Keyboard** (`FOH_CTRL_KEY`), not on
+the Controls menu page. Adding rows to the page would break upstream's pinned
+`menuCount = [4,4,4,2]` (`menu.js:31`) — the exact class of drift this arc
+exists to remove. The Keyboard screen is already OURS rather than a port
+(upstream's `keyboardmenu.js` is a 56-item rebinder we did not build — D13),
+so two settable rows on it is a rewrite of a rewritten screen, not a
+deviation from a faithful one. The Controller row keeps upstream's verbatim
+no-controller error (§9.2) and gains nothing.
+
+**Interaction** follows the audio screen's idiom exactly, so the whole FOH
+stays one model: up/down picks the row (one `else if` chain, up before down —
+a simultaneous up+down runs UP ONLY), left/right cycles the value, every
+accepted step plays `menuSelect`, B exits. Style cycles all three values with
+wrap; the Mod row is a two-state swap so either direction flips it.
+
+**No second copy of the value.** The rows write straight through to
+`ctl_style.c`'s cells; `FohState` gains only `ctlRow`, the cursor. The values
+are read by the sim-side input path in a different TU, and a mirror in
+`FohState` would be a live desync — which is exactly why `ctl_style.c` is a
+TU and not a header (its own note).
+
+**Persistence** uses the two chokepoint calls `foh_persist.h` specifies,
+deliberately NOT inside `foh_persist_apply/collect`: after load
+`ctl_style_set(p.ctlStyle)` / `ctl_mod_on_r_set(p.modOnR != 0)`, and before
+save `p.ctlStyle = ctl_style_get()` / `p.modOnR = ctl_mod_on_r_get()`. Wired
+in `port/foh/foh_app.c` (the host twin). **OUTSTANDING:** `port/foh/foh_dev.c`
+needs the same four lines and is the match-exit lane's file this iteration —
+recorded in `.loop/menus-p2-device-workorder-audio.md` §5 rather than edited
+across a live lane.
+
+**C31 — NORMAL's display label is now "Classic".** "Normal" and "Natural"
+share a prefix and a length and are near-indistinguishable in the 240x240 5x7
+font, and the owner is about to choose between exactly those two. Only the
+STRING changed (`ctl_style_name`). The `CtlStyle` enum values are a FROZEN
+WIRE FORMAT stored verbatim in `FohPersist.ctlStyle`; renumbering would
+silently remap every save on disk, so nothing was renumbered or removed.
+
+**Font gotcha, measured not guessed:** `foh_font.c`'s face 1 has 49 glyphs
+(A-Z, 0-9, and `- + . : / ' > < ! , ( )`) and **no lowercase at all**, and an
+unknown glyph is a hard `gfx_fatal`, not a blank. `ctl_style_name` returns
+mixed case, so the render site folds to uppercase before `foh_text`. The
+f04-nav flow found this immediately as a frame-0 fatal — the guard works.
+
+---
 
 ### 9.3 Destination 2: Keyboard rebinder — SHAPE-FAITHFUL, CONTENT REDUCED
 
@@ -1182,8 +1440,16 @@ ports cleanly:
   `"keycode-xScale-yScale"`. Navigating away any other way discards edits.
 - Defaults are the literal `keyMap` in `settings.js:8-45`. There is **no
   restore-defaults action** anywhere.
-- Exit goes to gameMode 1 (main menu), **not** back to the Controls
-  chooser.
+- Exit goes to gameMode **1** carrying `menuMode === CONTROLLERCALIB`
+  unchanged, so what renders is the **Controls chooser**, not the top-level
+  main menu. `menuMode` is private to `menu.js` (its only 26 references
+  live there; no setter is exported) and `changeGamemode` never resets it
+  (`main.js:554-569`); `drawMainMenu` indexes title, rows, count and
+  blurb by `menuMode` (`menu.js:437,440,445,485`), so `menuMode` 3 draws
+  title `"Controls"` over rows `["Controller", "Keyboard"]`
+  (`menu.js:19-32`). `menuSelected` is not reset either, so the chooser
+  comes back with the row you left on. Note the order at `:273-279`:
+  `changeGamemode(1)` runs *before* `setKeyboardCookie()`.
 
 **DEVIATION D13 — rebind the 12 physical FunKey-S buttons, not 56 keyboard
 slots.** The device has no keyboard: there is no keycode space, no Enter
@@ -1232,8 +1498,8 @@ kinds. On a single-device handheld this distinction collapses entirely, and
 | # | Behaviour | Our port | Gap |
 |---|---|---|---|
 | 1 | 2-row chooser page, exact labels + blurbs | rendered (`foh_render.c:37`) | **MATCHES** |
-| 2 | Row 0 → controller configurator | `deny` + `refused controller` | **DIFFERS** (should show `"Error: no controller detected"`) |
-| 3 | Row 1 → keyboard rebinder | `deny` + `refused keyboard` | **MISSING** |
+| 2 | Row 0 → controller configurator | shows upstream's own `Error: no controller detected` (`gamepadCalibration.js:71`); B returns | **CLOSED 2026-07-29** (the B return is **DEVIATION D15**, §9.2 — upstream has no B handler at all and its mouse-only Quit arm `:165-169` is unreachable here, so it soft-locks) |
+| 3 | Row 1 → keyboard rebinder | READ-ONLY S1 mapping screen | **PARTIAL 2026-07-29** — D13's rebinder (listening mode, hold-A clear, protected primaries) is NOT built; the screen says so rather than offering a dead control |
 | 4 | B → Options with cursor on Audio | `foh.c:210-228` → menu-options, cursor 0 | **MATCHES** |
 | 5 | Device kind is chosen at join, not in a menu | n/a (single device) | **MATCHES** by construction |
 
@@ -1302,7 +1568,7 @@ in scope.
 
 | # | Excluded | Reason |
 |---|---|---|
-| 1 | **Controller calibration** (`controllermenu.js`, `gamepadCalibration.js`) | Mouse-only DOM/SVG interaction (`controllermenu.js:236-242`); gameMode 14 runs **no** control function (`main.js:947-949`); hard-requires `navigator.getGamepads` (`gamepad.js:9-11`). No mouse and no gamepad exist on the device. Replaced by upstream's own `"Error: no controller detected"` state — §9.2. |
+| 1 | **Controller calibration** (`controllermenu.js`, `gamepadCalibration.js`) | Mouse-only DOM/SVG interaction (`controllermenu.js:236-242`); gameMode 14 runs **no** control function (`main.js:947-949`); hard-requires `navigator.getGamepads` (`gamepad.js:9-11`). No mouse and no gamepad exist on the device. Replaced by upstream's own `"Error: no controller detected"` state, exited via **DEVIATION D15**'s added B — §9.2. |
 | 2 | **Keyboard rebinder's modifier and range item types** | Types 1 and 2 scale an analog stick that does not exist; upstream's own UI already leaves `cstick.ranges` unreachable (`settings.js:22`, no `keymapItems` entry). §9.3 / D13. |
 | 3 | **Target builder** (gameMode 4, `menu.js:87-90`) | A level *editor*. No text entry, no mouse, no file surface on the device. Row stays visible and refuses, matching upstream's own P2P-style dead row. |
 | 4 | **Netplay: Spectate, P2P, Server** (`menu.js:108-121`) | Requires the `streamclient` stack, a server, and `inServerMode`. Owner ruling: **hide behind a named flag.** See §11.1. Note P2P is *already* dead upstream — its body is commented out (`menu.js:114-116`) — so P2P specifically is faithful when it does nothing. |
@@ -1311,7 +1577,7 @@ in scope.
 | 7 | **3- and 4-participant launches** | Menu-plane support is specified (four port panels exist); the *launch* is gated because every frozen golden and the whole `check-sim.sh` surface is 2-player. D6 — a launch-plane limit, deleted when 3/4-player conformance is proven. |
 | 8 | **`keytest.js` as a screen** | It is a lookup table, not a screen — no gamemode, nothing reaches it (§9.4). |
 | 9 | **`blastzoneWrapping`, `dustLessPerfectWavedash` UI rows** | Upstream has no row for them (their label entries are `""`, `css.js:85`/`:87`) and **zero code reads them**. They are persisted at their defaults and never shown — §3.2. |
-| 10 | **Target select semantics** | Not measured this pass; `src/stages/targetselect.js` was not read. Our screen stands as **UNVERIFIED** rather than being declared a gap — §7. |
+| 10 | **Target select semantics** | RENDER measured only in PART (`drawTSSInit` whole, `drawTSS` `:244`-~`:420` of `:244-540`; the tail `:421-540` unread) and the look re-authored from it; `tssControls` (`:43-173`) NOT measured, so the screen stands as **UNVERIFIED** as a whole rather than being declared a gap — §7.1. |
 | 11 | **Menu screens on the checksum surface** | Menus are not on the oracle surface at all. Two upstream input bugs (Q4 malformed diagonal guards, Q5 the 60 Hz left-repeat) are therefore *not* reproduced — D9. Faithfulness binds semantics, not typos that only degrade input. |
 
 ### 11.0 OWNER RULING SUPERSEDES §11.1 (driver, 2026-07-29)
@@ -1331,35 +1597,73 @@ ruling (fix_plan, 2026-07-28) is different and binding:
 So the SHIPPED behaviour is: the three rows are **HIDDEN**, and **VS
 MELEE goes STRAIGHT to local VS** (no Battle-Mode submenu step). The
 "named flag" requirement in §11.1 still applies and is the part to keep:
-one documented switch that restores upstream's shape wholesale — rows
-drawn, submenu reachable, `NET` back in the port-type cycle (D5) — so
-this is revertible without archaeology. Nothing is deleted.
+one documented switch that restores the battle page's shape — rows
+drawn, submenu reachable — so this is revertible without archaeology.
+Nothing is deleted. The switch's scope is exactly §11.1's: the battle
+page only. It does NOT touch the CSS port-type cycle — `NET` stays
+dropped at BOTH flag values as DEVIATION D5, which carries its own owner
+acceptance (§11.1, third bullet).
 
 This is a deliberate, owner-sanctioned DEVIATION from upstream's menu
 graph, recorded as such rather than smuggled in.
 
 ### 11.1 The netplay flag requirement
 
-Owner ruling: netplay stays, hidden behind a **named** flag. Concretely:
+**BINDING — owner ruling C5 (2026-07-28), implemented 2026-07-29.**
+`FOH_NETPLAY` (`port/foh/foh.h`) covers the **battle page only**.
 
-- The three Battle-Mode rows (`Spectate`, `P2P`, `Server`) and the CSS
-  `NET` port type are compiled behind one named build flag,
-  e.g. `MLFK_NETPLAY`, **off by default**.
-- With the flag off, the rows must remain *drawn* — upstream draws them
-  unconditionally (`menuCount[MPMENU] = 4`, `menu.js:31`) and disables P2P
-  by gutting its body, not by hiding it. Selecting one refuses.
-- With the flag off, `togglePort` runs the 3-cycle of D5. With it on, the
-  upstream 4-cycle is restored verbatim and nothing else changes.
+- At `FOH_NETPLAY 0` — the shipped build — the MPMENU page is unreachable
+  and `VS. Melee` runs `menu.js:105`'s Local VS action itself. The three
+  Battle-Mode rows (`Spectate`, `P2P`, `Server`) are **HIDDEN, not
+  drawn-and-refusing**, because the owner asked for "VS MELEE goes straight
+  to local VS".
+- Nothing is deleted. The page, its labels and blurbs
+  (`foh_render.c` `kMenuText[2]`), its four A-arms, its B-back edge and its
+  four judge-registered transitions all still exist and still compile;
+  flipping the flag to 1 restores the page SHELL and the `VS. Melee` routing ONLY — the three rows
+themselves still emit `deny`/`refused`, because Spectate/Server were never
+implemented in this port and upstream's P2P body is commented out. A future
+netplay arc owns their actual behaviour.
+- The CSS `NET` port type is **explicitly OUT of `FOH_NETPLAY`'s scope**.
+  It stays **DEVIATION D5** — a separate registered deviation carrying its
+  own owner acceptance — and `togglePort` runs D5's 3-cycle at *either*
+  flag value. NET has no implementation anywhere in the port, so putting a
+  NET tab behind a flag nobody compiles would be speculative work.
 - No netplay symbol may be referenced from a frozen-list TU — the
-  constructor-installed pointer-seam pattern already established for
+  constructor-installed pointer-seam pattern established for
   `ml_sim_runai_live` (`port/sim/sim/sim_ai_live.c`) is the precedent.
+
+**NOT BINDING — superseded pre-ruling proposal, retained only as the future
+netplay arc's checklist.** Before the ruling, this section asked for ONE
+flag covering both the Battle-Mode rows *and* the CSS `NET` port type, with
+the disabled rows still DRAWN and `togglePort` switching between the
+3-cycle and upstream's 4-cycle with the flag. The ruling above is narrower
+and is what ships; where the two disagree, **the ruling wins**. A future
+netplay arc must revisit both surfaces. (Recorded because a reviewer
+correctly read the old text as binding and called the implementation
+incomplete against it — the spec is evidence, and this is the correction.)
 
 ---
 
 ## §12. Gap totals
 
-Counted from the per-screen tables above. "Intentional" = a **DEVIATION**
-this spec deliberately mandates, not debt.
+> **THIS TABLE IS THE ORIGINAL AUDIT — a historical baseline, NOT current
+> state.** Every row is the count as first measured, and the totals
+> reconcile against those rows. It is deliberately NOT re-scored per arc:
+> re-auditing a row means re-reading upstream and re-testing the screen,
+> and only screens that have actually had that treatment could honestly
+> move. What has closed since is narrated below and in the per-screen
+> sections, which are the current-state source of truth. An earlier
+> revision of this arc tried to present the table as current and got it
+> wrong — the CSS row in particular still describes the pre-CSS-mechanics
+> port, so a "current" reading of it would be false.
+
+Counted from the per-screen tables above, as of the original audit.
+"Intentional" counts the **DEVIATIONS this spec mandated for that screen at
+audit time**, not debt — so it is D1-D13 only. D14 (audio numeric readout)
+and D15 (added B exit on the no-controller screen) were both registered
+AFTER this audit and are deliberately not folded into these counts; they
+are in the §12.1 register.
 
 | Screen | MATCHES | DIFFERS | MISSING | Intentional |
 |---|---:|---:|---:|---:|
@@ -1374,10 +1678,32 @@ this spec deliberately mandates, not debt.
 | Target select | — | — | — | UNVERIFIED |
 | **Total** | **18** | **21** | **28** | 3 |
 
-The distribution matches the owner's report exactly: the menus he could
-*navigate* score well (main menu 4/3/0, splash+title 4/2/1), and the screens
-he tried to *use* score badly — CSS is **0 MATCHES out of 19 behaviours**,
-and two whole screens do not exist.
+That audit-time distribution matched the owner's report exactly: the menus
+he could *navigate* scored well (main menu 4/3/0, splash+title 4/2/1), and
+the screens he tried to *use* scored badly — CSS scored **0 MATCHES out of
+19 behaviours**, and TWO whole screens did not exist.
+
+**What has closed since, by screen** (this list, not the table, is current
+state; each entry points at the section that carries the evidence):
+
+| Screen | Since the audit | Where |
+|---|---|---|
+| Gameplay options | CLOSED modulo D16 — all ten behaviours; held-direction repeat is the registered whole-FOH deviation | §3, §3.1 table |
+| Audio options | HOST-PROVEN, DEVICE-PENDING — the screen exists, persists, and its levels are applied to the mixer on the host path; the shipping target has no caller yet (owner ruling "yep wire", 2026-07-29); host proof = check-foh-flows.sh leg [5c], device audio proof outstanding as a work order | §4 |
+| Controls family | row 2 CLOSED (no-controller state, exited via D15); row 3 PARTIAL — the S1 map is still read-only (D13's rebinder is NOT built and the screen says so), but the screen now carries the TWO SETTABLE ROWS of C30(c) | §9.6, §9.7 |
+| Battle submenu | HIDDEN by owner ruling C5, nothing deleted | §11.1 |
+| CSS | the CSS-mechanics arc landed items 1-4 (cursor, token model, port types, ready/launch); the §2 tables and the CSS row above still describe the PRE-arc port and have not been re-audited | §2 |
+| Target select | LOOK measured and re-authored; semantics still UNVERIFIED | §7.1 |
+| Credits | still absent — **the last wholly unbuilt screen** | §8 |
+| SSS, splash/title | untouched since the audit | §6, §10 |
+>
+> Closed by owner ruling C5 rather than by measurement: the battle submenu
+> (Spectate / P2P / Server) is HIDDEN behind `FOH_NETPLAY` in
+> `port/foh/foh.h` and `VS. Melee` runs `menu.js:105`'s Local VS action
+> directly. Nothing was deleted — flipping the flag
+> restores the page SHELL and the `VS. Melee` routing, and the judge still
+> registers all four of its edges. It does NOT make the three rows work:
+> they still refuse, and a future netplay arc owns that.
 
 ### 12.1 Deviation register
 
@@ -1387,7 +1713,7 @@ and two whole screens do not exist.
 | D2 | `du/dd/dl/dr` unbindable; drops the CSS d-pad-up launch and d-pad-right-Falco arms | §1.2, §2.10 |
 | D3 | Cursor speed as a fraction of screen + `FOH_CURSOR_SPEED` knob | §1.2 |
 | D4 | Hit regions are our layout's drawn rects, not upstream pixel coords | §1.2 |
-| D5 | CSS port-type cycle drops NET (3-cycle) until the netplay flag lands | §2.7 |
+| D5 | CSS port-type cycle drops NET (3-cycle); NOT gated on `FOH_NETPLAY` — unconditional until a future netplay arc | §2.7, §11.1 |
 | D6 | Ports 3–4 stay N/A until 3/4-player conformance is proven | §2.7 |
 | D7 | CPU knob is grab-drag at the §1.2 cursor speed | §2.8 |
 | D8 | Name tags: keep random + clear, cut free-text entry | §2.9 |
@@ -1396,10 +1722,28 @@ and two whole screens do not exist.
 | D11 | SSS RANDOM resolves off the seeded chain | §6.5 |
 | D12 | Credits reticle becomes a relative cursor | §8.3 |
 | D13 | Rebind 12 physical buttons, not 56 keyboard slots | §9.3 |
+| D14 | Numeric tenths readout beside each audio knob (upstream draws none) — OWNER-RATIFIED 2026-07-29 | §4 |
+| D15 | Added `B` exit on the no-controller screen (upstream has no B handler; mouse-only Quit) | §9.2 |
+| D16 | Front-of-house navigation is RISING-EDGE only — holding a direction steps ONCE, where upstream repeats 1-then-every-10 frames. Applies to every FOH screen incl. §3 and §4 | §5.5 row 6 |
+| D17 | A CPU in port 1 cannot LAUNCH (`sim_setup_match` carries no P1 type) — menu plane unchanged | §2.7 |
 
 ---
 
-## §13. Recommended implementation order
+## §13. Recommended implementation order (QUARANTINED — historical)
+
+> **QUARANTINED. Nothing in §13, §13.1 or §13.2 is binding, current, or
+> safe to plan against.** This is the ordering and the consequence analysis
+> proposed AT AUDIT TIME, retained only as the record of that reasoning.
+> Substantial parts of it have since shipped and other parts were overtaken
+> by owner rulings, so rather than maintain a list of which sentences are
+> stale — an enumeration that has now been wrong twice — the whole section
+> is quarantined wholesale.
+>
+> **For current state, read §12's "what has closed since" table and the
+> per-screen sections.** For remaining work, read that table's open rows.
+> Do not derive schemas, field sets or file formats from anything below:
+> the `LAUNCH` line and `FohPersist` have both moved on (v2), and several
+> "to plan for" consequences were resolved differently than proposed.
 
 Sized **S** (< ~1 task), **M** (~1 task), **L** (multi-task). Ordered by
 owner-visible value per unit of work, with dependencies respected.

@@ -23,10 +23,21 @@ bool ctl_style_set(int style) {
   return true;
 }
 
+// C31 (driver, 2026-07-29): NORMAL's DISPLAY LABEL only. "Normal" and
+// "Natural" share a prefix and a length and are near-indistinguishable in the
+// 240x240 5x7 font — the owner is about to choose between exactly these two,
+// so the label must not be the ambiguous part of the decision. "Classic"
+// reads correctly for what NORMAL is (full-deflection stick, both shoulders
+// shield, Y C-layer kept) and shares no prefix with "Natural" or "Box".
+//
+// THE ENUM IS A FROZEN WIRE FORMAT: CtlStyle values are stored verbatim in
+// FohPersist.ctlStyle, so renumbering or removing a style silently remaps
+// every save on disk — including the owner's. This change is the STRING and
+// nothing else; CTL_STYLE_NORMAL is still 0.
 const char *ctl_style_name(int style) {
   switch (style) {
   case CTL_STYLE_NATURAL: return "Natural";
-  case CTL_STYLE_NORMAL: return "Normal";
+  case CTL_STYLE_NORMAL: return "Classic";
   case CTL_STYLE_BOX: return "Box";
   default: return "?";
   }

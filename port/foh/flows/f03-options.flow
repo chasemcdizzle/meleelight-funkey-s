@@ -1,13 +1,30 @@
 FLOW1
-# f03: the options path. menu-top: three DOWNs to OPTIONS, A ->
-# menu-options. A on AUDIO = refused (registered deferral). DOWN to
-# GAMEPLAY, A -> options-gameplay. Edits: turbo ON, L-cancel 0->1->2,
-# tap-jump-off P1 then P2. B backs to menu-options (cursor GAMEPLAY),
-# B to menu-top (cursor OPTIONS), DOWN wraps 3->0 (VS. MELEE — the
-# wrap witness), then the default-chars launch: battle -> css ->
-# START -> sss -> A (battlefield, marth vs marth, edited settings).
-# Bridge mode `state`: BRIDGE-STATE proves the edited settings reached
-# the GameState slice.
+# f03: the options path, over BOTH options screens.
+# menu-top: three DOWNs to OPTIONS, A -> menu-options.
+#
+# AUDIO (MENU-SPEC §4; new this arc — the row used to emit `refused
+# audio`): A on AUDIO -> options-audio. RIGHT x2 raises Sounds 0.5 -> 0.7,
+# DOWN moves to Music, LEFT drops it 0.3 -> 0.2; shot; B saves both levels
+# (audiomenu.js:24-25, no meHost gate) and returns with the cursor still on
+# AUDIO. There is no A handler on that screen at all (audiomenu.js:16-121),
+# so none is scripted.
+#
+# GAMEPLAY (MENU-SPEC §3.1; the row list is upstream's complete five):
+# DOWN to GAMEPLAY, A -> options-gameplay. Row 0 turbo ON; DOWN, A, A =
+# L-cancel 0->1->2; DOWN, A = Flash on L-Cancel ON; DOWN, A = Everyone
+# Walljumps ON (the measured-dead toggle — row + bit, wired to nothing);
+# DOWN to Tapjump off (row 4, the only multi-column row), A = P1, RIGHT +
+# A = P2. B backs to menu-options (cursor GAMEPLAY), B to menu-top (cursor
+# OPTIONS), DOWN wraps 3->0 (VS. MELEE — the wrap witness), then the
+# default-chars launch: VS. MELEE -> css (C5) -> START -> sss -> A
+# (battlefield, marth vs marth, edited settings).
+# Bridge mode `state`: BRIDGE-STATE proves the edited settings reached the
+# GameState slice. The LAUNCH line gained `flashlcancel=1 walljump=1`
+# (MENU-SPEC §13.1 item 1, and review-r2 asked for it): every OTHER field
+# is byte-unchanged from the pre-arc freeze — turbo=1 lcancel=2
+# tapjump=1,1,0,0 — so the manifest cross-binds still bind the same values,
+# and the two new columns are the evidence that the two new rows reach the
+# bridge at all.
 I 1 -
 I 375 S
 I 376 -
@@ -19,40 +36,59 @@ I 390 D
 I 393 -
 I 395 A
 I 396 -
+# --- audio options -----------------------------------------------------
 I 400 A
 I 401 -
-I 405 D
+I 405 R
 I 408 -
-I 410 A
-I 411 -
-SHOT 415 options-gameplay
-I 420 A
-I 421 -
-I 425 D
-I 428 -
-I 430 A
+I 410 R
+I 413 -
+I 415 D
+I 418 -
+I 420 L
+I 423 -
+SHOT 425 options-audio
+I 430 B
 I 431 -
-I 435 A
-I 436 -
-I 440 D
-I 443 -
-I 445 A
-I 446 -
-I 450 R
-I 453 -
-I 455 A
-I 456 -
-SHOT 460 options-edited
-I 465 B
+# --- gameplay options --------------------------------------------------
+I 435 D
+I 438 -
+I 440 A
+I 441 -
+SHOT 445 options-gameplay
+I 450 A
+I 451 -
+I 455 D
+I 458 -
+I 460 A
+I 461 -
+I 465 A
 I 466 -
-I 470 B
-I 471 -
+I 470 D
+I 473 -
+I 475 A
+I 476 -
 I 480 D
 I 483 -
 I 485 A
 I 486 -
-I 490 A
-I 491 -
+I 490 D
+I 493 -
+I 495 A
+I 496 -
+I 500 R
+I 503 -
+I 505 A
+I 506 -
+SHOT 510 options-edited
+I 515 B
+I 516 -
+I 520 B
+I 521 -
+I 525 D
+I 528 -
+I 530 A
+I 531 -
 # CSS mechanics arc (docs/MENU-SPEC.md item 4): START launches only while
 # READY TO FIGHT, and the CSS opens with one participant (playerType init
 # [-1,-1,-1,-1], main.js:107; P1 joins at the title). Clamp-anchored like
@@ -60,16 +96,16 @@ I 491 -
 # x = 79.20 and UP x36 -> y = 101.76 puts it on port 2's type tab without
 # ever entering the roster band, and A makes it HMN. The chars stay at
 # their defaults (marth vs marth) — this flow is about the settings plane.
-I 495 LD
-I 600 -
-I 605 R
-I 638 -
-I 643 U
-I 679 -
-I 685 A
-I 688 -
-I 695 S
-I 698 -
-I 705 A
-I 708 -
-END 715
+I 535 LD
+I 640 -
+I 645 R
+I 678 -
+I 683 U
+I 719 -
+I 725 A
+I 728 -
+I 735 S
+I 738 -
+I 745 A
+I 748 -
+END 755

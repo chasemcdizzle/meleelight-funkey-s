@@ -25,8 +25,6 @@ I 375 S
 I 376 -
 I 380 A
 I 381 -
-I 385 A
-I 386 -
 # P1: anchor UP x70, DOWN x12 -> (28.00, 46.08) on cell 0; B to retrieve
 # the token; carry RIGHT x77 -> x = 212.80 (cell 4, falcon); A to drop.
 I 390 U

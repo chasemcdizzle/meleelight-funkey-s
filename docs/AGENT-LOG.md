@@ -20546,3 +20546,443 @@ ZOOM OUT: the handoff itself is an instance of the project's own lesson —
 evidence and knowledge must live where the next reader is contracted to
 look, not in a transcript. Same class as C8 (a verdict living only in an
 agent summary) and PROCESS §12.3(5) (evidence must outlive the worktree).
+
+## driver — 2026-07-30 — match-exit arc: grok GO but §11 UNMET (second reviewer dispatched); 3 BLOCKERS registered; codex replayed 3× consecutively
+
+**Arc status: NOT closed.** The writer reported "the arc reached GO" on the
+strength of `.loop/review-mexit-r7g.log` (grok, terminal `VERDICT: GO` at :36,
+`GROK_RC=0`, 0 NULs, 0 anchored NO-GO — driver-verified, and the review is
+genuinely substantive: it re-derived the [4c] binding from ground truth and
+still found 2 Lows). **But r7 is a §11 codex-failure fallback round, and §11
+requires TWO independent reviews — grok AND a fresh Opus 5 reviewer — with
+"the round counts as GO only if BOTH end GO."** Only grok ran. Driver checked:
+no `review-mexit-r7o.log` exists. **Additionally the grok GO PREDATES the two
+Low fixes the writer then applied at grok's own prescription** (the VS finish
+music comment ~`foh_dev.c:3319-3331`, and `check-mexit-reentry.sh:299`'s bare
+`grep -qE` TLAUNCH check), so the FINAL bytes have been reviewed by nobody.
+Driver dispatched the missing Opus 5 reviewer against the final bytes
+(`.loop/review-mexit-r7o.log`). Same standard applied to the menus lane
+(sent back for an unmet Tier A+ obligation) and to render-judge (Tier A+ not
+waived) — consistency, not case-by-case leniency.
+
+**CODEX REPLAY, three consecutive rounds on one lane.** r5 replayed r4, r6
+replayed r5b, r7 replayed r6b — the last **even with `--ephemeral`**. Each
+proven by `cmp` rc 0 on the final `## Findings` block plus identical
+`tokens used` totals, never by narrative. Consequence for planning: further
+codex rounds on this lane are not expected to produce fresh review; the §11
+fallback path is the working route. (Registers alongside the existing
+"codex produces PROVEN REPLAYS" finding — this is the strongest instance yet,
+because `--ephemeral` did not defeat it.)
+
+**Registered under BLOCKERS (writer-reported, barred from this file):**
+
+1. **system-menu-in-match — unwitnessed.** The `--system-menu` arm has no
+   committed rig that drives it in-match. Two ad-hoc device attempts were made;
+   both left the device clean and are documented in
+   `.loop/matchexit-progress.md`. Deferred as an explicit registered deferral,
+   NOT a stub (grok judged it "an honest explicit deferral rather than a stub").
+2. **VS-finish-arm-on-device — unwitnessed.** The VS finish banner / `time`
+   vs `game` sfx / 2500 ms hold path is exercised by no committed device leg;
+   `--match-timer` is its only trigger and appears in no check script. First
+   real execution would be during an owner playthrough.
+3. **L1 volume-sweep underruns — unmeasured.** `foh_pause.c` `set_level` forks
+   a shell per volume/brightness press inside the 16.67 ms sysmenu loop; the
+   underrun measurement during a volume sweep was not taken. L2 was PARTIALLY
+   measured: `MemAvailable` 34,336 kB at rest, ANIM1 all-five 15,372 kB.
+
+**Device evidence that DID land:** `bash port/sim/target/check-device-target.sh`
+-> `DEVICE TARGET CONFORMS (goldens=2 flows=2 shots=4 fbwit=4 p99=14.146ms
+skips=0 underruns=0 starves=0 …)` rc 0 — closes M1 leg [6b] ON DEVICE, which
+is the H1 casualty the r3 review predicted. Also `MEXIT REENTRY OK` rc 0 (the
+new H1 witness) and `LAUNCH KIND OK` 15/15 rc 0.
+
+**Manifest re-pin deliberately NOT done — driver concurs.** Two correctness
+reasons, both correct: the GO predates the two Low fixes, and
+`.loop/cite-teeth.sh` self-documents as unsafe to run while another agent edits
+the tree (true all session). `verify_m4.sh` currently refuses CORRECTLY. The
+measured re-pin is exactly one row (`port/gfx/opk/mlfk-foh.sh`, new sha
+`03e7d065…313b`), with `verify_m4.sh`'s own row unchanged and anchor
+`be1d4a92…c90da` intact.
+
+**ZOOM OUT (HARD RULE 8).** Two instances this session of the SAME class —
+*a self-report asserting a completion state that disk contradicts*: a writer's
+12-of-13-row DONE ledger (C34, only H1 real), and now "the arc reached GO" when
+the governing rule needs two reviewers and one ran. Neither was dishonest in
+intent; both were **a rule applied from memory instead of re-read**. The
+class fix is not more diligence, it is the same one two lanes independently
+proposed today: **the reviewing harness emits its own verdict artifact carrying
+arc id + reviewed scope + which rule closed it**, so "is this arc closed?" is
+answered by a producer-written record rather than by a reader reconstructing it.
+Now motivated by five independent failure modes. Owner decision pending.
+
+**Corrupt-log corollary, measured today:** `.loop/mexit-r4-device-target.log` is
+44.4% NUL (7,835 of 17,627) AND CONTAINS THE STRING
+`DEVICE TARGET CONFORMS` — while its actual result was `TARGET_RC=1`. A success
+string inside a log is not evidence the run succeeded. NUL-scan every evidence
+artifact before reading a verdict out of it. (Clean replacement:
+`.loop/mexit-r5-device-target.log`, 0 NULs.)
+
+## driver — 2026-07-30 — match-exit arc AT GO (§11 satisfied: grok GO + Opus 5 GO); BLOCKER text CORRECTED — ~232 lines have never executed anywhere, and verify_m4.sh cannot close that by construction
+
+**§11 fallback now SATISFIED.** The missing second review ran against the FINAL
+bytes and returned GO. Driver-verified cold from the file, not from a summary:
+`.loop/review-mexit-r7o.log`, 27,295 B, **0 NUL bytes**, exactly **1** anchored
+`^VERDICT: GO$` (:486, terminal, column 0, undecorated), **0** anchored NO-GO.
+With `.loop/review-mexit-r7g.log` (grok GO, GROK_RC=0) that is BOTH reviewers
+GO, which is what §11 requires. **The match-exit arc is at GO.** Census from the
+second reviewer: **0 High, 0 Medium, 5 Low.**
+
+It also independently re-verified what the three replayed codex rounds never
+re-examined, and cleared each: the seeded RNG stream carries correctly across
+matches (`sim_boot_page`'s `memset` runs once, BEFORE the FOH phase — the
+hazard it went hunting for does not exist); continuing the tick after
+`ml_sim_finish_hook` is faithful (`matchTimerTick` is upstream's last
+sim-bearing statement, and `playing`/`gameEnd` are read nowhere after it);
+`setTokenPosSnapToChar`'s port-vs-char index confusion is carried verbatim and
+is correct; and `sounds.time`/`sounds.game` exist upstream, so the VS-finish arm
+cannot `sim_fatal` on a missing pack name. It confirmed the two previously
+unreviewed Low fixes are present and correct, and that the TLAUNCH fix is
+STRONGER than grok prescribed (`one_canonical` also catches an H1 regression
+that appends a second `TLAUNCH`).
+
+**CORRECTION to the BLOCKER text in the previous entry — it UNDERSTATED the
+gap.** Measured by the reviewer: `--system-menu` appears exactly once outside
+`foh_dev.c` (the product launcher), and **`--match-timer` appears in NO script
+at all.** Therefore `foh_sysmenu_open` (~157 lines) and the VS-finish block
+(~75 lines) — **~232 lines total — have never executed even once**, host or
+device, in-match or in-menu. The prior entry's "unwitnessed" wording implied
+partial coverage; there is none.
+
+**And `verify_m4.sh` STRUCTURALLY CANNOT close it.** `sysOk` requires
+`!shotsDir`, while **every committed flow leg runs with `--shots-dir`** — so no
+amount of gate running will ever enter the system-menu arm. Consequence for
+sequencing, and this is a driver-binding plan change: **the successor rig that
+drives these arms belongs BEFORE the M4 gate attempt, not after it.** Otherwise
+the first execution of ~232 lines of shipping code is Chase's acceptance
+playthrough. (This is a fresh instance of the registered class "evidence-rig
+bound governing the play path" — here the bound is `--shots-dir` being
+unconditional on every committed leg.)
+
+**The 5 Lows — dispositions (§3 allows Lows dispositioned in writing).**
+1. `foh_dev.c:3300` — the TIME!/GAME! discriminator is read **one `matchTimer`
+   decrement AFTER** upstream's `finishGame` reads it. One-frame window, off the
+   checksum surface, but the reviewer names it a real **HARD RULE 5 deviation**.
+   **DISPOSITION: NOT silently kept and NOT unilaterally fixed.** Fixing it now
+   would move bytes that both GO verdicts cover, re-opening the exact
+   review-coverage hole that cost this lane a round. HARD RULE 5 deviations are
+   the OWNER's call by precedent (D14, the numeric volume readout, was ratified
+   as an owner-sanctioned deviation). **Registered for owner ratification, with
+   the cheap fix already named: latch the discriminator in the hook.**
+2. Three **unbounded release drains**; this change widened
+   `platform_input_idle` to every action-bearing field and enabled the system
+   menu on the product path, and the new host injector holds keys at EOF BY
+   DESIGN. **Consequence: the successor rig will HANG rather than fail.** A hang
+   is strictly worse than a failure for an autonomous loop. **DISPOSITION: fix
+   this as part of building the successor rig, before that rig is first run.**
+3. `foh_dev.c:3623` — post-match drain does not latch a dead display, inflating
+   a summary field that checks parse. **DISPOSITION: fold into the same rig
+   increment.**
+4. **Measured citation drift** — nine `main.js` ranges off by 2-7 lines,
+   CLUSTERED in the one arm nobody has ever executed. **DISPOSITION: fix with
+   the rig increment.** Note the correlation is the interesting part: comments
+   drift precisely where no execution ever forces a re-read.
+5. The `gameMode == 5` endGame destination is stated unconditionally while
+   upstream branches on `targetTesting`. **DISPOSITION: comment correction with
+   the rig increment** (the port has no target builder, so the branch is
+   genuinely unreachable — the CODE is right, the COMMENT overclaims).
+
+**MERGE POSTURE.** Arc at GO, so the lane is mergeable. **Not merged this turn**
+— render-judge is mid-closeout, and §12.2(3) says batch merges that touch
+pinned producers so the manifest+anchor cycle runs ONCE. The measured re-pin is
+exactly one row (`port/gfx/opk/mlfk-foh.sh` -> `03e7d065…313b`), `verify_m4.sh`'s
+own row unchanged, anchor `be1d4a92…c90da` intact. Manifest/anchor is
+driver-only (§12.2(7)), so the re-pin is the driver's act at merge time.
+`verify_m4.sh` refuses CORRECTLY until then.
+
+## driver — 2026-07-30 — render-judge arc CLOSED (Tier A+ discharged, indep-3 GO); carrying indep-2 L4 out of the gitignored note; MY CAPPING PREMISE WAS WRONG and the lane corrected it
+
+**Arc closed at GO, Tier A+ discharged on the FINAL bytes.** Driver-verified
+cold from the files:
+- `.loop/review-134-indep-2.log` — terminal `VERDICT: NO-GO` (:224), 0 anchored
+  GO, 0 NULs in 15,341 B.
+- `.loop/review-134-indep-3.log` — terminal `VERDICT: GO`, 1 anchored GO, 0
+  anchored NO-GO, 0 NULs in 20,826 B. 0 High/Medium, 8 Low, **all dispositioned
+  in writing and NONE fixed — deliberately, because any edit would move the
+  bytes out from under the GO.** That is the correct instinct, and it is the
+  lesson the match-exit lane paid a round to learn today.
+- `bash port/gfx/check-render.sh` -> `RENDER OK`, `RENDER_RC=0`.
+- `bash .loop/review-134-regression.sh` -> `REGRESSION OK (immutable corpus
+  b8c9e40c…24c1, verified before judging, after judging, AND after publish;
+  candidate judge staged, executed and re-verified live; superseded evidence
+  retained)`, `REG_RC=0`.
+
+**THE DRIVER'S CAPPING PREMISE WAS WRONG, AND THE LANE SAID SO.** The 10:05
+ruling capped this arc partly on "the shipping surface has converged — the last
+`port/gfx/` Medium was r6 M1." That stopped being true: **indep-2 found a
+Medium in SHIPPING `iou.js` on the final bytes** — the C-side ART containment
+arm was a **TAUTOLOGY**. `article ⊆ fg` holds for ANY renderer (ink is set-only
+and cleared only before the article pass), so **deleting the OR-back left the
+check green while its message claimed to detect exactly that**; its only tooth
+was a data-byte `.pgm` edit. The lane corrected my premise IN PLACE rather than
+repairing it quietly, which is the standard. **The cap still holds — for a
+different reason** (bounded convergence), not because the shipping surface was
+clean. Recording the wrong premise next to the right conclusion, because the
+reasoning is what a successor reuses.
+
+Fixed the STRICT way (HARD RULE 3 forbids deleting a check): the producer now
+publishes the saved pre-article plane (`gfx_render.c` accessor +
+`gfx_dump_plane_pgm`; `gfx_replay.c` dumps `fNNNN.artpre.pgm`), `iou.js` keeps
+the old arm renamed for the only thing it still catches and adds a contingent
+restoration arm with a non-vacuity guard, and `check-render.sh` byte-checks the
+new plane. **Proven by a PRODUCER edit, not a data edit:** OR-back removed ->
+`check-render.sh` **rc 1**, `iou: article f0030: 2562 of 2817 pre-article
+cell(s) are MISSING`; restored -> `gfx_render.c` re-hashes byte-identical.
+
+**Recurring objection class — the lane's phrasing supersedes the driver's.**
+Driver proposed "the evidence rig carries weaker guarantees than the surface it
+certifies." Measured and sharpened by the lane to: **check code accretes
+assertions faster than it accretes ways to prove they bite** — **12 instances,
+one mechanism.** That is strictly better, and it explains why the driver's
+version was wrong by exactly one round: indep-2's Medium was the identical
+failure living inside SHIPPING `iou.js`, not inside the rig.
+
+**CARRIED HERE SO IT SURVIVES MERGE — indep-2 L4 (driver action, as requested).**
+It existed only in the gitignored lane note and would have died silently at
+merge: **the ART leg has two measured blind spots.** (Recorded verbatim from
+the lane's measurement; the ART plane resolves ~2-device-cell displacement, so
+it is provably insensitive to (a) dropping 2 of the laser's 3
+chromatic-aberration passes and (b) halving the laser quad's half-height
+(2 -> 1 canvas px = 0.4 device px). Both are sub-device-pixel shape changes.
+Honest exposure, reported and NOT fixed.)
+
+**L7, worth its own line: `artRestored` provably equals `artContained`** — i.e.
+**the recurring class reproduced itself INSIDE the fix for that very class.**
+That is the most useful single datum this arc produced, and it is why the class
+is mechanical rather than a discipline problem.
+
+**Merge follow-up list (do NOT lose):** 4 indep-2 Lows re-raised independently
+by indep-3, plus 4 new indep-3 Lows including L7.
+
+**OPERATIONAL, time-bounded:** the regression retention archive is at **3/4
+(335 MB)** and **the run after next will FAIL CLOSED** (by design — it never
+auto-prunes). Clear deliberately or set `REGRESSION_ARCHIVE_MAX=8` before the
+next-but-one run. This is a fail-closed budget working as intended, not a bug.
+
+**Chrome 150 -> 151 remains IRREVERSIBLE** (pin fired on both refusal paths; 6
+cold captures on 151; all 83 judgment lines byte-identical to each other and to
+150; no bound changed; 150 not reacquirable). Also carried verbatim: the
+predecessor's self-caught false citation, recorded rather than erased.
+
+## driver — 2026-07-30 — MEASURED: the match-exit re-pin is FIVE rows, not one (writer under-reported 5x); + C35 instance #4, made by the driver
+
+**The writer's closing report said the re-pin is "exactly one row changed
+(`port/gfx/opk/mlfk-foh.sh`)". That is WRONG.** Driver measured every one of the
+89 manifest rows by recomputing sha256 and comparing to the pin:
+
+| drifted row | manifest status |
+|---|---|
+| `port/sim/device/riglib.sh` | reviewed-go |
+| `port/sim/target/check-device-target.sh` | reviewed-go |
+| `port/foh/check-device-foh.sh` | reviewed-go |
+| `port/gfx/opk/mlfk-foh.sh` | reviewed-go |
+| `port/sim/device/check-device-fullgame.sh` | **arc-in-flight** |
+
+83 rows match their pin; 0 missing. **`port/sim/device/verify_m4.sh` is a FALSE
+POSITIVE of the naive whole-file comparison** and is genuinely unchanged: its
+manifest row pins the sha of its bytes EXCLUDING the single
+`^MANIFEST_SHA256=` line, and the normalized hash recomputes to
+`ee6a9444…78975`, exactly its pin (`git diff --quiet HEAD` also clean). Any
+future drift audit MUST normalize that one row or it will cry wolf every time.
+
+**Consequences for the merge, which is now materially larger than recorded:**
+1. **FOUR `reviewed-go` rows need re-pinning**, not one — and each needs a cite
+   whose TERMINAL anchored verdict is GO (C11). The match-exit arc supplies two
+   valid cites: `.loop/review-mexit-r7g.log` (grok, terminal `VERDICT: GO`) and
+   `.loop/review-mexit-r7o.log` (Opus 5, terminal `VERDICT: GO`, driver-verified
+   0 NULs / 1 anchored GO / 0 NO-GO).
+2. **`check-device-fullgame.sh` drifted while sitting at `arc-in-flight`** —
+   that is the B9 headroom arc, still OPEN. Its bytes cannot be re-pinned to
+   `reviewed-go` by this merge; the row stays arc-in-flight and the gate keeps
+   refusing on it in AUTHORITATIVE mode. **That is correct behaviour**, and it
+   means a green M4 gate needs the B9 arc closed regardless of the three lanes.
+3. The existing `mlfk-foh.sh` cite ALSO still contains the **brace glob**
+   `.loop/c6-review-codex-r{1,2,3}.log` — the iter-132 driver error that broke
+   the gate's line grammar. The re-pin MUST replace it with explicit paths, not
+   carry it forward.
+
+**Why this matters beyond the arithmetic:** the driver declined to freehand this
+re-pin last turn on the grounds that it was intricate and gate-affecting. That
+caution is now retroactively justified by measurement rather than by instinct —
+acting on "it's one row" would have produced an incomplete manifest edit. The
+gate WOULD have caught it (every error mode here is a refusal, never a false
+green — the anchor is designed so "a wrong literal IS a refusal"), but the
+driver would have believed the re-pin complete. **Third C34-class instance
+today: a self-reported completion figure contradicted by disk.**
+
+**C35 INSTANCE #4 — the driver's own, this turn.** The first drift audit was
+written as a shell `while read` loop calling `shasum`/`awk`; inside that loop
+both binaries resolved to `command not found`, so every `actual=` came back
+EMPTY and **all 89 rows reported as DRIFTED**. The driver caught it only because
+the error text was visible in the output. Had the loop been quieter, the
+conclusion "the entire manifest has drifted" would have looked authoritative.
+**Rule reinforced: when a check reports a suspiciously TOTAL result (everything
+failed / nothing found), suspect the instrument before believing the finding.**
+The audit was redone in `python3` (hashlib, no external binaries) and is the
+version reported above.
+
+## driver — 2026-07-30 — OWNER RULINGS (4, all ratified by Chase): menus CAPPED at r20 · TIME!/GAME! deviation RATIFIED · reviewer-harness verdict artifact APPROVED · successor rig BEFORE the gate
+
+Chase ratified all four decisions the driver escalated. Recorded here per
+PROCESS §10 (day-tagged in AGENT-LOG, mirrored in STATE.md §rulings).
+
+**1. MENUS ARC CAPPED at round 20.** Twenty consecutive valid NO-GOs
+(r20 = `.loop/menus-p2-r20.log`, 661,072 B, 2 anchored NO-GO, `CODEX_RC=0`,
+**0 NULs** — a genuine round, driver-verified), ~2.5x the §3 ~8-round cap.
+The arc was NOT capped for producing noise: its own gates are green
+(`FOH FLOWS OK … teeth=38`, `JUDGE REGRESSION OK … negs=26 tables=26`) and its
+rounds kept finding real defects, including a reviewer-CONSTRUCTED 5-way
+stacked loosening that PASSED at r16. That is precisely the condition the cap
+is written for: **when round 20 still finds defects, the information is about
+the SURFACE, not the change.**
+
+RECURRING OBJECTION CLASS (already measured, now the deliverable): **the
+judge/normalizer surface admits new loosenings faster than point fixes close
+them.** Proof: 12 rounds of point fixes did not converge, while ONE class fix —
+freezing 22 decision-table hashes + DECISION_REGION — killed the whole category
+AND defeated the constructed 5-way stack. Per §3 the lane now: fixes
+outstanding Medium+, dispositions Lows in writing, and records the CAPPED note
+naming that class. Its **Tier A+ obligation remains OWED** (it touches
+`judge-foh-trace.js` / `normalize-foh-trace.js`): independent second reviewer
+plus archived old-vs-new byte-identity regression.
+
+**2. TIME!/GAME! ONE-FRAME DEVIATION — RATIFIED as owner-sanctioned (D14
+precedent).** `foh_dev.c:3300` reads the discriminator one `matchTimer`
+decrement after upstream's `finishGame`. HARD RULE 5 deviation, one frame, off
+the checksum surface. **Carried deliberately.** Not fixed because editing it
+would move bytes both match-exit GO verdicts cover — the exact hole that cost
+this lane a round earlier today (a GO that predated two later fixes). Fix, if
+ever wanted: latch the discriminator in the hook; fold into the successor-rig
+increment where a fresh round is already owed.
+
+**3. REVIEWER-HARNESS VERDICT ARTIFACT — APPROVED as a PROCESS change.** The
+reviewing harness emits its OWN artifact carrying arc id + reviewed scope +
+which rule closed the arc, so arc closure is answered by a producer-written
+record rather than a reader's interpretation of log bytes. **Five measured
+failure modes in ONE day motivate it**, and two lanes derived it INDEPENDENTLY
+from unrelated evidence (cite-closure residuals 1+2 ← citation laundering;
+render-judge ← check-code class). It closes: (a) a NO-GO report whose EOF
+carries a QUOTED FOREIGN `VERDICT: GO`; (b) the 19 `x-*` rows resting on
+cross-artifact arc relations with no machine-readable arc identity;
+(c) fabricated work-status ledgers (12-of-13 DONE, only 1 real); (d) "the arc
+reached GO" asserted under a two-reviewer rule when one reviewer ran;
+(e) corrupt logs whose readable text contradicts their exit code — measured:
+`.loop/mexit-r4-device-target.log` is 44.4% NUL, CONTAINS
+`DEVICE TARGET CONFORMS`, and its run exited `TARGET_RC=1`.
+
+**4. SUCCESSOR RIG BEFORE THE M4 GATE ATTEMPT — resequencing approved.**
+~232 lines (`foh_sysmenu_open` ~157, VS-finish ~75) have never executed
+anywhere, and `verify_m4.sh` cannot reach them by construction (`sysOk` needs
+`!shotsDir`; every committed leg sets `--shots-dir`). Without the rig, their
+first execution is Chase's acceptance playthrough. **Precondition: fix the
+unbounded release drains first** — the host injector holds keys at EOF by
+design, so the rig would HANG rather than fail; a hang is strictly worse than a
+failure for an autonomous loop.
+
+**Merge remains sequencing-blocked on menus by MEASURED file overlap** (menus
+touches 4 of the 5 drifted pinned rows: `check-device-foh.sh` and
+`check-device-target.sh` already modified in its worktree; `riglib.sh` and
+`check-device-fullgame.sh` still owed via its BLOCKER 9 — `grep -c 'ctl_style.c'`
+= 0 in both). Capping menus is therefore what converges the whole merge.
+
+## driver — 2026-07-30 — MENUS LANE CLOSED (§3 CAPPED at r21), driver-audited; Tier A+ DISCHARGED with one registered residual; ALL FOUR LANES NOW DONE
+
+**Driver audit of the lane's report — every checkable claim HELD.** Measured,
+not read from the summary:
+- **BLOCKER 9 CLOSED (real fix, real defect):** `grep -c 'ctl_style.c'` now **1**
+  in BOTH `port/sim/device/riglib.sh` and `port/sim/device/check-device-fullgame.sh`
+  (driver measured **0/0** at 12:45). The lane proved the defect was real rather
+  than assumed: `nm -u foh.o` showed undefined `_ctl_style_get`/`_ctl_style_set`.
+  Class sweep applied to all 7 tracked scripts that compile `foh_render.c`.
+- **Tier A+ r8 review:** `.loop/menus-tierA-r8-20260731T011919Z.log`, 24,936 B,
+  **0 NULs**, 397 lines, terminal `VERDICT: NO-GO` at :397 (last non-empty line,
+  column 0, unadorned), **0 anchored GO**. Fresh Opus 5 reviewer, separate
+  session, not grok.
+- **Gates green:** `FOH FLOWS OK (… launch=1 teeth=40)` rc 0 ·
+  `JUDGE REGRESSION OK (… negs=26 tables=26)` rc 0 ·
+  `MENUS REGRESSION OK (corpus c284f391…6323 verified before judging, after
+  judging, and after publish; rows=31 identical=17 declared=14)` rc 0.
+
+**TIER A+ RULED DISCHARGED — and here is the measurement that decides it.**
+A Tier A+ obligation is only met if the independent review covered the bytes
+that actually merge. It did:
+- `port/foh/judge-foh-trace.js` mtime **13:12**, `normalize-foh-trace.js`
+  **14:19** — both hours BEFORE the r8 review launched (filename stamp
+  `20260731T011919Z` = **18:19** local).
+- The judge IS inside the reviewed diff (`grep -c '^\+\+\+ b/port/foh/judge-foh-trace.js'`
+  on `.loop/menus-tierA-r8-…-diff.txt` = 1).
+- The only post-review edits were `check-judge-regression.sh` (**18:51**) and
+  `judge-domains.authored.txt` (**18:52**) — a check script and a prose doc,
+  **not the judge or normalizer.**
+So the judge/verify plane Tier A+ exists to protect was reviewed at its final
+bytes. Note for precision: the lane's phrase "judge byte-unchanged" means
+unchanged **since r18**, NOT unchanged vs HEAD — the judge legitimately moved
+this arc (`4f0cf650…` at HEAD -> `e709c03b…b878`), which is exactly why Tier A+
+was owed.
+
+**REGISTERED RESIDUAL (not glossed):** BLOCKER-2's class fix — the new `[0e]`
+leg in `check-judge-regression.sh` plus the `judge-domains.authored.txt`
+amendment — **postdates the r8 review and is itself unreviewed.** Acceptable
+under a §3 CAP (fix Medium+, disposition Lows, record CAPPED), and it touches no
+judge/normalizer bytes, but it is recorded rather than waved through: "fixes
+that postdate the approval" is the exact hole the match-exit lane lost a round
+to today.
+
+**The r8 verdict was NO-GO, and that is consistent with a capped closure.** Its
+substantive headline: *"did the judge get weaker? — this lane is clean… NOTHING
+at BLOCKER or MAJOR in the loosening plane. Both BLOCKERs are
+atomicity/witness-integrity — each makes a gate go loudly red."* BLOCKER-2 was
+closed by a CLASS fix (not the one-line prose fix offered): `[0e]` extracts the
+LAUNCH column sequence from `RE_LAUNCH` and from each emitter's own
+CONCATENATED C format string (compiler-accurate — `foh_app.c` splits across four
+literals) and asserts membership + ORDER + a pinned pending set, pinned both
+directions so the exception cannot rot. BLOCKER-1 is driver-only (below).
+
+**RECURRING OBJECTION CLASS — the cap's deliverable, and it is a genuinely new
+finding.** The lane measured that the class MUTATED at r18: from "a rule changed
+silently" (killed by the decision-table hash freeze) to **"a rule was never
+exercised, so changing it is invisible even with an honest pin"** — one cause,
+six instances across four rounds: *a probe plane's coverage is a function of the
+carriers/directions/objects its author picked, not of the rule set it claims to
+cover.* Non-convergence quantified: the review surface is **7.6x** the artifact
+(5,032 check lines vs 666 judge+normalizer lines), probes grew 1103 -> 1295, and
+**from r18 to the cap ZERO findings landed in the artifact** — the judge's sha
+has not moved since r18. **Proposed process rule, which the driver endorses:
+cap when findings stop landing in the ARTIFACT** (mechanically detectable; here
+that was **round 18**, three rounds before the owner's cap).
+
+**MERGE HAZARD FOUND BY THE LANE — verified by the driver, and it would have
+bitten:** `.gitignore` contains **zero** `node_modules` entries and
+`oracle/harness/node_modules/` **exists untracked**. So `git add -A` at merge
+would commit node_modules. **Add files explicitly at merge; never `-A`.**
+
+**DRIVER-ONLY WORK REMAINING (all four lanes are otherwise DONE):**
+1. **ATOMIC LANDING (r8 BLOCKER-1).** `port/foh/foh_dev.c:1897-1901` must gain
+   `flashlcancel=%d walljump=%d` (sources `foh.flashOnLCancel` / `foh.everyCharWallJump`,
+   declared `foh.h:455`/`:465`) inserted after `lcancel`, **in the same commit**
+   as the judge changes. Exactly ONE LAUNCH emitter; `BRIDGE-STATE` /
+   `TBRIDGE-OPTS` / `TLAUNCH` need no change. When it lands, `[0e]` FAILS until
+   `EMIT_PENDING_DEV` is emptied and the caveat is dropped from
+   `judge-domains.authored.txt` — BY DESIGN, same change. This is shipping code,
+   so it dispatches to a writer (PROCESS §11: the driver writes none).
+2. **Manifest re-pin is now ~10 rows, not 5.** The driver's measured 5
+   (`riglib.sh`, `check-device-target.sh`, `check-device-foh.sh`, `mlfk-foh.sh`,
+   `check-device-fullgame.sh`) PLUS new records the r8 reviewer identified:
+   `port/foh/foh.h` (it became a judge DECISION INPUT via `#define FOH_NETPLAY`),
+   `check-judge-regression.sh`, `dump-judge-grammar.js`,
+   `judge-grammar.frozen.txt`, `judge-domains.authored.txt`, and re-pinned
+   records for the two JS programs.
+3. **`git add` these untracked lane files explicitly:** `foh_phantom_witness.c`,
+   `foh_launch_witness.c`, `foh_ctl_labels.h`, `judge-domains.authored.txt`.
+4. Still open: the phantomThreshold HARD RULE 5 pipeline residual;
+   `check-device-persist.sh` UNRUN (device-only, and **the device is currently
+   OFFLINE** — `adb devices` empty, confirmed not an adb-server hiccup).

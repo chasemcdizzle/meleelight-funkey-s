@@ -21,6 +21,7 @@
 // CLAUDE.md §Commands "Device access"): u/d/l/r, a/b/x/y, s, k/n, q.
 // Polled via SDL_GetKeyState after pumping the event queue.
 #include <SDL.h> // via sdl-config --cflags include path
+#include <dlfcn.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -139,4 +140,103 @@ void platform_quit(void) {
     SDL_Quit();
     g_screen = 0;
   }
+}
+
+// --- OS artwork loader (platform.h; punch-list A12c) ----------------------
+//
+// SDL_image is opened with dlopen instead of linked. Linking it would make
+// libSDL_image-1.2.so.0 a hard NEEDED entry, so a device that does not ship
+// it could not START THE GAME AT ALL — a catastrophic failure mode traded
+// for a background image. dlopen degrades to "no artwork", which is exactly
+// the donor's own contract (ssb64 fk_menu.c: a NULL IMG_Load falls back to
+// a dimmed frame). The soname list is the one FunKey OS ships (SDL_image
+// 1.2 for SDL 1.2), plus the unversioned dev symlink for host/SDK runs.
+static SDL_Surface *(*g_imgLoad)(const char *) = 0;
+static int g_imgTried;
+
+static void img_open(void) {
+  if (g_imgTried) return;
+  g_imgTried = 1;
+  static const char *const kSonames[] = {"libSDL_image-1.2.so.0",
+                                         "libSDL_image-1.2.so",
+                                         "libSDL_image.so"};
+  for (size_t i = 0; i < sizeof kSonames / sizeof kSonames[0]; i++) {
+    void *h = dlopen(kSonames[i], RTLD_LAZY | RTLD_LOCAL);
+    if (!h) continue;
+    // POSIX says convert via an object pointer; the cast through a union
+    // avoids the ISO C function/object-pointer conversion warning that
+    // -Wall -Wextra -Werror would otherwise reject.
+    union {
+      void *obj;
+      SDL_Surface *(*fn)(const char *);
+    } u;
+    u.obj = dlsym(h, "IMG_Load");
+    if (u.obj) {
+      g_imgLoad = u.fn;
+      return; // handle deliberately leaked: process-lifetime, freed at exit
+    }
+    dlclose(h);
+  }
+}
+
+int platform_image_load565(const char *path, uint16_t *out, uint8_t *opaque) {
+  if (!path || !out || !opaque) return 0;
+  img_open();
+  if (!g_imgLoad) return 0;
+  SDL_Surface *raw = g_imgLoad(path);
+  if (!raw) return 0;
+  if (raw->w != RAST_W || raw->h != RAST_H) {
+    SDL_FreeSurface(raw);
+    return 0;
+  }
+  // Normalise to a known 32-bit layout so the reader below needs no format
+  // cases: SDL does the conversion, including any palette and colour key.
+  SDL_Surface *s = SDL_CreateRGBSurface(SDL_SWSURFACE, RAST_W, RAST_H, 32,
+                                        0x00FF0000u, 0x0000FF00u,
+                                        0x000000FFu, 0xFF000000u);
+  if (!s) {
+    SDL_FreeSurface(raw);
+    return 0;
+  }
+  // Clear to fully transparent BEFORE the blit (review-mexit-r2 Medium). A
+  // colour-keyed source SKIPS its keyed pixels, so whatever the destination
+  // held shows through the `a >= 128` opacity test below. SDL 1.2 happens to
+  // zero a fresh surface, but that is an implementation detail of one libSDL
+  // and this reads it as data — state it instead of inheriting it.
+  if (SDL_FillRect(s, 0, 0) != 0) {
+    SDL_FreeSurface(raw);
+    SDL_FreeSurface(s);
+    return 0;
+  }
+  SDL_SetAlpha(raw, 0, 255); // copy the source alpha verbatim, never blend
+  const int rc = SDL_BlitSurface(raw, 0, s, 0);
+  SDL_FreeSurface(raw);
+  if (rc != 0) {
+    SDL_FreeSurface(s);
+    return 0;
+  }
+  if (SDL_MUSTLOCK(s) && SDL_LockSurface(s) != 0) {
+    SDL_FreeSurface(s);
+    return 0;
+  }
+  for (int y = 0; y < RAST_H; y++) {
+    const uint8_t *row = (const uint8_t *)s->pixels + (size_t)y * s->pitch;
+    for (int x = 0; x < RAST_W; x++) {
+      uint32_t px;
+      memcpy(&px, row + (size_t)x * 4u, 4u);
+      const unsigned a = (px >> 24) & 0xFFu;
+      const unsigned r = (px >> 16) & 0xFFu;
+      const unsigned g = (px >> 8) & 0xFFu;
+      const unsigned b = px & 0xFFu;
+      const size_t k = (size_t)y * RAST_W + (size_t)x;
+      // Half-transparent pixels are treated as opaque: this port has no
+      // alpha blend on the overlay path, and the OS asset is a hard-edged
+      // colour-keyed panel, so there is nothing to blend.
+      opaque[k] = (a >= 128u) ? 1u : 0u;
+      out[k] = (uint16_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+    }
+  }
+  if (SDL_MUSTLOCK(s)) SDL_UnlockSurface(s);
+  SDL_FreeSurface(s);
+  return 1;
 }

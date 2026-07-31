@@ -1,26 +1,23 @@
 FOHTRACE1 flow=f04-nav
 T 370 startup title timer
 T 375 title menu-top start
-T 380 menu-top menu-battle a
-S 390 refused spectate
-S 400 refused p2p
-S 410 refused server
-T 415 menu-battle menu-top b
-S 430 refused targetbuilder
-T 445 menu-top menu-options a
-S 450 refused audio
-T 465 menu-options menu-controls a
-SHOT 470 menu-controls
-S 475 refused controller
-S 485 refused keyboard
-T 490 menu-controls menu-options b
-S 510 refused credits
-T 515 menu-options menu-top b
-T 535 menu-top menu-battle a
-T 540 menu-battle css a
-S 735 p2type 0
-T 745 css sss start
-S 775 refused random
-T 785 sss css b
-T 824 css menu-battle bhold
-END 840 transitions=13
+S 390 refused targetbuilder
+T 400 menu-top menu-options a
+T 415 menu-options menu-controls a
+SHOT 420 menu-controls
+T 425 menu-controls controls-controller a
+SHOT 430 controls-controller
+T 435 controls-controller menu-controls b
+T 445 menu-controls controls-keyboard a
+SHOT 450 controls-keyboard
+T 455 controls-keyboard menu-controls b
+T 460 menu-controls menu-options b
+S 480 refused credits
+T 485 menu-options menu-top b
+T 505 menu-top css a
+S 700 p2type 0
+T 710 css sss start
+S 740 refused random
+T 750 sss css b
+T 789 css menu-top bhold
+END 810 transitions=14

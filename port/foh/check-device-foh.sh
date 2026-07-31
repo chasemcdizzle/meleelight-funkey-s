@@ -165,10 +165,10 @@ b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wr
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-4f0cf650978e871f442e28e2612307215cdeabf34d55126faea4d99f6f7198e8 port/foh/judge-foh-trace.js
+e709c03b2631ad0ab66a3f010c86905d9d1d5c81550d0143d7ca0799b95db878 port/foh/judge-foh-trace.js
 4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js
 2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e port/foh/keymap-frozen.txt
-9dd01ce9adcf969015ac4669034275c32710705ffdcdf6487b1241ff9846a742 port/foh/normalize-foh-trace.js
+a1353a71a66bb05bc28d547eee9385cfa8da7baf784f9e038bd31834cabb9cb8 port/foh/normalize-foh-trace.js
 1163e9c18323ac06aaaec4ee3068691d7d67ebbf98b3500a343a69c80ca793ea port/foh/flow-to-fkscript.js"
 # +2 (CSS mechanics arc): this check EXECUTES the normalizer (its poll-path
 # verdict is normalized-sequence equality) and the translator (it generates
@@ -343,7 +343,7 @@ done <<< "$PRODUCER_PINS"
 # (the sibling's pin line sits inside its PRODUCER_PINS quoted block, so
 # it may carry the block's closing quote — match the exact sha+path pair
 # and require EXACTLY one occurrence)
-c="$(grep -cF "4f0cf650978e871f442e28e2612307215cdeabf34d55126faea4d99f6f7198e8 port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
+c="$(grep -cF "e709c03b2631ad0ab66a3f010c86905d9d1d5c81550d0143d7ca0799b95db878 port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
 [ "$c" = 1 ] || fail "twin pin — check-foh-flows.sh does not carry the same judge-foh-trace.js sha exactly once (count $c; paired change rule)"
 rig_pin_assert_once "$GFX/check-device-music.sh" SNDPACK_SHA256 "$SNDPACK_SHA256" || exit 1
 rig_pin_assert_once "$GFX/check-device-music.sh" MUSIC_BF_SHA256 "$MUSIC_BF_SHA256" || exit 1
@@ -407,10 +407,10 @@ FLOW_INVENTORY=(f01-vs-g01 f02-cpu-m01 f03-options f04-nav f05-vs-g03           
 FLOW_IDS=(f01-vs-g01 f02-cpu-m01 f03-options f04-nav f05-vs-g03)
 FLOW_BRIDGE=(verify state state none state) # DEVICE bridge mode per flow
 FLOW_SEED=("$seed" "$m01seed" "$seed" "" "$g03seed")
-FLOW_SHOTS=("startup title menu-top menu-battle css sss" \
+FLOW_SHOTS=("startup title menu-top css sss" \
             "css-cpu sss-ystory" \
-            "options-gameplay options-edited" \
-            "menu-controls" \
+            "options-audio options-gameplay options-edited" \
+            "menu-controls controls-controller controls-keyboard" \
             "css-p2 sss-pstadium")
 FLOW_LAUNCH=(1 1 1 0 1)
 globbed="$(ls "$FLOWS"/*.flow | sed 's|.*/||; s|\.flow$||' | sort | tr '\n' ' ' | sed 's/ $//')"
@@ -592,7 +592,8 @@ build_foh_headless() { # <foh_dev_src> <out> [extra cc args...]
   shift 2
   cc -O2 "${CFLAGS_COMMON[@]}" "$@" -o "$out" \
     "$BUILD/raster.o" "$src" "$FOH/foh.c" "$FOH/foh_font.c" \
-    "$FOH/foh_render.c" "$FOH/foh_persist.c" "$FOH/foh_pause.c" "$GFX/img1.c" \
+    "$FOH/foh_render.c" "$FOH/foh_persist.c" "$FOH/foh_pause.c" \
+    "$GFX/ctl_style.c" "$GFX/img1.c" \
     "$GFX/platform_headless.c" \
     "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_target.c" \
     "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
@@ -1910,4 +1911,4 @@ rig_no_commit_guard "$BUILD" "$DEVB" "$TABLES" "$AUDIO_OUT"
 # opk=evidence (iter 95, review-93 M3): the OPK leg proves the
 # mount-and-run EVIDENCE path only — frontend-nav launch + the live
 # branch are task 14's gate leg, deliberately NOT claimed here.
-echo "DEVICE FOH OK (flows=5 shots=13 bridge=1 states=3 opk=evidence fbwit=$FBWIT_TOTAL p99=${full_p99_ms}ms skips=0 underruns=0 starves=0 starts${DEV_STARTS} teeth=$teeth)"
+echo "DEVICE FOH OK (flows=5 shots=15 bridge=1 states=3 opk=evidence fbwit=$FBWIT_TOTAL p99=${full_p99_ms}ms skips=0 underruns=0 starves=0 starts${DEV_STARTS} teeth=$teeth)"

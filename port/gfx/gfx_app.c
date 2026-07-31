@@ -172,7 +172,7 @@
 void gfx_fatal(const char *what) { sim_fatal(what); }
 // (sim_fatal is noreturn; the attribute on the gfx_fatal decl is satisfied)
 
-// --- trace loading (sim_main.c:39-148, duplicated verbatim) --------------------
+// --- trace loading (sim_main.c:50-159, duplicated verbatim) --------------------
 
 typedef struct {
   bool present[4];
@@ -281,7 +281,7 @@ static void load_trace(const char *path) {
   if (g_trace_len == 0) sim_fatal("trace: empty");
 }
 
-// --- draw counting (sim_main.c:150-162) -------------------------------------------
+// --- draw counting (sim_main.c:161-173) -------------------------------------------
 
 static uint32_t mulberry_inv(void) {
   const uint32_t k = 0x6D2B79F5u;
@@ -833,6 +833,13 @@ int main(int argc, char **argv) {
       // Recorded for EVERY frame (starting window included — the
       // replay feeds the same rows; the sim ignores them there just
       // like it did live). Quit/menu: recorded-and-ignored.
+      // PINNED to s1_input_row() (== BOX) on purpose — NOT an unconverted
+      // A4 site. This binary is the evidence rig whose recordings
+      // judge-s1-coverage.js reads, and that judge's 24 chord signatures and
+      // its `i.y || i.z` invariant are BOX-only by construction. Switching
+      // styles here would demand weakening a pinned judge (HARD RULE 3). The
+      // PRODUCT path (port/foh/foh_dev.c) is the one that honours the
+      // player's style; see the A4 HANDOVER status block in s1_input.h.
       liveRow = s1_input_row(&pin);
       rows[0] = &liveRow;
       rows[1] = &neutralRow;

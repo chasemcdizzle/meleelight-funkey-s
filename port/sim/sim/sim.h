@@ -164,4 +164,23 @@ extern void (*ml_sim_runai_live)(GameState *g, int i);
 // --ai-cover; stderr; never gating).
 extern void (*ml_sim_ai_cov_dump)(void);
 
+// --- finishGame seam (punch-list C18) --------------------------------------
+//
+// Upstream calls finishGame from FIVE sites: matchTimerTick's expiry
+// (main.js:338-350) and the four DEAD* KO states at timer===4 when
+// isFinalDeath() holds (DEAD{UP,DOWN,LEFT,RIGHT}.js:39). Every golden trace
+// stays inside a live match by the quality contract (oracle/goldens/
+// manifest.json), so all five were LOUD out-of-domain traps and stay loud:
+// this pointer is NULL by default and each site keeps its exact sim_fatal
+// message on the NULL arm.
+//
+// It crosses the SAME link seam as ml_sim_runai_live above: defined in
+// sim_tick.c, installed only by the live PLAY driver (foh_dev.c's
+// --bridge live arm). No TU on check-sim.sh's frozen list installs it, so
+// the M2 EXIT GATE's behavior is preserved bit-for-bit — `SIM CONFORMS` is
+// the standing proof. finishGame itself is a BANNER + a 2500 ms hold +
+// endGame (main.js:1420-1502); none of that is on the CHECKSUM.md surface,
+// and the driver owns all of it, exactly as tp_finish_hook does for targets.
+extern void (*ml_sim_finish_hook)(void);
+
 #endif // ML_SIM_H

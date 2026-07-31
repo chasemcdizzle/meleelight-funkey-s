@@ -27,11 +27,19 @@
 // port/gfx/vfxglyphs-frozen.txt).
 //
 // RNG: render-plane randomness (star scatter, tail jitter, lightning,
-// entrance seeds, ...) draws from a render-LOCAL mulberry32 with a fixed
-// seed — NEVER ml_random / the seeded gameplay chain (upstream uses the
-// native Math.random here; the browser reference capture swaps native RNG
-// in around its render call for the same reason). x2 C byte-stability
-// holds because the local stream is deterministic.
+// entrance seeds, ...) draws from a render-LOCAL mulberry32 seeded
+// 0xC0FFEE42 in gfx_vfx_install, chained across the whole run — NEVER
+// ml_random / the seeded gameplay chain (upstream uses the native
+// Math.random here). The browser reference capture no longer swaps native
+// RNG in around its render call: since C28 (iter 134) it runs the render
+// plane on a PAGE-LOCAL mulberry32 with that SAME seed and stream
+// (gfx-pagelib.js RENDER_SEED), likewise chained across the whole replay,
+// so both sides draw the same values on every frame; the capture's
+// injection-frame machinery REWINDS that chain (setState) rather than
+// reseeding it. Deliberately NOT window.__nativeRandom: it is not
+// reproducible across page loads, and percentShake draws from it on
+// wall-clock callbacks, which would put the render back on the wall clock.
+// x2 C byte-stability holds because the local stream is deterministic.
 //
 // SPAWN SEAM: sim-plane spawns arrive through ml_vfx_sink at ENQUEUE time
 // (ml_events.h; queues reset per tick stage). circleDust's 4 seeded draws

@@ -2,7 +2,9 @@ FLOW1
 # f01: the full VS path -> g01 params (fox / marth / battlefield,
 # default settings; pre-registration AGENT-LOG iter 88).
 # startup runs frames 1-370 (timer transition), then: title -> START ->
-# menu-top -> A on VS. MELEE -> menu-battle -> A on LOCAL VS -> css ->
+# menu-top -> A on VS. MELEE -> css. (Owner ruling C5: the battle page is
+# hidden behind FOH_NETPLAY, so VS. MELEE runs menu.js:105's Local VS
+# action itself and the second A is gone.) Then ->
 # the TOKEN GESTURE (below) -> START -> sss -> A on battlefield (cursor
 # default 0) -> LAUNCH.
 #
@@ -31,9 +33,6 @@ I 376 -
 SHOT 378 menu-top
 I 380 A
 I 381 -
-SHOT 383 menu-battle
-I 385 A
-I 386 -
 # Anchor: UP x70 clamps y to 0 (the hand starts at y = 224.00, and
 # 240/3.84 = 62.5 frames is the whole screen). Then DOWN x12 -> y = 46.08:
 # inside the roster band (26,62) with 14 px of slack above and 16 below,

@@ -4,9 +4,7 @@ T 370 startup title timer
 SHOT 373 title
 T 375 title menu-top start
 SHOT 378 menu-top
-T 380 menu-top menu-battle a
-SHOT 383 menu-battle
-T 385 menu-battle css a
+T 380 menu-top css a
 S 480 carry 0
 S 500 p1char 1
 S 519 p1char 2
@@ -16,5 +14,5 @@ SHOT 760 css
 T 765 css sss start
 SHOT 775 sss
 T 780 sss match launch
-LAUNCH 780 p1=2 p2=0 p2type=0 difficulty=3 stage=0 turbo=0 lcancel=0 tapjump=0,0,0,0 versus=0
-END 790 transitions=6
+LAUNCH 780 p1=2 p2=0 p2type=0 difficulty=3 stage=0 turbo=0 lcancel=0 flashlcancel=0 walljump=0 tapjump=0,0,0,0 versus=0
+END 790 transitions=5

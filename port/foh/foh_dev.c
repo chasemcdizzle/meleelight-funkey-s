@@ -86,12 +86,12 @@
 //   --flow/--flow-out/--input/--shots-dir/--foh-max/--fb-witness) runs
 //   `--bridge verify|state` with NO FOH phase: the five values are
 //   written into the SAME FohState fields the SSS-A launch arm writes
-//   (foh.c:313-332), `launched` is set, and every line from the bridge
+//   (foh.c:666-679), `launched` is set, and every line from the bridge
 //   onward is the untouched launch seam. This is what lets
 //   check-device-fullgame.sh replay all 12 leg-1 goldens through the
 //   product binary — including g07/g08 (difficulty 5) and m02
 //   (difficulty 9), which the FOH's own 1..4 slider domain
-//   (foh.h:79-82) can NEVER select, so no .flow could ever drive them.
+//   (foh.h:73-77) can NEVER select, so no .flow could ever drive them.
 //   Direct mode accepts the harness domain 1..9; the FOH machine's
 //   slider domain is untouched.
 //
@@ -330,7 +330,7 @@ static void load_flow(const char *path) {
   }
 }
 
-// --- match trace loading (sim_main.c:39-148, duplicated verbatim) ------------
+// --- match trace loading (sim_main.c:50-159, duplicated verbatim) ------------
 
 typedef struct {
   bool present[4];
@@ -439,7 +439,7 @@ static void load_trace(const char *path) {
   if (g_trace_len == 0) sim_fatal("trace: empty");
 }
 
-// --- draw counting (sim_main.c:150-162) ---------------------------------------
+// --- draw counting (sim_main.c:161-173) ---------------------------------------
 
 static uint32_t mulberry_inv(void) {
   const uint32_t k = 0x6D2B79F5u;
@@ -726,7 +726,7 @@ static void fbwit_flush(const char *flowId) {
   if (fclose(f) != 0) sim_fatal("--fb-witness close/flush failed");
 }
 
-// --- live-session input recording (gfx_app.c:381-431 duplicated verbatim) -----
+// --- live-session input recording (gfx_app.c:352-402 duplicated verbatim) -----
 
 static void rec_bool(MlSb *sb, const char *key, bool v, bool comma) {
   ml_sb_putc(sb, '"');
@@ -1188,6 +1188,156 @@ static void tdev_endgame_hook(GameState *g) {
   (void)g;
   g_tquit = 1;
 }
+
+// --- match-exit verdict (punch-list C18 + C19 + B4 + A19) -------------------
+//
+// WHERE THE PLAYER LANDS when a match ends. Upstream has no results screen
+// at all: finishGame (main.js:1420-1502) paints a banner, holds 2500 ms, then
+// endGame (main.js:1372-1418) picks the destination BY GAMEMODE —
+// gameMode 3 (VS) -> changeGamemode(2) = the CSS, gameMode 5 (targets) ->
+// changeGamemode(7) = target select. So every natural end, and upstream's own
+// A+L+R+Start quit combo (main.js:738-747), lands back on the SELECT screen
+// for that match kind — never on the frontend, and never on the title.
+//
+// That is one destination problem wearing four hats, so it is one enum. The
+// FunKey has no A+L+R+Start, so the pause overlay's QUIT TO VS SCREEN entry
+// (C19) is simply this port's affordance for that upstream combo.
+//
+// Only MEX_OS leaves the process; the rest are handled in-process by the
+// outer loop below (A19), which is what lets the CSS keep the player's
+// selections exactly as upstream's endGame does.
+typedef enum {
+  MEX_NONE = 0, // match still running
+  MEX_CSS,      // endGame from VS      -> character select
+  MEX_TSS,      // endGame from targets -> target select
+  MEX_TITLE,    // pause overlay QUIT TO MENU
+  MEX_OS        // pause overlay QUIT TO OS, or SDL_QUIT
+} MatchExit;
+static MatchExit g_mexit;
+
+// finishGame fired in a VS match (sim.h's ml_sim_finish_hook). Set from the
+// matchTimer arm (main.js:349) or any DEAD* final-death arm (DEAD*.js:39);
+// the driver's loop owns leaving, so upstream's tick body still finishes on
+// the frame that fired, exactly as tdev_endgame_hook does for targets.
+static int g_vsFinish;
+// Which kind of match the live arm is running, so the one finishGame seam can
+// route the way upstream's single finishGame does (main.js:1425 branches on
+// gameMode 5 || 8 vs everything else).
+static int g_tgt_live;
+static void tdev_finish_game_hook(void) {
+  if (g_tgt_live) {
+    // TARGET mode: isFinalDeath() is unconditionally true there
+    // (actionStateShortcuts.js:153), so falling off the stage IS the end of
+    // the run, and upstream routes it through the SAME finishGame — whose
+    // target branch paints "Failure" precisely because not every target was
+    // destroyed (main.js:1447/1465). tp_finish_game is that body, already
+    // real since iter 99; the guard keeps a death during the finish hold
+    // from starting a second one.
+    if (!g_tfin_fired) tp_finish_game(&G);
+  } else {
+    g_vsFinish = 1;
+  }
+}
+
+// finishGame's VS banner (main.js:1487-1499: "Time!" when the clock ran out,
+// else "Game!"). Same face, scale and centring recipe as
+// gfx_target_banner_text (gfx_target.c:192-199) so the two match ends look
+// like one game — this port's registered text surface is the FOH's own face,
+// so no new gfx plane is introduced for it.
+static void tdev_vs_banner_text(Raster *rz, int timeUp) {
+  const RastCol white = {255, 255, 255, 256};
+  const char *text = timeUp ? "TIME!" : "GAME!";
+  const int scale = 4;
+  const int tw = foh_text_width(text, scale);
+  foh_text(rz, 120 - tw / 2, 120 - (7 * scale) / 2, scale, text, white);
+}
+
+// endGame (main.js:1372-1418) — the state reset upstream runs when a match
+// ends, however it ended: finishGame's 2500 ms timeout, the A+L+R+Start quit
+// combo, or target mode's START. Only the parts this port can OBSERVE are
+// ported; every omission is NAMED here rather than silently dropped:
+//
+//   * clearScreen / drawStage (:1379-1380) and changeGamemode's drawCSSInit
+//     are canvas ops with no analogue — the FOH owns its own render and
+//     repaints whichever screen it lands on from FohState.
+//   * positionPlayersInCSS (:1409) and the per-player inCSS / face / WAIT /
+//     timer writes (:1414-1418) set sim player state this port's CSS never
+//     reads (it draws its own dolls from FohState). ponytail: unobservable,
+//     and the next sim_setup_match — upstream's own startGame — overwrites
+//     all of it before anything could read it. The furaloop.stop that shares
+//     that loop (:1411-1413) is NOT in this class and IS ported below: it is
+//     a looping VOICE, not player state.
+//   * lostStockQueue (:1374) is a documented render-only no-op here
+//     (physics.h:44).
+//   * pause / frameAdvance / findingPlayers (:1395-1408) are the browser
+//     lobby's own plane: `pause` is upstream's per-port START latch, which
+//     this port replaces outright with the release drain at the return site
+//     (a one-port device cannot express a 4x2 latch); frameAdvance is the
+//     debug single-step tool, absent here; findingPlayers drives the
+//     gamepad-hotplug scan, and this port has one fixed input device.
+//
+// The music duck is NOT restored here (`changeVolume(MusicManager,
+// masterVolume[1], 1)`, :1378): its only producer is interpretPause's 0.3x
+// duck (main.js:853/856), and this port never applies that duck — the pause
+// overlay freezes the whole loop instead — so there is nothing to undo. If a
+// duck is ever added, this line has to come with it.
+// foh_persist_save chokepoint. The control plane lives in ctl_style.c, not
+// in FohState, so foh_persist_collect cannot reach it (foh_persist.h:125
+// assigns these two stamps to the FOH). Every save goes through here so a
+// Controls-screen change can never be written by one path and dropped by
+// another.
+static void tdev_persist_save(void) {
+  g_persist.ctlStyle = (int)ctl_style_get();
+  g_persist.modOnR = ctl_mod_on_r_get() ? 1 : 0;
+  foh_persist_save(&g_persist);
+}
+// ...and its mirror. A save STAMPS the control plane out of ctl_style.c, so a
+// load that does not INSTALL it back leaves the two disagreeing, and the very
+// next save writes the process defaults over the player's persisted choice.
+// review-mexit-r2 Medium found exactly that on --tooth-persist-finish, which
+// loaded and then saved on an improved record; making load a chokepoint too
+// closes the class rather than that one site (PROCESS/HARD RULE 8).
+static void tdev_persist_load(void) {
+  foh_persist_load(&g_persist);
+  // ctl_style_set REFUSES an out-of-domain value, so a corrupt/older record
+  // lands on the default rather than an unrepresentable style.
+  ctl_style_set(g_persist.ctlStyle);
+  ctl_mod_on_r_set(g_persist.modOnR != 0);
+}
+static void tdev_end_game(GameState *g, FohState *f) {
+  art_resetAArticles(&g->arts);     // resetAArticles() (:1376)
+  hd_setPhantonQueue(&g->hq, 0, 0); // setPhantonQueue([]) (:1375)
+  g->inp.playing = false;           // playing = false (:1378)
+  // gameEnd = false (:1373). target_play.h:55 says outright that this is
+  // reset ONLY by endGame — tp_setup_target does not touch it — so a second
+  // target match started with it still true (review-mexit-r1 Medium).
+  TP.gameEnd = false;
+  // setTokenPosSnapToChar(0..3) (:1381-1384). This was listed as an
+  // unobservable omission and it is not (review-mexit-r2 Medium): the port's
+  // token rest position is PATH DEPENDENT (foh.h cssTokenRest), so a player
+  // returning to the CSS sees the tokens where the last drag left them
+  // instead of where endGame put them. Slot 2 is the snap; the loop stops at
+  // 2 (deviation D6's two ports — upstream's calls for 2..3 address ports
+  // this port does not have). Whichever token was in hand is released first
+  // — carrying one out of a match is unreachable today (the launch path
+  // leaves the CSS), but a stale carry would pin the token to the hand and
+  // hide the snap.
+  f->cssCarry = -1;
+  for (int k = 0; k < 2; k++) f->cssTokenRest[k] = 2;
+  // sounds.furaloop.stop(player[i].furaLoopID) for every ACTIVE player left
+  // dizzy (:1410-1413). furaloop is a LOOPING voice, so before the A19
+  // in-process return this was covered by the process exiting; now a match
+  // that ends on the clock while somebody is in FURAFURA would carry the
+  // loop over the select screen forever. Same id-routed call the two in-sim
+  // stop arms make (FURAFURA.c:73, hit_detection.c:1195), so the mixer's
+  // howler-parity id routing decides it, not a name sweep.
+  for (int i = 0; i < 4; i++) {
+    if (!(g->sim.playerType[i] > -1)) continue; // playerType[i] > -1 (:1411)
+    if (strcmp(g->sim.player[i].actionState, "FURAFURA") == 0) {
+      ml_sound_stop_id("furaloop.stop", 1, g->sim.player[i].furaLoopID);
+    }
+  }
+}
 static void tdev_finish_hook(GameState *g, bool complete) {
   g_tfin_fired++;
   g_tfin_complete = complete ? 1 : 0;
@@ -1201,11 +1351,38 @@ static void tdev_finish_hook(GameState *g, bool complete) {
     const int ch = (int)g->sim.characterSelections[0];
     const int ts = (int)TP.targetStagePlaying;
     if (foh_persist_record_update(&g_persist, ch, ts, g->matchTimer)) {
-      foh_persist_save(&g_persist); // :1445 setCookie on improvement
+      tdev_persist_save(); // :1445 setCookie on improvement
     }
     // finish sounds (newRecord/complete) = the registered task-12
     // acceptance-surface deferral.
   }
+}
+
+// --- the page-boot RNG, seeded ONCE per process (review-mexit-r2 High) -------
+//
+// Upstream seeds mulberry32 exactly once, when the PAGE loads, and burns the
+// page's boot draws there. startGame does not re-seed and endGame does not
+// re-seed — CLAUDE.md states it outright ("mulberry32 state is never
+// re-seeded at setupMatch, so boot draw count misalignment silently shifts
+// the in-match stream"), and it is why ML_BOOT_DRAWS exists at all. The A19
+// in-process return made the old unconditional seed+burn wrong: every
+// subsequent match restarted the page's random stream from the top, so match
+// 2 replayed match 1's draws — the same background, the same tie-breaks —
+// where upstream carries the stream forward.
+//
+// rngStateAtReset is a PER-MATCH mark, not a boot value: both match arms read
+// draws_between(rngStateAtReset, rng.a) as "draws this match consumed", so it
+// is re-latched at every launch while the stream itself is not disturbed.
+// First launch is bit-identical to the old code, which is what keeps every
+// frozen leg (all of which play exactly one match) byte-stable.
+static bool g_rngBooted;
+static void rng_boot_once(uint32_t seed) {
+  if (!g_rngBooted) {
+    g_rngBooted = true;
+    ml_rng_seed(&G.rng, seed);
+    for (int k = 0; k < ML_BOOT_DRAWS; k++) (void)ml_rng_next(&G.rng);
+  }
+  G.rngStateAtReset = G.rng.a;
 }
 
 // --- strict argv integer parse (review-109-1 M3) ------------------------------
@@ -1305,7 +1482,10 @@ int main(int argc, char **argv) {
     uint64_t bits = parse_hex16(bs); // loud death on non-hex
     double t;
     memcpy(&t, &bits, 8);
-    foh_persist_load(&g_persist);
+    tdev_persist_load(); // load chokepoint: installs ctlStyle/modOnR too,
+                         // so the improved-record save below stamps the
+                         // PERSISTED controls back, not process defaults
+                         // (review-mexit-r2 Medium)
     // craft the COMPLETE finish state (main.js:1431 strict equality)
     G.sim.characterSelections[0] = (double)(cs[0] - '0');
     TP.targetStagePlaying = ts[0] - '0';
@@ -1320,6 +1500,26 @@ int main(int argc, char **argv) {
     return 0;
   }
   const char *flowPath = 0, *inputMode = 0, *flowOut = 0, *shotsDir = 0;
+  // punch-list A12b: the MENU/HOME button opens an overlay OUTSIDE a match.
+  // OPT-IN, and deliberately not inferred from other argv.
+  //
+  // WHY A FLAG and not "--shots-dir is unset" (the first thing tried, and it
+  // is WRONG): generated fk scripts drive the rig's SCREENSHOT MARKER on the
+  // same MENU keysym (flow-to-fkscript.js:97 MARKER_SYM = "q"), and the live
+  // play legs of check-device-target.sh press it while passing NO --shots-dir
+  // at all. Inferring from shotsDir therefore ate those marker presses and
+  // took the target live leg from 315 frames to the full 900 bound. An
+  // explicit flag that ONLY the product launcher passes (port/gfx/opk/
+  // mlfk-foh.sh) leaves every rig invocation byte-identical by construction.
+  bool sysMenu = false;
+  // EVIDENCE ONLY (punch-list C18). Upstream's match clock is 480 s, so the
+  // natural finishGame end is EIGHT MINUTES of play — unscriptable in a
+  // check and impractical to demonstrate. This shortens the REAL clock and
+  // changes nothing else: the expiry still runs sim_tick.c's own
+  // matchTimerTick arm, the same ml_sim_finish_hook, the same banner, the
+  // same endGame. It proves the real path rather than standing in for it.
+  // <= 0 means "leave upstream's 480 s alone", which is every non-demo run.
+  double matchTimerSec = 0.0;
   const char *readyPath = 0, *bridge = 0;
   const char *simdataPath = 0, *bstateOut = 0;
   const char *tracePath = 0, *outPath = 0, *timingPath = 0;
@@ -1462,6 +1662,26 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--stage") == 0 && hasV) DMFLAG(0x10u, dmStage);
     else if (strcmp(a, "--cpu-live") == 0) cpuLive = true;
     else if (strcmp(a, "--legible") == 0) legible = true;
+    else if (strcmp(a, "--system-menu") == 0) sysMenu = true;
+    else if (strcmp(a, "--match-timer") == 0 && hasV) {
+      // WHOLE-STRING, finite, in range. atof() accepted "abc" as 0,
+      // "12xyz" as 12, and "inf"/"nan" as a clock that never expires —
+      // an evidence knob that silently misreads is worse than none
+      // (review-mexit-r1 Medium; PROCESS §3 whitelist-grammar rule).
+      // Upper bound = upstream's own 480 s match clock (settings.js).
+      const char *v = argv[++i];
+      char *end = 0;
+      errno = 0;
+      const double sec = strtod(v, &end);
+      if (end == v || *end != '\0' || errno == ERANGE || !(sec > 0.0) ||
+          !(sec <= 480.0)) {
+        fprintf(stderr,
+                "foh_dev: --match-timer wants seconds in (0, 480], got %s\n",
+                v);
+        return 1;
+      }
+      matchTimerSec = sec;
+    }
     else if (strcmp(a, "--tapjump-off-p1") == 0) tapJumpOffP1 = true;
     else if (strcmp(a, "--audio-samples") == 0 && hasV) {
       ARGN(audioSamples);
@@ -1494,7 +1714,7 @@ int main(int argc, char **argv) {
   // onward runs BYTE-UNCHANGED.
   //
   // WHY THIS EXISTS (measured, iter 109): the FOH's own CPU-difficulty
-  // domain is the upstream SLIDER's 1..4 (foh.h:79-82, css.js:316-329),
+  // domain is the upstream SLIDER's 1..4 (foh.h:73-77, css.js:316-329),
   // but the M4 exit gate's leg [1] must replay g07/g08 at difficulty 5
   // and m02 at difficulty 9. Those are STRUCTURALLY UNREACHABLE through
   // any menu flow, so no `.flow` can ever drive them. Direct mode
@@ -1581,6 +1801,17 @@ int main(int argc, char **argv) {
       // read and the requested output never written.
       (brLive && (tracePath || outPath || timingPath)) ||
       (cpuLive && !brVerify) ||
+      // review-mexit-r2 Medium: both of these are LIVE-PLAY-only arms and
+      // were previously accepted-and-ignored everywhere else — the exact
+      // "an out-of-domain ARGUMENT silently becomes a no-op" shape the argv
+      // whitelist rule above exists to kill. --system-menu installs nothing
+      // outside brLive (foh_sysmenu_hook is brLive-gated) and --match-timer
+      // is only consulted on the brLive VS launch, so anywhere else they are
+      // a malformed invocation that must die loudly, not look successful.
+      // The remaining case — --match-timer on a live TARGET launch — cannot
+      // be decided here (the launch kind is the PLAYER's choice, made in the
+      // menus) and is refused at the launch dispatch instead.
+      (sysMenu && !brLive) || (matchTimerSec > 0.0 && !brLive) ||
       (pace != 0 && pace != 1) || budgetNs == 0 ||
       (audioSamplesGiven && !sndpackPath) ||
       audioSamples <= 0 || audioSamples > 65535 ||
@@ -1603,6 +1834,7 @@ int main(int argc, char **argv) {
             " --gfxdata g --vfxdata v --glyphs gl --anim-dir D [--legible]"
             " [--cpu-live] [--attrib a.txt]]"
             " [live: --gfxdata ... [--legible] [--tapjump-off-p1]"
+            " [--system-menu] [--match-timer SEC (VS launches only)]"
             " (bounded+recorded: --frames N --record-trace t.json"
             " --record-keys k.txt — ALL THREE or NONE; omitting all three"
             " means an unbounded, unrecorded match: the play path)]"
@@ -1718,11 +1950,16 @@ int main(int argc, char **argv) {
   // (loud reset-to-defaults on missing/corrupt; foh_persist.h). The
   // brLive tapJumpOffP1 preset below intentionally stays AFTER the
   // apply — the S1 contract preset wins on the live path.
-  foh_persist_load(&g_persist);
+  // C30: the control plane is NOT part of FohState, so foh_persist_apply
+  // cannot carry it — foh_persist.h:125 names that install as the FOH's own
+  // duty and review-mexit-r1 caught it missing, which meant a save holding
+  // Box silently played as Natural. It now lives inside tdev_persist_load,
+  // the load chokepoint, so no site can load without it.
+  tdev_persist_load();
   foh_persist_apply(&g_persist, &foh);
   if (direct) {
     // DIRECT MATCH: write the SAME FohState fields a menu launch writes
-    // (foh.c:313-332's SSS-A arm), then mark it launched. Everything
+    // (foh.c:666-679's SSS-A arm), then mark it launched. Everything
     // downstream — the seed + 465 boot draws, sim_setup_match, the
     // options plane, the music switch, the BRIDGE-STATE witness and the
     // paced match loop — is the untouched launch seam. The persisted
@@ -1818,7 +2055,68 @@ int main(int argc, char **argv) {
       direct ? 0
              : (inPoll ? ((brLive && !fohMaxGiven) ? LONG_MAX - 1 : fohMax)
                        : g_flow_frames);
-  const uint64_t fohStart = now_ns();
+  // MATCH-SUMMARY STATE — declared ABOVE the re-entry label on purpose.
+  // A backward goto re-executes every declaration it jumps over, so leaving
+  // these below the label silently RESET them on each pass: the A2 guard
+  // stopped seeing that a match had been played (rc 4), and the teardown
+  // summary reported the empty final pass instead of the match the player
+  // actually played. Measured on device, not theorised.
+  long matchSkips = 0, matchPresentFails = 0;
+  // A11/A12: process exit code. Since A19 landed it is ALWAYS 0 — normal end,
+  // and the OPK launcher returns the player to the frontend. It is not const
+  // only because it is the function's single return value.
+  //
+  // review-mexit-r3/r5 Low: this used to say FOH_PAUSE_RC_MENU ("quit to
+  // menu", which the launcher answered by re-running the app) was the other
+  // possible value. It is not, and that constant and the launcher loop have
+  // both been DELETED as scaffolding — QUIT TO MENU returns to the menus
+  // IN-PROCESS via `foh_phase:`. See foh_pause.h.
+  int quitRc = 0;
+  // A19: how many matches this process has played. Distinguishes the A2
+  // cross-guard (a flow that NEVER launched) from the player simply
+  // leaving the menus after a match, which is a normal end.
+  long matchesRun = 0;
+  long matchFrames = 0; // frames ACTUALLY ticked (a live target
+                        // quit/finish exit runs fewer than `frames`)
+  uint64_t matchWallMs = 0;
+  bool ranMatch = false;
+
+  // A12b: install the SYSTEM menu hook HERE, not in the bridge arm below.
+  // The FOH phase runs BEFORE that arm, so installing it there left the hook
+  // NULL for the whole menu phase and MENU/HOME did nothing on the title
+  // screen — measured on device, which is the exact symptom the owner
+  // reported. Still live-play only: brLive is the same argv predicate.
+  if (brLive) foh_sysmenu_hook = foh_sysmenu_open;
+
+  // review-mexit-r3 Medium (M3) — ONE system-menu dispatch predicate for all
+  // three loops (this file's FOH phase, the target match, the VS match).
+  // The three sites had drifted: only the FOH phase carried `!shotsDir`, so
+  // an evidence run that reached a match could still have had its marker
+  // press eaten by the modal. `!shotsDir` is not a FOH-phase detail — it is
+  // the rig contract for the WHOLE run: with --shots-dir the MENU keysym is
+  // the screenshot marker (see the flag's note above), and a modal that
+  // consumes it desynchronises the shot schedule wherever it opens.
+  //
+  // Declared above `foh_phase:` with the other cross-phase state (see the
+  // MATCH-SUMMARY note): all three inputs are argv/install-time invariants,
+  // so re-deriving it per pass would be equivalent, but the file's stated
+  // convention is that anything read on both sides of the label lives here.
+  // The per-site EDGE tests (qEdge / pin.menu && !prevPause.menu / !pin.start)
+  // stay per-site: they are genuinely different input plumbing, not policy.
+  const bool sysOk = sysMenu && !shotsDir && foh_sysmenu_hook;
+
+  // A19 — THE in-process return point (punch-list C18/C19/B4/A19). Every
+  // resource a second match needs to re-establish (RNG accounting relatch,
+  // gfx loads,
+  // sim/target setup) already lives inside the bridge arm below and is simply
+  // re-run; the gfx loaders are idempotent or reset fixed pools, so this
+  // leaks nothing. The FOH keeps the SAME FohState, which is the whole point:
+  // upstream's endGame preserves the player's selections instead of rebooting
+  // into the title.
+foh_phase:;
+  // NOT const: the A12b menu overlay freezes wall clock, and each re-entry
+  // restarts this phase's pace epoch.
+  uint64_t fohStart = now_ns();
   long endTick = 0;
   for (long t = 1; t <= fohLimit; t++) {
     fohTicks = t;
@@ -1830,6 +2128,27 @@ int main(int argc, char **argv) {
       qEdge = pin.menu && !prevPin.menu;
       prevPin = pin;
       cur = pin;
+      // A12b — the player's MENU button in the FOH MENUS. Reported by the
+      // owner as "home button doesn't bring up the menu": the overlay was
+      // wired only inside the match loops, and out here MENU drove nothing
+      // but the evidence rig's screenshot marker.
+      //
+      // Gated on --system-menu, which ONLY the OPK launcher passes: the rig
+      // drives its screenshot marker on this very keysym, so any inferred
+      // discriminator eats marker presses (see the flag's note above).
+      if (qEdge && sysOk) {
+        uint64_t pausedNs = 0;
+        const int quit =
+            foh_sysmenu_hook(&g_rz, &pausedNs, &fohPresentFails);
+        fohStart += pausedNs; // the pace epoch owes the player that time
+        qEdge = false;        // consumed by the overlay, never a marker
+        if (quit) {
+          g_mexit = MEX_OS;
+          break;
+        }
+        platform_poll(&prevPin); // post-overlay state, not the stale edge
+        cur = prevPin;
+      }
     } else {
       while (rowIdx < g_nrows && g_rows[rowIdx].frame == t) {
         cur = g_rows[rowIdx].in;
@@ -1873,12 +2192,22 @@ int main(int argc, char **argv) {
         if (strcmp(ev->from, "options-gameplay") == 0 &&
             strcmp(ev->cause, "b") == 0) {
           foh_persist_collect(&g_persist, &foh);
-          foh_persist_save(&g_persist);
+          tdev_persist_save();
         }
         if (g_have_music && !menuMusicOn && strcmp(ev->to, "menu-top") == 0 &&
-            strcmp(ev->from, "title") == 0) {
+            (strcmp(ev->from, "title") == 0 || strcmp(ev->from, "tss") == 0)) {
           // menu music ON at the join (main.js:388-390) — the track is
           // already prefilled; this is a lock-bracketed flag flip.
+          //
+          // "tss" is upstream's OTHER playMenuLoop into the menu top
+          // (targetselect.js:76-81, the B-exit; review-mexit-r2 Medium).
+          // It reaches here rather than needing its own program because the
+          // in-process return below leaves the MENU track programmed-and-
+          // silent on every non-CSS destination, i.e. it restores exactly
+          // the precondition the boot establishes (mus_track_program(0, 0)).
+          // The two upstream sites that are NOT ported here are the gamepad
+          // join (main.js:452-464 — same arm, one input plane) and the target
+          // BUILDER (targetselect.js:118-124 — scope-excluded, foh.h).
           platform_audio_lock();
           g_mix.music.on = 1;
           platform_audio_unlock();
@@ -1895,10 +2224,12 @@ int main(int argc, char **argv) {
                   foh.tssStage);
         } else {
           tr_line("LAUNCH %ld p1=%d p2=%d p2type=%d difficulty=%d stage=%d "
-                  "turbo=%d lcancel=%d tapjump=%d,%d,%d,%d versus=0",
+                  "turbo=%d lcancel=%d flashlcancel=%d walljump=%d "
+                  "tapjump=%d,%d,%d,%d versus=0",
                   t, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
-                  foh.stageSel, foh.turbo, foh.lCancelType, foh.tapJumpOff[0],
-                  foh.tapJumpOff[1], foh.tapJumpOff[2], foh.tapJumpOff[3]);
+                  foh.stageSel, foh.turbo, foh.lCancelType, foh.flashOnLCancel,
+                  foh.everyCharWallJump, foh.tapJumpOff[0], foh.tapJumpOff[1],
+                  foh.tapJumpOff[2], foh.tapJumpOff[3]);
         }
       }
     }
@@ -1980,41 +2311,63 @@ int main(int argc, char **argv) {
   (void)fohTicks;
   (void)firstMarkerIdx;
 
-  // flush the FOH artifacts now (between phases; never inside a paced
-  // loop — the match loop below is the paced surface that matters)
-  if (flowOut) { // NULL only in direct mode (no FOH phase to record)
-    FILE *tf = fopen(flowOut, "w");
-    if (!tf) sim_fatal("cannot open --flow-out for writing");
-    if (fwrite(g_tr.buf, 1, g_tr.len, tf) != g_tr.len) {
-      sim_fatal("--flow-out write failed");
-    }
-    if (fclose(tf) != 0) sim_fatal("--flow-out close/flush failed");
-  }
-  if (shotsDir) {
-    for (int k = 0; k < g_nshotbuf; k++) {
-      char path[600];
-      if (snprintf(path, sizeof path, "%s/%s.ppm", shotsDir,
-                   g_shotbuf[k].name) >= (int)sizeof path) {
-        sim_fatal("shot path overflow");
+  // Flush the FOH artifacts now (between phases; never inside a paced
+  // loop — the match loop below is the paced surface that matters).
+  //
+  // FIRST PHASE ONLY (`matchesRun == 0`) — the ARTIFACT SCOPE rule stated in
+  // full at the re-entry site below. Every FOH artifact this run produces
+  // describes the FIRST phase, because the frozen expectation each rig holds
+  // IS the first phase's: the shot rows are a one-shot script, and the trace
+  // is a single FOHTRACE1 document whose tick axis restarts at 1 on every
+  // re-entry. Writing them again would not add a second phase's evidence, it
+  // would OVERWRITE exactly the evidence the rig came for.
+  //
+  // Measured, and the reason this guard exists: the FOHTRACE1 header is
+  // emitted once at boot (:1928), BEFORE the `foh_phase:` label, while the
+  // re-entry resets `g_tr.len` to 0. So a second phase's flush truncated
+  // --flow-out to a HEADERLESS single line (`END <t> transitions=0`) — which
+  // is not a trace at all: judge-foh-trace.js/normalize-foh-trace.js both
+  // reject it, and check-device-target.sh's live leg [6b] lost the
+  // `TLAUNCH ... char=2 tstage=0` line it exists to assert. Host witness:
+  // port/foh/check-mexit-reentry.sh (tooth T1 proves it fails unguarded).
+  if (matchesRun == 0) {
+    if (flowOut) { // NULL only in direct mode (no FOH phase to record)
+      FILE *tf = fopen(flowOut, "w");
+      if (!tf) sim_fatal("cannot open --flow-out for writing");
+      if (fwrite(g_tr.buf, 1, g_tr.len, tf) != g_tr.len) {
+        sim_fatal("--flow-out write failed");
       }
-      write_shot_ppm(g_shotbuf[k].fb, path);
+      if (fclose(tf) != 0) sim_fatal("--flow-out close/flush failed");
     }
+    if (shotsDir) {
+      for (int k = 0; k < g_nshotbuf; k++) {
+        char path[600];
+        if (snprintf(path, sizeof path, "%s/%s.ppm", shotsDir,
+                     g_shotbuf[k].name) >= (int)sizeof path) {
+          sim_fatal("shot path overflow");
+        }
+        write_shot_ppm(g_shotbuf[k].fb, path);
+      }
+    }
+    fbwit_flush(flowId);
   }
-  fbwit_flush(flowId);
 
-  long matchSkips = 0, matchPresentFails = 0;
-  // A11/A12: process exit code. 0 = normal end (the OPK launcher returns
-  // the player to the frontend); FOH_PAUSE_RC_MENU = "quit to menu", which
-  // the launcher answers by running the app again — the app boots into the
-  // FOH, so a relaunch IS the menus. Only the live play path can set it.
-  int quitRc = 0;
-  long matchFrames = 0; // frames ACTUALLY ticked (a live target
-                        // quit/finish exit runs fewer than `frames`)
-  uint64_t matchWallMs = 0;
-  bool ranMatch = false;
 
   if (bridge) {
     if (!foh.launched) {
+      // A19: once a match HAS been played, a FOH phase that ends without a
+      // new launch is the player walking away from the select screen, not
+      // the A2 "flow never launched" cross-guard. Only the FIRST pass can be
+      // that failure, and the artifacts of the match already played stay
+      // exactly as that match wrote them.
+      if (matchesRun > 0) goto bridge_done;
+      // A12b, review-mexit-r1 Medium: a player who boots the game and quits
+      // straight out of the SYSTEM menu (or closes the window) never
+      // launched anything either — but that is a DELIBERATE exit, not the
+      // A2 cross-guard. Reporting it as rc 4 also skipped audio/music
+      // teardown and platform_quit entirely. Only a bridge run that ends
+      // for no stated reason is the failure.
+      if (g_mexit == MEX_OS) goto bridge_done;
       fprintf(stderr, "foh_dev: --bridge given but the flow never "
                       "launched\n");
       return 4;
@@ -2027,6 +2380,16 @@ int main(int argc, char **argv) {
     // made "Target Test" quit the app at the launch seam (punch-list
     // A2; the app exited rc 4 the instant TLAUNCH happened).
     const bool tgtLive = brLive && foh.targetMode;
+    // --match-timer shortens the VS match clock (the C18 evidence arm). A
+    // TARGET run has no matchTimer expiry — its clock counts UP and its end
+    // is tp_finish_game — so the flag has no meaning here and was silently
+    // dropped (review-mexit-r2 Medium). The launch kind is only known now,
+    // which is why this refusal cannot live in the argv validation above.
+    if (tgtLive && matchTimerSec > 0.0) {
+      fprintf(stderr, "foh_dev: --match-timer is a VS arm but the flow "
+                      "performed a TARGET launch (cross-guard)\n");
+      return 4;
+    }
     // C6: the live arms record only when a --frames bound sized the
     // buffers. argv above makes recordPath, keysPath and framesGiven
     // stand or fall together under --bridge live, so this ONE predicate
@@ -2039,6 +2402,12 @@ int main(int argc, char **argv) {
     // the overlay, exactly as tp_endgame_hook keeps its live-only arm out
     // of the evidence legs (below). Not a runtime flag anyone can flip.
     if (brLive) foh_pause_hook = foh_pause_open;
+    // C18 — the finishGame seam (sim.h): the matchTimer expiry and all four
+    // DEAD* final-death arms. ONE hook for both match kinds, routed inside
+    // exactly as upstream's single finishGame branches on gameMode. NULL on
+    // every evidence bridge, so all five sim-side traps stay loud there.
+    g_tgt_live = (brLive && foh.targetMode) ? 1 : 0;
+    if (brLive) ml_sim_finish_hook = tdev_finish_game_hook;
     // launch-kind cross-guards (fail closed; the --cpu-live class).
     // The EVIDENCE bridges keep refusing: each carries a pinned witness
     // grammar plus a frozen expectation set for exactly one launch kind.
@@ -2063,9 +2432,7 @@ int main(int argc, char **argv) {
       // --- the TARGET launch bridge (target_main.c boot parity;
       // foh_app.c tstate/tverify twin with the LIVE render plane) ------
       ml_active_rng = &G.rng;
-      ml_rng_seed(&G.rng, seed);
-      for (int k = 0; k < ML_BOOT_DRAWS; k++) (void)ml_rng_next(&G.rng);
-      G.rngStateAtReset = G.rng.a;
+      rng_boot_once(seed);
       if (brTVerify || tgtLive) {
         gfx_data_load(&g_gfx.data, gfxdataPath);
         gfx_load_anim(&g_gfx, animDir, foh.p1Char);
@@ -2218,26 +2585,33 @@ int main(int argc, char **argv) {
           // `!pin.start` (review-a11-3 L1): on a SIMULTANEOUS MENU+START
           // edge the overlay would open first and its release drain would
           // then swallow the START, shadowing that faithful arm. START wins.
-          if (foh_pause_hook && pin.menu && !prevPause.menu && !pin.start) {
+          // A12b: MENU is the FunKey SYSTEM menu here too. START is NOT
+          // shadowed — in target mode it is upstream's own endGame quit
+          // (main.js:1013-1015) via tp_endgame_hook, which is faithful and
+          // already works, so the `!pin.start` guard stays: on a
+          // SIMULTANEOUS MENU+START edge the overlay's release drain would
+          // otherwise swallow the START. START wins.
+          if (sysOk && pin.menu && !prevPause.menu && !pin.start) {
             uint64_t pausedNs = 0;
-            const FohPauseResult pr =
-                foh_pause_hook(&g_gfx.rz, &pausedNs, &matchPresentFails);
-            tStart += pausedNs;
-            if (pr != FOH_PAUSE_RESUME) {
-              quitRc = (pr == FOH_PAUSE_QUIT_MENU) ? FOH_PAUSE_RC_MENU : 0;
+            if (foh_sysmenu_hook(&g_gfx.rz, &pausedNs, &matchPresentFails)) {
+              g_mexit = MEX_OS;
               pauseQuit = 1;
-              tfinDeadline = 0; // disarm any completion hold in progress
-              ticked = f;       // frame f never ticked...
-              framesRun = f;    // ...and never entered either artifact
+              tfinDeadline = 0;
+              ticked = f;
+              framesRun = f;
               break;
             }
+            tStart += pausedNs;
             platform_poll(&pin);
           }
           prevPause = pin;
           const uint64_t deadline = tStart + (uint64_t)(f + 1) * budgetNs;
           const MlInput *row0;
           if (tgtLive) {
-            liveRow = s1_input_row(&pin);
+            // C30(a): the PLAYER'S chosen control style, not the pinned BOX
+            // table. See the VS site below for the full note.
+            liveRow = s1_input_row_style(&pin, ctl_style_get(),
+                                         ctl_mod_on_r_get());
             row0 = &liveRow;
             // slot 0 is the ONLY active port in target mode, so the
             // recording carries [p0,null,null,null] — exactly the shape
@@ -2263,12 +2637,71 @@ int main(int argc, char **argv) {
           sim_frame_hash(&G, hex);
           tp_target_frame_hash(&G, thex);
           const uint64_t t1 = now_ns();
-          const bool skip = pace == 1 && t1 > deadline;
+          // review-mexit-r4 M5, TARGET DECISION (adjudicated by measurement,
+          // not by argument — the r3 note claimed this loop needed no
+          // finish-frame exception and that claim was WRONG).
+          //
+          // The r3 reasoning was: gfx_target_frame redraws the whole scene and
+          // gfx_target_banner_text re-composites COMPLETE!/FAILURE on top of
+          // it on every non-skipped frame of the hold (the arm just below), so
+          // one skipped frame presents nothing and the next unskipped frame
+          // repaints correctly. True — but it assumes at least one frame of
+          // the hold is unskipped. Under sustained catch-up NONE is: `skip` is
+          // a pure `t1 > deadline` test, so a run far enough behind skips the
+          // finish frame AND every tail frame; the per-frame banner
+          // re-composite the r3 argument rests on sits INSIDE `if (!skip)`
+          // (:2701-2703) and therefore never runs, and the wall-clock hold
+          // set at :2783 is then drained by the sleep loop at :2814-2819
+          // over a pre-finish raster. Without this fix the "banner is
+          // already presented" claim at :2808 is false; it is true only
+          // BECAUSE of the exemption below, which is what that comment now
+          // says.
+          //
+          // MEASURED, and stated at exactly the width of the measurement
+          // (.loop/mexit-r5-m5-measure.log — host twin, MLFK_HEADLESS_KEYS
+          // scripted live target session, `--budget-ns 1` so every frame is
+          // late by construction, run against the then-current source of this
+          // file and against a COPY of it whose only delta is `!tfinFirst`
+          // removed). PROVENANCE, stated because the log pins none
+          // (review-mexit-r5 Low): that measurement PREDATES the comment edits
+          // below it, and neither the log nor this note carries a source or
+          // binary hash. Every change since was to COMMENTS in this block, so
+          // the behavioural result still describes this code — but treat the
+          // numbers as "measured on the same program", not "measured on these
+          // exact bytes", and re-run it if the loop itself is edited:
+          //   (1) the premise holds — `foh_dev match: 900 frames, 900 render
+          //       skips`. Sustained catch-up skips EVERY frame, so a finish
+          //       frame landing in such a window gets no composite at all.
+          //   (2) the exception is correctly SCOPED — both builds report the
+          //       identical 900/900, because that session never reaches a
+          //       target finish, so `tfinFirst` is false throughout and the
+          //       term changes nothing off the finish frame.
+          // NOT measured, and true by construction rather than by run: that
+          // the exempted frame is exactly ONE. No scripted live target session
+          // destroys all ten targets, so the natural finish is not reachable
+          // from a key script; the one-frame bound rests on tfinDeadline
+          // becoming non-zero below, in this same iteration.
+          //
+          // The exemption is ONE frame, not the hold. tfinDeadline is declared
+          // 0 at :2570, set non-zero at :2783 — below this point, in this same
+          // iteration, on the same `g_tfin_fired && tfinDeadline == 0`
+          // predicate — and the ONLY assignment that returns it to 0 is
+          // :2596, on the system menu's QUIT arm, which `break`s out of the
+          // loop three lines later and so can never be observed by a later
+          // iteration. `tfinFirst` is therefore true on the finish frame and
+          // on no other. `&& !g_tfin_fired` (the shape
+          // r3 rejected, correctly) would instead disable skipping for the
+          // ENTIRE ~180-frame tail and distort the skip accounting the perf
+          // gate reads. This is the VS loop's `!g_vsFinish` exception in the
+          // form the target loop's banner actually needs.
+          const bool tfinFirst = tgtLive && g_tfin_fired && tfinDeadline == 0;
+          const bool skip = pace == 1 && t1 > deadline && !tfinFirst;
           uint64_t t2 = t1, t3 = t1;
           if (!skip) {
             gfx_target_frame(&g_gfx, &G, &TP);
-            // Post-finish the sim body is skipped (target_play.h
-            // :991/:1041-1044) and gfx_target_frame would redraw the
+            // Post-finish the sim body is skipped (main.js:991 and
+            // :1041-1044, relayed by target_play.h:115-120) and
+            // gfx_target_frame would redraw the
             // scene over the result, so the banner TEXT is composited
             // over every frame of the hold — the player SEES COMPLETE!/
             // FAILURE, not a frozen stage. gfx_target_banner is NOT used
@@ -2300,18 +2733,27 @@ int main(int argc, char **argv) {
             streamLen += (size_t)w;
           }
           if (pace == 1) pace_sleep_until_ns(deadline);
-          // LIVE EXITS. Both are the app-boundary form of upstream's
-          // "leave the target match": this build's match phase is
-          // terminal (the VS live arm exits after its frame bound too),
-          // so ending the run returns the player to the frontend rather
-          // than to the FOH menus. A bounded deviation for the DRIVER to
-          // register under BLOCKERS in docs/AGENT-LOG.md — this file must
-          // not claim its own registration. ALSO unapplied: upstream
-          // endGame (main.js:1372-1396) resets gameEnd/lost-stock/phantom/
-          // article state, sets playing=false and changeGamemode(4); the
-          // hook applies none of it, unobservable ONLY because the driver
-          // leaves the match on the next statement. Re-entering the menus
-          // needs the FOH/match outer loop no play arm has.
+          // LIVE EXITS. Both leave the match and RETURN TO THE FOH MENUS
+          // in-process: each sets g_mexit = MEX_TSS (target select), which
+          // the bridge tail below turns into the `foh_phase:` re-entry. That
+          // is upstream's own destination — endGame in gameMode 5 does
+          // changeGamemode(7) (main.js:1395-1400).
+          //
+          // STALE COMMENT REMOVED HERE (review-mexit-r3 Low): this block used
+          // to say the match phase was terminal, so "ending the run returns
+          // the player to the frontend rather than to the FOH menus", and
+          // that "re-entering the menus needs the FOH/match outer loop no
+          // play arm has". Both statements were true before punch-list
+          // C18/C19/B4/A19 and are false now — that outer loop IS the
+          // `foh_phase:` label, and this arm uses it. Nothing left here is a
+          // deviation for the driver to register.
+          //
+          // STILL unapplied, and this part is unchanged: upstream endGame
+          // (main.js:1372-1396) also resets gameEnd/lost-stock/phantom/
+          // article state and sets playing=false; the hook applies none of
+          // it. Unobservable because the driver leaves the match on the next
+          // statement and a re-entry re-runs the whole sim/target setup from
+          // scratch rather than resuming this G.
           //   (1) START while playing -> upstream endGame (main.js:1013
           //       -1015) via tp_endgame_hook. The terminating row is
           //       ROLLED BACK out of both artifacts: replaying it would
@@ -2321,6 +2763,11 @@ int main(int argc, char **argv) {
           //   (2) the target game finished -> upstream stops the music
           //       and leaves 2500 ms later (main.js:1499-1502).
           if (tgtLive && g_tquit) {
+            // B4: upstream's START quit IS endGame (main.js:1013-1015), and
+            // endGame in gameMode 5 does changeGamemode(7) — TARGET SELECT
+            // (main.js:1395-1400). Landing on the frontend here was the bug:
+            // the quit left the process instead of the match.
+            g_mexit = MEX_TSS;
             if (recording) rec.len = recMark; // roll the START row back out
             ticked = f + 1;    // this frame ran: ticked, rendered, paced
             framesRun = f;     // ...but it is NOT part of the replayable
@@ -2346,6 +2793,8 @@ int main(int argc, char **argv) {
             tfinDeadline = now_ns() + TFIN_HOLD_NS;
           }
           if (tgtLive && tfinDeadline != 0 && now_ns() >= tfinDeadline) {
+            // finishGame -> endGame -> changeGamemode(7) (main.js:1395-1400)
+            g_mexit = MEX_TSS;
             ticked = f + 1;
             framesRun = f + 1;
             break;
@@ -2366,8 +2815,11 @@ int main(int argc, char **argv) {
         // tail above is frame-COUNTED. Under catch-up pace_sleep_until_ns
         // is a no-op and post-finish ticks are nearly free, so the tail
         // can be spent in well under 2.5 s. Finish the hold here: the
-        // banner is already presented and post-finish ticks are inert
-        // (target_play.h :991/:1041-1044), so waiting is equivalent to
+        // banner is already presented — guaranteed by the finish frame's
+        // skip exemption above (review-mexit-r4 M5), not by luck of the
+        // pacing — and post-finish ticks are inert
+        // (main.js:991/:1041-1044, relayed by target_play.h:115-120),
+        // so waiting is equivalent to
         // ticking and cannot truncate the banner the player sees.
         while (tgtLive && tfinDeadline != 0 && now_ns() < tfinDeadline) {
           struct timespec hs;
@@ -2462,9 +2914,7 @@ int main(int argc, char **argv) {
 
     // seed + boot draws ONLY at the launch seam (foh_app.c verbatim)
     ml_active_rng = &G.rng;
-    ml_rng_seed(&G.rng, seed);
-    for (int k = 0; k < ML_BOOT_DRAWS; k++) (void)ml_rng_next(&G.rng);
-    G.rngStateAtReset = G.rng.a;
+    rng_boot_once(seed);
 
     if (brVerify || brLive) {
       gfx_data_load(&g_gfx.data, gfxdataPath);
@@ -2589,6 +3039,10 @@ int main(int argc, char **argv) {
     G.sim.turbo = foh.turbo != 0;
     G.sim.lCancelType = foh.lCancelType;
     for (int i = 0; i < 4; i++) G.sim.tapJumpOff[i] = foh.tapJumpOff[i];
+    // C18 evidence arm: shorten the REAL clock (see --match-timer above).
+    // Live play only — the evidence bridges never pass it, and with the
+    // finish hook NULL there the expiry would still be the loud trap.
+    if (brLive && matchTimerSec > 0.0) G.matchTimer = matchTimerSec;
     G.rngStateAtFrame1 = G.rng.a;
 
     // BRIDGE-STATE witness (read back FROM GameState; foh_app.c verbatim)
@@ -2688,17 +3142,41 @@ int main(int argc, char **argv) {
         // inflate a number judge-render-timing.js computes.
         if (attrib) attrib_sample(&attrib[f]);
         platform_poll(&pin);
-        // A11/A12: START or MENU opens the modal pause overlay. NULL hook
+        // A11/A12: START opens the modal pause overlay. MENU does NOT — since
+        // A12b it opens the FunKey SYSTEM menu, dispatched by the arm just
+        // below on its own button (review-mexit-r5 Low corrects this note,
+        // which still described the pre-A12b single-overlay world). NULL hook
         // on every evidence bridge, so this is dead code for flow/trace-fed
         // runs by construction (install site above).
-        if (foh_pause_hook &&
-            ((pin.start && !prevPause.start) || (pin.menu && !prevPause.menu))) {
+        // MENU/HOME is the FunKey SYSTEM menu now, in a match exactly as in
+        // the FOH menus (A12b). Checked BEFORE the pause arm, and the two are
+        // made mutually exclusive by `sysOpened` — NOT by updating prevPause
+        // here. Doing that (the shape this replaced) made the pause arm's own
+        // `!prevPause.start` edge test compare pin against ITSELF, so it was
+        // constant-false and C19's overlay was unreachable on every frame.
+        bool sysOpened = false;
+        if (sysOk && pin.menu && !prevPause.menu) {
+          uint64_t pausedNs = 0;
+          if (foh_sysmenu_hook(&g_gfx.rz, &pausedNs, &matchPresentFails)) {
+            g_mexit = MEX_OS; // the system menu's QUIT
+            vsRan = f;
+            break;
+          }
+          tStart += pausedNs;
+          platform_poll(&pin);
+          sysOpened = true;
+        }
+        if (!sysOpened && foh_pause_hook && pin.start && !prevPause.start) {
           uint64_t pausedNs = 0;
           const FohPauseResult pr =
               foh_pause_hook(&g_gfx.rz, &pausedNs, &matchPresentFails);
           tStart += pausedNs; // the pace epoch owes the player that time
           if (pr != FOH_PAUSE_RESUME) {
-            quitRc = (pr == FOH_PAUSE_QUIT_MENU) ? FOH_PAUSE_RC_MENU : 0;
+            // endGame's gameMode-3 destination is the CSS
+            // (main.js:1393-1395), so QUIT TO SELECT lands there.
+            g_mexit = (pr == FOH_PAUSE_QUIT_SELECT) ? MEX_CSS
+                      : (pr == FOH_PAUSE_QUIT_MENU) ? MEX_TITLE
+                                                    : MEX_OS;
             vsRan = f; // rows 0..f-1 are recorded; frame f never ticked
             break;
           }
@@ -2727,7 +3205,34 @@ int main(int argc, char **argv) {
           // and no pairing asserts it, so its raw bit stays honest.
           PlatformInput gpin = pin;
           gpin.start = false;
-          liveRow = s1_input_row(&gpin);
+          // C30(a) — THE integration point for the controls lane's three
+          // styles. s1_input_row() is hard-pinned to the ratified BOX table
+          // (s1_input.h), so until this call moved, ctl_style_get() had no
+          // caller on the play path and the whole feature was unreachable
+          // no matter what the Controls screen stored.
+          //
+          // The EVIDENCE rig app (port/gfx/gfx_app.c) deliberately keeps
+          // s1_input_row(): it is the producer for judge-s1-coverage.js,
+          // whose 24 pre-registered chord signatures AND its
+          // `if (i.y || i.z ...) invBad++` invariant are BOX-only by
+          // construction (Natural emits y/z and no C-layer). Style-switching
+          // that producer would demand weakening a pinned judge, which
+          // HARD RULE 3 forbids; the styles are proven host-side instead by
+          // .loop/ctl-style-check.sh. The product path is foh_dev.c — this
+          // site and the target one above.
+          //
+          // SCOPE, precisely (review-mexit-r3 Low): what is live is the
+          // CONSUMER half of C30(a). The play path now reads the control
+          // cells, so a style that is already set — i.e. one restored from
+          // the persisted record by tdev_persist_load() — reaches the sim.
+          // The PRODUCER half is still missing: ctl_style_set() /
+          // ctl_mod_on_r_set() have exactly ONE caller in this binary, the
+          // persist chokepoint at :1304, and no FOH UI caller at all — so a
+          // player cannot change style from inside the game yet. C30(c), and
+          // it is the menus lane's work, not this file's. Do not read this
+          // note as "the feature is fully live".
+          liveRow = s1_input_row_style(&gpin, ctl_style_get(),
+                                       ctl_mod_on_r_get());
           rows[0] = &liveRow;
           rows[1] = &neutralRow;
           rows[2] = 0;
@@ -2747,7 +3252,18 @@ int main(int argc, char **argv) {
         sim_game_tick(&G, rows);
         sim_frame_hash(&G, hex);
         const uint64_t t1 = now_ns();
-        const bool skip = pace == 1 && t1 > deadline;
+        // review-mexit-r3 Medium (M5): `!g_vsFinish` is the finish-frame
+        // exception, the same shape the FOH loop's `&& !shotDue` uses
+        // (:2268). sim_game_tick above can set g_vsFinish DURING this tick,
+        // and the C18 block below paints TIME!/GAME! straight into g_gfx.rz
+        // and presents it ONCE, then freezes for 2.5 s. Without this term a
+        // catch-up skip on exactly that frame left gfx_render_frame unrun, so
+        // the banner composited over the PREVIOUS frame still in the raster
+        // and the player held a stale image for the whole hold. Upstream's
+        // finishGame paints over the FINAL frame (main.js:1487-1499). Skip
+        // accounting stays honest: this frame is genuinely rendered, so it is
+        // correctly NOT counted in matchSkips.
+        const bool skip = pace == 1 && t1 > deadline && !g_vsFinish;
         uint64_t t2 = t1, t3 = t1;
         if (!skip) {
           gfx_render_frame(&g_gfx, &G);
@@ -2770,6 +3286,89 @@ int main(int argc, char **argv) {
             sim_fatal("stream buffer overflow");
           }
           streamLen += (size_t)w;
+        }
+        // C18 — finishGame fired inside THIS tick: matchTimer expiry
+        // (main.js:349) or a DEAD* final death (DEAD*.js:39), the normal way
+        // a VS match ends. Upstream paints the banner over the final frame
+        // and holds it 2500 ms of WALL CLOCK with `playing` false, so the sim
+        // is frozen and the render keeps the last frame; endGame then lands
+        // on the CSS. Freezing this loop for the hold is behaviourally the
+        // same and touches no checksummed TU, exactly as the pause overlay's
+        // argument (foh_pause.h). Only the live arm can get here: the hook is
+        // NULL for every evidence bridge, so the sim traps instead.
+        if (g_vsFinish) {
+          vsRan = f + 1; // this frame ran and IS part of the prefix
+          // "Time!" when the clock ran out, else "Game!" (main.js:1487-1499)
+          const int timeUp = (G.matchTimer <= 0);
+          tdev_vs_banner_text(&g_gfx.rz, timeUp);
+          // ...and the SFX upstream plays on the SAME branch
+          // (main.js:1476 sounds.time / :1481 sounds.game). Both names are
+          // in the shipped SND1 pack (pack-snd.js packs all 180); a missing
+          // one is a loud pack error, never a silent skip.
+          foh_snd(timeUp ? "time" : "game");
+          // C18 evidence: the banner is NOT an overlay, so nothing else can
+          // photograph it. Same MLFK_MENU_SHOT env as the overlays — unset
+          // in every check and in the product launcher.
+          {
+            const char *sd = getenv("MLFK_MENU_SHOT");
+            if (sd && *sd) {
+              char sp[512];
+              snprintf(sp, sizeof sp, "%s/finish-banner.ppm", sd);
+              write_shot_ppm(g_gfx.rz.fb, sp);
+            }
+          }
+          if (platform_present(g_gfx.rz.fb) != 0) matchPresentFails++;
+          // MusicManager.stopWhatisPlaying() (main.js:1500). This arm MUTES
+          // ONLY: the lock-bracketed flag flip below, and nothing else. The
+          // TARGET finish arm additionally signals the reader thread to quit
+          // (g_mus_quit, :2780-2789); this one does not. The thread join stays
+          // in teardown either way, never inside a paced loop.
+          //
+          // Both arms re-enter the FOH IN-PROCESS since A19, and the re-entry
+          // site below stops, reprograms and restarts the reader for whichever
+          // one ran — so this is NOT a "can the reader come back" question
+          // (review-mexit-r7 Low; two earlier versions of this note got that
+          // wrong in opposite directions). It is a cost question, and the two
+          // holds differ: the target hold is the last thing before that match
+          // is torn down, so stopping its SD refills is free, whereas this hold
+          // sits 2.5 s in the middle of a still-live mixer whose reader the
+          // very next match will want. Leaving a muted reader to do a few SD
+          // refills across it is cheaper than tearing the thread down and
+          // standing it back up.
+          if (g_have_music) {
+            platform_audio_lock();
+            g_mix.music.on = 0;
+            platform_audio_unlock();
+          }
+          // WALL-FIELD INFLATION, stated (review-mexit-r3 Low): this hold
+          // nanosleeps INSIDE match scope, i.e. between tStart and the tEnd
+          // that feeds `matchWallMs`, so the teardown summary's `wall <N> ms`
+          // absorbs the full 2500 ms. The same is true of the target loop's
+          // hold tail.
+          //
+          // Harmless, and measured rather than assumed. `wall` IS bounded by
+          // two checks — check-device-foh.sh:1472 and
+          // check-device-target.sh:1194, both [58000,66000] ms for a
+          // 3600-frame leg — but neither leg can reach this hold: it is
+          // live-arm-only (g_vsFinish requires the finish hook, which is NULL
+          // for every evidence bridge; the target tail is tgtLive-gated), and
+          // those legs are trace-fed. No judge derives a frame RATE from
+          // `wall` either: the perf judge reads the per-frame --timing file
+          // (percentiles.js, p50/p99 over sim+render+present), and held
+          // frames write no timing row at all because the loop has already
+          // broken. If some future check ever wants "seconds of PLAY",
+          // subtract TFIN_HOLD_NS when g_vsFinish fired — do NOT move the
+          // hold out of match scope, because to the player the hold is part
+          // of the match, and either wall bound would then need re-pinning.
+          const uint64_t hold = now_ns() + TFIN_HOLD_NS;
+          while (now_ns() < hold) {
+            struct timespec hs;
+            hs.tv_sec = 0;
+            hs.tv_nsec = 4000000L; // 4 ms
+            nanosleep(&hs, 0);
+          }
+          g_mexit = MEX_CSS; // endGame: changeGamemode(2) (main.js:1393-1395)
+          break;
         }
         if (pace == 1) pace_sleep_until_ns(deadline);
       }
@@ -2852,6 +3451,201 @@ int main(int argc, char **argv) {
       ml_sb_free(&rec);
     }
   bridge_done:;
+  }
+
+  // --- A19: the in-process return (punch-list C18 + C19 + B4) --------------
+  // endGame does NOT leave the game — it resets match state and changes
+  // gameMode back to a SELECT screen (main.js:1393-1400). Only MEX_OS leaves
+  // the process; everything else goes round again. See the MatchExit note.
+  if (g_mexit == MEX_CSS || g_mexit == MEX_TSS || g_mexit == MEX_TITLE) {
+    tdev_end_game(&G, &foh);
+    // Putting the screen back on the LIVE struct is NOT enough on its own,
+    // and that was measured: the select screen still holds the confirm that
+    // launched this match, so the very next tick launches again with no input
+    // at all. The device trace showed it exactly — a second `TLAUNCH 1`
+    // immediately after the first match's START quit, with the held START
+    // bleeding into match 2 as its frames 1-2.
+    //
+    // (review-mexit-r6b Low: a paragraph here used to describe the FIRST
+    // attempt at the cure — foh_init for a "KNOWN-CLEAN" machine, with the
+    // player's selections copied back over it. That implementation is gone;
+    // review-mexit-r1 showed the copy-back was a whitelist that silently
+    // dropped everything nobody listed. The paragraph outlived it and
+    // contradicted the live-state reset explained immediately below, so it is
+    // deleted rather than left to be read as current.)
+    matchesRun++;
+    // KEEP the state machine and reset only what a match actually
+    // invalidates. The first shape of this (foh_init + a whitelist of
+    // fields copied back) was WRONG and review-mexit-r1 caught it: a
+    // whitelist silently discards everything nobody thought to list —
+    // measured casualties were tssCursor (return from target N landed on
+    // target 0), p1Difficulty, and the CSS hand/slider positions
+    // (cssHandX/Y, cssSliderX[], cssCarry, cssHandType), which upstream
+    // holds at MODULE scope and therefore never resets (css.js:64-75;
+    // endGame at main.js:1372-1418 never touches them either).
+    //
+    // What a match DOES invalidate, and why each one:
+    //   launched — the confirm that started THIS match is still latched,
+    //     so without this the very next tick launches again with no input
+    //     at all (measured on device: a second `TLAUNCH 1` immediately
+    //     after the first match's START quit).
+    //   bHold — the CSS B-back counter; a stale count would insta-back.
+    //   prev — the edge snapshot; seeded from the post-drain input below
+    //     so a still-held button is not read as a fresh press. This is
+    //     upstream's `pause = [[true,true],...]` latch (main.js:1404-1409).
+    //   nev/nsnd — cleared by foh_tick anyway (foh.c:829-830); zeroed here so
+    //     nothing between now and the next tick can read a stale event.
+    foh.launched = false;
+    foh.bHold = 0;
+    foh.nev = 0;
+    foh.nsnd = 0;
+    foh.screen = (g_mexit == MEX_CSS)   ? FOH_CSS  // changeGamemode(2)
+                 : (g_mexit == MEX_TSS) ? FOH_TSS  // changeGamemode(7)
+                                        : FOH_TITLE;
+    // MUSIC (main.js:1377-1388, review-mexit-r1 High): endGame ALWAYS
+    // stops what is playing, and then — for gameMode 3 (VS) ONLY — starts
+    // the menu loop. gameMode 5 (targets) deliberately does not, so target
+    // select is silent upstream too, and that is carried verbatim.
+    // Without this the stage/target track kept playing over the select
+    // screen, and after a natural finish (which mutes below) nothing ever
+    // came back.
+    //
+    // ONE shape for all three destinations (review-mexit-r2 High + Medium):
+    // program the MENU track, audible only where upstream plays it. Two
+    // defects this replaces:
+    //   * mus_track_program was called with the reader thread STILL LIVE,
+    //     which its contract forbids outright (:1030) — it fcloses g_mus_file
+    //     and frees/replaces the ring the reader is concurrently reading.
+    //     Both other switch sites already bracket it; this one did not.
+    //   * the non-CSS arm only MUTED, leaving the stage/target track
+    //     programmed. So MEX_TITLE's later title->menu-top flag flip unmuted
+    //     the STAGE track over the menu, and TSS->menu-top (upstream's own
+    //     playMenuLoop, targetselect.js:76) was silent or wrong-track.
+    //     Programming the menu track silent restores the boot precondition
+    //     the flag-flip arm is written against.
+    if (g_have_music) {
+      const int menuAudible = (g_mexit == MEX_CSS) ? 1 : 0;
+      mus_reader_stop(); // MUST be stopped across a program (:1030)
+      mus_track_program(0, menuAudible); // kMusTok[0] = menu
+      mus_reader_start();
+      // CSS: playMenuLoop (:1388). TSS: silent upstream (gameMode 5 takes
+      // no playMenuLoop branch) — but re-armed, because its B-exit does.
+      // TITLE is this port's own affordance and re-arms like a fresh boot.
+      menuMusicOn = menuAudible != 0;
+    }
+    g_mexit = MEX_NONE;
+    g_vsFinish = 0;
+    g_tquit = 0;
+    g_tfin_fired = 0;
+    // ARTIFACT SCOPE (review-mexit-r2 Medium; corrected review-mexit-r3 High).
+    // A multi-phase run produces ONE set of artifacts, and which phase each
+    // one describes is stated here, once, for all of them. Three scopes, each
+    // forced by what its consumer can accept:
+    //
+    // (1) FIRST PHASE — every FOH ARTIFACT: the flow-out trace, the shot
+    //     PPMs, the framebuffer witness, and the `shots` count in the FOH
+    //     summary. Not a preference: the FOHTRACE1 header is emitted ONCE at
+    //     boot (:1928), before the `foh_phase:` label, and the FOH tick axis
+    //     restarts at 1 on every re-entry (`endTick`/`t` are declared after
+    //     the label). So an APPENDED trace would carry a second END after a
+    //     terminal one plus a decreasing frame column, and a REWRITTEN one is
+    //     headerless — both malformed, and both rejected by BOTH consumers:
+    //     the append by judge-foh-trace.js:149 / normalize-foh-trace.js:107
+    //     ("content after END"), the rewrite by judge-foh-trace.js:121 /
+    //     normalize-foh-trace.js:79 (the exact `FOHTRACE1 flow=<id>` header).
+    //     Host witness for the rewrite, both directions:
+    //     port/foh/check-mexit-reentry.sh ([4] cmp, [5] T1). The shot rows
+    //     are a one-shot script whose frozen expectation is likewise phase
+    //     1's, so re-arming them would re-photograph and overwrite exactly
+    //     the evidence a rig came for. One rule, one guard: the flush site
+    //     above is wrapped in `matchesRun == 0`, and the shot schedule
+    //     (g_nshotbuf, shotIdx, markerIdx) is deliberately NOT reset below.
+    //     Getting this half-right is what review-mexit-r3 caught: the shot
+    //     schedule was carved out correctly while the trace was still
+    //     rewritten every phase, i.e. the two halves of one rule contradicted
+    //     each other.
+    //
+    // (2) FINAL PHASE OF ITS KIND — the two stderr summary lines, with ONE
+    //     documented exception. The match counters below are reset per phase,
+    //     so the `foh_dev match:` line is wholly the LAST match's; before
+    //     this, `frames`/`wall` were the last match's while `render skips`/
+    //     `failed presents` were every match's, which is the mixing this
+    //     reset removes. The `foh_dev foh:` line is per-field, and one field
+    //     is deliberately NOT final-phase (review-mexit-r4): `ticks`,
+    //     `transitions`, `render skips`, `failed presents` and `launched` are
+    //     the FINAL FOH phase's, but `shots` is `g_nshotbuf`, which the shot
+    //     schedule above deliberately does not re-arm, so it is the FIRST
+    //     phase's count and stays that way for the same reason the trace does
+    //     — every frozen expectation is phase 1's. So the line does span two
+    //     scopes; it is stated here rather than claimed away. Grammar-safe:
+    //     no field is added or removed, and a single-match run — which is
+    //     every committed leg — produces byte-identical lines, which is why
+    //     no consumer can observe the split.
+    //
+    // (3) LAST MATCH — the MATCH sinks, because each match's writer opens
+    //     them with mode "w" and therefore truncates: --record-trace
+    //     (:2867 target / :3409 VS), --record-keys (:2873 / :3415) and
+    //     --bstate-out (:2471 / :3040). That is the honest scope — a replay
+    //     trace is one match's input stream and cannot be concatenated — but
+    //     it was previously true only by accident of the fopen mode, so it is
+    //     written down here. Every committed leg plays exactly one match, so
+    //     no committed expectation depends on which match won; a live
+    //     acceptance session that plays several keeps the LAST one.
+    g_tr.len = 0;
+    g_tr_full = 0;
+    transitions = 0;
+    fohSkips = 0;
+    fohPresentFails = 0;
+    matchSkips = 0;
+    matchPresentFails = 0;
+    // ranMatch is NOT cleared: it means "this process played a match", which
+    // stays true forever after and is what gates the teardown match summary.
+    // Clearing it here swallowed that summary entirely (measured on device).
+    // DRAIN every still-held input before handing control back. Whatever
+    // ended this match is still down — START for target mode's endGame, A
+    // for a pause-menu entry, or a direction the player never let go of —
+    // and the screen we land on is edge-driven, so any of them would read
+    // as a FRESH press on its very first frame. Upstream gets this for
+    // free from endGame's `pause = [[true,true],...]` latch
+    // (main.js:1404-1409). review-mexit-r1 Medium: the earlier form waited
+    // on a/b/start/menu only, so a held direction still leaked a cursor
+    // move; platform_input_idle() covers the whole action-bearing set and
+    // is shared with both overlays' drains (platform.h). Keep presenting
+    // the last frame so the screen does not appear frozen while a finger
+    // rests on a button.
+    bool drainQuit = false;
+    for (;;) {
+      const uint64_t deadline = now_ns() + budgetNs;
+      platform_poll(&prevPin);
+      if (prevPin.quit) { // the other legitimate way out of a held key
+        drainQuit = true;
+        break;
+      }
+      if (platform_input_idle(&prevPin)) break;
+      if (platform_present(g_gfx.rz.fb) != 0) fohPresentFails++;
+      pace_sleep_until_ns(deadline);
+    }
+    // review-mexit-r2 Low: SDL_QUIT is ONE-SHOT — platform_poll latches the
+    // event once and the next poll reports `quit` false. Breaking out of the
+    // drain and re-entering the FOH therefore ATE the player's close request:
+    // the window/shutdown signal was consumed here and never seen again. A
+    // quit is a quit whichever loop observes it, so it becomes MEX_OS and
+    // falls straight through to teardown (audio stop, platform_quit) instead.
+    if (drainQuit) {
+      g_mexit = MEX_OS;
+    } else {
+      // Seed the FOH's edge snapshot from the state we actually hand it.
+      // After platform_input_idle() has SUCCEEDED that state is necessarily
+      // neutral on every action-bearing button — which is the point: the FOH's
+      // first tick sees the same snapshot as its `prev`, so nothing can read
+      // as a fresh press. (This note used to say "anything still down is now
+      // already held"; nothing action-bearing can still be down here, so that
+      // was describing a case the drain has already excluded —
+      // review-mexit-r5 Low.)
+      foh.prev = prevPin;
+      cur = prevPin;
+      goto foh_phase;
+    }
   }
 
   // audio teardown BEFORE platform_quit (gfx_app.c ordering)

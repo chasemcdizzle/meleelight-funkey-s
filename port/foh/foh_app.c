@@ -34,6 +34,7 @@
 #include "../sim/sim/sim.h"
 #include "../sim/target/target_play.h" // M4 task 12: target bridges
 #include "foh.h"
+#include "../gfx/ctl_style.h" // C30(c)
 #include "foh_persist.h" // M4 task 13: the ONE persistence chokepoint
 
 #define ML_BOOT_DRAWS 465 // the qjs boot pin (oracle/qjs/replay.sh)
@@ -449,6 +450,13 @@ int main(int argc, char **argv) {
   // at a fresh dir so flows start from defaults.
   foh_persist_load(&g_persist);
   foh_persist_apply(&g_persist, &foh);
+  // C30(c): the control-style + Mod-shoulder cells are NOT FohState fields
+  // (they are read by the input path in another TU), so the FOH owns these
+  // two calls at the persist chokepoint rather than foh_persist_apply —
+  // exactly as foh_persist.h specifies. Without them the Controls screen
+  // would edit a setting that resets on every boot.
+  ctl_style_set(g_persist.ctlStyle);
+  ctl_mod_on_r_set(g_persist.modOnR != 0);
   foh_render_warm(&g_rz); // cold caches off the frame budget (foh_render.c)
   long transitions = 0;
   long launchFrame = 0;
@@ -484,11 +492,24 @@ int main(int argc, char **argv) {
             0) {
           sim_fatal("--flow-out write failed");
         }
-        // task 13: the upstream options save point (gameplaymenu.js:
-        // 29-33 — setCookie per key on the B-exit).
-        if (strcmp(ev->from, "options-gameplay") == 0 &&
+        // task 13: the upstream options save points — gameplaymenu.js:
+        // 29-33 (setCookie per gameSettings key on the B-exit) and
+        // audiomenu.js:24-25 (setCookie soundsLevel/musicLevel on ITS
+        // B-exit, with no meHost gate). Both are B-exits of an options
+        // screen and both go through the one chokepoint.
+        // C30(c) (review-r12 MAJOR): controls-keyboard's B-exit is a save
+        // point too. Without it a style/shoulder edit was only persisted if
+        // the user later happened to visit an UNRELATED options screen, so it
+        // silently vanished on restart — the same class of bug as an
+        // inaudible slider: the setting appears to take and does not survive.
+        if ((strcmp(ev->from, "options-gameplay") == 0 ||
+             strcmp(ev->from, "options-audio") == 0 ||
+             strcmp(ev->from, "controls-keyboard") == 0) &&
             strcmp(ev->cause, "b") == 0) {
           foh_persist_collect(&g_persist, &foh);
+          // C30(c): the twin of the load-side calls above (foh_persist.h).
+          g_persist.ctlStyle = (int)ctl_style_get();
+          g_persist.modOnR = ctl_mod_on_r_get() ? 1 : 0;
           foh_persist_save(&g_persist);
         }
       } else if (ev->kind == FOH_EV_SEL) {
@@ -509,10 +530,12 @@ int main(int argc, char **argv) {
         } else {
           w = fprintf(tf,
                       "LAUNCH %ld p1=%d p2=%d p2type=%d difficulty=%d "
-                      "stage=%d turbo=%d lcancel=%d tapjump=%d,%d,%d,%d "
+                      "stage=%d turbo=%d lcancel=%d flashlcancel=%d "
+                      "walljump=%d tapjump=%d,%d,%d,%d "
                       "versus=0\n",
                       f, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
                       foh.stageSel, foh.turbo, foh.lCancelType,
+                      foh.flashOnLCancel, foh.everyCharWallJump,
                       foh.tapJumpOff[0], foh.tapJumpOff[1],
                       foh.tapJumpOff[2], foh.tapJumpOff[3]);
         }
@@ -679,6 +702,12 @@ int main(int argc, char **argv) {
   G.sim.turbo = foh.turbo != 0;
   G.sim.lCancelType = foh.lCancelType;
   for (int i = 0; i < 4; i++) G.sim.tapJumpOff[i] = foh.tapJumpOff[i];
+  // phantomThreshold has no widget (MENU-SPEC §3.2) but IS persisted and
+  // IS on the checksum surface, so the value the file round-trips is the
+  // value the sim gets — not a second, independently-defaulted copy in
+  // sim_boot.c:435. Both are 0.01 today; the point is that they cannot
+  // silently disagree tomorrow (the qjs Number("")-zeroing class).
+  G.sim.phantomThreshold = foh.phantomThreshold;
   G.rngStateAtFrame1 = G.rng.a;
 
   // BRIDGE-STATE witness: read back from the GameState (never from the

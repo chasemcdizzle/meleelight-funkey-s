@@ -140,8 +140,8 @@ f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/
 0bc801ea46b06a63e79377aae164636a5e9f649ee45835748e5f2387b9e04281 oracle/harness/streamlib.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-4f0cf650978e871f442e28e2612307215cdeabf34d55126faea4d99f6f7198e8 port/foh/judge-foh-trace.js
-9dd01ce9adcf969015ac4669034275c32710705ffdcdf6487b1241ff9846a742 port/foh/normalize-foh-trace.js
+e709c03b2631ad0ab66a3f010c86905d9d1d5c81550d0143d7ca0799b95db878 port/foh/judge-foh-trace.js
+a1353a71a66bb05bc28d547eee9385cfa8da7baf784f9e038bd31834cabb9cb8 port/foh/normalize-foh-trace.js
 1163e9c18323ac06aaaec4ee3068691d7d67ebbf98b3500a343a69c80ca793ea port/foh/flow-to-fkscript.js
 4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js
 2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e port/foh/keymap-frozen.txt
@@ -295,9 +295,9 @@ done <<< "$PRODUCER_PINS"
 [ "$n_pins" = "$N_PINS_WANT" ] || fail "producer pin inventory — $n_pins/$N_PINS_WANT pins verified"
 # twin pins: the judge sha must sit in check-foh-flows.sh's pin table
 # exactly once; sndpack/menu.pcm must equal the sibling device checks'.
-c="$(grep -cF "4f0cf650978e871f442e28e2612307215cdeabf34d55126faea4d99f6f7198e8 port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
+c="$(grep -cF "e709c03b2631ad0ab66a3f010c86905d9d1d5c81550d0143d7ca0799b95db878 port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
 [ "$c" = 1 ] || fail "twin pin — check-foh-flows.sh does not carry the same judge-foh-trace.js sha exactly once (count $c; paired change rule)"
-c="$(grep -cF "4f0cf650978e871f442e28e2612307215cdeabf34d55126faea4d99f6f7198e8 port/foh/judge-foh-trace.js" "$FOH/check-device-foh.sh")" || true
+c="$(grep -cF "e709c03b2631ad0ab66a3f010c86905d9d1d5c81550d0143d7ca0799b95db878 port/foh/judge-foh-trace.js" "$FOH/check-device-foh.sh")" || true
 # exactly 2 there: its PRODUCER_PINS row + its own twin grep of
 # check-foh-flows.sh (both carry the sha+path pair)
 [ "$c" = 2 ] || fail "twin pin — check-device-foh.sh does not carry the same judge-foh-trace.js sha exactly twice (count $c; pin row + its twin grep)"
@@ -512,7 +512,8 @@ rm -f "$BUILD/raster.o" "$BUILD/foh_dev_headless"
 cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$BUILD/raster.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/foh_dev_headless" \
   "$BUILD/raster.o" "$FOH/foh_dev.c" "$FOH/foh.c" "$FOH/foh_font.c" \
-  "$FOH/foh_render.c" "$FOH/foh_persist.c" "$FOH/foh_pause.c" "$GFX/img1.c" \
+  "$FOH/foh_render.c" "$FOH/foh_persist.c" "$FOH/foh_pause.c" \
+  "$GFX/ctl_style.c" "$GFX/img1.c" \
   "$GFX/platform_headless.c" \
   "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_target.c" \
   "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \

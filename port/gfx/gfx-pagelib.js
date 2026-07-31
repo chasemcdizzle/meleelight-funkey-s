@@ -34,15 +34,20 @@
 // U1 — why drawBackground used to be excluded, and what makes it
 // includable now. drawStars consumes Math.random EVERY frame (18 draws
 // for the two mountains' control points, +3 per star respawn), so under
-// the native-RNG swap below the browser walks a random trajectory the C
-// cannot follow: pairing the BG2 plane frame-by-frame was impossible,
-// not merely unjudged. The fix is the project's own sweep discipline
-// (fix_plan §M2 rules 11/12): give BOTH sides the SAME stream and the
-// SAME start state.
+// the NATIVE-RNG swap this file used to install the browser walked a
+// random trajectory the C could not follow: pairing the BG2 plane
+// frame-by-frame was impossible, not merely unjudged. The fix is the
+// project's own sweep discipline (fix_plan §M2 rules 11/12): give BOTH
+// sides the SAME stream and the SAME start state.
 //   - stream: a mulberry32 seeded with gfx_bg.c's own render-local
 //     constant, installed as Math.random for the duration of
-//     drawBackground ONLY (the rest of the render keeps the native swap,
-//     so nothing else changes);
+//     drawBackground ONLY;
+//     (C28, iter 134: the REST of the render is no longer on native RNG
+//     either — it runs on the chained render-plane mulberry32
+//     `renderRandom` below, mirroring gfx_vfx.c's own stream. Same
+//     argument, applied to the foreground: an unpaired native stream
+//     made the fg masks — and therefore the fg IoU — differ in every
+//     capture.)
 //   - start state: bgPos/direction/circleSize/bgSparkle/ang are still at
 //     their stagerender.js module literals when the capture begins
 //     (renderTick is disabled via __harnessNoRender, so drawBackground
@@ -65,10 +70,16 @@
 //
 // Guards that keep the sim stream clean, PROVEN by the run's
 // verify-stream STREAM MATCH:
-//   - Math.random is swapped to the harness's stashed native RNG for the
-//     duration of the render call (render-plane code — incl. the dVfx
-//     re-spawns and the injected drawVfx calls — must not consume the
-//     seeded gameplay stream);
+//   - Math.random is swapped for the duration of the render call, so
+//     render-plane code — incl. the dVfx re-spawns and the injected
+//     drawVfx calls — cannot consume the seeded gameplay stream. Since
+//     C28 (iter 134) the replacement is the page-local CHAINED
+//     `renderRandom` (mulberry32 @ 0xC0FFEE42, the same stream and seed
+//     gfx_vfx.c chains), NOT `window.__nativeRandom`: native RNG is not
+//     reproducible across page loads, and __nativeRandom additionally
+//     carries percentShake's wall-clock setTimeout draws, so sharing it
+//     would put the render back on the wall clock. __nativeRandom keeps
+//     exactly that one cosmetic job and no render duty;
 //   - phys.outOfCameraTimer is snapshot/restored around it (renderPlayer
 //     writes it and physics.js:660 FEEDS IT BACK into percent).
 // renderVfx/renderOverlay mutate only render-module state (vfxQueue,
@@ -417,6 +428,49 @@
     };
   }
 
+  // --- C28: the RENDER-PLANE RNG (run-to-run reproducible) -----------------
+  // The reference render used to consume V8's NATIVE Math.random
+  // (window.__nativeRandom) for everything except the background. Native
+  // RNG is not reproducible across page loads, so every RNG-consuming vfx
+  // (firefoxtail.randomTail, shine/star scatter, dashDust, fireburst, ...)
+  // landed somewhere else in every capture: MEASURED (iter 134) 5 of the
+  // 24 sampled fg masks differed between two otherwise-identical captures,
+  // up to 2288 source pixels on f0030, while every seeded-stream plane
+  // (bg / star / tunnel / gradient / det / loo) was byte-identical. That
+  // is the whole of C28 — seven distinct IOU MIN values from identical
+  // code — and it is why the fg threshold had to sit slack enough to
+  // absorb the drift, which is what let U3's articles hole exist.
+  //
+  // The render plane now runs on the SAME render-local mulberry32 the C
+  // renderer already uses (gfx_vfx.c gfx_vfx_install:
+  // ml_rng_seed(&g_rrng, 0xC0FFEE42)), seeded once and CHAINED across the
+  // whole replay exactly as the C chains it — both sides render every
+  // frame, so the two streams stay in step by construction.
+  //
+  // It is deliberately NOT window.__nativeRandom: percentShake draws from
+  // that one too (oracle/meleelight-harness.patch), from wall-clock
+  // setTimeout callbacks, so sharing a deterministic stream with it would
+  // put the render draws straight back on the wall clock. __nativeRandom
+  // keeps its cosmetic-only job untouched.
+  const RENDER_SEED = 0xC0FFEE42;
+  let renderRngState = RENDER_SEED | 0;
+  function renderRandom() {
+    const a = (renderRngState + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    renderRngState = a;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  // Save/restore for the injection frame's det + leave-one-out replays
+  // (capture-canvas.js): mulberry32 state is one int32, so a replay is an
+  // exact rewind and the canonical trajectory frames 151+ continue from is
+  // restored afterwards. Same contract the old per-render reseed carried,
+  // minus the reseed — reseeding would break the chain the C keeps.
+  window.__gfxRenderRng = {
+    state: function () { return renderRngState; },
+    setState: function (v) { renderRngState = v | 0; },
+  };
+
   function eqArr(a, b) {
     if (!Array.isArray(a) || a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) {
@@ -523,6 +577,92 @@
     };
   }
 
+  // --- U3: the ARTICLE-ONLY plane -------------------------------------------
+  // The fg IoU is an aggregate over players+articles+vfx+overlay, and an
+  // aggregate cannot see a feature that is entirely missing from it —
+  // MEASURED (iter 134): stubbing out the C renderArticles pass entirely
+  // leaves IOU MIN at 0.9143 against the frozen 0.88 bound, exit 0. That
+  // is the third instance of U1's class (stars 0.9927; blend565 survived
+  // because the fg leg judges binary ink masks). So articles get their
+  // own plane, exactly as the starfield did.
+  //
+  // article.js's LASER.draw draws to `fg2` and nothing else (the only
+  // non-noDraw article; ILLUSION is noDraw), and renderArticles is a pure
+  // draw over aArticles — it mutates no article state, so it can be run a
+  // second time. So the plane is taken AFTER the frame is finished and
+  // captured: clear FG2, replay renderArticles onto the empty layer, read
+  // its alpha. That is the ABSOLUTE article plane, the browser twin of
+  // the C's cleared ink plane — no differential, no region argument. No
+  // restore is needed: upstream's own clearScreen() wipes FG2 at the top
+  // of the next render (main.js:1157), and this runs after
+  // __gfxCaptureMask has already read every judged layer, so nothing
+  // judged is produced after it.
+  //
+  // TWO REJECTED ALTERNATIVES, both MEASURED (do NOT retry blind):
+  //  (a) stage the pass on a cleared FG2 mid-render and re-composite the
+  //      saved content back with "destination-over". The drawImage
+  //      round-trip requantizes premultiplied RGBA and PERTURBED the
+  //      judged fg mask on all 24 sampled frames (44-1198 source pixels
+  //      each, 4216 total); it also broke the injection frame's
+  //      det==canonical assertion.
+  //  (b) observe it in place — read FG2 alpha immediately before and
+  //      after renderArticles and take the newly-inked pixels. Read-only,
+  //      but a MID-RENDER getImageData changes how Chrome rasterizes the
+  //      REST of that frame: it moved 992 (f0030) and 1005 (f0076) source
+  //      pixels of the ready/go banner, which renderVfx/renderOverlay
+  //      draw after the article pass. Control: the same code with the
+  //      readback removed reproduced the pre-change capture byte for byte
+  //      across all 24 masks. A judge may not corrupt the artifact it
+  //      judges — hence "after the frame", never "during" it.
+  //
+  // Canvas alpha is composite-operator-independent here: LASER.draw runs
+  // under globalCompositeOperation "screen", which is a separable BLEND
+  // mode over source-over compositing, so aOut = aS + aD*(1-aS) — on the
+  // empty layer that is aS, exactly the pass's own coverage.
+  window.__gfxArticlePlane = function () {
+    const l = mods.main.layers, A = mods.article;
+    const w = l.FG2.width, h = l.FG2.height;
+    if (w !== 1200 || h !== 750) {
+      throw new Error("gfx-capture: unexpected FG2 size under the article plane");
+    }
+    const fg2 = l.FG2.getContext("2d");
+    fg2.save();
+    fg2.setTransform(1, 0, 0, 1, 0, 0);
+    fg2.globalAlpha = 1;
+    fg2.globalCompositeOperation = "source-over";
+    fg2.clearRect(0, 0, w, h);
+    fg2.restore();
+    // RENDER-PLANE RNG GUARD, EXACTLY NEUTRAL (independent-reviewer Low,
+    // review-134). Every other upstream-draw site in this file
+    // (__gfxRender, __gfxInject, __gfxBgTunnel) swaps `renderRandom` in
+    // first, precisely so a RENDER draw can never touch the SEEDED GAMEPLAY
+    // chain. This one did not: by the time it runs, __gfxRender's `finally`
+    // has already restored the gameplay Math.random, so any draw the article
+    // path ever gained would have advanced the gameplay stream — 24 times
+    // per capture. It is safe TODAY (upstream article.js /
+    // chromaticAberration.js / laser.js contain no Math.random, and a stray
+    // one would die loudly on verify-stream.js's per-frame hash + rngCalls
+    // pins), so this states the file's own contract where it is relied on
+    // rather than fixing a live bug.
+    // NEUTRAL IN BOTH DIRECTIONS: the C's article pass consumes no render
+    // draws either, so the render state is snapshotted and RESTORED around
+    // the replay. This observation therefore advances NEITHER stream, and
+    // the C chain it is compared against stays in step.
+    const savedRandom = Math.random;
+    const savedRenderRng = window.__gfxRenderRng.state();
+    Math.random = renderRandom;
+    try {
+      A.renderArticles();
+    } finally {
+      Math.random = savedRandom;
+      window.__gfxRenderRng.setState(savedRenderRng);
+    }
+    const d = fg2.getImageData(0, 0, w, h).data;
+    const m = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) m[i] = d[i * 4 + 3] > 0 ? 1 : 0;
+    return b64(m);
+  };
+
   // --- render + mask capture ------------------------------------------------
   // opts.bg === false skips drawBackground. The injection frame renders
   // SEVEN times (canonical + det + 5 leave-one-out) and the bg stream
@@ -558,18 +698,18 @@
         players[i].percentShake.y = 0;
       }
     }
-    Math.random = window.__nativeRandom;
+    Math.random = renderRandom;
     try {
       M.clearScreen();
       if (withBg && mods.vfx.isShowSFX()) {
         // upstream's own gate (main.js:1249-1251). The bg gets the
-        // MIRRORED stream, everything else keeps the native swap.
+        // MIRRORED stream, everything else keeps the render-plane swap.
         if (!bgRandom) throw new Error("gfx-capture: __gfxBgInit was never run");
         Math.random = bgRandom;
         const unhook = hookStarCapture();
         try { S.drawBackground(); } finally {
           unhook();
-          Math.random = window.__nativeRandom;
+          Math.random = renderRandom;
         }
       }
       S.drawStage();
@@ -594,11 +734,12 @@
   // Synthetic-coverage injection (expected-render.json "inject"): the
   // SAME configs spawn on both sides at the same point in the frame
   // (post-tick, pre-render). None of the injected names draw seeded RNG
-  // at spawn (only circleDust does, and it is not injectable here);
-  // native RNG is swapped in anyway, same guard as the render call.
+  // at spawn (only circleDust does, and it is not injectable here); the
+  // render-plane RNG is swapped in anyway, same guard as the render call
+  // — never the seeded gameplay chain.
   window.__gfxInject = function (configs) {
     const savedRandom = Math.random;
-    Math.random = window.__nativeRandom;
+    Math.random = renderRandom;
     try {
       for (const cfg of configs) {
         const c = { name: cfg.name, pos: { x: cfg.pos.x, y: cfg.pos.y } };
@@ -705,7 +846,13 @@
     S.setBackgroundType(1);
     S.drawBackgroundInit(); // installs the radial gridGrad strokeStyle
     const saved = Math.random;
-    Math.random = window.__nativeRandom;
+    // C28 class closure: this leg is documented above as consuming no
+    // randomness, and its masks were MEASURED byte-stable across two
+    // captures while the fg masks drifted — but it ran on the native RNG
+    // all the same, so a future draw here would have reintroduced the
+    // drift silently. It runs after every sampled frame is captured, so
+    // putting it on the render chain costs nothing and closes the class.
+    Math.random = renderRandom;
     try {
       for (let f = 1; f <= frames; f++) {
         M.clearScreen();
@@ -733,7 +880,12 @@
       }
       window.__gfxRender();
       if (sampled[r[0].f]) {
-        window.__gfxCaptured[r[0].f] = window.__gfxCaptureMask();
+        const cap = window.__gfxCaptureMask();
+        // U3: the article plane is taken AFTER every judged layer has
+        // been read (it replays renderArticles onto a cleared FG2 —
+        // see __gfxArticlePlane). Never before.
+        cap.art = window.__gfxArticlePlane();
+        window.__gfxCaptured[r[0].f] = cap;
       }
     }
     return out;

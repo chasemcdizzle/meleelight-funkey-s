@@ -304,21 +304,41 @@ static inline MlInput s1_input_row(const PlatformInput *p) {
   return s1_input_row_style(p, CTL_STYLE_BOX, false);
 }
 
-// --- A4 HANDOVER (Controls screen, menus lane) ------------------------
-// This header ships the MODEL only. To make the selector live:
-//   1. add port/gfx/ctl_style.c to the FOH link line(s);
-//   2. swap the two liveRow call sites in port/foh/foh_dev.c (and
-//      port/gfx/gfx_app.c) from
-//          s1_input_row(&pin)
-//      to  s1_input_row_style(&pin, ctl_style_get(), ctl_mod_on_r_get());
-//   3. Controls screen — TWO independent rows:
+// --- A4 HANDOVER (Controls screen, menus lane) — STATUS -----------------
+// Steps 1 and 2 have LANDED (punch-list C30(a), match-exit closure lane).
+// What is live today, and what deliberately is not:
+//
+//   1. DONE — port/gfx/ctl_style.c is on the FOH link line(s).
+//   2. DONE, and it is TWO sites, not three. The PRODUCT path is
+//      port/foh/foh_dev.c: the target match loop and the VS match loop both
+//      call s1_input_row_style(..., ctl_style_get(), ctl_mod_on_r_get()).
+//      The two sites do NOT pass the same struct, and that is deliberate:
+//      the target loop passes the raw poll `&pin` (foh_dev.c:2610), while the
+//      VS loop passes `&gpin` (foh_dev.c:3221), the START-MASKED copy — VS START opens
+//      the pause overlay, so it must not also reach the sim as a row bit.
+//      Same style plumbing, two different input structs.
+//      port/gfx/gfx_app.c's live arm stays on s1_input_row() BY DESIGN — it
+//      is not an unfinished site. That binary is the EVIDENCE rig, the
+//      producer judge-s1-coverage.js reads, and that judge is BOX-only by
+//      construction: its 24 pre-registered chord signatures plus its
+//      `if (i.y || i.z ...) invBad++` invariant both assume the BOX table
+//      (Natural emits y/z and has no C-layer). Style-switching that producer
+//      would require weakening a pinned judge, which HARD RULE 3 forbids, so
+//      the styles are proven host-side by .loop/ctl-style-check.sh instead.
+//      Do NOT "finish" gfx_app.c.
+//   3. NOT DONE — the Controls SCREEN itself. This is the remaining C30(c)
+//      work and it belongs to the menus lane, not to this header. The play
+//      path CONSUMES the cells (ctl_style_get / ctl_mod_on_r_get above), but
+//      ctl_style_set/ctl_mod_on_r_set have exactly ONE caller (foh_dev.c's
+//      persist chokepoint, :1304) and no FOH UI caller at all, so a player
+//      cannot yet change style in-game; only a persisted record can set it.
+//      When that screen lands it needs TWO independent rows:
 //        style:    ctl_style_set(0..CTL_STYLE_COUNT-1) / ctl_style_name()
 //        shoulder: ctl_mod_on_r_set(bool) / ctl_mod_shoulder_name(bool)
 //      (the shoulder row only changes BOX; it is a no-op in the other
-//      two styles, so the screen may grey it out when style != Box);
-//   4. after foh_persist_load(&p):
+//      two styles, so the screen may grey it out when style != Box).
+//   4. DONE — the persist round trip. after foh_persist_load(&p):
 //        ctl_style_set(p.ctlStyle); ctl_mod_on_r_set(p.modOnR != 0);
 //      before foh_persist_save(&p):
 //        p.ctlStyle = (int)ctl_style_get(); p.modOnR = ctl_mod_on_r_get();
-// Until step 2 lands, behaviour on device is byte-identical to today.
 #endif // GFX_S1_INPUT_H

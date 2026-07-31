@@ -16,10 +16,17 @@
 //   menu-top          gameMode 1 mm 0    START on title (findPlayers,
 //                                        main.js:385; addPlayer = P1 join)
 //   menu-battle       gameMode 1 mm 2    A on "VS. Melee" (menu.js:73-75)
+//                                        — UNREACHABLE at FOH_NETPLAY 0
+//                                        (owner ruling C5, flag below)
 //   menu-options      gameMode 1 mm 1    A on "Options" (menu.js:92-97)
 //   menu-controls     gameMode 1 mm 3    A on "Keyboard Controls"
 //                                        (menu.js:138-141)
-//   css               gameMode 2         A on "Local VS" (menu.js:105)
+//   options-audio     gameMode 10        A on "Audio" (menu.js:130)
+//   controls-controller gameMode 14      A on "Controller" (menu.js:155-157)
+//   controls-keyboard gameMode 12        A on "Keyboard" (menu.js:159-161)
+//   css               gameMode 2         A on "Local VS" (menu.js:105);
+//                                        at FOH_NETPLAY 0 that same action
+//                                        runs from "VS. Melee" directly
 //   sss               gameMode 6         START in CSS while readyToFight
 //                                        (css.js:446-451); B held 30
 //                                        frames backs to menu (css.js:
@@ -144,11 +151,16 @@
 // Menu entries whose screens are excluded/deferred stay VISIBLE with
 // their faithful labels (menu.js:19-24) and selecting one emits a
 // structural `refused` event — loud and frozen in the flow traces,
-// never silence: targetbuilder / credits (conventions scope
-// exclusions), audio (mixer volume surface, tasks 10/13),
-// controller/keyboard (the S1 mapping is Chase-ratified hardware
-// surface), spectate/p2p/server (multiplayer excluded; P2P is dead
-// upstream, menu.js:113-116), addcode (the target-select "+ Add Code"
+// never silence. LIVE refusals at FOH_NETPLAY 0: targetbuilder
+// (conventions scope exclusion), credits (upstream credits.js is a
+// 422-line shooting gallery — MENU-SPEC §8/D12; the LAST unbuilt
+// screen, registered), random (SSS), addcode (target-select),
+// portconfig (CSS launch plane). RETIRED this arc: audio (real screen
+// now, MENU-SPEC §4), controller/keyboard (real destinations now,
+// MENU-SPEC §9). UNREACHABLE-but-registered at FOH_NETPLAY 0:
+// spectate/p2p/server (multiplayer excluded; P2P is dead upstream,
+// menu.js:113-116) — their arms are kept whole behind the flag.
+// addcode is the target-select "+ Add Code"
 // slot — builder/share-code plane, scope-excluded; customTargetStages
 // is EMPTY in the fresh domain so the authored 10 slots + Add Code are
 // exactly what upstream shows, targetselect.js:47/:133-140). The
@@ -286,16 +298,48 @@ static inline int foh_css_panel_x(int k) {
 #define FOH_CURSOR_VX (2.40 * FOH_CURSOR_SPEED)
 #define FOH_CURSOR_VY (3.84 * FOH_CURSOR_SPEED)
 
+// --- C5: the netplay switch (owner ruling 2026-07-28, fix_plan C5) ----------
+// "HIDE Spectate / P2P / Server; VS MELEE goes straight to local VS.
+// Implement behind a NAMED FLAG so the battle-mode submenu can be restored
+// later without archaeology (a single documented switch, not deletions)."
+//
+// FOH_NETPLAY 0 (the shipped build): menu-top's `VS. Melee` row runs the
+// Local VS action DIRECTLY (menu.js:105 — changeGamemode(2) +
+// positionPlayersInCSS), and the whole MPMENU page is unreachable. Nothing
+// is deleted: FOH_MENU_BATTLE, its labels/blurbs (foh_render.c kMenuText[2]),
+// its four A-arms, its B-back edge and its judge-registered transitions all
+// still exist and still compile.
+// FOH_NETPLAY 1: the page SHELL and routing come back — `VS. Melee` opens
+// the battle page with the cursor on LOCALVS (menu.js:73-75) and the CSS's
+// B-hold returns there (css.js:186-194 leaves menuMode untouched). It does
+// NOT restore upstream's page 2 "verbatim": Spectate/Server are not
+// implemented in this port and still refuse (upstream's own P2P body is
+// commented out), so a future netplay arc owns their behaviour.
+// SCOPE, stated exactly (review-r2 MAJOR corrected an over-claim here):
+// this flag covers the BATTLE PAGE ONLY. DEVIATION D5 — the CSS port-type
+// cycle dropping NET (main.js:504-520's four-cycle narrowed to three) — is
+// a SEPARATE registered deviation with its own owner acceptance, and it is
+// NOT wired to this switch. A future netplay arc has to revisit both, plus
+// everything else §11.1 lists; flipping this one restores the page and its
+// four judge-registered edges, and nothing more.
+#define FOH_NETPLAY 0
+
 typedef enum {
   FOH_STARTUP = 0,
   FOH_TITLE,
   FOH_MENU_TOP,
   FOH_MENU_OPTIONS,  // upstream menuMode SECONDLEVELOPTIONS = 1
-  FOH_MENU_BATTLE,   // upstream menuMode MPMENU = 2
+  FOH_MENU_BATTLE,   // upstream menuMode MPMENU = 2 (C5: unreachable at
+                     // FOH_NETPLAY 0, kept whole)
   FOH_MENU_CONTROLS, // upstream menuMode CONTROLLERCALIB = 3
   FOH_CSS,
   FOH_SSS,
   FOH_OPT_GAMEPLAY,
+  FOH_OPT_AUDIO,  // upstream gameMode 10 (menus/audiomenu.js)
+  FOH_CTRL_PAD,   // upstream gameMode 14 (controllermenu.js) — §9.2 honest
+                  // no-controller state, see the note in foh.c
+  FOH_CTRL_KEY,   // upstream gameMode 12 (keyboardmenu.js) — §9.3 D13
+                  // reduced form, see the note in foh.c
   FOH_MATCH,
   FOH_TSS,    // target-select (upstream gameMode 7, targetselect.js)
   FOH_TMATCH, // target-match (terminal; the driver owns the target sim)
@@ -349,9 +393,16 @@ typedef struct {
   // clears whichTokenGrabbed but leaves handType at 2 for that draw.
   int cssHandType;
   // Which rest slot each port's token last came to: 0 = the A-drop slot
-  // (css.js:227-233 class), 1 = the leave-band slot (css.js:337). Upstream's
-  // two formulas genuinely disagree, so the resting position is PATH
-  // DEPENDENT — see the note at the leave-band arm in foh.c.
+  // (css.js:227-233 class), 1 = the leave-band slot (css.js:337), 2 = the
+  // endGame SNAP slot (main.js:1381-1384 -> css.js:154). Upstream's three
+  // formulas genuinely disagree, so the resting position is PATH DEPENDENT
+  // — see the notes on each arm in foh_css_token_pos (foh.c).
+  //
+  // Slot 2 exists because the A19 in-process return made it OBSERVABLE:
+  // endGame snaps every token before landing on the CSS, so a returning
+  // player's tokens are where endGame put them, not where the last drag
+  // left them (review-mexit-r2 Medium). Before the return existed the CSS
+  // was only ever entered before a match, so the snap had nothing to move.
   int cssTokenRest[2];
   // readyToFight (css.js:78). Upstream computes it in the DRAW pass
   // (css.js:1167-1181), one frame after the controls that read it, and that
@@ -392,12 +443,62 @@ typedef struct {
   // addcode slot; the char plane is the SHARED p1Char
   // (characterSelections[0] — setCS writes the same array upstream)
   int tssCursor;
-  // options-gameplay (sim-consumed subset; settings.js:44-56 defaults)
-  int optRow; // 0 turbo, 1 lCancelType, 2 tapJumpOff columns
-  int optCol; // 0..3 (active on the tapJumpOff row)
+  // options-gameplay. The row list is upstream's, VERBATIM and complete
+  // (MENU-SPEC §3.1; gameplaymenu.js:11-12 `menuVOptions = 4` is a MAX
+  // INDEX, so FIVE rows, and `menuHOptions = [0,0,0,0,3]` gives the last
+  // row four columns). It is NOT derived from gameSettings — upstream
+  // hard-codes it three times (labels :178-182, A-actions :39-59, value
+  // strings :228-245) and so do we, in the same order.
+  int optRow; // 0 turbo, 1 lCancelType, 2 flashOnLCancel,
+              // 3 everyCharWallJump, 4 tapJumpOff columns
+  int optCol; // 0..menuHOptions[optRow] (only row 4 has more than one)
   int turbo;
   int lCancelType;
+  // render-plane setting (render.js:125 — the white LANDINGATT* flash),
+  // implemented at gfx_render.c:443. WIRED: foh_dev.c writes this value
+  // over the GFXDATA1 dump's captured copy at match boot on both LIVE
+  // paths (VS and target). The frozen EVIDENCE arms deliberately keep the
+  // dump's own value, so recorded render references are untouched.
+  int flashOnLCancel;
+  // MEASURED DEAD upstream (MENU-SPEC §3.3): ZERO MECHANICS/GAMEPLAY
+  // consumers in src/. Two DISPLAY-only readers exist and are not
+  // mechanics (gameplaymenu.js:239 draws its own row; css.js:1183-1191
+  // prints it in inServerMode). The menu writes it, the menu displays it,
+  // and no simulation code ever asks
+  // for it. Owner ruling (fix_plan, 2026-07-29): implement it faithfully
+  // dead — row + persisted bit + wired to nothing. Inventing a walljump
+  // rule here would be the faithfulness violation (deferred item WJ-later
+  // is an explicit owner-sanctioned deviation, done at the END).
+  int everyCharWallJump;
   int tapJumpOff[4];
+  // The three gameSettings keys with NO UI ROW (settings.js:47-55;
+  // MENU-SPEC §3.2). Upstream's B-exit save loop writes EVERY key
+  // (gameplaymenu.js:29-31), and its CSS label tables carry the empty
+  // string for exactly these (css.js:85/:87) — that is how upstream marks
+  // "not displayable". They live here because the persist chokepoint
+  // collects from FohState and the launch bridge reads it; NO row edits
+  // them and no renderer draws them.
+  // phantomThreshold is the one that matters: default 0.01 (NOT 0) and ON
+  // THE CHECKSUM SURFACE (hitDetection.js:335,337,348; physics.js:
+  // 1039-1040). The qjs gotcha (CLAUDE.md M0 task 6) is precisely that a
+  // missing storage plane Number("")-zeroes it and silently flips physics.
+  double phantomThreshold;
+  int blastzoneWrapping;         // zero readers in src/ (measured)
+  int dustLessPerfectWavedash;   // zero readers in src/ (measured)
+  // options-audio (upstream menus/audiomenu.js): masterVolume[0] = sounds,
+  // [1] = music (audiomenu.js:13, defaults 0.5/0.3); audioMenuSelected
+  // (:15). Steps are a fixed +/-0.1 in DOUBLES with NO rounding, so the
+  // float dust (0.7999999999999999) is upstream's own and is what gets
+  // persisted (:24-25) — carried verbatim.
+  double masterVolume[2];
+  int audioRow;
+  // C30(c): the Controls>Keyboard screen's cursor over its TWO settable
+  // rows (0 = control style, 1 = Mod shoulder). The VALUES do not live
+  // here — they live in port/gfx/ctl_style.c's two process cells, which
+  // the sim-side input path reads; this is only which row the cursor is
+  // on. Same module lifetime as audioRow: not reset on entry, so a second
+  // visit opens on the row you left.
+  int ctlRow;
   // target-test records DISPLAY plane (task 13): seconds, -1 = none
   // (upstream fresh state, targetplay.js:40). foh_init sets -1; the
   // drivers overwrite from the foh_persist chokepoint at boot
@@ -425,6 +526,11 @@ typedef struct {
   double menuColours[4]; // menu.js:34 — MUTABLE, see menu.js:243-252
   int menuTimer;      // menu.js menuTimer, 0..60 (ring pulse phase)
   int menuCycle;      // menu.js menuCycle, 0/1 (second ring on/off)
+  // targetSelectTimer (targetselect.js:51). Upstream increments it inside
+  // drawTSS ONLY (:268), so it is NOT the global frame counter: it advances
+  // on target-select ticks and nowhere else. LOOK plane — pinned to 0 by
+  // foh_look_canonical like every other phase (review-r3).
+  int tssTimer;
   int menuPrevSel;    // previous menuSelected — drives the reset-on-move arm
   int menuPrevScreen; // previous screen — a B-back can land on the SAME row
                       // number (battle 0 -> top 0), which upstream still

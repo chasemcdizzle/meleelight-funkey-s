@@ -6,6 +6,9 @@
 // check's shot byte-stability x2 depends on it.
 #include "foh.h"
 
+#include "../gfx/ctl_style.h" // C30(c): the Controls screen's two cells
+#include "foh_ctl_labels.h" // the Controls screen's action-label table
+
 #include <math.h> // sqrtf/fabsf/fabs only — see the device-libm note below
 
 // DEVICE LIBM (M3 task 1 class finding, CLAUDE.md §Commands): the FunKey SDK's
@@ -1137,6 +1140,10 @@ static void render_menu(const FohState *s, Raster *rz) {
 // the pulse phase). The FOH keeps rendering pure, so all of it advances
 // here, off the tick count.
 void foh_anim_tick(FohState *s) {
+  // targetSelectTimer, advanced ONLY while the tick ends on target-select
+  // (targetselect.js:268 lives inside drawTSS). Same LOOK-plane rules as
+  // everything below: no flow edge, event or launch record can read it.
+  if (s->screen == FOH_TSS) s->tssTimer++;
   // Bounded so the counter can never reach signed overflow and stays exactly
   // representable as a float. 25440 = 1060 (grid sweep bounce) * 24
   //                                 = 48 (wordmark bob) * 530,
@@ -1230,12 +1237,20 @@ void foh_anim_tick(FohState *s) {
 //   - the CSS shots: the phase of the READY TO FIGHT ribbon's hsl pulse
 //     (render_css, `s->frame % 60`);
 //   - the SSS shots: the phase of the hovered thumb's 8-frame border flash
-//     and the RANDOM box's (render_sss, `(s->frame / 8) % 2`).
-// Every one of those is a pure function of `frame`, which this function
-// pins to 0 — that is the whole reason the new animation was put on the
-// LOOK plane rather than on any machine field. The remaining screens
-// (startup/match/tmatch/options/target-select) read no look-plane field at
-// all. The layers still draw, at phase 0, so their arithmetic is still
+//     and the RANDOM box's (render_sss, `(s->frame / 8) % 2`);
+//   - the TARGET-SELECT shots: the same 8-frame flash on the hovered slot
+//     border (render_tss, `(s->tssTimer % 8) > 4` — upstream's own
+//     targetselect.js:271), and the audio screen's lattice sweep
+//     (render_opt_audio's grid_shine).
+// Every one of those is a pure function of the LOOK PLANE — `frame` for
+// most of them and the screen-local `tssTimer` for the target-select
+// flash — and this function pins BOTH to 0 (with menuTimer/menuCycle and
+// the hue's fixed point). That is the whole reason the animation went on
+// the LOOK plane rather than onto any machine field: a shot stays a pure
+// function of MACHINE state on every target, whatever counters the look
+// acquires later. Any new phase counter MUST be added here too. The remaining screens
+// (startup / match / tmatch / options-gameplay / the two controls
+// destinations) read no look-plane field at all. The layers still draw, at phase 0, so their arithmetic is still
 // judged; it is the phase VALUES that are not. Recording the device's own look plane and injecting it
 // into the host twin would restore even those (the project's oracle-fed-seam
 // idiom) — that is the preferred end state, and it is registered for the
@@ -1252,6 +1267,7 @@ void foh_look_canonical(FohState *s) {
   s->frame = 0;
   s->menuTimer = 0;
   s->menuCycle = 0;
+  s->tssTimer = 0;
   // the hue lerp's fixed point (foh_anim_tick above lands menuHue exactly on
   // menuColours[menuSelected] at step 20); menuColours itself is navigation-
   // driven, not tick-driven, so it is left alone.
@@ -1736,26 +1752,233 @@ static void render_sss(const FohState *s, Raster *rz) {
   }
 }
 
+// --- GAMEPLAY OPTIONS (upstream menus/gameplaymenu.js; MENU-SPEC §3) --------
+// The COMPLETE upstream row list, in upstream's order (:178-182), with
+// upstream's value strings (:230/:233/:236/:239/:242) and its one multi-cell
+// row. Labels are the upstream literals uppercased for the 5x7 face, and the
+// value column is right-aligned because "EVERYONE WALLJUMPS" is 18 glyphs on
+// a 240 px screen where upstream had 1200 (D4: our rects, upstream's
+// semantics).
 static void render_opt_gameplay(const FohState *s, Raster *rz) {
   header(rz, "GAMEPLAY");
-  const int ys[3] = {60, 95, 130};
-  row_label(rz, ys[0], 0, s->optRow, "TURBO");
-  foh_text(rz, 120, ys[0], 1, s->turbo ? "ON" : "OFF", kAccent);
-  row_label(rz, ys[1], 1, s->optRow, "L-CANCEL");
-  foh_text(rz, 120, ys[1], 1, kLCancelNames[s->lCancelType], kAccent);
-  row_label(rz, ys[2], 2, s->optRow, "TAP JUMP OFF");
+  static const char *const kRows[5] = {"TURBO MODE", "L-CANCEL",
+                                       "FLASH ON L-CANCEL",
+                                       "EVERYONE WALLJUMPS", "TAPJUMP OFF"};
+  const int ys[5] = {40, 66, 92, 118, 144};
+  const char *vals[4];
+  vals[0] = s->turbo ? "ON" : "OFF";              // :230
+  vals[1] = kLCancelNames[s->lCancelType];        // :233
+  vals[2] = s->flashOnLCancel ? "ON" : "OFF";     // :236
+  vals[3] = s->everyCharWallJump ? "ON" : "OFF";  // :239
+  for (int r = 0; r < 5; r++) {
+    row_label(rz, ys[r], r, s->optRow, kRows[r]);
+    if (r == 4) continue;
+    const int w = foh_text_width(vals[r], 1);
+    foh_text(rz, RAST_W - 12 - w, ys[r], 1, vals[r], kAccent);
+  }
+  // Row 4 is menuHOptions[4] == 3, i.e. FOUR cells, one per port
+  // (:242 renders "On"/"Off" per column). Upstream splits its single value
+  // box into equal columns; ours sits under the label for width.
   for (int k = 0; k < 4; k++) {
-    const int x = 40 + k * 42;
-    const int y = ys[2] + 18;
-    if (s->optRow == 2 && s->optCol == k) {
-      fill_rect(rz, x - 3, y - 3, 38, 16, kPanel);
+    const int x = 22 + k * 52;
+    const int y = ys[4] + 16;
+    if (s->optRow == 4 && s->optCol == k) {
+      fill_rect(rz, x - 4, y - 3, 48, 15, kPanel);
     }
     const char pn[3] = {'P', (char)('1' + k), 0};
     foh_text(rz, x, y, 1, pn, kDim);
-    foh_text(rz, x + 14, y, 1, s->tapJumpOff[k] ? "X" : "-",
+    foh_text(rz, x + 16, y, 1, s->tapJumpOff[k] ? "ON" : "OFF",
              s->tapJumpOff[k] ? kAccent : kDim);
   }
   text_center(rz, 205, 1, "A: CHANGE   B: BACK", kDim);
+}
+
+// --- AUDIO OPTIONS (upstream menus/audiomenu.js; MENU-SPEC §4) -------------
+// Upstream's screen IS two wedges: a grey triangle (200,350+250i) ->
+// (1000,200+250i) -> (1000,350+250i) with the volume-filled part drawn over
+// it in a horizontal gradient, and a knob disc whose RADIUS GROWS WITH THE
+// VALUE (15 + vol*65 — audiomenu.js:204). That is the whole visual language,
+// so it is kept; only the coordinates are D4-scaled (x/5, y*0.32) and the
+// row labels move above their wedge, because at 240 px the upstream label
+// position (centred on x=225) sits on top of the wedge's thin end.
+#define AUD_X0 40
+#define AUD_X1 200
+#define AUD_Y0 112
+#define AUD_PITCH 80
+#define AUD_RISE 48
+
+static void render_opt_audio(const FohState *s, Raster *rz) {
+  header(rz, "AUDIO");
+  // BG: upstream's own linear ramp rgb(11,65,39) -> rgb(8,20,61)
+  // (audiomenu.js:124-127) plus the white 30 px lattice (:160-166).
+  {
+    const RastCol g0 = {11, 65, 39, 256}, g1 = {8, 20, 61, 256};
+    rrect_v(rz, 0, 24, RAST_W, RAST_H - 24, 0, g0, g1);
+    const RastCol white = {255, 255, 255, 256};
+    grid_shine(rz, s->frame, white, 26, 0);
+  }
+  // the panel (:130-134: black 0.5 fill, white 0.3 stroke, 10 px line)
+  {
+    const RastCol face = {0, 0, 0, 128}, edge = {255, 255, 255, 77};
+    fill_rect(rz, 10, 30, RAST_W - 20, 172, face);
+    rrect(rz, 10, 30, RAST_W - 20, 2, 0, edge);
+    rrect(rz, 10, 200, RAST_W - 20, 2, 0, edge);
+  }
+  static const char *const kRow[2] = {"SOUNDS", "MUSIC"}; // :140-141
+  for (int i = 0; i < 2; i++) {
+    const double v = s->masterVolume[i];
+    const int yb = AUD_Y0 + AUD_PITCH * i; // the wedge's baseline
+    const bool sel = (s->audioRow == i);
+    // the unfilled wedge (:175-180) — white at 0.3 selected, 0.1 idle
+    {
+      const RastCol w = sel ? (RastCol){255, 255, 255, 77}
+                            : (RastCol){255, 255, 255, 26};
+      const float tri[6] = {(float)AUD_X0, (float)yb, (float)AUD_X1,
+                            (float)(yb - AUD_RISE), (float)AUD_X1, (float)yb};
+      poly8(rz, tri, 3, w, w.a256);
+    }
+    // the filled part (:192-197). Upstream's horizontal gradient is
+    // green->blue for sounds and navy->red for music (:182-191); a 3-point
+    // fan cannot carry a gradient, so the fill takes the ramp's far stop
+    // scaled by how far along it the wedge actually reaches — the same
+    // colour the gradient would show at that x.
+    if (v > 0.0) {
+      const RastCol c0 = i == 0 ? (RastCol){12, 75, 13, 256}
+                                : (RastCol){11, 13, 65, 256};
+      const RastCol c1 = i == 0 ? (RastCol){15, 75, 255, 256}
+                                : (RastCol){255, 15, 73, 256};
+      const RastCol fc = lerp_col(c0, c1, (float)v);
+      const float xr = (float)AUD_X0 + (float)v * (float)(AUD_X1 - AUD_X0);
+      const float tri[6] = {(float)AUD_X0, (float)yb, xr,
+                            (float)yb - (float)v * (float)AUD_RISE, xr,
+                            (float)yb};
+      poly8(rz, tri, 3, fc, 256);
+    }
+    // the knob (:203-207): centre rides the wedge's mid-height, radius
+    // 15 + vol*65 on 1200 px == 3 + vol*13 here.
+    {
+      const RastCol k = sel ? (RastCol){255, 255, 255, 256}
+                            : (RastCol){136, 136, 136, 256};
+      const float cx = (float)AUD_X0 + (float)v * (float)(AUD_X1 - AUD_X0);
+      const float cy = (float)yb - (float)v * (float)(AUD_RISE / 2);
+      disc8(rz, cx, cy, 3.0f + (float)v * 13.0f, k, 256);
+    }
+    // label + the value as a percentage of the raw double (the machine
+    // keeps upstream's unrounded dust; this is the readout, not the value)
+    foh_text(rz, 12, yb - AUD_RISE - 12, 1, kRow[i], sel ? kText : kDim);
+    {
+      // DEVIATION D14 (MENU-SPEC §4 / §12.1) — this readout is an ADDED
+      // 240x240 legibility adaptation, registered AND OWNER-RATIFIED
+      // 2026-07-29 (presented as keep-or-strip with the removal site named;
+      // the owner chose keep, rationale recorded in MENU-SPEC §4).
+      // Tenths, as "0.7" — upstream prints no number at all (the wedge and
+      // the knob's radius ARE the readout), but 240 px of wedge is a
+      // coarse gauge, so the value is spelled out in the glyphs face 1
+      // already carries. No '%': face 1's coverage is deliberately narrow
+      // (foh_font.c) and widening it for one label is not worth defusing
+      // any part of the missing-glyph guard.
+      const int tenths = (int)(v * 10.0 + 0.5);
+      char lvl[8];
+      snprintf(lvl, sizeof lvl, "%d.%d", tenths / 10, tenths % 10);
+      foh_text(rz, 206, yb - 6, 1, lvl, sel ? kAccent : kDim);
+    }
+    if (sel) foh_text(rz, 4, yb - 6, 1, ">", kCursor);
+  }
+  // There is no A handler upstream (:16-121) — the hint says so.
+  text_center(rz, 212, 1, "L/R: LEVEL   B: SAVE + BACK", kDim);
+}
+
+// --- CONTROLS DESTINATIONS (MENU-SPEC §9; the arms are documented in
+// foh.c's step_ctrl) ---------------------------------------------------------
+static void render_ctrl_pad(Raster *rz) {
+  header(rz, "CONTROLLER");
+  // gamepadCalibration.js:71's own literal, in its own condition: no
+  // navigator.getGamepads and no pad on a FunKey-S, so this is the state
+  // upstream would be in. Uppercased for the 5x7 face like every other
+  // label in this file.
+  {
+    const RastCol warn = {236, 96, 96, 256};
+    ring8(rz, 120.0f, 76.0f, 16.0f, 2.0f, warn, 256);
+    foh_text2(rz, 117, 68, 2, 0, "!", warn);
+    text_center(rz, 110, 1, "ERROR: NO CONTROLLER DETECTED", warn);
+  }
+  text_center(rz, 134, 1, "THE FUNKEY-S HAS NO GAMEPAD PORT", kDim);
+  text_center(rz, 148, 1, "AND NO CALIBRATION TO RUN.", kDim);
+  text_center(rz, 205, 1, "B: BACK", kDim);
+}
+
+// The control scheme, rendered from the ACTIVE style rather than from the one
+// ratified table. The BOX row is still PLAN §6's ("L=Mod, R=shield,
+// Y(hold)=C-stick layer, A=attack, B=special, X=jump, Start=pause"), but it is
+// now one of three (ctl_style.h) and the screen follows whichever is live;
+// MENU opens the pause menu in every style (foh_dev.c). The BUTTON column is
+// hardware and never varies. This is a READ-ONLY view of the mapping: DEVIATION D13's rebinder (listening mode, hold-A
+// clear, protected primaries) is registered as remaining, and the screen
+// says so rather than offering a control that does nothing.
+// foh_font.c's face 1 is UPPERCASE-ONLY (49 glyphs) and an unknown glyph is
+// a hard gfx_fatal, so any string that comes from outside this file — e.g.
+// ctl_style.h's display names — is folded before it reaches foh_text.
+static void foh_upper(char *p) {
+  for (; *p; p++) {
+    if (*p >= 'a' && *p <= 'z') *p = (char)(*p - 'a' + 'A');
+  }
+}
+
+static void render_ctrl_key(const FohState *s, Raster *rz) {
+  header(rz, "KEYBOARD");
+  static const char *const kBtn[9] = {"D-PAD", "A", "B", "X", "Y", "L",
+                                      "R", "START", "MENU"};
+  // review-r14 MAJOR: these labels used to be the BOX table, hard-coded,
+  // while the FRESH-INSTALL style is NATURAL — so the screen described a
+  // mapping the buttons did not have. They are now DERIVED from the same two
+  // cells the input path reads (ctl_style_get / ctl_mod_on_r_get), following
+  // ctl_roles() + s1_input_row_style() in port/gfx/s1_input.h:160-185,:280-284:
+  //   X / Y   : C-layer styles (BOX, NORMAL) spend X on jump and Y on the
+  //             C-stick layer; NATURAL spends X on grab (Z) and Y on jump.
+  //   L / R   : only BOX carries Mod, on the shoulder modOnR names; NORMAL
+  //             and NATURAL shield on BOTH shoulders.
+  // There is no second copy of the truth table here — every arm below cites
+  // the predicate that decides it, so a style change cannot drift the screen.
+  const CtlStyle style = ctl_style_get();
+  const bool modOnR = ctl_mod_on_r_get();
+  // The label table is a PURE function of (style, modOnR) and lives in
+  // foh_ctl_labels.h so that check-foh-flows.sh leg [0m] can COMPILE it and
+  // pin all three styles x Mod-on-L/R (review-r15 MAJOR: inline here, the
+  // BOX and NORMAL rows had no coverage at all — the frozen keyboard
+  // screenshot only ever exercises the fresh-install NATURAL). There is no
+  // restated C-layer predicate in this TU any more.
+  const char *kAct[FOH_CTL_LABEL_ROWS];
+  foh_ctl_labels(style, modOnR, kAct);
+  foh_text(rz, 12, 30, 1, "ACTIVE MAPPING", kAccent);
+  for (int i = 0; i < 9; i++) {
+    const int y = 44 + i * 14;
+    foh_text(rz, 16, y, 1, kBtn[i], kText);
+    foh_text(rz, 96, y, 1, kAct[i], kDim);
+  }
+  // C30(c): the two SETTABLE rows. Drawn from the same cells foh.c's
+  // step_ctrl writes and the input path reads (ctl_style.h), so there is no
+  // second copy that can drift out of sync with what the buttons actually do.
+  {
+    char buf[40];
+    const int yRow[2] = {176, 190};
+    // UPPERCASE at the RENDER site, not in ctl_style.c: foh_font.c's face 1
+    // carries no lowercase glyphs at all (49 glyphs: A-Z 0-9 and a short
+    // punctuation set), and a missing glyph is a FATAL, not a blank — the
+    // f04-nav flow proved it. The shared API keeps its natural-case strings
+    // for any consumer with a real font; only this screen folds them.
+    snprintf(buf, sizeof buf, "STYLE: %s", ctl_style_name((int)ctl_style_get()));
+    foh_upper(buf);
+    foh_text(rz, 16, yRow[0], 1, buf,
+             s->ctlRow == 0 ? kAccent : kDim);
+    snprintf(buf, sizeof buf, "%s", ctl_mod_shoulder_name(ctl_mod_on_r_get()));
+    foh_upper(buf);
+    foh_text(rz, 16, yRow[1], 1, buf,
+             s->ctlRow == 1 ? kAccent : kDim);
+    // the cursor caret, so the selected row reads at a glance at 240x240
+    foh_text(rz, 6, yRow[s->ctlRow], 1, ">", kAccent);
+  }
+  text_center(rz, 204, 1, "L/R: CHANGE   REBIND: N/A", kDim);
+  text_center(rz, 216, 1, "B: BACK", kDim);
 }
 
 static void render_match(Raster *rz) {
@@ -1764,67 +1987,151 @@ static void render_match(Raster *rz) {
 }
 
 // target-select (upstream drawTSS/drawTSSInit, stages/targetselect.js:
-// 231-420, rewritten at 240x240 — foh.h rewrite deltas). Slots are the
+// drawTSSInit :183-242 whole; drawTSS :244-~420 of its real :244-540 span
+// (tail :421-540 NOT read); rewritten at 240x240 — foh.h rewrite deltas). Slots are the
 // upstream 2-col x 5-row authored layout (col = floor(j/5), row = j%5)
 // plus the refusing "+ ADD CODE" slot; the records line is the honest
 // fresh-boot value (targetRecords ≡ -1 -> "--:--:--", targetplay.js:40 +
 // targetselect.js:411-412; READ/persistence = task 13, medal/dev times
 // deferred — foh.h note).
 static void render_tss(const FohState *s, Raster *rz) {
+  // MEASURED LOOK (drawTSSInit :183-242 whole + drawTSS :244-~:420 of its
+  // real :244-540 span; the tail :421-540 was NOT read), which the
+  // previous pass did not carry at all: a dark BROWN linear ramp
+  // rgb(66,42,6) -> rgb(26,2,2) (:184-187) under the same white 30 px
+  // lattice every other menu has (:257-265); slot bodies are BLACK
+  // fillRects 250x50 at (50 + col*260, 110 + row*60) with "Target N" in
+  // white 0.6 (:196-203); the slot BORDER is a stroke that is grey
+  // rgb(166,166,166) idle and FLASHES rgb(251,116,155)/rgb(255,182,204) on
+  // an 8-frame cycle when hovered (:270-277) — the same pink flash the SSS
+  // uses, NOT an orange one; the brown/orange in this screen is the BRONZE
+  // MEDAL gradient rgb(180,123,65)->rgb(236,179,120) (:325-327). Below sits
+  // a black-0.5 / white-0.5 info panel (:206-208) carrying Personal Best,
+  // and a rounded character plate with a chevron above and below (:210-241).
+  //
+  // NOT DRAWN, and it is a data deferral rather than a styling one: the
+  // three medal discs per slot, the three big medal-time discs and the
+  // Developer Record row all read medalTimes[][][] / devRecords[][] /
+  // medalsEarned[][][], which are AUTHORED UPSTREAM DATA that the M1
+  // pipeline does not emit (measured: no medalTimes/devRecords stage).
+  // HARD RULE 5 forbids retyping engine data by hand, so drawing them
+  // would mean inventing numbers, and drawing empty medal outlines would
+  // assert "not earned" for a player who has earned them. The pipeline
+  // extension stays registered (foh.h, iter 99).
+  {
+    const RastCol b0 = {66, 42, 6, 256}, b1 = {26, 2, 2, 256};
+    rrect_v(rz, 0, 0, RAST_W, RAST_H, 0, b0, b1);
+    const RastCol white = {255, 255, 255, 256};
+    grid_shine(rz, s->frame, white, 22, 0);
+  }
   header(rz, "TARGET TEST");
-  // char row (shoulder-driven; targetselect.js:60-74)
-  foh_text(rz, 12, 32, 1, "L/R:", kDim);
-  foh_text(rz, 44, 32, 1, kCharNames[s->p1Char], kAccent);
-  // 2x5 grid of authored target stages (ids 0..9 == tstage ids)
+  // The hovered-slot flash, off the LOOK plane. targetselect.js:271
+  // verbatim: `targetSelectTimer % 8 > 4` — an 8-frame cycle that is HOT on
+  // 3 of every 8 frames (remainders 5,6,7), NOT a 16-frame 50/50 one
+  // (review-r1). The counter is `tssTimer`, the SCREEN-LOCAL timer, not the
+  // global `frame`, because upstream only advances it while this screen
+  // draws (review-r3); foh_look_canonical pins tssTimer == 0 for every
+  // judged shot, so the flash is cold in shots and target-independent.
+  const int flash = (s->tssTimer % 8) > 4;
+  const RastCol hot = flash ? (RastCol){251, 116, 155, 256}
+                            : (RastCol){255, 182, 204, 256};
+  const RastCol idle = {166, 166, 166, 256};         // :279
+  const RastCol slotBg = {0, 0, 0, 256};             // :195 fillStyle black
+  // :201 `rgba(255,255,255,0.6)` over the black slot body == 153 opaque.
+  // CONSTANT: upstream never brightens a label on hover, only its border.
+  const RastCol slotTx = {153, 153, 153, 256};
+  // 2x5 grid of authored target stages (ids 0..9 == tstage ids), upstream's
+  // own col = floor(j/5) / row = j%5 mapping.
   for (int k = 0; k < 10; k++) {
-    const int col = k / 5, row = k % 5; // upstream floor(j/5) / j%5
-    const int x = 16 + col * 108, y = 48 + row * 24;
-    fill_rect(rz, x, y, 96, 18, kPanel);
-    if (k == s->tssCursor) {
-      fill_rect(rz, x - 2, y - 2, 100, 2, kCursor);
-      fill_rect(rz, x - 2, y + 18, 100, 2, kCursor);
-      fill_rect(rz, x - 2, y, 2, 18, kCursor);
-      fill_rect(rz, x + 96, y, 2, 18, kCursor);
-    }
-    // "Target "+(i+1) (targetselect.js:93 label class)
+    const int col = k / 5, row = k % 5;
+    const int x = 8 + col * 124, y = 30 + row * 22;
+    rrect(rz, x - 1, y - 1, 102, 21, 0, k == s->tssCursor ? hot : idle);
+    fill_rect(rz, x, y, 100, 19, slotBg);
     char label[10] = "TARGET ";
     if (k == 9) { label[7] = '1'; label[8] = '0'; label[9] = 0; }
     else { label[7] = (char)('1' + k); label[8] = 0; }
-    foh_text(rz, x + 6, y + 5, 1, label,
-             k == s->tssCursor ? kText : kDim);
+    foh_text(rz, x + 6, y + 6, 1, label, slotTx);
   }
-  // the refusing "+ Add Code" slot (builder plane; foh.h note)
+  // the refusing "+ Add Code" slot (builder plane; foh.h note). Upstream
+  // puts it at the head of the CUSTOM column (:206, i == 10 -> x = 635);
+  // the d-pad cursor makes it the row below the grid here (rewrite delta).
   {
-    const int x = 60, y = 172, w = 120, h = 14;
-    fill_rect(rz, x, y, w, h, kPanel);
-    if (s->tssCursor == 10) {
-      fill_rect(rz, x - 2, y - 2, w + 4, 2, kCursor);
-      fill_rect(rz, x - 2, y + h, w + 4, 2, kCursor);
-      fill_rect(rz, x - 2, y, 2, h, kCursor);
-      fill_rect(rz, x + w, y, 2, h, kCursor);
+    const int x = 70, y = 142, w = 100, h = 17;
+    rrect(rz, x - 1, y - 1, w + 2, h + 2, 0,
+          s->tssCursor == 10 ? hot : idle);
+    fill_rect(rz, x, y, w, h, slotBg);
+    foh_text(rz, x + 6, y + 5, 1, "+ ADD CODE", slotTx);
+  }
+  // the character plate (:210-241): a rounded gradient tile with a chevron
+  // on each side. Upstream stacks its chevrons vertically; ours point along
+  // the axis the control actually uses — the SHOULDER buttons
+  // (targetselect.js:60-74), which is what the L/R caps say.
+  {
+    const RastCol p0 = {41, 47, 68, 256}, p1 = {85, 95, 128, 256};
+    const RastCol ed = {157, 157, 157, 256}, chev = {180, 180, 180, 256};
+    const int px = 20, py = 160, pw = 60, ph = 62;
+    rrect(rz, px - 1, py - 1, pw + 2, ph + 2, 4, ed);
+    rrect_v(rz, px, py, pw, ph, 4, p0, p1);
+    {
+      // centre-cropped like the CSS cells (the portraits are wider than
+      // this plate); top-aligned so the head fills it.
+      // The A9 portraits are 58 px wide but only 37-45 TALL, and the
+      // height differs per character (marth 40, puff 37, falco 45), so the
+      // crop is clamped to the source rather than assumed square — the
+      // same lesson the CSS cells learned with their own 40x18 crop.
+      const Img1Image *im = art(kCharArt[s->p1Char]);
+      const int sw = (pw - 4 < im->w) ? pw - 4 : im->w;
+      const int shWant = ph - 14;
+      const int sh = (shWant < im->h) ? shWant : im->h;
+      blit_img_rect(rz, im, px + 2, py + 2, (im->w - sw) / 2, 0, sw, sh, 1);
     }
-    foh_text(rz, x + 6, y + 4, 1, "+ ADD CODE", kDim);
+    text_in(rz, px, pw, py + ph - 9, 1, kCharShort[s->p1Char], kText);
+    const float lt[6] = {(float)(px - 5), (float)(py + 30),
+                         (float)(px + 3), (float)(py + 24),
+                         (float)(px + 3), (float)(py + 36)};
+    const float rt[6] = {(float)(px + pw + 5), (float)(py + 30),
+                         (float)(px + pw - 3), (float)(py + 24),
+                         (float)(px + pw - 3), (float)(py + 36)};
+    poly8(rz, lt, 3, chev, 256);
+    poly8(rz, rt, 3, chev, 256);
+    foh_text(rz, px - 8, py + ph - 9, 1, "L", chev);
+    foh_text(rz, px + pw + 3, py + ph - 9, 1, "R", chev);
   }
-  // records line (task 13 — the READ path through the persist plane):
-  // upstream format targetselect.js:411-419 — -1 -> "--:--:--", else
-  // "0"+floor(rec/60)+":"+((rec%60).toFixed(2), 5-char left-padded).
-  // C form: integer centiseconds cs = (long)(rec*100 + 0.5) — no libc
-  // float formatting on the device path (the iter-38/74 musl rounding
-  // class; registered formatting delta, AGENT-LOG iter 100). The
-  // addcode slot (cursor 10) keeps the dashes (foh.h note).
+  // the info panel (:206-208: black 0.5 fill, white 0.5 stroke) carrying
+  // the Personal Best row (:404-419).
   {
-    char line[40] = "PERSONAL BEST --:--:--";
+    const RastCol face = {0, 0, 0, 128}, edge = {255, 255, 255, 128};
+    const int x = 92, y = 160, w = 140, h = 62;
+    fill_rect(rz, x, y, w, h, face);
+    rrect(rz, x, y, w, 1, 0, edge);
+    rrect(rz, x, y + h - 1, w, 1, 0, edge);
+    rrect(rz, x, y, 1, h, 0, edge);
+    rrect(rz, x + w - 1, y, 1, h, 0, edge);
+    // records line (task 13 — the READ path through the persist plane):
+    // upstream format targetselect.js:411-419 — -1 -> "--:--:--", else
+    // "0"+floor(rec/60)+":"+((rec%60).toFixed(2), 5-char left-padded).
+    // C form: integer centiseconds cs = (long)(rec*100 + 0.5) — no libc
+    // float formatting on the device path (the iter-38/74 musl rounding
+    // class; registered formatting delta, AGENT-LOG iter 100). The
+    // addcode slot (cursor 10) keeps the dashes (foh.h note), and so does
+    // upstream: it swaps the whole row for "Add custom stage" there
+    // (:403), which is exactly what the refusal already says.
+    char line[16] = "--:--:--";
     if (s->tssCursor <= 9) {
       const double rec = s->targetRecords[s->p1Char][s->tssCursor];
       if (rec != -1.0) {
         const long cs = (long)(rec * 100.0 + 0.5);
-        snprintf(line, sizeof line, "PERSONAL BEST 0%ld:%02ld.%02ld",
-                 cs / 6000, (cs % 6000) / 100, cs % 100);
+        snprintf(line, sizeof line, "0%ld:%02ld.%02ld", cs / 6000,
+                 (cs % 6000) / 100, cs % 100);
       }
     }
-    text_center(rz, 194, 1, line, kAccent);
+    // Whose record it is: upstream's PB row is indexed by
+    // characterSelections[targetPlayer] (:406), so the name belongs on it.
+    text_in(rz, x, w, y + 8, 1, kCharNames[s->p1Char], kText);
+    text_in(rz, x, w, y + 22, 1, "PERSONAL BEST", kDim);
+    text_in(rz, x, w, y + 38, 2, line, kAccent);
   }
-  text_center(rz, 208, 1, "A: GO   B: BACK", kDim);
+  text_center(rz, 228, 1, "A: GO   B: BACK", kDim);
 }
 
 static void render_tmatch(Raster *rz) {
@@ -1867,6 +2174,9 @@ void foh_render(const FohState *s, Raster *rz) {
     case FOH_CSS: render_css(s, rz); break;
     case FOH_SSS: render_sss(s, rz); break;
     case FOH_OPT_GAMEPLAY: render_opt_gameplay(s, rz); break;
+    case FOH_OPT_AUDIO: render_opt_audio(s, rz); break;
+    case FOH_CTRL_PAD: render_ctrl_pad(rz); break;
+    case FOH_CTRL_KEY: render_ctrl_key(s, rz); break;
     case FOH_MATCH: render_match(rz); break;
     case FOH_TSS: render_tss(s, rz); break;
     case FOH_TMATCH: render_tmatch(rz); break;

@@ -7,6 +7,8 @@
 // construction.
 #include "foh.h"
 
+#include "../gfx/ctl_style.h" // C30(c): the Controls screen's two cells
+
 #include <string.h>
 
 // Upstream menuMode constants (menu.js:44-47) mapped onto FOH screens.
@@ -29,6 +31,9 @@ const char *foh_screen_token(FohScreen sc) {
     case FOH_CSS: return "css";
     case FOH_SSS: return "sss";
     case FOH_OPT_GAMEPLAY: return "options-gameplay";
+    case FOH_OPT_AUDIO: return "options-audio";
+    case FOH_CTRL_PAD: return "controls-controller";
+    case FOH_CTRL_KEY: return "controls-keyboard";
     case FOH_MATCH: return "match";
     case FOH_TSS: return "target-select";
     case FOH_TMATCH: return "target-match";
@@ -68,7 +73,14 @@ void foh_init(FohState *s) {
   // never re-initialised on CSS entry (MENU-SPEC §2.2 property 4).
   s->cssHandX = 140.0 * RAST_W / 1200.0;
   s->cssHandY = 700.0 * RAST_H / 750.0;
-  // gameSettings defaults (settings.js:44-56): all zero — memset did it.
+  // gameSettings defaults (settings.js:44-56): all zero — memset did it,
+  // EXCEPT phantomThreshold, whose authored default is 0.01 (settings.js:50)
+  // and which is on the checksum surface. Zeroing it is the exact qjs
+  // getCookie defect (CLAUDE.md M0 task 6), so it is written explicitly.
+  s->phantomThreshold = 0.01;
+  // masterVolume = [0.5, 0.3] (audiomenu.js:13) — sounds, music.
+  s->masterVolume[0] = 0.5;
+  s->masterVolume[1] = 0.3;
   // targetRecords fresh state is -1, NOT 0 (targetplay.js:40) — 0 would
   // read as a valid 0-second record (task 13).
   for (int c = 0; c < 5; c++) {
@@ -167,7 +179,17 @@ static void step_menu(FohState *s, const PlatformInput *in,
         if (s->menuSelected == 0) {
           s->menuSelected = 0; // LOCALVS (menu.js:74)
           snd_push(s, "menuForward"); // menu.js:70
+#if FOH_NETPLAY
           ev_trans(s, sc, FOH_MENU_BATTLE, "a");
+#else
+          // C5 (owner ruling; foh.h FOH_NETPLAY): the battle page holds
+          // nothing but Local VS and three netplay rows, so `VS. Melee`
+          // runs the Local VS action itself — menu.js:105's
+          // changeGamemode(2) + positionPlayersInCSS, the exact arm the
+          // hidden page would have dispatched. menuSelected stays 0, so the
+          // CSS's B-hold lands back on `VS. Melee`.
+          ev_trans(s, sc, FOH_CSS, "a");
+#endif
         } else if (s->menuSelected == 1) {
           // TARGETTEST (menu.js:77-84): setTargetPlayer(0) is implicit
           // (slot 0 is the only port); targetPointerPos reset == the
@@ -185,6 +207,11 @@ static void step_menu(FohState *s, const PlatformInput *in,
         } else {
           s->menuSelected = 0; // AUDIOOPTIONS (menu.js:96)
           snd_push(s, "menuForward"); // menu.js:70
+          // menu.js:67/:233/:236 — the LOCAL boolean `menuMove` (it shadows
+          // the function name) is set by this arm, and :236 plays a SECOND
+          // sound in the SAME tick. Only menuMODE changes set it: the
+          // changeGamemode leaves (and VSMODE->MPMENU, :73-75) do NOT.
+          snd_push(s, "menuSelect"); // menu.js:236 (menuMove at :97)
           ev_trans(s, sc, FOH_MENU_OPTIONS, "a");
         }
         break;
@@ -208,16 +235,26 @@ static void step_menu(FohState *s, const PlatformInput *in,
       case FOH_MENU_OPTIONS:
         // ["Audio","Gameplay","Keyboard Controls","Credits"]
         if (s->menuSelected == 0) {
-          snd_push(s, "deny");
-          ev_refused(s, "audio"); // mixer volume surface, tasks 10/13
+          // audioMenuSelected (audiomenu.js:15) is MODULE state: it is not
+          // reset on entry, so a second visit opens on the row you left.
+          // FohState has exactly that lifetime — nothing to do here.
+          snd_push(s, "menuForward"); // menu.js:70
+          ev_trans(s, sc, FOH_OPT_AUDIO, "a"); // changeGamemode(10), :130
         } else if (s->menuSelected == 1) {
-          s->optRow = 0;
-          s->optCol = 0;
+          // menuIndex (gameplaymenu.js:10) is MODULE state too — upstream
+          // never resets it on entry either (measured), so the cursor is
+          // where you left it. The old unconditional reset here was an
+          // unregistered deviation; FohState already has module lifetime.
           snd_push(s, "menuForward"); // menu.js:70
           ev_trans(s, sc, FOH_OPT_GAMEPLAY, "a"); // menu.js:135
         } else if (s->menuSelected == 2) {
           s->menuSelected = 0;
           snd_push(s, "menuForward"); // menu.js:70
+          // menu.js:67/:233/:236 — the LOCAL boolean `menuMove` (it shadows
+          // the function name) is set by this arm, and :236 plays a SECOND
+          // sound in the SAME tick. Only menuMODE changes set it: the
+          // changeGamemode leaves (and VSMODE->MPMENU, :73-75) do NOT.
+          snd_push(s, "menuSelect"); // menu.js:236 (menuMove at :141)
           ev_trans(s, sc, FOH_MENU_CONTROLS, "a"); // menu.js:138-141
         } else {
           snd_push(s, "deny");
@@ -225,10 +262,12 @@ static void step_menu(FohState *s, const PlatformInput *in,
         }
         break;
       case FOH_MENU_CONTROLS:
-        // ["Controller","Keyboard"] — both are calibration screens; the
-        // S1 mapping is Chase-ratified hardware surface (registered).
-        snd_push(s, "deny");
-        ev_refused(s, s->menuSelected == 0 ? "controller" : "keyboard");
+        // ["Controller","Keyboard"] (menu.js:22-23). Upstream row 1 is
+        // reached by `else`, so ANY non-zero index lands there
+        // (menu.js:159) — mirrored by the ternary below.
+        snd_push(s, "menuForward"); // menu.js:70 (before any dispatch)
+        ev_trans(s, sc, s->menuSelected == 0 ? FOH_CTRL_PAD : FOH_CTRL_KEY,
+                 "a"); // :155-157 changeGamemode(14) / :159-161 (12)
         break;
       default: gfx_fatal("foh: step_menu on a non-menu screen");
     }
@@ -239,25 +278,33 @@ static void step_menu(FohState *s, const PlatformInput *in,
     if (sc == FOH_MENU_CONTROLS) {
       s->menuSelected = 0; // AUDIOOPTIONS
       snd_push(s, "menuBack"); // menu.js:170-190
+      // menu.js:169/:174/:179 set the local `menuMove` boolean, so :236
+      // plays a SECOND sound in the same tick (all three B backs).
+      snd_push(s, "menuSelect"); // menu.js:236
       ev_trans(s, sc, FOH_MENU_OPTIONS, "b");
     } else if (sc == FOH_MENU_OPTIONS) {
       s->menuSelected = 3; // OPTIONS
       snd_push(s, "menuBack"); // menu.js:170-190
+      snd_push(s, "menuSelect"); // menu.js:236 (menuMove at :174)
       ev_trans(s, sc, FOH_MENU_TOP, "b");
     } else if (sc == FOH_MENU_BATTLE) {
       s->menuSelected = 0; // VSMODE
       snd_push(s, "menuBack"); // menu.js:170-190
+      snd_push(s, "menuSelect"); // menu.js:236 (menuMove at :179)
       ev_trans(s, sc, FOH_MENU_TOP, "b");
     }
     // top level: B does nothing (no upstream arm)
     return;
   }
   // cursor with wrap (menu.js:192-242 wraps via menuCount)
+  // upstream's arms are ONE else-if chain (menu.js:69,164,192,205 —
+  // A->B->up->down; the A arm at :69 precedes the B arm at :164),
+  // so a simultaneous up+down edge runs UP ONLY. Independent ifs cancelled
+  // the cursor and emitted TWO menuSelects in one tick.
   if (uE) {
     s->menuSelected = (s->menuSelected + count - 1) % count;
     snd_push(s, "menuSelect"); // menu.js:236
-  }
-  if (dE) {
+  } else if (dE) {
     s->menuSelected = (s->menuSelected + 1) % count;
     snd_push(s, "menuSelect"); // menu.js:236
   }
@@ -295,7 +342,15 @@ void foh_css_token_pos(const FohState *s, int k, double *x, double *y) {
   const int c = s->cssChar[k]; // the TOKEN plane (css.js:66), not setCS's
   // Quirk Q1 (foh.h): the resting slot depends on HOW the token got there.
   double base;
-  if (s->cssTokenRest[k] == 0) { // A-drop (css.js:288 family)
+  if (s->cssTokenRest[k] == 2) {
+    // endGame's snap slot (main.js:1381-1384 -> css.js:154-156:
+    // `tokenPos[index] = charIconPos[index]`). Note the INDEX: upstream
+    // indexes charIconPos — a per-CHARACTER array — with the PORT number, so
+    // port k's token snaps to CHARACTER k's icon whatever that port actually
+    // picked. That is upstream's own index confusion and it is carried
+    // verbatim (HARD RULE 5), which is why `c` is deliberately unused here.
+    base = (double)(foh_css_cell_x(k) + FOH_CSS_TOKEN_DX);
+  } else if (s->cssTokenRest[k] == 0) { // A-drop (css.js:288 family)
     base = (double)(foh_css_cell_x(c) + FOH_CSS_TOKEN_DX);
   } else { // leave-band (css.js:337) — the base/pitch really do differ
     base = (double)(foh_css_cell_x(0) + FOH_CSS_TOKEN_DX +
@@ -375,7 +430,14 @@ static bool css_ready(const FohState *s) {
 // The sound is emitted at the counter site, not here (see step_css).
 static void css_back(FohState *s) {
   s->menuSelected = 0; // LOCALVS
+#if FOH_NETPLAY
   ev_trans(s, FOH_CSS, FOH_MENU_BATTLE, "bhold");
+#else
+  // C5: the battle page is hidden, so `menuMode untouched` resolves to the
+  // page the player actually came from — menu-top, cursor on VS. Melee
+  // (row 0, the same index LOCALVS has on the hidden page).
+  ev_trans(s, FOH_CSS, FOH_MENU_TOP, "bhold");
+#endif
 }
 
 static void step_css(FohState *s, const PlatformInput *in,
@@ -660,6 +722,12 @@ static void step_sss(FohState *s, const PlatformInput *in,
     // actual sim boot.
     snd_push(s, "menuForward"); // stageselect.js:81
     s->stageSel = s->sssCursor;
+    // The launch KIND, stated by every launch arm rather than left over from
+    // the last one (review-mexit-r2 High). Harmless while a process could
+    // only ever launch once; with the A19 in-process return it is a real
+    // defect — target -> TSS -> B -> menu -> VS -> SSS -> A left targetMode
+    // true, so the "VS" launch dispatched through the TARGET bridge.
+    s->targetMode = false;
     s->launched = true;
     ev_trans(s, FOH_SSS, FOH_MATCH, "launch");
     ev_launch(s);
@@ -760,54 +828,258 @@ static void step_tss(FohState *s, const PlatformInput *in,
   }
 }
 
+// menuVOptions / menuHOptions (gameplaymenu.js:11-12). BOTH are MAX
+// INDICES, not counts: five rows, and only the last one has columns.
+#define FOH_OPT_ROWMAX 4
+static const int kOptColMax[FOH_OPT_ROWMAX + 1] = {0, 0, 0, 0, 3};
+
 static void step_opt_gameplay(FohState *s, const PlatformInput *in,
                               const PlatformInput *pv) {
-  const bool aE = in->a && !pv->a;
+  // gameplayMenuControls (gameplaymenu.js:23-164) is ONE else-if chain —
+  // B -> A -> up -> down -> right -> left -> neutral — so exactly one arm
+  // runs per frame. That priority is kept here over d-pad EDGES (the
+  // 10-frame autorepeat is the pre-registered rewrite delta, iter 88).
+  // DEVIATION D9 (MENU-SPEC §3.4): upstream's diagonal guards are
+  // malformed (`!(Math.abs(lsX >= 0.7))` applies Math.abs to a BOOLEAN, so
+  // up-left is accepted and up-right is rejected) and its left arm omits
+  // stickHoldEach, repeating at 60 Hz instead of 6. Neither is reproduced;
+  // the chain's own order already makes vertical win a diagonal.
   const bool bE = in->b && !pv->b;
+  const bool aE = in->a && !pv->a;
+  const bool uE = in->up && !pv->up;
+  const bool dE = in->down && !pv->down;
+  const bool lE = in->left && !pv->left;
+  const bool rE = in->right && !pv->right;
   if (bE) {
-    // gameplaymenu.js:25-36 (cookie save = task-13 persistence,
-    // registered); cursor returns to the Gameplay entry.
+    // gameplaymenu.js:25-36: menuBack, then setCookie over EVERY
+    // gameSettings key (the persist chokepoint's save, foh_app/foh_dev),
+    // then changeGamemode(1) with menuMode/menuSelected untouched — so the
+    // cursor is still on the Gameplay row. The meHost gate (:32's blocking
+    // alert on a joined client) is netplay-only and out of scope.
     s->menuSelected = 1;
     snd_push(s, "menuBack"); // gameplaymenu.js:26
     ev_trans(s, FOH_OPT_GAMEPLAY, FOH_MENU_OPTIONS, "b");
     return;
   }
+  if (aE) {
+    // A is the ONLY value-changing input on this screen (:37-59), and it
+    // plays menuSelect unconditionally at :38, before the switch.
+    snd_push(s, "menuSelect");
+    switch (s->optRow) {
+      case 0:
+        s->turbo ^= 1; // :41 `turbo ^= true` (coerces, stays 0/1)
+        ev_sel(s, "turbo", s->turbo);
+        break;
+      case 1:
+        s->lCancelType++; // :44-47 ++ then wrap >2 -> 0
+        if (s->lCancelType > 2) s->lCancelType = 0;
+        ev_sel(s, "lcancel", s->lCancelType);
+        break;
+      case 2:
+        s->flashOnLCancel ^= 1; // :50
+        ev_sel(s, "flashlcancel", s->flashOnLCancel);
+        break;
+      case 3:
+        s->everyCharWallJump ^= 1; // :53 — the measured-dead toggle
+        ev_sel(s, "walljump", s->everyCharWallJump);
+        break;
+      default:
+        // :56 gameSettings["tapJumpOffp" + (menuIndex[1]+1)] ^= true;
+        // the field token carries the same 1-based port the key does.
+        s->tapJumpOff[s->optCol] ^= 1;
+        ev_sel(s,
+               s->optCol == 0   ? "tapjump1"
+               : s->optCol == 1 ? "tapjump2"
+               : s->optCol == 2 ? "tapjump3"
+                                : "tapjump4",
+               s->tapJumpOff[s->optCol]);
+        break;
+    }
+    return;
+  }
+  bool moved = false;
+  if (uE || dE) {
+    s->optRow += uE ? -1 : 1;
+    // :62-65 clamps the column against the NEW row BEFORE the wrap. When
+    // the row has gone out of range upstream reads menuHOptions[-1] /
+    // [5] == undefined and `col > undefined` is FALSE, so no clamp runs —
+    // hence the range guard here rather than a saturating index.
+    if (s->optRow >= 0 && s->optRow <= FOH_OPT_ROWMAX &&
+        s->optCol > kOptColMax[s->optRow]) {
+      s->optCol = kOptColMax[s->optRow];
+    }
+    moved = true;
+  } else if (rE) {
+    s->optCol++; // :101 (upstream's clamp at :102-104 is commented out)
+    moved = true;
+  } else if (lE) {
+    s->optCol--; // :117
+    moved = true;
+  }
+  if (moved) {
+    // :150-163 — one menuSelect per accepted move, then the wraps. The
+    // column wraps against the POST-wrap row, and on a single-column row
+    // any left/right press wraps straight back to 0: an audible no-op,
+    // which is exactly what upstream does.
+    snd_push(s, "menuSelect"); // :152
+    if (s->optRow < 0) s->optRow = FOH_OPT_ROWMAX;
+    else if (s->optRow > FOH_OPT_ROWMAX) s->optRow = 0;
+    if (s->optCol > kOptColMax[s->optRow]) s->optCol = 0;
+    else if (s->optCol < 0) s->optCol = kOptColMax[s->optRow];
+  }
+}
+
+// --- AUDIO OPTIONS (upstream menus/audiomenu.js; MENU-SPEC §4) --------------
+// audioMenuControls (:16-121) is the same else-if shape as gameplaymenu with
+// one loud difference: there is NO A HANDLER AT ALL (measured — `.a` does not
+// appear in the file), so A does nothing here. Chain: B -> up -> down ->
+// right -> left -> neutral, i.e. lsY is tested before lsX, so a diagonal
+// moves the cursor and never touches a volume.
+static void step_opt_audio(FohState *s, const PlatformInput *in,
+                           const PlatformInput *pv) {
+  const bool bE = in->b && !pv->b;
   const bool uE = in->up && !pv->up;
   const bool dE = in->down && !pv->down;
   const bool lE = in->left && !pv->left;
   const bool rE = in->right && !pv->right;
-  {
-    const int rowBefore = s->optRow, colBefore = s->optCol;
-    if (uE) s->optRow = clampi(s->optRow - 1, 0, 2);
-    if (dE) s->optRow = clampi(s->optRow + 1, 0, 2);
-    if (s->optRow == 2) {
-      if (lE) s->optCol = clampi(s->optCol - 1, 0, 3);
-      if (rE) s->optCol = clampi(s->optCol + 1, 0, 3);
+  if (bE) {
+    // :20-26 — menuBack, setCookie("soundsLevel"/"musicLevel", ...) and
+    // changeGamemode(1) with menuMode/menuSelected untouched, so the cursor
+    // is still on the Audio row. Unlike gameplaymenu there is NO meHost
+    // gate: audio always saves.
+    s->menuSelected = 0;
+    snd_push(s, "menuBack"); // :22
+    ev_trans(s, FOH_OPT_AUDIO, FOH_MENU_OPTIONS, "b");
+    return;
+  }
+  if (uE || dE) {
+    s->audioRow += uE ? -1 : 1; // :30 / :44
+    snd_push(s, "menuSelect");  // :95
+    if (s->audioRow == -1) s->audioRow = 1; // :96-99
+    else if (s->audioRow == 2) s->audioRow = 0;
+    return;
+  }
+  if (rE || lE) {
+    // WIRED 2026-07-29 (owner ruling: "yep wire"). The level below is
+    // edited, clamped, persisted AND converted for the live mixer by
+    // snd_bus_set (port/gfx/snd_mixer.h's AUDIO BUS note) — this machine's
+    // stand-in for audiomenu.js:114-120's changeVolume call. The FOH itself
+    // stays I/O-free: it owns the VALUE, the app owns the push.
+    // The DEVICE app's call site (foh_dev.c) is a pending cross-lane patch,
+    // not landed code — MENU-SPEC §4 and the work order say so plainly.
+    // Navigation here is rising-edge only (DEVIATION D16, §5.5 row 6):
+    // upstream repeats a held direction 1-then-every-10 frames, we step once.
+    // :103/:109 — a fixed +/-0.1 step with NO rounding, so the float dust
+    // (0.7999999999999999) accumulates exactly as it does upstream and is
+    // what gets persisted. menuSelect plays on EVERY accepted step,
+    // including one that the clamp turns into a no-op (:102/:108 precede
+    // the clamps) — so a rail-end press still clicks.
+    const int k = s->audioRow;
+    const double before = s->masterVolume[k];
+    snd_push(s, "menuSelect");
+    s->masterVolume[k] += rE ? 0.1 : -0.1;
+    if (s->masterVolume[k] > 1.0) s->masterVolume[k] = 1.0; // :104-106
+    if (s->masterVolume[k] < 0.0) s->masterVolume[k] = 0.0; // :110-112
+    // The engine push (:114-120, the global changeVolume installed by
+    // sfx.js:609) has no counterpart inside this machine: the FOH is
+    // I/O-free by construction, so the value is state the app reads. Its
+    // consumer is the app's bus push -> snd_bus_set, which
+    // scales snd_mixer.h's two accumulate sites by masterVolume/default
+    // (the RATIO — the packed gains already carry the 0.5/0.3 defaults, so
+    // pushing the raw level would apply the default twice).
+    if (s->masterVolume[k] != before) {
+      // Traced in TENTHS: the structural plane carries an integer, the
+      // machine keeps the raw double (dust included).
+      ev_sel(s, k == 0 ? "soundsvol" : "musicvol",
+             (int)(s->masterVolume[k] * 10.0 + 0.5));
     }
-    if (s->optRow != rowBefore || s->optCol != colBefore) {
-      snd_push(s, "menuSelect"); // nav class (menu.js:236)
+    return;
+  }
+}
+
+// --- CONTROLS DESTINATIONS (MENU-SPEC §9) -----------------------------------
+// Page 3's two rows finally go somewhere. Neither destination is a port of
+// its upstream module, and both say so on screen:
+//
+//   Controller (gameMode 14, controllermenu.js + gamepadCalibration.js) is
+//   MOUSE-ONLY upstream — 14 clickable regions and an SVG diagram, no
+//   stick/keyboard arm anywhere (MENU-SPEC §9.2) — and it hard-requires
+//   navigator.getGamepads. There is no mouse, no gamepad API and no pad on
+//   a FunKey-S, so every calibration primitive is dead by construction. What
+//   upstream ITSELF shows when no pad answers is `Error: no controller
+//   detected` (gamepadCalibration.js:71), and that is what we show: its own
+//   literal string, in its own condition. The one deviation is the way out —
+//   upstream forgets to reschedule preCalibrationLoop there, so its menu
+//   becomes permanently unresponsive with no route back but a page reload
+//   (:71, measured; its only exit is the mouse-only Quit arm at
+//   gamepadCalibration.js:165-169). B returns here. Reproducing a soft-lock
+//   is not faithfulness. This added exit is DEVIATION D15 (MENU-SPEC §9.2 /
+//   §12.1) — NOT the D9 class, which covers only declining to reproduce
+//   gameplay-menu input bugs.
+//
+//   Keyboard (gameMode 12, keyboardmenu.js) is genuinely stick-navigated
+//   upstream, and DEVIATION D13 already rules that the port rebinds the 12
+//   PHYSICAL buttons rather than 56 keyboard slots. The rebinder itself
+//   (listening mode, hold-A clear, protected primaries) is the largest and
+//   least load-bearing item in the whole spec and is NOT in this arc — so
+//   this screen is the READ-ONLY half of it: the frozen, Chase-ratified S1
+//   mapping (port/foh/keymap-frozen.txt) shown as what it is. Registered as
+//   the remaining half, never dressed up as the whole.
+// C30(c) (driver, 2026-07-29): the control-style and Mod-shoulder cells the
+// controls lane shipped in port/gfx/ctl_style.h had NO UI AT ALL — three
+// styles and a shoulder swap that no user could ever reach. They live on the
+// Controls > Keyboard screen because that is the screen that already answers
+// "what do my buttons do"; the Controller row stays upstream's verbatim
+// no-controller error (MENU-SPEC §9.2) and gains nothing.
+//
+// DEVIATION, and it is a knowing one: upstream's keyboardmenu.js is a 56-item
+// REBINDER (D13) that we did not build, so this screen is already ours rather
+// than a port. Two settable rows on it is a rewrite of a rewritten screen, not
+// a drift from a faithful one. The rows follow the audio screen's idiom
+// exactly (up/down picks the row, left/right cycles the value, every accepted
+// step clicks) so the whole FOH stays one interaction model.
+//
+// The VALUES are written straight through to ctl_style.c's process cells,
+// not mirrored into FohState: they are read by the sim-side input path in a
+// different TU, and a second copy here would be a live desync (the exact
+// reason ctl_style.c is a TU and not a header — ctl_style.c's own note).
+static void step_ctrl(FohState *s, const PlatformInput *in,
+                      const PlatformInput *pv) {
+  if (s->screen == FOH_CTRL_KEY && !(in->b && !pv->b)) {
+    const bool uE = in->up && !pv->up;
+    const bool dE = in->down && !pv->down;
+    const bool lE = in->left && !pv->left;
+    const bool rE = in->right && !pv->right;
+    // One else-if chain, up before down, exactly like every other screen
+    // (menu.js:164-242's shape): a simultaneous up+down runs UP ONLY.
+    if (uE || dE) {
+      (void)uE; // two rows only, so up and down land on the same other row
+      s->ctlRow ^= 1;
+      snd_push(s, "menuSelect");
+      return;
+    }
+    if (rE || lE) {
+      if (s->ctlRow == 0) {
+        // cycle the three styles, wrapping (CTL_STYLE_COUNT is the domain;
+        // the enum VALUES are a frozen wire format — never renumber them,
+        // FohPersist.ctlStyle stores them verbatim).
+        const int n = (int)CTL_STYLE_COUNT;
+        int v = (int)ctl_style_get() + (rE ? 1 : n - 1);
+        ctl_style_set(((v % n) + n) % n);
+      } else {
+        // the Mod shoulder is a two-state swap, so either direction flips it
+        ctl_mod_on_r_set(!ctl_mod_on_r_get());
+      }
+      snd_push(s, "menuSelect");
+      return;
     }
   }
-  if (aE) {
-    if (s->optRow == 0) {
-      s->turbo ^= 1; // gameplaymenu.js:40 (turbo ^= true)
-      snd_push(s, "menuSelect"); // gameplaymenu.js:38
-      ev_sel(s, "turbo", s->turbo);
-    } else if (s->optRow == 1) {
-      s->lCancelType = (s->lCancelType + 1) % 3; // 0->1->2->0 (:44-48)
-      snd_push(s, "menuSelect"); // gameplaymenu.js:38
-      ev_sel(s, "lcancel", s->lCancelType);
-    } else {
-      s->tapJumpOff[s->optCol] ^= 1; // tapJumpOffp{1..4} (:53-58)
-      snd_push(s, "menuSelect"); // gameplaymenu.js:152
-      // field token carries the 1-based port like the upstream key
-      ev_sel(s,
-             s->optCol == 0   ? "tapjump1"
-             : s->optCol == 1 ? "tapjump2"
-             : s->optCol == 2 ? "tapjump3"
-                              : "tapjump4",
-             s->tapJumpOff[s->optCol]);
-    }
+  if (in->b && !pv->b) {
+    // menuSelected is untouched on the way in and out, so B lands on the
+    // row that opened the screen (upstream's page-3 rows are unchanged by
+    // either destination).
+    snd_push(s, "menuBack");
+    ev_trans(s, s->screen, FOH_MENU_CONTROLS, "b");
   }
 }
 
@@ -844,6 +1116,13 @@ void foh_tick(FohState *s, const PlatformInput *in) {
       break;
     case FOH_OPT_GAMEPLAY:
       step_opt_gameplay(s, in, &pv);
+      break;
+    case FOH_OPT_AUDIO:
+      step_opt_audio(s, in, &pv);
+      break;
+    case FOH_CTRL_PAD:
+    case FOH_CTRL_KEY:
+      step_ctrl(s, in, &pv);
       break;
     case FOH_TSS:
       step_tss(s, in, &pv);

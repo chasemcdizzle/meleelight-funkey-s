@@ -82,12 +82,29 @@ const RE_T = new RegExp("^T " + NUM + " ([a-z-]+ [a-z-]+ (?:timer|start|a|b|bhol
 // DEVIATION D5's 3-cycle), P1 gained its own type + CPU level (upstream has
 // no port-0 special case, main.js:504-520), and `carry` is
 // whichTokenGrabbed[0] (css.js:68) — the token-gesture state, -1 or a port.
-const RE_S = new RegExp("^S " + NUM + " ((?:p1char|p2char|p1difficulty|difficulty|turbo|lcancel|tapjump[1-4]) [0-9]|(?:p1type|p2type|carry) (?:-1|[01])|refused [a-z0-9]+)$");
+// MENU-FIDELITY ARC: the completed gameplay row list adds flashlcancel /
+// walljump (0/1, gameplaymenu.js:50/:53) and the audio screen adds the two
+// volume fields in TENTHS (0..10, audiomenu.js:103/:109). This grammar is
+// the DEVICE side's independent copy of judge-foh-trace.js's RE_S_NUM —
+// review-r2 BLOCKER: it was missed, and it rejected the very trace the
+// host gate had just frozen. Domains are spelled out per field here too,
+// so the two copies can only disagree loudly. review-r3 MINOR: the shared
+// `[0-9]` this list used to end in was a LIE against that claim — it took
+// `turbo 9` and `difficulty 0`. Every field now carries its real domain,
+// so this copy rejects exactly what judge-foh-trace.js's SVAL_DOM does.
+const RE_S = new RegExp("^S " + NUM + " (" +
+    "(?:p1char|p2char) [0-4]" +
+    "|(?:p1difficulty|difficulty) [1-4]" +
+    "|(?:turbo|flashlcancel|walljump|tapjump[1-4]) [01]" +
+    "|lcancel [0-2]" +
+    "|(?:p1type|p2type|carry) (?:-1|[01])" +
+    "|(?:soundsvol|musicvol) (?:10|[0-9])" +
+    "|refused [a-z0-9]+)$");
 const RE_SHOT = new RegExp("^SHOT " + NUM + " ([a-z0-9-]{1,32})$");
 // UNCHANGED by the CSS mechanics arc: the launch plane only supports a human
 // port 0, so foh.c refuses any other port configuration and the record never
 // needs p1type/p1difficulty columns (see judge-foh-trace.js's note).
-const RE_LAUNCH = new RegExp("^LAUNCH " + NUM + " (p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] tapjump=[01],[01],[01],[01] versus=0)$");
+const RE_LAUNCH = new RegExp("^LAUNCH " + NUM + " (p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] flashlcancel=[01] walljump=[01] tapjump=[01],[01],[01],[01] versus=0)$");
 // iter 99 (M4 task 12): the target-mode launch record — same
 // END==launch-tick semantics as LAUNCH in bounded mode.
 const RE_TLAUNCH = new RegExp("^TLAUNCH " + NUM + " (char=[0-4] tstage=[0-9])$");

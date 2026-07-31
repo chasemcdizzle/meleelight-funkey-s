@@ -110,7 +110,7 @@ CtlStyle ctl_style_get(void);
 // style that has no table.
 bool ctl_style_set(int style);
 
-// Stable display name for the Controls screen ("Natural" / "Normal" /
+// Stable display name for the Controls screen ("Natural" / "Classic" /
 // "Box"). Returns "?" for an out-of-domain value (never NULL).
 const char *ctl_style_name(int style);
 

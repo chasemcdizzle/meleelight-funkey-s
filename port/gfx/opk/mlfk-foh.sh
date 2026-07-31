@@ -149,15 +149,16 @@ else
   # --bridge live WITH --foh-max 1400 so it terminates if its navigation
   # fails. So: do NOT reintroduce --foh-max on this line. The evidence
   # branch above is unaffected; it reads foh-args, which the rigs pin.
-  # A11/A12 "QUIT TO MENU": the in-match pause overlay exits the app with
-  # rc 70 (FOH_PAUSE_RC_MENU, port/foh/foh_pause.h) to ask for the menus
-  # back. The app BOOTS into the FOH, so relaunching it IS the menus —
-  # a clean process boundary instead of the FOH/match outer loop no play
-  # arm has (foh_dev.c). Every other rc leaves the loop and returns the
-  # player to the frontend, exactly as before. The bound is a safety net,
-  # not a policy: a wedged rc-70 loop must not spin forever.
-  n=0
-  while :; do
+  # ONE launch, no relaunch loop (review-mexit-r5 Low, HARD RULE 2). This used
+  # to run the app in a `while` that re-launched it on exit code 70
+  # (FOH_PAUSE_RC_MENU) to "put the FOH menus back". Punch-list A19 made that
+  # return happen IN-PROCESS via foh_dev.c's `foh_phase:` re-entry, so nothing
+  # emits 70 any more and nothing can — the constant and the loop were kept
+  # only for a hypothetical future arm, which is scaffolding for later. Worse
+  # than dead: an unexpected rc 70 from some future defect would have been
+  # SILENTLY answered by relaunching the game instead of surfacing. The app now
+  # runs once and every exit code is reported as itself. Re-add a loop only
+  # alongside a live producer of the code it answers.
   # shellcheck disable=SC2086 — $SND/$MUS are word lists on purpose
   "$DIR/foh_device" --flow "$DIR/f01-vs-g01.flow" --input poll \
     --flow-out "$EV/foh-trace.txt" \
@@ -167,13 +168,8 @@ else
     --gfxdata "$DATA/gfxdata-frozen.txt" \
     --vfxdata "$DATA/vfxdata-frozen.txt" \
     --glyphs "$DATA/vfxglyphs-frozen.txt" --legible \
-    --anim-dir "$DATA" --tapjump-off-p1 $SND $MUS \
+    --anim-dir "$DATA" --tapjump-off-p1 --system-menu $SND $MUS \
     >> "$LOG" 2>&1 || rc=$?
-    [ "$rc" = 70 ] || break
-    n=$((n + 1))
-    [ "$n" -lt 64 ] || { echo "mlfk-foh: rc-70 relaunch bound hit" >> "$LOG"; break; }
-    rc=0
-  done
 fi
 echo "RC=$rc" > "$EV/opk.rc"
 exit "$rc"

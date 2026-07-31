@@ -84,8 +84,14 @@
 #       edited.
 #   [6] hygiene: build outputs are git-ignored (rc case-split).
 #
-# Prints `FOH FLOWS OK (flows=7 shots=17 bridges=3 tbridges=2 states=4
-# tstates=2 diverge=1 control=1 banner=1 teeth=26)`, exit 0; ANY divergence,
+#   [5c] the C23 FOH sound-plane witness + the audio-bus audibility legs.
+#   [5d] the CSS launch-guard grid witness (codex B1): the full
+#        (p1Type,p2Type) grid over {-1,0,1} through the real foh_tick,
+#        judged against an AUTHORED 9-row table — the refusing side of
+#        the D6 guard that no committed flow can reach.
+#
+# Prints `FOH FLOWS OK (flows=7 shots=19 bridges=3 tbridges=2 states=4
+# tstates=2 diverge=1 control=1 banner=1 snd=1 launch=1 teeth=40)`, exit 0; ANY divergence,
 # off-graph transition, pin mismatch, count disagreement, or missing
 # artifact -> nonzero. (iter 99, M4 task 12: flows 5->7 — the
 # target-select screen + f06/f07 target bridges judged by BOTH
@@ -189,12 +195,18 @@ trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
 # --- [0a] PRODUCER BYTE PINS -------------------------------------------------
 # UPDATE DISCIPLINE (binding): a reviewed change to a pinned producer
 # updates its line below IN THE SAME COMMIT (shasum -a 256 <path>).
+# HONEST LIMIT (Tier A+ round-6 MINOR-2): these are CHANGE detectors, never
+# LOOSENING detectors — re-pinning a line here is one edit, and a judge that
+# widens while its pin is refreshed passes this leg. What actually disagrees
+# with judge-foh-trace.js from outside it is check-judge-regression.sh leg
+# [0n]'s hand-authored port/foh/judge-domains.authored.txt, whose rows are not
+# re-derivable from the judge. Read that leg's header before trusting this one.
 PRODUCER_PINS="\
 b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wrap-run.js
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-4f0cf650978e871f442e28e2612307215cdeabf34d55126faea4d99f6f7198e8 port/foh/judge-foh-trace.js
+e709c03b2631ad0ab66a3f010c86905d9d1d5c81550d0143d7ca0799b95db878 port/foh/judge-foh-trace.js
 2cf5c5a532207372b70c4cee57412c7ac65643ac4f4066c745d9eb7fe4aa0e9b port/goldens-m4/wrap-target.js
 415335239fcc04df97eba07298a1fa521602d5ea45b087aa8d7d40bd740c122a port/goldens-m4/verify-target-stream.js
 6b1b6b5be3700c51dfae8c0c4cb1f012e5b61239394ae4146c2e5e19cc4fcc47 port/goldens-m4/validate-target-manifest.js
@@ -270,10 +282,10 @@ FLOW_IDS=(f01-vs-g01 f02-cpu-m01 f03-options f04-nav f05-vs-g03 \
 # with BOTH streams judged (iter 99, M4 task 12)
 FLOW_BRIDGE=(verify verify state none verify tverify tverify)
 # pinned shot inventory per flow (space-joined; both directions below)
-FLOW_SHOTS=("startup title menu-top menu-battle css sss" \
+FLOW_SHOTS=("startup title menu-top css sss" \
             "css-cpu sss-ystory" \
-            "options-gameplay options-edited" \
-            "menu-controls" \
+            "options-audio options-gameplay options-edited" \
+            "menu-controls controls-controller controls-keyboard" \
             "css-p2 sss-pstadium" \
             "menu-targettest tss-t01" \
             "tss-addcode tss-t02")
@@ -317,7 +329,7 @@ done
 # and appear as S events, but never on this line — foh.c refuses to launch any
 # port configuration the launch plane cannot honour (sim_setup_match pins a
 # human port 0), so the record's shape is provably the same one.
-LAUNCH_RE='^LAUNCH [0-9]+ p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] tapjump=[01],[01],[01],[01] versus=0$'
+LAUNCH_RE='^LAUNCH [0-9]+ p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] flashlcancel=[01] walljump=[01] tapjump=[01],[01],[01],[01] versus=0$'
 for exf in "$FLOWS/f01-vs-g01.expect" "$FLOWS/f02-cpu-m01.expect" \
            "$FLOWS/f05-vs-g03.expect"; do
   c="$(count_e "$exf" "$LAUNCH_RE")"
@@ -411,11 +423,247 @@ made "$B/simdata.txt" "$B/simdata2.txt"
 cmp "$B/simdata.txt" "$B/simdata2.txt" || fail "simdata not byte-identical across two fresh dumps"
 echo "    simdata byte-identical across two fresh dumps"
 
+# --- [0j] JUDGE-PATH REGRESSION (PROCESS §3 Tier A+; driver 2026-07-29) ------
+# This arc modified judge-foh-trace.js and normalize-foh-trace.js — the JUDGE
+# PATH. A judge that silently gets LOOSER keeps printing OK while proving less,
+# so a judge change owes an archived old-vs-new regression on top of the normal
+# arc. Composed in HERE rather than left standalone so it cannot rot: it runs
+# on every flows check, against a PINNED pre-arc commit (not HEAD, which would
+# self-destruct the moment this lane merges).
+echo "=== [0j] judge-path old-vs-new regression"
+JUDGEREG_OK='JUDGE REGRESSION OK (corpus=7 pairs=24 identical=4 moved=10 rejects=5 negs=26 reaccept=5 norms=3 normmoved=4 normrej=5 tables=26)'
+rc=0
+bash "$FOH/check-judge-regression.sh" > "$B/judgereg.out" 2>&1 || rc=$?
+relay_lines < "$B/judgereg.out"
+[ "$rc" = 0 ] || fail "judge-path regression failed (rc $rc) — see relayed output above"
+# Anchored FULL-LINE verdict with its counts pinned: a regression whose corpus
+# or intended-movement table silently shrank would still print OK, so the
+# SHAPE of the result is pinned too, not just its success.
+[ "$(count_xl "$B/judgereg.out" "$JUDGEREG_OK")" = 1 ] \
+  || fail "judge-path regression did not print the exact anchored verdict '$JUDGEREG_OK' exactly once (its corpus or movement table moved — re-measure and re-pin deliberately)"
+echo "    [0j] OK: untouched flows byte-identical (judge + normalizer), all movement enumerated, re-frozen expects accepted"
+
+# --- [0m] CONTROL-ROLE TRUTH TABLE: one predicate, both copies compared,
+# every style x Mod arrangement COMPILED and pinned ------------------------
+# The Controls screen renders its X/Y and L/R action labels from the ACTIVE
+# style, so it needs the C-layer predicate that port/gfx/s1_input.h:162
+# defines (`ctl_style_has_clayer`). foh_render.c cannot include that header
+# (it drags the sim input + platform planes into a UI TU) and the header is
+# owned by another in-flight lane, so the truth table is restated ONCE in
+# port/foh/foh_ctl_labels.h. review-r15 MAJOR: pinning only the DEFINITION
+# site left the copy free to drift, and the frozen keyboard screenshot only
+# ever exercises the fresh-install style (NATURAL), so the BOX and NORMAL
+# label rows had no coverage at all. This leg closes both halves:
+#   (a) the two predicate EXPRESSIONS are compared to each other, so neither
+#       side can move alone;
+#   (b) the label table is COMPILED and every style x Mod arrangement is
+#       checked against the table authored below.
+S1H=port/gfx/s1_input.h
+LBLH=port/foh/foh_ctl_labels.h
+for f in "$S1H" "$LBLH"; do
+  [ -f "$f" ] || fail "[0m] $f missing — the control-role truth table has no definition site"
+done
+# (a) both copies of the predicate, reduced to a bare expression and compared.
+s1expr="$(sed -n '/^static inline bool ctl_style_has_clayer(CtlStyle style) {$/,/^}$/p' "$S1H" \
+  | sed -n '2p' | sed -e 's/^ *return //' -e 's/; *$//' | tr -s ' ')"
+lblexpr="$(sed -n '/^static inline bool foh_ctl_has_clayer(CtlStyle style) {$/,/^}$/p' "$LBLH" \
+  | sed -n '2p' | sed -e 's/^ *return //' -e 's/; *$//' | tr -s ' ')"
+[ -n "$s1expr" ] || fail "[0m] could not extract ctl_style_has_clayer's body from $S1H (its shape moved)"
+[ -n "$lblexpr" ] || fail "[0m] could not extract foh_ctl_has_clayer's body from $LBLH (its shape moved)"
+[ "$s1expr" = "$lblexpr" ] \
+  || fail "[0m] the two C-layer predicates disagree: $S1H says '$s1expr' but $LBLH says '$lblexpr' — they are the SAME truth table and must move together (or be collapsed onto one predicate once s1_input.h is free)"
+# and the renderer must not grow a THIRD copy behind the header's back.
+c="$(grep -c 'CTL_STYLE_BOX ||' port/foh/foh_render.c)" || true
+[ "$c" = 0 ] \
+  || fail "[0m] port/foh/foh_render.c restates the C-layer predicate ($c site(s)) — it must call foh_ctl_labels() so there is exactly one copy to pin"
+# (b) COMPILE the label table and pin all 3 styles x Mod-on-L/R. The expected
+# table is AUTHORED here from the mapping rules (s1_input.h:160-185,:280-284),
+# never dumped from the code under test:
+#   X / Y : C-layer styles (BOX, NORMAL) spend X on jump and Y on the C-stick
+#           layer; NATURAL spends X on grab (Z) and Y on jump.
+#   L / R : only BOX carries Mod, on the shoulder modOnR names; NORMAL and
+#           NATURAL shield on BOTH shoulders.
+cat > "$B/ctl_labels_probe.c" <<'PROBE'
+#include "foh_ctl_labels.h"
+#include <stdio.h>
+int main(void) {
+  static const char *const kStyle[CTL_STYLE_COUNT] = {"NORMAL", "BOX", "NATURAL"};
+  for (int st = 0; st < CTL_STYLE_COUNT; st++) {
+    for (int md = 0; md < 2; md++) {
+      const char *out[FOH_CTL_LABEL_ROWS];
+      foh_ctl_labels((CtlStyle)st, md != 0, out);
+      for (int i = 0; i < FOH_CTL_LABEL_ROWS; i++)
+        printf("%s mod=%d %d %s\n", kStyle[st], md, i, out[i]);
+    }
+  }
+  return 0;
+}
+PROBE
+cc -O0 -ffp-contract=off -Wall -Wextra -Werror -I port/foh -o "$B/ctl_labels_probe" \
+   "$B/ctl_labels_probe.c" >"$B/ctl_labels_probe.cc.log" 2>&1 \
+  || { sed -n '1,20p' "$B/ctl_labels_probe.cc.log"; fail "[0m] the label table does not compile standalone (see $B/ctl_labels_probe.cc.log)"; }
+"$B/ctl_labels_probe" > "$B/ctl_labels.got" 2>"$B/ctl_labels.err" \
+  || fail "[0m] the label probe exited nonzero"
+cat > "$B/ctl_labels.want" <<'WANT'
+NORMAL mod=0 0 CONTROL STICK
+NORMAL mod=0 1 ATTACK
+NORMAL mod=0 2 SPECIAL
+NORMAL mod=0 3 JUMP
+NORMAL mod=0 4 C-STICK (HOLD)
+NORMAL mod=0 5 SHIELD
+NORMAL mod=0 6 SHIELD
+NORMAL mod=0 7 PAUSE
+NORMAL mod=0 8 PAUSE MENU
+NORMAL mod=1 0 CONTROL STICK
+NORMAL mod=1 1 ATTACK
+NORMAL mod=1 2 SPECIAL
+NORMAL mod=1 3 JUMP
+NORMAL mod=1 4 C-STICK (HOLD)
+NORMAL mod=1 5 SHIELD
+NORMAL mod=1 6 SHIELD
+NORMAL mod=1 7 PAUSE
+NORMAL mod=1 8 PAUSE MENU
+BOX mod=0 0 CONTROL STICK
+BOX mod=0 1 ATTACK
+BOX mod=0 2 SPECIAL
+BOX mod=0 3 JUMP
+BOX mod=0 4 C-STICK (HOLD)
+BOX mod=0 5 MOD / TILT
+BOX mod=0 6 SHIELD
+BOX mod=0 7 PAUSE
+BOX mod=0 8 PAUSE MENU
+BOX mod=1 0 CONTROL STICK
+BOX mod=1 1 ATTACK
+BOX mod=1 2 SPECIAL
+BOX mod=1 3 JUMP
+BOX mod=1 4 C-STICK (HOLD)
+BOX mod=1 5 SHIELD
+BOX mod=1 6 MOD / TILT
+BOX mod=1 7 PAUSE
+BOX mod=1 8 PAUSE MENU
+NATURAL mod=0 0 CONTROL STICK
+NATURAL mod=0 1 ATTACK
+NATURAL mod=0 2 SPECIAL
+NATURAL mod=0 3 GRAB (Z)
+NATURAL mod=0 4 JUMP
+NATURAL mod=0 5 SHIELD
+NATURAL mod=0 6 SHIELD
+NATURAL mod=0 7 PAUSE
+NATURAL mod=0 8 PAUSE MENU
+NATURAL mod=1 0 CONTROL STICK
+NATURAL mod=1 1 ATTACK
+NATURAL mod=1 2 SPECIAL
+NATURAL mod=1 3 GRAB (Z)
+NATURAL mod=1 4 JUMP
+NATURAL mod=1 5 SHIELD
+NATURAL mod=1 6 SHIELD
+NATURAL mod=1 7 PAUSE
+NATURAL mod=1 8 PAUSE MENU
+WANT
+cmp -s "$B/ctl_labels.got" "$B/ctl_labels.want" \
+  || { diff "$B/ctl_labels.want" "$B/ctl_labels.got" | sed -n '1,20p'; fail "[0m] the compiled Controls-screen label table does not match the authored table above (left = authored, right = compiled) — if the MAPPING really changed, change s1_input.h/foh_ctl_labels.h and this table in the SAME change and say why"; }
+lblrows="$(wc -l < "$B/ctl_labels.want" | tr -d ' ')"
+[ "$lblrows" = 54 ] || fail "[0m] authored label table is $lblrows rows, expected 54 (3 styles x Mod-on-L/R x 9 buttons) — a style or a button row was added without extending the pin"
+echo "  [0m] control-role predicate agrees at both copies; label table compiled and pinned for all 6 style/Mod arrangements (54 rows)"
+
+# --- [1p] phantomThreshold: NO HAND-TYPED ENGINE VALUE MAY DRIFT (C-review
+# r11 BLOCKER; HARD RULE 5 + HARD RULE 8's "instrument > class fix").
+# `phantomThreshold` is a gameSettings value ON THE CHECKSUM SURFACE
+# (hitDetection.js:335/337/348), and its authored default 0.01 is currently
+# HAND-TYPED at four C sites. HARD RULE 5 says engine values come from the
+# executed-data pipeline and are never retyped by hand; the proper fix is to
+# emit this default through the pipeline, which changes a PINNED M1 producer
+# and therefore belongs to a pipeline arc, not this one (REGISTERED, reported
+# to the driver — see MENU-SPEC §4's note).
+#
+# What is fixable HERE, and is strictly better than consolidating the four
+# literals into one hand-typed constant, is an INSTRUMENT: assert every C site
+# equals the value parsed from UPSTREAM'S OWN BYTES. That makes silent drift
+# impossible at ALL FOUR sites (two of which predate this arc) and it catches a
+# FIFTH site being added, because the site count is pinned. It is the project's
+# standing "read the oracle's own bytes, never transcribe" pattern.
+echo "=== [1p] phantomThreshold hand-typed-value instrument"
+# Same clone resolution pipeline/run.js:39 uses (already a hard prerequisite
+# of [1], so this introduces no new one).
+PT_DIST="${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}"
+PT_SETTINGS="$PT_DIST/src/settings.js"
+[ -f "$PT_SETTINGS" ] || fail "phantomThreshold instrument — upstream $PT_SETTINGS missing (the clone is already a hard prerequisite of [1])"
+# Upstream's authored default, parsed from the source bytes (never transcribed).
+pt_up="$(sed -n 's/^[[:space:]]*phantomThreshold[[:space:]]*:[[:space:]]*\([0-9.eE+-]*\)[[:space:]]*,.*$/\1/p' "$PT_SETTINGS")"
+[ -n "$pt_up" ] || grammar_die "phantomThreshold instrument — could not parse the authored default out of $PT_SETTINGS (upstream shape changed; this is corrupt evidence, never a pass)"
+[ "$(printf '%s\n' "$pt_up" | wc -l | tr -d ' ')" = 1 ] || grammar_die "phantomThreshold instrument — $PT_SETTINGS declares phantomThreshold more than once (ambiguous authored default)"
+# ROUND-19 CLASS FIX (Tier A+ round-19 MAJOR): the first form of this
+# instrument asked its questions with the RHS SPELLING baked into the regex --
+# the fifth-site sweep required the right-hand side to begin with `[0-9]`, and
+# the literal extractor's character class had no parentheses. codex showed what
+# that leaves open: `foh.phantomThreshold = .01;` is a compiled FIFTH hand-typed
+# literal with identical behavior, yet `pt_found` stayed 4, the sweep did not
+# list the file, and this leg still printed "no fifth site" (`+0.01` and
+# `(0.01)` evade it the same way). "Does any C site hand-type this engine
+# value?" must not depend on how the author spelled the number. So the sweep is
+# now SPELLING-INDEPENDENT -- it matches every assignment to the field, whatever
+# follows the `=` -- and each right-hand side is CLASSIFIED instead of
+# pattern-matched: a numerically-spelled RHS is a hand-typed literal (and must
+# live in a pinned literal site and equal upstream's value NUMERICALLY, so
+# `.01` is judged equal to `0.01` rather than reported as drift); anything else
+# is a propagation from another variable.
+#
+# Two PINNED file sets, because "assigns the field" and "hand-types a number"
+# are different questions and only the second is a HARD RULE 5 matter:
+PT_LIT_SITES="port/foh/foh.c port/foh/foh_persist.c port/sim/sim/sim_boot.c port/sim/target/target_play.c"
+PT_ASSIGN_SITES="port/foh/foh.c port/foh/foh_app.c port/foh/foh_persist.c port/sim/calib/replay_hitdet.c port/sim/calib/replay_physics.c port/sim/hit_detection.c port/sim/sim/sim_boot.c port/sim/target/target_play.c"
+# Whole-tree sweep with NO constraint on the right-hand side: every file that
+# assigns phantomThreshold at all must be pinned. A new site cannot hide behind
+# an unusual spelling of the number, because the spelling is not consulted.
+pt_all="$(grep -rlE 'phantomThreshold[[:space:]]*=' port/ --include='*.c' --include='*.h' 2>/dev/null | grep -v '/build/' | sort | tr '\n' ' ')"
+pt_want="$(printf '%s\n' $PT_ASSIGN_SITES | sort | tr '\n' ' ')"
+[ "$pt_all" = "$pt_want" ] || fail "phantomThreshold instrument — the set of files ASSIGNING phantomThreshold is '$pt_all', pinned '$pt_want' (a new site appeared, or one was removed without updating this pin)"
+pt_found=0
+for f in $PT_ASSIGN_SITES; do
+  [ -f "$f" ] || fail "phantomThreshold instrument — pinned site $f is missing (the site list is stale)"
+  # Every assignment must PARSE to a right-hand side. A spelling this extractor
+  # cannot read is UNJUDGED, which is exactly the failure this round found, so
+  # it fails loudly instead of being skipped.
+  pt_asg="$(grep -cE 'phantomThreshold[[:space:]]*=' "$f" | tr -d ' ')"
+  pt_par="$(grep -nE 'phantomThreshold[[:space:]]*=' "$f" | sed -nE 's/^([0-9]+):.*phantomThreshold[[:space:]]*=[[:space:]]*([^;]*);.*/\1:\2/p')"
+  pt_np="$(printf '%s\n' "$pt_par" | grep -c . || true)"
+  [ "$pt_np" = "$pt_asg" ] || grammar_die "phantomThreshold instrument — $f has $pt_asg assignment(s) but only $pt_np parse to a right-hand side; an unparsed spelling would go UNJUDGED (this is corrupt evidence, never a pass)"
+  while IFS= read -r rec; do
+    [ -n "$rec" ] || continue
+    pt_ln="${rec%%:*}"; pt_rhs="${rec#*:}"
+    # CLASSIFY: numerically spelled (optionally signed/parenthesised) => a
+    # hand-typed literal. Anything else (an identifier, a field read, a call)
+    # is a propagation and is not a HARD RULE 5 site.
+    printf '%s' "$pt_rhs" | grep -qE '^[[:space:]]*[-+(]*[[:space:]]*[0-9.][0-9.eE+-]*[[:space:]]*[)]*[[:space:]]*$' || continue
+    pt_found=$((pt_found + 1))
+    case " $PT_LIT_SITES " in
+      *" $f "*) ;;
+      *) fail "phantomThreshold instrument — $f:$pt_ln hand-types the literal '$pt_rhs', but $f is not a pinned literal site (HARD RULE 5: a new hand-typed CHECKSUM-SURFACE engine value appeared)" ;;
+    esac
+    # NUMERIC equality, so a legal respelling is not reported as drift while a
+    # changed VALUE still is.
+    pt_norm="$(printf '%s' "$pt_rhs" | tr -d '() ')"
+    awk -v a="$pt_norm" -v b="$pt_up" 'BEGIN { exit !(a ~ /[0-9]/ && (a + 0) == (b + 0)) }' \
+      || fail "phantomThreshold instrument — $f:$pt_ln assigns '$pt_rhs' but upstream settings.js authors $pt_up (a hand-typed CHECKSUM-SURFACE engine value has drifted; HARD RULE 5)"
+  done <<EOF
+$pt_par
+EOF
+done
+[ "$pt_found" = 4 ] || fail "phantomThreshold instrument — found $pt_found hand-typed literal assignment(s) across the pinned sites, want 4 (a fifth hand-typed site appeared, or one was removed without updating this pin)"
+# HONEST LIMIT (the round-6 MINOR-2 discipline: say what this does NOT prove).
+# A right-hand side that is a NAMED constant classifies as a propagation here,
+# so a `#define PHANTOM_DEFAULT 0.01` would move the hand-typed value out of
+# this instrument's view. Closed by pinning that no such macro exists: if one
+# is ever wanted, it must be added together with the check that judges it.
+pt_mac="$( { grep -rnE '^[[:space:]]*#[[:space:]]*define[[:space:]]+[A-Za-z_]*([Pp][Hh][Aa][Nn][Tt][Oo][Mm])[A-Za-z_]*' port/ --include='*.c' --include='*.h' 2>/dev/null || true; } | { grep -v '/build/' || true; } | wc -l | tr -d ' ')"
+[ "$pt_mac" = 0 ] || fail "phantomThreshold instrument — a phantom* macro is now defined ($pt_mac site(s)); a named constant reads as a propagation to the classifier above, so extend this instrument to judge the macro's value in the SAME change"
+echo "    [1p] OK: every file assigning phantomThreshold is pinned (${pt_want% }); all 4 hand-typed literals == upstream settings.js's authored $pt_up numerically; no fifth hand-typed site, no phantom* macro"
+
 # --- [2] build ----------------------------------------------------------------
 echo "=== [2] build foh_app"
 CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror
   -I"$TABLES" -Iport/ryu -Iport/sim -Ioracle/qjs)
-rm -f "$B/raster.o" "$B/platform_headless.o" "$B/foh.o" "$B/foh_font.o" \
+rm -f "$B/raster.o" "$B/platform_headless.o" "$B/foh.o" "$B/foh_font.o" "$B/ctl_style.o" \
       "$B/foh_render.o" "$B/foh_persist.o" "$B/foh_app.o" "$B/img1.o" \
       "$B/foh_app"
 cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$B/raster.o"
@@ -427,38 +675,248 @@ cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_font.c" -o "$B/foh_font.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_render.c" -o "$B/foh_render.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_persist.c" -o "$B/foh_persist.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_app.c" -o "$B/foh_app.o"
-cc -O2 "${CFLAGS_COMMON[@]}" -o "$B/foh_app" \
-  "$B/foh.o" "$B/foh_font.o" "$B/foh_render.o" "$B/foh_persist.o" \
-  "$B/foh_app.o" \
-  "$B/raster.o" "$B/img1.o" "$B/platform_headless.o" \
-  "$SIM/sim_boot.c" "$SIM/sim_tick.c" "$SIM/sim_ser.c" \
-  "$SIM/sim_data.c" "$SIM/sim_ai_live.c" \
-  "$CAL/canon.c" "$CAL/player_canon.c" \
-  port/sim/ai.c \
-  port/sim/physics.c port/sim/interpolated_collision.c \
-  port/sim/environmental_collision.c port/sim/hit_detection.c \
-  port/sim/article.c port/sim/action_state_shortcuts.c \
-  port/sim/ml_events.c port/sim/ml_fmt.c port/sim/ml_ser.c \
-  port/sim/ai_bridge.c port/sim/input/interpret_inputs.c \
-  port/sim/stages/moving_platforms.c port/sim/stages/ystory.c \
-  port/sim/stages/fountain.c \
-  port/sim/characters/shared/moves_index.c port/sim/characters/shared/moves/*.c \
-  port/sim/characters/fox/moves_index.c port/sim/characters/fox/moves/*.c \
-  port/sim/characters/falco/moves_index.c port/sim/characters/falco/moves/*.c \
-  port/sim/characters/falcon/moves_index.c port/sim/characters/falcon/moves/*.c \
-  port/sim/characters/marth/moves_index.c \
-  port/sim/characters/marth/dancing_blade_combo.c \
-  port/sim/characters/marth/dancing_blade_air_mobility.c \
-  port/sim/characters/marth/moves/*.c \
-  port/sim/characters/puff/moves_index.c \
-  port/sim/characters/puff/puff_multi_jump_drift.c \
-  port/sim/characters/puff/puff_next_jump.c \
-  port/sim/characters/puff/moves/*.c \
-  port/sim/target/target_play.c \
-  "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" "$TABLES/ml_targets.c" \
+# C30(c): the control-style/Mod-shoulder cells. A TU, not a header, on
+# purpose (ctl_style.c's own note): the Controls screen writes them in one
+# TU and the input path reads them in another, so a per-TU static copy
+# would be a live desync.
+cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/ctl_style.c" -o "$B/ctl_style.o"
+# ONE list, two consumers. The phantomThreshold witness ([1pw]) must link the
+# SAME bodies the app links -- a second copy of this list would drift, and the
+# witness would then be witnessing code the app does not run.
+FOH_LINK_OBJS=(
+  "$B/foh.o" "$B/foh_font.o" "$B/foh_render.o" "$B/foh_persist.o"
+  "$B/ctl_style.o" "$B/raster.o" "$B/img1.o" "$B/platform_headless.o"
+)
+FOH_LINK_SRCS=(
+  "$SIM/sim_boot.c" "$SIM/sim_tick.c" "$SIM/sim_ser.c"
+  "$SIM/sim_data.c" "$SIM/sim_ai_live.c"
+  "$CAL/canon.c" "$CAL/player_canon.c"
+  port/sim/ai.c
+  port/sim/physics.c port/sim/interpolated_collision.c
+  port/sim/environmental_collision.c port/sim/hit_detection.c
+  port/sim/article.c port/sim/action_state_shortcuts.c
+  port/sim/ml_events.c port/sim/ml_fmt.c port/sim/ml_ser.c
+  port/sim/ai_bridge.c port/sim/input/interpret_inputs.c
+  port/sim/stages/moving_platforms.c port/sim/stages/ystory.c
+  port/sim/stages/fountain.c
+  port/sim/characters/shared/moves_index.c port/sim/characters/shared/moves/*.c
+  port/sim/characters/fox/moves_index.c port/sim/characters/fox/moves/*.c
+  port/sim/characters/falco/moves_index.c port/sim/characters/falco/moves/*.c
+  port/sim/characters/falcon/moves_index.c port/sim/characters/falcon/moves/*.c
+  port/sim/characters/marth/moves_index.c
+  port/sim/characters/marth/dancing_blade_combo.c
+  port/sim/characters/marth/dancing_blade_air_mobility.c
+  port/sim/characters/marth/moves/*.c
+  port/sim/characters/puff/moves_index.c
+  port/sim/characters/puff/puff_multi_jump_drift.c
+  port/sim/characters/puff/puff_next_jump.c
+  port/sim/characters/puff/moves/*.c
+  port/sim/target/target_play.c
+  "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" "$TABLES/ml_targets.c"
   oracle/qjs/sha256.c port/fdlibm/fdlibm.c -lm
+)
+cc -O2 "${CFLAGS_COMMON[@]}" -o "$B/foh_app" \
+  "${FOH_LINK_OBJS[@]}" "$B/foh_app.o" "${FOH_LINK_SRCS[@]}"
 made "$B/foh_app"
 echo "build OK: $B/foh_app (raster TU -O3, all else -O2; -ffp-contract=off everywhere)"
+
+# --- [1pw] phantomThreshold BEHAVIORAL witness ---------------------------------
+# Tier A+ round-20 MAJORs 1-3, closed as ONE CLASS. [1p] above answers the
+# STRUCTURAL half of the HARD RULE 5 question by reading the source, and codex
+# defeated three successive readings in three successive rounds: `.01`, then
+# `+0.01` / `(0.01)`, then `0x1.47ae147ae147bp-7` / `0.01f` / `(double)0.01`, a
+# named `static const double phantom_default = .01;`, and a comment wedged
+# before the `=`. Widening the regex a fourth time would lose the same race a
+# fourth time, because a regex enumerates the spellings its author thought of
+# while C admits infinitely many spellings of one double.
+#
+# So the VALUE half is settled the way this lane has already settled its frame,
+# field-value and separator planes: BY EXECUTION. port/foh/foh_phantom_witness.c
+# CALLS all four owning initialisers and reads the field back out of the
+# initialised objects, comparing bit-for-bit against the value parsed from
+# UPSTREAM'S OWN settings.js bytes. After compilation no spelling survives, so
+# the question stops depending on how the number was written.
+#
+# The two legs are complementary and neither is redundant: [1p] pins the SHAPE
+# of the site set (which files assign the field at all, how many hand-type a
+# number, no phantom* macro), [1pw] pins the VALUE every site actually
+# produces. A respelling that hides from [1p]'s classifier cannot hide here.
+echo "=== [1pw] phantomThreshold behavioral witness (compiled, not read)"
+# The expected bit pattern is computed INDEPENDENTLY of the C under test, from
+# the same upstream bytes, by V8. That makes the assertion a differential
+# (V8's parse vs the compiler's) rather than the witness grading its own paper.
+pt_bits="$(node -e 'const b=Buffer.alloc(8);b.writeDoubleLE(Number(process.argv[1]));console.log(String(b.toString("hex").match(/../g).reverse().join("")))' "$pt_up")"
+printf '%s' "$pt_bits" | grep -qE '^[0-9a-f]{16}$' \
+  || grammar_die "phantomThreshold witness — could not compute the expected bit pattern for upstream's '$pt_up' (got '$pt_bits'); this is corrupt evidence, never a pass"
+PHANTOM_OK_LINE="PHANTOM WITNESS OK (sites=4 value=$pt_up bits=$pt_bits)"
+# ROUND-21 M2: the witness's COVERAGE is a function of [1p]'s pinned rule set,
+# not of what its author chose to call. codex's finding was that re-aiming
+# site 3's read from `g_target` at `g_match` left the output byte-identical, so
+# tp_setup_target() was called but never judged. The witness side is fixed by
+# poisoned per-site slots; this is the OUTSIDE half: one labelled row per setup
+# path, and the label set CROSS-BOUND to PT_LIT_SITES, so a fifth hand-typed
+# literal site cannot appear without a fifth witnessed path (and vice versa).
+PT_WIT_MAP="port/foh/foh.c:foh_init port/foh/foh_persist.c:foh_persist_defaults port/sim/sim/sim_boot.c:sim_setup_match port/sim/target/target_play.c:tp_setup_target"
+pt_map_files="$(printf '%s\n' $PT_WIT_MAP | sed 's/:.*//' | sort | tr '\n' ' ')"
+pt_lit_sorted="$(printf '%s\n' $PT_LIT_SITES | sort | tr '\n' ' ')"
+[ "$pt_map_files" = "$pt_lit_sorted" ] \
+  || fail "phantomThreshold witness — the witnessed setup paths cover files '$pt_map_files' but [1p] pins the hand-typed literal sites as '$pt_lit_sorted' (both directions: a literal site with no witnessed initialiser would go unjudged, a witnessed path with no literal site is stale)"
+PHANTOM_EXPECT="$B/phantomwit.expect"
+: > "$PHANTOM_EXPECT"
+pt_idx=0
+pt_fn_list=""
+for pt_pair in $PT_WIT_MAP; do
+  pt_file="${pt_pair%%:*}"; pt_fn="${pt_pair#*:}"
+  # The map is not taken on trust: the named initialiser must actually be
+  # defined in the file [1p] pinned as its literal site.
+  grep -qE "\b$pt_fn[[:space:]]*\(" "$pt_file" \
+    || fail "phantomThreshold witness — the map claims $pt_file's hand-typed literal is owned by $pt_fn(), but $pt_fn is not mentioned in $pt_file (stale map)"
+  printf 'PHANTOM SITE %d %s bits=%s\n' "$pt_idx" "$pt_fn" "$pt_bits" >> "$PHANTOM_EXPECT"
+  pt_fn_list="$pt_fn_list $pt_fn"
+  pt_idx=$((pt_idx + 1))
+done
+pt_fn_list="${pt_fn_list# }"
+printf '%s\n' "$PHANTOM_OK_LINE" >> "$PHANTOM_EXPECT"
+[ "$pt_idx" = 4 ] || grammar_die "phantomThreshold witness — built $pt_idx expected site row(s), want 4 (corrupt evidence, never a pass)"
+# WHOLE-OUTPUT whitelist, the [5c]/[5d] rule: success output is EXACTLY this
+# block, byte-compared, so a witness that also printed a complaint could not
+# be read as a pass, and a renamed/duplicated/dropped path is a diff.
+phantom_verdict_ok() { # <out-file>
+  cmp -s "$PHANTOM_EXPECT" "$1"
+}
+# The witness links the SAME bodies foh_app links (FOH_LINK_OBJS/SRCS above) so
+# that it witnesses the code the app actually runs; only foh_app.o is swapped
+# out, because both define main().
+phantom_link() { # <out-binary> <persist-object> <witness-object>
+  cc -O2 "${CFLAGS_COMMON[@]}" -o "$1" \
+    "$B/foh.o" "$B/foh_font.o" "$B/foh_render.o" "$2" \
+    "$B/ctl_style.o" "$B/raster.o" "$B/img1.o" "$B/platform_headless.o" \
+    "$3" "${FOH_LINK_SRCS[@]}"
+}
+rm -f "$B/foh_phantom_witness.o" "$B/foh_phantom_witness"
+cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_phantom_witness.c" -o "$B/foh_phantom_witness.o"
+phantom_link "$B/foh_phantom_witness" "$B/foh_persist.o" "$B/foh_phantom_witness.o"
+made "$B/foh_phantom_witness"
+if ! "$B/foh_phantom_witness" "$pt_up" > "$B/phantomwit.out" 2>&1; then
+  relay_lines < "$B/phantomwit.out"
+  fail "phantomThreshold witness exited non-zero — a CHECKSUM-SURFACE engine value has drifted at one of the four owning initialisers (HARD RULE 5; see relayed output above)"
+fi
+relay_lines < "$B/phantomwit.out"
+phantom_verdict_ok "$B/phantomwit.out" \
+  || fail "phantomThreshold witness — success output is not the exact anchored line '$PHANTOM_OK_LINE' (permissive-parse guard, PROCESS §3) — see relayed output above"
+echo "    [1pw] OK: one labelled row per pinned literal site ($pt_fn_list) — each initialiser was CALLED, read through its OWN poisoned slot, and produced phantomThreshold == upstream settings.js's $pt_up bit-for-bit ($pt_bits)"
+
+# --- [1pw] TEETH. All on COPIES of foh_persist.c; the committed source is
+# never touched. Two prove the witness fails CLOSED on value drift wearing
+# exactly the spellings that defeated [1p]'s classifier; the third is a
+# NEGATIVE CONTROL proving it does not fire on a legal respelling, which is the
+# property that makes the arms race stop.
+PT_TOOTHDIR="$B/ptwit"
+rm -rf "$PT_TOOTHDIR"; mkdir -p "$PT_TOOTHDIR"
+pt_tooth() { # <id> <perl-expr> <expect: fail|pass> <needle> <label>
+  local id="$1" expr="$2" mode="$3" needle="$4" label="$5" rc=0
+  local d="$PT_TOOTHDIR/$id"
+  mkdir -p "$d"
+  cp "$FOH/foh_persist.c" "$d/foh_persist.c"
+  perl -0pi -e "$expr" "$d/foh_persist.c"
+  cmp -s "$FOH/foh_persist.c" "$d/foh_persist.c" \
+    && fail "$id — the tooth edit was a NO-OP on the copy (the pattern did not match); a tooth that changes nothing proves nothing"
+  cc -O2 "${CFLAGS_COMMON[@]}" -I"$FOH" -c "$d/foh_persist.c" -o "$d/foh_persist.o"
+  phantom_link "$d/wit" "$d/foh_persist.o" "$B/foh_phantom_witness.o"
+  "$d/wit" "$pt_up" > "$d/out" 2>&1 || rc=$?
+  if [ "$mode" = fail ]; then
+    [ "$rc" = 1 ] || fail "$id — the perturbed build exited rc $rc, want 1 ($label): $(cat "$d/out")"
+    grep -qF "$needle" "$d/out" \
+      || fail "$id — the perturbed build failed, but not at the declared diagnostic '$needle' ($label): $(cat "$d/out")"
+  else
+    [ "$rc" = 0 ] || fail "$id — the respelled build exited rc $rc, want 0 ($label): $(cat "$d/out")"
+    phantom_verdict_ok "$d/out" \
+      || fail "$id — the respelled build did not print the exact anchored success line ($label): $(cat "$d/out")"
+  fi
+  echo "    $id OK: $label"
+}
+# T-PT1 (round-20 MAJOR 2): a HEX FLOAT, the spelling [1p]'s numeric classifier
+# skips entirely — carrying a ONE-ULP drift. Nothing short of reading the
+# compiled value can see this.
+pt_tooth ptwit1 \
+  's/p->phantomThreshold = 0\.01;/p->phantomThreshold = 0x1.47ae147ae147cp-7;/' \
+  fail 'phantom witness: foh_persist_defaults() produced phantomThreshold bits' \
+  'a one-ulp drift spelled as a hex float is caught (MAJOR 2)'
+# T-PT2 (round-20 MAJOR 1): a NAMED CONSTANT, which [1p] classifies as a
+# propagation and therefore does not judge at all.
+pt_tooth ptwit2 \
+  's/p->phantomThreshold = 0\.01;/static const double phantom_default = 0.02; p->phantomThreshold = phantom_default;/' \
+  fail 'phantom witness: foh_persist_defaults() produced phantomThreshold bits' \
+  'drift hidden behind a named constant is caught (MAJOR 1)'
+# T-PT3 (round-20 MAJOR 3, NEGATIVE CONTROL): a comment before the `=` plus a
+# hex float holding the CORRECT value. The witness must stay silent: being
+# blind to spelling is the point, and a witness that cried drift here would
+# just be a slower regex.
+pt_tooth ptwit3 \
+  's{p->phantomThreshold = 0\.01;}{p->phantomThreshold /* authored default */ = 0x1.47ae147ae147bp-7;}' \
+  pass '-' \
+  'a legal respelling (comment before =, hex float, same value) does NOT fire (MAJOR 3)'
+
+# --- [1pw] TEETH, round-21 M2 group. These perturb COPIES of the WITNESS
+# itself, because the defect codex found lived there: a read aimed at the wrong
+# object. All three edits are NO-OPS under the pre-M2 witness (identical bytes
+# out); each must now fail, and fail at ITS OWN declared diagnostic.
+pt_wtooth() { # <id> <perl-expr> <mode: nonzero|block> <needle> <label>
+  local id="$1" expr="$2" mode="$3" needle="$4" label="$5" rc=0
+  local d="$PT_TOOTHDIR/$id"
+  mkdir -p "$d"
+  cp "$FOH/foh_phantom_witness.c" "$d/foh_phantom_witness.c"
+  perl -0pi -e "$expr" "$d/foh_phantom_witness.c"
+  cmp -s "$FOH/foh_phantom_witness.c" "$d/foh_phantom_witness.c" \
+    && fail "$id — the tooth edit was a NO-OP on the copy (the pattern did not match); a tooth that changes nothing proves nothing"
+  cc -O2 "${CFLAGS_COMMON[@]}" -I"$FOH" -c "$d/foh_phantom_witness.c" -o "$d/wit.o"
+  phantom_link "$d/wit" "$B/foh_persist.o" "$d/wit.o"
+  "$d/wit" "$pt_up" > "$d/out" 2>&1 || rc=$?
+  if [ "$mode" = nonzero ]; then
+    [ "$rc" != 0 ] || fail "$id — the perturbed witness exited 0 ($label); the round-21 M2 defect is exactly that this edit is invisible: $(cat "$d/out")"
+  else
+    # The values are all still correct, so the witness legitimately exits 0.
+    # What must move is the OUTPUT BLOCK the leg byte-compares.
+    [ "$rc" = 0 ] || fail "$id — the perturbed witness exited $rc, want 0 ($label): $(cat "$d/out")"
+    phantom_verdict_ok "$d/out" \
+      && fail "$id — the perturbed witness still printed the exact expected block ($label); the labelled rows are not being judged: $(cat "$d/out")"
+  fi
+  grep -qF "$needle" "$d/out" \
+    || fail "$id — the perturbed witness moved (rc $rc) but not at the declared diagnostic '$needle' ($label): $(cat "$d/out")"
+  echo "    $id OK: $label"
+}
+# T-PT4 (round-21 M2, the EXACT edit codex constructed): site 3 reads the
+# object site 2 owns. Pre-M2 this produced byte-identical output; now two sites
+# would share one slot, which the witness refuses outright.
+pt_wtooth ptwit4 \
+  's/sites\[3\]\.slot = &g_target\.sim\.phantomThreshold;/sites[3].slot = \&g_match.sim.phantomThreshold;/' \
+  nonzero \
+  'sites 2 (sim_setup_match) and 3 (tp_setup_target) read the SAME slot' \
+  'the exact cross-read codex constructed is refused up front (round-21 M2)'
+# T-PT5 (the ATTACKER'S FULL REMEDY, the lane's quiet-re-freeze idiom): the
+# same cross-read, PLUS deleting the guard that caught it. The second line of
+# defence — the per-site SPENT stamp — must still name the object actually hit.
+pt_wtooth ptwit5 \
+  's/sites\[3\]\.slot = &g_target\.sim\.phantomThreshold;/sites[3].slot = \&g_match.sim.phantomThreshold;/; s/for \(j = 0; j < i; j\+\+\) \{/for (j = 0; j < 0; j++) {/' \
+  nonzero \
+  'site 3 (tp_setup_target) read the slot of site 2 (sim_setup_match), already measured' \
+  'with the duplicate-slot guard REMOVED, the SPENT stamp still catches the cross-read by name (round-21 M2)'
+# T-PT6 (the other sentinel direction): an owning initialiser stops being
+# CALLED at all. Its slot then still holds the UNSET poison, so "called but
+# unjudged" and "never called" are both failures, not silent passes.
+pt_wtooth ptwit6 \
+  's{foh_init\(&g_foh\);}{(void)0; /* tooth: initialiser not called */}' \
+  nonzero \
+  'site 0 (foh_init) still holds its UNSET poison -- foh_init() did not write phantomThreshold' \
+  'an owning initialiser that is never CALLED is caught by the UNSET poison (round-21 M2)'
+# T-PT7 (the labelling half): a DUPLICATED label. Every value assertion still
+# passes — only the per-row output moves, which is precisely why the leg
+# byte-compares the whole block against labels derived from PT_LIT_SITES.
+pt_wtooth ptwit7 \
+  's/sites\[3\]\.name = "tp_setup_target";/sites[3].name = "sim_setup_match";/' \
+  block \
+  'PHANTOM SITE 3 sim_setup_match' \
+  'a DUPLICATED setup-path label changes the whole-output block (round-21 M2)'
 
 # golden traces -> text (pinned trace-to-txt.js)
 rm -f "$B/g01.trace.txt" "$B/m01.trace.txt" "$B/g03.trace.txt" \
@@ -621,7 +1079,7 @@ for k in 0 1 2 3 4 5 6; do
   [ "$ndistinct" = "$nfiles" ] || fail "flow $id: shots not pairwise distinct ($ndistinct unique of $nfiles) — a stuck screen machine renders duplicates"
   echo "    -> flow $id OK (trace frozen-match, x2 stable, shots $nfiles)"
 done
-[ "$total_shots" = 17 ] || fail "shot total $total_shots != pinned 17"
+[ "$total_shots" = 19 ] || fail "shot total $total_shots != pinned 19"
 [ "$states" = 4 ] || fail "BRIDGE-STATE witness total $states != pinned 4"
 [ "$tstates" = 2 ] || fail "TBRIDGE-STATE witness total $tstates != pinned 2"
 
@@ -882,8 +1340,6 @@ I 430 D
 I 431 -
 I 435 A
 I 436 -
-I 440 A
-I 441 -
 I 445 U
 I 515 -
 I 520 D
@@ -916,7 +1372,7 @@ fresh_persist # defaults domain (task 13; the wit leg saves lcancel=1)
 made "$WIT/trace.txt" "$WIT/stream.txt" "$WIT/bstate.txt"
 { node "$FOH/judge-foh-trace.js" "$WIT/trace.txt" wit-g01 1; } 2>&1 | relay_lines
 # LAUNCH line EXACT: g01 cross-bound params + lcancel=1 (nothing else).
-witlaunch="LAUNCH 830 p1=$G01_P1 p2=$G01_P2 p2type=0 difficulty=3 stage=$G01_STAGE turbo=0 lcancel=1 tapjump=0,0,0,0 versus=0"
+witlaunch="LAUNCH 830 p1=$G01_P1 p2=$G01_P2 p2type=0 difficulty=3 stage=$G01_STAGE turbo=0 lcancel=1 flashlcancel=0 walljump=0 tapjump=0,0,0,0 versus=0"
 c="$(count_xl "$WIT/trace.txt" "$witlaunch")"
 [ "$c" = 1 ] || fail "witness — LAUNCH line != g01-params-plus-lcancel=1 (count $c/1)"
 # The settings-edit line itself (the control derivation below deletes
@@ -1001,7 +1457,7 @@ sed -e '/^S 415 lcancel 1$/d' \
   "$WIT/trace.txt" > "$CTRL/trace-want.txt"
 made "$CTRL/trace-want.txt"
 cmp "$CTRL/trace.txt" "$CTRL/trace-want.txt" || fail "control — trace != witness-trace-minus-the-lcancel-edit (the treatment and control did NOT share the options path)"
-ctrllaunch="LAUNCH 830 p1=$G01_P1 p2=$G01_P2 p2type=0 difficulty=3 stage=$G01_STAGE turbo=0 lcancel=0 tapjump=0,0,0,0 versus=0"
+ctrllaunch="LAUNCH 830 p1=$G01_P1 p2=$G01_P2 p2type=0 difficulty=3 stage=$G01_STAGE turbo=0 lcancel=0 flashlcancel=0 walljump=0 tapjump=0,0,0,0 versus=0"
 c="$(count_xl "$CTRL/trace.txt" "$ctrllaunch")"
 [ "$c" = 1 ] || fail "control — LAUNCH line != g01-params-with-lcancel=0 (count $c/1)"
 # Pure-defaults GameState: byte-equal to the FROZEN f01 witness.
@@ -1054,7 +1510,7 @@ node -e '
   }
   let i = 0;
   while (i < a.length && i < b.length && a[i] === b[i]) i++;
-  if (a[i] !== "T 380 menu-top menu-battle a" ||
+  if (a[i] !== "T 380 menu-top css a" ||
       b[i] !== "T 380 menu-top target-select a") {
     console.error("first divergent pair is not the injected-DOWN transition: " +
                   "frozen=" + JSON.stringify(a[i]) + " variant=" +
@@ -1062,7 +1518,7 @@ node -e '
     process.exit(1);
   }
 ' "$FLOWS/f01-vs-g01.expect" "$B/t1.trace.txt" || fail "T1 — first-divergent-line witness failed"
-echo "    T1 OK: same header, first divergent pair = injected-DOWN transition (T 380 menu-battle vs target-select — the iter-99 real entry)"
+echo "    T1 OK: same header, first divergent pair = injected-DOWN transition (T 380 css vs target-select — row 0 goes straight to the CSS under C5)"
 teeth=$((teeth + 1))
 # T2 char variant: carry the token one cell further -> p1=3 in LAUNCH.
 # Deleting the RIGHT release lets the hold run to the drop press instead
@@ -1194,12 +1650,12 @@ c="$(count_x "$B/t7.out" "divergence witness UNSOUND")"
 echo "    T7 OK: a MATCH fed to the witness judge dies with the UNSOUND class"
 teeth=$((teeth + 1))
 # T8 (review-88 M1): delete the f04 sss->css B press -> the frozen
-# 15th-edge line 'T 785 sss css b' is the first divergent frozen line.
+# sss->css edge line 'T 750 sss css b' is the first divergent frozen line.
 # (Anchors moved iter 93: the f04 sss segment gained the RANDOM-slot
 # traversal — designed re-freeze channel, AGENT-LOG iter 93.)
 mkdir -p "$B/t8"
 mkvariant "$FLOWS/f04-nav.flow" "$B/t8/f04-nav.flow" delete \
-  "I 785 B" "I 788 -"
+  "I 750 B" "I 753 -"
 run_variant "$B/t8/f04-nav.flow" "$B/t8.trace.txt"
 rc=0; cmp -s "$B/t8.trace.txt" "$FLOWS/f04-nav.expect" || rc=$?
 [ "$rc" = 1 ] || fail "T8 — sss->css edge variant trace cmp rc $rc, want exactly 1"
@@ -1210,13 +1666,13 @@ node -e '
   if (a[0] !== b[0]) { console.error("headers differ (L1 class)"); process.exit(1); }
   let i = 0;
   while (i < a.length && i < b.length && a[i] === b[i]) i++;
-  if (a[i] !== "T 785 sss css b") {
+  if (a[i] !== "T 750 sss css b") {
     console.error("first divergent frozen line is not the 15th edge: " +
                   JSON.stringify(a[i]));
     process.exit(1);
   }
 ' "$FLOWS/f04-nav.expect" "$B/t8.trace.txt" || fail "T8 — first-divergent-line witness failed"
-echo "    T8 OK: dropping the B press diverges exactly at the frozen 'T 785 sss css b' edge"
+echo "    T8 OK: dropping the B press diverges exactly at the frozen 'T 750 sss css b' edge"
 teeth=$((teeth + 1))
 # T19 (CSS mechanics arc): P1 CAN be set to CPU on the CSS — togglePort has
 # no port-0 special case (main.js:504-520) — but the LAUNCH plane cannot honour
@@ -1236,8 +1692,6 @@ I 375 S
 I 376 -
 I 380 A
 I 381 -
-I 385 A
-I 386 -
 I 390 LD
 I 495 -
 I 500 R
@@ -1395,8 +1849,6 @@ I 375 S
 I 376 -
 I 380 A
 I 381 -
-I 385 A
-I 386 -
 I 390 LD
 I 495 -
 I 500 R
@@ -1737,8 +2189,336 @@ rm -f "$B/banner-garble.out" "$B/banner-resemble.out"
 echo "    parser teeth OK: garbled-success + substring-resemblance verdict outputs both rejected by the anchored full-line parser"
 teeth=$((teeth + 2))
 
-[ "$teeth" = 26 ] || fail "teeth ledger — $teeth/26 fired"
+# T23-T25 (review-r1 BLOCKER): the judge must hold a trace to the
+# COMPILED profile and to the SCREEN each event can come from, not merely
+# to a global token list. Each arm feeds a MINIMAL synthetic trace whose
+# only defect is the one under test, so the death message is attributable.
+# The positive controls are the committed flows themselves: f04 carries
+# `refused targetbuilder` on menu-top and f03 carries `soundsvol` on
+# options-audio, both of which pass in leg [3].
+mkdir -p "$B/t23"
+t23_head() { # <file> — a legal prefix ending on menu-top
+  printf 'FOHTRACE1 flow=t23\nT 370 startup title timer\nT 375 title menu-top start\n' > "$1"
+}
+# (a) the hidden battle page: legal only in a FOH_NETPLAY 1 build
+t23_head "$B/t23/edge.txt"
+printf 'T 380 menu-top menu-battle a\nEND 400 transitions=3\n' >> "$B/t23/edge.txt"
+rc=0
+node "$FOH/judge-foh-trace.js" "$B/t23/edge.txt" t23 0 > "$B/t23/edge.log" 2>&1 || rc=$?
+[ "$rc" = 2 ] || fail "T23 — a menu-battle edge under FOH_NETPLAY 0 returned rc $rc, want 2 (the judge must read the build profile out of foh.h)"
+c="$(count_x "$B/t23/edge.log" "off-graph transition")"
+[ "$c" = 1 ] || fail "T23 — death message class missing (want the off-graph class)"
+echo "    T23 OK: a hidden-page transition dies as off-graph under the compiled profile"
+teeth=$((teeth + 1))
+# (b) a retired refusal token: `audio` is a real screen now, in every build
+t23_head "$B/t23/ref.txt"
+printf 'S 380 refused audio\nEND 400 transitions=2\n' >> "$B/t23/ref.txt"
+rc=0
+node "$FOH/judge-foh-trace.js" "$B/t23/ref.txt" t23 0 > "$B/t23/ref.log" 2>&1 || rc=$?
+[ "$rc" = 2 ] || fail "T24 — a retired `refused audio` returned rc $rc, want 2"
+c="$(count_x "$B/t23/ref.log" "unregistered refused entry")"
+[ "$c" = 1 ] || fail "T24 — death message class missing"
+echo "    T24 OK: a retired refusal token dies as unregistered"
+teeth=$((teeth + 1))
+# (c) a real field on a screen that cannot write it
+t23_head "$B/t23/scr.txt"
+printf 'S 380 soundsvol 5\nEND 400 transitions=2\n' >> "$B/t23/scr.txt"
+rc=0
+node "$FOH/judge-foh-trace.js" "$B/t23/scr.txt" t23 0 > "$B/t23/scr.log" 2>&1 || rc=$?
+[ "$rc" = 2 ] || fail "T25 — a volume edit on menu-top returned rc $rc, want 2"
+c="$(count_x "$B/t23/scr.log" "cannot write it")"
+[ "$c" = 1 ] || fail "T25 — death message class missing (want the wrong-screen class)"
+echo "    T25 OK: a settings field emitted on the wrong screen dies"
+teeth=$((teeth + 1))
+# T26 (review-r2 MAJOR): the profile parse must be fail-closed against
+# AMBIGUOUS input, not merely present. The judge reads its SIBLING foh.h,
+# so the lever is a copy of the judge next to a doctored header — which is
+# also the only way to exercise the arm without editing the real header.
+mkdir -p "$B/t26"
+cp "$FOH/judge-foh-trace.js" "$B/t26/judge-foh-trace.js"
+{ cat "$FOH/foh.h"; printf '#define FOH_NETPLAY 1\n'; } > "$B/t26/foh.h"
+t23_head "$B/t26/t.txt"
+printf 'END 400 transitions=2\n' >> "$B/t26/t.txt"
+rc=0
+node "$B/t26/judge-foh-trace.js" "$B/t26/t.txt" t23 0 > "$B/t26/dup.log" 2>&1 || rc=$?
+[ "$rc" = 2 ] || fail "T26 — two FOH_NETPLAY definitions returned rc $rc, want 2 (a first-match parse is not fail-closed)"
+c="$(count_x "$B/t26/dup.log" "FOH_NETPLAY definitions, want")"
+[ "$c" = 1 ] || fail "T26 — death message class missing (want the ambiguous-profile class)"
+# and the SAME judge copy beside the REAL header still passes, so the tooth
+# proves the duplicate — not the copy.
+cp "$FOH/foh.h" "$B/t26/foh.h"
+node "$B/t26/judge-foh-trace.js" "$B/t26/t.txt" t23 0 > "$B/t26/ok.log" 2>&1 \
+  || fail "T26 — the relocated judge fails against the REAL header (the tooth would be proving the wrong thing)"
+echo "    T26 OK: an ambiguous FOH_NETPLAY dies; the same judge passes beside the real header"
+teeth=$((teeth + 1))
+# --- [5c] FOH SOUND-PLANE WITNESS (C23; menu-fidelity arc round 10;
+# review-r9 Standards BLOCKER + the writer's own escalation). The FOH
+# structural trace carries transitions/selections/launches and NOTHING
+# about SOUND: `FohState.snd[]` was unobserved by every check, so a screen
+# that played the wrong sound, played it twice, or fell silent passed all
+# eight green flow runs (same class as the U1 star false-green — the judge
+# could not see the plane the change lived in). It needs neither device
+# audio nor a trace-format change (foh.h:538-539 exposes foh_init/foh_tick;
+# snd[] is populated per tick), so it lives here.
+#
+# The witness (port/foh/foh_snd_witness.c) covers TWO planes:
+#   [A] EMISSION — real foh_tick() over crafted one-tick input edges,
+#       asserting the EXACT token sequence/count for the five menuMove=true
+#       arms that emit a SECOND menuSelect, the single-sound changeGamemode
+#       leaves that must NOT (the negative side), the deny refusals, A-over-B
+#       and up-over-down priority, and the audio screen's own arms.
+#   [B] AUDIBILITY — real snd_mix_fill() over a synthetic SNDPACK1 + music
+#       ring, asserting that the options-audio master levels reach the
+#       OUTPUT SAMPLES: byte-identical to the PRE-WIRE mixer at the upstream
+#       defaults (independent reference formula — this is what keeps the
+#       frozen mixer/music fidelity streams green), exact silence at 0.0,
+#       authored full scale at 1.0, strict monotonicity across the rail, and
+#       snd_bus_q12's level/default RATIO against hand-computed pins, and
+#       that the SFX bus is SNAPSHOTTED per voice at play time (howler).
+# The DEVICE half (real SDL audio through a speaker) is NOT claimed here —
+# it is the work order .loop/menus-p2-device-workorder-audio.md.
+echo "=== [5c] FOH sound-plane witness (C23)"
+# PRODUCER GRAMMAR (PROCESS §3 whitelist rule): anchored FULL-LINE verdict,
+# counts are structural pins measured from the committed witness — growing a
+# sound plane without growing the witness moves them and this dies.
+SND_OK_LINE='SND WITNESS OK (cases=24 buspins=10 gainvec=3 sfx=7 music=6)'
+SND_OK_NEEDLE='SND WITNESS OK'
+# WHOLE-OUTPUT whitelist (review-r10 MAJOR): the witness's entire combined
+# stdout+stderr on success is EXACTLY this one line. An "exact line appears
+# once" parser still accepts arbitrary unrelated extra lines, which is not
+# PROCESS §3's whole-output rule and would let noisy/corrupt producer output
+# through. So: byte equality against the single expected line, nothing else.
+snd_verdict_ok() { # <out-file>
+  printf '%s\n' "$SND_OK_LINE" | cmp -s - "$1"
+}
+sndwit=0
+rm -f "$B/foh_snd_witness.o" "$B/foh_snd_witness"
+cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_snd_witness.c" -o "$B/foh_snd_witness.o"
+# Links the SAME [2] objects the app links (foh.o is the machine under test;
+# foh_render.o carries foh_anim_tick, which foh_tick calls — stubbing it would
+# be a fake, so the real TU is linked and -dead_strip drops the draw code).
+snd_link() { # <out-binary> <witness.o> <foh.o>
+  cc -O2 -Wl,-dead_strip -o "$1" "$2" "$3" \
+    "$B/foh_render.o" "$B/foh_font.o" "$B/raster.o" "$B/img1.o" \
+    "$B/ctl_style.o" -lm
+}
+snd_link "$B/foh_snd_witness" "$B/foh_snd_witness.o" "$B/foh.o"
+made "$B/foh_snd_witness"
+rm -f "$B/sndwit-pack.bin"
+if ! "$B/foh_snd_witness" "$B/sndwit-pack.bin" > "$B/sndwit.out" 2>&1; then
+  relay_lines < "$B/sndwit.out"
+  fail "sound witness exited non-zero — the FOH sound plane or the audio bus regressed (see relayed output above)"
+fi
+relay_lines < "$B/sndwit.out"
+snd_verdict_ok "$B/sndwit.out" || fail "sound witness — success output is not the exact anchored line '$SND_OK_LINE' exactly once, with no other 'SND WITNESS OK' resemblance (permissive-parse guard, PROCESS §3) — see relayed output above"
+sndwit=1
+echo "    [5c] OK: 24 emission cases (5 menuMove doubles, the single-sound leaves, deny, A/B + up/down priority, the audio screen) + the audio bus reaches snd_mix_fill's samples, survives a track switch, and is linear at level 0.1 (byte-identical at the upstream defaults)"
+
+# --- [5c] TEETH. All EIGHT on COPIES; the committed sources are never
+# touched. Each must kill the witness with the RIGHT diagnostic, not merely
+# exit non-zero.
+# WHOLE-OUTPUT parsing on the TOOTH side (review-r11 MAJOR): "rc 1 + the
+# expected substring appears" still tolerates arbitrary EXTRA output, so a
+# perturbation that also crashed, warned, or printed junk would pass. Every
+# line must match the witness's OWN line grammar, the trailer must be the exact
+# failure-count line with the PINNED count, and the expected diagnostic must be
+# present. `snd_tooth_lines` counts lines that do NOT match the grammar.
+SND_LINE_RE='^foh_snd_witness: (FAIL: .+|[0-9]+ failure\(s\))$'
+snd_tooth() { # <id> <binary> <want-needle> <want-failures> <label>
+  local id="$1" bin="$2" needle="$3" wantf="$4" label="$5" rc=0 bad last
+  "$bin" "$B/$id-pack.bin" > "$B/$id.out" 2>&1 || rc=$?
+  [ "$rc" = 1 ] || fail "$id — the perturbed build exited rc $rc, want 1 (the witness's own failure class; got: $(cat "$B/$id.out"))"
+  bad="$(grep -cvE "$SND_LINE_RE" "$B/$id.out" || true)"
+  [ "$bad" = 0 ] || fail "$id — $bad line(s) of the tooth's output are outside the witness's own line grammar (crash/warning/junk alongside the expected failure; got: $(cat "$B/$id.out"))"
+  last="$(tail -n 1 "$B/$id.out")"
+  [ "$last" = "foh_snd_witness: $wantf failure(s)" ] || fail "$id — trailer is '$last', want the pinned 'foh_snd_witness: $wantf failure(s)' (a changed failure COUNT means the perturbation moved which assertions fire)"
+  [ "$(count_x "$B/$id.out" "$needle")" -ge 1 ] || fail "$id — died but not at the expected diagnostic '$needle' (got: $(cat "$B/$id.out"))"
+  [ "$(count_x "$B/$id.out" "$SND_OK_NEEDLE")" = 0 ] || fail "$id — printed the OK verdict despite the perturbation"
+  echo "    $label"
+  teeth=$((teeth + 1))
+}
+# T27: a DROPPED second menuSelect (the exact r9 regression: the five
+# menuMove=true arms could all have lost their sound and every flow run
+# would still have been green).
+rm -rf "$B/st27"; mkdir -p "$B/st27"
+sed 's|^          snd_push(s, "menuSelect"); // menu.js:236 (menuMove at :97)$||' \
+  "$FOH/foh.c" > "$B/st27/foh.c"
+[ "$(count_x "$B/st27/foh.c" 'menuMove at :97')" = 0 ] || fail "T27 — the dropped-menuSelect perturb did not take"
+cc -O2 "${CFLAGS_COMMON[@]}" -I"$FOH" -c "$B/st27/foh.c" -o "$B/st27/foh.o"
+snd_link "$B/st27/w" "$B/foh_snd_witness.o" "$B/st27/foh.o"
+snd_tooth st27 "$B/st27/w" "want 'menuForward,menuSelect'" 1 \
+  "T27 OK: a dropped second menuSelect dies at the exact emission case"
+# T28: the up/down PRIORITY regression — upstream's ONE else-if chain turned
+# back into independent ifs (which double the sound AND cancel the cursor).
+rm -rf "$B/st28"; mkdir -p "$B/st28"
+awk '{ if ($0 == "  } else if (dE) {") { print "  }"; print "  if (dE) {" } else print }' \
+  "$FOH/foh.c" > "$B/st28/foh.c"
+[ "$(count_xl "$B/st28/foh.c" '  } else if (dE) {')" = 0 ] || fail "T28 — the else-if split perturb did not take"
+cc -O2 "${CFLAGS_COMMON[@]}" -I"$FOH" -c "$B/st28/foh.c" -o "$B/st28/foh.o"
+snd_link "$B/st28/w" "$B/foh_snd_witness.o" "$B/st28/foh.o"
+snd_tooth st28 "$B/st28/w" "'menuSelect,menuSelect'" 2 \
+  "T28 OK: a simultaneous up+down that runs BOTH arms dies (two sounds, cancelled cursor)"
+# T29/T30 perturb snd_mixer.h, which the witness includes as
+# "../gfx/snd_mixer.h" — so they need a foh/ + gfx/ MIRROR (the 5 files the
+# witness's include chain reaches; a new include breaks the build loudly).
+snd_mirror() { # <dir> <sed-expr> <must-vanish>
+  local d="$1"
+  rm -rf "$d"; mkdir -p "$d/foh" "$d/gfx"
+  cp "$FOH/foh_snd_witness.c" "$d/foh/"
+  cp "$FOH/foh.h" "$d/foh/"
+  cp "$GFX/platform.h" "$GFX/raster.h" "$d/gfx/"
+  sed "$2" "$GFX/snd_mixer.h" > "$d/gfx/snd_mixer.h"
+  [ "$(count_x "$d/gfx/snd_mixer.h" "$3")" = 0 ] || fail "$d — the snd_mixer perturb did not take"
+  cc -O2 "${CFLAGS_COMMON[@]}" -c "$d/foh/foh_snd_witness.c" -o "$d/w.o"
+  snd_link "$d/w" "$d/w.o" "$B/foh.o"
+}
+# T29: the bus WIRED BUT INERT — the sliders persist and the mixer ignores
+# them. This is literally the bug the owner reported ("audio tab doesn't
+# work"), so it must be the loudest tooth in the set. snd_bus_apply is the
+# single chokepoint both channels go through, so neutering it neuters the whole
+# wire in one edit.
+snd_mirror "$B/st29" \
+  's|if (busQ12 == (uint16_t)SND_BUS_UNITY) {|if (busQ12 \|\| 1) {|' \
+  'busQ12 == (uint16_t)SND_BUS_UNITY'
+snd_tooth st29 "$B/st29/w" "want exact silence" 17 \
+  "T29 OK: a bus that never reaches the fill dies (level 0.0 still audible, 1.0 not louder, sweep flat)"
+# T30: the DOUBLE-APPLY bug — pushing the RAW LEVEL instead of the
+# level/default ratio, forgetting that SND1's packed gains already carry the
+# 0.5/0.3 defaults, so the default lands twice (0.5 x 0.5 at rest). Perturbed
+# to the literal raw-level expression (review-r10 NIT: the earlier `level *
+# dflt` bit, but modelled a THIRD default rather than the named defect). The
+# `(void)dflt` keeps -Werror happy so the tooth dies at RUNTIME, on the pins,
+# not at compile time — a compile failure would prove nothing about the pins.
+snd_mirror "$B/st30" \
+  's|return (uint16_t)(level / dflt \* (double)SND_BUS_UNITY + 0.5);|(void)dflt; return (uint16_t)(level * (double)SND_BUS_UNITY + 0.5);|' \
+  'level / dflt'
+snd_tooth st30 "$B/st30/w" "want 4096 (sfx default == unity)" 16 \
+  "T30 OK: pushing the raw level (default applied twice) dies on the hand-computed bus pins"
+
+# --- [5d] CSS LAUNCH-GUARD GRID WITNESS (codex review round 17/18 finding
+# B1). Every committed flow drives the ONE port configuration the shipped
+# menu reaches (P1 HMN, P2 HMN or CPU), so the REFUSING side of foh.c's D6
+# launch guard had no behavioral coverage: the arm could be deleted,
+# inverted or narrowed and every green flow would stay green. The witness
+# drives the full (p1Type,p2Type) grid over {-1,0,1} through the REAL
+# foh_tick and judges the sound plane, the event plane and the screen.
+# The 9 expectations are AUTHORED in the witness (one row per cell, each
+# with the reason the configuration owes a launch or a refusal) — nothing
+# is computed from the predicate under test.
+echo "=== [5d] CSS launch-guard grid witness (B1)"
+LAUNCH_OK_LINE='LAUNCH GUARD WITNESS OK (cells=9 launch=2 refuse=7)'
+LAUNCH_OK_NEEDLE='LAUNCH GUARD WITNESS OK'
+# WHOLE-OUTPUT whitelist, same rule as [5c]: success output is EXACTLY
+# this one line, byte-compared.
+launch_verdict_ok() { # <out-file>
+  printf '%s\n' "$LAUNCH_OK_LINE" | cmp -s - "$1"
+}
+launchwit=0
+rm -f "$B/foh_launch_witness.o" "$B/foh_launch_witness"
+cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_launch_witness.c" -o "$B/foh_launch_witness.o"
+# Same objects and the same -Wl,-dead_strip recipe the sound witness uses
+# (foh.o is the machine under test; foh_render.o carries foh_anim_tick,
+# which foh_tick calls, so the real TU is linked rather than stubbed).
+snd_link "$B/foh_launch_witness" "$B/foh_launch_witness.o" "$B/foh.o"
+made "$B/foh_launch_witness"
+if ! "$B/foh_launch_witness" > "$B/launchwit.out" 2>&1; then
+  relay_lines < "$B/launchwit.out"
+  fail "launch-guard witness exited non-zero — the CSS port-configuration guard regressed (see relayed output above)"
+fi
+relay_lines < "$B/launchwit.out"
+launch_verdict_ok "$B/launchwit.out" || fail "launch-guard witness — success output is not the exact anchored line '$LAUNCH_OK_LINE' (permissive-parse guard, PROCESS §3) — see relayed output above"
+launchwit=1
+echo "    [5d] OK: all 9 (p1Type,p2Type) cells judged against the authored grid — 2 launch (HMN vs HMN, HMN vs CPU), 7 refuse with 'deny' + 'refused portconfig' and NO screen movement"
+
+# --- [5d] TEETH. Both on COPIES of foh.c; the committed sources are never
+# touched. Same whole-output treatment as [5c]'s teeth.
+LAUNCH_LINE_RE='^foh_launch_witness: (FAIL: .+|[0-9]+ failure\(s\))$'
+launch_tooth() { # <id> <binary> <want-needle> <want-failures> <label>
+  local id="$1" bin="$2" needle="$3" wantf="$4" label="$5" rc=0 bad last
+  "$bin" > "$B/$id.out" 2>&1 || rc=$?
+  [ "$rc" = 1 ] || fail "$id — the perturbed build exited rc $rc, want 1 (the witness's own failure class; got: $(cat "$B/$id.out"))"
+  bad="$(grep -cvE "$LAUNCH_LINE_RE" "$B/$id.out" || true)"
+  [ "$bad" = 0 ] || fail "$id — $bad line(s) of the tooth's output are outside the witness's own line grammar (got: $(cat "$B/$id.out"))"
+  last="$(tail -n 1 "$B/$id.out")"
+  [ "$last" = "foh_launch_witness: $wantf failure(s)" ] || fail "$id — trailer is '$last', want the pinned 'foh_launch_witness: $wantf failure(s)' (a changed failure COUNT means the perturbation moved which assertions fire)"
+  [ "$(count_x "$B/$id.out" "$needle")" -ge 1 ] || fail "$id — died but not at the expected diagnostic '$needle' (got: $(cat "$B/$id.out"))"
+  [ "$(count_x "$B/$id.out" "$LAUNCH_OK_NEEDLE")" = 0 ] || fail "$id — printed the OK verdict despite the perturbation"
+  echo "    $label"
+  teeth=$((teeth + 1))
+}
+# T35: the guard NARROWED — the CPU-P2 disjunct dropped, so HMN vs CPU (the
+# configuration the difficulty widget exists for) starts refusing. This is
+# the regression no flow can see.
+rm -rf "$B/st35w"; mkdir -p "$B/st35w"
+# `@` delimiter on purpose: the guard itself contains `||`.
+sed 's@    if (!(s->p1Type == 0 && (s->p2Type == 0 || s->p2Type == 1))) {@    if (!(s->p1Type == 0 \&\& (s->p2Type == 0))) {@' \
+  "$FOH/foh.c" > "$B/st35w/foh.c"
+[ "$(count_x "$B/st35w/foh.c" 's->p2Type == 1')" = 0 ] || fail "T35 — the narrowed-guard perturb did not take"
+cc -O2 "${CFLAGS_COMMON[@]}" -I"$FOH" -c "$B/st35w/foh.c" -o "$B/st35w/foh.o"
+snd_link "$B/st35w/w" "$B/foh_launch_witness.o" "$B/st35w/foh.o"
+launch_tooth st35w "$B/st35w/w" "(p1=0,p2=1)" 3 \
+  "T35 OK: narrowing the guard so HMN vs CPU refuses dies on the authored grid row"
+# T36: the refusal's EVENT dropped — it still denies audibly, so a
+# sound-only witness would stay green, but the structural trace would lose
+# every refusal record.
+rm -rf "$B/st36w"; mkdir -p "$B/st36w"
+sed 's@^      ev_refused(s, "portconfig");$@@' "$FOH/foh.c" > "$B/st36w/foh.c"
+[ "$(count_x "$B/st36w/foh.c" 'ev_refused(s, "portconfig")')" = 0 ] || fail "T36 — the dropped-refusal-event perturb did not take"
+cc -O2 "${CFLAGS_COMMON[@]}" -I"$FOH" -c "$B/st36w/foh.c" -o "$B/st36w/foh.o"
+snd_link "$B/st36w/w" "$B/foh_launch_witness.o" "$B/st36w/foh.o"
+launch_tooth st36w "$B/st36w/w" "want exactly 1" 9 \
+  "T36 OK: a refusal that stops emitting its structural event dies, though the deny sound still plays"
+
+# T31: the MUSIC BUS NEVER LEAVES UNITY — the r10 BLOCKER's observable shape.
+# The original defect was `snd_music_cfg` resetting the music bus on every
+# track switch; that is now STRUCTURALLY IMPOSSIBLE (the bus moved to SndMixer
+# scope, and snd_music_cfg only receives SndMusic*), so it cannot be perturbed
+# back in one line. What IS still representable is the same OBSERVABLE: the
+# music level never reaching the mixer. Both the music cases and the
+# lifecycle case must catch it.
+snd_mirror "$B/st31" \
+  's|  m->musicBusQ12 = snd_bus_q12(musicLevel, SND_MUSIC_MASTER_DEFAULT);|  (void)musicLevel;|' \
+  'snd_bus_q12(musicLevel'
+snd_tooth st31 "$B/st31/w" "music-lifecycle" 4 \
+  "T31 OK: a music level that never reaches the mixer dies in the music + lifecycle cases"
+
+# T33: the SFX bus read LIVE from the mixer instead of the VOICE'S SNAPSHOT.
+# This is the plausible-but-unfaithful implementation: howler's Sound.init
+# copies parent._volume at play time (dist:2005) and audiomenu's groupType-0
+# changeVolume never calls the public .volume() API, so the Sounds slider must
+# affect FUTURE plays only. Nothing else in the witness distinguishes the two.
+snd_mirror "$B/st33" \
+  's|vc->e->gainQ8, vc->busQ12);|vc->e->gainQ8, m->sfxBusQ12);|' \
+  'vc->busQ12'
+snd_tooth st33 "$B/st33/w" "snapshots parent._volume" 2 \
+  "T33 OK: re-gaining an already-playing voice from the live bus dies (howler snapshots at play time)"
+
+# T34: CHAINED TRUNCATION restored — gain truncated to Q8, THEN scaled by the
+# bus. This is the shape the r12 review caught: it is invisible on even samples
+# (the witness's synthetic PCM used to be even, which is exactly why it passed)
+# and loses whole LSBs on ODD ones — s=1 -> 0, s=-1 -> -2, s=32767 -> 32766 at
+# master 1.0, against a real pack carrying over a million odd samples.
+snd_mirror "$B/st34" \
+  's|  const int64_t n = (int64_t)s \* (int64_t)gainQ8 \* (int64_t)busQ12;|  const int32_t sv2 = (s * (int32_t)gainQ8) >> 8; return (sv2 * (int32_t)busQ12 + SND_BUS_HALF) >> SND_BUS_SHIFT; const int64_t n = (int64_t)s * (int64_t)gainQ8 * (int64_t)busQ12;|' \
+  'int64_t n = (int64_t)s \* (int64_t)gainQ8 \* (int64_t)busQ12;$'
+snd_tooth st34 "$B/st34/w" "chained truncation loses odd samples" 9 \
+  "T34 OK: chaining a Q8 truncation into the bus dies on the odd/negative gain vectors"
+
+# T32: the WHOLE-OUTPUT verdict parser (review-r10 MAJOR) — prove it rejects
+# the exact success line PLUS an unrelated extra line, which the previous
+# count-based parser accepted.
+{ printf '%s\n' "$SND_OK_LINE"; printf 'some unrelated producer noise\n'; } > "$B/sndwit-extra.out"
+if snd_verdict_ok "$B/sndwit-extra.out"; then
+  fail "T32 — the verdict parser ACCEPTED the success line plus an unrelated extra line (not a whole-output whitelist)"
+fi
+printf '%s\n' "$SND_OK_LINE" > "$B/sndwit-clean.out"
+snd_verdict_ok "$B/sndwit-clean.out" || fail "T32 — the verdict parser rejects the CLEAN success line (the tooth would be proving the wrong thing)"
+echo "    T32 OK: the whole-output verdict parser rejects extra lines and accepts only the exact line"
+teeth=$((teeth + 1))
+
+[ "$teeth" = 40 ] || fail "teeth ledger — $teeth/40 fired"
 [ "$banner" = 1 ] || fail "banner ledger — the finish-banner witness leg did not complete"
+[ "$sndwit" = 1 ] || fail "sound-witness ledger — the C23 sound-plane witness leg did not complete"
 
 # --- [6] hygiene ----------------------------------------------------------------
 rc=0
@@ -1751,4 +2531,4 @@ fi
 
 [ "$diverge" = 1 ] || fail "divergence-witness ledger — witness leg did not complete"
 [ "$control" = 1 ] || fail "control ledger — the lcancel=0 control leg did not complete"
-echo "FOH FLOWS OK (flows=7 shots=$total_shots bridges=$bridges tbridges=$tbridges states=$states tstates=$tstates diverge=$diverge control=$control banner=$banner teeth=$teeth)"
+echo "FOH FLOWS OK (flows=7 shots=$total_shots bridges=$bridges tbridges=$tbridges states=$states tstates=$tstates diverge=$diverge control=$control banner=$banner snd=$sndwit launch=$launchwit teeth=$teeth)"

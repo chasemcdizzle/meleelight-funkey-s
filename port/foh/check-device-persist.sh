@@ -97,15 +97,15 @@ REC_BITS=402d000000000000
 REC_DISPLAY="00:14.50"
 WORSE_BITS=4030000000000000
 
-# review-102 M-b: a genuine MLFKPERSIST3 file is EXACTLY this many bytes
-# (MEASURED across every archived genuine file; line-derived: header 13 +
-# turbo 8 + lcancel 10 + tapjump 16 + ctlstyle 11 + modonr 9
-# (MLFKPERSIST3,
-# fix_plan A4) + 50 rec rows x25 + SUM 69). A
-# dropped/added byte — including an embedded NUL that command
+# review-102 M-b: a genuine MLFKPERSIST4 file is EXACTLY this many bytes
+# (line-derived: header 13 + turbo 8 + lcancel 10 + tapjump 16 +
+# ctlstyle 11 + modonr 9 (fix_plan A4) + 50 rec rows x25 + the v4 options
+# block 124 (flash 8 + walljump 11 + blastzone 12 + dustless 11 +
+# phantom 25 + soundslevel 29 + musiclevel 28; MENU-SPEC §3/§4) + SUM 69
+# = 1510). A dropped/added byte — including an embedded NUL that command
 # substitution silently swallows through the per-line sed reads — breaks
 # this reconciliation.
-PERSIST_BYTES=1386
+PERSIST_BYTES=1510
 
 DEADMAN_S="${MLFK_DEADMAN_S:-900}"
 READY_TRIES=60
@@ -402,7 +402,7 @@ echo "   device state clean; sha tool self-tested"
 
 # --- [1] twin pin + data planes -----------------------------------------------
 echo "== [1/10] judge twin pin + data planes =="
-JUDGE_SHA=4f0cf650978e871f442e28e2612307215cdeabf34d55126faea4d99f6f7198e8
+JUDGE_SHA=e709c03b2631ad0ab66a3f010c86905d9d1d5c81550d0143d7ca0799b95db878
 have="$(rig_host_sha256 "$FOH/judge-foh-trace.js")" || exit 1
 [ "$have" = "$JUDGE_SHA" ] || fail "judge-foh-trace.js sha $have != pinned $JUDGE_SHA (reviewed pin update in the same commit)"
 c="$(grep -cF "$JUDGE_SHA port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
@@ -459,7 +459,8 @@ rm -f "$BUILD/raster.o" "$BUILD/foh_dev_headless"
 cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$BUILD/raster.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/foh_dev_headless" \
   "$BUILD/raster.o" "$FOH/foh_dev.c" "$FOH/foh.c" "$FOH/foh_font.c" \
-  "$FOH/foh_render.c" "$FOH/foh_persist.c" "$FOH/foh_pause.c" "$GFX/img1.c" \
+  "$FOH/foh_render.c" "$FOH/foh_persist.c" "$FOH/foh_pause.c" \
+  "$GFX/ctl_style.c" "$GFX/img1.c" \
   "$GFX/platform_headless.c" \
   "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_target.c" \
   "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
@@ -587,15 +588,15 @@ run_host() {
     || grammar_die "host leg $id: the degraded 'saved-nodirsync' token appeared on a healthy leg"
 }
 
-# EXACT POSITIONAL MLFKPERSIST3 whitelist verification, INDEPENDENT of
+# EXACT POSITIONAL MLFKPERSIST4 whitelist verification, INDEPENDENT of
 # the C loader (review-100 M2 + the whitelist-grammar rule, PROCESS §3).
 # The format is a FIXED 57-line shape — so this asserts it BY POSITION:
-# final byte LF, exactly 57 lines, each line matched at its exact index
+# final byte LF, exactly 64 lines, each line matched at its exact index
 # by an anchored full-line pattern, the 50 rec rows carrying the
 # canonical c-major (c 0..4, s 0..9) progression at their exact
 # position (uniqueness by position, not a global count), each rec bit
 # pattern in the C loader's domain (== the -1.0 sentinel or finite in
-# [0,6000)), and a shasum recompute of the SUM seal over lines 1..56.
+# [0,6000)), and a shasum recompute of the SUM seal over lines 1..63.
 # Binary outcome: exact match -> pass; resembles-but-doesn't -> fail
 # closed (grammar_die). NO global counts, NO permissive scan.
 hex_lt() ( LC_ALL=C; [[ "$1" < "$2" ]]; ) # fixed 16-hex: byte order == numeric order
@@ -612,10 +613,10 @@ verify_persist_file() { # <file> <ctx>
   # line-derived expectation. Catches any dropped/added byte (embedded
   # NUL, stray CR, truncation) the per-line $(sed) reads would launder.
   nbytes="$(wc -c < "$f" | tr -d ' ')"
-  [ "$nbytes" = "$PERSIST_BYTES" ] || grammar_die "$ctx: file is $nbytes bytes != $PERSIST_BYTES (MLFKPERSIST3 fixed size; byte-count reconciliation failed — dropped/added/NUL byte)"
+  [ "$nbytes" = "$PERSIST_BYTES" ] || grammar_die "$ctx: file is $nbytes bytes != $PERSIST_BYTES (MLFKPERSIST4 fixed size; byte-count reconciliation failed — dropped/added/NUL byte)"
   nl="$(grep -c "" "$f")" || grammar_die "$ctx: cannot count lines"
-  [ "$nl" = 57 ] || grammar_die "$ctx: $nl lines != 57 (MLFKPERSIST3 is exactly 57 LF lines)"
-  L="$(sed -n 1p "$f")"; [ "$L" = "MLFKPERSIST3" ] || grammar_die "$ctx: line 1 is not the exact header ('$L')"
+  [ "$nl" = 64 ] || grammar_die "$ctx: $nl lines != 64 (MLFKPERSIST4 is exactly 64 LF lines)"
+  L="$(sed -n 1p "$f")"; [ "$L" = "MLFKPERSIST4" ] || grammar_die "$ctx: line 1 is not the exact header ('$L')"
   L="$(sed -n 2p "$f")"; [[ "$L" =~ ^turbo\ [01]$ ]] || grammar_die "$ctx: line 2 turbo grammar ('$L')"
   L="$(sed -n 3p "$f")"; [[ "$L" =~ ^lcancel\ [0-2]$ ]] || grammar_die "$ctx: line 3 lcancel grammar ('$L')"
   L="$(sed -n 4p "$f")"; [[ "$L" =~ ^tapjump\ [01]\ [01]\ [01]\ [01]$ ]] || grammar_die "$ctx: line 4 tapjump grammar ('$L')"
@@ -645,14 +646,46 @@ verify_persist_file() { # <file> <ctx>
       ln=$((ln + 1))
     done
   done
-  L="$(sed -n 57p "$f")"
-  [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 57 is not the SUM line ('$L')"
+  # lines 57-63: the v4 options block (MENU-SPEC §3/§4), APPENDED after the
+  # rec rows so every older version stays a strict prefix through them.
+  # Four 0/1 flags then three hex16 doubles, each with its own domain.
+  for k in flash walljump blastzone dustless; do
+    L="$(sed -n "${ln}p" "$f")"
+    [[ "$L" =~ ^${k}\ [01]$ ]] || grammar_die "$ctx: line $ln is not '$k [01]' ('$L')"
+    ln=$((ln + 1))
+  done
+  # phantomThreshold is ON THE CHECKSUM SURFACE (hitDetection.js:335/337/348)
+  # — an out-of-domain value silently flips physics (the qjs getCookie
+  # class), so its bits are range-checked, not merely shape-checked.
+  L="$(sed -n "${ln}p" "$f")"
+  [[ "$L" =~ ^phantom\ ([0-9a-f]{16})$ ]] || grammar_die "$ctx: line $ln is not 'phantom <hex16>' ('$L')"
+  # INCLUSIVE at 1000.0 (review-r12 MINOR): foh_persist.c's fp_in_range uses
+  # `d <= hi`, so a product-written file at exactly the cap is VALID and this
+  # independent whitelist must not reject what the product accepts. An
+  # off-by-one here is a gate that fails on a legitimate save.
+  b="${BASH_REMATCH[1]}"
+  [ "$b" = 408f400000000000 ] || hex_lt "$b" 408f400000000000 \
+    || grammar_die "$ctx: line $ln phantom bits $b out of domain (want finite non-negative <= 1000.0)"
+  ln=$((ln + 1))
+  # the two master levels are clamped to [0,1] by the audio screen
+  # (audiomenu.js:104-112), so anything above the 1.0 pattern is corrupt.
+  for k in soundslevel musiclevel; do
+    L="$(sed -n "${ln}p" "$f")"
+    [[ "$L" =~ ^${k}\ ([0-9a-f]{16})$ ]] || grammar_die "$ctx: line $ln is not '$k <hex16>' ('$L')"
+    b="${BASH_REMATCH[1]}"
+    [ "$b" = 3ff0000000000000 ] || hex_lt "$b" 3ff0000000000000 \
+      || grammar_die "$ctx: line $ln $k bits $b out of domain (want finite non-negative <= 1.0)"
+    ln=$((ln + 1))
+  done
+  [ "$ln" = 64 ] || grammar_die "$ctx: v4 block ended at line $ln, want 64 (line accounting drifted)"
+  L="$(sed -n 64p "$f")"
+  [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 64 is not the SUM line ('$L')"
   sum="${BASH_REMATCH[1]}"
   # review-102 M-b: validate the COMPLETE recomputed shasum line grammar
   # (`<64hex>  -` on stdin), never a `cut -d' ' -f1` first-field scrape —
   # a truncated line with a plausible first field is corruption.
   local sumline
-  sumline="$(head -n 56 "$f" | shasum -a 256)" || fail "$ctx: shasum failed"
+  sumline="$(head -n 63 "$f" | shasum -a 256)" || fail "$ctx: shasum failed"
   [[ "$sumline" =~ ^([0-9a-f]{64})\ \ -$ ]] || grammar_die "$ctx: recomputed shasum line is not exactly '<64hex>  -' ('$sumline')"
   want="${BASH_REMATCH[1]}"
   [ "$want" = "$sum" ] || grammar_die "$ctx: SUM seal $sum != recomputed $want (torn/corrupt file passed as evidence)"
@@ -874,11 +907,14 @@ tooth_boot h1 "$PWD/$HP/th1" "foh_persist: reset cause=corrupt detail=sum"
 teeth=$((teeth + 1))
 echo "    T-H1 OK: nibble-flipped rec dies on the SUM seal (loud reset)"
 # T-H2 unsupported-version bump WITH a recomputed (valid) SUM.
-# review-ctl r1 / the 2026-07-29 v3 bump: v1 AND v2 are now legitimate
-# MIGRATIONS rather than resets, and v3 is the CURRENT version — so the
-# unsupported-version tooth moves to v4, a version this build cannot know.
+# review-ctl r1 / the 2026-07-29 v3 bump / the v4 menus bump: v1, v2 AND
+# v3 are now legitimate MIGRATIONS rather than resets, and v4 is the
+# CURRENT version — so the unsupported-version tooth moves to v5, a
+# version this build cannot know. (It sat at v4 until v4 became real;
+# leaving it there would have turned this tooth into a no-op that asserts
+# the CURRENT format resets.)
 mk_pdir "$HP/th2" -
-{ printf 'MLFKPERSIST4\n'; tail -n +2 "$FILE_REC" | head -n 55; } > "$HP/th2/body"
+{ printf 'MLFKPERSIST5\n'; tail -n +2 "$FILE_REC" | head -n 62; } > "$HP/th2/body"
 { cat "$HP/th2/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th2/body" | cut -d' ' -f1)"; } \
   > "$HP/th2/mlfk-persist.dat"
 rm -f "$HP/th2/body"
@@ -888,7 +924,7 @@ echo "    T-H2 OK: unsupported version (checksum-valid) resets loudly"
 # T-H3 domain: NaN record bits with a recomputed SUM
 mk_pdir "$HP/th3" -
 sed "s/^rec $REC_CHAR $REC_TSTAGE $REC_BITS\$/rec $REC_CHAR $REC_TSTAGE 7ff8000000000000/" \
-  "$FILE_REC" | head -n 56 > "$HP/th3/body"
+  "$FILE_REC" | head -n 63 > "$HP/th3/body"
 { cat "$HP/th3/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th3/body" | cut -d' ' -f1)"; } \
   > "$HP/th3/mlfk-persist.dat"
 rm -f "$HP/th3/body"
@@ -974,6 +1010,15 @@ th9_rows() { # <bits for the target slot> -> the 50 canonical rec rows
     done
   done
 }
+# The v4 options block AS foh_persist_defaults() writes it (MENU-SPEC §3/§4).
+# Bit patterns are the authored defaults: 0.01 / 0.5 / 0.3. Emitted from ONE
+# place so an expectation and a fixture can never disagree.
+v4_defaults() {
+  printf 'flash 0\nwalljump 0\nblastzone 0\ndustless 0\n'
+  printf 'phantom 3f847ae147ae147b\n'
+  printf 'soundslevel 3fe0000000000000\n'
+  printf 'musiclevel 3fd3333333333333\n'
+}
 mk_pdir "$HP/th9" -
 { printf 'MLFKPERSIST1\n'; sed -n '2,4p' "$FILE_P01"; th9_rows "$WORSE_BITS"; } \
   > "$HP/th9/body"
@@ -989,8 +1034,8 @@ rm -f "$HP/th9/body"
 # improved to $REC_BITS, and ctlstyle 1 — because the migration must
 # carry the ratified BOX mapping forward rather than re-map to the
 # fresh-install NATURAL.
-{ printf 'MLFKPERSIST3\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 1\n';
-  printf 'modonr 0\n'; th9_rows "$REC_BITS"; } > "$HP/th9.expect.body"
+{ printf 'MLFKPERSIST4\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 1\n';
+  printf 'modonr 0\n'; th9_rows "$REC_BITS"; v4_defaults; } > "$HP/th9.expect.body"
 { cat "$HP/th9.expect.body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th9.expect.body" | cut -d' ' -f1)"; } \
   > "$HP/th9.expect.dat"
 rm -f "$HP/th9.expect.body"
@@ -1010,7 +1055,7 @@ c="$(grep -c '^foh_persist: reset cause=' "$HP/th9.log")" || true
   || grammar_die "T-H9: a reset occurred while migrating a VALID v1 file (PB data-loss regression)"
 verify_persist_file "$HP/th9/mlfk-persist.dat" "T-H9 migrated"
 cmp "$HP/th9/mlfk-persist.dat" "$HP/th9.expect.dat" \
-  || fail "T-H9: the migrated+saved file != the independently built v3 (settings, the 49 untouched target records, the improved slot, or the carried-forward BOX style were not preserved) — the PB data-loss regression"
+  || fail "T-H9: the migrated+saved file != the independently built v4 (settings, the 49 untouched target records, the improved slot, the carried-forward BOX style, or the default-filled v4 options block were not preserved) — the PB data-loss regression"
 teeth=$((teeth + 1))
 echo "    T-H9 OK: genuine v1 migrates byte-for-byte (settings + 49 seeded records intact + 1 improved, style carried forward as BOX, no reset)"
 # T-H10 a v1 file that DOES carry the newer lines is not a v1 file: the
@@ -1072,9 +1117,62 @@ c="$(grep -c '^foh_persist: reset cause=' "$HP/th13.log")" || true
   || grammar_die "T-H13: a reset occurred while migrating a VALID v2 file (PB data-loss regression)"
 verify_persist_file "$HP/th13/mlfk-persist.dat" "T-H13 migrated"
 cmp "$HP/th13/mlfk-persist.dat" "$HP/th9.expect.dat" \
-  || fail "T-H13: the migrated v2 file != the independently built v3 (settings, the 49 untouched records, the improved slot, the PRESERVED ctlstyle, or the ratified modonr default were not carried forward)"
+  || fail "T-H13: the migrated v2 file != the independently built v4 (settings, the 49 untouched records, the improved slot, the PRESERVED ctlstyle, the ratified modonr default, or the default-filled v4 options block were not carried forward)"
 teeth=$((teeth + 1))
 echo "    T-H13 OK: genuine v2 migrates byte-for-byte (ctlstyle preserved, modonr ratified default)"
+# T-H16 (driver ruling 2026-07-29, the MLFKPERSIST4 merge): a GENUINE v3
+# file MIGRATES to v4 rather than resetting, and the 50 target records plus
+# every v3 setting survive BYTE-FOR-BYTE. This is the arm the v4 bump added,
+# and it was the ONLY migration arm without a tooth — which is precisely
+# where a silent save-wipe hides, and the owner has a real save on his
+# device. ctlstyle AND modonr both carry over unchanged (v3 already had
+# both); the seven appended v4 options lines take the fresh-install
+# defaults, because no v3 file ever carried an opinion about them.
+mk_pdir "$HP/th16" -
+{ printf 'MLFKPERSIST3\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 1\n';
+  printf 'modonr 0\n'; th9_rows "$WORSE_BITS"; } > "$HP/th16/body"
+{ cat "$HP/th16/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th16/body" | cut -d' ' -f1)"; } \
+  > "$HP/th16/mlfk-persist.dat"
+rm -f "$HP/th16/body"
+[ "$(grep -c "" "$HP/th16/mlfk-persist.dat")" = 57 ] \
+  || fail "T-H16: the v3 fixture is not 57 lines (fixture construction broken — dead tooth)"
+# The fixture must NOT already equal the expectation, or the tooth proves
+# nothing (the same dead-tooth guard T-H9 carries).
+rc=0; cmp -s "$HP/th16/mlfk-persist.dat" "$HP/th9.expect.dat" || rc=$?
+[ "$rc" = 1 ] || fail "T-H16: fixture and expectation are already identical (dead tooth)"
+rc=0
+MLFK_PERSIST_DIR="$PWD/$HP/th16" \
+"$BUILD/foh_dev_headless" --tooth-persist-finish "$REC_CHAR" "$REC_TSTAGE" \
+  "$REC_BITS" 2> "$HP/th16.log" || rc=$?
+[ "$rc" = 0 ] || { cat "$HP/th16.log" >&2; fail "T-H16: the v3 migrate+improve+save run failed"; }
+[ "$(count_xl "$HP/th16.log" "foh_persist: migrated from=3")" = 1 ] \
+  || grammar_die "T-H16: expected exactly one 'foh_persist: migrated from=3'"
+[ "$(count_xl "$HP/th16.log" "foh_persist: loaded")" = 1 ] \
+  || grammar_die "T-H16: a migrated v3 file must also report exactly one 'loaded'"
+c="$(grep -c '^foh_persist: reset cause=' "$HP/th16.log")" || true
+[ "$c" = 0 ] \
+  || grammar_die "T-H16: a reset occurred while migrating a VALID v3 file (PB data-loss regression — the owner has a real save)"
+verify_persist_file "$HP/th16/mlfk-persist.dat" "T-H16 migrated"
+# Same expectation as T-H9/T-H13: identical settings, ctlstyle 1, modonr 0,
+# the 49 seeded records untouched, the target slot improved, and the v4
+# options block at its defaults.
+cmp "$HP/th16/mlfk-persist.dat" "$HP/th9.expect.dat" \
+  || fail "T-H16: the migrated v3 file != the independently built v4 (settings, the 49 untouched records, the improved slot, ctlstyle/modonr, or the default-filled v4 options block were not carried forward) — the PB data-loss regression"
+teeth=$((teeth + 1))
+echo "    T-H16 OK: genuine v3 migrates byte-for-byte to v4 (records + ctlstyle + modonr intact, options block default-filled, no reset)"
+# T-H17 the mirror of T-H10/T-H15 for the new version: a v3 header that ALSO
+# carries the v4 options block is not a v3 file. v3's grammar ends at the
+# last rec row, so the "nothing may sit between the last content line and
+# the SUM line" guard must reject it rather than silently skip 7 lines.
+mk_pdir "$HP/th17" -
+{ printf 'MLFKPERSIST3\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 1\n';
+  printf 'modonr 0\n'; th9_rows "$WORSE_BITS"; v4_defaults; } > "$HP/th17/body"
+{ cat "$HP/th17/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th17/body" | cut -d' ' -f1)"; } \
+  > "$HP/th17/mlfk-persist.dat"
+rm -f "$HP/th17/body"
+tooth_boot h17 "$PWD/$HP/th17" "foh_persist: reset cause=corrupt detail=grammar"
+teeth=$((teeth + 1))
+echo "    T-H17 OK: v3 header WITH a v4 options block dies on grammar"
 # T-H14 (review-ctl n1): a v2 file may NOT carry a v3-era style value, and
 # may NOT carry a modonr line. MLFKPERSIST2 predates CTL_STYLE_NATURAL, so
 # its ctlstyle grammar was {0,1}; accepting `ctlstyle 2` would install a

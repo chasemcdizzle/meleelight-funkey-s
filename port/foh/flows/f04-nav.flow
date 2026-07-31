@@ -1,23 +1,28 @@
 FLOW1
-# f04: navigation + refusal coverage (no launch). NINE of the ten
-# refused entries fire: spectate/p2p/server (menu-battle),
-# targetbuilder (menu-top — `targettest` RETIRED iter 99: the entry is
-# a real screen now, exercised by f06/f07), audio/credits
-# (menu-options), controller/keyboard (menu-controls), random (sss —
-# iter 93, the registered seeded-draw exclusion). The tenth token
-# (addcode) fires in f07's target-select leg.
-# Every menu B-back edge fires (battle->top, controls->options,
-# options->top), plus the CSS hold-B-30 back edge (css.js:186-191) and
-# the U/D cursor wrap witnesses. Iter-90 (review-88 M1): the flow also
-# traverses css -> sss (START, css.js:446-451) and sss -> css on B
-# (stageselect.js:79 — the 15th pinned edge) before the bhold
-# back-edge, so every edge of the judge's pinned flow graph is
-# exercised by a frozen trace.
+# f04: navigation + refusal + destination coverage (no launch).
+#
+# REFUSALS. Three of the five still-emitted tokens fire here:
+# targetbuilder (menu-top), credits (menu-options) and random (sss —
+# iter 93, the registered seeded-draw exclusion). addcode fires in f07's
+# target-select leg; portconfig in the check's own T19 flow. RETIRED as
+# emissions this arc: `audio` (a real screen now, MENU-SPEC §4) and
+# `controller`/`keyboard` (real destinations, §9) — this flow now ENTERS
+# the two destinations instead of being refused by them. UNREACHABLE
+# while FOH_NETPLAY is 0 (owner ruling C5): spectate/p2p/server, whose
+# page `VS. Melee` no longer opens.
+#
+# EDGES. Every B-back edge of the live graph fires: controls-controller
+# -> menu-controls, controls-keyboard -> menu-controls, menu-controls ->
+# menu-options, menu-options -> menu-top, plus the CSS hold-B-30 back
+# edge (css.js:186-191), which under C5 lands on menu-top with the cursor
+# on VS. Melee. The css -> sss (START, css.js:446-451) and sss -> css (B,
+# stageselect.js:79) pair is traversed before it. The U-wrap witness is
+# the three UPs from OPTIONS(3) back to VS. MELEE(0).
 I 1 -
 I 375 S
 I 376 -
-I 380 A
-I 381 -
+I 380 D
+I 383 -
 I 385 D
 I 388 -
 I 390 A
@@ -28,89 +33,75 @@ I 400 A
 I 401 -
 I 405 D
 I 408 -
-I 410 A
-I 411 -
-I 415 B
+I 410 D
+I 413 -
+I 415 A
 I 416 -
-I 420 D
-I 423 -
-I 425 D
-I 428 -
-I 430 A
-I 431 -
-I 435 D
-I 438 -
+SHOT 420 menu-controls
+I 425 A
+I 426 -
+SHOT 430 controls-controller
+I 435 B
+I 436 -
+I 440 D
+I 443 -
 I 445 A
 I 446 -
-I 450 A
-I 451 -
-I 455 D
-I 458 -
-I 460 D
-I 463 -
-I 465 A
-I 466 -
-SHOT 470 menu-controls
-I 475 A
-I 476 -
-I 480 D
-I 483 -
-I 485 A
+SHOT 450 controls-keyboard
+I 455 B
+I 456 -
+I 460 B
+I 461 -
+I 465 D
+I 468 -
+I 470 D
+I 473 -
+I 475 D
+I 478 -
+I 480 A
+I 481 -
+I 485 B
 I 486 -
-I 490 B
-I 491 -
-I 495 D
+I 490 U
+I 493 -
+I 495 U
 I 498 -
-I 500 D
+I 500 U
 I 503 -
-I 505 D
-I 508 -
-I 510 A
-I 511 -
-I 515 B
-I 516 -
-I 520 U
-I 523 -
-I 525 U
-I 528 -
-I 530 U
-I 533 -
-I 535 A
-I 536 -
-I 540 A
-I 541 -
-# CSS mechanics arc (docs/MENU-SPEC.md item 4): START now launches ONLY
-# while READY TO FIGHT, and the CSS opens with one participant (P1 joined
-# at the title; playerType init is [-1,-1,-1,-1], main.js:107). So this
-# leg must make a second port non-N/A before it can cross to the SSS.
+I 505 A
+I 506 -
+# CSS mechanics arc (docs/MENU-SPEC.md item 4): START launches ONLY while
+# READY TO FIGHT, and the CSS opens with one participant (P1 joined at
+# the title; playerType init is [-1,-1,-1,-1], main.js:107). So this leg
+# must make a second port non-N/A before it can cross to the SSS.
 # Clamp-anchored like f01: LEFT+DOWN x105 pins the hand at (0, 240), then
 # RIGHT x33 -> x = 79.20 and UP x36 -> y = 101.76 puts it on port 2's
 # type tab. The hand never enters the roster band on that path, so
 # nothing here can touch a token.
-I 545 LD
-I 650 -
-I 655 R
-I 688 -
-I 693 U
-I 729 -
-I 735 A
-I 738 -
-I 745 S
-I 748 -
-I 755 D
-I 758 -
-I 765 D
-I 768 -
-I 775 A
-I 778 -
-I 785 B
-I 788 -
+I 510 LD
+I 615 -
+I 620 R
+I 653 -
+I 658 U
+I 694 -
+I 700 A
+I 703 -
+I 710 S
+I 713 -
+I 720 D
+I 723 -
+I 730 D
+I 733 -
+I 740 A
+I 743 -
+I 750 B
+I 753 -
 # The B-hold back edge (css.js:186-194) fires from OUTSIDE the roster
 # band, so it exercises the hold counter alone — the deliberate overlap
-# with the B-grab (MENU-SPEC §2.11) is f01's territory. Held 35 frames,
+# with the B-grab (MENU-SPEC §2.11) is f01's territory. Held 40 frames,
 # not exactly 30: the counter fires on the equality `bHold == 30`
 # (css.js:188), so the extra frames are slack for the device injector's
 # +/-1 frame and change nothing about when it fires.
-I 795 B
-I 830 -
-END 840
+I 760 B
+I 800 -
+END 810

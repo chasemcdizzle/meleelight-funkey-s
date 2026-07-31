@@ -2,21 +2,27 @@ FOHTRACE1 flow=f03-options
 T 370 startup title timer
 T 375 title menu-top start
 T 395 menu-top menu-options a
-S 400 refused audio
-T 410 menu-options options-gameplay a
-SHOT 415 options-gameplay
-S 420 turbo 1
-S 430 lcancel 1
-S 435 lcancel 2
-S 445 tapjump1 1
-S 455 tapjump2 1
-SHOT 460 options-edited
-T 465 options-gameplay menu-options b
-T 470 menu-options menu-top b
-T 485 menu-top menu-battle a
-T 490 menu-battle css a
-S 685 p2type 0
-T 695 css sss start
-T 705 sss match launch
-LAUNCH 705 p1=0 p2=0 p2type=0 difficulty=3 stage=0 turbo=1 lcancel=2 tapjump=1,1,0,0 versus=0
-END 715 transitions=10
+T 400 menu-options options-audio a
+S 405 soundsvol 6
+S 410 soundsvol 7
+S 420 musicvol 2
+SHOT 425 options-audio
+T 430 options-audio menu-options b
+T 440 menu-options options-gameplay a
+SHOT 445 options-gameplay
+S 450 turbo 1
+S 460 lcancel 1
+S 465 lcancel 2
+S 475 flashlcancel 1
+S 485 walljump 1
+S 495 tapjump1 1
+S 505 tapjump2 1
+SHOT 510 options-edited
+T 515 options-gameplay menu-options b
+T 520 menu-options menu-top b
+T 530 menu-top css a
+S 725 p2type 0
+T 735 css sss start
+T 745 sss match launch
+LAUNCH 745 p1=0 p2=0 p2type=0 difficulty=3 stage=0 turbo=1 lcancel=2 flashlcancel=1 walljump=1 tapjump=1,1,0,0 versus=0
+END 755 transitions=11

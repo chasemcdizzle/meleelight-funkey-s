@@ -35,6 +35,22 @@ typedef struct {
   bool quit;
 } PlatformInput;
 
+// True iff no ACTION-bearing input is held. `quit` is deliberately not
+// part of it: it is a request to leave, not a button a finger is resting
+// on, and its callers handle it separately.
+//
+// This exists because "wait for the player to let go before handing
+// control to an edge-driven screen" was written three times with three
+// different (and each time incomplete) field lists — the release drains
+// in both overlays and the one after an in-process match exit. A held
+// direction or shoulder leaked through every one of them
+// (review-mexit-r1 Medium). One predicate, one place to extend when
+// PlatformInput grows a field.
+static inline bool platform_input_idle(const PlatformInput *p) {
+  return !p->up && !p->down && !p->left && !p->right && !p->a && !p->b &&
+         !p->x && !p->y && !p->start && !p->l && !p->r && !p->menu;
+}
+
 // Init the display (240x240, 16bpp on device). Returns 0 on success;
 // nonzero = loud failure (the caller must bail, never limp on).
 int platform_init(const char *title);
@@ -51,6 +67,26 @@ int platform_present(const uint16_t *fb565);
 void platform_poll(PlatformInput *in);
 
 void platform_quit(void);
+
+// --- OS artwork loader (punch-list A12c) ---------------------------------
+//
+// Load `path` as a RAST_W x RAST_H image into `out` (RGB565) plus a
+// per-pixel opacity mask in `opaque` (1 = draw, 0 = the image's own colour
+// key / alpha-transparent). Returns 1 on success, 0 on ANY failure —
+// missing file, missing decoder, wrong dimensions, unsupported format.
+// Both output buffers are RAST_W*RAST_H entries and are only written on
+// success.
+//
+// WHY IT IS A PLATFORM SEAM: this exists to read the FunKey OS's OWN
+// /usr/games/menu_resources/zone_bg.png at runtime, which is a PNG, and
+// CLAUDE.md allows exactly ONE TU to touch the SDL API. Decoding therefore
+// belongs here, next to SDL, and not in foh_pause.c.
+//
+// The SDL1 backend loads SDL_image through dlopen rather than linking it,
+// so a device without libSDL_image cannot stop the binary from starting —
+// it just returns 0 and the caller uses its documented fallback. Every
+// other backend returns 0 unconditionally (host runs have no OS artwork).
+int platform_image_load565(const char *path, uint16_t *out, uint8_t *opaque);
 
 // --- audio (M3 task 6) --------------------------------------------------------
 //

@@ -45,22 +45,54 @@ if (!/^[a-z0-9-]+$/.test(flowId)) die("flow id argv fails [a-z0-9-]+");
 if (launchArg !== "0" && launchArg !== "1") die("launch argv must be 0|1");
 const wantLaunch = launchArg === "1";
 
+// THE BUILD PROFILE (review-r1 BLOCKER). `FOH_NETPLAY` (port/foh/foh.h) is
+// a COMPILE-TIME switch: at 0 the battle submenu is unreachable and
+// `VS. Melee` goes straight to the CSS; at 1 upstream's page 2 is back.
+// The two graphs are MUTUALLY EXCLUSIVE, so registering both at once would
+// accept a `menu-top>menu-battle>a` transition the shipped build can never
+// emit — a false green. The flag is therefore parsed LIVE out of the
+// header, exactly as verify-stream.js parses specVersion out of
+// CHECKSUM.md: flipping the switch without re-freezing the traces fails
+// mechanically instead of passing quietly.
+const HDR = fs.readFileSync(require("path").join(__dirname, "foh.h"), "utf8");
+// EXACTLY ONE definition, or die. A second `#define FOH_NETPLAY` (even a
+// dead one inside an #if) would let the compiler take one profile while
+// this judge took the other — a first-match parse is not fail-closed
+// against duplicate input (review-r2 MAJOR).
+const NET_DEFS = HDR.match(/^[ \t]*#[ \t]*define[ \t]+FOH_NETPLAY\b.*$/mg) || [];
+if (NET_DEFS.length !== 1) {
+  die("foh.h carries " + NET_DEFS.length + " FOH_NETPLAY definitions, want " +
+      "exactly 1 (the build profile must be unambiguous)");
+}
+const M_NET = /^#define FOH_NETPLAY ([01])$/.exec(NET_DEFS[0]);
+if (M_NET === null) {
+  die("the FOH_NETPLAY definition is not exactly '#define FOH_NETPLAY [01]': '" +
+      NET_DEFS[0] + "'");
+}
+const NETPLAY = M_NET[1] === "1";
+
 // The pinned faithful edge set (foh.h flow graph; upstream citations
 // there). ANY other (from,to,cause) triple is corruption.
 const EDGES = new Set([
   "startup>title>timer",
   "title>menu-top>start",
-  "menu-top>menu-battle>a",
   "menu-top>menu-options>a",
-  "menu-battle>css>a",
-  "menu-battle>menu-top>b",
   "menu-options>options-gameplay>a",
   "menu-options>menu-controls>a",
   "menu-options>menu-top>b",
   "menu-controls>menu-options>b",
   "options-gameplay>menu-options>b",
   "css>sss>start",
-  "css>menu-battle>bhold",
+  // MENU-SPEC §4 — the audio options screen (gameMode 10, menu.js:130 in,
+  // audiomenu.js:26 out with menuMode/menuSelected untouched).
+  "menu-options>options-audio>a",
+  "options-audio>menu-options>b",
+  // MENU-SPEC §9 — the CONTROLS page's two destinations finally go
+  // somewhere (menu.js:155-157 / :159-161). B returns to the chooser.
+  "menu-controls>controls-controller>a",
+  "menu-controls>controls-keyboard>a",
+  "controls-controller>menu-controls>b",
+  "controls-keyboard>menu-controls>b",
   "sss>css>b",
   "sss>match>launch",
   // iter 99 (M4 task 12) — the target-test screen (upstream citations
@@ -69,35 +101,68 @@ const EDGES = new Set([
   "target-select>menu-top>b",
   "target-select>target-match>launch",
 ]);
-const REFUSED = new Set([
-  "targetbuilder", "audio", "credits", "controller",
-  "keyboard", "spectate", "p2p", "server",
+// PROFILE-DEPENDENT edges. Exactly one of these two blocks is legal in any
+// given build, and which one is decided by the header above — never by
+// whichever the trace happens to contain.
+for (const e of NETPLAY
+         ? ["menu-top>menu-battle>a", "menu-battle>css>a",
+            "menu-battle>menu-top>b", "css>menu-battle>bhold"]
+         // C5 (owner ruling 2026-07-28): `VS. Melee` runs menu.js:105's
+         // Local VS action itself and the CSS's B-hold returns to the page
+         // the player actually came from.
+         : ["menu-top>css>a", "css>menu-top>bhold"]) {
+  EDGES.add(e);
+}
+// Registered refusal tokens, each bound to the screen that emits it
+// (review-r1 BLOCKER: a token registered globally passed on ANY screen).
+// `audio`, `controller` and `keyboard` are GONE, not merely unused: they
+// are real screens now in every build (MENU-SPEC §4/§9), so a trace
+// carrying them is corruption, not history. The netplay three are legal
+// only in the FOH_NETPLAY 1 build, where their page exists.
+const REFUSED = new Map([
+  ["targetbuilder", ["menu-top"]],   // conventions scope exclusion
+  ["credits", ["menu-options"]],     // MENU-SPEC §8, the last unbuilt screen
   // iter 93 (M4 task 10): the SSS RANDOM slot — visible but refusing
   // (registered exclusion; upstream's arm draws from the SEEDED stream,
   // stageselect.js:80-84 — measured, AGENT-LOG iter 93).
-  "random",
+  ["random", ["sss"]],
   // iter 99 (M4 task 12): `targettest` RETIRED (target-select is real);
   // the target-select "+ Add Code" slot refuses (builder/share-code
   // plane, scope-excluded — foh.h note).
-  "addcode",
+  ["addcode", ["target-select"]],
   // CSS mechanics arc (MENU-SPEC items 2/3/4): the CSS can now reach port
   // configurations the LAUNCH plane cannot honour — a CPU port 0 (togglePort
   // has no port-0 special case, main.js:504-520) and the one-frame N/A race
   // that upstream's draw-pass readyToFight allows (css.js:1167-1181 vs
   // :446-451). sim_setup_match pins a human port 0, so START refuses loudly
   // instead of booting a different match than the record claims.
-  "portconfig",
+  ["portconfig", ["css"]],
 ]);
+if (NETPLAY) {
+  for (const t of ["spectate", "p2p", "server"]) REFUSED.set(t, ["menu-battle"]);
+}
 
-const RE_T = /^T ([0-9]+) ([a-z-]+) ([a-z-]+) (timer|start|a|b|bhold|launch)$/;
+// FRAME/COUNT FIELDS ARE CANONICAL DECIMALS, FILE-WIDE (review-r14 MAJOR).
+// Every numeric frame or count below is `(0|[1-9][0-9]*)`, never `[0-9]+`.
+// The `%ld` producer cannot emit a leading zero and the normalizer already
+// rejects one, so accepting `S 0400 turbo 1` here was a judge-side widening
+// with nothing behind it. It is a TIGHTENING: no conforming producer output
+// changes verdict, and leg [5b] carries a leading-zero negative for both of
+// the forms this arc revised. (Generalized from the iter-101 review-99 L1
+// ruling on TLAUNCH, which had this right for one line form only.)
+const RE_T = /^T (0|[1-9][0-9]*) ([a-z-]+) ([a-z-]+) (timer|start|a|b|bhold|launch)$/;
 // MENU-SPEC items 2/3/4 (CSS mechanics): `carry` is whichTokenGrabbed[0]
 // (css.js:68) — the token-gesture state; the type fields gained N/A (-1) from
 // DEVIATION D5's 3-cycle; P1 gained its own type + CPU level because
 // togglePort has no port-0 special case (main.js:504-520).
+// The value alphabet gained `10` for the two volume fields (tenths of the
+// audiomenu step, MENU-SPEC §4). It is NOT a loosening of the existing
+// fields: every field's real domain is pinned per-name in SVAL_DOM below
+// and checked on every line, so `S 400 turbo 10` still dies.
 const RE_S_NUM =
-    /^S ([0-9]+) (p1char|p2char|p1type|p2type|p1difficulty|difficulty|carry|turbo|lcancel|tapjump[1-4]) (-1|[0-9])$/;
-const RE_S_REF = /^S ([0-9]+) refused ([a-z0-9]+)$/;
-const RE_SHOT = /^SHOT ([0-9]+) ([a-z0-9-]{1,32})$/;
+    /^S (0|[1-9][0-9]*) (p1char|p2char|p1type|p2type|p1difficulty|difficulty|carry|turbo|lcancel|flashlcancel|walljump|tapjump[1-4]|soundsvol|musicvol) (-1|10|[0-9])$/;
+const RE_S_REF = /^S (0|[1-9][0-9]*) refused ([a-z0-9]+)$/;
+const RE_SHOT = /^SHOT (0|[1-9][0-9]*) ([a-z0-9-]{1,32})$/;
 // UNCHANGED by the CSS mechanics arc, deliberately. p1type/p1difficulty are
 // real machine state and are traced as S events, but they are NOT on this
 // line: the launch plane only supports a human port 0 (sim_setup_match pins
@@ -105,14 +170,15 @@ const RE_SHOT = /^SHOT ([0-9]+) ([a-z0-9-]{1,32})$/;
 // but (p1 HMN, p2 HMN|CPU) — the record can therefore never need the columns,
 // and the device app's independent copy of this format stays valid.
 const RE_LAUNCH =
-    /^LAUNCH ([0-9]+) p1=([0-4]) p2=([0-4]) p2type=([01]) difficulty=([1-4]) stage=([0-5]) turbo=([01]) lcancel=([012]) tapjump=([01]),([01]),([01]),([01]) versus=0$/;
+    /^LAUNCH (0|[1-9][0-9]*) p1=([0-4]) p2=([0-4]) p2type=([01]) difficulty=([1-4]) stage=([0-5]) turbo=([01]) lcancel=([012]) flashlcancel=([01]) walljump=([01]) tapjump=([01]),([01]),([01]),([01]) versus=0$/;
 // iter 99 (M4 task 12): the target-mode launch record (foh.h TLAUNCH
 // note; char domain 0-4, tstage domain 0-9 == targetStageMapping).
-// iter 101 (review-99 L1): frame field is a CANONICAL decimal
-// (0|[1-9][0-9]*) in the judging layer itself — `TLAUNCH 0405` is
-// corruption here, never the normalizer backstop's problem.
+// iter 101 (review-99 L1): frame field is a CANONICAL decimal in the
+// judging layer itself — `TLAUNCH 0405` is corruption here, never the
+// normalizer backstop's problem. As of review-r14 that rule is file-wide
+// (see the note above RE_T); this line form was simply first.
 const RE_TLAUNCH = /^TLAUNCH (0|[1-9][0-9]*) char=([0-4]) tstage=([0-9])$/;
-const RE_END = /^END ([0-9]+) transitions=([0-9]+)$/;
+const RE_END = /^END (0|[1-9][0-9]*) transitions=(0|[1-9][0-9]*)$/;
 
 const raw = fs.readFileSync(path, "utf8");
 if (raw.length === 0) die("empty trace");
@@ -141,7 +207,32 @@ const SVAL_DOM = {
   carry: [-1, 1],
   p1difficulty: [1, 4], difficulty: [1, 4],
   turbo: [0, 1], lcancel: [0, 2],
+  // MENU-SPEC §3.1's completed row list: rows 2 and 3 (gameplaymenu.js:
+  // 50/:53, both `^= true` so integer 0/1).
+  flashlcancel: [0, 1], walljump: [0, 1],
   tapjump1: [0, 1], tapjump2: [0, 1], tapjump3: [0, 1], tapjump4: [0, 1],
+  // MENU-SPEC §4: masterVolume in TENTHS. The machine keeps the raw
+  // unrounded double (audiomenu.js:103/:109 never round); the structural
+  // plane carries round(v*10), clamped by the same [0,1] the menu clamps.
+  soundsvol: [0, 10], musicvol: [0, 10],
+};
+
+// Which screen may emit each field (review-r1 BLOCKER: the domain pin said
+// WHAT a value may be but never WHERE it may appear, so `S 5 turbo 1`
+// during the startup timer passed). The machine's emission sites are the
+// authority; `lastScreen` is already tracked for the T-chain.
+const SFIELD_SCREENS = {
+  // the CSS token gesture writes both planes at the hover site
+  // (css.js:222-226); target-select's shoulder arms write the SHARED
+  // characterSelections[0] (targetselect.js:60-74).
+  p1char: ["css", "target-select"], p2char: ["css"],
+  p1type: ["css"], p2type: ["css"],
+  p1difficulty: ["css"], difficulty: ["css"], carry: ["css"],
+  turbo: ["options-gameplay"], lcancel: ["options-gameplay"],
+  flashlcancel: ["options-gameplay"], walljump: ["options-gameplay"],
+  tapjump1: ["options-gameplay"], tapjump2: ["options-gameplay"],
+  tapjump3: ["options-gameplay"], tapjump4: ["options-gameplay"],
+  soundsvol: ["options-audio"], musicvol: ["options-audio"],
 };
 
 for (let k = 1; k < lines.length; k++) {
@@ -204,6 +295,12 @@ for (let k = 1; k < lines.length; k++) {
       die("S value " + v + " outside the pinned domain of " + m[2] +
           " at line " + (k + 1));
     }
+    const scr = SFIELD_SCREENS[m[2]];
+    if (scr.indexOf(lastScreen) === -1) {
+      die("S field '" + m[2] + "' at line " + (k + 1) + " is emitted on '" +
+          lastScreen + "', which cannot write it (legal: " + scr.join(",") +
+          ")");
+    }
     continue;
   }
   if ((m = RE_S_REF.exec(ln)) !== null) {
@@ -211,7 +308,13 @@ for (let k = 1; k < lines.length; k++) {
     if (f < lastFrame) die("S frame regressed at line " + (k + 1));
     lastFrame = f;
     if (!REFUSED.has(m[2])) {
-      die("unregistered refused entry '" + m[2] + "' at line " + (k + 1));
+      die("unregistered refused entry '" + m[2] + "' at line " + (k + 1) +
+          " (FOH_NETPLAY=" + (NETPLAY ? "1" : "0") + ")");
+    }
+    if (REFUSED.get(m[2]).indexOf(lastScreen) === -1) {
+      die("refusal '" + m[2] + "' at line " + (k + 1) + " is emitted on '" +
+          lastScreen + "', which cannot refuse it (legal: " +
+          REFUSED.get(m[2]).join(",") + ")");
     }
     continue;
   }
@@ -237,7 +340,13 @@ for (let k = 1; k < lines.length; k++) {
   die("line " + (k + 1) + " matches no FOHTRACE1 form: '" + ln + "'");
 }
 if (!sawEnd) die("no END line (truncated trace)");
-if (wantLaunch !== (launches === 1)) {
+// Tier A+ round-6 MINOR-1: this is an equality on the COUNT, deliberately not
+// the boolean identity `wantLaunch !== (launches === 1)`. That form is only
+// sound while the earlier "more than one LAUNCH" rule fires first; delete that
+// rule and it silently accepts launches=2 for wantLaunch=0 (and prints its own
+// OK line reading launch=2). This form states the requirement without
+// depending on another check having already fired.
+if (launches !== (wantLaunch ? 1 : 0)) {
   die("launch expectation: want " + (wantLaunch ? 1 : 0) + ", saw " + launches);
 }
 console.log("FOH TRACE GRAMMAR OK " + flowId + " (transitions=" + tCount +

@@ -21,7 +21,7 @@
 #define FP_FILE "mlfk-persist.dat"
 #define FP_TMP "mlfk-persist.tmp"
 #define FP_DEFAULT_DIR "/mnt/mlfk-data"
-// 57 lines, ~1.5 KB canonical — anything larger is not ours.
+// 64 lines, ~1.6 KB canonical — anything larger is not ours.
 #define FP_CAP 4096
 // MLFKPERSIST2's ctlstyle domain was {0 normal, 1 box} — CTL_STYLE_NATURAL
 // did not exist yet. FROZEN: never re-point this at CTL_STYLE_COUNT.
@@ -40,13 +40,21 @@ const char *foh_persist_dir(void) {
 }
 
 void foh_persist_defaults(FohPersist *p) {
-  memset(p, 0, sizeof *p); // settings.js:44-56 subset — all zero
+  memset(p, 0, sizeof *p); // settings.js:44-56 — all zero, EXCEPT:
   // Owner ruling 2026-07-29: Natural is the FRESH-INSTALL default. It is
   // assigned explicitly because CTL_STYLE_NORMAL (not NATURAL) is the
   // zero value — the enum numbers are frozen so MLFKPERSIST2 saves keep
   // their scheme across the v3 bump (ctl_style.h).
   p->ctlStyle = (int)CTL_STYLE_DEFAULT;
   p->modOnR = 0; // the M3-ratified arrangement: Mod on L, shield on R
+  // v4 (MENU-SPEC §3/§4): the three options defaults that are NOT zero.
+  // phantomThreshold is ON THE CHECKSUM SURFACE — zeroing it silently
+  // flips physics, which is exactly the qjs getCookie defect (CLAUDE.md
+  // M0 task 6) — so it is assigned explicitly, never left to the memset.
+  // The other four v4 keys ARE zero upstream (settings.js).
+  p->phantomThreshold = 0.01; // settings.js:50
+  p->masterVolume[0] = 0.5;   // audiomenu.js:13 (sounds)
+  p->masterVolume[1] = 0.3;   // audiomenu.js:13 (music)
   for (int c = 0; c < FOH_PERSIST_CHARS; c++) {
     for (int s = 0; s < FOH_PERSIST_TSTAGES; s++) {
       p->targetRecords[c][s] = -1.0; // targetplay.js:40
@@ -62,6 +70,14 @@ static uint64_t fp_bits(double d) {
   return b;
 }
 
+// Domain guard for the v4 block's three doubles: finite, non-negative
+// (signbit rejects -0.0 too) and <= hi. The qjs getCookie defect class
+// (CLAUDE.md M0 task 6) is exactly a silently out-of-domain settings
+// value, so these are checked, never trusted.
+static bool fp_in_range(double d, double hi) {
+  return isfinite(d) && !signbit(d) && d >= 0.0 && d <= hi;
+}
+
 static double fp_double(uint64_t b) {
   double d;
   memcpy(&d, &b, 8);
@@ -74,7 +90,7 @@ static double fp_double(uint64_t b) {
 static size_t fp_serialize(const FohPersist *p, char *buf, size_t cap) {
   size_t n = 0;
   int w = snprintf(buf + n, cap - n,
-                   "MLFKPERSIST3\nturbo %d\nlcancel %d\n"
+                   "MLFKPERSIST4\nturbo %d\nlcancel %d\n"
                    "tapjump %d %d %d %d\nctlstyle %d\nmodonr %d\n",
                    p->turbo, p->lCancelType, p->tapJumpOff[0],
                    p->tapJumpOff[1], p->tapJumpOff[2], p->tapJumpOff[3],
@@ -91,6 +107,21 @@ static size_t fp_serialize(const FohPersist *p, char *buf, size_t cap) {
       n += (size_t)w;
     }
   }
+  // v4 BLOCK — APPENDED after the 50 rec rows (foh_persist.h): every older
+  // version stays a strict PREFIX through the rec block, so their rec-row
+  // line indices are unchanged and one parser still serves all of them.
+  // Doubles as hex16 bit patterns, never decimal — no strtod on any path
+  // (the iter-38 device-musl strtod class is structurally out).
+  w = snprintf(buf + n, cap - n,
+               "flash %d\nwalljump %d\nblastzone %d\ndustless %d\n"
+               "phantom %016llx\nsoundslevel %016llx\nmusiclevel %016llx\n",
+               p->flashOnLCancel, p->everyCharWallJump, p->blastzoneWrapping,
+               p->dustLessPerfectWavedash,
+               (unsigned long long)fp_bits(p->phantomThreshold),
+               (unsigned long long)fp_bits(p->masterVolume[0]),
+               (unsigned long long)fp_bits(p->masterVolume[1]));
+  if (w < 0 || (size_t)w >= cap - n) gfx_fatal("foh_persist: serialize overflow");
+  n += (size_t)w;
   char hex[65];
   ml_sha256_hex(buf, n, hex);
   w = snprintf(buf + n, cap - n, "SUM %s\n", hex);
@@ -175,20 +206,27 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
   FohPersist v;
   foh_persist_defaults(&v);
   size_t pos = 0;
-  // line 1: header. ^MLFKPERSIST[0-9]+$ — version 3 is current; versions
-  // 2 and 1 MIGRATE (see below), any OTHER version -> RESET_VERSION;
+  // line 1: header. ^MLFKPERSIST[0-9]+$ — version 4 is current; versions
+  // 3, 2 and 1 MIGRATE (see below), any OTHER version -> RESET_VERSION;
   // anything else -> header corruption.
-  // Migration source version: 0 = current (v3), else the version we are
-  // upgrading FROM. Both older formats are strict PREFIXES of v3, so the
-  // shared parse below just skips the lines they lack.
+  // Migration source version: 0 = current (v4), else the version we are
+  // upgrading FROM. Every older format is a strict PREFIX of v4 through
+  // the rec block, so the shared parse below just skips the lines they
+  // lack and fills the appended v4 block with the fresh-install defaults.
   int fromVer = 0;
   {
     size_t e = pos;
     while (e < sumStart && buf[e] != '\n') e++;
     if (e >= sumStart) return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "header");
     const size_t len = e - pos;
-    if (len == 12 && memcmp(buf + pos, "MLFKPERSIST3", 12) == 0) {
+    if (len == 12 && memcmp(buf + pos, "MLFKPERSIST4", 12) == 0) {
       // current version
+    } else if (len == 12 && memcmp(buf + pos, "MLFKPERSIST3", 12) == 0) {
+      // MIGRATION. v3 is v4 minus the seven appended options lines
+      // (MENU-SPEC §3/§4). Nothing older ever carried an opinion about
+      // them, so they take exactly the fresh-install defaults that
+      // foh_persist_defaults() already put in *p before this parse ran.
+      fromVer = 3;
     } else if (len == 12 && memcmp(buf + pos, "MLFKPERSIST2", 12) == 0) {
       // MIGRATION. v2 is v3 minus the `modonr` line; its ctlstyle values
       // are the SAME numbers v3 uses (the enum is frozen for exactly
@@ -281,7 +319,7 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
   // line 6: "modonr [01]" (owner ruling 2026-07-29). ABSENT in v1 and
   // v2 — both migrate to the M3-RATIFIED arrangement (Mod on L), never
   // to a swapped one, so an upgrade cannot silently move a binding.
-  if (fromVer == 0) {
+  if (fromVer == 0 || fromVer == 3) {
     if (sumStart - pos < 9 || memcmp(buf + pos, "modonr ", 7) != 0 ||
         (buf[pos + 7] != '0' && buf[pos + 7] != '1') ||
         buf[pos + 8] != '\n') {
@@ -321,11 +359,62 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
       pos += 25;
     }
   }
-  // nothing may sit between the last rec row and the SUM line
+  // v4 BLOCK (MENU-SPEC §3/§4) — present only in v4 files. Every older
+  // version stops after the rec rows, and none of them ever carried an
+  // opinion about these seven keys, so a MIGRATED file simply keeps what
+  // foh_persist_defaults(&v) above already put there: exactly the
+  // fresh-install value. No older save loses anything.
+  if (fromVer == 0) {
+
+  // --- the v4 block, same anchored discipline as the header lines --------
+  {
+    // four 0/1 flags, in the fixed order flash, walljump, blastzone,
+    // dustless
+    static const char *const kFlagKey[4] = {"flash ", "walljump ",
+                                            "blastzone ", "dustless "};
+    int *const dst[4] = {&v.flashOnLCancel, &v.everyCharWallJump,
+                         &v.blastzoneWrapping, &v.dustLessPerfectWavedash};
+    for (int k = 0; k < 4; k++) {
+      const size_t kl = strlen(kFlagKey[k]);
+      if (sumStart - pos < kl + 2 || memcmp(buf + pos, kFlagKey[k], kl) != 0 ||
+          (buf[pos + kl] != '0' && buf[pos + kl] != '1') ||
+          buf[pos + kl + 1] != '\n') {
+        return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "grammar");
+      }
+      *dst[k] = buf[pos + kl] - '0';
+      pos += kl + 2;
+    }
+    // three hex16 doubles: phantom, soundslevel, musiclevel
+    static const char *const kDblKey[3] = {"phantom ", "soundslevel ",
+                                           "musiclevel "};
+    double *const dd[3] = {&v.phantomThreshold, &v.masterVolume[0],
+                           &v.masterVolume[1]};
+    for (int k = 0; k < 3; k++) {
+      const size_t kl = strlen(kDblKey[k]);
+      if (sumStart - pos < kl + 17 || memcmp(buf + pos, kDblKey[k], kl) != 0 ||
+          !fp_is_hex16(buf + pos + kl) || buf[pos + kl + 16] != '\n') {
+        return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "grammar");
+      }
+      const double d = fp_double(fp_parse_hex16(buf + pos + kl));
+      // DOMAIN, per key: phantomThreshold is on the checksum surface
+      // (hitDetection.js:335) and the two levels are audiomenu's clamped
+      // [0,1] (audiomenu.js:104-112). An out-of-domain value is corruption,
+      // never something to clamp silently — that is how the qjs
+      // Number("")-zeroing defect got to flip physics unseen.
+      const double hi = (k == 0) ? 1000.0 : 1.0;
+      if (!fp_in_range(d, hi)) {
+        return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "domain");
+      }
+      *dd[k] = d;
+      pos += kl + 17;
+    }
+  }
+  }
+  // nothing may sit between the last content line and the SUM line
   if (pos != sumStart) return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "grammar");
   *p = v;
   // A migrated older file is LOADED, not reset — but it says so loudly,
-  // so an upgrade is never silent. The next save republishes it as v3.
+  // so an upgrade is never silent. The next save republishes it as v4.
   if (fromVer) fprintf(stderr, "foh_persist: migrated from=%d\n", fromVer);
   fprintf(stderr, "foh_persist: loaded\n");
   return FOH_PERSIST_LOADED;
@@ -398,6 +487,13 @@ static FohState *g_bound = 0;
 void foh_persist_apply(const FohPersist *p, FohState *s) {
   s->turbo = p->turbo;
   s->lCancelType = p->lCancelType;
+  s->flashOnLCancel = p->flashOnLCancel;
+  s->everyCharWallJump = p->everyCharWallJump;
+  s->phantomThreshold = p->phantomThreshold;
+  s->blastzoneWrapping = p->blastzoneWrapping;
+  s->dustLessPerfectWavedash = p->dustLessPerfectWavedash;
+  s->masterVolume[0] = p->masterVolume[0];
+  s->masterVolume[1] = p->masterVolume[1];
   for (int k = 0; k < 4; k++) s->tapJumpOff[k] = p->tapJumpOff[k];
   memcpy(s->targetRecords, p->targetRecords, sizeof s->targetRecords);
   g_bound = s; // review-100 M1: bind for the record-time refresh
@@ -406,6 +502,13 @@ void foh_persist_apply(const FohPersist *p, FohState *s) {
 void foh_persist_collect(FohPersist *p, const FohState *s) {
   p->turbo = s->turbo;
   p->lCancelType = s->lCancelType;
+  p->flashOnLCancel = s->flashOnLCancel;
+  p->everyCharWallJump = s->everyCharWallJump;
+  p->phantomThreshold = s->phantomThreshold;
+  p->blastzoneWrapping = s->blastzoneWrapping;
+  p->dustLessPerfectWavedash = s->dustLessPerfectWavedash;
+  p->masterVolume[0] = s->masterVolume[0];
+  p->masterVolume[1] = s->masterVolume[1];
   for (int k = 0; k < 4; k++) p->tapJumpOff[k] = s->tapJumpOff[k];
   // records are chokepoint-owned: they change ONLY through
   // foh_persist_record_update (the finishGame arm), never collected

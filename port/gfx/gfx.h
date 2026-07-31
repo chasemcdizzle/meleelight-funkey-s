@@ -9,9 +9,14 @@
 //   renderArticles -> renderVfx() -> renderOverlay(true)
 // The vfx/overlay/banner planes live in gfx_vfx.c / gfx_overlay.c /
 // gfx_bg.c (see gfx_vfx.h). The browser reference capture
-// (port/gfx/capture-canvas.js) executes the same sequence minus
-// drawBackground and masks fg1|fg2|UI, so the silhouette IoU pairing is
-// honest on both sides.
+// (port/gfx/capture-canvas.js) executes the SAME sequence INCLUDING
+// drawBackground — U1 added the background legs, and the canonical render
+// of each frame advances the mirrored bg stream (only the extra det/loo
+// replays pass bg:false, so the stream advances exactly once per game
+// frame) — and masks fg1|fg2|UI. The bg pass draws to a DIFFERENT canvas
+// layer than the judged mask, so including it does not change the fg
+// pairing; it is what keeps the background legs and the C's bg stream in
+// step. The silhouette IoU pairing is honest on both sides.
 //
 // CAMERA (verbatim, measured): upstream has NO dynamic camera/zoom —
 // the world->canvas transform is the static per-stage
@@ -86,8 +91,16 @@ typedef struct {
   int backgroundType;
   // canvas-state emulation: fg2.lineWidth persists ACROSS frames
   // (canvas 2d contexts are never reset upstream). Assigned at the
-  // exact upstream sites: drawStage=4, miniView bubble 6 then 1,
-  // drawLaserLine=2.
+  // exact upstream sites that LEAK the width: drawStage=4, miniView
+  // bubble 6 then 1.
+  // drawLaserLine's `fg2.lineWidth = 2` is deliberately NOT modelled
+  // (review-134 r3 M1): article.js LASER.draw wraps its whole body in
+  // fg2.save()/fg2.restore(), so that assignment is DISCARDED when
+  // draw() returns and never reaches the next consumer. Writing it here
+  // leaked a width upstream never leaks (into the moving-platform stroke
+  // and the player temp quad) — see the long note at the
+  // laser_pass sites in gfx_render.c, and the per-frame invariant
+  // gfx_render_frame asserts.
   double fg2LineWidth;
   // stage-surface legibility adaptation (M4 task 3): 0 = upstream-
   // faithful widths (default; every host IoU path), 1 = clamp stage
@@ -109,11 +122,38 @@ void gfx_init(Gfx *g, int stageId, int backgroundType);
 // Render one frame of `st` into g->rz (fb + ink plane).
 void gfx_render_frame(Gfx *g, const GameState *st);
 
+// U3: the ARTICLE-ONLY ink plane (browser-parity check only; NULL =
+// disarmed, which is every shipping build). Armed, gfx_render_frame
+// isolates the renderArticles pass — ink plane saved, cleared, articles
+// drawn, `fn` called with g->rz.ink holding exactly the article ink, then
+// the saved plane OR'd back — so the fg plane every later pass and every
+// other dump sees is bit-identical to the disarmed path.
+// Same shape as gfx_bg_star_sink, and for the same reason: an aggregate
+// silhouette cannot see a feature that is entirely missing from it (U1's
+// starfield scored 0.9927 with every star deleted; articles scored
+// 0.9143 against a 0.88 bound with renderArticles stubbed out — MEASURED,
+// iter 134). The isolation scratch (57,600 B) is allocated HERE when a
+// non-NULL sink is installed, so a shipping link carries TWO null
+// pointers (the sink `g_art_sink` and the scratch `g_art_pre`) and no
+// buffer at all (review-134 r1 M2) — it used to carry 57,600 B of BSS.
+void gfx_render_article_sink(void (*fn)(Gfx *));
+
+// The plane saved by that isolation, valid only inside the sink callback
+// (review-134 indep-2 M1). It is what makes the C-side containment check
+// contingent: `article ink subset of final fg ink` is true for any renderer
+// (ink is set-only and is not cleared after the article pass), whereas
+// `saved plane subset of final fg ink` holds only if the OR-back actually
+// restored it. NULL when the sink is not armed.
+const uint8_t *gfx_render_article_pre(void);
+
 // Dump the buffer as binary PPM (P6, 240x240, 565->888 by bit
 // replication-free shift like rastbench dump_ppm) and the ink plane as
 // binary PGM (P5, 0/255).
 void gfx_dump_ppm(const Gfx *g, const char *path);
 void gfx_dump_ink_pgm(const Gfx *g, const char *path);
+// Same P5 grammar over an arbitrary RAST_W*RAST_H ink plane (the live-plane
+// dump above is this with plane == g->rz.ink).
+void gfx_dump_plane_pgm(const uint8_t *plane, const char *path);
 
 // Per-pass render-profiler dump (attribution instrument, M4 task 3):
 // prints avg ns/frame per pass to stderr in -DMLFK_RENDER_PROF builds;

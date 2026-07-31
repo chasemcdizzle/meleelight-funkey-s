@@ -1,0 +1,170 @@
+# port/sim/device/m4-closure-ledger.txt - structured closure records for the
+# M4 freeze manifest (fix_plan C25/C26/C27). DERIVED, never hand-written:
+#   python3 port/sim/device/gen-closure-ledger.py --write \
+#       --cap port/sim/device/adbsh.sh=2026-07-17
+# Verified by: bash port/sim/device/check-cite-closure.sh -> CITE CLOSURE OK
+#
+# WHY. The manifest's `cite` column is free text, so a `reviewed-go` row can
+# cite a real terminal GO that belongs to a DIFFERENT arc (C25), a GO that is
+# positionally terminal but semantically inert (C26), or, for a non-arc row,
+# prose that DENIES the gate it must assert (C27). Nothing in prose binds a
+# verdict to a producer. These records do, by identity.
+#
+# RECORD GRAMMAR - anchored, fixed arity, fail closed. Exactly 12
+# whitespace-separated fields; any `CLOSURE` line with a different arity is a
+# refusal, never a partial parse (PROCESS 3 whitelist-grammar rule). The file
+# must end with a newline: an unterminated final record is counted by every
+# awk scan but skipped by a `while read` loop, so the checker refuses that too.
+#
+#   CLOSURE <path> <psha> <verdict> <ev> <evsha> <vline> <cov> <covref> <covsha> <reviewer> <round>
+#
+#   path     producer path; must be a manifest row, exactly once
+#   psha     producer sha256; must equal the manifest row AND the bytes on disk
+#   verdict  GO | CAPPED-CLOSED | PROVEN-BY-HARD-RULE-3
+#            | PROVEN-BY-M1-EXIT-GATE | PROVEN-BY-M2-EXIT-GATE
+#            Closed vocabulary matched WHOLE-FIELD, so C27's denial form
+#            ("...NOT-proven-by-SIM-CONFORMS...") is unrepresentable. The
+#            PROVEN-BY-* token is DERIVED FROM THE MANIFEST'S ANCHORED STATUS
+#            FIELD, never from cite prose, and the checker RECOMPUTES it from
+#            the status and refuses any disagreement.
+#   ev       the closure log carrying the verdict (`-` when not arc-closed)
+#   evsha    sha256 of that log - evidence is now tamper-evident: appending a
+#            transcript to a cited log changes this and the gate refuses
+#   vline    1-based line number of the verdict INSIDE ev. The gate reads THAT
+#            line, requires it to be exactly `VERDICT: GO`, requires it to be
+#            the LAST anchored verdict in the file, and requires everything
+#            after it to be blank or AT MOST ONE reviewer `<TOOL>_RC=<n>`
+#            marker (C26; measured over every cited closure log).
+#   cov      how this GO is bound to THIS producer:
+#              self-sha | self-path | self-base  the SAME sha-pinned artifact
+#                        carries the verdict AND names the producer (by its
+#                        exact sha256, its path, or its unique basename), so no
+#                        cross-artifact arc relation is assumed. STATED
+#                        PRECISELY (r5 [M]): a substring match proves the
+#                        closing artifact MENTIONS this producer, NOT that the
+#                        review's SCOPE was this producer. C25 is NARROWED for
+#                        such a row, not closed. Only a harness-emitted scope
+#                        record would close it.
+#              x-sha | x-path | x-base  the binding lives in a DIFFERENT cited
+#                        artifact, so the row also rests on those two artifacts
+#                        being rounds of ONE arc - which nothing in the corpus
+#                        makes machine-checkable. GRADED and COUNTED, never
+#                        silently equated with a self-* row. Registered
+#                        residual; the durable fix is an arc id emitted by the
+#                        review harness (a PROCESS change).
+#              ledger    a driver cap, bound to a dated AGENT-LOG section
+#              gate      a named EXIT GATE, derived from the status
+#   covref   the artifact (or AGENT-LOG date) carrying that binding
+#   covsha   sha256 of covref (`-` for ledger/gate)
+#   reviewer codex | grok | opus5 | unattributed | driver | gate. DERIVED from
+#            the RC marker, then from a filename token, and otherwise
+#            `unattributed` - never defaulted to codex, because 11 of the 18
+#            pinned closure logs carry no marker and calling those codex would
+#            be an invention. A marker, when present, must read `=0`: a nonzero
+#            reviewer exit code means the round FAILED.
+#   round    the arc round; DERIVED from ev's basename (drop `.log`, drop a
+#            leading `review-`) and compared for EQUALITY, not as a substring
+#
+# COVERAGE IS AN ARC-LEVEL RELATION, MEASURED NOT ASSUMED. Over the live corpus
+# only 37 of 59 GO-backed rows have a terminal-GO log naming their own path, so
+# the naive "the GO log must name the producer" rule false-rejects 22 real rows:
+# the arc's EARLY rounds name the producer and the closure round often does not
+# (riglib.sh closes at review-113-7 while its binding is review-109-9). Hence
+# the self-/x- grading rather than a rule the corpus cannot satisfy.
+#
+# 84 records; 5 manifest rows are deliberately UNRECORDED because their
+# status is arc-in-flight/arc-pending - an open row must have no closure
+# record, and the checker refuses one that does.
+#
+# INTEGRITY ANCHOR: this file's sha256 is pinned as LEDGER_SHA256= inside
+# port/sim/device/check-cite-closure.sh. ANY edit here - record or comment -
+# must update that literal IN THE SAME COMMIT:
+#   shasum -a 256 port/sim/device/m4-closure-ledger.txt
+# Regenerating (`--write`) prints the new value.
+#
+LEDGER-OPEN-ROWS 5
+
+CLOSURE oracle/CHECKSUM.md cdc48d11014a41aec99bbbd47f534b16b8b4a8bf060dbf1a75918e86a7c1bd10 PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g01-fox-marth-battlefield.sha256.json 6426169198c7cf27ce9889a66e83e55f1bcd253837b7497babe9be19e0dd4e85 PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g01-fox-marth-battlefield.trace.json 60c332c5b65cf08c0b2e2530425b03111054916c378bca03ba501eb000aa20b9 PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g02-falco-puff-ystory.sha256.json 1c8432eb9b635b0bed76880416290b464fa1a1c245b4fc24e1d0b21628d4c05b PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g02-falco-puff-ystory.trace.json 468806c6bcaf56df739dff64afaeed73e7cdaf56676e25de32cfb1831da23dc3 PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g03-falcon-fox-pstadium.sha256.json 760c99dfdceb6fa3ef6ff05eb3879f22b5cc5f9ceb53526524b7d863cf649d21 PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g03-falcon-fox-pstadium.trace.json d8ec9cc26c717e7bc2f74b84914e2b43dbebf9fb6f398e7668d9d46bd7615a3a PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g04-puff-falcon-dreamland.sha256.json 1d7eeb6807524a86f34fca91c0b88f0c764f96187a267313f0537fb240b84c4a PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g04-puff-falcon-dreamland.trace.json bcc8f686d1242d79541b01bdfbda835d003bc34e5ede62479d6f8093b84961d4 PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g05-marth-falco-fdest.sha256.json 6b32b5c5ecba698b0be7f62a2c76104b071de27131c10fee3cd399cf85abc47b PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g05-marth-falco-fdest.trace.json 313e5b8508385d092ac852f4077aaee4e2a826bade1c667285a9a14340f1f44e PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g06-falcon-marth-fountain.sha256.json 16c0017bf75ad2642207217d16f0b46a9308ff8df2146ee5a7537a42de062b23 PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g06-falcon-marth-fountain.trace.json 50e06b634300bf2fbe900be86d236093ded0243fee9bb3843da1984179a648d0 PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g07-falco-falcon-battlefield.sha256.json 9580e25b5e52b835cd7eac0d43e5c78235166b06566822b973d7fe877d144797 PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g07-falco-falcon-battlefield.trace.json 1d4463d9aeee50e607774ba9ce13ebb3ee970848680a62bbd7a51a3ee39a223e PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g08-fox-puff-fdest.sha256.json a49e8913315354d08328107006045da864945c3a1e43c88fdff5366f3b72391e PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/g08-fox-puff-fdest.trace.json 04273b28f39e9a1dbbed1cccf8534ad28f4d88419cc7af60af67715f421e7d03 PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/goldens/manifest.json 344a0d669420edb957f52288083a9b447e48f3125a484f044eade7cec1ee4b62 PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/harness/streamlib.js 0bc801ea46b06a63e79377aae164636a5e9f649ee45835748e5f2387b9e04281 PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE oracle/harness/verify-stream.js f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e PROVEN-BY-HARD-RULE-3 - - - gate - - gate -
+CLOSURE pipeline/expected.json 31e5946a0269095f7895b01aaf7f78e9c3496aae75c638b8cd1b4a678c4bd29b GO .loop/review-117-plib-4o.log 74bbaf56ab5dbe985b4c9837d4aa1b8cdb17e012b46bbc59435b9abba1288830 240 self-sha .loop/review-117-plib-4o.log 74bbaf56ab5dbe985b4c9837d4aa1b8cdb17e012b46bbc59435b9abba1288830 opus5 117-plib-4o
+CLOSURE pipeline/lib/animbin.js 63107cb140f2f63977c2b2f65994ef4628da09d454b20227f5d7cb14852170f1 PROVEN-BY-M1-EXIT-GATE - - - gate - - gate -
+CLOSURE pipeline/lib/check-expected.js ec578b42d0490448d61bef3f21c958105a48d99c4cc1a5d403a742e7627b8e18 GO .loop/review-117-plib-4o.log 74bbaf56ab5dbe985b4c9837d4aa1b8cdb17e012b46bbc59435b9abba1288830 240 self-sha .loop/review-117-plib-4o.log 74bbaf56ab5dbe985b4c9837d4aa1b8cdb17e012b46bbc59435b9abba1288830 opus5 117-plib-4o
+CLOSURE pipeline/lib/manifest.js 46606bed441ae2923c7c67355f12b789f5854543295c5e718fa679bf23a0d533 GO .loop/review-117-plib-4o.log 74bbaf56ab5dbe985b4c9837d4aa1b8cdb17e012b46bbc59435b9abba1288830 240 self-sha .loop/review-117-plib-4o.log 74bbaf56ab5dbe985b4c9837d4aa1b8cdb17e012b46bbc59435b9abba1288830 opus5 117-plib-4o
+CLOSURE pipeline/lib/tables-anim-xref.js a574fec40685b6770e85d55ee1aaabd35553caab00c9aeadec0ea234b4173590 PROVEN-BY-M1-EXIT-GATE - - - gate - - gate -
+CLOSURE pipeline/lib/tables-schema.js 31199acd496efa519ef793717e9ff41ea92bc33da0e5727c1fa62601b19feca8 GO .loop/review-119-tsch-1-opus.log 262beabc5b7704b91da4d13a8b83986672ae5f2246e76c58cfbebec7c46931be 93 self-sha .loop/review-119-tsch-1-opus.log 262beabc5b7704b91da4d13a8b83986672ae5f2246e76c58cfbebec7c46931be opus5 119-tsch-1-opus
+CLOSURE pipeline/lib/verify-artifacts.js 826e16854bdbfb6061052d1a0dbdcc4675f282754b04fb5262f34b5b30283a45 GO .loop/review-117-plib-4o.log 74bbaf56ab5dbe985b4c9837d4aa1b8cdb17e012b46bbc59435b9abba1288830 240 self-sha .loop/review-117-plib-4o.log 74bbaf56ab5dbe985b4c9837d4aa1b8cdb17e012b46bbc59435b9abba1288830 opus5 117-plib-4o
+CLOSURE port/foh/check-device-foh.sh 4cfb96928d7873153fc409f6ff7807ee06eb99bee6a92e353cb6012253ae7a0e GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-path .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/foh/flow-to-fkscript.js 1163e9c18323ac06aaaec4ee3068691d7d67ebbf98b3500a343a69c80ca793ea GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-sha .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/foh/flows/f01-vs-g01.bstate.expect ce2313ec61aea10f577da236800f8d601990e34e9f94a7f6849bf3689a75f163 GO .loop/review-92-1.log 51f678a43ceb855387ded1d8a256f672fc8cbf8a14a2c108e65ae2f3a503c5cb 640 self-base .loop/review-92-1.log 51f678a43ceb855387ded1d8a256f672fc8cbf8a14a2c108e65ae2f3a503c5cb unattributed 92-1
+CLOSURE port/foh/flows/f01-vs-g01.expect 9059610d74a0f56c1914d6bfa9b590d2651d2bc3e896636547392ce8b13c0a42 GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-path .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/foh/flows/f01-vs-g01.flow 236a9b81f0b32cf0fe55b8b16d3c6460ebeea222d73a220454213f28024fd58a GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-path .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/foh/flows/f02-cpu-m01.bstate.expect 26b5e753fdbfdca952e8b244effce8c6653585befcf01fdd290cb5e834f778fb GO .loop/review-92-1.log 51f678a43ceb855387ded1d8a256f672fc8cbf8a14a2c108e65ae2f3a503c5cb 640 x-path .loop/review-88-diff.txt b218e999572c134b8dcb88787da363a1aabd8f1bce38421a7798e521e79d83aa unattributed 92-1
+CLOSURE port/foh/flows/f02-cpu-m01.expect e94db8888fb02627e990c6f5eefba98957031e5fcbcf5d413c6a76224ea01d77 GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-path .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/foh/flows/f02-cpu-m01.flow 7b70222dca56e1ee5f2cf64d67e06b04e7cd34f3417cba0406b5a63a7f71112b GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-path .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/foh/flows/f03-options.bstate.expect 5eb18799a9d2ab715fdb1a9466da7a3457ea951ac7235dd62d3af74aa5f9657a GO .loop/review-92-1.log 51f678a43ceb855387ded1d8a256f672fc8cbf8a14a2c108e65ae2f3a503c5cb 640 x-path .loop/review-88-diff.txt b218e999572c134b8dcb88787da363a1aabd8f1bce38421a7798e521e79d83aa unattributed 92-1
+CLOSURE port/foh/flows/f03-options.expect b8a199b5356a182230e034fb6a7b10d48fe0b9c6f0b0520ebb6bc6617a0c69af GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-path .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/foh/flows/f03-options.flow fe3710ca0febb382af0ac63586e7e83aff39118021779ac750dfa6952575ab55 GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-path .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/foh/flows/f04-nav.expect 495a02a38c077acdc7200f4e1b36a84e8e7b7fcf9dbc897fdeb5dc486fd025c5 GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-path .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/foh/flows/f04-nav.flow d13f2797b22b2601b24544bf50af6d80150ffa21acda6429b0f7fc600816eabd GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-path .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/foh/flows/f05-vs-g03.bstate.expect 37f10388f604e4d26c453320f5fc908620f33e45a5fbfaebd57572fc9a58142f GO .loop/review-92-1.log 51f678a43ceb855387ded1d8a256f672fc8cbf8a14a2c108e65ae2f3a503c5cb 640 x-path .loop/review-90-diff.txt 930b8390cd1c5d475e9c5e18bc251d07a5937c13cb1fc073e20c4f44853de276 unattributed 92-1
+CLOSURE port/foh/flows/f05-vs-g03.expect 21d07f96eedb0476ddd0485787c2e84f95d0ce499b9d37bff4a7c52b0735b62e GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-path .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/foh/flows/f05-vs-g03.flow 8f5ae82362decd7450a70cd1876005933ca5a8318acde6d93f16f42a1aac2776 GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-path .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/foh/flows/f06-target-t01.bstate.expect 28d584f23b580ddec53ad8f4fd6dc4af5237ebea38e7aff3b33729e0acf47690 GO .loop/review-105-1.log d57176f6f1d60276126a65d982eb94d07bb62c2b49f868b59b92d28803681142 446 x-path .loop/review-99-diff.txt 037593383a736668bacb6e00b82d439580729b37d64ccf65045a183f21a47540 unattributed 105-1
+CLOSURE port/foh/flows/f06-target-t01.expect 344bbc379f767c59a83a215cdef1864df82cdd9bdb44ae77e0fb0c0fa862c1c9 GO .loop/review-105-1.log d57176f6f1d60276126a65d982eb94d07bb62c2b49f868b59b92d28803681142 446 x-path .loop/review-99-diff.txt 037593383a736668bacb6e00b82d439580729b37d64ccf65045a183f21a47540 unattributed 105-1
+CLOSURE port/foh/flows/f06-target-t01.flow bce19576cccae39d5e9129236298e421def1a9310ee6aa35389ecd69b63d44ff GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-path .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/foh/flows/f07-target-t02.bstate.expect 6887d64a13a1ee19201f5ad36d08ba147c28e69f900aa68dfd20e11dea86feb3 GO .loop/review-105-1.log d57176f6f1d60276126a65d982eb94d07bb62c2b49f868b59b92d28803681142 446 x-path .loop/review-99-diff.txt 037593383a736668bacb6e00b82d439580729b37d64ccf65045a183f21a47540 unattributed 105-1
+CLOSURE port/foh/flows/f07-target-t02.expect 346e29fdcf21f8bf772dfdcbdde36b1f289d21b171845cfe2213351cfab94932 GO .loop/review-105-1.log d57176f6f1d60276126a65d982eb94d07bb62c2b49f868b59b92d28803681142 446 x-path .loop/review-99-diff.txt 037593383a736668bacb6e00b82d439580729b37d64ccf65045a183f21a47540 unattributed 105-1
+CLOSURE port/foh/flows/f07-target-t02.flow 180928158368eac90bc42b68776ec760e27d7c90094e75b71220ed89cb9c8d83 GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-path .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/foh/judge-foh-trace.js 4f0cf650978e871f442e28e2612307215cdeabf34d55126faea4d99f6f7198e8 GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-sha .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/foh/keymap-frozen.txt 2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e GO .loop/review-97-1.log b96b2c201baa60226bb6dc1f03ad52fea079a756cd9d635e994c954d1e597b08 6474 self-sha .loop/review-97-1.log b96b2c201baa60226bb6dc1f03ad52fea079a756cd9d635e994c954d1e597b08 unattributed 97-1
+CLOSURE port/foh/normalize-foh-trace.js 9dd01ce9adcf969015ac4669034275c32710705ffdcdf6487b1241ff9846a742 GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-sha .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/gfx/gfxdata-frozen.txt 5499a3dd5fc374d6ed988faf0bef6fa2e189eb314e892bdd83c7534dc0865c94 GO .loop/review-118-prov-1.log 3816d8cd437b6c3fa5786b1827cad6ca653a68d89956f71a4110961177f71ed4 7764 self-sha .loop/review-118-prov-1.log 3816d8cd437b6c3fa5786b1827cad6ca653a68d89956f71a4110961177f71ed4 codex 118-prov-1
+CLOSURE port/gfx/judge-audio-summary.js 8ceaf028fe5740a1c0bb384e2eae113996bdb5c3db5720f1337af068266b966f GO .loop/review-61-1.log 2b504d4aeb52bb24c5fbaf29998aef00550d13b9b30195d3290916b1af103af8 3703 self-base .loop/review-61-1.log 2b504d4aeb52bb24c5fbaf29998aef00550d13b9b30195d3290916b1af103af8 unattributed 61-1
+CLOSURE port/gfx/judge-render-timing.js 4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 GO .loop/review-117-jrt-9b.log b76f5d1ae10fb60146507bef06b5605fe2f1e59a9fd952cf66dec698b4480f11 6976 self-sha .loop/review-117-jrt-9b.log b76f5d1ae10fb60146507bef06b5605fe2f1e59a9fd952cf66dec698b4480f11 codex 117-jrt-9b
+CLOSURE port/gfx/judge-shot.js de32dffbe43423bee43f67516007d4039abbd80237a626aec81e54fd7dc4ca68 GO .loop/review-80-1.log 9e903867db471e2b094d66243bbad810b1309b31dd543a1daf9ca91e1b160e85 789 x-sha .loop/review-73-1.log 2fa9b5a25b0bdbb82faa01048bea3183826abdef848a122ee34e7ac5a59a4c7c unattributed 80-1
+CLOSURE port/gfx/opk/icon32.png efea406086050d51b3894692c6030afef1b0cc7ed06de442b728ef2e6072fe99 GO .loop/review-62-grok-go.log fdea55ae342b8e417481a5b38837acb95b31c131ece1781dee6d1381c2571609 43 x-sha .loop/review-58-1.log 2560530d220ca2adf0dbd2573fcf731ba6cec4abfb89625d674b106ce1858208 grok 62-grok-go
+CLOSURE port/gfx/opk/meleelight-foh.funkey-s.desktop 3b4289d640bbe7df0e4d065d909f2b46aef9b7e4d7622a90e4f7021fd801dbea GO .loop/review-115-3.log fc4012764d6ce1110eb9c2c7a50d447d76a374f2c0a0c00af274c17a288832be 3066 self-path .loop/review-115-3.log fc4012764d6ce1110eb9c2c7a50d447d76a374f2c0a0c00af274c17a288832be codex 115-3
+CLOSURE port/gfx/opk/mlfk-foh.sh 0c37b702f0478fd48380dfd1a897f696204949aff1f9a06532362c44a006c213 GO .loop/c6-review-codex-r4.log 78af5be76f55b6faff703b98d6754fb90efe90040c915b9d772e73dbed276a0f 5166 self-path .loop/c6-review-codex-r4.log 78af5be76f55b6faff703b98d6754fb90efe90040c915b9d772e73dbed276a0f codex c6-review-codex-r4
+CLOSURE port/gfx/pack-snd.js bf29fa7cba83708cfff093195f48ad20a8eda2ad794fe25b270f211b08876eee GO .loop/review-61-1.log 2b504d4aeb52bb24c5fbaf29998aef00550d13b9b30195d3290916b1af103af8 3703 self-base .loop/review-61-1.log 2b504d4aeb52bb24c5fbaf29998aef00550d13b9b30195d3290916b1af103af8 unattributed 61-1
+CLOSURE port/gfx/vfxdata-frozen.txt 545015a3d7e3bc138059fcb9711040758e729a7d21aac650b009ed7fdb5bd662 GO .loop/review-118-prov-1.log 3816d8cd437b6c3fa5786b1827cad6ca653a68d89956f71a4110961177f71ed4 7764 self-sha .loop/review-118-prov-1.log 3816d8cd437b6c3fa5786b1827cad6ca653a68d89956f71a4110961177f71ed4 codex 118-prov-1
+CLOSURE port/gfx/vfxglyphs-frozen.txt 8926cab4d648579d099053994bf309943b5a6bc3c5abf733af9ac6b71f3cbbeb GO .loop/review-118-prov-1.log 3816d8cd437b6c3fa5786b1827cad6ca653a68d89956f71a4110961177f71ed4 7764 self-sha .loop/review-118-prov-1.log 3816d8cd437b6c3fa5786b1827cad6ca653a68d89956f71a4110961177f71ed4 codex 118-prov-1
+CLOSURE port/goldens-m4/json-dup-key-scan.js 624956898890e749170a4768af0f8ef86e05ce4dd75046d084701747c9d9121f GO .loop/review-98-1.log 220fead1ef511c57e3c4127b6ba1856651a78a8abf421a839d9fd0135c930136 3591 self-path .loop/review-98-1.log 220fead1ef511c57e3c4127b6ba1856651a78a8abf421a839d9fd0135c930136 unattributed 98-1
+CLOSURE port/goldens-m4/m01-falcon-marth-d1-ystory.sha256.json a48c47b0bc682abbade75d38ec00832d4235f6f22dd7e5015eba516213688b6b GO .loop/review-86-1.log f0b20493accccba04ba57daa1f613ef15162e39e53f84ab6f9f6c6e9dd456a49 5162 x-sha .loop/review-81-1.log 8c6edddf66e0998259bfcb1763333cc1e361f5c8ed5eea0869c6cfb7481c159c unattributed 86-1
+CLOSURE port/goldens-m4/m02-falcon-fox-d9-dreamland.sha256.json 041bc10edcb333480f7d8390aa161861f2b80e8839e35fc1bbc700c247f5cab1 GO .loop/review-86-1.log f0b20493accccba04ba57daa1f613ef15162e39e53f84ab6f9f6c6e9dd456a49 5162 x-sha .loop/review-81-1.log 8c6edddf66e0998259bfcb1763333cc1e361f5c8ed5eea0869c6cfb7481c159c unattributed 86-1
+CLOSURE port/goldens-m4/manifest-target.json b1fe39e64b8e76b8b7e361e0b3c42258f8140d0caad58e5a1df941f5c714f1ac GO .loop/review-98-1.log 220fead1ef511c57e3c4127b6ba1856651a78a8abf421a839d9fd0135c930136 3591 self-path .loop/review-98-1.log 220fead1ef511c57e3c4127b6ba1856651a78a8abf421a839d9fd0135c930136 unattributed 98-1
+CLOSURE port/goldens-m4/manifest.json f10e00010c769642e550959f3e3ea329bb6c0ae32ca642c3a8a0e29a69135aac GO .loop/review-86-1.log f0b20493accccba04ba57daa1f613ef15162e39e53f84ab6f9f6c6e9dd456a49 5162 self-path .loop/review-86-1.log f0b20493accccba04ba57daa1f613ef15162e39e53f84ab6f9f6c6e9dd456a49 unattributed 86-1
+CLOSURE port/goldens-m4/s01-marth-fox-stops-battlefield.sha256.json 4229cdebcbc18edb1f62812feb017fdfc24b87011b3af7159c674501cd5d9126 GO .loop/review-86-1.log f0b20493accccba04ba57daa1f613ef15162e39e53f84ab6f9f6c6e9dd456a49 5162 x-sha .loop/review-82-1.log c94537b4881ed2d8fdafae1110ea079a2f9d5da2ad2127fe644b31eac5021365 unattributed 86-1
+CLOSURE port/goldens-m4/s02-marth-fox-guardon-break-battlefield.sha256.json 67bfaee2c5df277dc1c6434516eea2a85cfec393421870e5343e707ab15ab076 GO .loop/review-86-1.log f0b20493accccba04ba57daa1f613ef15162e39e53f84ab6f9f6c6e9dd456a49 5162 x-path .loop/review-83-1.log 5b284c9107cf5a0e9279f78062727ebc89899591c57198c30aa15f7109f608c5 unattributed 86-1
+CLOSURE port/goldens-m4/t01-fox-lasers-tstage1.sha256.json 5ae4a05d161d2d6d4826828cc0c8c6b32bbdf778f9e09457e1b7e1a1f949ca95 GO .loop/review-98-1.log 220fead1ef511c57e3c4127b6ba1856651a78a8abf421a839d9fd0135c930136 3591 x-path .loop/review-94-1.log ea51b00c2e0797052c2b0b1c601ee97b6735096694e78b4e27eb4271e3b17cb2 unattributed 98-1
+CLOSURE port/goldens-m4/t01-fox-lasers-tstage1.target.sha256.json 677c81e677ece8dc2442ab340a7227bfb4ce44d416348d357327db76f4032daf GO .loop/review-98-1.log 220fead1ef511c57e3c4127b6ba1856651a78a8abf421a839d9fd0135c930136 3591 x-path .loop/review-94-1.log ea51b00c2e0797052c2b0b1c601ee97b6735096694e78b4e27eb4271e3b17cb2 unattributed 98-1
+CLOSURE port/goldens-m4/t02-falcon-melee-tstage2.sha256.json 6e4116060b6e81fa57313c6fe08544201edfa23a7eb4d8b5f2e0362f3e906afb GO .loop/review-98-1.log 220fead1ef511c57e3c4127b6ba1856651a78a8abf421a839d9fd0135c930136 3591 x-path .loop/review-94-1.log ea51b00c2e0797052c2b0b1c601ee97b6735096694e78b4e27eb4271e3b17cb2 unattributed 98-1
+CLOSURE port/goldens-m4/t02-falcon-melee-tstage2.target.sha256.json d0718dd760ffa802326f2de42078bd8cc55de75440113fa0b7d34e676a757e30 GO .loop/review-98-1.log 220fead1ef511c57e3c4127b6ba1856651a78a8abf421a839d9fd0135c930136 3591 x-path .loop/review-94-1.log ea51b00c2e0797052c2b0b1c601ee97b6735096694e78b4e27eb4271e3b17cb2 unattributed 98-1
+CLOSURE port/goldens-m4/validate-target-manifest.js 6b1b6b5be3700c51dfae8c0c4cb1f012e5b61239394ae4146c2e5e19cc4fcc47 GO .loop/review-98-1.log 220fead1ef511c57e3c4127b6ba1856651a78a8abf421a839d9fd0135c930136 3591 self-path .loop/review-98-1.log 220fead1ef511c57e3c4127b6ba1856651a78a8abf421a839d9fd0135c930136 unattributed 98-1
+CLOSURE port/goldens-m4/verify-target-stream.js 415335239fcc04df97eba07298a1fa521602d5ea45b087aa8d7d40bd740c122a GO .loop/review-98-1.log 220fead1ef511c57e3c4127b6ba1856651a78a8abf421a839d9fd0135c930136 3591 self-path .loop/review-98-1.log 220fead1ef511c57e3c4127b6ba1856651a78a8abf421a839d9fd0135c930136 unattributed 98-1
+CLOSURE port/goldens-m4/wrap-target.js 2cf5c5a532207372b70c4cee57412c7ac65643ac4f4066c745d9eb7fe4aa0e9b GO .loop/review-98-1.log 220fead1ef511c57e3c4127b6ba1856651a78a8abf421a839d9fd0135c930136 3591 self-path .loop/review-98-1.log 220fead1ef511c57e3c4127b6ba1856651a78a8abf421a839d9fd0135c930136 unattributed 98-1
+CLOSURE port/sim/calib/dump-sim-data.js 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba PROVEN-BY-M2-EXIT-GATE - - - gate - - gate -
+CLOSURE port/sim/device/adbsh.sh 7b031055e2329269e4e207012202cd772a75b604bd37ab3df8de9db325e4a254 CAPPED-CLOSED - - - ledger 2026-07-17 - driver -
+CLOSURE port/sim/device/percentiles.js 4034ad81601de4e25b85658095ebfd38de2cc813fad594164afb563d6deb81ad GO .loop/review-47-1.log aa74b7d3ab76ac62cf7ec28121c2df46ca75ed0b20dfd55fe27bf10435752f5b 330 x-path .loop/review-45-1.log 264854970f7379e930d03732b67158ced1ea67e36436af852534b25ee8151d71 unattributed 47-1
+CLOSURE port/sim/device/riglib.sh 57687de52055a29eae6a5f27ef46446ceb4e472a0441360c735f948f5337e3db GO .loop/review-113-7.log 2a991fc77d4ddad99722ba39f6aac55482e15cb60b0d0786e95e01c79575cd04 123 x-path .loop/review-109-9.log d7f1061465a3e8002a3a9b9fc76f5bc73dba60573522fee15888bcea01ea1064 grok 113-7
+CLOSURE port/sim/sim/trace-to-txt.js 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab PROVEN-BY-M2-EXIT-GATE - - - gate - - gate -
+CLOSURE port/sim/sim/wrap-run.js b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 GO .loop/review-86-1.log f0b20493accccba04ba57daa1f613ef15162e39e53f84ab6f9f6c6e9dd456a49 5162 self-sha .loop/review-86-1.log f0b20493accccba04ba57daa1f613ef15162e39e53f84ab6f9f6c6e9dd456a49 unattributed 86-1
+CLOSURE port/sim/target/check-device-target.sh 011c1eb3ca7c1660d0093d341761a6ef92f3815ec4f2efbe5efff29097b8af2f GO .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce 15343 self-path .loop/review-cssmech-r11.log 28621d088a132e2877ab740e37846025ee1f3a655b4aaf003d8be2b37e9471ce codex cssmech-r11
+CLOSURE port/tools/fk_input.c 05ced80f57e993541f6da8b647e63abcac4163cd6e5b275f2a811a49c2faeb76 GO .loop/review-53-1.log 211642d94d35e58c90387c8f1099274fab60fe6507735aa9ccb2a9b6fed1fd77 2719 self-path .loop/review-53-1.log 211642d94d35e58c90387c8f1099274fab60fe6507735aa9ccb2a9b6fed1fd77 unattributed 53-1

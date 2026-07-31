@@ -135,3 +135,28 @@ ssb64-funkey-s (sibling project, same owner) — process prior art
   FunKey OS volume/brightness/powerdown helpers, while foh_pause.c draws
   through THIS port's Raster + platform seam and its own 6x9 face, and
   has different entries. Attribution kept in the foh_pause.h header.
+
+  LANDED (punch-list A12b, owner-authorised 2026-07-29 — "menu/home i want
+  funkey system menu, which ssb64 port I made — you can pull that from
+  there, adjust anything if needed"): the FunKey S SYSTEM menu in the second
+  half of port/foh/foh_pause.c is a PORT of that project's
+  port/gfx/fk_menu.c + port/include/fk_menu.h (MIT, same owner). Unlike the
+  pause overlay above, this one DOES carry that file's substance across:
+  the VOLUME / BRIGHTNESS / QUIT / POWER OFF option list, the one-option-
+  at-a-time centred layout, the geometry constants (MENU_BG_SQUARE_HEIGHT
+  140, BAR_W 100, BAR_H 20, PAD_Y 18), the ten-cell segmented bar with
+  hollowed empty cells, the +/-10 step, the read_cmd_int() popen helper and
+  the `volume set` / `brightness set` / `powerdown handle` OS-tool
+  delegation, the dark-grey-on-panel vs white-on-dimmed colour choice, the
+  "A: select  B: back" hint, and the graceful-degradation contract
+  (missing assets -> dimmed live frame; missing tools -> safe no-op).
+  ADAPTED for this port's seams: it draws into the Raster + platform seam
+  instead of an SDL_Surface, because CLAUDE.md allows exactly ONE TU to
+  touch the SDL API, so it reads the OS's own zone_bg.png through the
+  platform_image_load565() seam (port/gfx/platform.h) whose SDL1 backend
+  dlopens SDL_image rather than linking it — dynamic-load-or-degrade, so a
+  device without libSDL_image still starts; it draws the arrows as triangles rather
+  than loading arrow_top.png / arrow_bottom.png; and it renders text with
+  this port's own face rather than SDL_ttf + OpenSans-Bold. The OS assets
+  under /usr/games/menu_resources/ are read from the device at runtime and
+  are NOT redistributed. Attribution kept in the foh_pause.h header.

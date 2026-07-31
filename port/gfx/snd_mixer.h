@@ -78,6 +78,19 @@
 #define SND_SRC_RATE 22050
 #define SND_OUT_RATE 44100
 
+// AUDIO BUS constants (full rationale in the "AUDIO BUS" note past SndMixer).
+#define SND_SFX_MASTER_DEFAULT 0.5   // sfx.js:623 changeVolume(sounds, 0.5)
+#define SND_MUSIC_MASTER_DEFAULT 0.3 // sfx.js:624 (MusicManager, 0.3)
+// Q12, not Q8 (review-r10 MAJOR): the bus multiplies an ALREADY-Q8 packed
+// gain, so an 8-bit bus compounds two quantizations and measurably loses a
+// whole output LSB at ordinary levels (a no-overwrite 1000-sample at level 0.1
+// emitted 99 where exact linear is 100). 12 bits of bus + round-half-up makes
+// that example exact and keeps unity byte-identical. Max value is the music
+// rail, round(1.0/0.3 * 4096) = 13653, which fits uint16_t with room.
+#define SND_BUS_UNITY 4096u
+#define SND_BUS_SHIFT 12
+#define SND_BUS_HALF (1 << (SND_BUS_SHIFT - 1))
+
 // --- MUSIC channel (M4 task 7) ---------------------------------------------
 // A DEDICATED stereo channel (not an SFX voice — matching the browser,
 // where music is a separate Howl outside any voice pool). Source: the
@@ -138,6 +151,12 @@ static uint64_t snd_music_ms_to_frames(uint64_t ms) {
 static void snd_music_cfg(SndMusic *mu, uint16_t gainQ8, uint64_t startOffMs,
                           uint64_t startDurMs, uint64_t loopOffMs,
                           uint64_t loopDurMs, uint64_t fileBytes) {
+  // NOTE (review-r10 BLOCKER): this memset runs on EVERY TRACK SWITCH, not
+  // just at boot (mus_track_program -> here, at the menu join and at every
+  // VS/target launch). The master music bus therefore must NOT live in this
+  // struct — it is a user preference that outlives any track. It lives in
+  // SndMixer; see the AUDIO BUS note. An earlier version had it here and
+  // silently reverted the user's music level to 0.3 the moment a match started.
   memset(mu, 0, sizeof *mu);
   if (gainQ8 > 256) sim_fatal("music: gainQ8 > 256 (volume > 1)");
   if (startOffMs > 1000000000ull || startDurMs > 1000000000ull ||
@@ -281,6 +300,18 @@ typedef struct {
   uint64_t phase;    // 16.16 into e->samples
   uint64_t seq;      // start sequence (steal-oldest key)
   uint64_t id;       // howler play id (1000 + play-event count)
+  // MASTER SFX BUS SNAPSHOT, taken at snd_event (review-r11). This is
+  // howler's own semantics, not an optimisation: `Sound.prototype.init`
+  // does `self._volume = parent._volume` (howler 2.0.12 dist:2005), so a
+  // Sound captures the group volume when it STARTS. audiomenu's
+  // `changeVolume(sounds, level, 0)` writes only `audioGroup[key]._volume`
+  // (sfx.js:613/615) and never calls the public `.volume()` API, so moving
+  // the Sounds slider affects FUTURE plays only — a click already sounding
+  // keeps the gain it began with. (Music is the opposite and stays
+  // mixer-wide: groupType 1 also calls `.volume(newVolume)` at sfx.js:618,
+  // and howler's volume() setter writes every playing sound's gain node
+  // live, dist:1088-1100.)
+  uint16_t busQ12;
 } SndVoice;
 
 typedef struct {
@@ -302,7 +333,151 @@ typedef struct {
   // stopsMatched + stopsUnmatched == stops always.
   uint64_t stopsMatched, stopsUnmatched;
   uint64_t maxVoices; // concurrency high-water (M4 task 6 measurement)
+  // MASTER buses (see the AUDIO BUS note below). SND_BUS_UNITY == the
+  // upstream default already baked into the packed gains. BOTH live here, at
+  // MIXER scope, because they are user preferences that must survive every
+  // track switch and every voice start; both are set by snd_pack_load, which
+  // is a hard prerequisite for any output at all, so a zero-init SndMixer can
+  // never mix silently.
+  uint16_t sfxBusQ12;
+  uint16_t musicBusQ12;
 } SndMixer;
+
+// --- AUDIO BUS: the options-audio master levels (menu-fidelity arc) --------
+// Upstream's audio screen pushes its two levels straight into the engine:
+// `changeVolume(sounds, masterVolume[0], 0)` / `changeVolume(MusicManager,
+// masterVolume[1], 1)` (audiomenu.js:114-120), and changeVolume (sfx.js:
+// 609-621) overwrites every instance's `_volume` with
+// `newVolume * (volumeOverwrites[name] || 1)`.
+//
+// THE ONE THING THAT MAKES THIS SUBTLE — DO NOT SKIP: the SND1 pipeline
+// already records the POST-changeVolume value. sfx.js:623-624 runs
+// `changeVolume(sounds, 0.5, 0)` / `changeVolume(MusicManager, 0.3, 1)` at
+// load, so every packed `gainQ8` is round(DEFAULT * overwrite * 256), NOT
+// round(overwrite * 256) (pipeline/lib/sounds-schema.js:12-15 records both:
+// `volume` = the effective post-changeVolume value = the mixer's gain
+// source, `cfgVolume` = the authored one). Multiplying the packed gain by
+// masterVolume would therefore apply the default TWICE (0.5 * 0.5 at rest).
+//
+// WHERE EACH BUS APPLIES (measured from howler 2.0.12's own source, not
+// assumed — the two channels genuinely differ upstream):
+//   * SFX  — `changeVolume(sounds, level, 0)` writes `_volume` on the GROUP
+//     only (sfx.js:613/615; groupType 0 skips the `.volume()` call at :618).
+//     A howler Sound snapshots `parent._volume` when it starts (dist:2005),
+//     so the slider affects FUTURE plays; anything already sounding keeps its
+//     gain. Modelled by SndVoice.busQ12, captured in snd_event.
+//   * MUSIC — groupType 1 ALSO calls `.volume(newVolume)` (sfx.js:618), and
+//     howler's setter updates every playing sound's gain node immediately
+//     (dist:1088-1100). So music is LIVE, and its bus stays mixer-wide.
+//
+// So the faithful live transform is a RATIO against the baked default:
+//     effective_new = newVolume * overwrite
+//                   = (default * overwrite) * (newVolume / default)
+//                   = packed_gain * (newVolume / default)
+// i.e. bus = newVolume / default, which is EXACTLY 1.0 at the defaults and
+// ranges to 2.0 (sfx: 1.0/0.5) and 3.3333 (music: 1.0/0.3). Above-unity is
+// faithful, not a bug: upstream at masterVolume 1.0 really is twice the
+// default loudness, and the int32->S16 clamp in snd_mix_fill handles the
+// headroom exactly as the browser's own output stage does.
+//
+// BYTE-IDENTITY AT REST (why the frozen audio gates stay green): at bus ==
+// SND_BUS_UNITY the applied math is `(x * 4096 + 2048) >> 12`, which is x for
+// every int32 x in range, BOTH SIGNS — so a default-level mixer produces the
+// pre-wire bytes EXACTLY. VERIFIED, not asserted: check-mixer-fidelity.sh
+// (12 goldens, diff=bit-identical) and check-music-fidelity.sh (12 goldens,
+// 8 tracks, diff=bit-identical) both re-run green with this wire in place.
+//
+// PRECISION — MEASURED, and the residual is REGISTERED, not waved away
+// (review-r10 MAJOR corrected an earlier version of this note that claimed
+// "<= 1 Q8 step ... below the noise floor"; both halves of that were FALSE):
+//   * FIXED here: the bus is Q12, applied PER VOICE, and off the unity path
+//     gain+bus are ONE combined 64-bit multiply rounded once (snd_gain_apply).
+//     An 8-bit bus compounded two truncations and lost a whole output LSB at
+//     ordinary levels (no-overwrite sample 1000 at level 0.1 emitted 99 where
+//     exact linear is 100; now 100). Scaling the summed accumulator instead of
+//     each voice diverged from per-voice by up to SEVEN output LSBs on
+//     polyphonic frames; per-voice removes that entirely. And chaining a Q8
+//     truncation into a Q12 one lost LSBs on ODD samples specifically
+//     (s=1 -> 0, s=-1 -> -2, s=32767 -> 32766 at master 1.0) — the combined
+//     multiply removes that class too (review-r12).
+//   * REMAINING, and it is PRE-EXISTING: SNDPACK1 stores each gain as Q8
+//     (`u16 gainQ8`), so the AUTHORED product `default * overwrite` is already
+//     quantized in the pack before any bus touches it, and a bus can scale
+//     that error but never undo it. Worst case is the smallest overwrite
+//     (dash, 0.3): packed gain round(0.5*0.3*256) = 38 encodes 0.1484 rather
+//     than 0.15. RE-MEASURED after snd_gain_apply landed (the old note said
+//     9726, which was the pre-combined-multiply value — review-r13): a
+//     full-scale 32767 sample emits 9728 at level 1.0 where exact linear is
+//     9830.1, i.e. 1.04% of amplitude (~0.09 dB). The SAME error is already
+//     present at the DEFAULT level (4863 vs 4915.1, 1.06%) — the bus neither
+//     introduces nor worsens it, which is why the default-level frozen gates
+//     cannot see it.
+//     This is a property of the FROZEN pack format, not of this wire. It is
+//     PRE-EXISTING at the default level (measured just above: 1.06% there
+//     vs 1.04% at 1.0), so wiring the bus produces no before/after
+//     difference for the frozen gates to see — the error is not new, and
+//     not hidden. Removing it means widening SNDPACK1's gain field, which
+//     re-freezes a PINNED producer (SNDPACK1 sha256 + both fidelity gates +
+//     the device pin) — out of this lane's scope by construction, reported to
+//     the driver rather than silently accepted. MENU-SPEC §4 carries the same
+//     numbers.
+// level (the options-audio [0,1] double) -> Q12 bus gain against `dflt`, the
+// master default already baked into the packed gains. Clamps the level to
+// [0,1] — the FOH clamps too (foh.c step_opt_audio), this is the trust
+// boundary for any other caller — and rounds half-up like pack-snd.js.
+static inline uint16_t snd_bus_q12(double level, double dflt) {
+  if (!(level > 0.0)) return 0; // <= 0 or NaN -> silence (fails closed)
+  if (level > 1.0) level = 1.0;
+  return (uint16_t)(level / dflt * (double)SND_BUS_UNITY + 0.5);
+}
+
+// Gain ONE sample by its packed Q8 gain and the Q12 master bus.
+//
+// TWO PATHS ON PURPOSE (review-r12 MAJOR — the earlier version chained two
+// truncations and lost whole LSBs on ODD samples, which the witness missed
+// because its synthetic PCM was all even; the real pack has >1e6 odd samples):
+//
+//   * bus == UNITY -> return EXACTLY the pre-wire value `(s*gainQ8) >> 8`,
+//     floor and all. This is what keeps check-mixer-fidelity.sh and
+//     check-music-fidelity.sh byte-identical, and it is also the path the
+//     SHIPPING DEFAULT takes, so the common case costs nothing.
+//   * otherwise -> ONE combined multiply in 64-bit at scale 2^20
+//     (Q8 x Q12), rounded half-up once. No intermediate truncation exists to
+//     lose, so `s=1, gain=128, bus=8192` gives 1 (was 0), `s=-1` gives -1
+//     (was -2) and `s=32767` gives 32767 (was 32766) — i.e. master 1.0 with
+//     an overwrite-free sound reproduces the AUTHORED sample exactly.
+//
+// int64 is used only off the unity path, so the device's hot default path
+// keeps 32-bit arithmetic. Bound: |s| <= 32768, gainQ8 <= 256, busQ12 <=
+// 13653 -> |n| <= 1.15e11, far inside int64.
+static inline int32_t snd_gain_apply(int32_t s, uint16_t gainQ8,
+                                     uint16_t busQ12) {
+  if (busQ12 == (uint16_t)SND_BUS_UNITY) {
+    return (s * (int32_t)gainQ8) >> 8; // the pre-wire expression, verbatim
+  }
+  const int64_t n = (int64_t)s * (int64_t)gainQ8 * (int64_t)busQ12;
+  return (int32_t)((n + (int64_t)(1 << (8 + SND_BUS_SHIFT - 1))) >>
+                   (8 + SND_BUS_SHIFT));
+}
+
+// Read back the effective buses (accessors, so a consumer never depends on
+// which struct owns them — r10: musicBus USED to live in SndMusic, where
+// snd_music_cfg's per-track memset silently reset it on every track switch).
+static inline uint16_t snd_music_bus(const SndMixer *m) {
+  return m->musicBusQ12;
+}
+static inline uint16_t snd_sfx_bus(const SndMixer *m) { return m->sfxBusQ12; }
+
+// The app-facing wire: push the options-audio master levels onto the live
+// buses. Callers on a live audio device MUST hold the audio lock (the
+// callback reads these fields) — foh_dev.c brackets it with
+// platform_audio_lock/unlock. Safe to call at ANY time, including before or
+// after a track switch: nothing else writes these two fields.
+static inline void snd_bus_set(SndMixer *m, double sfxLevel,
+                               double musicLevel) {
+  m->sfxBusQ12 = snd_bus_q12(sfxLevel, SND_SFX_MASTER_DEFAULT);
+  m->musicBusQ12 = snd_bus_q12(musicLevel, SND_MUSIC_MASTER_DEFAULT);
+}
 
 static uint32_t snd_rd_u32(const uint8_t *p) {
   return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
@@ -327,6 +502,11 @@ static bool snd_name_ok(const char *n) {
 static void snd_pack_load(SndMixer *m, const char *path) {
   memset(m, 0, sizeof *m);
   m->step = ((uint64_t)SND_SRC_RATE << 16) / SND_OUT_RATE;
+  // SFX bus at UNITY (every packed gainQ8 already carries the 0.5 default).
+  // Set HERE for the same reason as the music bus above — snd_pack_load is a
+  // hard prerequisite for any SFX output, so zero-init silence is unreachable.
+  m->sfxBusQ12 = (uint16_t)SND_BUS_UNITY;
+  m->musicBusQ12 = (uint16_t)SND_BUS_UNITY;
   FILE *f = fopen(path, "rb");
   if (!f) sim_fatal("sndpack: cannot open pack file");
   if (fseek(f, 0, SEEK_END) != 0) sim_fatal("sndpack: seek failed");
@@ -471,6 +651,7 @@ static void snd_event(SndMixer *m, const char *name) {
   m->voice[slot].phase = 0;
   m->voice[slot].seq = ++m->seqCounter;
   m->voice[slot].id = 1000ull + m->playCount;
+  m->voice[slot].busQ12 = m->sfxBusQ12; // howler Sound.init snapshot
   m->starts++;
   uint64_t live = 0;
   for (int v = 0; v < SND_VOICES; v++) {
@@ -490,7 +671,12 @@ static void snd_mix_fill(void *ud, int16_t *out, int frames) {
       SndVoice *vc = &m->voice[v];
       if (!vc->e) continue;
       const int16_t s = vc->e->pcm[vc->phase >> 16];
-      acc += ((int32_t)s * vc->e->gainQ8) >> 8;
+      // PER VOICE, not on the sum (r10 MAJOR): scaling the summed accumulator
+      // floors once for the whole mix and diverged from per-voice by up to
+      // seven output LSBs on polyphonic frames. And with the VOICE'S OWN
+      // snapshot, not the live mixer bus (r11 MAJOR): see SndVoice.busQ12 —
+      // howler snapshots the group volume into each Sound at play time.
+      acc += snd_gain_apply(s, vc->e->gainQ8, vc->busQ12);
       vc->phase += m->step;
       if ((vc->phase >> 16) >= vc->e->samples) {
         if (vc->e->loop) {
@@ -503,14 +689,15 @@ static void snd_mix_fill(void *ud, int16_t *out, int frames) {
     // M4 task 7: the music channel joins per-channel BEFORE the single
     // clamp (header note). Disabled: accL == accR == the old mono sum —
     // byte-identical to the pre-music mixer.
+    // The sfx bus is already applied per voice above.
     int32_t accL = acc, accR = acc;
     if (m->music.on) {
       SndMusic *mu = &m->music;
       const uint64_t t = mu->outPos >> 1; // zero-order hold 2x upsample
       if (t < mu->wr) {
         const size_t slot = (size_t)(t % SND_MUSIC_RING_FRAMES) * 2;
-        accL += ((int32_t)mu->ring[slot] * mu->gainQ8) >> 8;
-        accR += ((int32_t)mu->ring[slot + 1] * mu->gainQ8) >> 8;
+        accL += snd_gain_apply(mu->ring[slot], mu->gainQ8, m->musicBusQ12);
+        accR += snd_gain_apply(mu->ring[slot + 1], mu->gainQ8, m->musicBusQ12);
       } else {
         mu->starves++; // silence for this output frame; time advances
       }

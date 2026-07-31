@@ -35,6 +35,25 @@
 #      state, so these are geometry comparisons, not statistics — see
 #      gfx-pagelib.js's __gfxBgInit note for why the plane used to be
 #      excluded and what made it includable.
+#   8. THE ARTICLE PLANE (U3). The fg IoU in 6 is an AGGREGATE over
+#      players+articles+vfx+overlay and cannot see a feature that is
+#      entirely missing from it: measured, a C build with renderArticles
+#      stubbed out entirely still scored IOU MIN 0.9143 against the fg
+#      bound and exited 0. Articles therefore get their own plane, drawn
+#      ALONE on both sides (gfx_render.c's article sink /
+#      gfx-pagelib.js __gfxArticlePlane), judged at the frozen
+#      per-frame artFrameFloors with the article-bearing frame COUNT pinned so a
+#      renderer that emits no articles cannot pass by having nothing to
+#      compare.
+#
+# C28: the browser render plane runs on a DETERMINISTIC page-local
+# mulberry32 (gfx-pagelib.js __gfxRenderRng) seeded with the same
+# constant the C renderer uses. It used to run on V8's native
+# Math.random, which made the reference masks — and therefore the fg IoU
+# — different in every capture (measured: 5 of 24 masks differed between
+# two identical captures, and seven distinct IOU MIN values had been
+# observed from identical code). Two fresh captures now produce
+# byte-identical judge output, which is what lets the fg bound be tight.
 #
 # Tier-A hygiene (PROCESS §3 review bar, iter-42 class rule): every
 # produced artifact is rm-before-produce + made()-asserted; every
@@ -116,8 +135,39 @@ if (e.bgStarFrameCount !== 6) {
   console.error("check-render: bgStarFrameCount pin violated (want exactly 6)");
   process.exit(1);
 }
+if (e.artFrameCount !== 4 ||
+    !Array.isArray(e.artFrames) || e.artFrames.join(",") !== "184,1234,1237,1238" ||
+    !e.artFrameFloors || typeof e.artFrameFloors !== "object" ||
+    Array.isArray(e.artFrameFloors) ||
+    Object.keys(e.artFrameFloors).join(",") !== "f0184,f1234,f1237,f1238" ||
+    e.artFrameFloors.f0184 !== 0.6707 || e.artFrameFloors.f1234 !== 0.6708 ||
+    e.artFrameFloors.f1237 !== 0.6455 || e.artFrameFloors.f1238 !== 0.6455) {
+  console.error("check-render: article plane pin violated — got " +
+    [JSON.stringify(e.artFrameFloors), e.artFrameCount, String(e.artFrames)].join("/") +
+    ", pinned f0184=0.6707,f1234=0.6708,f1237=0.6455,f1238=0.6455/4/184,1234,1237,1238");
+  process.exit(1);
+}
+if (e.iouThreshold !== 0.92) {
+  console.error("check-render: fg iouThreshold pin violated — got " + String(e.iouThreshold) +
+    ", pinned 0.92 (C28 re-freeze: measured min 0.9208 over 6 fresh captures, spread 0)");
+  process.exit(1);
+}
+const bp = e.browserPin;
+if (!bp || bp.name !== "chromium" || bp.channel !== "chrome" ||
+    bp.version !== "151.0.7922.71") {
+  console.error("check-render: browserPin violated — every bound in this file was " +
+    "measured on chromium/chrome 151.0.7922.71 (EXACT: Skia rasterizes " +
+    "differently at patch level)");
+  process.exit(1);
+}
+if (e.seedThreshold !== undefined) {
+  console.error("check-render: seedThreshold is retired (review-134 r1 L2) and must not " +
+    "reappear at top level where it reads as a live bound");
+  process.exit(1);
+}
 '
 echo "background pin OK (exact 11-frame tunnel corpus + 4 frozen background thresholds + star-frame count)"
+echo "article-plane pin OK (U3: frozen per-frame artFrameFloors + article-bearing frame count/identities)"
 
 # injection-set pin (review-65 M1, iter 67): the RUNTIME inject table must
 # equal the frozen reviewed injectPin — exact ordered name list,
@@ -465,6 +515,42 @@ fi
 made "$BUILD/g01.render-run.json" "$BUILD/gfxdata.txt" \
      "$BUILD/vfxdata.txt" "$BUILD/vfxglyphs.txt" "$CANVAS/capture.digests.json"
 
+# BROWSER IDENTITY (review-134 r1 M1). Every bound in expected-render.json is
+# a measured property of ONE rasterizer. capture-canvas.js asserts the pin at
+# launch, but the reuse hatch launches no browser at all, so the identity is
+# read back HERE from the sidecar — which makes reuse mode the case this
+# covers, not the case it misses. Strict grammar, fail closed: exact name AND
+# EXACT version equality against the frozen pin (r2 M1 — NOT a major-version
+# prefix; Skia rasterizes differently at PATCH level and the fg margin is only
+# ~3 device cells), plus a cross-check that the run JSON records the same
+# engine as the sidecar.
+node -e '
+const fs = require("fs");
+const e = require("./'"$EXP"'");
+const side = JSON.parse(fs.readFileSync("'"$CANVAS"'/capture.digests.json", "utf8"));
+const b = side.browser;
+if (!b || typeof b.name !== "string" || typeof b.version !== "string") {
+  console.error("check-render: capture sidecar records no browser identity " +
+    "(pre-review-134 capture — recapture)");
+  process.exit(1);
+}
+if (b.name !== e.browserPin.name || b.version !== e.browserPin.version) {
+  console.error("check-render: capture was produced by " + b.name + " " + b.version +
+    ", pinned " + e.browserPin.name + " " + e.browserPin.version +
+    " — the render bounds were measured on the pinned engine; re-measure and " +
+    "re-freeze rather than widening them");
+  process.exit(1);
+}
+const run = JSON.parse(fs.readFileSync("'"$BUILD"'/g01.render-run.json", "utf8"));
+if (run.meta.browser !== b.name || run.meta.version !== b.version) {
+  console.error("check-render: run JSON engine (" + run.meta.browser + " " +
+    run.meta.version + ") disagrees with the sidecar (" + b.name + " " + b.version + ")");
+  process.exit(1);
+}
+process.stdout.write(b.name + " " + b.version + "\n");
+' > "$BUILD/.browser-id" || { echo "check-render: browser identity check failed" >&2; exit 1; }
+echo "browser identity OK ($(tr -d '\n' < "$BUILD/.browser-id") == frozen browserPin; reuse-mode covered via the sidecar)"
+
 # GFXDATA freeze tripwire (M3 task 4, iter 50): the committed
 # port/gfx/gfxdata-frozen.txt is the browser-free device-path copy of
 # this capture's GFXDATA1 dump (deterministic executed page data;
@@ -536,7 +622,7 @@ console.log("capture artifact map verified (" + want.length + " files)");
 IFS=',' read -r -a SAMPLED <<< "$FRAMES_LIST"
 for f in "${SAMPLED[@]}"; do
   tag=$(printf 'f%04d' "$f")
-  made "$CANVAS/$tag.mask.bin" "$CANVAS/$tag.png" "$CANVAS/$tag.bg.bin" "$CANVAS/$tag.star.bin"
+  made "$CANVAS/$tag.mask.bin" "$CANVAS/$tag.png" "$CANVAS/$tag.bg.bin" "$CANVAS/$tag.star.bin" "$CANVAS/$tag.art.bin"
 done
 # U1: the browser background reference — per-frame BG2 masks come from
 # the same capture, the tunnel leg's masks and the BG1 gradient column
@@ -678,7 +764,8 @@ for side in a b; do
   for f in "${SAMPLED[@]}"; do
     tag=$(printf 'f%04d' "$f")
     made "$BUILD/render-$side/$tag.ppm" "$BUILD/render-$side/$tag.pgm" \
-         "$BUILD/render-$side/$tag.bg.pgm" "$BUILD/render-$side/$tag.star.pgm"
+         "$BUILD/render-$side/$tag.bg.pgm" "$BUILD/render-$side/$tag.star.pgm" \
+         "$BUILD/render-$side/$tag.art.pgm" "$BUILD/render-$side/$tag.artpre.pgm"
   done
   for f in "${TSAMPLED[@]}"; do
     tag=$(printf 'f%04d' "$f")
@@ -693,6 +780,10 @@ for f in "${SAMPLED[@]}"; do
   cmp "$BUILD/render-a/$tag.pgm" "$BUILD/render-b/$tag.pgm"
   cmp "$BUILD/render-a/$tag.bg.pgm" "$BUILD/render-b/$tag.bg.pgm"
   cmp "$BUILD/render-a/$tag.star.pgm" "$BUILD/render-b/$tag.star.pgm"
+  cmp "$BUILD/render-a/$tag.art.pgm" "$BUILD/render-b/$tag.art.pgm"
+  # review-134 indep-2 M1: the saved pre-article plane is evidence like any
+  # other dumped plane, so it is byte-stability checked like any other.
+  cmp "$BUILD/render-a/$tag.artpre.pgm" "$BUILD/render-b/$tag.artpre.pgm"
 done
 for f in "${TSAMPLED[@]}"; do
   tag=$(printf 'f%04d' "$f")

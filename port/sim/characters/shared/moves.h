@@ -87,6 +87,12 @@ static inline MvX mvx_vec(Vec2D v) {
 // checkFor* pair payloads: [true,"NAME"] | [true, 0|1] | [false,false] —
 // KNEEBEND.init(p, j[1], input) forwards the payload VALUE verbatim.
 extern void mv_out_of_domain(const char *what);
+// finishGame seam (punch-list C18; defined in sim_tick.c, contract in
+// sim/sim.h). The four DEAD* KO states call finishGame at timer===4 when
+// isFinalDeath() holds — the normal way a VS match ends. NULL by default, so
+// those sites keep their verbatim out-of-domain trap for every evidence and
+// golden run; only the live PLAY driver installs a body.
+extern void (*ml_sim_finish_hook)(void);
 static inline MvX mvx_pair_payload(const AsPair *pr) {
   if (pr->kind == AS_P_NUM) return mvx_num(pr->num);
   if (pr->kind == AS_P_FALSE) return mvx_bool(false);

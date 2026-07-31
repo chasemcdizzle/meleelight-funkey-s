@@ -102,8 +102,17 @@ if (!Array.isArray(exp.sampledFrames) || !Number.isInteger(exp.sampledFrameCount
     seen.add(v);
   }
 }
-if (typeof exp.iouThreshold !== "number" || exp.iouThreshold <= 0 || exp.iouThreshold > 1) {
-  console.error("iou: expected-render.json iouThreshold malformed");
+// EXACT pin, not a shape check (C28 re-freeze, iter 134). The old shape
+// check accepted any number in (0,1], so the fg bound could be widened
+// silently — which is exactly the failure mode the re-freeze exists to
+// close. 0.92 is measured-then-frozen: min 0.9208 over 6 fresh captures
+// with ZERO spread, and 0.0003 max movement on the 19 near-bound frames
+// under a controlled same-version rasterizer-backend change (see
+// expected-render.json measuredAtFreeze). Twin-pin class: check-render.sh
+// and capture-canvas.js carry their own copies.
+if (exp.iouThreshold !== 0.92) {
+  console.error("iou: iouThreshold pin violated — got " + String(exp.iouThreshold) +
+    ", pinned 0.92 (measured-then-frozen floor; never loosened)");
   process.exit(1);
 }
 
@@ -135,6 +144,58 @@ if (exp.bgIouThreshold !== 0.99 || exp.bgStarIouThreshold !== 0.78 ||
 if (!Number.isInteger(exp.bgStarFrameCount) || exp.bgStarFrameCount !== 6) {
   console.error("iou: bgStarFrameCount pin violated — want exactly 6 star-bearing sampled frames");
   process.exit(1);
+}
+// U3 article-plane pins, same twin-pin discipline (check-render.sh and
+// capture-canvas.js carry their own copies). Exact values, not shape
+// checks: a shape check would accept a 0.01 floor or artFrameCount 0 and
+// still print RENDER OK.
+// PER-FRAME FLOORS (r6 M1). A single global floor can only be calibrated on
+// one frame, so calibrated on the MIN frame it leaves progressively more
+// slack on every higher-scoring frame (measured at the old global 0.645:
+// f0184 still passed with THREE cells missing). Each article frame now
+// carries its own floor, each admitting exactly ONE device cell of movement
+// and rejecting TWO. Exact map pin — keys, order and values.
+{
+  const WANT = { f0184: 0.6707, f1234: 0.6708, f1237: 0.6455, f1238: 0.6455 };
+  const got = exp.artFrameFloors;
+  if (!got || typeof got !== "object" || Array.isArray(got) ||
+      Object.keys(got).join(",") !== Object.keys(WANT).join(",") ||
+      Object.keys(WANT).some((k) => got[k] !== WANT[k])) {
+    console.error("iou: artFrameFloors pin violated — got " + JSON.stringify(got) +
+      ", pinned " + JSON.stringify(WANT) +
+      " (measured-then-frozen per-frame floors; never loosened)");
+    process.exit(1);
+  }
+  // the floors must cover exactly the pinned article frames
+  const fromFrames = exp.artFrames.map((f) => "f" + String(f).padStart(4, "0")).join(",");
+  if (Object.keys(got).join(",") !== fromFrames) {
+    console.error("iou: artFrameFloors keys [" + Object.keys(got).join(",") +
+      "] != the pinned artFrames [" + fromFrames + "]");
+    process.exit(1);
+  }
+}
+if (!Number.isInteger(exp.artFrameCount) || exp.artFrameCount !== 4) {
+  console.error("iou: artFrameCount pin violated — want exactly 4 article-bearing sampled frames");
+  process.exit(1);
+}
+// IDENTITIES, not just the count (review-134 r3 M2): a coverage set that
+// drifts four-for-four — different frames carrying articles, or a labelling
+// slip — would satisfy a bare count. The ordered list is the pin; the count
+// is kept as its redundant twin so a half-edit dies.
+if (!Array.isArray(exp.artFrames) || exp.artFrames.join(",") !== "184,1234,1237,1238") {
+  console.error("iou: artFrames pin violated — [" + String(exp.artFrames) +
+    "] != the measured article-bearing set 184,1234,1237,1238");
+  process.exit(1);
+}
+if (exp.artFrames.length !== exp.artFrameCount) {
+  console.error("iou: artFrames/artFrameCount disagree");
+  process.exit(1);
+}
+for (const v of exp.artFrames) {
+  if (!exp.sampledFrames.includes(v)) {
+    console.error("iou: artFrames pin violated — frame " + v + " is not a sampled frame");
+    process.exit(1);
+  }
 }
 
 // Injection-set pin, JUDGE SIDE (review-65 M1, iter 67): iou.js is the
@@ -195,6 +256,34 @@ const INJ = exp.inject;
 
 const W = 240, BAND_Y0 = 45, BAND_H = 150;
 const SRC_W = 1200, SRC_H = 750;
+
+// RETARGET PIN — MADE OPERATIVE (review-134 r5 Low). expected-render.json
+// carried a top-level `"retarget": { "k": 0.2, "dy": 45 }` that LOOKED like
+// the frozen methodology but had NO runtime reader: this judge and the
+// renderer each hard-coded /5 and +45 independently, so the file could be
+// edited to claim a different methodology and the check would still print
+// RENDER OK — decision-looking configuration that decides nothing is exactly
+// the class this lane exists to remove. It is now BOUND to the constants
+// actually used: k is the downscale factor (1/k == the 5x5 box below) and dy
+// is the letterbox band origin. Editing either side alone is a loud death.
+if (!exp.retarget || typeof exp.retarget !== "object" ||
+    exp.retarget.k !== 0.2 || exp.retarget.dy !== 45) {
+  console.error("iou: retarget pin violated — expected-render.json must pin " +
+    "retarget k=0.2 dy=45, got " + JSON.stringify(exp.retarget));
+  process.exit(1);
+}
+{
+  // 1/k is the integer downscale factor; derive it once so the float
+  // reciprocal is never compared directly.
+  const F = Math.round(1 / exp.retarget.k);
+  if (Math.abs(1 / exp.retarget.k - F) > 1e-12 || F !== 5 ||
+      SRC_W !== W * F || SRC_H !== BAND_H * F || exp.retarget.dy !== BAND_Y0) {
+    console.error("iou: retarget pin does not match the geometry this judge uses — " +
+      `pinned k=${exp.retarget.k} (1/k=${F}) dy=${exp.retarget.dy}; judge uses ` +
+      `${SRC_W}x${SRC_H} -> ${W}x${BAND_H} (factor ${SRC_W / W}) and band origin ${BAND_Y0}`);
+    process.exit(1);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Injection-region derivation (review-65 M2, iter 67).
@@ -715,6 +804,233 @@ bgFail += bgLeg("stars", exp.sampledFrames.map((f) => {
     `frames ${starFrames} (of ${exp.sampledFrames.length} sampled; star-only plane, full band)`);
 }
 
+// --- U3: the ARTICLE plane -------------------------------------------------
+// Same argument as the starfield leg above, on the FOREGROUND side. The fg
+// IoU is an aggregate over players + articles + vfx + overlay, and an
+// aggregate cannot see a feature that is entirely missing from it:
+// MEASURED (iter 134) a C build with renderArticles stubbed out entirely
+// still scores IOU MIN 0.9143 against the frozen 0.88 fg bound and exits
+// 0 — articles move only 22-52 device cells on the 4 sampled frames that
+// carry a laser, against ~3,700-cell unions. Third instance of the class
+// (stars 0.9927; blend565's wrong blend survived because the fg leg
+// judges binary ink masks).
+//
+// So articles get their own plane, produced on both sides by drawing the
+// article pass ALONE: gfx_render.c clears the ink plane around
+// render_articles (fNNNN.art.pgm), and the browser replays
+// renderArticles onto a cleared FG2 after the frame is captured
+// (gfx-pagelib.js __gfxArticlePlane -> fNNNN.art.bin). Measuring the
+// plane directly needs no argument about where a laser may appear —
+// exactly the U1 lesson.
+//
+// Two pins keep an empty judgment from passing: every frame the BROWSER
+// draws articles on must be article-bearing on the C side too (an empty
+// C plane against a non-empty browser plane is IoU 0 = FAIL, never a
+// skip), and the number of article-bearing frames is FROZEN, so a
+// renderer that simply never emits an article cannot pass by producing
+// no comparable frames.
+// Own counter and own result list (review-134 r1 L1): folding article
+// failures into bgFail/bgResults made them print as "background
+// judgment(s)" and serialize under `background.samples`, so an archived
+// report could not tell the U3 judgment apart from the U1 ones.
+const artResults = [];
+let artFail = 0;
+let artMin = Infinity;
+{
+  let artFrames = 0, min = Infinity;
+  let artContained = 0;
+  let artRestored = 0;
+  const seenArtFrames = [];
+  for (const f of exp.sampledFrames) {
+    const tag = String(f).padStart(4, "0");
+    const maskFp = path.join(CANVAS, `f${tag}.art.bin`);
+    if (!fs.existsSync(maskFp) || fs.statSync(maskFp).size === 0) {
+      console.error(`iou: ${maskFp}: missing or empty article mask ` +
+        `(corpus pin: every sampled frame needs one)`);
+      process.exit(1);
+    }
+    const src = fs.readFileSync(maskFp);
+    if (src.length !== SRC_W * SRC_H) {
+      console.error(`iou: ${maskFp}: ${src.length} bytes (want ${SRC_W * SRC_H})`);
+      process.exit(1);
+    }
+    const cink = loadPgm(path.join(RENDER, `f${tag}.art.pgm`));
+    // same band-leak guard the fg loop, bgLeg and the starfield leg carry
+    for (let y = 0; y < 240; y++) {
+      if (y >= BAND_Y0 && y < BAND_Y0 + BAND_H) continue;
+      for (let x = 0; x < W; x++) {
+        if (cink[y * W + x]) {
+          console.error(`iou: article f${tag}: C article ink outside the letterbox band at (${x},${y})`);
+          process.exit(1);
+        }
+      }
+    }
+    // ART-PLANE CONTAINMENT (independent-reviewer Low, review-134). The ART
+    // leg's whole value is that it judges the article pass OF THE FRAME THE
+    // FG LEG JUDGED. Nothing else established that link: on the browser side
+    // `__gfxArticlePlane` replays renderArticles on a cleared fg2 AFTER the
+    // frame's own render, so the replay inherits end-of-frame canvas state
+    // rather than the state the real mid-render pass ran under (upstream
+    // renderVfx has many fg2 translate/rotate/scale sites); on the C side the
+    // sink saves/clears/ORs-back the ink plane. If either replay were
+    // transformed, clipped or mis-restored relative to the real pass, a C
+    // renderer that matched the REPLAY could pass while disagreeing with the
+    // frame the fg leg judged — a false GREEN, the worst direction a judge
+    // can fail in. MEASURED at 0 violations on all four article frames on
+    // BOTH sides (f0184 carries live vfx, so the inherited-CTM case is
+    // exercised), so this FREEZES a measured invariant: it adds no tolerance
+    // and can mask nothing.
+    {
+      const fgMaskFp = path.join(CANVAS, `f${tag}.mask.bin`);
+      const fgSrc = fs.readFileSync(fgMaskFp);
+      if (fgSrc.length !== SRC_W * SRC_H) {
+        console.error(`iou: ${fgMaskFp}: ${fgSrc.length} bytes (want ${SRC_W * SRC_H})`);
+        process.exit(1);
+      }
+      let bviol = 0, bviolAt = -1;
+      for (let i = 0; i < src.length; i++) {
+        if (src[i] && !fgSrc[i]) { bviol++; if (bviolAt < 0) bviolAt = i; }
+      }
+      if (bviol !== 0) {
+        console.error(`iou: article f${tag}: ${bviol} browser article pixel(s) are NOT set in that ` +
+          `frame's judged fg mask (first at ${bviolAt % SRC_W},${Math.floor(bviolAt / SRC_W)}) — the ` +
+          `replayed article plane is not part of the plane the fg leg judged`);
+        process.exit(1);
+      }
+      const fgInk = loadPgm(path.join(RENDER, `f${tag}.pgm`));
+      // The C-side FRAME-TAG arm. This one is deliberately stated for what
+      // it can actually catch and NOTHING MORE (review-134 indep-2 M1): it
+      // is NOT the twin of the browser arm above. On the C side there is no
+      // replay — the article pass IS the real mid-render pass — and this
+      // raster's ink is set-only (raster.c writes it exclusively as
+      // 1/memset-1) with its only clears at PROF stages 0-1, strictly
+      // before the article pass. So `article subset of final fg` is true
+      // for ANY renderer and ANY sink, and it was measured green with the
+      // OR-back deleted. What it still detects is a frame-tag misalignment
+      // between art_sink's dump and the fg dump (they are tagged from
+      // g_bgFrame and f+1 independently), which would pair an article plane
+      // with the wrong frame's fg plane. Kept for that, named for that.
+      let cviol = 0, cviolAt = -1;
+      for (let i = 0; i < cink.length; i++) {
+        if (cink[i] && !fgInk[i]) { cviol++; if (cviolAt < 0) cviolAt = i; }
+      }
+      if (cviol !== 0) {
+        console.error(`iou: article f${tag}: ${cviol} C article cell(s) are NOT set in that frame's ` +
+          `C fg ink plane (first at ${cviolAt % W},${Math.floor(cviolAt / W)}) — the article plane and ` +
+          `the fg plane are not from the same frame`);
+        process.exit(1);
+      }
+      // THE C-SIDE RESTORATION ARM — the one that is contingent on the
+      // isolation working (review-134 indep-2 M1, which found the arm above
+      // tautological with respect to the failure it used to name). The sink
+      // publishes the plane it SAVED before clearing: everything drawn
+      // before the article pass. That ink is removed from the live plane by
+      // the memset and returns ONLY because the OR-back puts it back, so
+      // `saved subset of final fg` is FALSE the moment the OR-back is
+      // removed, truncated, or given the wrong length — and it is toothed by
+      // editing gfx_render.c, not by editing a .pgm (the self-referential
+      // negative-test class CLAUDE.md already registers). Runs on all 24
+      // sampled frames, not just the four article-bearing ones, because the
+      // isolation runs on every frame the sink is armed for.
+      const artPre = loadPgm(path.join(RENDER, `f${tag}.artpre.pgm`));
+      let pviol = 0, pviolAt = -1, pre = 0;
+      for (let i = 0; i < artPre.length; i++) {
+        if (artPre[i]) {
+          pre++;
+          if (!fgInk[i]) { pviol++; if (pviolAt < 0) pviolAt = i; }
+        }
+      }
+      // A saved plane with no ink at all would make the arm vacuous, so the
+      // premise is asserted rather than assumed: stage + players are drawn
+      // before the article pass on every sampled frame.
+      if (pre === 0) {
+        console.error(`iou: article f${tag}: the saved pre-article plane is EMPTY — the restoration ` +
+          `check would be vacuous (stage/player ink is drawn before the article pass)`);
+        process.exit(1);
+      }
+      if (pviol !== 0) {
+        console.error(`iou: article f${tag}: ${pviol} of ${pre} pre-article cell(s) are MISSING from ` +
+          `that frame's C fg ink plane (first at ${pviolAt % W},${Math.floor(pviolAt / W)}) — the ` +
+          `article sink's save/clear/OR-back did not restore the plane it isolated`);
+        process.exit(1);
+      }
+      artRestored++;
+      artContained++;
+    }
+    let inter = 0, union = 0, bi = 0, ci = 0;
+    for (let Y = 0; Y < BAND_H; Y++) {
+      for (let X = 0; X < W; X++) {
+        let a = 0;
+        for (let dy = 0; dy < 5 && !a; dy++) {
+          const row = (Y * 5 + dy) * SRC_W + X * 5;
+          for (let dx = 0; dx < 5; dx++) {
+            if (src[row + dx]) { a = 1; break; }
+          }
+        }
+        const b = cink[(Y + BAND_Y0) * W + X] ? 1 : 0;
+        if (a) bi++;
+        if (b) ci++;
+        if (a & b) inter++;
+        if (a | b) union++;
+      }
+    }
+    if (bi === 0) {
+      // no articles on screen this frame; the C must not invent any
+      if (ci !== 0) {
+        console.error(`iou: article f${tag}: C drew ${ci} article cells where the browser drew none`);
+        process.exit(1);
+      }
+      continue;
+    }
+    artFrames++;
+    seenArtFrames.push(f);
+    const iou = inter / union;
+    if (iou < min) min = iou;
+    const floor = exp.artFrameFloors[`f${tag}`];
+    if (typeof floor !== "number") {
+      console.error(`iou: article f${tag} is article-bearing but has no pinned floor in artFrameFloors`);
+      process.exit(1);
+    }
+    const pass = iou >= floor;
+    if (!pass) artFail++;
+    artResults.push({ frame: `f${tag}`, iou: iou, intersection: inter,
+                      union: union, browserCells: bi, cCells: ci, pass: pass });
+    console.log(`ART f${tag} ${iou.toFixed(4)} (${inter}/${union}) ` +
+      `browser=${bi} C=${ci} floor ${floor} ${pass ? "PASS" : "FAIL"}`);
+  }
+  if (artFrames !== exp.artFrameCount) {
+    console.error(`iou: article pin violated — ${artFrames} article-bearing frames, pinned ${exp.artFrameCount}`);
+    process.exit(1);
+  }
+  // r3 M2: WHICH frames, not just how many. sampledFrames is iterated in
+  // order, so this is an ordered comparison against the frozen list.
+  if (seenArtFrames.join(",") !== exp.artFrames.join(",")) {
+    console.error(`iou: article pin violated — article-bearing frames [${seenArtFrames}] ` +
+      `!= the frozen set [${exp.artFrames}]`);
+    process.exit(1);
+  }
+  // The containment invariant is checked on EVERY sampled frame, not only
+  // the article-bearing ones (it runs before the no-articles `continue`), so
+  // this cardinality is an exact-coverage assertion.
+  if (artContained !== exp.sampledFrames.length) {
+    console.error(`iou: article containment ran on ${artContained} frames, want ${exp.sampledFrames.length}`);
+    process.exit(1);
+  }
+  // Separate counter for the restoration arm so the published line cannot
+  // claim coverage the contingent check did not actually get (review-134
+  // indep-2 M1).
+  if (artRestored !== exp.sampledFrames.length) {
+    console.error(`iou: article pre-plane restoration ran on ${artRestored} frames, want ${exp.sampledFrames.length}`);
+    process.exit(1);
+  }
+  console.log(`ART CONTAIN OK ${artContained}/${exp.sampledFrames.length} frames ` +
+    `(browser article plane subset of judged fg mask; C article plane same-frame as C fg ink; ` +
+    `C pre-article plane restored into C fg ink ${artRestored}/${exp.sampledFrames.length})`);
+  artMin = min;
+  console.log(`ART MIN ${min.toFixed(4)} per-frame floors ` +
+    `frames ${artFrames} (of ${exp.sampledFrames.length} sampled; article-only plane, full band)`);
+}
+
 bgFail += bgLeg("tunnel", exp.bgTunnelFrames.map((f) => {
   const tag = String(f).padStart(4, "0");
   return [`t${tag}`, path.join(CANVAS, `t${tag}.bg.bin`), path.join(BG_TUNNEL, `f${tag}.bg.pgm`)];
@@ -850,7 +1166,8 @@ const injResults = [];
   // capture additionally rendered the injection frame under a
   // DETERMINISTIC page-local render RNG — one full render
   // (f<tag>.det.mask.bin) and one leave-one-out render per inkNames
-  // effect (f<tag>.loo-<name>.mask.bin), same reseed per render, so det
+  // effect (f<tag>.loo-<name>.mask.bin), each starting from the SAME
+  // REWOUND render-RNG state (setState, not a reseed — C28), so det
   // and loo-X differ only by X's draws (plus the queue-order-bounded
   // RNG ripple into later movers' own regions — the same argument as
   // the C leave-one-out, now deterministic on the browser side too).
@@ -871,7 +1188,8 @@ const injResults = [];
   // Trajectory-continuity pin, JUDGE SIDE (review-70 r3, iter 71): the
   // capture's injection-frame CANONICAL render runs on the same
   // deterministic page-local render RNG and the det mask is a strict
-  // REPLAY of it (pre-render snapshot restored + same reseed) — byte-
+  // REPLAY of it (pre-render snapshot restored + the render RNG rewound
+  // to the same state, not reseeded) — byte-
   // identical by construction, asserted capture-side too (twin-pin
   // class). A divergence means the canonical render left the det
   // trajectory (e.g., a native-RNG canonical or a finally re-render
@@ -966,6 +1284,13 @@ if (REPORT && REPORT !== true) {
       gradMaxRow: gradMaxRow,
       samples: bgResults,
     },
+    // U3, its own section (review-134 r1 L1)
+    article: {
+      artFrameFloors: exp.artFrameFloors,
+      artFrameCount: exp.artFrameCount,
+      minIou: artMin === Infinity ? null : artMin,
+      samples: artResults,
+    },
   }, null, 2) + "\n");
 }
 if (fail > 0) {
@@ -974,6 +1299,10 @@ if (fail > 0) {
 }
 if (bgFail > 0) {
   console.error(`iou: ${bgFail} background judgment(s) below threshold`);
+  process.exit(1);
+}
+if (artFail > 0) {
+  console.error(`iou: ${artFail} article judgment(s) below threshold`);
   process.exit(1);
 }
 console.log("IOU OK");

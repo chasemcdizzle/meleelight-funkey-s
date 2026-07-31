@@ -595,6 +595,43 @@ static void laser_pass(Gfx *g, const double *hx6, const double *hy6,
   stroke_cpoly(g, dq, 6, 1, 2.0, col_rgba(stroke.r, stroke.g, stroke.b, 0.8));
 }
 
+// U3: article-only ink observation. NULL in every shipping build; armed
+// only by the browser-parity check (gfx.h note).
+static void (*g_art_sink)(Gfx *);
+// Scratch for the isolation, ALLOCATED WHEN THE SINK IS ARMED (review-134
+// r1 M2). It used to be a function-static array, which put 57,600 bytes of
+// BSS into every shipping link of this TU for instrumentation no shipping
+// caller ever arms — not acceptable on a 32 MB handheld. Armed only by
+// gfx_replay.c, so the device binary carries TWO null pointers — this one
+// and g_art_sink above — and no buffer.
+static uint8_t *g_art_pre;
+
+void gfx_render_article_sink(void (*fn)(Gfx *)) {
+  if (fn != NULL && g_art_pre == NULL) {
+    g_art_pre = malloc((size_t)RAST_W * RAST_H);
+    if (g_art_pre == NULL) gfx_fatal("gfx: oom (article-plane scratch)");
+  }
+  g_art_sink = fn;
+}
+
+// The SAVED pre-article plane, exposed so the sink can publish it
+// (review-134 indep-2 M1). The old C-side containment arm asserted
+// `article ink subset of final fg ink`, which is TRUE FOR ANY RENDERER AND
+// ANY SINK: this raster's ink is set-only (raster.c writes it exclusively as
+// 1/memset-1) and its only clears run at PROF stages 0-1, strictly before
+// the article pass — so nothing the article isolation could get wrong can
+// make that subset relation fail. Deleting the OR-back at the bottom of the
+// armed branch left it green, which is exactly what a check must not do.
+// The plane that IS contingent on the isolation working is this one: it
+// holds everything drawn BEFORE the article pass, it is removed from the
+// live plane by the memset, and it comes back ONLY because the OR-back puts
+// it back. Publishing it lets iou.js assert a restoration rather than a
+// tautology, and the assertion is toothed by editing this file rather than
+// by editing a .pgm.
+// Valid only from inside the sink callback (the scratch holds the saved
+// plane for exactly that window); NULL when the sink is not armed.
+const uint8_t *gfx_render_article_pre(void) { return g_art_pre; }
+
 static void render_articles(Gfx *g, const GameState *st) {
   for (int i = 0; i < st->arts.count; i++) {
     const MlArticle *a = &st->arts.a[i];
@@ -624,7 +661,22 @@ static void render_articles(Gfx *g, const GameState *st) {
     laser_pass(g, px, py, 0, 0, stroke, fill);        // G pass site
     laser_pass(g, px, py, -vx, -vy, stroke, fill);    // R pass (translate(-vec))
     laser_pass(g, px, py, vx, vy, stroke, fill);      // B pass (translate(2vec))
-    g->fg2LineWidth = 2.0; // drawLaserLine's assignment persists
+    // NO fg2LineWidth WRITE (review-134 r3 M1 — faithfulness fix, HARD RULE
+    // 5). drawLaserLine does assign `fg2.lineWidth = 2`, but article.js's
+    // LASER.draw wraps the WHOLE body in fg2.save()/fg2.restore() (:103 and
+    // :117, with a second save/restore inside chromaticAberration), so the
+    // assignment is discarded when draw() returns. The old
+    // `g->fg2LineWidth = 2.0` therefore leaked a width upstream never leaks,
+    // into the two live consumers of that state: the moving-platform stroke
+    // (draw_stage_fg2, which reads it BEFORE re-setting it to 4.0 at the end
+    // of the pass) and the player temp quad. Invisible on g01 — battlefield
+    // has no moving platforms — which is precisely why an aggregate silhouette
+    // on one stage could not have found it.
+    // REGISTERED, not fixed here: a laser-on-a-moving-platform-stage witness
+    // needs a second render corpus (ystory/fountain capture with live
+    // articles), i.e. a new capture golden. What IS mechanically witnessed
+    // every run is the invariant itself — gfx_render_frame asserts the
+    // article pass leaves fg2LineWidth untouched.
   }
 }
 
@@ -680,7 +732,43 @@ void gfx_render_frame(Gfx *g, const GameState *st) {
   for (int i = 0; i < 4; i++) {
     if (st->sim.playerPresent[i]) PROF(4, render_player(g, st, i));
   }
-  PROF(5, render_articles(g, st));
+  if (g_art_sink == NULL) {
+    PROF(5, render_articles(g, st));
+  } else {
+    // U3 article-only plane. Isolate the renderArticles pass the way
+    // gfx_bg.c isolates drawStars: save the ink laid down so far, clear
+    // it, run the pass, hand the sink an ink plane holding EXACTLY the
+    // article ink, then OR the saved plane back. The framebuffer is
+    // never touched and ink is set-only, so the plane every later pass
+    // and every other dump sees is bit-identical to the disarmed path
+    // (ASSERTED: with the sink armed, every fg/bg/star pgm of all 24
+    // sampled frames is byte-equal to the disarmed build's).
+    // The browser twin replays renderArticles onto a CLEARED FG2 after
+    // the frame is captured (gfx-pagelib.js __gfxArticlePlane), so both
+    // sides produce the same ABSOLUTE plane and the comparison needs no
+    // geometric argument about where a laser may appear.
+    // Scratch is heap and belongs to the ARMED state, so a shipping link
+    // carries no buffer at all (review-134 r1 M2).
+    const size_t n = (size_t)RAST_W * RAST_H;
+    if (g_art_pre == NULL) gfx_fatal("gfx: article sink armed without scratch");
+    memcpy(g_art_pre, g->rz.ink, n);
+    memset(g->rz.ink, 0, sizeof g->rz.ink);
+    // Canvas-state witness (review-134 r3 M1). Upstream's LASER.draw is
+    // wrapped in fg2.save()/restore(), so the article pass leaves
+    // fg2LineWidth exactly as it found it. The ART plane judges the laser's
+    // silhouette and nothing else, so a re-introduced leak would be
+    // invisible to it — and invisible to the whole check on g01, which has
+    // no moving platforms to consume the leaked width. Assert the invariant
+    // directly instead: it holds on every stage and every golden.
+    const double lw_pre = g->fg2LineWidth;
+    PROF(5, render_articles(g, st));
+    if (g->fg2LineWidth != lw_pre) {
+      gfx_fatal("gfx: the article pass changed fg2LineWidth — upstream's "
+                "LASER.draw save/restore discards it");
+    }
+    g_art_sink(g);
+    for (size_t i = 0; i < n; i++) g->rz.ink[i] |= g_art_pre[i];
+  }
   PROF(6, gfx_render_vfx(g, st));
   PROF(7, gfx_render_overlay(g, st));
 #ifdef MLFK_RENDER_PROF
@@ -719,13 +807,21 @@ void gfx_dump_ppm(const Gfx *g, const char *path) {
   if (fclose(f) != 0) gfx_fatal("gfx: ppm close failed");
 }
 
-void gfx_dump_ink_pgm(const Gfx *g, const char *path) {
+void gfx_dump_plane_pgm(const uint8_t *plane, const char *path) {
+  if (plane == NULL) gfx_fatal("gfx: pgm dump of a null ink plane");
   FILE *f = fopen(path, "wb");
   if (!f) gfx_fatal("gfx: cannot open pgm for writing");
   fprintf(f, "P5\n%d %d\n255\n", RAST_W, RAST_H);
   for (int i = 0; i < RAST_W * RAST_H; i++) {
-    const uint8_t v = g->rz.ink[i] ? 255 : 0;
+    const uint8_t v = plane[i] ? 255 : 0;
     if (fwrite(&v, 1, 1, f) != 1) gfx_fatal("gfx: pgm write failed");
   }
   if (fclose(f) != 0) gfx_fatal("gfx: pgm close failed");
+}
+
+// The live plane is just the general case with plane == g->rz.ink; sharing
+// one body keeps the two dumps in the SAME P5 grammar by construction, so
+// iou.js can load either with the same reader.
+void gfx_dump_ink_pgm(const Gfx *g, const char *path) {
+  gfx_dump_plane_pgm(g->rz.ink, path);
 }

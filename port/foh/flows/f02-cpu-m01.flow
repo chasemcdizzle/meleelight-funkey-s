@@ -19,8 +19,6 @@ I 375 S
 I 376 -
 I 380 A
 I 381 -
-I 385 A
-I 386 -
 # Anchor UP x70 (y clamps to 0), then DOWN x12 -> y = 46.08: the roster
 # band (26,62) and the cell row (32,62), x still 28.00 = cell 0.
 I 390 U

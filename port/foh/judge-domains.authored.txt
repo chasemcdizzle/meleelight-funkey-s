@@ -1,0 +1,321 @@
+# judge-domains.authored.txt — the AUTHORED authority for EVERY decision
+# surface of the FOHTRACE1 judge (port/foh/judge-foh-trace.js) and of the
+# device-side normalizer (port/foh/normalize-foh-trace.js).
+# Read by check-judge-regression.sh leg [0n].
+#
+# WHY THIS FILE EXISTS (Tier A+ round-3b BLOCKER, 2026-07-30).
+# ---------------------------------------------------------------------------
+# Leg [0g] freezes the judge's decision tables by hashing them. That catches
+# CHANGE. It cannot catch LOOSENING, because the frozen bytes are produced by
+# running the judge under review through a dumper: the artifact and its
+# witness have the same author. The documented remedy for a detected change is
+# "re-freeze and say why", so a widening plus a re-freeze is indistinguishable
+# from a legitimate edit, and nothing outside the judge disagrees.
+#
+# This file is that outside disagreement. It is HAND-AUTHORED and each row is
+# a CLAIM ABOUT UPSTREAM (or about a registered MENU-SPEC deviation), not a
+# dump of anything. Widening a domain, adding an edge, registering a refusal
+# token or loosening a line form now requires editing this file too, and the
+# edit must state a citation that a reviewer can check and that the widening
+# would have to falsify. A re-freeze cannot launder that; it is a second
+# signature, in the reviewer's words.
+#
+# WHY IT COVERS ALL FIVE SURFACES (round-16 / Tier A+ round-4 BLOCKER).
+# ---------------------------------------------------------------------------
+# v1 of this file authored the `S` value plane only. Both reviewers then
+# demonstrated, independently, that the SAME self-derived-pin defect survived
+# on every OTHER decision surface: the LAUNCH/TLAUNCH field domains, the
+# EDGES set, the REFUSED map, and the normalizer's independent copy of the
+# grammar were each witnessed by nothing but their own hash. Stacked
+# widenings on those surfaces left both gates green and launched a mutated
+# match. Authoring one plane and leaving four is not a fix, it is a smaller
+# instance of the same class (HARD RULE 8). All five are authored here.
+#
+# SCOPE — WHAT THIS FILE DOES AND DOES NOT CLAIM (Tier A+ round-4 MINOR-2).
+# ---------------------------------------------------------------------------
+# IN scope. For the six row types below, this file is the authority on
+#   WHICH values / edges / tokens / line forms are LEGAL, and on the upstream
+#   or registered-deviation reason each one is legal. Leg [0n] enforces that
+#   the judge and the normalizer agree with it, semantically AND behaviorally.
+#   Since round-6 the file ALSO authors the judge's TRACE-INTEGRITY rules
+#   (the `X` rows): the SHAPE of a trace -- header, chain continuity, frame
+#   monotonicity, launch adjacency and uniqueness, SHOT-name uniqueness, the
+#   END line and its transition count. That surface was previously declared
+#   OUT of scope on the grounds that legs [5]/[5b]'s negative corpus covered
+#   it. Round-6 falsified that: the corpus is a fixed set of hand-made
+#   fixtures, so deleting a rule the corpus happens not to exercise is
+#   invisible. Every structural rule now has an authored row and a generated
+#   corrupt trace that must be rejected by THAT rule's own declared wording.
+# OUT of scope, deliberately, each covered elsewhere:
+#   - whether the FOH's RUNTIME actually produces a given value on a given
+#     screen: that is the flows gate (check-foh-flows.sh) against real
+#     device traces. A row here says "legal", never "occurs".
+#   - RENDER/layout, timing, audio: no row here constrains a pixel or a frame
+#     budget.
+#   - the sim/checksum plane: menus are not on the CHECKSUM.md surface at all.
+# A row is therefore a NECESSARY condition on the judge, never a sufficient
+# description of the FOH.
+#
+# EDITING RULE: a row moves only together with the upstream/spec change that
+# makes it true. If you cannot name the citation, the row does not move.
+#
+# ---------------------------------------------------------------------------
+# FORMAT. One row per line, first token = row type. Comments `#`, blanks
+# ignored. Counts are pinned in leg [0n]: 17 S, 16 L, 26 E, 8 R, 2 N, 20 X.
+#
+#   S <field> <lo> <hi> <screen[,screen...]> <citation...>
+#       an `S <frame> <field> <value>` field. lo/hi INCLUSIVE. `screen` list
+#       = every screen whose machine may emit the field (the authored
+#       SFIELD_SCREENS row).
+#   L <line> <field> <lo> <hi> <citation...>
+#       a numeric field of the `LAUNCH` / `TLAUNCH` line. lo/hi INCLUSIVE.
+#   E <profile> <from> <to> <cause> <citation...>
+#       a legal screen transition. profile: `any` | `net` (FOH_NETPLAY 1
+#       only) | `nonet` (FOH_NETPLAY 0 only).
+#   R <profile> <token> <screen[,screen...]> <citation...>
+#       a registered refusal token, bound to the screens that may emit it.
+#   N <rule> <value> <citation...>
+#       a line-FORM rule the normalizer must share with the judge.
+#   X <id> <own|preempt> <citation...>
+#       a TRACE-INTEGRITY (structural) rule of the judge: the claim that a
+#       FOHTRACE1 trace is constrained in this shape, plus what the emitter
+#       does that makes the constraint true. `own` = leg [0n.7] builds a
+#       corrupt trace and the judge must reject it with THIS rule's own
+#       declared wording. `preempt` = the corruption this rule guards against
+#       is caught by an EARLIER rule first, so the rule is defensive depth and
+#       cannot fire; the probe proves the PREEMPTION (and names the preempting
+#       rule) rather than pretending to exercise dead code.
+#
+# NOTE ON THE S VALUE ALPHABET: the judge's RE_S_NUM admits only
+# (-1|10|[0-9]), so an HI+1 probe above 10 is unrepresentable and leg [0n]
+# records it as alphabet-bounded rather than pretending to test it. Leg
+# [0n.2] probes the alphabet itself from a FIXED wider token universe
+# (-2..12 plus malformed forms), so widening RE_S_NUM is caught by the
+# universe, not by the alphabet it widened.
+
+
+# === S — the `S <frame> <field> <value>` plane ==============================
+
+# --- CSS plane -------------------------------------------------------------
+# 5 playable characters, ids 0=marth 1=puff 2=fox 3=falco 4=falcon. Pinned
+# independently of the menus by pipeline/expected.json (chars=5) and by the
+# oracle harness --p1/--p2 param table (CLAUDE.md §Commands).
+# p1char is ALSO written on target-select: its shoulder arms write the SHARED
+# characterSelections[targetPlayer] (targetselect.js:58-72 — the L/R arms,
+# `setCS(i, ...)` with wrap <0 -> 4 and >4 -> 0).
+S p1char 0 4 css,target-select characters.js CHARIDS registry, 5 chars; pipeline/expected.json chars=5
+S p2char 0 4 css characters.js CHARIDS registry, 5 chars; pipeline/expected.json chars=5
+# Port type cycle. Upstream togglePort (main.js:510-526) cycles the port
+# through N/A -> HMN -> CPU -> NET; DEVIATION D5 drops NET, leaving 3 states
+# encoded -1 = N/A, 0 = HMN, 1 = CPU. There is no port-0 special case
+# upstream, so P1 carries its own type.
+S p1type -1 1 css main.js:510-526 togglePort, MENU-SPEC DEVIATION D5 (NET dropped)
+S p2type -1 1 css main.js:510-526 togglePort, MENU-SPEC DEVIATION D5 (NET dropped)
+# CPU difficulty knob. MEASURED domain 1..4, not 1..9: the 166-px track
+# parameter t maps round(t*3)+1 (css.js:325-326, MENU-SPEC §2.8). The oracle
+# harness's --difficulty 1-9 is a programmatic surface and is NOT this field.
+S p1difficulty 1 4 css css.js:316-334 round((x-off)*3/166)+1; MENU-SPEC §2.8
+S difficulty 1 4 css css.js:316-334 round((x-off)*3/166)+1; MENU-SPEC §2.8
+# Token-gesture state: whichTokenGrabbed[0]. -1 = empty-handed, else the PORT
+# whose token hand 0 is carrying. The FOH fields 2 ports, so the carried port
+# is 0 or 1.
+S carry -1 1 css css.js:68 whichTokenGrabbed; MENU-SPEC §2.4; FOH is 2-port (DEVIATION D6)
+
+# --- Gameplay options plane ------------------------------------------------
+# The five upstream rows of gameplaymenu.js, MENU-SPEC §3.1's table. Every
+# `^= true` row is integer 0/1 by construction (XOR with 1 coerces); the one
+# stepper row wraps at >2.
+S turbo 0 1 options-gameplay gameplaymenu.js:41 `turbo ^= true`; MENU-SPEC §3.1 row 0
+S lcancel 0 2 options-gameplay gameplaymenu.js:44-47 ++ with wrap >2 -> 0; MENU-SPEC §3.1 row 1
+S flashlcancel 0 1 options-gameplay gameplaymenu.js:50 `flashOnLCancel ^= true`; MENU-SPEC §3.1 row 2
+S walljump 0 1 options-gameplay gameplaymenu.js:53 `everyCharWallJump ^= true`; MENU-SPEC §3.1 row 3
+S tapjump1 0 1 options-gameplay gameplaymenu.js:56 `tapJumpOffp1 ^= true`; MENU-SPEC §3.1 row 4 col 0
+S tapjump2 0 1 options-gameplay gameplaymenu.js:56 `tapJumpOffp2 ^= true`; MENU-SPEC §3.1 row 4 col 1
+S tapjump3 0 1 options-gameplay gameplaymenu.js:56 `tapJumpOffp3 ^= true`; MENU-SPEC §3.1 row 4 col 2
+S tapjump4 0 1 options-gameplay gameplaymenu.js:56 `tapJumpOffp4 ^= true`; MENU-SPEC §3.1 row 4 col 3
+
+# --- Audio options plane ---------------------------------------------------
+# masterVolume[0]=sounds, [1]=music (audiomenu.js:13 — `[0.5, 0.3]`). The
+# machine keeps the raw unrounded double and clamps it to [0,1] (right:
+# += 0.1 clamp >1 -> 1, audiomenu.js:101-106; left: -= 0.1 clamp <0 -> 0,
+# :107-112). The STRUCTURAL plane carries round(v*10), so the same clamp in
+# tenths is [0,10]. The numeric readout itself is DEVIATION D14.
+S soundsvol 0 10 options-audio audiomenu.js:13,101-112 masterVolume[0] clamped [0,1], traced in tenths
+S musicvol 0 10 options-audio audiomenu.js:13,101-112 masterVolume[1] clamped [0,1], traced in tenths
+
+
+# === L — the LAUNCH / TLAUNCH field domains =================================
+# The launch line is the FOH's hand-off to the sim: every field here becomes a
+# sim_setup_match argument -- EXCEPT `flashlcancel`, which reaches only the
+# renderer (port/gfx/gfx.h:71), and `walljump`, which reaches nothing at all
+# (foh_persist.h:187 -- MEASURED DEAD upstream, MENU-SPEC §3.3). Those two are
+# the render/dead rows of MENU-SPEC §3.1 and are recorded here so the sentence
+# stays true (Tier A+ round 8, NIT 1). For the other fourteen, a widening buys
+# a match the record does not describe. The second reviewer's exploit was
+# exactly this (`stage=8`, `difficulty=7` accepted after a stacked widening +
+# re-freeze).
+#
+# There is deliberately NO `p1type` field on the LAUNCH line: port 0 is
+# pinned HUMAN and the FOH REFUSES to launch otherwise (foh.c:682-687 emits
+# `refused portconfig` when !(p1Type==0 && (p2Type==0||p2Type==1))). If a
+# p1type field ever appears on this line, that refusal has been weakened and
+# this row block is stale.
+# `versus=0` is a fixed literal, not a domain: the FOH launches VS matches
+# only, and the target-test plane uses TLAUNCH instead.
+L launch p1 0 4 characters.js CHARIDS registry, 5 chars; pipeline/expected.json chars=5
+L launch p2 0 4 characters.js CHARIDS registry, 5 chars; pipeline/expected.json chars=5
+L launch p2type 0 1 foh.c:682-687 launch refusal — port 1 is HMN(0) or CPU(1); N/A never launches
+L launch difficulty 1 4 css.js:316-334 round((x-off)*3/166)+1; MENU-SPEC §2.8
+L launch stage 0 5 vs-stages.js:8-15 exports 6 VS stages; activeStage.js:21-28 stageMapping 0..5; pipeline/expected.json stages=6
+L launch turbo 0 1 gameplaymenu.js:41 `turbo ^= true`; MENU-SPEC §3.1 row 0
+L launch lcancel 0 2 gameplaymenu.js:44-47 ++ with wrap >2 -> 0; MENU-SPEC §3.1 row 1
+L launch flashlcancel 0 1 gameplaymenu.js:50 `flashOnLCancel ^= true`; MENU-SPEC §3.1 row 2
+L launch walljump 0 1 gameplaymenu.js:53 `everyCharWallJump ^= true`; MENU-SPEC §3.1 row 3
+L launch tapjump1 0 1 gameplaymenu.js:56 `tapJumpOffp1 ^= true`; MENU-SPEC §3.1 row 4 col 0
+L launch tapjump2 0 1 gameplaymenu.js:56 `tapJumpOffp2 ^= true`; MENU-SPEC §3.1 row 4 col 1
+L launch tapjump3 0 1 gameplaymenu.js:56 `tapJumpOffp3 ^= true`; MENU-SPEC §3.1 row 4 col 2
+L launch tapjump4 0 1 gameplaymenu.js:56 `tapJumpOffp4 ^= true`; MENU-SPEC §3.1 row 4 col 3
+L launch versus 0 0 fixed literal — the FOH launches VS only; target tests use TLAUNCH
+L tlaunch char 0 4 characters.js CHARIDS registry, 5 chars; pipeline/expected.json chars=5
+L tlaunch tstage 0 9 activeStage.js:36-47 targetStageMapping has exactly 10 keys, 0..9 -> targetstage1..10
+
+
+# === E — the legal screen transitions ======================================
+# The judge's EDGES set. An UNAUTHORED edge is a new path through the FOH,
+# so it takes a citation like any other claim. Profile `net`/`nonet` rows are
+# the FOH_NETPLAY-dependent blocks; exactly one block is live in a build and
+# leg [0n] checks the one the header selects.
+E any startup title timer startup.js:49-50 — startUpTimer reaches 370
+E any title menu-top start main.js:385 changeGamemode(1) on START
+E any menu-top menu-options a menu.js:92-98 OPTIONS submenu
+E any menu-options options-gameplay a menu.js:135 changeGamemode(11)
+E any menu-options menu-controls a menu.js:138-141 CONTROLS chooser
+E any menu-options menu-top b menu.js:164-191 menuBack, cursor restored to 3
+E any menu-controls menu-options b menu.js:164-191 menuBack, cursor restored to 0
+E any options-gameplay menu-options b gameplaymenu.js:25-36 back arm, cursor 1
+E any css sss start css.js:446-451 START while readyToFight -> changeGamemode(6)
+E any menu-options options-audio a menu.js:130 changeGamemode(10)
+E any options-audio menu-options b audiomenu.js:20-26 changeGamemode(1), menuMode/menuSelected untouched
+E any menu-controls controls-controller a menu.js:155-157 changeGamemode(14)
+E any menu-controls controls-keyboard a menu.js:159-161 changeGamemode(12)
+E any controls-controller menu-controls b MENU-SPEC §9.2 DEVIATION D15 — added B exit (upstream gameMode 14 runs no control fn, main.js:947-949)
+E any controls-keyboard menu-controls b MENU-SPEC §9.3 keyboard rebinder back arm (DEVIATION D13 scope)
+E any sss css b stageselect.js:77-79 B -> menuBack + changeGamemode(2)
+E any sss match launch stageselect.js:80-88 A confirm -> startGame; main.js:1320-1370
+E any menu-top target-select a menu.js:77-84 TARGETTEST -> changeGamemode(7)
+E any target-select menu-top b targetselect.js:73-78 B -> menuBack + changeGamemode(1)
+E any target-select target-match launch targetselect.js:127-148 A/START -> setActiveStageTarget + startTargetGame; main.js:987-990 gameMode==5 arm
+E net menu-top menu-battle a menu.js:73-75 VS. Melee submenu (netplay build only)
+E net menu-battle css a menu.js:105 Local VS action
+E net menu-battle menu-top b menu.js:164-191 menuBack
+E net css menu-battle bhold css.js:186-191 B held 30 frames returns to the page entered from
+E nonet menu-top css a menu.js:105 Local VS action run directly (owner ruling C5, 2026-07-28)
+E nonet css menu-top bhold css.js:186-191 B held 30 frames returns to the page entered from
+
+
+# === R — the registered refusal tokens =====================================
+# A refusal token is a promise that a visible affordance does NOTHING. Each
+# is bound to the screen that may emit it: a globally registered token would
+# pass on any screen (review-r1 BLOCKER). `audio`, `controller` and
+# `keyboard` are absent BY CONSTRUCTION — they are real screens in every
+# build now (MENU-SPEC §4/§9), so a trace refusing them is corruption.
+R any targetbuilder menu-top MENU-SPEC §11 — target builder is out of scope
+R any credits menu-options MENU-SPEC §8 — the last unbuilt screen
+R any random sss MENU-SPEC §6.5 first paragraph + §6.6 gap row 6 — the refusal is a REGISTERED EXCLUSION (register: foh.h:69-76) because upstream's confirm arm draws from the seeded stream (stageselect.js:83). D11 is NOT the authority for it: D11 is the PENDING deviation that DELETES this refusal (§12 roadmap row 8), so citing it here would have said the opposite of what it says
+R any addcode target-select MENU-SPEC §11 — share-code/builder plane out of scope
+R any portconfig css MENU-SPEC §2.7 DEVIATION D17 — the CSS may reach a port config the LAUNCH plane cannot honour (togglePort has no port-0 case, main.js:510-526; sim.h:98-100 has no P1 type and sim_boot.c:374-383 pins types[0]=0). The refusal itself is foh.c:671-685, cited as the SITE, never as its own authority
+R net spectate menu-battle netplay build only — the page exists solely at FOH_NETPLAY 1
+R net p2p menu-battle netplay build only — the page exists solely at FOH_NETPLAY 1
+R net server menu-battle netplay build only — the page exists solely at FOH_NETPLAY 1
+
+
+# === N — line-FORM rules the normalizer must share =========================
+# The device-side normalizer carries its own independent copy of the grammar.
+# Independent copies are the point (a shared module would let one edit move
+# both), but nothing outside the two of them said they must AGREE. Round-16
+# exploited exactly that: widening the normalizer's NUM to `[0-9]+` while the
+# judge kept the canonical form left both gates green. Leg [0n.6] drives the
+# SAME authored rows through BOTH programs, so neither can drift alone.
+N stokenalphabet -1,10,0-9 judge-foh-trace.js RE_S_NUM admits exactly the tokens `(-1|10|[0-9])` = the UNION of every field's domain: -1 from DEVIATION D5's N/A type cycle (css.js:68, MENU-SPEC §2), 10 from the volume fields' tenths (audiomenu.js:13,101-112, MENU-SPEC §4), 0-9 for the rest. This is the ALPHABET, not a domain: a token OUTSIDE it dies on FORM, a token inside it but outside its own field's domain dies on DOMAIN, and leg [0n] declares which of the two each probe must produce -- so widening the alphabet changes which diagnostic fires and is caught even where the per-field domain rows would still hold.
+#   Consequence recorded honestly: HI+1 above 10 is UNREPRESENTABLE in this
+#   alphabet, so no probe can test it. That is a property of the grammar,
+#   not a gap this file papers over.
+N frameanchor canonical-decimal foh_app.c emits every frame/count with plain `%ld` (no width, no `0` flag), so a leading zero is not producible; both programs must spell `(0|[1-9][0-9]*)`, never `[0-9]+`
+
+
+# === X — the TRACE-INTEGRITY (structural) plane =============================
+#
+# WHY THIS SECTION EXISTS (Tier A+ round-6 BLOCKER, 2026-07-30).
+# ---------------------------------------------------------------------------
+# v2 of this file authored five surfaces, and every row on all five was a
+# VALUE/DOMAIN row: which values a field may take, which screen may emit it,
+# which edges exist, which refusal tokens are registered, which line forms are
+# spelled canonically. Not one row constrained the SHAPE of a trace. So the
+# judge's structural rules -- the ones that make a trace a TRACE and not a bag
+# of independently-valid lines -- were still witnessed by nothing but leg
+# [0g]'s hash of the judge's own source and a fixed corpus of hand-made
+# fixtures. Deleting a structural rule that the corpus does not happen to
+# exercise is exactly the self-derived-pin defect this file exists to close,
+# one surface further out.
+#
+# WHAT AN X ROW CLAIMS. Not "the judge has this line". Two things the judge
+# cannot say about itself: (1) a FOHTRACE1 trace is constrained in this shape,
+# and (2) the EMITTER makes that constraint true -- the citation names the code
+# that produces the shape. A widening that drops the rule falsifies claim (1)
+# by hand, and the row cannot move without an emitter change to cite.
+#
+# THE EMITTERS. Two: the host driver (foh_app.c -- header :437, T :491,
+# S :518-520, TLAUNCH :528, LAUNCH :532, SHOT :565, END :571, fclose checked
+# :575) and the device driver (foh_dev.c -- lines buffered in RAM by tr_line
+# at :1122 under the TR_MAX cap and flushed after the FOH phase; header :1928,
+# SHOT :1154, T :2185, S :2217, TLAUNCH :2223, LAUNCH :2226, END :2309).
+# The foh_dev.c line numbers moved when the match-exit lane landed in the same
+# commit as this file; they are re-measured here, not carried over.
+#
+# BOTH emitters satisfy every row. The device emitter's registered LAUNCH patch
+# (`.loop/menus-p2-device-workorder-audio.md` §A2, docs/MENU-SPEC.md) LANDED in
+# the same change that first committed this file: foh_dev.c:2226-2232 now emits
+# `flashlcancel=%d walljump=%d` after `lcancel=%d`, so `L launch flashlcancel`
+# (:167) and `L launch walljump` (:168) are emitted by both. The paragraph that
+# excused their absence is deleted, as its own instruction required.
+#
+# This is not a promise -- it is ENFORCED. check-judge-regression.sh leg [0e]
+# extracts the LAUNCH column sequence from RE_LAUNCH and from each emitter's
+# own concatenated C format string and asserts the difference equals exactly
+# a pinned pending set, pinned in BOTH directions and order-sensitive: a third
+# column drifting fails, and the day the device patch landed the leg failed
+# until the exception was removed. Both pending sets are now EMPTY, which is
+# the strongest form of the pin -- any column either emitter fails to emit is a
+# hard failure with nothing left to hide behind. Tier A+ round 8 found this
+# paragraph asserting something measurably false; the remedy is that the
+# paragraph can no longer be wrong without a gate saying so.
+#
+# ON `preempt` ROWS. Four rules cannot fire: the judge checks the frame of the
+# `T ... launch` line BEFORE the LAUNCH/TLAUNCH line whose frame must EQUAL it,
+# and the EDGES graph has no edge departing `match` or `target-match`, so a
+# second launch is a chain break before it is a second launch. Those rules are
+# defensive depth. Recording them as `own` would be a lie (no probe could ever
+# make them fire); dropping them would leave the corruption unprobed. The probe
+# drives the corruption and pins the PREEMPTING rule's wording, so the
+# preemption itself is behavioral rather than a claim in a comment.
+
+X empty own foh_app.c:437 writes the FOHTRACE1 header before any event can be recorded and foh_dev.c:1928 does the same, so a zero-byte trace means the emitter never ran; a judge that accepts it reports a green flow for a run that produced nothing
+X torn own foh_dev.c:1122 buffers the whole trace in RAM and flushes it after the FOH phase, and both drivers check fclose (foh_app.c:575); a trace without its trailing newline is a torn or short write, i.e. a truncated run that must never read as a complete pass
+X header own both emitters spell the header with a single fixed format string (`FOHTRACE1 flow=%s`, foh_app.c:437 / foh_dev.c:1928), so the header is exact or the file is not ours; an inexact header means a foreign or corrupt file being judged against a flow id it does not belong to
+X afterend own END is the LAST line either emitter writes (foh_app.c:571 then fclose :575; foh_dev.c:2309), so any bytes after it are appended by something that is not the run -- a stale file being re-used, or two runs concatenated
+X tregress own every frame field is the device tick counter at emission time (foh_dev.c:2185 emits the tick `t`), which is monotone within a run; a T line whose frame goes backwards means the trace interleaves two runs or the tick source was reset mid-flow
+X tchain own each T line's `from`/`to` are the machine's own edge endpoints (foh_app.c:491 emits ev->from/ev->to), so consecutive transitions must be end-to-end continuous; a break means a transition went unrecorded, which is precisely the class the flow gate exists to catch
+X launchadj own the LAUNCH record is written inside the SAME event block as its transition, immediately after it and at the same frame (foh_app.c:527-536 sits in the branch that just emitted the `T ... launch` line; foh_dev.c:2223-2232 likewise), so a LAUNCH that is not adjacent to its own T describes a launch the machine did not take
+X launchregress preempt UNREACHABLE, preempted by rule `tregress`: the adjacency rule already requires the LAUNCH frame to EQUAL the preceding `T ... launch` frame, and that T line's own frame was regress-checked first, so no trace can reach the LAUNCH frame check with a regressed frame; kept as defensive depth
+X launchonce preempt UNREACHABLE, preempted by rule `tchain`: a second LAUNCH needs a second `T ... sss match launch`, whose `from` is `sss` while the machine is already on `match`, and the authored E rows give NO edge departing `match` -- so a second launch is a chain break first; kept as defensive depth
+X tlaunchadj own the TLAUNCH record is written in the same event block as its `T <f> target-select target-match launch` and at the same frame (foh_app.c:527-531, foh_dev.c:2223), so non-adjacency describes a target launch the machine did not take
+X tlaunchregress preempt UNREACHABLE, preempted by rule `tregress`, exactly as `launchregress` is: the TLAUNCH frame must equal its already-checked T frame; kept as defensive depth
+X tlaunchonce preempt UNREACHABLE, preempted by rule `tchain`: the authored E rows give no edge departing `target-match`, so a second TLAUNCH is a chain break first; kept as defensive depth
+X sregress own S lines carry the same monotone tick as T lines (foh_app.c:518-520 emits the frame of the event being drained), so a regressed S frame is the same interleaving or reset corruption as `tregress`, on the field plane
+X srefregress own the refusal form `S <frame> refused <token>` is emitted from the same event drain and carries the same monotone tick; it is a SEPARATE arm of the judge from the numeric S form, so it needs its own probe -- a widening that drops the frame check from one arm leaves the other arm's probe green
+X shotregress own SHOT lines are emitted at the tick the screenshot is taken (foh_dev.c:1154), inside the same monotone drain, so a regressed SHOT frame is the same corruption class
+X shotdup own the .flow script names each screenshot once and foh_app.c:171 parses one `SHOT <frame> <name>` per script line, so two SHOT lines carrying one name mean two captures were written to one name -- the second silently overwrites the first and the screenshot judge then compares one image twice
+X endframe own the END frame is the flow's total length (foh_app.c:571 emits g_flow_frames; foh_dev.c:2309 the end tick), which by construction covers every event frame; an END below the last event means the run was cut short of the events it claims to contain
+X endcount own both emitters count transitions as they write them and emit the total on the END line (foh_app.c:571, foh_dev.c:2309), so the declared count and the counted T lines are the SAME number computed twice -- a mismatch means lines were lost or added between the two
+X noend own END is written unconditionally at the end of the FOH phase and its file is fclose-checked (foh_app.c:571-575), so a trace without an END line is a run that crashed, hung, or was killed -- the single most important thing a flow gate must never call green
+X launchexpect own whether a flow launches is a property of the flow itself, passed to the judge as its third argument by check-foh-flows.sh and by the M4 gate's leg [2]; a trace that silently stops launching (or starts launching) still has a perfectly well-formed shape, so only the expectation catches it
