@@ -513,7 +513,17 @@ typedef struct {
 
 static const char *g_fbwit_path; // judged witness output (FBWIT1)
 static const char *g_fbwit_raw;  // measurement dump dir (instrument)
-static FbWitRow g_fbwit_rows[FLOW_SHOT_CAP];
+// FLOW_SHOT_CAP rows for the FOH-phase shots (the flow loader refuses a
+// flow with more) PLUS ONE for the VS-finish banner's own present, which
+// is sampled from the C18 block below (R6, 2026-07-31, review-r6-r4 [LOW]).
+// Without the +1 a flow using all 16 legal SHOT rows and then reaching a
+// clock expiry would die on row overflow — i.e. the added witness would
+// have quietly shrunk the legal shot count by one. Exactly ONE extra row is
+// enough because the finish sample is guarded on `matchesRun == 0` (see the
+// C18 block below): the witness file is scoped to the first match, the same
+// scope the FOH artifact flush at :2348 already uses.
+#define FBWIT_ROW_CAP (FLOW_SHOT_CAP + 1)
+static FbWitRow g_fbwit_rows[FBWIT_ROW_CAP];
 static int g_nfbwit;
 
 #ifdef __linux__
@@ -685,7 +695,7 @@ static void fbwit_sample(const char *name, const uint16_t *sub, long tick) {
       }
     }
   }
-  if (g_nfbwit >= FLOW_SHOT_CAP) sim_fatal("fb witness: row overflow");
+  if (g_nfbwit >= FBWIT_ROW_CAP) sim_fatal("fb witness: row overflow");
   strcpy(g_fbwit_rows[g_nfbwit].name, name);
   g_fbwit_rows[g_nfbwit].tick = tick;
   g_fbwit_rows[g_nfbwit].yoff = vi.yoffset;
@@ -3344,9 +3354,11 @@ foh_phase:;
           // C18 evidence: the banner is NOT an overlay, so nothing else can
           // photograph it. Same MLFK_MENU_SHOT env as the overlays: unset in
           // the product launcher and in every evidence leg, and set by
-          // EXACTLY ONE check — port/foh/check-live-arms.sh, which drives this
-          // arm to its real matchTimer expiry and then measures this frame's
-          // ink against the committed font to prove the banner says TIME!.
+          // EXACTLY TWO checks — port/foh/check-live-arms.sh, which drives
+          // this arm to its real matchTimer expiry on the HOST twin and
+          // measures this frame's ink against the committed font to prove
+          // the banner says TIME!, and port/foh/check-device-foh.sh's [7b]
+          // leg, which drives the same arm ON THE DEVICE.
           {
             const char *sd = getenv("MLFK_MENU_SHOT");
             if (sd && *sd) {
@@ -3356,6 +3368,35 @@ foh_phase:;
             }
           }
           if (platform_present(g_gfx.rz.fb) != 0) matchPresentFails++;
+          // PRESENT WITNESS on the ONE present this block makes (R6,
+          // 2026-07-31). The self-shot above photographs the RASTER, which a
+          // dead or no-op presenter produces just as happily — on the host
+          // that is all there is, and "the banner reached the panel" stayed
+          // an inference for as long as this arm had never run on hardware.
+          // fbwit_sample re-reads the DISPLAYED kernel-fb page and dies
+          // in-app if it is not this frame, exactly as it does for the FOH
+          // shots; the re-flush republishes the witness file the FOH phase
+          // already wrote, because the rows are cumulative and the FOH
+          // re-entry this block causes deliberately writes no artifacts
+          // (matchesRun > 0 at :2337). Inert wherever --fb-witness is absent
+          // — i.e. everywhere except the one leg that drives this arm — and
+          // unreachable on a non-linux build, where fbwit_open already died
+          // at startup rather than letting either pointer be set.
+          //
+          // FIRST MATCH ONLY, and that is the SAME ARTIFACT-SCOPE RULE the
+          // FOH flush already obeys at :2348 (review-r6-r5 [LOW]). The rows
+          // are cumulative and never reset, so an unguarded sample would let
+          // a run that finishes a SECOND match append a SECOND
+          // `finish-banner` row and re-flush FBWIT1 with duplicates — an
+          // artifact whose row list no longer means "the flow's shots, plus
+          // the finish". An earlier version of this note claimed the row cap
+          // would catch that; it would not, because a five-shot flow has ten
+          // rows of headroom. `matchesRun` is still 0 here (it increments at
+          // :3545, after this block), so this is exactly "the first match".
+          if ((g_fbwit_path || g_fbwit_raw) && matchesRun == 0) {
+            fbwit_sample("finish-banner", g_gfx.rz.fb, f + 1);
+            fbwit_flush(flowId);
+          }
           // MusicManager.stopWhatisPlaying() (main.js:1498). This arm MUTES
           // ONLY: the lock-bracketed flag flip below, and nothing else. The
           // TARGET finish arm additionally signals the reader thread to quit

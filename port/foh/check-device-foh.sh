@@ -57,6 +57,27 @@
 #    frozen g01 stream (exceeds the conventions' prefix bar); p99 <
 #    16.67 ms (judge-render-timing.js), skips==0, presentFails==0,
 #    underruns==0, badlen==0, music starves==0;
+#  - THE VS CLOCK EXPIRY, ON HARDWARE ([5b] host twin + [7b] device leg;
+#    R6, 2026-07-31). `--match-timer` is the ONLY trigger for the
+#    VS-finish arm (foh_dev.c's C18 block: the TIME! banner, its sfx,
+#    the music mute, the 2500 ms hold, the MEX_CSS re-entry), and until
+#    this leg existed its only consumer was check-live-arms.sh, which
+#    runs the HOST twin. That mattered: the arm's finish frame carries a
+#    NEGATIVE matchTimer, and R3 found that rendering it aborted the
+#    game outright (`glyphs: font 0 has no glyph '-'`, SIM FATAL frame
+#    210) — a crash EVERY natural VS timeout on this device would have
+#    hit. The clamp that fixed it had only ever been witnessed on a
+#    host. This leg drives the committed f01 navigation ON the device
+#    through the real keysym path, lets a 2 s clock run out, and judges:
+#    rc 0 with ZERO `SIM FATAL` bytes in the app log; the match ending
+#    at the EXPIRY (a measured frame window) and not at its bound; the
+#    banner shot byte-exact vs the host twin AND independently decoded
+#    back to "TIME!" from the committed font by decode-pb-glyphs.js; the
+#    2500 ms hold measured off the paced floor; the PRESENT WITNESS on
+#    the banner's own present (foh_dev.c samples the displayed kernel-fb
+#    page there too, so the banner is proven to have reached the panel,
+#    not just the raster); the second FOH phase the arm re-enters; and
+#    skips/underruns/starves == 0 with voice starts == the twin's.
 #  - f02/f03/f05: BRIDGE-STATE byte-exact vs the frozen .bstate.expect
 #    (CPU toggle + difficulty, settings plane, p2char/stage — all
 #    through the real keysym path);
@@ -148,7 +169,55 @@ WALL_MAX_MS=66000
 QW_PRE_SLACK_S=10
 QW_POST_SLACK_S=10
 READY_TRIES=30
-DEADMAN_S="${MLFK_DEADMAN_S:-900}" # whole device phase (7 legs) backstop
+DEADMAN_S="${MLFK_DEADMAN_S:-900}" # whole device phase (8 legs) backstop
+# UNCHANGED at 900 WITH the new [7b] leg, and that is a MEASUREMENT, not an
+# assumption (review-r6-r1/r2 [HIGH], settled). An earlier version of this
+# increment widened it to 1080 on the reasoning that the window is sized to
+# the number of legs inside one park. The reviewer's counter was correct and
+# decisive: this timer also BOUNDS a healthy phase, so widening it admits
+# runs the old value would have killed — a cap, and HARD RULE 3 territory.
+# So it was measured instead. The whole parked phase (park -> the [8b]
+# unpark) ran 326 s on 2026-07-31 with [7b] included — [7]'s five legs
+# 532272->532486, [7b] 532486->532544 (58 s), OPK+tooth 532544->532598 —
+# i.e. under 40% of the window, with ~570 s of margin. [7b] costs ~58 s of
+# that. No widening is needed and none is taken.
+# VS-CLOCK-EXPIRY leg pins (R6, 2026-07-31). The leg drives the COMMITTED
+# f01 navigation and then simply stops pressing, so the only thing that can
+# end its match is the clock — `--match-timer 2` stands in for upstream's
+# 480 s VS clock exactly as it does on the host twin (check-live-arms.sh
+# [5]). sim_tick.c decrements matchTimer by 0.016667 per frame once
+# `starting` clears (~90 frames at startTimer 1.5), so a 2 s clock expires
+# around frame 210 — MEASURED at exactly 210 on the host twin. The window
+# below is wide enough to survive a startTimer change and narrow enough to
+# exclude BOTH the 400-frame bound and an early death.
+VSF_ID=f01-vs-g01
+VSF_TIMER=2
+VSF_FRAMES=400
+VSF_EXPIRY_LO=120
+VSF_EXPIRY_HI=320
+# The 2500 ms hold, measured off the PACED FLOOR (check-live-arms.sh [5]/B3
+# arithmetic, restated): the loop pace-sleeps after every frame EXCEPT the
+# finish frame, so (frames-1) budget periods is a true floor on the paced
+# portion and everything above it is the hold. HOST window is that check's
+# measured [2450,2700]. The DEVICE window keeps the same floor — the floor
+# is the assertion that the hold ran IN FULL — and widens the ceiling to
+# 3000 ms for device scheduling headroom, which is not slack for the hold
+# but for the open mmcirq-correlated stall class the p99/skip bars already
+# track (AGENT-LOG 2026-07-31, B9). A hold that did not run at all lands
+# ~0 ms and a truncated one lands well under 2450, so the floor is what
+# discriminates and it is NOT relaxed.
+VSF_HOLD_FLOOR_MS=2450
+VSF_HOLD_CEIL_HOST_MS=2700
+VSF_HOLD_CEIL_DEV_MS=3000
+# The banner: tdev_vs_banner_text draws "TIME!" at scale 4 in WHITE
+# (255,255,255) centred by foh_render.c's text_center — x = (240 - 116)/2
+# = 62, y = 120 - (7*4)/2 = 106. decode-pb-glyphs.js reads that back out of
+# the shot through the COMMITTED font tables, so the assertion is about
+# WHICH banner, not about how much ink there is.
+VSF_BANNER_Y=106
+VSF_BANNER_SCALE=4
+VSF_BANNER_TEXT='TIME!'
+VSF_BANNER_RGB=255,255,255
 # present-witness envelope pins (measured, iter-95 probe
 # .loop/m4-foh95-probe.log; must equal foh_dev.c's FBWIT_* pins — the
 # FBWIT1 header carries them and is judged byte-anchored below)
@@ -169,12 +238,16 @@ e709c03b2631ad0ab66a3f010c86905d9d1d5c81550d0143d7ca0799b95db878 port/foh/judge-
 4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js
 2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e port/foh/keymap-frozen.txt
 a1353a71a66bb05bc28d547eee9385cfa8da7baf784f9e038bd31834cabb9cb8 port/foh/normalize-foh-trace.js
-1163e9c18323ac06aaaec4ee3068691d7d67ebbf98b3500a343a69c80ca793ea port/foh/flow-to-fkscript.js"
+1163e9c18323ac06aaaec4ee3068691d7d67ebbf98b3500a343a69c80ca793ea port/foh/flow-to-fkscript.js
+809ea4f6cc361014f75be8034d8fef69fd2a683213c1bc111574dfbbe98a31f9 port/foh/decode-pb-glyphs.js"
 # +2 (CSS mechanics arc): this check EXECUTES the normalizer (its poll-path
 # verdict is normalized-sequence equality) and the translator (it generates
 # every fk_input script it injects), so both were evidence-bearing here while
 # unpinned. check-device-target.sh already pinned all three.
-N_PINS_WANT=9
+# +1 (R6): the [7b] VS-finish leg DECODES the device banner shot back to
+# "TIME!" through decode-pb-glyphs.js, so that tool is evidence-bearing
+# here exactly as it is in check-device-persist.sh (which pins it too).
+N_PINS_WANT=10
 # Audio artifact pins: sndpack + battlefield.pcm are TWIN-PINNED to the
 # reviewed literals in the sibling checks (asserted below via
 # rig_pin_assert_once — drift at either site is a loud death);
@@ -839,6 +912,86 @@ parse_match_summary() { # <log> <frames> <pace>
     grammar_die "match summary line failed re-extraction ('$line')"
   fi
 }
+
+# VS-finish match summary (R6). Same whitelist discipline as
+# parse_match_summary — needle-ANYWHERE == 1, one full-line grammar match,
+# canonical numerals, re-extraction or death — but the FRAME COUNT is the
+# measurement here (it must be the clock expiry and not the 400-frame
+# bound), so it is captured instead of pinned into the pattern. A separate
+# function rather than a parameterized one: parameterizing the frames field
+# would shift every capture index in parse_match_summary, and that function
+# is the perf leg's only reader of `wall`.
+parse_finish_summary() { # <log>
+  local log="$1" re cnt line pcnt
+  unset fin_frames fin_skips fin_fails fin_wall_ms
+  nl_terminated "$log" "vsfinish match summary"
+  pcnt="$(grep_count 'foh_dev match:' "$log" "vsfinish match summary")"
+  [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt lines containing 'foh_dev match:' (want exactly 1 — resemblance ANYWHERE is corruption)"
+  re="^foh_dev match: ${NUM12} frames, ${NUM12} render skips, ${NUM12} failed presents, wall ${NUM12} ms, pace=1 budget=${BUDGET_NS} ns\$"
+  cnt="$(grep_count "$re" "$log" "vsfinish match summary")"
+  [ "$cnt" = 1 ] || grammar_die "app log $log has $cnt lines matching the pinned vsfinish match-summary grammar (want 1)"
+  line="$(grep -E "$re" "$log")"
+  # groups: 1=frames 2=skips 3=fails 4=wall
+  if [[ "$line" =~ ^foh_dev\ match:\ (0|[1-9][0-9]{0,11})\ frames,\ (0|[1-9][0-9]{0,11})\ render\ skips,\ (0|[1-9][0-9]{0,11})\ failed\ presents,\ wall\ (0|[1-9][0-9]{0,11})\ ms,\ pace=1\ budget=${BUDGET_NS}\ ns$ ]]; then
+    fin_frames="${BASH_REMATCH[1]}"
+    fin_skips="${BASH_REMATCH[2]}"
+    fin_fails="${BASH_REMATCH[3]}"
+    fin_wall_ms="${BASH_REMATCH[4]}"
+  else
+    grammar_die "vsfinish match summary line failed re-extraction ('$line')"
+  fi
+}
+
+# The whole VS-finish verdict, applied identically to the host twin and to
+# the device leg (R6). Taking the same measurements on both sides is the
+# point: the host side is what check-live-arms.sh already proves, so any
+# device-only divergence is exactly the thing this leg exists to surface.
+judge_vsfinish() { # <side-label> <applog> <banner.ppm> <hold-ceiling-ms>
+  local side="$1" log="$2" banner="$3" ceil="$4" paced hold dec
+  # (0) NO CONTROL BYTES, before anything parses (review-r6-r4 [MEDIUM]).
+  # Every assertion below reasons about LINES, and a control byte breaks
+  # line reasoning in ways no line-level guard can see: it can split the
+  # `SIM FATAL` needle this leg exists to count, or hide a duplicate
+  # `foh_dev match:` from the resemblance-anywhere check while a valid
+  # summary still matches. The app log is pure ASCII by construction (the
+  # foh_dev.c fprintf sites are fixed format strings and decimals), so a
+  # genuine log can never carry one, and refusing the class once up front
+  # is cheaper than proving each reader immune.
+  ascii_text_ok "$log" \
+    || grammar_die "$side vsfinish: the app log contains control byte(s) other than TAB/LF, or could not be measured — CORRUPT evidence (control bytes defeat line-oriented parsing, including the SIM FATAL count below)"
+  # (1) THE CRASH BAR. R3's shipping defect aborted the process ON THIS
+  # FRAME, so "no SIM FATAL bytes anywhere in the log" is a first-class
+  # assertion and not a by-product of the rc check.
+  [ "$(grep_count 'SIM FATAL' "$log" "$side vsfinish")" = 0 ] \
+    || fail "$side vsfinish: the app log carries 'SIM FATAL' — the negative-matchTimer finish frame died (the R3 clamp did not hold): $(grep -a 'SIM FATAL' "$log" | head -1)"
+  # (2) the match ended at the CLOCK EXPIRY, not at its bound and not early
+  parse_finish_summary "$log"
+  [ "$fin_frames" -lt "$VSF_FRAMES" ] \
+    || fail "$side vsfinish: the match ran the full $VSF_FRAMES-frame bound — the clock never expired, so nothing here exercised the finish arm"
+  [ "$fin_frames" -gt "$VSF_EXPIRY_LO" ] && [ "$fin_frames" -lt "$VSF_EXPIRY_HI" ] \
+    || fail "$side vsfinish: the match ended on frame $fin_frames, outside the ($VSF_EXPIRY_LO,$VSF_EXPIRY_HI) window a ${VSF_TIMER}s clock plus the 'starting' window produces — it ended for some other reason and this leg is not evidence about the finish arm"
+  [ "$fin_skips" = 0 ] || fail "$side vsfinish: $fin_skips render skips in the match (want 0)"
+  [ "$fin_fails" = 0 ] || fail "$side vsfinish: $fin_fails failed presents in the match (want 0)"
+  # (3) the 2500 ms hold ran, and ran IN FULL
+  paced=$(( (fin_frames - 1) * BUDGET_NS / 1000000 ))
+  hold=$(( fin_wall_ms - paced ))
+  [ "$hold" -ge "$VSF_HOLD_FLOOR_MS" ] && [ "$hold" -le "$ceil" ] \
+    || fail "$side vsfinish: wall ${fin_wall_ms} ms over $fin_frames paced frames leaves a ${hold} ms hold, outside [$VSF_HOLD_FLOOR_MS,$ceil] — the 2500 ms finish hold did not run, or did not run in full"
+  # (4) WHICH banner. The self-shot exists only because the `if (g_vsFinish)`
+  # block wrote it, so the file is already a statement about that block; the
+  # decode says the block painted TIME! (a clock expiry) and not GAME! (a
+  # final death), read out of the shot through the COMMITTED font tables.
+  made "$banner"
+  dec="$(node "$FOH/decode-pb-glyphs.js" "$FOH/foh_font.c" "$banner" \
+    "$VSF_BANNER_Y" "$VSF_BANNER_SCALE" "${#VSF_BANNER_TEXT}" 0,240 "$VSF_BANNER_RGB")" \
+    || fail "$side vsfinish: the finish-banner shot did not decode at the committed banner origin (y=$VSF_BANNER_Y scale=$VSF_BANNER_SCALE)"
+  [ "$dec" = "$VSF_BANNER_TEXT" ] \
+    || fail "$side vsfinish: the finish banner decodes to '$dec', not '$VSF_BANNER_TEXT' — a clock expiry must paint TIME!"
+  VSF_FRAMES_SEEN="$fin_frames"
+  VSF_HOLD_SEEN="$hold"
+  echo "   $side vsfinish: expiry on frame $fin_frames, banner decodes '$dec', hold ${hold} ms in [$VSF_HOLD_FLOOR_MS,$ceil], 0 skips / 0 failed presents"
+}
+
 parse_audio_summary() { # <log>
   local log="$1" re cnt line pcnt
   unset au_underruns au_badlen au_starts au_stops
@@ -1100,6 +1253,65 @@ for k in 0 1 2 3 4; do
   cmp "$BUILD/$id.fks" "$BUILD/$id.fks.b" || fail "fk script $id not byte-stable x2"
 done
 echo "   5 fk scripts derived (LEAD 8200 ms, 1 device frame per flow frame)"
+
+# --- [5b] VS-finish HOST TWIN (the reference for the [7b] device leg) ------------
+echo "== [5b] VS-finish host twin (--match-timer; the [7b] device leg's reference) =="
+# Placed here and not with the other twins because it needs the fk script
+# derived above: the twin is driven through the SAME --input poll arm the
+# device uses, fed the SAME committed f01 key script, so both sides consume
+# one input model and a device-only divergence cannot be an artifact of the
+# host's flow-fed PlatformInput construction. `--bridge live` is required
+# (foh_dev.c refuses --match-timer anywhere else — the arm is only consulted
+# on a live VS launch) and it in turn requires --pace 1 and the recording
+# triad, so this twin is a real 60 fps run and takes about a minute.
+VSF_END="$(grep -E '^END (0|[1-9][0-9]*)$' "$FLOWS/$VSF_ID.flow" | awk '{print $2}')"
+[[ "$VSF_END" =~ ^(0|[1-9][0-9]{0,5})$ ]] || fail "vsfinish: flow END frame grammar ('$VSF_END')"
+VSF_FOHMAX=$(( (8200 * 60 / 1000) + (VSF_END - 370) + 600 ))
+VSFT=$BUILD/twin-vsfinish
+rm -rf "$VSFT"
+mkdir -p "$VSFT/shots" "$VSFT/banner" "$VSFT/persist"
+env "MLFK_PERSIST_DIR=$PWD/$VSFT/persist" \
+    "MLFK_MENU_SHOT=$PWD/$VSFT/banner" \
+    "MLFK_MENU_IMG1=$PWD/$TABLES/assets/menu.img1" \
+    "MLFK_HEADLESS_KEYS=$PWD/$BUILD/$VSF_ID.fks" \
+  "$BUILD/foh_dev_headless" --flow "$FLOWS/$VSF_ID.flow" --input poll \
+    --flow-out "$VSFT/trace.txt" --shots-dir "$VSFT/shots" \
+    --foh-max "$VSF_FOHMAX" --pace 1 --budget-ns "$BUDGET_NS" \
+    --bridge live --simdata "$BUILD/simdata.txt" --seed "$seed" \
+    --bstate-out "$VSFT/bstate.txt" \
+    --gfxdata "$GFXDATA_FROZEN" --vfxdata "$VFXDATA_FROZEN" \
+    --glyphs "$VFXGLYPHS_FROZEN" --anim-dir "$TABLES" --legible \
+    --sndpack "$BUILD/sndpack.bin" --music-manifest "$BUILD/foh-music-host.txt" \
+    --frames "$VSF_FRAMES" --record-trace "$VSFT/rec.json" \
+    --record-keys "$VSFT/keys.txt" --match-timer "$VSF_TIMER" \
+    2> "$VSFT/log.txt" \
+  || { cat "$VSFT/log.txt" >&2; fail "vsfinish host twin exited nonzero"; }
+made "$VSFT/trace.txt" "$VSFT/log.txt" "$VSFT/bstate.txt"
+judge_vsfinish twin "$VSFT/log.txt" "$VSFT/banner/finish-banner.ppm" \
+  "$VSF_HOLD_CEIL_HOST_MS"
+VSF_TWIN_FRAMES="$VSF_FRAMES_SEEN"
+# the FOH phase the arm RE-ENTERS (foh_dev.c's g_mexit = MEX_CSS): a run
+# that reached the tick bound WITHOUT launching, after a match was played.
+# A single-phase run cannot produce that shape — its phase ended BY
+# launching — so this line IS the block's destination.
+VSF_SHOTS="startup title menu-top css sss"
+VSF_NSHOTS="$(printf '%s\n' $VSF_SHOTS | wc -l | tr -d ' ')"
+parse_foh_summary "$VSFT/log.txt" 0 "$VSF_NSHOTS"
+[ "$foh_transitions" = 0 ] || fail "vsfinish twin: the re-entered FOH phase reports $foh_transitions transitions (want 0 — nothing presses anything after the match)"
+[ "$foh_skips" = 0 ] || fail "vsfinish twin: $foh_skips FOH render skips"
+[ "$foh_fails" = 0 ] || fail "vsfinish twin: $foh_fails failed presents in the FOH phase"
+VSF_FOHLINE="^foh_dev foh: $VSF_FOHMAX ticks, 0 transitions, $VSF_NSHOTS shots, 0 render skips, 0 failed presents, launched=0\$"
+[ "$(grep_count "$VSF_FOHLINE" "$VSFT/log.txt" "vsfinish twin FOH phase")" = 1 ] \
+  || grammar_die "vsfinish twin: the teardown FOH summary is not the MEX_CSS re-entry's shape ($VSF_FOHMAX ticks, launched=0)"
+parse_audio_summary "$VSFT/log.txt"
+VSF_TWIN_STARTS="$au_starts"
+VSF_TWIN_STOPS="$au_stops"
+[ "$VSF_TWIN_STARTS" -gt 0 ] \
+  || fail "vsfinish twin: 0 voice starts — the SFX plane is loaded but nothing played, so the finish sfx cannot have played either"
+nshots_got="$(ls "$VSFT/shots" | wc -l | tr -d ' ')"
+[ "$nshots_got" = "$VSF_NSHOTS" ] || fail "vsfinish twin: $nshots_got shots != $VSF_NSHOTS"
+made "$VSFT/banner/finish-banner.ppm"
+echo "   vsfinish twin OK (frame $VSF_TWIN_FRAMES expiry, MEX_CSS re-entry at $VSF_FOHMAX ticks, starts=$VSF_TWIN_STARTS)"
 
 # --- [6] arm build + push --------------------------------------------------------
 echo "== [6/9] armv7 build (shared rig stamp) + push + provenance =="
@@ -1472,6 +1684,204 @@ parse_match_summary "$BUILD/f01-vs-g01.dev-applog.txt" "$frames" 1
 [ "$match_wall_ms" -ge "$WALL_MIN_MS" ] && [ "$match_wall_ms" -le "$WALL_MAX_MS" ] \
   || fail "match wall ${match_wall_ms} ms outside [$WALL_MIN_MS,$WALL_MAX_MS]"
 echo "   f01 perf OK (p99 ${full_p99_ms} ms < 16.67; skips 0/$FRAMES_PIN; wall ${match_wall_ms} ms)"
+
+# --- [7b] device VS-CLOCK-EXPIRY leg (the C18 finish arm, on hardware) -----------
+echo "== [7b] device leg: the VS clock runs out (--match-timer) on real hardware =="
+# Same navigation, same key script, same park/deadman/quiesce plumbing as
+# the five legs above — deliberately, because hand-rolling a second park is
+# the registered C24 hazard (a check that set /mnt/disable_frontend and died
+# host-side left the device refusing to start its frontend on every boot).
+# The ONLY differences from the f01 leg are the bridge (live, the only mode
+# --match-timer is consulted in) and that nothing is pressed after the
+# launch, so the clock is the only thing that can end the match.
+vsfid=vsfinish
+args="--flow $DTMP/$VSF_ID.flow --input poll --flow-out $DTMP/$vsfid.trace.txt"
+args="$args --shots-dir $DTMP/$vsfid-shots --ready-file $DTMP/$vsfid.ready"
+args="$args --foh-max $VSF_FOHMAX --pace 1 --budget-ns $BUDGET_NS"
+args="$args --fb-witness $DTMP/$vsfid.fbwit.txt"
+args="$args --sndpack $DSD/sndpack.bin --music-manifest $DTMP/foh-music-dev.txt"
+args="$args --bridge live --simdata $DTMP/simdata.txt --seed $seed"
+args="$args --bstate-out $DTMP/$vsfid.bstate.txt"
+args="$args --gfxdata $DTMP/gfxdata-frozen.txt --vfxdata $DTMP/vfxdata-frozen.txt"
+args="$args --glyphs $DTMP/vfxglyphs-frozen.txt --anim-dir $DTMP --legible"
+args="$args --frames $VSF_FRAMES --record-trace $DTMP/$vsfid.rec.json"
+args="$args --record-keys $DTMP/$vsfid.keys.txt --match-timer $VSF_TIMER"
+rm -f "$BUILD/$vsfid.argv"
+printf '%s\n' "$args" > "$BUILD/$vsfid.argv"
+rig_argv_assert_once "$BUILD/$vsfid.argv" "--input" || exit 1
+rig_argv_assert_once "$BUILD/$vsfid.argv" "--match-timer" || exit 1
+# status-honest counts (review-r6-r1 [HIGH]): `grep -c ... || true` launders
+# a READ failure into the count `0`… and, worse, an erroring grep that has
+# already printed `1` into a passing certification. grep_count separates
+# "no match" (rc 1) from "grep failed" (rc >1) and dies on the latter.
+c="$(grep_count "--input poll" "$BUILD/$vsfid.argv" "leg $vsfid argv")"
+[ "$c" = 1 ] || fail "leg $vsfid: device argv does not pin '--input poll' (the M3 binding)"
+c="$(grep_count "--match-timer $VSF_TIMER" "$BUILD/$vsfid.argv" "leg $vsfid argv")"
+[ "$c" = 1 ] || fail "leg $vsfid: device argv does not carry '--match-timer $VSF_TIMER' — without it upstream's 480 s clock is 28,000 frames away and this leg proves nothing"
+rm -f "$BUILD/$vsfid-launch.sh"
+cat > "$BUILD/$vsfid-launch.sh" << EOF
+#!/bin/sh
+# generated by check-device-foh.sh — VS-clock-expiry leg launcher
+cd $DTMP || exit 9
+rm -rf $vsfid.apprc $vsfid.ready $vsfid-shots $vsfid-banner $vsfid-persist foh.pid.$DM_NONCE app.start.ts app.end.ts
+mkdir -p $vsfid-shots $vsfid-banner
+setsid sh -c 'date +%s > $DTMP/app.start.ts; MLFK_PERSIST_DIR=$DTMP/$vsfid-persist MLFK_MENU_IMG1=$DTMP/menu.img1 MLFK_MENU_SHOT=$DTMP/$vsfid-banner ./foh_device $args \\
+  2> $DTMP/$vsfid.applog.txt & \\
+  echo \$! > $DTMP/foh.pid.$DM_NONCE; \\
+  wait \$!; arc=\$?; \\
+  date +%s > $DTMP/app.end.ts; \\
+  echo "RC=\$arc" > $DTMP/$vsfid.apprc' \\
+  </dev/null >/dev/null 2>&1 &
+sleep 2
+EOF
+made "$BUILD/$vsfid-launch.sh"
+adb -s "$DEV" push "$BUILD/$vsfid-launch.sh" "$DTMP/" >/dev/null
+hsum="$(rig_host_sha256 "$BUILD/$vsfid-launch.sh")" || exit 1
+dsum="$(rig_dev_sha256 "$DTMP/$vsfid-launch.sh")" || exit 1
+[ "$dsum" = "$hsum" ] || fail "pushed $vsfid-launch.sh sha mismatch"
+dsh "chmod +x $DTMP/$vsfid-launch.sh"
+
+echo "== leg $vsfid (bridge=live, match-timer=${VSF_TIMER}s, foh-max=$VSF_FOHMAX)"
+dsh "printf '' > $DTMP/qd.low_bat_check.$DM_NONCE"
+LBC_STOPPED=1
+lbc_pid="$(rig_daemon_stop low_bat_check)"
+dsh "date +%s > $DTMP/qstop.ts"
+dsh "sh -lc $DTMP/$vsfid-launch.sh"
+ready=0
+for _ in $(seq 1 "$READY_TRIES"); do
+  if dsh "test -f $DTMP/$vsfid.ready" >/dev/null 2>&1; then ready=1; break; fi
+  sleep 1
+done
+if [ "$ready" != 1 ]; then
+  dsh "cat $DTMP/$vsfid.applog.txt" >&2 || true
+  fail "leg $vsfid: app ready marker never appeared (${READY_TRIES}s)"
+fi
+# the DEADMAN's scoped-kill record, asserted BEFORE anything long-running and
+# asserted for what it has to BE (review-r6-r4/r6/r7 [MEDIUM]). The existing
+# legs check `test -s` only after the app has exited: that proves a record
+# existed, not that it named the running app, and not during the window in
+# which it matters. The deadman's kill arm is
+# `grep -q foh_device /proc/$gp/cmdline`, so a torn or malformed record makes
+# the backstop a no-op — a host/ADB loss mid-leg would then leave a wedged
+# foh_device holding the parked frontend. Here the record is read at
+# READINESS (before the injector runs), parsed with the canonical-decimal
+# grammar this rig uses everywhere, checked to name a LIVE process whose
+# cmdline really is foh_device, retained, and required to be the SAME pid
+# after the run.
+vsf_pid="$(dsh "cat $DTMP/foh.pid.$DM_NONCE")" \
+  || fail "leg $vsfid: could not read the deadman's scoped-kill pid record at app-ready"
+vsf_pid="${vsf_pid%$'\n'}"
+[[ "$vsf_pid" =~ ^[1-9][0-9]{0,6}$ ]] \
+  || fail "leg $vsfid: the deadman pid record is not a canonical pid ('$vsf_pid') — the deadman's /proc/<pid>/cmdline guard would match nothing, so this leg would run with no working backstop"
+dsh "grep -q foh_device /proc/$vsf_pid/cmdline" \
+  || fail "leg $vsfid: pid $vsf_pid from the deadman record is not a live foh_device — the backstop cannot kill this app"
+echo "   app ready — playing $VSF_ID.fks through fk_input (uinput -> SDL keysyms)"
+dsh "sh -lc 'cd $DTMP && ./fk_input $VSF_ID.fks'" || fail "leg $vsfid: fk_input injector failed"
+# bounded §7#1 wait: ~210 paced frames + the 2500 ms hold + the re-entered
+# FOH phase running to its $VSF_FOHMAX bound. The apprc poll below carries
+# the rest.
+sleep 35
+done_f=0
+for _ in $(seq 1 40); do
+  if dsh "test -f $DTMP/$vsfid.apprc" >/dev/null 2>&1; then done_f=1; break; fi
+  sleep 2
+done
+if [ "$done_f" != 1 ]; then
+  dsh "cat $DTMP/$vsfid.applog.txt" >&2 || true
+  fail "leg $vsfid: app rc file never appeared"
+fi
+if rig_daemon_restore low_bat_check /etc/init.d/S12low-bat-check "$DTMP/qrestore.ts"; then
+  dsh "rm -f $DTMP/qd.low_bat_check.$DM_NONCE"
+  dsh "test ! -f $DTMP/qd.low_bat_check.$DM_NONCE"
+  LBC_STOPPED=0
+else
+  fail "leg $vsfid: low_bat_check did not verify as running after restart"
+fi
+qstop_ts="$(rig_dev_ts "$DTMP/qstop.ts")" || exit 1
+appstart_ts="$(rig_dev_ts "$DTMP/app.start.ts")" || exit 1
+append_ts="$(rig_dev_ts "$DTMP/app.end.ts")" || exit 1
+qrestore_ts="$(rig_dev_ts "$DTMP/qrestore.ts")" || exit 1
+rig_quiesce_bracket_assert "foh $vsfid low_bat_check" \
+  "$qstop_ts" "$appstart_ts" "$append_ts" "$qrestore_ts" \
+  "$QW_PRE_SLACK_S" "$QW_POST_SLACK_S" || exit 1
+vsf_pid2="$(dsh "cat $DTMP/foh.pid.$DM_NONCE")" \
+  || fail "leg $vsfid: could not re-read the deadman's scoped-kill pid record after the leg"
+vsf_pid2="${vsf_pid2%$'\n'}"
+[ "$vsf_pid2" = "$vsf_pid" ] \
+  || fail "leg $vsfid: the deadman pid record changed during the leg ('$vsf_pid' -> '$vsf_pid2') — the backstop was pointing at something other than the app that produced this evidence"
+pullv "$DTMP/$vsfid.apprc" "$BUILD/$vsfid.apprc"
+pullv "$DTMP/$vsfid.applog.txt" "$BUILD/$vsfid.dev-applog.txt"
+# THE HEADLINE: rc 0. The shipping defect this leg exists for killed the
+# process on the finish frame, so the app log is dumped on any nonzero rc —
+# a future regression should print its own death rather than a bare number.
+if ! cmp -s "$BUILD/$vsfid.apprc" <(printf 'RC=0\n'); then
+  cat "$BUILD/$vsfid.dev-applog.txt" >&2 || true
+  fail "leg $vsfid: app rc file is not EXACTLY 'RC=0<newline>' (got: '$(cat "$BUILD/$vsfid.apprc")') — a natural VS timeout did not survive on the device"
+fi
+pullv "$DTMP/$vsfid-banner/finish-banner.ppm" "$BUILD/$vsfid.dev-banner.ppm"
+judge_vsfinish device "$BUILD/$vsfid.dev-applog.txt" "$BUILD/$vsfid.dev-banner.ppm" \
+  "$VSF_HOLD_CEIL_DEV_MS"
+VSF_DEV_FRAMES="$VSF_FRAMES_SEEN"
+VSF_DEV_HOLD="$VSF_HOLD_SEEN"
+# the finish frame is a SIM frame, so the two sides must agree on WHICH one
+# the clock expired at — a device that expired somewhere else is not running
+# the same match and its banner says nothing about the host's.
+[ "$VSF_DEV_FRAMES" = "$VSF_TWIN_FRAMES" ] \
+  || fail "leg $vsfid: the device match expired on frame $VSF_DEV_FRAMES, the host twin on $VSF_TWIN_FRAMES — the two are not the same match"
+# ...and the finish frame's PIXELS are identical, which is the R3 clamp's
+# real device witness: the crash was the HUD drawing a NEGATIVE matchTimer
+# on this exact frame, and this shot is that frame's raster with the banner
+# composited over it.
+judge_dev_shot "$vsfid/finish-banner" "$BUILD/$vsfid.dev-banner.ppm" \
+  "$VSFT/banner/finish-banner.ppm"
+# the FOH-phase shots, byte-exact vs the same twin
+ndev="$(dsh "ls $DTMP/$vsfid-shots | wc -l")" || fail "leg $vsfid: cannot enumerate device shots"
+ndev="${ndev%$'\n'}"
+ndev="$(printf '%s' "$ndev" | tr -d ' ')"
+[[ "$ndev" =~ ^(0|[1-9][0-9]{0,2})$ ]] || fail "leg $vsfid: device shot count grammar ('$ndev')"
+[ "$ndev" = "$VSF_NSHOTS" ] || fail "leg $vsfid: device shot count $ndev != $VSF_NSHOTS"
+for sname in $VSF_SHOTS; do
+  pullv "$DTMP/$vsfid-shots/$sname.ppm" "$BUILD/$vsfid.dev-shot-$sname.ppm"
+  judge_dev_shot "$vsfid/$sname" "$BUILD/$vsfid.dev-shot-$sname.ppm" "$VSFT/shots/$sname.ppm"
+done
+# PRESENT WITNESS. The five FOH rows are the pipeline the other legs use;
+# the SIXTH row is the one this leg adds — foh_dev.c samples the displayed
+# kernel-fb page on the banner's own present too, so "the TIME! banner
+# reached the panel" stops being an inference off a RAM shot.
+pullv "$DTMP/$vsfid.fbwit.txt" "$BUILD/$vsfid.fbwit.txt"
+# shellcheck disable=SC2086 — VSF_SHOTS is a space-joined name list
+judge_fbwit "$BUILD/$vsfid.fbwit.txt" "$VSF_ID" $VSF_SHOTS finish-banner
+FBWIT_TOTAL=$((FBWIT_TOTAL + VSF_NSHOTS + 1))
+# the re-entered FOH phase (MEX_CSS), same shape as the twin's
+parse_foh_summary "$BUILD/$vsfid.dev-applog.txt" 0 "$VSF_NSHOTS"
+[ "$foh_transitions" = 0 ] || fail "leg $vsfid: the re-entered FOH phase reports $foh_transitions transitions (want 0)"
+[ "$foh_skips" = 0 ] || fail "leg $vsfid: $foh_skips FOH render skips (want 0; quiesced leg)"
+[ "$foh_fails" = 0 ] || fail "leg $vsfid: $foh_fails failed presents in the FOH phase"
+[ "$(grep_count "$VSF_FOHLINE" "$BUILD/$vsfid.dev-applog.txt" "vsfinish device FOH phase")" = 1 ] \
+  || grammar_die "leg $vsfid: the teardown FOH summary is not the MEX_CSS re-entry's shape ($VSF_FOHMAX ticks, launched=0) — the finish block did not land back on the CSS"
+parse_audio_summary "$BUILD/$vsfid.dev-applog.txt"
+[ "$au_underruns" = 0 ] || fail "leg $vsfid: $au_underruns audio underruns (want 0)"
+[ "$au_badlen" = 0 ] || fail "leg $vsfid: $au_badlen audio badlen callbacks (want 0)"
+[ "$au_starts" = "$VSF_TWIN_STARTS" ] || fail "leg $vsfid: device voice starts $au_starts != twin $VSF_TWIN_STARTS (the finish sfx / menu wiring diverged)"
+[ "$au_stops" = "$VSF_TWIN_STOPS" ] || fail "leg $vsfid: device voice stops $au_stops != twin $VSF_TWIN_STOPS"
+parse_music_summary "$BUILD/$vsfid.dev-applog.txt"
+[ "$mu_starves" = 0 ] || fail "leg $vsfid: $mu_starves music starves (want 0)"
+[ "$mu_out" != 0 ] || fail "leg $vsfid: music consumed 0 output frames"
+# trace + bridge state: judged against the TWIN (which ran byte-identical
+# argv), normalized for the injection-cadence difference the poll path has
+# by construction — the frozen .expect belongs to the verify-bridge f01 leg
+# and is judged there.
+pullv "$DTMP/$vsfid.trace.txt" "$BUILD/$vsfid.dev-trace.txt"
+node "$FOH/judge-foh-trace.js" "$BUILD/$vsfid.dev-trace.txt" "$VSF_ID" 1
+norm "$BUILD/$vsfid.dev-trace.txt" "$BUILD/$vsfid.dev-trace.norm"
+norm "$VSFT/trace.txt" "$BUILD/$vsfid.twin-trace.norm"
+cmp "$BUILD/$vsfid.dev-trace.norm" "$BUILD/$vsfid.twin-trace.norm" \
+  || fail "leg $vsfid: DEVICE trace (normalized) != the host twin's — the real keysym path diverged from the twin's navigation"
+pullv "$DTMP/$vsfid.bstate.txt" "$BUILD/$vsfid.dev-bstate.txt"
+cmp "$BUILD/$vsfid.dev-bstate.txt" "$VSFT/bstate.txt" \
+  || fail "leg $vsfid: DEVICE BRIDGE-STATE != the host twin's"
+VSFINISH_DONE=1
+echo "   -> leg $vsfid OK (expiry frame $VSF_DEV_FRAMES == twin, banner byte-exact + decodes '$VSF_BANNER_TEXT', fb-witnessed, hold ${VSF_DEV_HOLD} ms, rc 0 — the negative-matchTimer clamp holds ON HARDWARE)"
 
 # --- [8] OPK: package (mksquashfs 4.4 ONLY) + mount + FOH-entry evidence ---------
 echo "== [8/9] OPK: FOH launcher packaged, mounted on device, evidence run =="
@@ -1911,4 +2321,8 @@ rig_no_commit_guard "$BUILD" "$DEVB" "$TABLES" "$AUDIO_OUT"
 # opk=evidence (iter 95, review-93 M3): the OPK leg proves the
 # mount-and-run EVIDENCE path only — frontend-nav launch + the live
 # branch are task 14's gate leg, deliberately NOT claimed here.
-echo "DEVICE FOH OK (flows=5 shots=15 bridge=1 states=3 opk=evidence fbwit=$FBWIT_TOTAL p99=${full_p99_ms}ms skips=0 underruns=0 starves=0 starts${DEV_STARTS} teeth=$teeth)"
+# vsfinish=1 (R6): the C18 VS-clock-expiry arm ran ON THE DEVICE — banner
+# byte-exact + decoded, present-witnessed, hold measured, rc 0.
+[ "${VSFINISH_DONE:-0}" = 1 ] \
+  || fail "verdict guard: the [7b] VS-clock-expiry leg did not complete, so this run is not the evidence its verdict line claims"
+echo "DEVICE FOH OK (flows=5 shots=15 bridge=1 states=3 vsfinish=1 opk=evidence fbwit=$FBWIT_TOTAL p99=${full_p99_ms}ms skips=0 underruns=0 starves=0 starts${DEV_STARTS} teeth=$teeth)"

@@ -820,18 +820,60 @@ L1_PERT="$(derive_pb 402e000000000000)" || fail "L1: perturbed derivation failed
 [ "$L1_PERT" != "$REC_DISPLAY" ] || fail "L1: dead-tooth — perturbed bits derived the same display as REC_BITS"
 echo "   L1 OK: PERSONAL BEST '$REC_DISPLAY' derived independently from the record bits (spec rule); defaults '--:--:--'; dead-tooth guarded"
 
-# L-b (review-102): CONNECT the independently-derived display string to
-# the SHOT PIXELS. decode-pb-glyphs.js reads the FOH 5x7 font tables from
-# foh_font.c AS DATA and decodes the PERSONAL BEST region of the shot
-# back into a string — NOT the C renderer — so the display is bound to
-# actual pixels, not a renderer-vs-renderer echo. Pinned like the judge
-# twin (artifact identity, PROCESS §4). Region: text_center line at
-# y=194, scale 1, 22 glyphs ("PERSONAL BEST " + the 8-char PB display).
-DECODE_SHA=1b7ada83dcb9b23f6f7c42974738788cd2811d502660cb19d16a74e122cfbe70
+# L-b (review-102; RE-TARGETED R5, 2026-07-31): CONNECT the
+# independently-derived display string to the SHOT PIXELS.
+# decode-pb-glyphs.js reads the FOH 5x7 font tables from foh_font.c AS
+# DATA and decodes the PERSONAL BEST region of the shot back into a
+# string — NOT the C renderer — so the display is bound to actual pixels,
+# not a renderer-vs-renderer echo. Pinned like the judge twin (artifact
+# identity, PROCESS §4).
+#
+# THE REGION MOVED, and this is the ONLY assertion that changed shape.
+# When this check was authored (iter 100) the row was ONE kAccent
+# text_center line at y=194 carrying all 22 glyphs. The menus lane made
+# it a PANEL — foh_render.c render_tselect: x=92, y=160, w=140, h=62 —
+# carrying TWO text_in lines in TWO colour classes:
+#   label "PERSONAL BEST" at y+22 = 182, scale 1, kDim    (120,120,140)
+#   time  "0X:XX.XX"      at y+38 = 198, scale 2, kAccent (255,200,60)
+# So the decode is two calls whose composition is the SAME 22-character
+# string this leg has always asserted, against the SAME expectations.
+# Nothing here got weaker: the decoder's on-test went from an accent
+# luminance threshold to EXACT post-565 colour equality, and the two
+# classes are now both load-bearing (tooth below). The drift survived a
+# lane that updated every committed flow only because this check had
+# never been executed (R5, AGENT-LOG 2026-07-31).
+PB_WIN=92,140            # the panel's text_in window (x,w)
+PB_LBL_Y=182;  PB_LBL_SCALE=1;  PB_LBL_N=13; PB_LBL_RGB=120,120,140
+PB_TIME_Y=198; PB_TIME_SCALE=2; PB_TIME_N=8; PB_TIME_RGB=255,200,60
+DECODE_SHA=809ea4f6cc361014f75be8034d8fef69fd2a683213c1bc111574dfbbe98a31f9
 have="$(rig_host_sha256 "$FOH/decode-pb-glyphs.js")" || exit 1
 [ "$have" = "$DECODE_SHA" ] || fail "decode-pb-glyphs.js sha $have != pinned $DECODE_SHA (reviewed pin update in the same commit)"
+decode_pb_part() { # <shot.ppm> <y> <scale> <nglyphs> <r,g,b> -> decoded chars
+  # `flat-panel` (review-r6-r7 [HIGH]): BOTH PB lines sit inside the
+  # target-select info panel, whose fill is a flat (16,4,0) over kBg — no
+  # gameplay renders behind them — so the decoder may treat any BRIGHT pixel
+  # inside the line rectangle that is not this line's ink as damage. That is
+  # the one discrimination the pre-panel accent-threshold decoder had and
+  # exact colour equality alone does not: foreign ink dropped into an OFF
+  # cell. It is NOT passed by the finish-banner decode in
+  # check-device-foh.sh, which is drawn over a live frame where bright
+  # background is legitimate.
+  node "$FOH/decode-pb-glyphs.js" "$FOH/foh_font.c" "$1" "$2" "$3" "$4" "$PB_WIN" "$5" flat-panel
+}
 decode_pb_line() { # <shot.ppm> -> the decoded 22-char PERSONAL BEST line
-  node "$FOH/decode-pb-glyphs.js" "$FOH/foh_font.c" "$1" 194 1 22
+  # `local` on its own line: `local x="$(...)"` reports the DECLARATION's
+  # status, so a decoder death would be laundered into success here.
+  # The decoder's OWN rc is propagated, never collapsed to 1
+  # (review-r6-r3 [LOW]): the teeth below require rc 3 exactly — the
+  # no-matching-glyph / mixed-cell / blank-line death — so that a node
+  # crash, an unreadable file or a usage error (rc 1/2) can never be
+  # credited as "the decoder rejected these pixels".
+  local lbl tm rc=0
+  lbl="$(decode_pb_part "$1" "$PB_LBL_Y" "$PB_LBL_SCALE" "$PB_LBL_N" "$PB_LBL_RGB")" || rc=$?
+  [ "$rc" = 0 ] || return "$rc"
+  tm="$(decode_pb_part "$1" "$PB_TIME_Y" "$PB_TIME_SCALE" "$PB_TIME_N" "$PB_TIME_RGB")" || rc=$?
+  [ "$rc" = 0 ] || return "$rc"
+  printf '%s %s' "$lbl" "$tm"
 }
 L1_PB_LINE="PERSONAL BEST $L1_PB"    # persisted-twin expectation
 L1_DEF_LINE="PERSONAL BEST $L1_DEF"  # defaults-control expectation
@@ -847,22 +889,109 @@ dec_ctrl="$(decode_pb_line "$HP/p02ctrl/shots/tss-record.ppm")" \
   || fail "L-b: dead-tooth — twin and control shots decoded to the SAME string ('$dec_twin')"
 # dead-tooth: a one-pixel-perturbed COPY of the twin shot must NOT decode
 # the same string (proves the decoder reads pixels, not a constant).
+# The perturbed pixel is the TOP-LEFT pixel of the first lit cell of the
+# time line — derived from the same window/scale constants the decoder
+# uses, not hunted for by luminance in a hand-typed band (the old band was
+# additionally addressing the pre-panel y=194 layout). Top-left and NOT
+# centre on purpose (review-r6-r3 [MEDIUM]): at scale 2 the decoder used
+# to look only at each cell's centre pixel, so a tooth that perturbs the
+# centre would still pass against that weaker sampler. This one perturbs a
+# pixel the centre sampler could not see, so it fires only because the
+# decoder now reads the WHOLE cell — and it lands as a MIXED cell, which
+# is the decoder's rc-3 death.
 LBPERT="$HP/lb-pert.ppm"
 rm -f "$LBPERT"
 node -e '
   const fs=require("fs"); const b=fs.readFileSync(process.argv[1]);
-  // flip a pixel inside the PB glyph band (x=54.., y=194..200) to bg-ish
+  const [winX,winW]=process.argv[3].split(",").map(Number);
+  const y=+process.argv[4], scale=+process.argv[5], n=+process.argv[6];
+  const [cr,cg,cb]=process.argv[7].split(",").map(Number);
+  const onR=cr&0xf8, onG=cg&0xfc, onB=cb&0xf8; // pack565 -> write_shot_ppm
   let i=2, tok=()=>{while(i<b.length){const c=b[i];if(c===0x23){while(i<b.length&&b[i]!==0x0a)i++;}else if(c===0x20||c===9||c===10||c===13)i++;else break;}let s="";while(i<b.length){const c=b[i];if(c===0x20||c===9||c===10||c===13)break;s+=String.fromCharCode(c);i++;}return s;};
   const w=+tok(),h=+tok(),mx=+tok(); i++;
-  // find an ON pixel in the band and clear it (guarantees a decode change)
-  for(let yy=194; yy<201; yy++){ for(let xx=54; xx<186; xx++){ const o=i+(yy*w+xx)*3; if(b[o]>=128){ b[o]=12;b[o+1]=12;b[o+2]=28; fs.writeFileSync(process.argv[2],b); process.exit(0);} } }
-  process.stderr.write("no ON pixel found to perturb\n"); process.exit(9);
-' "$HP/p02twin/shots/tss-record.ppm" "$LBPERT" || fail "L-b: could not build the perturbed shot"
+  const xStart = winX + Math.trunc((winW - (n*6-1)*scale)/2);
+  for(let gi=0; gi<n; gi++) for(let r=0;r<7;r++) for(let c=0;c<5;c++){
+    // the cell TOP-LEFT, which a centre sampler cannot see at scale >= 2
+    const sx = xStart + gi*6*scale + c*scale;
+    const sy = y + r*scale;
+    const o = i + (sy*w+sx)*3;
+    if(b[o]===onR && b[o+1]===onG && b[o+2]===onB){
+      b[o]=12; b[o+1]=12; b[o+2]=28; // any non-on value; kBg-ish by intent
+      fs.writeFileSync(process.argv[2],b); process.exit(0);
+    }
+  }
+  process.stderr.write("no SAMPLED on-pixel found to perturb\n"); process.exit(9);
+' "$HP/p02twin/shots/tss-record.ppm" "$LBPERT" \
+  "$PB_WIN" "$PB_TIME_Y" "$PB_TIME_SCALE" "$PB_TIME_N" "$PB_TIME_RGB" \
+  || fail "L-b: could not build the perturbed shot"
+# rc CASE-SPLIT, not `cmp -s && fail` (review-r6-r2 [LOW]): `&&` treats rc 1
+# (genuinely different) and rc >1 (cmp could not read a file) the same, and
+# the decoder death below accepts any nonzero too — so an unreadable
+# perturbation would be credited as a fired tooth. Exactly 1 is the only
+# outcome that says "the perturbation changed bytes".
+rc=0; cmp -s "$LBPERT" "$HP/p02twin/shots/tss-record.ppm" || rc=$?
+[ "$rc" = 1 ] \
+  || fail "L-b: the perturbed shot vs the twin gives cmp rc $rc (want exactly 1 — rc 0 means the perturbation was a no-op and the tooth is dead; rc >1 means cmp could not read one of them)"
 rc=0; dec_pert="$(decode_pb_line "$LBPERT")" || rc=$?
-[ "$rc" != 0 ] || [ "$dec_pert" != "$L1_PB_LINE" ] \
-  || fail "L-b: dead-tooth — a perturbed shot still decoded the same string (the decoder is not reading pixels)"
+[ "$rc" = 3 ] \
+  || fail "L-b: dead-tooth — clearing one top-left cell pixel gave decoder rc $rc (want EXACTLY 3, the mixed-cell death). rc 0 means the decoder is not reading those pixels; any other nonzero is an operational failure (crash, unreadable file, usage) being credited as pixel discrimination. Decoded: '$dec_pert'"
 teeth=$((teeth + 1))
-echo "   L-b OK: twin shot decodes to '$dec_twin' == derived; control '$dec_ctrl'; distinct; perturb-tooth fired"
+# COLOUR-CLASS tooth (new with the panel layout): the label is kDim and
+# the time is kAccent, and the decode now names which. Reading the LABEL
+# row under the ACCENT class must DIE — otherwise the colour argument is
+# decorative and a future single-colour layout would decode green while
+# asserting nothing about which line it read.
+rc=0
+dec_wrongcol="$(decode_pb_part "$HP/p02twin/shots/tss-record.ppm" \
+  "$PB_LBL_Y" "$PB_LBL_SCALE" "$PB_LBL_N" "$PB_TIME_RGB" 2>/dev/null)" || rc=$?
+[ "$rc" = 3 ] \
+  || fail "L-b: dead-tooth — reading the kDim label row under the kAccent colour class gave decoder rc $rc (want EXACTLY 3, the blank-line death). rc 0 means the colour parameter is not load-bearing; any other nonzero is an operational failure being credited as rejection. Decoded: '$dec_wrongcol'"
+teeth=$((teeth + 1))
+# FOREIGN-INK tooth (review-r6-r7 [HIGH]). Exact-colour matching answers "is
+# this pixel this line's ink" and says nothing about ink of ANOTHER colour
+# landing in a cell that should be background — and the byte-exact
+# device-vs-twin shot compare cannot catch that either, because both sides
+# run the SAME renderer, so a shared defect is identical on both. The
+# `flat-panel` declaration closes it; this tooth proves the declaration is
+# load-bearing by planting one bright-but-wrong pixel on a KNOWN-OFF pixel of
+# the time line and requiring the decoder to die on it. Without the guard the
+# same shot decodes clean (measured, 2026-07-31).
+LBINK="$HP/lb-foreign-ink.ppm"
+rm -f "$LBINK"
+node -e '
+  const fs=require("fs"); const b=fs.readFileSync(process.argv[1]);
+  const [winX,winW]=process.argv[3].split(",").map(Number);
+  const y=+process.argv[4], scale=+process.argv[5], n=+process.argv[6];
+  const [cr,cg,cb]=process.argv[7].split(",").map(Number);
+  const onR=cr&0xf8, onG=cg&0xfc, onB=cb&0xf8;
+  let i=2, tok=()=>{while(i<b.length){const c=b[i];if(c===0x23){while(i<b.length&&b[i]!==0x0a)i++;}else if(c===0x20||c===9||c===10||c===13)i++;else break;}let s="";while(i<b.length){const c=b[i];if(c===0x20||c===9||c===10||c===13)break;s+=String.fromCharCode(c);i++;}return s;};
+  const w=+tok(),h=+tok(),mx=+tok(); i++;
+  const xStart = winX + Math.trunc((winW - (n*6-1)*scale)/2);
+  // the first sampled pixel that is NOT this line ink, i.e. a genuine OFF
+  // pixel inside a glyph cell — planting there cannot be mistaken for
+  // removing ink (that is the other tooth).
+  for(let gi=0; gi<n; gi++) for(let r=0;r<7;r++) for(let c=0;c<5;c++)
+   for(let dy=0;dy<scale;dy++) for(let dx=0;dx<scale;dx++){
+    const sx = xStart + gi*6*scale + c*scale + dx, sy = y + r*scale + dy;
+    const o = i + (sy*w+sx)*3;
+    if(!(b[o]===onR && b[o+1]===onG && b[o+2]===onB)){
+      b[o]=200; b[o+1]=100; b[o+2]=112; // bright + warm: the foreign-ink class
+      fs.writeFileSync(process.argv[2],b); process.exit(0);
+    }
+   }
+  process.stderr.write("no OFF pixel found inside a glyph cell\n"); process.exit(9);
+' "$HP/p02twin/shots/tss-record.ppm" "$LBINK" \
+  "$PB_WIN" "$PB_TIME_Y" "$PB_TIME_SCALE" "$PB_TIME_N" "$PB_TIME_RGB" \
+  || fail "L-b: could not build the foreign-ink shot"
+rc=0; cmp -s "$LBINK" "$HP/p02twin/shots/tss-record.ppm" || rc=$?
+[ "$rc" = 1 ] \
+  || fail "L-b: the foreign-ink shot vs the twin gives cmp rc $rc (want exactly 1)"
+rc=0
+dec_ink="$(decode_pb_part "$LBINK" "$PB_TIME_Y" "$PB_TIME_SCALE" "$PB_TIME_N" "$PB_TIME_RGB" 2>/dev/null)" || rc=$?
+[ "$rc" = 3 ] \
+  || fail "L-b: dead-tooth — one bright foreign pixel planted on an OFF pixel of the time line gave decoder rc $rc (want EXACTLY 3, the foreign-ink death). rc 0 means the flat-panel declaration is not load-bearing and added ink is invisible to this check. Decoded: '$dec_ink'"
+teeth=$((teeth + 1))
+echo "   L-b OK: twin shot decodes to '$dec_twin' == derived; control '$dec_ctrl'; distinct; perturb-tooth + colour-class tooth + foreign-ink tooth fired"
 
 # M1 witness (review-100 PRODUCT BUG: same-process stale PB render). The
 # p02-persist-verify flow over a dir seeded with the PRE-record file
