@@ -5,6 +5,22 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## §rulings (standing owner directives, day-tagged)
 
+- **2026-07-31 — R4 SPLIT: keep the PRODUCER, drop the JUDGE'S AUTHORITY
+  (owner ruling).** After THREE independent adversarial passes each found fresh
+  false-GREEN paths into `arc-closure.sh`, the judge does not ship as an
+  authority. **KEEP** `review-harness.sh` emitting provenance-bound artifacts
+  (arc id, reviewed scope, reviewer, times, sealed verdict region) — that closes
+  the original five failure modes AS EVIDENCE and was never the problem.
+  **DEMOTE** `arc-closure.sh` to a DIAGNOSTIC that reports what it observes, and
+  **REMOVE the `PROCESS.md` sentence making it the sanctioned answer.** Arc
+  closure remains a driver/human judgement informed by the artifacts.
+  Deciding reason: the reviewers' through-line — *each fix closed the measured
+  instance and left the class*, HARD RULE 8's hierarchy inverted three times —
+  plus a measured FALSE SAFETY DISCLOSURE (FORMAT.md §7 claimed the
+  output-quiescence gap "produces a REFUSAL, not a false GO"; measured 3/3 it
+  produces a self-consistent GO). A judge with known false-GREEN paths is worse
+  than no judge precisely because the process declared it authoritative.
+
 - **2026-07-30 — MENUS ARC CAPPED (owner ruling, PROCESS §3).** The menus lane
   stops iterating at **round 20** (20 consecutive valid NO-GOs, ~2.5x the ~8
   cap; r20 = `.loop/menus-p2-r20.log`, 2 anchored NO-GO, `CODEX_RC=0`, 0 NULs).
