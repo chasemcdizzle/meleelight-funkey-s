@@ -1057,6 +1057,68 @@ NOT a GO cite. Do not invent a GO for a capped arc.
 the checksummed sim plane is the project's core invariant and both lanes touched
 `port/sim/` files. **No commit until it prints `SIM CONFORMS` rc 0.**
 
+### 2026-07-30 21:00 — MERGE + RE-PIN COMMITTED. All 4 lanes are in. Read this first.
+
+**`bed73d6`** — 4-lane merge (71 files): match-exit (GO), render-judge (GO),
+cite-closure (CAPPED), menus (CAPPED), **plus the LAUNCH producer/judge atomic
+landing** (`foh_dev.c:2227` gains `flashlcancel`/`walljump`;
+`EMIT_PENDING_DEV=""`; caveat deleted — all one change, so judge and producer
+cannot disagree).
+**`14c394b`** — manifest re-pin: **17 drifted rows** + the iter-132 **brace glob
+removed** + anchor recomputed to `0a5f5957…88ee`.
+
+**Driver verification that gates these commits (all run by the driver, cold):**
+- `bash port/sim/check-sim.sh` -> **`SIM CONFORMS`, rc 0, 8/8 goldens,
+  3600/3600 frames exact.** The checksummed core survived a 71-file merge — this
+  was the one invariant not delegated.
+- Manifest drift recomputed over all 89 rows -> **DRIFTED=0, missing=0**.
+- Anchor self-consistent (`MANIFEST_SHA256` == sha256(manifest)).
+- `bash .loop/cite-teeth.sh` -> **`CITE TEETH OK (17/17 fail closed)`**, rc 0.
+
+**THE MERGE WAS NOT A COPY — remember this shape.** menus' worktree predated
+match-exit's uncommitted work; **7 files were edited by both** and were
+reconciled as true unions. A copy would have silently reverted GO'd work with no
+conflict marker. Cross-lane file-list comparison is what caught it; worktree
+isolation does NOT imply independence.
+
+**Two defects found only by reconciling lanes against each other** (neither
+arc's own review found them): menus pinned `judge-foh-trace.js` at a **stale
+sha** (6 sites, 3 device scripts) whose twin-pin greps would have matched 0 and
+hard-failed on device; and match-exit's own `check-mexit-reentry.sh` failed to
+link (`_ctl_style_get`/`_ctl_style_set` undefined) — the same BLOCKER-9 class in
+a file menus never saw. **Its link-recipe line was never in match-exit's review
+scope — flag it if that lane is ever re-reviewed.**
+
+**Cite forms:** match-exit rows cite two terminal-GO logs; **menus and
+cite-closure closed CAPPED and have NO GO**, so their rows use the documented
+rule-3 form (`CAPPED-CLOSED` + `AGENT-LOG-2026-07-30`). **Never invent a GO for
+a capped arc** — that is the exact laundering cite-closure exists to prevent.
+
+**GATE STATUS: still refuses, for TWO CORRECT REASONS** — (1)
+`check-device-fullgame.sh` is `arc-in-flight` (**B9 arc still OPEN**), (2) every
+device leg is unrunnable (**device OFFLINE**, `adb devices` empty, confirmed not
+an adb-server hiccup). The pins themselves are now honest, which was the part
+the driver could fix.
+
+**STILL OWED, in order:**
+1. **New manifest rows** for judge decision inputs not yet pinned: `port/foh/foh.h`
+   (became one via `#define FOH_NETPLAY`), `check-judge-regression.sh`,
+   `dump-judge-grammar.js`, `judge-grammar.frozen.txt`,
+   `judge-domains.authored.txt`. Deliberately NOT tail-appended — adding
+   producer rows changes what the gate governs.
+2. **R3 successor rig** (fix the unbounded drains FIRST or it HANGS instead of
+   failing) — must precede any M4 gate attempt: ~232 lines still never executed.
+3. **B9 arc** must close before a green gate is even possible.
+4. Two work-order patches now landable (`foh_dev.c` is no longer single-writer):
+   `.loop/menus-p2-device-workorder-audio.md` §8 (`foh_audio_bus_push`) and §5
+   (the four `ctl_style_set`/`ctl_mod_on_r_set` persistence lines).
+5. Device-only: `check-device-persist.sh` unrun; all device legs deferred.
+
+**In flight:** R4 (reviewer verdict artifact) at review round 3, in worktree
+`agent-ad3238e43fc13278b` — and it is DOGFOODING its own design, emitting
+`.loop/arc/r4-verdict-artifact/r003-codex-primary-<ts>-<hash>.{log,verdict,decision}`
+for its own rounds.
+
 ## Live right now (updated: 2026-07-29 — HANDOFF PAGE. Latest AGENT-LOG entry = **iter 132**; latest COMMIT = `b44937b` (verification-debt lane merged). Phase: M4 mechanically PASSED; in owner-punch-list execution, NOT re-ratified)
 
 **READ ORDER for a fresh context:** CLAUDE.md → this section → `fix_plan.md`
