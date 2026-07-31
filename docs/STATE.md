@@ -1266,6 +1266,92 @@ registered.
 - **Never run timing-sensitive rigs concurrently** (live-arms pins a 2500 ms
   hold to ±200 ms; contention fails it for the wrong reason).
 
+### 2026-07-31 (late) — CURRENT TRUTH. Pausing at the next lane boundary. Read this block first, then §rulings.
+
+**HEAD `7546485`.** Main tree carries the device lane's IN-PROGRESS edits (4
+files, uncommitted, see below) plus the usual 4 excluded untracked files.
+**DEVICE ONLINE** (`12c00003237f5528`); it is being driven by a live lane.
+
+**Commits this session (8):** `bed73d6` 4-lane merge · `14c394b` manifest re-pin
+· `a78c074` recovery page · `ebe8f35` pause checkpoint · `109645c` R3 successor
+rig · `df72146` device legs + armv7 cross-compile fix · `5619645` R4 second
+Tier A+ NO-GO · `7546485` owner ruling: R4 splits.
+
+### WHAT LANDED TODAY THAT MATTERS
+
+1. **A shipping crash, found by executing never-run code, now fixed AND
+   witnessed on real hardware.** A natural VS timeout rendered a NEGATIVE match
+   timer (`-1:-0.00`) into a font atlas with no `-` glyph -> `SIM FATAL frame
+   210`. **Every natural VS timeout on device would have aborted the game.**
+   The device leg now passes: `DEVICE FOH OK (… vsfinish=1 … fbwit=23
+   p99=13.995ms skips=0 …)` rc 0. **`vsfinish=1` and fbwit 17->23 are the proof
+   it actually ran on hardware.**
+2. **An armv7 CROSS-COMPILE BREAK that blocked EVERY device leg.**
+   `foh_render.c` failed SDK gcc `-Werror=format-truncation`; those bytes had
+   only ever been compiled by host clang. **CLASS: host-clang-clean is not
+   evidence of device-buildable, and no host check can see it.**
+3. **`check-device-persist.sh` PASSED for the first time in its existence**
+   (authored iter 100, never once past step 3/10):
+   `PERSIST OK (sessions=2 powercycle=reboot bootid=PRE!=POST … roundtrip=byte-exact
+   record=00:14.50 … teeth=29)` rc 0 — a REAL reboot, boot-id change proving the
+   power cycle, save data byte-exact across it.
+4. **2 of R3's 3 device-only floor facts SETTLED** — pixels provably reach the
+   scanned-out framebuffer (`eq=1` at `yoff=0`, 17 witnesses), and audio is real
+   on device (host `0 callbacks / 274 steals` vs device `6585 callbacks / 0
+   steals`, with **282 voice starts identical**).
+
+### LANES IN FLIGHT (both will report; PAUSE WHEN THEY DO)
+- **Device lane** — MAIN TREE, holds the hardware lock. Round 8, one hardware
+  re-run per review round. Uncommitted: `check-device-foh.sh`,
+  `check-device-persist.sh`, `decode-pb-glyphs.js`, `foh_dev.c`.
+  **WATCH: `foh_dev.c` gained ~23 lines though the brief said the arm binary
+  needed no change — require its justification in the report.**
+- **R4 split lane** — worktree `agent-ad3238e43fc13278b`. Executing the owner's
+  split ruling. `arc-report.sh` has appeared (the demotion is going in at the
+  command-name level, not as a disclaimer).
+
+### R4 — SETTLED BY OWNER RULING, do not re-litigate
+Three independent adversarial passes each found fresh false-GREEN paths into the
+judge. Reviewers' through-line: **each fix closed the measured instance and left
+the class — HARD RULE 8's hierarchy inverted three times.** Plus a measured
+FALSE SAFETY DISCLOSURE (§7 claimed the quiescence gap "produces a REFUSAL";
+measured 3/3 it produces a self-consistent GO). Owner ruled: **keep the
+producer, demote the judge to a diagnostic, remove PROCESS.md's
+sanctioned-answer sentence.** Closure stays a human judgement.
+
+### RESUME ORDER
+1. Audit both lanes' reports against disk, then commit them.
+2. **Re-pin the manifest** — the device lane touches `check-device-foh.sh` (a
+   pinned producer) and others; drift must be re-measured, NOT carried forward
+   from any earlier count (it went 1 -> 5 -> ~10 -> 17 this cycle).
+3. New manifest rows for unpinned judge decision inputs (`foh.h`,
+   `check-judge-regression.sh`, `dump-judge-grammar.js`,
+   `judge-grammar.frozen.txt`, `judge-domains.authored.txt`).
+4. **B9 arc must CLOSE** — `check-device-fullgame.sh` stays `arc-in-flight` and
+   red on its `skips == 0` bar. NEW attribution from today: the skip follows
+   per-leg **MMC interrupt count**, not workload (g06 2820 mmcirq + the only
+   `pswpin=7` -> 7 skips; baseline 198-485), `low_bat_check` quiesced in both
+   passes, so this is a **SECOND stall source** distinct from the closed iter-74
+   class. p99 headroom is thin: **439-566 µs**.
+5. Two work-order patches now landable (`foh_dev.c` no longer single-writer):
+   `.loop/menus-p2-device-workorder-audio.md` §8 and §5.
+6. **Only then** an M4 gate attempt, then Chase's acceptance playthrough.
+
+### STANDING DISCIPLINE (do not relax — all earned this cycle)
+- **Audit every lane report against disk.** Three self-reported completion
+  claims were contradicted this cycle, including two device measurements that
+  never happened.
+- **C35 unsound-negative, 5 driver instances, all caught:** `/tmp` vs `$TMPDIR`
+  lock path · process-cwd worker detection · `find -newermt '-12M'` (use
+  `-mmin`) · a `shasum` loop with missing binaries (reported ALL 89 rows
+  drifted) · a root-only `.gitignore` scan missing a NESTED ignore file.
+  **A suspiciously TOTAL result indicts the instrument first.**
+- **A merge is not a copy.** Worktree isolation does NOT imply independence.
+- **Never invent a GO for a capped arc.**
+- **Never run timing-sensitive rigs concurrently.**
+- **Liveness is a process + log-tail check, not a single mtime window** — a lane
+  mid-adb-push looks dead for minutes.
+
 ## Live right now (updated: 2026-07-29 — HANDOFF PAGE. Latest AGENT-LOG entry = **iter 132**; latest COMMIT = `b44937b` (verification-debt lane merged). Phase: M4 mechanically PASSED; in owner-punch-list execution, NOT re-ratified)
 
 **READ ORDER for a fresh context:** CLAUDE.md → this section → `fix_plan.md`

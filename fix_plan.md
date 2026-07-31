@@ -2692,3 +2692,35 @@ settles them. Take the riglib lock; if `/mnt/disable_frontend` is ever set, use 
 SELF-EXPIRING marker (C24).
 `done-check:` each device check prints its anchored OK line with rc 0, evidence
 pulled and judged HOST-side.
+
+## STATUS 2026-07-31 (late)
+
+- **R4 — owner-ruled SPLIT** (commit `7546485`): keep the producer, demote
+  `arc-closure.sh` to a diagnostic (`arc-report.sh`), remove PROCESS.md's
+  sanctioned-answer sentence. Split lane in flight.
+  `done-check:` no output line asserts an arc is closed; the three known-unsound
+  situations are VISIBLE in output where they apply; FORMAT.md §7 states the
+  quiescence gap can produce a false GO (measured 3/3), not a refusal; the 185
+  teeth re-pointed to diagnostic behaviour rather than deleted.
+- **R5 device legs — DONE** (`df72146`): armv7 cross-compile break fixed
+  (blocked EVERY device leg), persist p01 un-staled, 2 of R3's 3 floor facts
+  settled.
+- **R6 device follow-ups — IN FLIGHT** (main tree): persist decoder rewritten
+  for the two-region PERSONAL BEST panel + `DECODE_SHA` re-pin; `--match-timer`
+  device leg added to `check-device-foh.sh`.
+  Already measured green: `PERSIST OK (… powercycle=reboot … teeth=29)` rc 0 and
+  `DEVICE FOH OK (… vsfinish=1 … fbwit=23 p99=13.995ms)` rc 0.
+  `done-check:` both terminal lines reproduce cold under a driver re-run.
+
+### R7 — B9 arc (blocks a green M4 gate)
+`check-device-fullgame.sh` is `arc-in-flight` and red on `skips == 0`. All 12
+legs are `STREAM MATCH 3600/3600 exact` in both passes; only skips fail, and they
+MIGRATE between passes. NEW attribution (2026-07-31): the skip tracks per-leg
+**MMC interrupt count**, not workload — pass 1 g06 = 2820 mmcirq (and the only
+leg with `pswpin=7`) -> 7 skips, baseline 198-485; pass 2 m01 = 2227 -> 1 skip.
+`low_bat_check` verified quiesced per leg in BOTH passes, so this is a **second
+stall source distinct from the closed iter-74 class**, and the pre-leg `sync`
+does not suppress it. p99 headroom 439-566 µs.
+`done-check:` `check-device-fullgame.sh` prints `FULLGAME CONFORMS 12/12` rc 0 on
+two consecutive passes, or the skip bar is re-based on a driver-recorded,
+owner-visible measurement.
