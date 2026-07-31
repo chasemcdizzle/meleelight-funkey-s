@@ -39,7 +39,105 @@
 
 #include <stdint.h>
 
+#include "../gfx/platform.h" // PlatformInput: the drain's published state
 #include "../gfx/raster.h"
+
+// ==========================================================================
+// THE SHARED RELEASE DRAIN (fix_plan R3 precondition; class fix)
+// ==========================================================================
+//
+// WHAT IT IS. Three places in this port waited for the player to LET GO of
+// every action-bearing button before handing control back: the pause
+// overlay's RESUME tail, the system menu's tail, and foh_dev.c's post-match
+// drain before the `foh_phase:` re-entry. Each was its own hand-written
+// `for (;;)`, and all three were UNBOUNDED by design — "a finger that never
+// lifts is indistinguishable from staying paused".
+//
+// WHY THAT HAD TO CHANGE. That argument holds for a human thumb on hardware.
+// It does NOT hold for the two input sources this port actually drives:
+//
+//   * MLFK_HEADLESS_KEYS (port/gfx/platform_headless.c) HOLDS THE LAST KEY
+//     STATE FOREVER at end-of-script, deliberately (its deviation (b): a
+//     synthetic release-all would inject an edge no script asked for). A
+//     scripted run whose last line is `d q` therefore enters a drain that
+//     can never end, and the process HANGS.
+//   * a physically stuck button on the device does the same thing, and an
+//     unbounded drain turns it into a frozen game with no diagnostic.
+//
+// A HANG IS STRICTLY WORSE THAN A FAILURE for an autonomous loop: a failure
+// reports and the loop moves on; a hang consumes the session and reports
+// nothing at all. So every drain is bounded, and exhaustion is LOUD and
+// NAMED rather than silent.
+//
+// WHAT EXHAUSTION DOES, and why it is not a hard death. The drain exists to
+// stop a still-held button reading as a FRESH press on the resumed screen, and
+// on a timeout it has by definition FAILED to do that. The residual exposure
+// is stated here at its real width, because an earlier draft of this note
+// understated it (review-r3-r5 Medium) and an understated residual is worse
+// than a wide one:
+//
+//   * FOH NAVIGATION is protected either way. foh_dev.c's match-exit drain
+//     passes `last`, so the post-drain state goes straight into `foh.prev` and
+//     `cur`; a held button equals its own snapshot and cannot be an edge.
+//   * THE OVERLAYS' callers re-poll into `pin`/`prevPause` the moment the hook
+//     returns, which stops the SAME overlay re-opening, and nothing more.
+//   * SO: after a timeout at the pause or system-menu site, the held button
+//     reaches the sim in the next S1 row, and the SIM's own history
+//     (`G.prevBuf`) has not seen it held before — so it can read as a fresh
+//     press and fire one action. That is real, and it is the price of the
+//     bound.
+//
+// It is still the right trade. The alternative to the bound was an unbounded
+// loop that hung the process outright, and the alternative to continuing is
+// taking a player's match away because a button stuck for ten seconds. The
+// event is LOUD (one anchored diagnostic line, naming the drain and the keys)
+// and rare by construction: it takes ten unbroken seconds of hold. It is the
+// CHECK SCRIPTS that fail closed on that line — port/foh/check-live-arms.sh
+// gates on it and asserts it appears nowhere else — which is where a rig
+// failure belongs.
+//
+// CALLERS MUST SWITCH ON ALL THREE RESULTS. IDLE and TIMEOUT differ only in
+// the diagnostic, never in the caller's verdict, but they are spelled out at
+// every site rather than defaulted, so a future fourth result cannot be
+// silently absorbed by an `else`.
+//
+// THE DIAGNOSTIC GRAMMAR (load-bearing — greppable, anchored, one line):
+//   foh_drain: TIMEOUT <site> after <N> polls, still held: <fields>
+// It is deliberately NOT a new field in the teardown summaries: those
+// grammars are parsed by fully-anchored regexes in five committed rigs, and
+// widening them would break every one.
+typedef enum {
+  FOH_DRAIN_IDLE = 0, // platform_input_idle(): every action-bearing field up
+  FOH_DRAIN_QUIT,     // the backend asked us to go (SDL_QUIT), one-shot
+  FOH_DRAIN_TIMEOUT   // the bound was reached with something still held
+} FohDrainResult;
+
+// 600 polls. Each iteration is paced to one PAUSE_BUDGET_NS frame period
+// (16.666667 ms), so the bound is ~10 s of held input — two orders of
+// magnitude above any real release and far below any rig's patience. Chosen
+// as a POLL COUNT rather than a wall-clock deadline on purpose: under the
+// headless injector the virtual clock advances one quantum per poll, so a
+// poll bound is the same bound on host and device, and a timeout is
+// reproducible run to run instead of depending on machine speed.
+#define FOH_DRAIN_MAX_POLLS 600
+
+// Drain until every action-bearing input is released.
+//
+//   site         names the drain in the timeout diagnostic ("pause-release",
+//                "sysmenu-release", "match-exit-release"). Never NULL.
+//   rz           the frame to KEEP PRESENTING while waiting, so the screen
+//                does not look frozen under a resting finger.
+//   presentFails INCREMENTED (never reset) on a failed present.
+//   presentDead  latched dead-display flag, carried IN and OUT: once a
+//                present has failed, stop presenting but KEEP DRAINING, and
+//                never count the same dead display twice. Callers that have
+//                no prior latch pass a zeroed int.
+//   last         receives the final polled input, so the caller can seed its
+//                edge snapshot from the state it is actually handing on.
+//                May be NULL.
+FohDrainResult foh_drain_release(const char *site, Raster *rz,
+                                 long *presentFails, int *presentDead,
+                                 PlatformInput *last);
 
 typedef enum {
   FOH_PAUSE_RESUME = 0,

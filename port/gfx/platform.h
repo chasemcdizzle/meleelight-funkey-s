@@ -35,20 +35,35 @@ typedef struct {
   bool quit;
 } PlatformInput;
 
-// True iff no ACTION-bearing input is held. `quit` is deliberately not
-// part of it: it is a request to leave, not a button a finger is resting
-// on, and its callers handle it separately.
+// THE ACTION-BEARING FIELD LIST, once. `quit` is deliberately NOT in it: it is
+// a request to leave, not a button a finger is resting on, and its callers
+// handle it separately.
 //
-// This exists because "wait for the player to let go before handing
-// control to an edge-driven screen" was written three times with three
-// different (and each time incomplete) field lists — the release drains
-// in both overlays and the one after an in-process match exit. A held
-// direction or shoulder leaked through every one of them
-// (review-mexit-r1 Medium). One predicate, one place to extend when
-// PlatformInput grows a field.
+// This exists because "wait for the player to let go before handing control to
+// an edge-driven screen" was written three times with three different (and
+// each time incomplete) field lists — the release drains in both overlays and
+// the one after an in-process match exit. A held direction or shoulder leaked
+// through every one of them (review-mexit-r1 Medium).
+//
+// It is an X-MACRO rather than a hand-written expression because a SECOND
+// consumer appeared and immediately re-introduced the same class: the release
+// drain's timeout diagnostic names the fields that are still held, and its
+// own copy of the list could under-report a newly added field while claiming
+// it could not (review-r3-r6 Low). Both the predicate below and that
+// diagnostic are now generated from this list, so a new field joins them
+// together or joins neither.
+#define PLATFORM_ACTION_FIELDS(X)                                              \
+  X(up) X(down) X(left) X(right)                                               \
+  X(a) X(b) X(x) X(y)                                                          \
+  X(start) X(l) X(r) X(menu)
+
+// True iff no ACTION-bearing input is held.
 static inline bool platform_input_idle(const PlatformInput *p) {
-  return !p->up && !p->down && !p->left && !p->right && !p->a && !p->b &&
-         !p->x && !p->y && !p->start && !p->l && !p->r && !p->menu;
+  bool held = false;
+#define PLATFORM_X_IDLE(f) held = held || p->f;
+  PLATFORM_ACTION_FIELDS(PLATFORM_X_IDLE)
+#undef PLATFORM_X_IDLE
+  return !held;
 }
 
 // Init the display (240x240, 16bpp on device). Returns 0 on success;

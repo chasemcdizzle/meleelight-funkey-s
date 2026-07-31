@@ -20986,3 +20986,77 @@ would commit node_modules. **Add files explicitly at merge; never `-A`.**
 4. Still open: the phantomThreshold HARD RULE 5 pipeline residual;
    `check-device-persist.sh` UNRUN (device-only, and **the device is currently
    OFFLINE** — `adb devices` empty, confirmed not an adb-server hiccup).
+
+## driver — 2026-07-31 — R3 + R4 driver-audited COLD; R3 found a SHIPPING CRASH that would have aborted every natural VS timeout on device
+
+Both lanes reported; the driver re-ran their done-checks itself rather than
+reading their summaries. **Both held.**
+
+**R4 (reviewer verdict artifact) — VERIFIED.**
+`bash port/review/check-review-artifact.sh` -> `REVIEW ARTIFACT TEETH OK
+(144/144 fail closed)`, **rc 0** (driver cold run). ~3,500 lines across
+`port/review/{review-harness.sh,arc-closure.sh,reviewers.sh,
+check-review-artifact.sh,FORMAT.md,specimens/}` + PROCESS §3/§11 amendments.
+Fails closed on BOTH live specimens from 07-30: the foreign-verdict-at-EOF log
+and the 44.4%-NUL log. Also fails closed on a single-reviewer §11 fallback.
+Method worth keeping: it applied **39 single-check OFF controls one at a time**
+and **one did not bite** — a check with no tooth behind it — which it then fixed
+(T56). That is the render-judge class ("check code accretes assertions faster
+than ways to prove they bite") caught by construction.
+
+**R3 (successor rig) — VERIFIED.**
+`bash port/foh/check-live-arms.sh` -> `LIVE ARMS OK (sysmenu=4 vsfinish=1
+drains=3 teeth=15)`, **rc 0** (driver cold run, 2,197-line rig).
+
+**THE FINDING OF THE INCREMENT — a real shipping crash, found by EXECUTING code
+the gate cannot reach.** The first run of the VS-finish arm died:
+`glyphs: font 0 has no glyph '-'` / `SIM FATAL frame 210`. `matchTimerTick`
+decrements BEFORE it tests, so the frame that fires `finishGame` carries a
+NEGATIVE `matchTimer`; `floor(mt/60)` = `-1` and `(mt%60).toFixed(2)` =
+`"-0.00"`, while the T40/T25 atlases hold digits and `:` only.
+**Every natural VS timeout on the device would have aborted the game.**
+Upstream never draws it — its rAF render is gated `playing || frameByFrameRender`
+(main.js:1243) and `finishGame` clears `playing` (main.js:1423) — so the port
+renders one frame upstream skips. Fixed at `gfx_overlay.c:363` with a guard that
+is ONE SIM TICK WIDE, rejects non-finite, and is **finish-frame-permissioned**
+(`gfx_overlay_allow_timer_expiry`, declared `gfx_vfx.h:98`, defined
+`gfx_overlay.c:246`, cleared in `gfx_overlay_reset` `:257`, bracketed
+`foh_dev.c:3301`/`:3310`). **Driver reproduced the crash in its own cold run via
+tooth T6**: *"the unclamped copy aborts on frame 210 with the missing '-'
+glyph"* — so the fix is proven in BOTH directions, not asserted.
+
+**This vindicates owner decision 4 (rig BEFORE the gate) empirically.** The gate
+cannot reach these arms by construction, so without this rig the first execution
+of that code would have been Chase's acceptance playthrough — and it would have
+crashed.
+
+**Hang precondition CLOSED.** Three unbounded release drains vs an injector that
+holds keys at EOF by design, class-fixed into one bounded `foh_drain_release`
+(`foh_pause.h:138`, defined `foh_pause.c:160`, called at exactly the 3 sites:
+`foh_pause.c:316`, `:639`, `foh_dev.c:3675` — driver-verified). Tooth **D2
+rebuilds the unbounded loop and it HANGS**, killed at the same deadline D1
+finishes ~35 s under. Also fixed: the `foh_dev` drain's unlatched dead display,
+which inflated `failed presents` — a field **five rigs parse** — proven by
+D3-tooth measuring a delta of **exactly 599** (driver saw the same number).
+
+**Witness quality note (why these teeth are credible):** ARM A is bound BOTH
+positionally (a font-derived bitmap mask at the drawn origin, plus absence
+elsewhere in the band) AND behaviourally (rig-local `volume`/`brightness` shims
+on PATH whose 4-line transcript proves RIGHT/DOWN/LEFT reached their handlers —
+which no screenshot can show). Tooth **T10** removes ONLY the label draw: the
+overlay still navigates, and the mask fails. That separates "it drew" from "it
+worked".
+
+**MANIFEST: no re-pin owed for R3** — driver measured all 8 touched files
+against the manifest; **0 are pinned producer rows** (`gfx_overlay.c`,
+`gfx_vfx.h`, `platform.h`, `sim/sim.h`, `sim_tick.c`, `foh_dev.c`,
+`foh_pause.{c,h}`). That answers R3's driver-decision (a).
+
+**IN FLIGHT:** driver cold `check-sim.sh` in the R3 worktree — R3 touched
+`sim.h` and `sim_tick.c` (checksummed plane; it made `ML_MATCH_TIMER_TICK` one
+shared definition). **No merge until that prints `SIM CONFORMS` rc 0.** The
+driver deliberately did NOT run it concurrently with the live-arms check: that
+rig pins a 2500 ms hold to ±200 ms, and CPU contention would have failed it for
+the wrong reason.
+
+**BOTH ARCS ARE NOT AT GO — decisions pending (see next entry).**

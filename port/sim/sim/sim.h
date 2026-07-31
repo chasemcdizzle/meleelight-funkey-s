@@ -63,6 +63,8 @@ typedef struct {
   bool starting;                 // main.js:195
   double startTimer;             // main.js:199
   double matchTimer;             // main.js:207
+  // NOTE the tick width for matchTimer lives at ML_MATCH_TIMER_TICK below —
+  // it is engine data that a non-sim consumer (the HUD) also has to know.
   double stageSelect;            // main.js:187
   MpStageKind stageKind;
   double cpuDifficulty[4];       // main.js:109 [3,3,3,3]
@@ -163,6 +165,22 @@ extern void (*ml_sim_runai_live)(GameState *g, int i);
 // Optional diagnostic twin: dump the ml_ai_cov arm table (sim_main
 // --ai-cover; stderr; never gating).
 extern void (*ml_sim_ai_cov_dump)(void);
+
+// --- the matchTimer tick, ONE definition -----------------------------------
+//
+// matchTimerTick subtracts this from `matchTimer` every non-`starting` frame
+// (main.js:339, sim_tick.c's matchTimerTick arm). It is upstream's literal,
+// carried verbatim and NOT derived from 1/60 — the two differ, and the
+// difference is on the checksum surface.
+//
+// It lives in the header, rather than inline at the single sim site, because
+// a NON-sim consumer has to know it: gfx_overlay.c's HUD guard bounds the one
+// legitimately-negative matchTimer (the finish frame's) at exactly one tick,
+// and a second hand-typed copy of an engine constant is the drift class
+// CLAUDE.md HARD RULE 5 exists to forbid (review-r3-r2 Medium). Any change
+// here moves the sim and the guard together, and `bash port/sim/check-sim.sh`
+// is what proves the sim side did not move by accident.
+#define ML_MATCH_TIMER_TICK 0.016667
 
 // --- finishGame seam (punch-list C18) --------------------------------------
 //

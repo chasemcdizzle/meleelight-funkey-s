@@ -67,19 +67,27 @@ static void fb_rect(uint16_t *fb, int x0, int y0, int x1, int y1, uint16_t c) {
 // tick loop, so the rig's tick-indexed shot machinery can never fire while one
 // is open — and the rig's marker trigger is the very MENU key that opens the
 // system menu. An overlay that cannot be photographed cannot be evidenced, so
-// each dumps its OWN frame when MLFK_MENU_SHOT names a directory. Unset in
-// every check AND in the product launcher, so it is inert everywhere but a
-// deliberate demo run. Same P6 format as foh_dev.c's write_shot_ppm.
+// each dumps its OWN frame when MLFK_MENU_SHOT names a directory.
+//
+// WHO SETS IT (kept accurate — this note used to say "unset in every check",
+// which stopped being true when the R3 successor rig landed): the product
+// launcher never sets it, and neither does any evidence or conformance leg.
+// EXACTLY ONE check does — `port/foh/check-live-arms.sh`, whose whole purpose
+// is to execute these overlays and then READ the frames they photograph,
+// because an overlay that freezes the driver's tick loop cannot be captured
+// by the tick-indexed shot machinery. That is the "deliberate demo run" this
+// hook was written for, so it is now exercised rather than merely available.
+// Same P6 format as foh_dev.c's write_shot_ppm.
 //
 // EVERY step is checked and a failure is FATAL (review-mexit-r2 Low). The
-// env var is set only on a deliberate demo run whose entire purpose is the
-// resulting file, so a truncated path, a full filesystem or a short write
-// must not leave a plausible-looking partial PPM behind and report nothing:
-// that is precisely PROCESS §3's "a silent pass is the defect". Dying is
-// also safe by construction — the variable is unset in every check script
-// and in the product launcher, so no player and no rig leg can reach it.
-// Same discipline as foh_dev.c's write_shot_ppm (gfx_fatal is
-// raster.h's host-provided abort, already this TU's death path).
+// env var is set only on a run whose entire purpose is the resulting file, so
+// a truncated path, a full filesystem or a short write must not leave a
+// plausible-looking partial PPM behind and report nothing: that is precisely
+// PROCESS §3's "a silent pass is the defect". Dying is still safe by
+// construction — no player and no conformance leg can reach this path, and
+// the one check that does WANTS the loud death. Same discipline as
+// foh_dev.c's write_shot_ppm (gfx_fatal is raster.h's host-provided abort,
+// already this TU's death path).
 static void overlay_selfshot(const uint16_t *fb, const char *name) {
   const char *dir = getenv("MLFK_MENU_SHOT");
   if (!dir || !*dir) return;
@@ -108,6 +116,71 @@ static void text2_center(Raster *rz, int y, int scale, const char *s,
                          RastCol col) {
   const int w = foh_text2_width(s, scale);
   foh_text2(rz, (RAST_W - w) / 2, y, scale, 0, s, col);
+}
+
+// --- the shared BOUNDED release drain (foh_pause.h) -------------------------
+
+// Name every action-bearing field that is still down, so the timeout line says
+// WHAT it waited for rather than merely that it waited.
+//
+// GENERATED from platform.h's PLATFORM_ACTION_FIELDS, the same list
+// platform_input_idle() is generated from (review-r3-r6 Low: the earlier form
+// duplicated the field names here and claimed the two "can never disagree",
+// which was exactly backwards — a hand-copied list is how they WOULD). A new
+// field now joins the predicate and this diagnostic in one edit or neither.
+static void drain_held_names(const PlatformInput *p, char *out, size_t cap) {
+#define PLATFORM_X_NAME(f) #f,
+  static const char *const kName[] = {PLATFORM_ACTION_FIELDS(PLATFORM_X_NAME)};
+#undef PLATFORM_X_NAME
+#define PLATFORM_X_DOWN(f) p->f,
+  const bool down[] = {PLATFORM_ACTION_FIELDS(PLATFORM_X_DOWN)};
+#undef PLATFORM_X_DOWN
+  size_t n = 0;
+  out[0] = 0;
+  for (size_t i = 0; i < sizeof down / sizeof *down; i++) {
+    if (!down[i]) continue;
+    const size_t need = strlen(kName[i]) + 1; // leading space
+    if (n + need + 1 > cap) break;            // truncate, never overflow
+    out[n++] = ' ';
+    memcpy(out + n, kName[i], need - 1);
+    n += need - 1;
+    out[n] = 0;
+  }
+  // `still held:` with nothing after it would be a lie: the loop only reaches
+  // the timeout because platform_input_idle() was false on the last poll, so
+  // an empty list means the two disagree and that is worth saying out loud.
+  // snprintf, not memcpy with a counted length: the earlier form copied a
+  // hand-counted 25 bytes of a literal that is neither 25 bytes long nor
+  // NUL-terminated at that offset, so `%s` would have read past it
+  // (review-r3-r2 Low). ASCII only, for the same reason the count was wrong —
+  // a multi-byte dash makes byte arithmetic on a literal a trap.
+  if (n == 0) snprintf(out, cap, " (none - idle disagrees)");
+}
+
+FohDrainResult foh_drain_release(const char *site, Raster *rz,
+                                 long *presentFails, int *presentDead,
+                                 PlatformInput *last) {
+  PlatformInput in;
+  memset(&in, 0, sizeof in);
+  for (long i = 0; i < FOH_DRAIN_MAX_POLLS; i++) {
+    const uint64_t deadline = attrib_mono_ns() + PAUSE_BUDGET_NS;
+    platform_poll(&in);
+    if (last) *last = in;
+    // The other legitimate way out of a held button. SDL_QUIT is ONE-SHOT
+    // (platform_sdl1.c), so it is reported UP rather than swallowed here.
+    if (in.quit) return FOH_DRAIN_QUIT;
+    if (platform_input_idle(&in)) return FOH_DRAIN_IDLE;
+    if (!*presentDead && platform_present(rz->fb) != 0) {
+      (*presentFails)++;
+      *presentDead = 1; // stop presenting, keep draining
+    }
+    pace_sleep_until_ns(deadline);
+  }
+  char held[160];
+  drain_held_names(&in, held, sizeof held);
+  fprintf(stderr, "foh_drain: TIMEOUT %s after %d polls, still held:%s\n",
+          site, FOH_DRAIN_MAX_POLLS, held);
+  return FOH_DRAIN_TIMEOUT;
 }
 
 FohPauseResult foh_pause_open(Raster *rz, uint64_t *pausedNs,
@@ -222,30 +295,32 @@ FohPauseResult foh_pause_open(Raster *rz, uint64_t *pausedNs,
   // caller's next poll goes straight into the S1 row, so a held A/B would
   // swing an attack on the resume frame and a held START would hit target
   // mode's endGame arm. Keep presenting the frozen frame until release.
-  // Unbounded on purpose: a finger that never lifts is indistinguishable
-  // from staying paused, and *pausedNs keeps the pace epoch honest for it.
+  //
+  // BOUNDED since the R3 precondition (foh_pause.h): this used to be an
+  // unbounded `for (;;)` on the argument that a finger which never lifts is
+  // indistinguishable from staying paused. True of a thumb, false of the
+  // scripted host injector, which HOLDS ITS LAST KEY STATE AT EOF by design —
+  // so the loop could never end and the process hung instead of failing.
+  // *pausedNs still keeps the pace epoch honest for however long it waited.
+  //
+  // presentDead is carried in from the loop above: a failed present must not
+  // ABANDON the drain (returning with the button still held is the exact bug
+  // this loop exists to prevent), and one dead display must not be counted
+  // twice. EVERY action-bearing field is waited on, not just the dismiss
+  // buttons — the overlay navigates with up/down too and the caller's next
+  // poll goes straight into gameplay (review-mexit-r1 Medium).
   if (out == FOH_PAUSE_RESUME) {
-    // presentDead is carried in from the loop above: a failed present must
-    // not ABANDON the drain (returning with the button still held is the
-    // exact bug this loop exists to prevent), and one dead display must not
-    // be counted twice.
-    for (;;) {
-      const uint64_t deadline = attrib_mono_ns() + PAUSE_BUDGET_NS;
-      PlatformInput in;
-      platform_poll(&in);
-      if (in.quit) { // the other legitimate way out of a held button
+    // `last` is NULL here on purpose: this caller re-seeds by re-polling the
+    // moment the overlay returns (foh_dev.c's `platform_poll(&pin)` right
+    // after the hook), which is mechanism (b) in foh_pause.h.
+    switch (foh_drain_release("pause-release", rz, presentFails, &presentDead,
+                              0)) {
+      case FOH_DRAIN_QUIT:
         out = FOH_PAUSE_QUIT_FRONTEND;
         break;
-      }
-      // EVERY action-bearing field, not just the dismiss buttons: the
-      // overlay navigates with up/down too, and the caller's next poll
-      // goes straight into gameplay (review-mexit-r1 Medium).
-      if (platform_input_idle(&in)) break;
-      if (!presentDead && platform_present(rz->fb) != 0) {
-        (*presentFails)++;
-        presentDead = 1; // stop presenting, keep draining
-      }
-      pace_sleep_until_ns(deadline);
+      case FOH_DRAIN_TIMEOUT: // diagnosed inside the drain; still a RESUME —
+      case FOH_DRAIN_IDLE:    // the caller's re-poll models the held button
+        break;
     }
   }
 
@@ -548,25 +623,27 @@ int foh_sysmenu_open(Raster *rz, uint64_t *pausedNs, long *presentFails) {
 
   // Do not hand a STILL-HELD dismiss button back to the caller: the very
   // next poll goes into gameplay or the FOH, where a held A/B would act.
-  // Unbounded on purpose, and *pausedNs keeps the pace epoch honest for it.
-  for (;;) {
-    const uint64_t deadline = attrib_mono_ns() + SYS_BUDGET_NS;
-    PlatformInput in;
-    platform_poll(&in);
-    if (in.quit) {
+  // BOUNDED since the R3 precondition (foh_pause.h — same argument as the
+  // pause tail above); *pausedNs keeps the pace epoch honest for the wait.
+  // EVERY action-bearing field is waited on: this menu drives volume and
+  // brightness with LEFT/RIGHT and moves with UP/DOWN, so a held direction
+  // leaked a cursor move or an attack into whatever resumed
+  // (review-mexit-r1 Medium).
+  //
+  // The drain paces at PAUSE_BUDGET_NS, which is SYS_BUDGET_NS: both are the
+  // same 16.666667 ms frame period, so sharing one implementation changes no
+  // timing here.
+  // `last` is NULL for the same reason as the pause tail: both match loops and
+  // the FOH phase re-poll into their edge snapshot immediately after this
+  // returns (foh_pause.h mechanism (b)).
+  switch (foh_drain_release("sysmenu-release", rz, presentFails, &presentDead,
+                            0)) {
+    case FOH_DRAIN_QUIT:
       result = 1;
       break;
-    }
-    // EVERY action-bearing field: this menu drives volume/brightness with
-    // LEFT/RIGHT and moves with UP/DOWN, so a held direction leaked a
-    // cursor move or an attack into whatever resumed (review-mexit-r1
-    // Medium).
-    if (platform_input_idle(&in)) break;
-    if (!presentDead && platform_present(rz->fb) != 0) {
-      (*presentFails)++;
-      presentDead = 1; // stop presenting, keep draining
-    }
-    pace_sleep_until_ns(deadline);
+    case FOH_DRAIN_TIMEOUT: // diagnosed inside the drain; the caller's
+    case FOH_DRAIN_IDLE:    // re-poll models a still-held button as held
+      break;
   }
 
   rz->clipY0 = clipY0;

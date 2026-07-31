@@ -238,9 +238,23 @@ static int g_lsn;
 static int g_prevStocks[4];
 static int g_prevValid;
 
+// Finish-frame permission for the timer's domain guard (gfx_vfx.h). Default 0
+// — every evidence, target and menu path leaves it there, so the guard is at
+// its strictest everywhere except the one frame the driver names, and
+// gfx_overlay_reset() below puts it back.
+static int g_allowTimerExpiry;
+void gfx_overlay_allow_timer_expiry(int on) { g_allowTimerExpiry = on ? 1 : 0; }
+
 void gfx_overlay_reset(void) {
   g_lsn = 0;
   g_prevValid = 0;
+  // The finish-frame permission is per-frame state and must never outlive the
+  // match it was granted in (review-r3-r4 Medium). The driver brackets it
+  // around one render; clearing it here as well means a path that leaves a
+  // match without passing that bracket still cannot hand permission to the
+  // next one — and the next one may be a TARGET match, whose clock counts up
+  // and where any negative must trap.
+  gfx_overlay_allow_timer_expiry(0);
 }
 
 static float dev_x(double cx) { return (float)(cx * GFX_K); }
@@ -254,7 +268,105 @@ void gfx_render_overlay_timer(Gfx *g, const GameState *st) {
   const RastCol black = { 0, 0, 0, 256 };
   const RastCol white = { 255, 255, 255, 256 };
   {
-    const double mt = st->matchTimer;
+    // EXPIRY CLAMP — a MEASURED shipping crash, found by the R3 successor rig
+    // the first time anything ever ran a VS match to its natural clock end
+    // (fix_plan R3; `foh_dev --bridge live --match-timer 2`, which died with
+    // `glyphs: font 0 has no glyph '-'` / `SIM FATAL frame 210: glyphs:
+    // missing glyph`). It is NOT a demo artefact: upstream's real clock is
+    // 480 s and the same frame arrives in any full match, so this aborted the
+    // game at every natural VS timeout on the device.
+    //
+    // THE MECHANISM. matchTimerTick decrements first and tests after
+    // (main.js:339/347), so the frame that fires finishGame carries a
+    // matchTimer that has just gone NEGATIVE — measured -0.00004 at
+    // --match-timer 2. `Math.floor(mt/60)` is then -1 and `(mt%60).toFixed(2)`
+    // is "-0.00", so BOTH halves of the timer string acquire a '-'. The T40 /
+    // T25 atlases are digits and ':' only (they are Arial cut-outs of exactly
+    // the glyphs the HUD draws), so gfx_glyph_text hits gfx_overlay's own
+    // FATAL missing-glyph path — the iter-103 banner-font class, second
+    // instance, in the one arm no committed leg reached.
+    //
+    // WHY CLAMPING IS THE FAITHFUL ANSWER, and not "add a '-' glyph".
+    // UPSTREAM NEVER DRAWS THIS STRING. Its render is requestAnimationFrame-
+    // driven and decoupled from gameTick, and the VS arm is gated
+    // `else if (playing || frameByFrameRender)` (main.js:1243) while
+    // finishGame sets `playing = false` (main.js:1423). So the frame whose
+    // matchTimer went negative is never rendered at all upstream: the last
+    // overlay it painted carried a NON-NEGATIVE timer, and finishGame's
+    // banner goes over that. This port renders synchronously inside the tick
+    // loop, so it paints one overlay frame upstream skips; the fix is to keep
+    // that frame's text inside the domain upstream actually draws, not to
+    // teach the atlas a glyph upstream's HUD never shows.
+    //
+    // BOUNDED, AND IT MASKS NOTHING (review-r3-r1 High). A blanket
+    // `mt < 0 -> 0` would also turn a NaN or a wildly negative clock — real
+    // corruption — into a legitimate-looking 00:00, which is precisely the
+    // silent-pass shape this project keeps re-registering. So the rescue is
+    // exactly as wide as the measured case and no wider:
+    //
+    //   * the ONLY legitimate out-of-domain value is the single finish frame's,
+    //     at most ONE tick below zero (0.016667), because sim_tick.c calls the
+    //     finish hook the moment the decrement crosses zero and this port's
+    //     loop leaves the match on that same frame. That one is clamped.
+    //   * anything else — NaN, or more than one tick negative — is a state the
+    //     sim cannot produce, so it dies LOUDLY and says what it saw.
+    //
+    // Dying there is not a new risk, and that is the point: BEFORE this fix
+    // every one of those values already killed the process, just via
+    // gfx_glyph_text's missing-'-' abort with a message that named a font
+    // instead of a clock. This trades a confusing death for an accurate one
+    // and rescues only the case upstream itself never renders.
+    //
+    // Off the finish frame the expression is byte-unchanged, and no evidence
+    // or golden run can reach it either way — with a NULL finish hook the sim
+    // traps on expiry instead (sim_tick.c), so every committed trace-fed leg
+    // keeps a strictly positive clock. The target compositor shares this
+    // function and its clock counts UP from zero, so it never comes near here.
+    //
+    // REGISTERED ALTERNATIVE, deliberately not taken here (owner call): the
+    // deeper mirror of upstream would be to skip gfx_render_frame entirely on
+    // the finish frame, so the banner composites over the previous frame the
+    // way an rAF render gated by `playing` does. That means inverting
+    // foh_dev.c's `!g_vsFinish` skip exception, which is a RATIFIED port-level
+    // decision (review-mexit-r3 M5, measured) covered by the match-exit lane's
+    // GO verdicts, and it moves `matchSkips` accounting that committed rigs
+    // parse. It is a behavioural change needing its own evidence and sign-off,
+    // not a drive-by inside a rig increment — recorded in the writer's report.
+    //
+    // OFF THE CHECKSUM SURFACE: the HUD is render-only (oracle/CHECKSUM.md §2
+    // is an exhaustive allow-list and carries no overlay field), so this
+    // cannot move a stream. `bash port/sim/check-sim.sh` is the proof.
+    const double raw = st->matchTimer;
+    // THE DOMAIN GUARD. Two separate things can put a value here that this
+    // function cannot draw, and both are rejected before anything is
+    // formatted (review-r3-r2 Medium):
+    //
+    //   * NON-FINITE. `(int)floor(inf/60)` is undefined behaviour outright,
+    //     and `%.2f` of an infinity or a NaN emits "inf"/"nan" — letters the
+    //     digit-only atlas has never carried, i.e. the SAME missing-glyph
+    //     abort with an even less informative message.
+    //   * MORE THAN ONE TICK BELOW ZERO. The width is ML_MATCH_TIMER_TICK,
+    //     read from sim.h so it is the SAME symbol matchTimerTick subtracts —
+    //     a second hand-typed copy of an engine constant is exactly the drift
+    //     HARD RULE 5 forbids.
+    //
+    // Spelled as a NEGATED `>=` so NaN is caught by the same test: every
+    // ordinary comparison against a NaN is false, so `raw < -TICK` would let
+    // it straight through.
+    //
+    // AND IT IS CONTEXT-BOUND, not merely value-bound (review-r3-r3 Medium).
+    // A negative clock is legitimate on exactly ONE frame of ONE caller — the
+    // VS finish frame — so the driver grants permission for that frame and
+    // nothing else. The TARGET compositor calls this same function with a
+    // clock that counts UP from zero, and there a negative is corruption; with
+    // permission off it aborts instead of quietly rendering 00:00.
+    if (!isfinite(raw) ||
+        (raw < 0.0 &&
+         (!g_allowTimerExpiry || !(raw >= -ML_MATCH_TIMER_TICK)))) {
+      gfx_fatal("matchTimer out of domain for the HUD (non-finite, or negative "
+                "outside the one-tick finish-frame window the sim can produce)");
+    }
+    const double mt = raw > 0.0 ? raw : 0.0;
     const int min = (int)floor(mt / 60);
     char minStr[16], secStr[16];
     snprintf(minStr, sizeof minStr, "%d", min);

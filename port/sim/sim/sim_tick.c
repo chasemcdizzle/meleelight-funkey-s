@@ -379,7 +379,11 @@ void sim_game_tick(GameState *g, const MlInput *traceRow[4]) {
 
   if (!g->starting /* && !versusMode — versusMode == 0 */) {
     // matchTimerTick(input) (main.js:338-350): HUD writes are render
-    g->matchTimer -= 0.016667;
+    // ML_MATCH_TIMER_TICK is sim.h's ONE definition of upstream's literal
+    // (main.js:339); the HUD guard in gfx_overlay.c reads the same symbol so
+    // the two cannot drift. Textually identical double, so the emitted
+    // arithmetic is unchanged — `bash port/sim/check-sim.sh` is the proof.
+    g->matchTimer -= ML_MATCH_TIMER_TICK;
     if (g->matchTimer <= 0) {
       // finishGame(input) (main.js:349). NULL hook = every evidence and
       // golden run: the trap below is unchanged and still loud.

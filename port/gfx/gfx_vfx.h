@@ -82,6 +82,20 @@ void gfx_render_overlay(Gfx *g, const GameState *st);      // renderOverlay(true
 // 12). Extracted from gfx_render_overlay — the VS path calls the same
 // bytes (behavioral identity; RENDER OK is the regression).
 void gfx_render_overlay_timer(Gfx *g, const GameState *st);
+// FINISH-FRAME PERMISSION for the HUD timer's domain guard (fix_plan R3,
+// review-r3-r3 Medium). matchTimerTick decrements BEFORE it tests, so the one
+// frame on which upstream's finishGame fires carries a matchTimer that has
+// just gone up to one tick negative — and this port, unlike upstream's
+// `playing`-gated rAF render, draws that frame. It is the ONLY caller and the
+// ONLY frame on which a negative clock is legitimate, so permission is granted
+// explicitly for it instead of the guard being widened for everyone: the
+// TARGET compositor shares gfx_render_overlay_timer and its clock counts UP,
+// where any negative is corruption and must still abort.
+//
+// Set it from the driver immediately before the frame's render and let it fall
+// back to 0 on every other frame (a plain per-frame assignment does both).
+// Default 0, so no evidence, target or menu path can be affected.
+void gfx_overlay_allow_timer_expiry(int on);
 // M4 task 12 (gfx_target.c consumes; visibility-only wrappers around
 // gfx_render.c's static passes — bodies untouched):
 void gfx_render_player_pass(Gfx *g, const GameState *st, int i);
