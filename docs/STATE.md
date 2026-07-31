@@ -1159,6 +1159,97 @@ progress notes. They are harness-tracked, so they still report when done:
 5. Then, and only then, an M4 gate attempt — **after** R3's rig lands, never
    before (~232 lines still never executed; the gate cannot reach them).
 
+### 2026-07-31 — CURRENT TRUTH. Loop resuming. Read this block first, then §rulings.
+
+**HEAD `109645c`.** Main tree CLEAN except 4 deliberately-excluded untracked
+files (`.tokensave/`, `AGENTS.md`, `CLAUDE.local.md`, `scratch-b8.js`).
+**DEVICE IS ONLINE** (`12c00003237f5528`, frontend running, no danger marker, no
+stale rig lock, MemAvailable ~42 MB).
+
+**Commits this cycle:** `bed73d6` 4-lane merge · `14c394b` manifest re-pin (17
+rows, brace glob removed) · `a78c074` recovery page · `ebe8f35` pause checkpoint
+· `109645c` R3 successor rig.
+
+**ALL SIX LANES ARE DONE.** match-exit (GO) · render-judge (GO) · cite-closure
+(CAPPED) · menus (CAPPED) · **R3 successor rig (CAPPED, MERGED)** · R4 reviewer
+verdict artifact (NOT GO — held, see below).
+
+**R3's headline, driver-reproduced cold:** executing the never-run arms found a
+**shipping crash** — every natural VS timeout would have aborted the game
+(`glyphs: font 0 has no glyph '-'`, `SIM FATAL frame 210`; the finish frame
+carries a NEGATIVE `matchTimer` and the atlas has no minus sign). Fixed with a
+one-tick, finish-frame-permissioned guard; tooth T6 requires the crash back.
+**This empirically vindicates owner decision 4 (rig BEFORE the gate).**
+
+**Driver cold verifications on `109645c`:** `LIVE ARMS OK (sysmenu=4 vsfinish=1
+drains=3 teeth=15)` rc 0 · `SIM CONFORMS` rc 0, 8/8 goldens, 3600/3600 exact ·
+all 8 touched files measured against the manifest = **0 pinned producers**, no
+re-pin owed.
+
+### THE ONE OPEN OWNER DECISION — R4's tier
+
+R4 built `port/review/` (~3,500 lines: producer, judge, 144-tooth done-check,
+FORMAT.md, 2 live specimens) + PROCESS §3/§11 amendments. Driver cold-verified
+`REVIEW ARTIFACT TEETH OK (144/144 fail closed)` rc 0. It fails closed on BOTH
+real 07-30 specimens and on a single-reviewer §11 fallback.
+
+**It is NOT merged, and must not be, because it flagged its OWN arc as
+misclassified:** `arc-closure.sh` IS a judge, so PROCESS §3 tiers it UP to
+**Tier A+** (independent second reviewer, NOT codex + archived byte-identity
+regression). All 7 rounds were sealed as tier A. **Sealed artifacts cannot be
+re-tiered — that is the point of sealing.**
+
+**Driver recommendation: a FRESH ARC at the correct tier**, not a re-tiering
+ruling. Re-tiering by decree is exactly the laundering this tool exists to
+prevent, and it would be the worst possible first exception. Consistency
+precedent from 07-30: menus was sent back for an unmet Tier A+, render-judge's
+Tier A+ was not waived, and match-exit was sent back for the sibling
+two-reviewer rule. **Waiving it for the anti-laundering tool itself would be
+indefensible.**
+R4's two registered residuals (output-quiescence race — outcome is a REFUSAL,
+never a false GO; and unenforced prompt semantics) are recommended ACCEPTED as
+registered.
+
+### RESUME ORDER (the loop should work this top-down)
+1. **Dispatch R4's Tier A+ independent reviewer** (fresh Opus 5, NOT codex, NOT
+   R4's own session) + the archived byte-identity regression — R4's own
+   `review-harness.sh regression --tier A+` can record it. Then merge R4.
+2. **Run the device legs that were deferred all cycle — the device is BACK.**
+   `check-device-persist.sh` (NEVER run), plus the device arms of
+   `check-device-foh.sh`, `check-device-target.sh`, `check-device-fullgame.sh`.
+   R3's capped-closure floor is explicitly three device-only facts (headless
+   present is a no-op, headless audio starts no callback thread, a daemon-owned
+   container escapes a process-group kill) — only hardware settles them.
+3. **New manifest rows** for judge decision inputs not yet pinned: `port/foh/foh.h`
+   (became one via `#define FOH_NETPLAY`), `check-judge-regression.sh`,
+   `dump-judge-grammar.js`, `judge-grammar.frozen.txt`,
+   `judge-domains.authored.txt`. Adding producer rows changes what the gate
+   governs — deliberate change, not a tail-end append.
+4. **B9 arc must CLOSE** — `check-device-fullgame.sh` is still `arc-in-flight`,
+   so a green M4 gate is impossible until it does.
+5. Two work-order patches now landable (`foh_dev.c` is no longer single-writer):
+   `.loop/menus-p2-device-workorder-audio.md` §8 (`foh_audio_bus_push`) and §5
+   (the four `ctl_style_set`/`ctl_mod_on_r_set` persistence lines).
+6. **Only then** an M4 gate attempt, followed by Chase's acceptance playthrough.
+
+### STANDING DISCIPLINE (earned the hard way this cycle — do not relax)
+- **Audit every lane report against disk.** Three self-reported completion
+  claims were contradicted by filesystem audit; one claimed 12 of 13 items done
+  when 1 was real, including two device measurements that never happened.
+- **C35 unsound-negative — 5 instances, all driver-made, all caught.** A check
+  that cannot observe the thing reports absence: `/tmp` vs `$TMPDIR` lock path ·
+  process-cwd worker detection · `find -newermt '-12M'` (use `-mmin`) · a
+  `shasum` loop whose binaries were missing (reported ALL 89 rows drifted) · a
+  root-only `.gitignore` scan missing a NESTED ignore file. **A suspiciously
+  TOTAL result indicts the instrument first.**
+- **A merge is not a copy.** Worktree isolation does NOT imply independence —
+  7 files were edited by two lanes and a copy would have silently reverted
+  reviewed work. Always diff lane file-lists against each other first.
+- **Never invent a GO for a capped arc.** Capped arcs cite `CAPPED-CLOSED` +
+  `AGENT-LOG-<date>`.
+- **Never run timing-sensitive rigs concurrently** (live-arms pins a 2500 ms
+  hold to ±200 ms; contention fails it for the wrong reason).
+
 ## Live right now (updated: 2026-07-29 — HANDOFF PAGE. Latest AGENT-LOG entry = **iter 132**; latest COMMIT = `b44937b` (verification-debt lane merged). Phase: M4 mechanically PASSED; in owner-punch-list execution, NOT re-ratified)
 
 **READ ORDER for a fresh context:** CLAUDE.md → this section → `fix_plan.md`

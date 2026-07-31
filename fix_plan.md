@@ -2664,3 +2664,31 @@ Supersedes cite-closure residuals 1+2 as their durable fix.
 `done-check:` a review round cannot be accepted without its harness-written
 artifact; teeth prove a quoted foreign verdict and a truncated/NUL log both FAIL
 CLOSED.
+
+## STATUS 2026-07-31 — R1/R2/R3 DONE; R4 held on Tier A+
+
+- **R1 menus CAPPED closure — DONE**, merged in `bed73d6`.
+- **R2 batched merge + re-pin — DONE**, `bed73d6` + `14c394b` (17 rows re-pinned,
+  iter-132 brace glob removed, anchor `0a5f5957…88ee`, `CITE TEETH OK 17/17`).
+- **R3 successor rig — DONE**, merged in `109645c`. Arc CAPPED at 8 rounds.
+  Found and fixed a shipping crash (every natural VS timeout aborted the game).
+  Driver cold-verified `LIVE ARMS OK` rc 0 and `SIM CONFORMS` rc 0. No re-pin
+  owed (0 of 8 touched files are pinned producers).
+- **R4 reviewer verdict artifact — BUILT, NOT MERGED.** Driver cold-verified
+  `REVIEW ARTIFACT TEETH OK (144/144 fail closed)` rc 0. **Blocked on its own
+  Tier A+ obligation**: `arc-closure.sh` is a judge, its 7 rounds were sealed at
+  tier A, and sealed artifacts cannot be re-tiered.
+  `done-check:` an independent second reviewer (fresh Opus 5, NOT codex, NOT
+  R4's session) returns a terminal anchored verdict on the FINAL bytes, AND the
+  archived old-vs-new byte-identity regression exists; then merge.
+
+### R5 — device legs, now unblocked (device back online 2026-07-30 22:38)
+Run the device evidence deferred all cycle: `check-device-persist.sh` (NEVER
+run), plus the device arms of `check-device-foh.sh`, `check-device-target.sh`,
+`check-device-fullgame.sh`. R3's capped-closure floor is three device-only facts
+(headless present is a success-reporting no-op; headless audio starts no callback
+thread; a daemon-owned container escapes a process-group kill) — only hardware
+settles them. Take the riglib lock; if `/mnt/disable_frontend` is ever set, use a
+SELF-EXPIRING marker (C24).
+`done-check:` each device check prints its anchored OK line with rc 0, evidence
+pulled and judged HOST-side.
