@@ -1878,7 +1878,15 @@ static void render_opt_audio(const FohState *s, Raster *rz) {
       // (foh_font.c) and widening it for one label is not worth defusing
       // any part of the missing-glyph guard.
       const int tenths = (int)(v * 10.0 + 0.5);
-      char lvl[8];
+      // Buffer sized for the WHOLE int range the compiler can see, not for
+      // the [0,10] tenths actually reachable (the audio screen clamps v to
+      // [0,1], audiomenu.js:104-112). The SDK's arm gcc 10.2 cannot prove
+      // that range and rejects the narrower buffer under
+      // -Werror=format-truncation= (R5, 2026-07-31: host clang never
+      // diagnosed it, so this TU had only ever built on the host). Widening
+      // is byte-identical for every reachable value — a clamp here would
+      // instead invent behaviour at inputs that cannot occur.
+      char lvl[16];
       snprintf(lvl, sizeof lvl, "%d.%d", tenths / 10, tenths % 10);
       foh_text(rz, 206, yb - 6, 1, lvl, sel ? kAccent : kDim);
     }
@@ -2116,7 +2124,12 @@ static void render_tss(const FohState *s, Raster *rz) {
     // addcode slot (cursor 10) keeps the dashes (foh.h note), and so does
     // upstream: it swaps the whole row for "Add custom stage" there
     // (:403), which is exactly what the refusal already says.
-    char line[16] = "--:--:--";
+    // Sized for the full `long` range the compiler can see (arm gcc 10.2
+    // computes a 17-byte worst case and rejects a 16-byte buffer under
+    // -Werror=format-truncation=; R5, 2026-07-31 — host clang was silent,
+    // so this path had only ever been compiled on the host). Reachable
+    // records are far smaller; widening changes no rendered byte.
+    char line[24] = "--:--:--";
     if (s->tssCursor <= 9) {
       const double rec = s->targetRecords[s->p1Char][s->tssCursor];
       if (rec != -1.0) {

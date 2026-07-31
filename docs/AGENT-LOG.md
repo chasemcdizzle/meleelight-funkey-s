@@ -21060,3 +21060,196 @@ rig pins a 2500 ms hold to ±200 ms, and CPU contention would have failed it for
 the wrong reason.
 
 **BOTH ARCS ARE NOT AT GO — decisions pending (see next entry).**
+
+## driver — 2026-07-31 — R4 Tier A+ INDEPENDENT REVIEW = NO-GO, 3 HIGH. Holding the tier line was decisive: the tool would have shipped LESS SAFE than what it replaces.
+
+**Verdict driver-verified cold:** `.loop/review-r4-tierA-opus-20260731.log`,
+21,748 B, **0 NULs**, **0 anchored `^VERDICT: GO$`**, terminal
+`VERDICT: NO-GO` at :439 (last non-empty line). Independent Opus 5 reviewer,
+not codex (codex ran all 7 prior rounds), not the writer's session. It
+reproduced the done-check cold (`REVIEW ARTIFACT TEETH OK (144/144 fail
+closed)`, rc 0) and verified both specimen fixtures byte-identically — then
+broke the thing anyway.
+
+**THIS IS THE VINDICATION OF THE TIER A+ RULE.** R4's own 7 codex rounds were
+converging; a re-tiering ruling (which the driver explicitly refused) would have
+merged a JUDGE that PROCESS.md now declares "the ONLY sanctioned answer" — and
+the reviewer's decisive argument is that **on two of its findings the mechanised
+answer is LESS SAFE than the human log-read it replaces**: a human reading the
+log sees the file dates and reads "I found a blocking defect", where the tool
+prints ARC CLOSED.
+
+**H1 — `round` is a caller LABEL, not evidence.** `maxround` picks the closing
+round from the caller's `--round` flag, and the "re-derivation" from the archived
+envelope is CIRCULAR (the harness wrote that envelope from the same flag).
+Measured: a codex **NO-GO produced 2 SECONDS AFTER a GO**, labelled round 1 vs
+9, yields `ARC CLOSED` — with the contradicting timestamps sitting in the
+artifacts AND in the filenames the judge itself enumerates. FORMAT.md §7
+excludes `round` from its trusted list, so by the script's own stated standard
+("an understated trust boundary is itself a false green") this is wrong.
+
+**H2 — failure mode #1 (the PRIMARY thing R4 exists to close) is UNCLOSED on the
+§11 fallback and Tier A+ paths.** The decision channel exists only for codex. A
+grok/opus5 reviewer emitting its real NO-GO followed by a QUOTED FOREIGN GO
+block yields `verdict: GO` and closes under `process11-fallback-dual-go`. The
+artifact even RECORDS `anchored-go: 1 / anchored-nogo: 1` — **the tell is
+measured and then never judged.** Corroborated by the lane's own data: 2 of its
+7 real codex rounds carry in-region anchored GO *and* NO-GO. Cheap fix named by
+the reviewer, using fields already recorded: VOID transcript-decided rounds
+where `anchored-go > 0 AND anchored-nogo > 0`.
+
+**H3 — §11's "codex proven failed" precondition is ONE FLAG away.**
+`--timeout-sec 1` produced a 6-second `VOID / timeout / rc=143` codex round that
+then LICENSED a grok+opus5 dual GO. The timeout value is not recorded and both
+timestamps are trusted. **Killing an adverse reviewer has the same effect**, and
+can never lower the arc's verdict (VOIDs are skipped by `maxround`).
+
+**M1 — the decorative-check class REPRODUCED, and worse than the lane found.**
+The driver's brief asked this reviewer to "find the next one". It ran 10 fresh
+single-check OFF controls: **9 left the suite GREEN, and two are probe-proven
+FAIL OPEN** (`closure-rule`↔role coherence; and the "mixes a primary GO with a
+§11 fallback" rule — whose triggering state the reviewer built through the
+SANCTIONED CLI with no file editing). So FORMAT.md §6's "each proven to bite"
+does not hold. The lane found 1 decorative check by this method; an independent
+pass found 2 more that FAIL OPEN.
+
+**M3 — the lane's own arc is permanently unjudgeable by its own tool.**
+RVERDICT1 has no version discriminator and the field list changed mid-arc under
+the same magic, so replaying its own rounds gives `expected 35 lines, measured
+31`. A format that cannot read its own history is not yet a format.
+
+**M2** scope membership is an unverified caller assertion (an arc closes after an
+unreviewed sibling file is rewritten and a new file added). **M4** round 7's [M]
+(specimens outside the reviewed scope) is still unclosed in the shipped bytes.
+**M5** `.loop/arc/` was never copied to the main tree — the §12.3(5) obligation
+is unmet.
+
+**COULD NOT BREAK (credit where due):** paste-after-run (three independent
+refusals, reproduced against the live specimen), truncation/NUL, bundle
+cross-wiring, synthetic-reviewer back door, reused arc id, VOID precedence
+replay. **HARD RULE 3 clean** — nothing outside `port/review/` + `docs/PROCESS.md`;
+no gate/oracle/test/cap weakened; `verify_m4.sh` untouched; `bash -n` clean; the
+PROCESS §3/§11 edits genuinely strengthen (they retire the stale
+"fallback = grok" wording).
+
+**RULING: R4 does NOT merge, and does NOT cap.** A §3 capped closure is for an
+arc whose remaining findings are tolerable; **you do not cap a JUDGE with three
+proven false-GREEN paths.** The findings are structural, not nits, and H2's fix
+is cheap and uses fields the artifact already carries. Dispatching a fix
+increment, then a re-review. If the fixes hold, the arc closes properly; if they
+do not, this tool does not ship — which is the correct outcome for a tool whose
+entire purpose is refusing to launder approvals.
+
+## driver — 2026-07-31 — R5 device legs: a SHIPPING CROSS-COMPILE BREAK blocked every device leg; 2 of R3's 3 floor facts SETTLED; persist was stale from never being run
+
+First hardware run of the six lanes merged 2026-07-30. Driver-audited every
+claim from the logs.
+
+**THE BLOCKING FIND — merged bytes did not CROSS-COMPILE.** `check-device-foh.sh`
+failed its armv7 build immediately (`.loop/r5-foh-20260731.log`):
+```
+foh_render.c:2124:54: error: 'snprintf' output may be truncated before the last
+  format character [-Werror=format-truncation=]
+foh_render.c:1882:34: error: '%d' directive output may be truncated writing
+  between 1 and 10 bytes into a region of size 8
+cc1: all warnings being treated as errors
+```
+Those bytes had only ever been compiled by **host clang**; SDK gcc with
+`-Werror` rejects them. **This blocked EVERY device leg in the tree** — all four
+device checks share the riglib arm build. Fixed by widening two buffers
+(`lvl[8]->[16]`, `line[16]->[24]`), provably byte-identical for every reachable
+value; the lane deliberately did NOT add clamps, which would invent behaviour at
+unreachable inputs. **Class note: host-clang-clean is not evidence of
+device-buildable, and nothing in the host loop can see it.**
+
+**RESULTS (driver-verified terminal lines):**
+- `check-device-foh.sh` -> **`DEVICE FOH OK (flows=5 shots=15 bridge=1 states=3
+  opk=evidence fbwit=17 p99=14.250ms skips=0 underruns=0 starves=0 … teeth=15)`**
+  rc 0.
+- `check-device-target.sh` -> **`DEVICE TARGET CONFORMS (goldens=2 flows=2
+  shots=4 fbwit=4 p99=14.391ms skips=0 underruns=0 starves=0 …
+  live=f08-live-target:314f/313rows/opts-ok bound=f09-live-bound:240f/240rows
+  teeth=6)`** rc 0.
+- `check-device-fullgame.sh` -> **FAIL both passes, but NOT a regression.**
+  Driver-counted **24 `STREAM MATCH` lines in EACH pass** (all 12 legs, 3600/3600
+  frames exact), 0 underruns, 0 music starves. The ONLY failing bar is
+  `skips == 0`, and the failures **MIGRATE**: pass 1 g05(1)+g06(7) -> pass 2 both
+  clean, skip moves to m01(1). No leg is reproducibly red — the check's own
+  `[4/9]` header documents this migrating class.
+- `check-device-persist.sh` -> FAIL, never reached the device (below).
+
+**NEW ATTRIBUTION DATA (keep — it narrows the open B9 stall class):** the skip
+follows the per-leg **MMC interrupt count**, not the workload. Pass 1 g06 =
+**2820 mmcirq** (and the only leg with `pswpin=7`, i.e. swap-in) -> 7 skips;
+g05 = 485 (2nd highest) -> 1 skip; baseline 198-485. Pass 2 m01 = **2227** -> 1
+skip; baseline 154-798. `low_bat_check` was verified quiesced per leg in BOTH
+passes, so this is a **SECOND stall source distinct from the closed iter-74
+class**, and the pre-leg `sync` does not fully suppress it. p99 headroom is thin:
+**439-566 µs** (s01 at 16.104 / 16.231 ms against the 16.670 ms budget). The
+perf bar was correctly NOT touched — that is the open B9 arc's business.
+
+**R3's THREE DEVICE-ONLY FLOOR FACTS — 2 SETTLED, 1 dismissed as host-only.**
+1. **"headless present is a success-reporting no-op" — SETTLED.** 17 framebuffer
+   witnesses across 5 flows + the OPK read back the REAL kernel fb (`ll=480
+   vyres=720`, the 3 flip pages) and assert the rendered surface equals the
+   **scanned-out** page: `FBWIT1 … W 200 startup yoff=0 eq=1 … W 968 sss yoff=0
+   eq=1`. Tooth T10 confirms eq=0 / wrong-row / torn / yoff=240 copies all die.
+   Host reports `0 failed presents` too — but has no witness to offer.
+2. **"headless audio starts no callback thread" — SETTLED, and sharper than
+   expected.** Same flow, same binary:
+   `HOST   audio: 0 callbacks … 282 voice starts, 274 steals, rate=0`
+   `DEVICE audio: 6585 callbacks, 0 underruns, 282 voice starts, 0 steals,
+    rate=44100 samples=512 channels=2` · `DEVICE music: 2,951,168 out frames,
+    89 refills, 0 starves`.
+   **The 282 voice starts are IDENTICAL** — host proved the `foh_snd` calls were
+   *reached*; device proves they were *consumed*, and the **274 host "steals"
+   collapse to 0** because a real callback retires voices instead of letting them
+   pile up. The music-mute body is finally observable.
+3. **docker containment — NOT settled, and it does not matter on device**
+   (host-side only; the device sees only adb pushes/execs). The adjacent hazard
+   WAS observed live: after run 1's compile error a `docker run` survived as a
+   daemon-owned child, and the lane's premature relaunch was **correctly refused
+   by the rig lock** (`already exists (age: 760 s)`) — the singleton discipline
+   held.
+
+**`check-device-persist.sh` — STALE FROM NEVER HAVING BEEN RUN.** Authored at
+iter 100, executed for the first time today; two later-merged lanes moved the
+surfaces it asserts against. Same class, twice:
+- **Defect A — FIXED.** `PERSIST FAIL: p01 host trace: missing exact line
+  'S 440 tapjump2 1'`. Its in-check flow walks 2 rows down to reach tapjump, but
+  the **menus lane** grew the gameplay options screen to upstream's five rows
+  (`FOH_OPT_ROWMAX 4`, adding `flashlcancel` + `walljump`), so tapjump is now
+  **four** rows down and the flow was landing on `flashlcancel`. The COMMITTED
+  flows in `port/foh/flows/` were updated by that lane — **only this never-run
+  check was missed.** D-presses changed only; every asserted line keeps its exact
+  frame, no assertion touched.
+- **Defect B — CORRECTLY NOT FIXED, needs a lane.** The target-select PERSONAL
+  BEST row was one `text_center` line at y=194 when the check was written; it is
+  now a **panel** — `text_in(x=92,w=140)`, `"PERSONAL BEST"` at y=182 scale 1
+  **kDim**, the time at y=198 scale 2 kAccent (verified from the shot pixels:
+  accent glyphs at y=198-211, x=115-208, exactly 8 glyphs at scale 2).
+  `decode-pb-glyphs.js` hardcodes full-screen `text_center` (`RAST_W=240`) and
+  its `isOn` threshold (r>=128,g>=96,b<128) **cannot match kDim (120,120,140) at
+  all**. Fixing it needs an x-window/centering parameter, a second colour class,
+  and two decodes at two y/scale — on a **SHA-pinned, review-102/104-hardened**
+  artifact whose own contract demands a reviewed pin update in the same commit.
+  Declining was right: that is lane work, not an evidence run. **Until then this
+  check produces ZERO device evidence — it dies at step 3 of 10.**
+
+**Natural VS timeout on hardware — STILL UNWITNESSED, and the lane stopped for
+the right reason.** `--match-timer` is the VS-finish arm's only trigger and its
+only consumer is `check-live-arms.sh`, which runs the HOST twin. Driving it on
+device needs a leg that parks the frontend, and park/deadman is implemented
+INLINE per check, not as a riglib function — hand-rolling one is precisely the
+**C24** hazard. Cheap route for whoever takes it: add a `--match-timer` leg to
+`check-device-foh.sh`, which already owns a verified park + deadman + fb-witness
++ applog pipeline; the arm binary needs no change.
+
+**Device left CLEAN** (driver-verified): frontend running, `/mnt/disable_frontend`
+ABSENT, no orphan `foh_device`/`deadman`, `/tmp/mlfk` and `/mnt/mlfk-scratch`
+empty, no rig lock. **C24 did not recur.**
+
+**Lane hygiene worth noting:** it flagged that `docs/AGENT-LOG.md` was modified
+and **not by it** (the driver's own R4 entry, already uncommitted when it
+arrived) rather than silently working around it. Writers are barred from that
+file and it respected the bar.

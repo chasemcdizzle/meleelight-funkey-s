@@ -491,8 +491,15 @@ cat > "$FLOWD/p01-persist-edit.flow" << 'EOF'
 FLOW1
 # check-owned settings-edit session (iter 100): menu-top -> Options ->
 # Gameplay; edits turbo 0->1 (A row 0), lcancel 0->1->2 (A x2 row 1),
-# tapjump P2 (row 2 col 1); shot; B-exit = the upstream cookie-save
+# tapjump P2 (row 4 col 1); shot; B-exit = the upstream cookie-save
 # point (gameplaymenu.js:29-33) -> foh_persist save.
+# NOTE (R5, 2026-07-31): the tapjump row is FOUR down from turbo, not two
+# — the gameplay screen carries upstream's five rows (turbo, lcancel,
+# flashlcancel, walljump, tapjump; foh.c kOptColMax / FOH_OPT_ROWMAX).
+# This flow was authored against a three-row screen and had never been
+# executed, so the drift was invisible until the first device run. The
+# D-presses below are the ONLY change; every asserted line (including
+# `S 440 tapjump2 1`) keeps its exact frame.
 I 1 -
 I 375 S
 I 376 -
@@ -516,10 +523,14 @@ I 420 A
 I 421 -
 I 425 A
 I 426 -
-I 430 D
-I 431 -
-I 435 R
-I 436 -
+I 428 D
+I 429 -
+I 431 D
+I 432 -
+I 434 D
+I 435 -
+I 437 R
+I 438 -
 I 440 A
 I 441 -
 SHOT 445 opt-edited
