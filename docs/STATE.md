@@ -1119,6 +1119,46 @@ the driver could fix.
 `.loop/arc/r4-verdict-artifact/r003-codex-primary-<ts>-<hash>.{log,verdict,decision}`
 for its own rounds.
 
+### 2026-07-30 22:40 — PAUSED at a clean checkpoint (owner request). Device is BACK.
+
+**Main tree is at a clean boundary — nothing half-done here.** HEAD `a78c074`;
+3 commits today (`bed73d6` merge, `14c394b` re-pin, `a78c074` recovery page);
+`git status` shows only the 4 deliberately-excluded untracked files
+(`.tokensave/`, `AGENTS.md`, `CLAUDE.local.md`, `scratch-b8.js`).
+
+**DEVICE IS ONLINE AGAIN** (owner re-plugged, 22:38): `12c00003237f5528`
+present, `/mnt/disable_frontend` ABSENT, gmenu2x running, no orphan `mlfk`
+processes, no stale rig lock at `$TMPDIR/mlfk-rig-*.lock`, MemAvailable
+42,628 kB. **Every device leg deferred today is now runnable.**
+
+**Two lanes were mid-arc when the pause was called and were NOT killed** —
+stopping them would discard substantial in-flight work, and both write their own
+progress notes. They are harness-tracked, so they still report when done:
+- **R3 successor rig** — worktree `agent-a55523774731719ba`. Editing
+  `foh_dev.c`, `foh_pause.{c,h}`, `gfx_overlay.c`; building the input scripts
+  that drive the two never-executed arms (`sysfoh.fks`, `fin.fks`,
+  `nav-noshot.fks`). **Now that the device is back, its deferred device legs are
+  runnable — but it was briefed while the device was offline, so it will
+  register them as deferrals unless told otherwise.**
+- **R4 reviewer verdict artifact** — worktree `agent-ad3238e43fc13278b`, review
+  round 4. Deliverables on disk: `port/review/{review-harness.sh,
+  check-review-artifact.sh,arc-closure.sh,reviewers.sh,FORMAT.md,specimens/}`.
+  It is DOGFOODING its own format on its own rounds.
+
+**RESUME HERE (ordered):**
+1. Let R3 and R4 report; audit both against disk (three self-reported completion
+   claims were contradicted by filesystem audit today — audit every one).
+2. **Re-run the device legs now unblocked:** `check-device-persist.sh` (never
+   run), plus the device arms of `check-device-foh.sh`,
+   `check-device-target.sh`, `check-device-fullgame.sh`.
+3. New manifest rows for the unpinned judge decision inputs (`foh.h`,
+   `check-judge-regression.sh`, `dump-judge-grammar.js`,
+   `judge-grammar.frozen.txt`, `judge-domains.authored.txt`).
+4. **B9 arc must close** — `check-device-fullgame.sh` is still `arc-in-flight`,
+   so a green M4 gate is impossible until then.
+5. Then, and only then, an M4 gate attempt — **after** R3's rig lands, never
+   before (~232 lines still never executed; the gate cannot reach them).
+
 ## Live right now (updated: 2026-07-29 — HANDOFF PAGE. Latest AGENT-LOG entry = **iter 132**; latest COMMIT = `b44937b` (verification-debt lane merged). Phase: M4 mechanically PASSED; in owner-punch-list execution, NOT re-ratified)
 
 **READ ORDER for a fresh context:** CLAUDE.md → this section → `fix_plan.md`
