@@ -1493,6 +1493,32 @@ surviving sentence claims authority the code no longer has.
 - **Liveness is a process + log-tail check, not one mtime window** — a lane
   mid-adb-push looks dead for minutes.
 
+### 2026-08-01 (latest) — THREE OWNER DECISIONS ARE NOW PENDING; the queue is decision-blocked, not work-blocked
+
+Everything the driver could advance without a ruling has been advanced. What
+remains all needs Chase:
+
+1. **B11 fix direction** (new this turn, below) — recommendation (c).
+2. **R4 disposition** — the post-split round came back **`VERDICT: NO-GO`**
+   (`.loop/review-r4split-r1-20260801.log`), so the owner's *"one round, then
+   merge"* precondition FAILED and the split stays unmerged. It found 3
+   genuinely DEAD teeth (T89a/T94a/T96a assert boilerplate `arc-report.sh`
+   prints unconditionally — they pass with the perturbation removed, three false
+   bits inside the cited `189/189`), 2 teeth that pass against `true`/`false`,
+   surviving present-tense authority language in the generated prompts, and one
+   `[HIGH]`: **reviewer identity is forgeable by the writer the artifact exists
+   to constrain** — a design ceiling, not a bug. Options + driver recommendation
+   (2) in `fix_plan.md`. NOTE the shape difference from the three NO-GOs that
+   shelved the judge: those were fresh false-GREEN classes each round
+   (non-convergence); these are bounded and fixable.
+3. **R7a — B9 companion decision** (unchanged, still open).
+
+No further autonomous dispatch is warranted: the remaining items either edit a
+judge, spend a review budget the owner set, or ratify a bar — all owner-visible
+by construction. The manifest re-pin (item 3) is deliberately HELD rather than
+taken, because B11's fix will edit `check-device-foh.sh` again and the row
+should be pinned once, on final bytes, not twice.
+
 ### 2026-08-01 (later) — DEVICE EVIDENCE RUN: persist GREEN, foh BLOCKED on a NEW finding (B11)
 
 Item 1 of the resume list was executed on the device (`12c00003237f5528`, healthy,

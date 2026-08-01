@@ -2712,6 +2712,62 @@ pulled and judged HOST-side.
   `DEVICE FOH OK (… vsfinish=1 … fbwit=23 p99=13.995ms)` rc 0.
   `done-check:` both terminal lines reproduce cold under a driver re-run.
 
+### R4 POST-SPLIT ROUND — ran 2026-08-01, **VERDICT: NO-GO**. Merge NOT authorized.
+
+The owner's budget was *"one Tier A round aimed at tooth-vacuity, then merge."*
+The round ran (`.loop/review-r4split-r1-20260801.log`, 429385 bytes, 0 NULs,
+terminal anchored `VERDICT: NO-GO`, `CODEX_RC=0`; findings taken from the LAST
+`## Findings` block — the log echoes specimen files carrying foreign verdicts,
+which is why 5 `VERDICT: GO` strings appear in it and none of them is this
+round's). **The merge precondition failed, so the split stays unmerged in
+`agent-ad3238e43fc13278b`.**
+
+**The round found exactly what it was pointed at — the teeth ARE partly vacuous,
+and the demotion is partly cosmetic:**
+
+- `[MEDIUM]` `check-review-artifact.sh:1220` — **T89a/T94a/T96a assert
+  boilerplate `arc-report.sh:1231-1244` prints UNCONDITIONALLY.** All three pass
+  with their perturbations REMOVED: three false bits inside the cited `189/189`.
+- `[MEDIUM]` `:825` — T55 discards the result with `|| true` and passes only
+  because no `r008-*` residue exists. **Passes against `true`.**
+- `[MEDIUM]` `:1101` — T82 accepts any nonzero failure when two paths are
+  absent. **Passes against `false`**, never reaching reservation.
+- `[MEDIUM]` `review-harness.sh:390` — every generated reviewer prompt still
+  says "the judge" re-hashes paths before it "call[s] the arc closed".
+  **Present-tense authority language survived the demotion.**
+- `[HIGH]` `review-harness.sh:290` — **reviewer identity is forgeable by the
+  writer the artifact exists to constrain.** The artifact records a fixed public
+  descriptor hash while lines 411-416 exec bare `codex`/`grok`/`claude`; an
+  exported Bash function or PATH shadow runs as a "built-in" reviewer AND keeps
+  the genuine descriptor hash. T35 only covers explicit `--reviewer-cmd`. The
+  reviewer's own note on the ceiling: *"strong provenance against a writer
+  ultimately requires a driver-owned launcher or external signature."*
+
+**Driver read — this NO-GO is a DIFFERENT SHAPE from the three that shelved the
+judge, and that matters for the decision.** Those three each found a FRESH
+false-GREEN class in a tool CLAIMING authority — non-convergence. These five are
+bounded and individually fixable, and four are the kind of finding a round is
+supposed to produce. The exception is the HIGH, which is a **design ceiling, not
+a bug**: a tool a writer invokes cannot bind the identity of the reviewer it
+invokes, against that same writer.
+
+**OWNER DECISION — the one-round budget is spent.** Three options:
+1. **Spend one fix round + one re-review** (5 findings; the 4 MEDIUMs are small).
+   The HIGH cannot be closed inside the current design — it would have to be
+   accepted as a registered limitation, scoped honestly: the artifact is
+   tamper-EVIDENT against accident and sloppiness, not against a determined
+   writer.
+2. **Merge the producer with the HIGH registered as a stated limitation** and
+   fix only the 4 MEDIUMs. Requires deleting or binding the 3 dead teeth FIRST —
+   a cited `189/189` containing known-false bits is worse than a smaller honest
+   count.
+3. **Shelve R4 entirely.** It is a PROCESS tool; nothing on the M4 critical path
+   depends on it. Costs nothing to ship, loses the provenance binding.
+
+Driver recommendation: **(2)**, because the producer's value survives the HIGH
+once the HIGH is stated rather than implied, and because R4 has now consumed
+four review rounds on a tool that ships nothing to the device.
+
 ### R7 — B9 arc (blocks a green M4 gate)
 `check-device-fullgame.sh` is `arc-in-flight` and red on `skips == 0`. All 12
 legs are `STREAM MATCH 3600/3600 exact` in both passes; only skips fail, and they

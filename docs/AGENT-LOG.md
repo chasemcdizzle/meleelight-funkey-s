@@ -21434,3 +21434,72 @@ review-covered — `ef31e53` ran an 8-round arc to a terminal anchored
 `VERDICT: GO` with `CODEX_RC=0` (`.loop/review-r6-r8-20260731T230613Z.log`,
 410719 bytes, 0 NULs) — so the re-pin is honest whenever it is taken; it just
 cannot claim device-green until B11 is decided.
+
+## driver — 2026-08-01 — R4 post-split round: NO-GO. The teeth ARE partly vacuous (3 dead bits inside a cited 189/189), and the demotion was partly cosmetic
+
+Dispatched the single Tier A round the owner budgeted for the R4 split ("one
+Tier A review round aimed at tooth-vacuity, then merge"). Scoped it deliberately
+narrow — tooth vacuity first, honesty of the demotion second, and whether the
+surviving producer still earns its keep third — because the three prior reviews
+had each found a fresh false-GREEN class and the owner's split was the response
+to that non-convergence.
+
+`.loop/review-r4split-r1-20260801.log`, 429385 bytes, NUL-scanned clean (429385
+== 429385 after `tr -d '\000'`), terminal anchored `VERDICT: NO-GO`,
+`CODEX_RC=0`. **Findings taken from the LAST `## Findings` block**: the log
+contains 5 `VERDICT: GO` strings and NONE of them is this round's — the reviewer
+reads `port/review/specimens/`, which by design holds specimen logs carrying
+foreign verdicts (`foreign-verdict-at-eof.log` among them). A grep for
+`VERDICT: GO` anywhere in this log would have returned a GO for a round that
+said NO-GO. That is the registered last-block rule earning its keep, on a log
+whose foreign verdicts are there precisely because the tool under review exists
+to catch foreign verdicts.
+
+**The primary question got a clean answer: yes, vacuous.**
+`check-review-artifact.sh:1220` — T89a/T94a/T96a assert text that
+`arc-report.sh:1231-1244` prints UNCONDITIONALLY. All three pass with their
+perturbations REMOVED. Three false bits inside the `189/189` the tool cites as
+its evidence. Two more (T55 `:825`, T82 `:1101`) pass against `true` and `false`
+respectively — the mundane-nonzero-exit shape.
+
+**The secondary question also got an answer: partly cosmetic.**
+`review-harness.sh:390` — every generated reviewer prompt still tells the
+reviewer that "the judge" re-hashes paths before it "call[s] the arc closed."
+The rename landed, the PROCESS sentence was removed, and the authority claim
+survived in the text the tool SENDS TO REVIEWERS. Worth noting as a class: a
+demotion has to be chased through generated output, not just headers and docs —
+grep what a tool EMITS, not what it says about itself.
+
+**The HIGH is a design ceiling, not a bug.** `review-harness.sh:290`: the
+artifact records a fixed public descriptor hash while :411-416 exec bare
+`codex`/`grok`/`claude`; an exported Bash function or a PATH shadow runs as a
+"built-in" reviewer and still carries the genuine descriptor hash. T35 only
+covers explicit `--reviewer-cmd`. The reviewer stated the ceiling itself:
+provenance against a writer needs a driver-owned launcher or an external
+signature. A tool the writer invokes cannot bind the identity of the reviewer it
+invokes, against that same writer. That is not fixable by another round; it is
+fixable by stating the guarantee honestly — tamper-EVIDENT against accident and
+sloppiness, not against a determined writer.
+
+**Merge NOT taken.** The owner's precondition was a clean round and the round was
+not clean. Options and a driver recommendation (merge the producer with the HIGH
+registered as a stated limitation, after deleting or binding the 3 dead teeth)
+are in `fix_plan.md`. Not dispatching a fifth round unasked: R4 has consumed four
+review rounds on a PROCESS tool that ships nothing to the device, the owner set a
+one-round budget, and spending more of it is the owner's call rather than mine.
+
+**ZOOM OUT (HARD RULE 8).** Instance: three teeth assert unconditional
+boilerplate. Class: **a tooth that asserts on OUTPUT TEXT is only as strong as
+the text's conditionality** — any assertion whose target is printed on every run
+is a constant, not a test. The general instrument is the one the reviewer used
+and any tooth suite should own: **run each tooth with its perturbation removed;
+every tooth that still passes is dead.** That is mechanically checkable and
+would have caught all three before a human ever read them. Same shape as the
+project's existing dead-tooth guards (`cmp -s variant committed && fail "dead
+tooth"`), lifted from byte-identity to behaviour.
+
+Second, smaller class worth recording next to it: this round's three dead teeth
+and this turn's B11 both come from the same family — **evidence that is weaker
+or stronger than it appears**. B11: a judgment STRICTER than the determinism of
+the thing judged. R4: teeth WEAKER than the count they are cited as. Both pass
+review reading because the number on the page looks right.
