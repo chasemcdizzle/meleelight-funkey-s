@@ -45,11 +45,15 @@ without new evidence.
 
 ## 3. Adversarial review arcs (Codex; tiered)
 
-Reviewer: `codex` CLI (adversarial stance), fallback `grok` if Codex is
-unavailable. Contract: prompt file + full log on disk under `.loop/`
-(`.loop/review-<iter>-<n>.log`), exact verdict line required
-(`VERDICT: GO` / `VERDICT: NO-GO`), driver reads the verdict FROM THE LOG
-FILE, never from an agent's summary.
+Reviewer: `codex` CLI (adversarial stance); when a codex round is PROVEN
+FAILED the replacement is the §11 fallback — `grok` AND an Opus 5 reviewer,
+BOTH (the older "fallback = grok" wording is superseded; see §11).
+Contract: prompt file + full log on disk under `.loop/`, exact verdict line
+required (`VERDICT: GO` / `VERDICT: NO-GO`), driver reads the verdict FROM
+THE LOG FILE, never from an agent's summary. Since 2026-07-30 rounds are
+launched through `port/review/review-harness.sh`, which writes that bundle
+under `.loop/arc/<arc-id>/` (see below); the older ad-hoc
+`.loop/review-<iter>-<n>.log` paths remain valid for reading archived arcs.
 
 **Verdicts are emitted UNADORNED (binding; C11, iter 133).** The verdict
 must occupy its own line, at column 0, with no decoration whatsoever:
@@ -75,6 +79,105 @@ those. Known residual, registered rather than papered over: a verdict
 quoted in a transcript appended AFTER a report is positionally
 indistinguishable from a real one, so the durable fix is a structured
 closure record binding producer path + pinned sha + verdict.
+
+**That residual is now CLOSED: the reviewing harness writes its own verdict
+artifact (owner ruling 2026-07-30; fix_plan R4; format
+`port/review/FORMAT.md`).** Rounds are launched through
+`port/review/review-harness.sh run` (`--arc --round --reviewer --role --tier
+--prompt --scope`), which archives the log, prompt and scope under
+`.loop/arc/<arc-id>/` and, when the reviewer exits, writes a sealed RVERDICT2
+artifact binding **arc id · round · reviewer · role · the exact reviewed
+scope BYTES (a per-file sha256 manifest) · the log's sha256/bytes/lines/NUL
+count · the reviewer's rc and the deadline it ran under · the terminal
+verdict and its line · which rule the round counts toward**.
+**ARC CLOSURE IS A DRIVER/HUMAN JUDGEMENT, INFORMED BY THOSE ARTIFACTS
+(owner ruling 2026-07-31 — see §3.1 below).** `bash port/review/arc-report.sh
+--arc <id>` is a DIAGNOSTIC that reads them: it refuses evidence it cannot
+read (bad seal, mutated log, cross-wired bundle, NULs, version skew,
+incoherent VOID reason, artifacts that contradict each other) and otherwise
+REPORTS what the artifacts say — every round's reviewer, role, verdict,
+times, rc, deadline and scope; whether a §11 pair is complete; what a cap
+claims; whether the reviewed bytes are still on disk. It decides nothing, and
+neither its output nor its exit code authorizes anything. **It is not a
+substitute for reading FORMAT.md §7, which is BINDING disclosure of what it
+does not verify** — most importantly that SCOPE MEMBERSHIP (which paths the
+arc covers) and PROMPT SEMANTICS (whether the reviewer was actually told to
+be adversarial) are caller assertions, that `--tier` is an argument rather
+than a derivation, and that a transcript-decided round's recorded verdict is
+a reported field rather than a proven decision. The closure-rule vocabulary
+is still recorded in every artifact and still means what §3/§11 say —
+`process3-tier-a-go` (codex GO), `process11-fallback-dual-go` (§11 — BOTH
+grok and opus5 GO; one alone does not close it), `process3-capped` (a
+harness-written RVCAP1 naming the recurring class), plus BOTH Tier A+
+obligations, the independent second reviewer AND the byte-identity
+regression, the latter representable because `review-harness.sh regression`
+RUNS the lane's regression command and seals its rc and output (RVREG1)
+exactly as it does a review round. The report tells a driver which of those
+ingredients are ON DISK; it does not tell anyone that they add up. Poll for
+the ARTIFACT, never for a substring of the log. Five measured failure modes
+closed, all from
+2026-07-30: foreign-GO-at-EOF laundering · no machine-readable arc identity
+(the 19 `x-*` cross-artifact rows) · fabricated work-status ledgers ·
+"reached GO" under a two-reviewer rule with one reviewer · corrupt logs whose
+readable text contradicts their rc. The mechanism against the first is
+structural rather than a hash alone: the harness terminates every log with a
+nonce-bearing `REVIEWER_RC <nonce> <rc>` + `HARNESS-EOR <nonce>` pair, the
+verdict is read only from the region ahead of it, and `HARNESS-EOR` must be
+the log's final line — so a transcript pasted into a finished log is out of
+region, after the terminator, AND a hash mismatch.
+
+### §3.1 Why there is no arc-closure JUDGE (owner ruling 2026-07-31)
+
+An earlier version of this section declared `arc-closure.sh` "the ONLY
+sanctioned answer to 'is this arc closed?'" and listed three shapes it had
+just closed. **That sentence is withdrawn, and two of the three "closures"
+did not hold.** THREE independent adversarial passes over the judge — the
+arc's own round 7, then two independent Tier A+ reviewers — each produced a
+green `ARC CLOSED` line over a review that had not happened, each time
+through a shape the previous fix had not anticipated:
+
+- The **ambiguity rule** (a transcript carrying BOTH anchored verdicts is
+  VOID) closes the shape it was built for, and leaves the class: a
+  transcript that emits **no verdict of its own** and ends with a quoted
+  foreign anchored GO is recorded GO with no ambiguity at all — so the rule
+  makes DELETING the honest verdict the winning move.
+- The **round-order rule** (labels must agree with `started-utc`) never read
+  `ended-utc`: a GO that started one second later and finished six seconds
+  earlier than an adverse round still closed the arc.
+- The **§11 basis-eligibility rule** was a two-item blacklist over eight VOID
+  reasons; two fresh eligible "proven codex failures" were manufactured in
+  zero seconds with no repo write (codex off PATH → rc 127; one sentence of
+  prompt → rc 0 `decision-malformed`).
+- And FORMAT.md §7's own disclosure that the open output-quiescence gap
+  "produces a REFUSAL, not a false GO" was measured FALSE 3/3: it produces a
+  self-consistent `verdict: GO` written by a background process, and closed
+  arcs.
+
+The through-line is the finding: **every fix closed the measured instance and
+left the class** — CLAUDE.md HARD RULE 8's hierarchy (instrument > class fix >
+registered one-off) inverted three times. A judge with known false-GREEN paths
+is worse than no judge precisely because the process had declared it
+authoritative. So the owner's ruling: **KEEP the producer, DROP the judge's
+authority.** `review-harness.sh`'s provenance-bound artifacts stay — they
+close the original five failure modes AS EVIDENCE and were never the problem.
+`arc-closure.sh` is demoted to `arc-report.sh`, a diagnostic that reports what
+it observes and decides nothing; the round-order and basis-eligibility rules
+are DELETED rather than reported, because an observation derived from an
+unsound rule is still an unsound claim. **Arc closure remains a driver/human
+judgement informed by the artifacts.** Do not re-add a judge without arguing
+the class fix and having it reviewed as one.
+
+Teeth: `bash port/review/check-review-artifact.sh` →
+`REVIEW ARTIFACT TEETH OK`, which refuses the real laundering specimen and the
+real 44.4%-NUL specimen (both kept as fixtures under
+`port/review/specimens/`), requires the report to DISCLOSE every situation a
+deleted closure rule used to refuse on, and whose measured single-check OFF
+controls — with their stated bounds, including that OFF controls say nothing
+about checks that were never written — are tabulated in FORMAT.md §6. NOTE
+the deliberate scope: this is the review layer's own record. `verify_m4.sh`
+and `m4-freeze-manifest.txt` are untouched by it, and nothing in the freeze
+manifest consults `arc-report.sh` — a diagnostic is not a cite verifier, and
+the manifest is single-writer by nature (§12(3)).
 
 **§12.3(5) is now ENFORCED for arc-claiming rows.** "Evidence must outlive
 the worktree" has a mechanical check: for every `reviewed-go` /
@@ -268,6 +371,10 @@ events and genuine decisions, not progress noise.
   `.loop/review-<iter>-<n>.log`, exact verdict line, and the DRIVER
   reads verdicts from the log files cold at ground-truth time (§5),
   never from the writer's summary. Driver arbitrates disputes and caps.
+  Rounds launched through `port/review/review-harness.sh` (§3) satisfy
+  this contract and additionally leave the sealed verdict artifact the
+  driver reads with `arc-report.sh` instead of re-reading log bytes — a
+  DIAGNOSTIC read, not a delegated decision (§3.1).
 - **Codex-failure fallback (owner ruling 2026-07-26): grok AND an
   Opus 5 reviewer, BOTH.** When a codex round is proven failed (cached
   output cmp-proven, wedge, no verdict), the replacement round is TWO
@@ -279,7 +386,17 @@ events and genuine decisions, not progress noise.
   disagreement → driver arbitrates. This supersedes the earlier
   grok-only fallback and the "no claude reviewers" rulings FOR THE
   FALLBACK PATH ONLY — codex remains the primary; Opus never reviews
-  while codex is healthy.
+  while codex is healthy. **Mechanically enforced since 2026-07-30:**
+  a fallback round is recorded with `--role fallback` plus a
+  `--fallback-basis` naming the RECORDED failed codex round it rests on.
+  `arc-report.sh` refuses a record whose basis is incoherent (absent, not a
+  VOID codex `primary` of that round, or on other prompt/scope bytes) and
+  REPORTS whether the pair is complete and what the basis actually was —
+  void-reason, rc, deadline, harness-kill, elapsed. **Whether a codex round
+  is PROVEN failed, and whether a complete pair closes the round, stay the
+  driver's call** (§3.1: the mechanical eligibility rule was measured
+  bypassable in zero seconds and was deleted). Teeth:
+  `port/review/check-review-artifact.sh` T21-T26, T53, T54, T94, T96.
 
 ## Explicitly NOT adopted (with reasons; reopen only with new evidence)
 
