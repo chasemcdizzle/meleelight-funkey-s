@@ -5,6 +5,42 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## §rulings (standing owner directives, day-tagged)
 
+- **2026-08-01 — THREE RATIFICATIONS (Chase, in session, after a full written
+  briefing of the options and their costs).** Verbatim: *"option A close the arc
+  and approve a named skip allowance yes. decision 1: C yes please. decision 2:
+  B please."* These three are the authority for the check edits that follow, and
+  each edit cites this bullet at the edit site.
+
+  1. **B9 / R7a — CLOSE THE ARC + APPROVE A NAMED, BOUNDED, LOUD SKIP
+     ALLOWANCE.** `check-device-fullgame.sh`'s B9 arc closes as a §3 CAPPED
+     closure naming the class (the skip tracks per-leg **MMC interrupt count**,
+     not workload; a second stall source distinct from the closed iter-74 class).
+     The `skips == 0` bar becomes a NAMED allowance with a MEASURED bound. The
+     check keeps counting. The check keeps PRINTING every count. **The p99 bar
+     is UNCHANGED at < 16.67 ms** — that is what still protects the player, since
+     a skip that matters is a skip that blows the frame budget.
+     **BOUND, set from measurement (2 passes x 12 legs = 24 leg-runs):** observed
+     per-leg max **7** (pass 1 g06; pass 1 g05 = 1; pass 2 m01 = 1; the other 21
+     leg-runs = 0), observed per-run total max **8**. Bound therefore
+     **≤ 8 per leg** and **≤ 12 per run** — one above the measured per-leg max,
+     50% above the measured run total. A regression past the noise still fails.
+     This is a RATIFIED DEVIATION, not a weakening: the number stays on the page
+     and the owner signed for it in writing (D14 precedent).
+  2. **B11 — THREE-WAY BYTE-EXACT ACCEPTANCE SET.** A jitter-exposed shot is
+     judged against the host twins {hold-1, hold, hold+1}, each by `cmp`. The
+     matched variant is PRINTED. **Byte-exactness is retained** — this admits
+     exactly the ±1 device frame `flow-to-fkscript.js` documents and nothing
+     else. Position-tolerant comparison was OFFERED and REFUSED on HARD RULE 3
+     grounds. A tooth must prove a 2-frame offset still FAILS.
+  3. **R4 — MERGE THE PRODUCER, WITH THE HIGH STATED.** `review-harness.sh`
+     merges. The three DEAD teeth (T89a/T94a/T96a — they assert boilerplate
+     `arc-report.sh` prints unconditionally and pass with the perturbation
+     removed) are deleted or bound FIRST; the cited tooth count is re-frozen to
+     the honest number. The `[HIGH]` reviewer-identity forgeability is recorded
+     as a STATED LIMITATION, not silently carried: the artifact is
+     tamper-EVIDENT against accident and sloppiness, **not** against a determined
+     writer. No further review round is spent.
+
 - **2026-08-01 — SHIP BEFORE THE 1-FRAME SKIP IS FIXED (owner ruling).** The B9
   fullgame skip class is **deferred to the VERY END of all work** — after the
   gate, after acceptance, after everything. Chase will ship without it fixed and
