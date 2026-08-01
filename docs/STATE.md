@@ -1352,6 +1352,120 @@ sanctioned-answer sentence.** Closure stays a human judgement.
 - **Liveness is a process + log-tail check, not a single mtime window** — a lane
   mid-adb-push looks dead for minutes.
 
+### 2026-07-31 — PAUSED AT A CLEAN CHECKPOINT (owner request). READ THIS FIRST.
+
+**HEAD `ef31e53`.** Main tree CLEAN except the 4 permanently-excluded untracked
+files. **9 commits this session.** Both in-flight lanes reported and were
+audited; nothing is half-done in the main tree.
+
+## ⚠️ TWO THINGS NEEDING A HUMAN
+
+**1. THE DEVICE IS OFF THE USB BUS and did not return.** No `adb devices`, no
+`funkey` in `system_profiler SPUSBDataType`, after ~20 min of retries and an
+adb server restart. **It needs a physical check.**
+**C24 RISK, stated honestly:** the lane parked the frontend at ~16:23; the
+deadman's 900 s window expired ~16:38. If the device stayed powered it
+self-unparked and is fine. **If it lost power while parked, `/mnt/disable_frontend`
+persists on the SD card and the frontend will refuse to start on every boot.**
+That is NOT a brick — it is one file. Fix: `adb shell rm /mnt/disable_frontend`,
+or pull the SD and delete it. HOST side is verified clean: no rig lock, no lane
+processes, and **zero FunKey SDK containers** (the 5 running containers are the
+owner's own — postgres/redis/adp-dev-api/floci — checked, NOT killed, because a
+blind sweep once took out 4 unrelated ones).
+
+**2. R6's FINAL BYTES HAVE NOT HAD A DEVICE RUN.** Committed at `ef31e53` with
+this caveat explicit. Last device-green: foh = the r6-fix state, persist = the
+r5-fix state. The delta is r7 hardening only (flat-panel foreign-ink guard +
+tooth + deadman-pid assertions), host-verified (`bash -n`, `node --check`,
+host+ARM `-Werror`). **The two runs on final bytes died on ADB TRANSPORT LOSS,
+not on any assertion.** When the device returns: re-run `check-device-foh.sh`,
+then `check-device-persist.sh`.
+
+## WHAT THIS SESSION ACHIEVED
+
+- **A shipping crash found, fixed, and WITNESSED ON HARDWARE.** A natural VS
+  timeout rendered a negative match timer into a font atlas with no `-` glyph
+  (`SIM FATAL frame 210`) — **every natural timeout on device would have aborted
+  the game.** Now: `device vsfinish: expiry frame 210 == twin, banner byte-exact
+  + decodes 'TIME!', fb-witnessed, hold 2526 ms, rc 0`, with
+  `W 210 finish-banner yoff=0 eq=1` proving it reached the SCANNED-OUT page, and
+  zero `SIM FATAL` bytes.
+- **An armv7 CROSS-COMPILE BREAK that blocked EVERY device leg** (`foh_render.c`
+  under `-Werror=format-truncation`; those bytes had only ever met host clang).
+  **CLASS: host-clang-clean is not evidence of device-buildable.**
+- **`check-device-persist.sh` PASSED for the first time in its existence** —
+  authored iter 100, never past step 3/10. Now all ten, four green runs, with a
+  REAL reboot (`bootid:PRE!=POST`) and a byte-exact save roundtrip across it.
+- **2 of R3's 3 device-only floor facts SETTLED** — pixels provably reach the
+  scanned-out fb; audio is real on device (host `0 callbacks / 274 steals` vs
+  device `6585 callbacks / 0 steals`, **282 voice starts identical**).
+- **4 lanes merged** + a 17-row manifest re-pin + the iter-132 brace glob removed.
+
+## R4 — SPLIT DONE, AWAITS EXACTLY ONE REVIEW ROUND (do not merge before it)
+
+Owner ruled the split (`7546485`); the lane executed it and the driver
+cold-verified: `REVIEW ARTIFACT TEETH OK (189/189 bit)` rc 0, scope clean
+(`M docs/PROCESS.md` + `?? port/review/`).
+**The demotion is REAL, not cosmetic:** `arc-closure.sh` -> `arc-report.sh`;
+output grammar is now `ARC REPORT … (DIAGNOSTIC — this tool does not decide
+whether an arc is closed)` / `EVIDENCE DEFECT` / `REFUSED`; **the entire
+closure-rule layer is deleted** — driver-verified the only surviving `maxround`
+and `ARC CLOSED` strings are deletion-rationale COMMENTS (`:742`, `:30`), and
+PROCESS.md's sanctioned-answer sentence is **gone (0 refs)**.
+**Two unsound rules were DELETED rather than downgraded to observations** — round
+ordering and §11 basis eligibility — on the correct principle that *an
+observation derived from an unsound rule is still an unsound claim*. The report
+now prints both timestamps and says `round order: NOT ESTABLISHED` /
+`§11 basis eligibility: NOT DECIDED here`.
+§7's FALSE SAFETY DISCLOSURE is corrected with the measured mechanism, and the
+lane **self-retracted** a second overstated claim (§2(c)) it found while fixing
+the first. Teeth 185 -> 189, none deleted; `expect_observed` **fails if the
+report is SILENT** about a situation it cannot judge.
+
+**TIER RULING (driver accepts the lane's argument): Tier A, ONE codex round.**
+§3's A+ trigger is a judge/verify-surface change; this change *removes* the judge
+surface — nothing gates on `arc-report.sh`, nothing outside `port/review/`
+references it, and the failure mode A+ exists to catch (a mechanised green line
+laundering a decision) is **structurally absent because there is no green line**.
+A+'s obligation (2), a byte-identity regression on archived results, has no
+referent: the archived results were closure lines deleted by design, so an
+"old vs new" artefact would be fabricated — itself evidence A+ is the wrong tier.
+**Point that one round at TOOTH-VACUITY specifically:** whether any
+`expect_observed` substring is satisfied by a report that would print it anyway
+(baseline-vacuity), whether §7 still understates anything, and whether any
+surviving sentence claims authority the code no longer has.
+
+## RESUME ORDER
+1. **Physical check on the device**; clear `/mnt/disable_frontend` if the
+   frontend does not start.
+2. Re-run `check-device-foh.sh` then `check-device-persist.sh` on R6's final
+   bytes (the only outstanding evidence debt).
+3. R4: one Tier A round aimed at tooth-vacuity -> then merge (copy list is at the
+   top of `.loop/r4-progress.md`, 34 files + the progress artifacts; it is the
+   ONLY copy of round 7's decision channel).
+4. **Re-pin the manifest** — `check-device-foh.sh` is row 20 (`reviewed-go`) and
+   its sha is now stale. **Re-MEASURE drift; never carry a count forward** (it
+   went 1 -> 5 -> ~10 -> 17 this cycle).
+5. New manifest rows for unpinned judge decision inputs (`foh.h`,
+   `check-judge-regression.sh`, `dump-judge-grammar.js`,
+   `judge-grammar.frozen.txt`, `judge-domains.authored.txt`).
+6. **B9 arc (R7)** — blocks a green gate. Today's attribution: the fullgame skip
+   tracks per-leg **MMC interrupt count**, not workload; `low_bat_check` quiesced
+   in both passes, so it is a **second stall source** distinct from the closed
+   iter-74 class. p99 headroom **439-566 µs**.
+7. The two work-order patches, then the M4 gate attempt, then Chase's playthrough.
+
+## NEW GOTCHAS FROM THIS SESSION (do not rediscover)
+- **Editing a running bash script corrupts it** (bash reads by byte offset); the
+  killed run also left a daemon-owned SDK container alive.
+- **`grep -a $'\x00'` is an UNSOUND NUL scan on macOS/zsh** — the empty pattern
+  matches every line. C35 class, found in a lane's own instrument.
+- **codex reads `.loop/` and echoes prior rounds' logs**, so a round log can
+  contain EARLIER rounds' `## Findings` and `CODEX_RC=` mid-file. Require
+  last-block extraction AND "sentinel is the final line AND producer dead".
+- **Liveness is a process + log-tail check, not one mtime window** — a lane
+  mid-adb-push looks dead for minutes.
+
 ## Live right now (updated: 2026-07-29 — HANDOFF PAGE. Latest AGENT-LOG entry = **iter 132**; latest COMMIT = `b44937b` (verification-debt lane merged). Phase: M4 mechanically PASSED; in owner-punch-list execution, NOT re-ratified)
 
 **READ ORDER for a fresh context:** CLAUDE.md → this section → `fix_plan.md`
