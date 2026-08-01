@@ -1493,6 +1493,43 @@ surviving sentence claims authority the code no longer has.
 - **Liveness is a process + log-tail check, not one mtime window** — a lane
   mid-adb-push looks dead for minutes.
 
+### 2026-08-01 (later) — DEVICE EVIDENCE RUN: persist GREEN, foh BLOCKED on a NEW finding (B11)
+
+Item 1 of the resume list was executed on the device (`12c00003237f5528`, healthy,
+`/mnt/disable_frontend` absent, no orphans, no lock). Result is **split**:
+
+- **`check-device-persist.sh` -> `PERSIST OK` rc 0** on `ef31e53`'s FINAL bytes
+  (`sessions=2 powercycle=reboot bootid=PRE!=POST legs=5 pulls=4
+  roundtrip=byte-exact teeth=30`; log `.loop/resume-persist-20260801.log`).
+  **That evidence debt is DISCHARGED** — the caveat in `ef31e53`'s message is
+  answered for persist.
+- **`check-device-foh.sh` -> `DEVICE FOH FAIL` rc 1** at
+  `shot f01-vs-g01/css` (log `.loop/resume-foh-20260801.log`). **Diagnosed, not
+  re-run blindly. It is NOT a product regression and NOT the B9 skip class.**
+
+**B11 (new, in `fix_plan.md`): the shot judge is stricter than the rig's own
+determinism.** The device shot is **byte-identical** to a host twin whose
+`I 708 U` hold runs **37 frames instead of 36** (`51e0d8db…c00217` both sides;
+the committed 36-frame twin is `3abd60ff…5c7ec91`; evidence preserved under
+`.loop/b11-shot-jitter/`). The flow file's own header documents the tolerance —
+*"a hold can land +/-1 device frame off"* — and the slack did its job: the device
+trace is **byte-identical** to the twin trace, every transition on the same frame.
+What the slack does not protect is the resting pixel position: the hand moves
+**3.84 px/frame** (D3), so ±1 frame relocates it, and the shot judge is byte-exact.
+
+**B9 ruled OUT by measurement, not assumption:** the leg's applog reads
+`976 ticks, 5 transitions, 5 shots, 0 render skips, 0 failed presents` (match
+phase likewise 0). This is injector wall-clock jitter, not a game-side stall.
+
+**Consequence for the plan:** this is `verify_m4.sh` leg [2]'s judgment too, so
+the gate inherits the intermittency; the manifest re-pin (item 3) should NOT cite
+a device-green foh run until B11 is decided, because there isn't one. Driver
+recommendation is option **(c)** in fix_plan B11 — judge against the DECLARED ±1
+tolerance as a three-way byte-exact acceptance set, printing which variant
+matched — because it keeps byte-exactness and refuses the (b) "loosen the
+comparator" path HARD RULE 3 forbids. **Not executed: every option edits a judge,
+so it is owner-visible by construction.**
+
 ### 2026-08-01 — RESUME POINT. Device is BACK and CLEAN. Read §rulings first.
 
 **HEAD `f823369`** (a commit follows this block). Main tree clean except the 4

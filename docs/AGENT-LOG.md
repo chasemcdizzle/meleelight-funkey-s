@@ -21335,3 +21335,102 @@ this evidence it should not be attempted as a patch series.
 **NOT dispatched: a fourth fix round.** Three cycles without class-level
 convergence is the point at which spending more is the error, and this is an
 owner call about whether the tool ships at all.
+
+## driver — 2026-08-01 — device evidence run: persist GREEN on final bytes; foh FAIL root-caused to an UNSOUND JUDGE (B11), and B9 ruled out by measurement
+
+Executed resume item 1 (the only outstanding evidence debt from `ef31e53`,
+whose commit message stated the caveat plainly: *"the FINAL bytes have not had a
+device run"*). Device came back healthy after the USB disconnect —
+`/mnt/disable_frontend` ABSENT, gmenu2x running, no orphan `foh_device`,
+`/tmp/mlfk` empty, no rig lock. C24 did not bite.
+
+**Result is split, and the split is the whole story.**
+
+`check-device-persist.sh` -> **`PERSIST OK` rc 0** (`sessions=2
+powercycle=reboot bootid=PRE!=POST bootwait=12s legs=5 pulls=4
+roundtrip=byte-exact record=00:14.50 resets missing=1 loud-corrupt=2
+dirsync=plain-saved+degraded-tooth teeth=30`). Debt discharged for persist,
+including a real `adb reboot` with a boot-id change and a byte-exact save
+roundtrip across it.
+
+`check-device-foh.sh` -> **`DEVICE FOH FAIL` rc 1** at `shot f01-vs-g01/css`:
+`device shot != host twin reference (byte-exact judgment, pre-registered iter 93)`.
+
+**What I did NOT do: re-run it.** A blind re-run of a failing check is how a
+flaky judge gets laundered into a green ledger. Diagnosed first.
+
+**Diagnosis, host-only, ~1 minute, and it is a PROOF rather than a story.**
+The failing shot differs from the twin in exactly 613 pixels inside a 24x36 box
+at x 69-92 / y 91-126 — one sprite, displaced, on a screen whose hand cursor is
+free-moving. The flow's own header names the mechanism: *"The device path drives
+these scripts through a wall-clock injector (flow-to-fkscript.js), so a hold can
+land +/-1 device frame off"*, and *"The hand moves 2.40 px/frame in x and 3.84 in
+y (DEVIATION D3)"*. 3.84 px is one frame; the observed displacement is ~4 px.
+So I rebuilt the twin with the pre-shot `I 708 U` hold at 34/35/36/37/38 frames
+and compared each to the pulled device shot:
+
+| U hold | vs device shot |
+|---|---|
+| 34 | differs (13261 px) |
+| 35 | differs (700 px) |
+| 36 (**committed flow**) | differs (613 px) |
+| **37** | **byte-identical** (`51e0d8db…c00217` both sides) |
+| 38 | differs (13292 px) |
+
+Evidence preserved at `.loop/b11-shot-jitter/` (device shot, both twins, the
+u37 flow). The committed-flow twin hashes `3abd60ff…5c7ec91`.
+
+**So the rig is internally inconsistent.** The flow was authored to tolerate ±1
+injector frame and the tolerance WORKED — the device trace is **byte-identical**
+to the twin trace, every `T`/`S`/`SHOT` on the same frame, the hand still landed
+inside the port-2 type tab. The slack protects the LOGICAL outcome. It cannot
+protect the RESTING PIXEL POSITION, and the shot judge is byte-exact. The judge
+is strictly stronger than the determinism the rig provides; it passes when the
+jitter happens to land on the authored count. `.loop/r6-foh-20260731-g.log`'s
+`shots=15` green was that coin landing heads.
+
+**B9 ruled OUT by measurement, not by assumption.** My first hypothesis was that
+the deferred skip class had caused the late release — it would have been a tidy
+story, and it is wrong. The leg's own applog says
+`976 ticks, 5 transitions, 5 shots, 0 render skips, 0 failed presents`, and the
+match phase likewise `0 render skips`. Injector wall-clock jitter, no game-side
+stall. Recording the dead hypothesis because "the skip class explains it" would
+have been believable and would have quietly widened B9's blast radius.
+
+**ZOOM OUT (HARD RULE 8).** Instance: one shot. Class: **every shot taken after
+a counted (non-clamped) hold on a free-cursor screen** — `f01-vs-g01/css`,
+`f02-cpu-m01/css-cpu`, `f05-vs-g03`'s css, 3 of the 15 judged shots.
+`f03-options`' shots sit on discrete-row menus and are structurally immune. And
+because `verify_m4.sh` leg [2] judges these same screenshots, **the M4 gate
+inherits the intermittency** — a gate that passes on a coin flip is worse than a
+gate that fails, because the failure is the only honest signal.
+
+There is a second, sharper class statement worth keeping: **a judgment must not
+be stronger than the determinism of the thing it judges.** The rig DOCUMENTED
+its own ±1-frame tolerance in the flow header and then judged the output
+byte-exactly anyway. That is not a typo; it is two correct decisions made in
+different files that were never reconciled. Worth a sweep of the other judges
+for the same shape.
+
+**Not fixed, deliberately.** Every candidate option edits a judge surface, so it
+is owner-visible by construction, and one of the options is exactly the
+"loosen the comparator until it passes" move HARD RULE 3 forbids. Options and
+the driver recommendation are registered in `fix_plan.md` B11; the recommendation
+is (c) — judge against the DECLARED ±1 tolerance as a three-way byte-exact
+acceptance set {hold-1, hold, hold+1}, printing which variant matched, so
+byte-exactness survives and any real render divergence still matches none of the
+three. Rejected (b), position-tolerant comparison, on HARD RULE 3 grounds.
+
+**Consequence for the queue:** the manifest re-pin (resume item 3) must NOT cite
+a device-green foh run, because there is not one. Measured drift this turn, with
+`python3`/`hashlib` rather than a `shasum`/`awk` loop (the C35 instance that once
+reported all 89 rows drifted): **89 rows, 0 missing, exactly 1 genuine drift** —
+`port/foh/check-device-foh.sh`. My first pass reported 2 and the second was my
+own unsound negative: `verify_m4.sh`'s row pins its bytes EXCLUDING the single
+`^MANIFEST_SHA256=` line, so a naive whole-file hash can never match. Recomputed
+per the documented rule, it matches (`ee6a9444…`), and the `MANIFEST_SHA256`
+anchor matches the manifest (`0a5f5957…`). The drifted row's new bytes ARE
+review-covered — `ef31e53` ran an 8-round arc to a terminal anchored
+`VERDICT: GO` with `CODEX_RC=0` (`.loop/review-r6-r8-20260731T230613Z.log`,
+410719 bytes, 0 NULs) — so the re-pin is honest whenever it is taken; it just
+cannot claim device-green until B11 is decided.

@@ -2759,6 +2759,71 @@ STATE.md §rulings; `verify_m4.sh` no longer hard-refuses on that row.
 every pass — **the simulation is not implicated**, only the timing bar. p99
 headroom is 439-566 µs against 16.67 ms.
 
+### B11 — the device shot judge is STRICTER than the rig's own determinism (NEW, 2026-08-01; blocks R-item-1 and M4 gate leg [2])
+
+**Found while re-running `check-device-foh.sh` on `ef31e53`'s final bytes.** The
+run failed at `DEVICE FOH FAIL: shot f01-vs-g01/css: device shot != host twin
+reference`. It is **NOT a product regression and NOT the B9 skip class** — it is
+an unsound judgment in the rig.
+
+**PROVEN root cause (host-only, reproducible in ~1 min).** The device shot is
+**byte-identical** to a host twin run in which the flow's `I 708 U` hold is
+**37 frames instead of 36**:
+
+| artifact | sha256 |
+|---|---|
+| `.loop/b11-shot-jitter/device-css.ppm` | `51e0d8db…c00217` |
+| `.loop/b11-shot-jitter/host-twin-u37-css.ppm` | `51e0d8db…c00217` (**==**) |
+| `.loop/b11-shot-jitter/host-twin-u36-css.ppm` (committed flow) | `3abd60ff…5c7ec91` |
+
+Reproduce: `MLFK_MENU_IMG1=$PWD/pipeline/build/sim-tables/assets/menu.img1
+port/foh/build/device-foh/foh_dev_headless --flow .loop/b11-shot-jitter/f01-u37.flow
+--input flow --flow-out /tmp/t.txt --shots-dir /tmp/s --pace 0` then
+`cmp /tmp/s/css.ppm .loop/b11-shot-jitter/device-css.ppm`.
+
+**Why this is the rig's fault, in the rig's own words.** `f01-vs-g01.flow`'s
+header states it: *"The device path drives these scripts through a wall-clock
+injector (flow-to-fkscript.js), so a hold can land +/-1 device frame off; anchoring
+on a clamp makes leg (a) exact regardless, and every target below keeps more than
+one frame of slack on each side of leg (b)."* The slack protects the **logical**
+outcome and it worked perfectly — the device trace is **byte-identical** to the
+twin trace (`transitions=5, shots=5`, every `S`/`T` on the same frame). What the
+slack does not protect is the **resting pixel position**: the hand moves
+**3.84 px/frame in y** (D3), so one frame of hold difference relocates it by
+3.84 px — and the shot judge is byte-exact. The judge is therefore strictly
+stronger than the determinism the injector provides, and passes only when the
+jitter happens to land on the authored count.
+
+**B9 is NOT implicated — measured, not assumed.** `f01-vs-g01.dev-applog.txt`:
+`976 ticks, 5 transitions, 5 shots, 0 render skips, 0 failed presents`, and the
+match phase likewise `0 render skips`. The +1 frame is injector wall-clock
+jitter, not a game-side stall.
+
+**Scope (CLASS, HARD RULE 8).** Every shot taken after a *counted* (non-clamped)
+hold on a free-cursor screen: `f01-vs-g01/css`, `f02-cpu-m01/css-cpu`, and
+`f05-vs-g03`'s css — 3 of the 15 judged shots. `f03-options`' shots sit on
+discrete-row menus (no free cursor) and are unaffected. **This is also
+`verify_m4.sh` leg [2]'s judgment** ("screenshot judges green"), so the gate
+inherits the same intermittency.
+
+**Decision required — OWNER-VISIBLE, because every option touches a judge.**
+Driver recommendation: **(c)**, because it keeps byte-exactness intact.
+- (a) Re-author the flows so the last positioning move before each shot ends
+  against a screen clamp. Cheapest, but the port-2 type tab is mid-screen; there
+  is no clamp to anchor on without changing what the flow demonstrates.
+- (b) Position-tolerant shot comparison. **Rejected** — this is exactly the
+  "weaken a check to make a run pass" that HARD RULE 3 forbids.
+- (c) **Judge against the rig's DECLARED tolerance, still byte-exact:** the
+  acceptance set for a jitter-exposed shot is the three host twins
+  {hold-1, hold, hold+1}, each compared with `cmp`. It admits precisely the ±1
+  frame the injector documents and nothing else — a genuine render divergence
+  matches none of the three and still fails. The accepted variant is PRINTED, so
+  drift stays visible on the page.
+`done-check:` `bash port/foh/check-device-foh.sh` -> `DEVICE FOH OK (… shots=15 …)`
+rc 0 on **two consecutive device runs**, with the per-shot accepted jitter offset
+printed for each jitter-exposed shot; and a tooth proving a 2-frame offset still
+FAILS.
+
 ### R8 — fix the B9 skip properly (LAST ITEM, post-ship)
 Root-cause and remove the mmcirq-correlated stall. Owner will return to this
 after shipping. Candidate levers already registered from earlier work: the
