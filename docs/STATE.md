@@ -5,6 +5,33 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## §rulings (standing owner directives, day-tagged)
 
+- **2026-08-01 — SHIP BEFORE THE 1-FRAME SKIP IS FIXED (owner ruling).** The B9
+  fullgame skip class is **deferred to the VERY END of all work** — after the
+  gate, after acceptance, after everything. Chase will ship without it fixed and
+  return to it later. It is NOT abandoned; it is scheduled last.
+  **THE MECHANICAL CONSEQUENCE, which the driver must not paper over:** today
+  this ruling alone does NOT make the gate passable, because
+  (a) `verify_m4.sh:23` — *"any arc-in-flight/arc-pending producer = HARD
+  REFUSAL"*, and `check-device-fullgame.sh` is an `arc-in-flight` row; and
+  (b) the fullgame bar itself includes `skips == 0`
+  (`check-device-fullgame.sh:41`), so the leg goes red even once the arc closes.
+  **Deferring the FIX therefore requires a companion decision about the BAR.**
+  Driver recommendation (to execute on resume unless Chase says otherwise):
+  **(1)** close the B9 arc as a §3 CAPPED closure — it now has real attribution
+  (skip tracks per-leg MMC interrupt count, not workload; `low_bat_check`
+  quiesced in both passes; a SECOND stall source distinct from the closed
+  iter-74 class), which is exactly what a capped record is for; and
+  **(2)** ratify a NAMED, BOUNDED, LOUD skip allowance rather than silently
+  loosening `skips == 0` — the check keeps measuring and keeps printing the
+  count, the allowance is an owner-ratified deviation with its measurement
+  recorded (D14 precedent), and the p99 bar is UNCHANGED. **This must be a
+  visible ratification, never a quiet edit** — HARD RULE 3 forbids weakening a
+  check to make a run pass, and the difference between the two is whether the
+  number stays on the page.
+  Standing facts to carry: all 12 legs are `STREAM MATCH 3600/3600 frames exact`
+  on every pass — **the simulation is not implicated**; only the timing bar is.
+  p99 headroom is **439-566 µs** against the 16.67 ms budget.
+
 - **2026-07-31 — R4 SPLIT: keep the PRODUCER, drop the JUDGE'S AUTHORITY
   (owner ruling).** After THREE independent adversarial passes each found fresh
   false-GREEN paths into `arc-closure.sh`, the judge does not ship as an
@@ -1465,6 +1492,45 @@ surviving sentence claims authority the code no longer has.
   last-block extraction AND "sentinel is the final line AND producer dead".
 - **Liveness is a process + log-tail check, not one mtime window** — a lane
   mid-adb-push looks dead for minutes.
+
+### 2026-08-01 — RESUME POINT. Device is BACK and CLEAN. Read §rulings first.
+
+**HEAD `f823369`** (a commit follows this block). Main tree clean except the 4
+permanently-excluded untracked files.
+
+**DEVICE VERIFIED HEALTHY after the USB disconnect** — `12c00003237f5528`
+present; **`/mnt/disable_frontend` is ABSENT** (C24 did NOT bite — it either
+self-unparked via the deadman or never lost power while parked); gmenu2x
+running; no orphan `foh_device`; `/tmp/mlfk` empty; no rig lock. **Nothing to
+clean up.**
+
+**NEW OWNER RULING (2026-08-01): ship before the 1-frame skip is fixed.** B9 is
+deferred to the very end. See §rulings for the full text AND for the mechanical
+consequence — deferring the fix does not by itself make the gate passable, and
+the companion decision about the `skips == 0` bar is written there with the
+driver's recommendation.
+
+### FIRST ACTIONS ON RESUME (ordered)
+1. **Re-run the two device checks on the final committed bytes** — the only
+   outstanding evidence debt. Both prior attempts died on ADB transport loss,
+   not on any assertion:
+   `bash port/foh/check-device-foh.sh` then `bash port/foh/check-device-persist.sh`.
+2. **R4 split — one Tier A review round**, aimed at TOOTH-VACUITY specifically
+   (can an `expect_observed` substring be satisfied by a report that would print
+   it anyway?), then merge. Driver already ruled Tier A and recorded why.
+   Copy list is at the top of `.loop/r4-progress.md` — 34 files, and it is the
+   ONLY copy of round 7's decision channel.
+3. **Re-pin the manifest.** `port/foh/check-device-foh.sh` is row 20
+   (`reviewed-go`) and its sha is stale after `ef31e53`. **RE-MEASURE drift; never
+   carry a count forward** — it went 1 -> 5 -> ~10 -> 17 in a single day.
+4. **New manifest rows** for judge decision inputs not yet pinned: `port/foh/foh.h`,
+   `check-judge-regression.sh`, `dump-judge-grammar.js`,
+   `judge-grammar.frozen.txt`, `judge-domains.authored.txt`.
+5. **B9 companion decision** (see §rulings) — cap the arc + ratify the bounded
+   skip allowance, so the deferral is executable rather than merely stated.
+6. Two work-order patches (`.loop/menus-p2-device-workorder-audio.md` §8 and §5),
+   then the M4 gate attempt, then **Chase's acceptance playthrough**.
+7. **LAST, after everything ships:** fix the B9 skip properly.
 
 ## Live right now (updated: 2026-07-29 — HANDOFF PAGE. Latest AGENT-LOG entry = **iter 132**; latest COMMIT = `b44937b` (verification-debt lane merged). Phase: M4 mechanically PASSED; in owner-punch-list execution, NOT re-ratified)
 

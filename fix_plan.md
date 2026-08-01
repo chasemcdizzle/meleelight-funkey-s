@@ -2724,3 +2724,46 @@ does not suppress it. p99 headroom 439-566 µs.
 `done-check:` `check-device-fullgame.sh` prints `FULLGAME CONFORMS 12/12` rc 0 on
 two consecutive passes, or the skip bar is re-based on a driver-recorded,
 owner-visible measurement.
+
+## OWNER RULING 2026-08-01 — B9 DEFERRED TO LAST; ship first
+
+**R7 (B9 fullgame skip) is RE-ORDERED to the very end of all work** — after the
+M4 gate, after Chase's acceptance playthrough, after shipping. Not abandoned:
+scheduled last, and Chase will return to it.
+
+**Mechanical consequence — do not paper over it.** The ruling alone does not
+make the gate passable:
+- `verify_m4.sh:23` — *any `arc-in-flight`/`arc-pending` producer = HARD REFUSAL*,
+  and `check-device-fullgame.sh` is `arc-in-flight`.
+- The fullgame bar itself contains `skips == 0` (`check-device-fullgame.sh:41`).
+
+**R7a — B9 companion decision (do this instead of the fix, to make shipping
+possible).** Two parts:
+1. **Close the B9 arc as a §3 CAPPED closure.** It now has real attribution: the
+   skip tracks per-leg **MMC interrupt count**, not workload (pass 1 g06 = 2820
+   mmcirq and the only leg with `pswpin=7` -> 7 skips; baseline 198-485; pass 2
+   m01 = 2227 -> 1 skip), and `low_bat_check` was verified quiesced per leg in
+   BOTH passes — a **second stall source** distinct from the closed iter-74
+   class. Naming that class IS what a capped record is for.
+2. **Ratify a NAMED, BOUNDED, LOUD skip allowance** — the check keeps measuring
+   and keeps PRINTING the count; the allowance is an owner-ratified deviation
+   with its measurement recorded (D14 precedent); the **p99 bar is unchanged**.
+   **A visible ratification, never a quiet edit.** HARD RULE 3 forbids weakening
+   a check to make a run pass; the difference is whether the number stays on the
+   page and whether the owner ratified it in writing.
+`done-check:` the B9 CAPPED record exists and names the class; the fullgame check
+still prints its per-leg skip counts; the allowance and its bound are recorded in
+STATE.md §rulings; `verify_m4.sh` no longer hard-refuses on that row.
+
+**Standing facts:** all 12 legs are `STREAM MATCH 3600/3600 frames exact` on
+every pass — **the simulation is not implicated**, only the timing bar. p99
+headroom is 439-566 µs against 16.67 ms.
+
+### R8 — fix the B9 skip properly (LAST ITEM, post-ship)
+Root-cause and remove the mmcirq-correlated stall. Owner will return to this
+after shipping. Candidate levers already registered from earlier work: the
+post-gate jitter increment (SCHED_FIFO for the frame loop with audio ranked
+above, music reader on CFS) plus the SPIN_NS 3->2 ms retune with enough passes
+for statistical power.
+`done-check:` `check-device-fullgame.sh` prints `FULLGAME CONFORMS 12/12` rc 0 on
+two consecutive passes with the ratified allowance removed.
