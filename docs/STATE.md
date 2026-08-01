@@ -1529,7 +1529,67 @@ surviving sentence claims authority the code no longer has.
 - **Liveness is a process + log-tail check, not one mtime window** — a lane
   mid-adb-push looks dead for minutes.
 
-### 2026-08-01 (latest) — THREE OWNER DECISIONS ARE NOW PENDING; the queue is decision-blocked, not work-blocked
+### 2026-08-01 (CHECKPOINT — paused at owner request mid-execution of the three ratified decisions)
+
+All three decisions are ratified (§rulings) and IN EXECUTION. Resume state:
+
+**Decision 3 — B9 skip allowance: CODE DONE + COMMITTED (`812059a`).**
+`skips == 0` is now `SKIP_ALLOW_PER_LEG=8` / `SKIP_ALLOW_PER_RUN=12`, bound set
+from 24 measured leg-runs. Count kept, print added on the PASS path and in the
+terminal line, p99 bar untouched, run-total gate added (there was none). T3
+re-armed to inject allowance+1 (it was about to go DEAD — one skip is now
+inside the allowance), T3b ADDED to prove a within-allowance skip still gets
+counted and persisted, `TEETH_PIN` 21 -> 22. Both fixtures are DELTAS on the
+measured base, proven at base=0 and base=3.
+**REMAINING:** the review round is STILL RUNNING (detached codex,
+`.loop/review-b9-r5-20260801.log`, prompt `.loop/b9-r5-prompt-20260801.md`).
+Read its LAST `## Findings` block — the log echoes other logs, so an unanchored
+grep is unsound. On GO, close the B9 arc's **FIVE** manifest rows
+(check-device-fullgame.sh, check-device-opk.sh, verify_m4.sh,
+check-assets-expected.js, expected-assets.json — measured, the header saying
+"seven" is stale), re-pin the fullgame hash, then recompute `MANIFEST_SHA256`
+into verify_m4.sh. Closing at GO is BETTER than the ratified cap and costs
+nothing extra, because this edit forced a round anyway.
+
+**Decision 2 — R4: DONE AND MERGED (`86f836e`).** Verified ON THE MERGED BYTES
+from the main tree, not just in the lane: `bash
+port/review/check-review-artifact.sh` -> `REVIEW ARTIFACT TEETH OK (187/187
+bit)` rc 0 (`.loop/r4-merge-verify.log`). 187 = 189 - 3 dead + 1 honest
+baseline. The worktree `agent-ad3238e43fc13278b` is now redundant and may be
+removed. What landed: Three dead teeth removed and replaced by ONE
+honest `expect_footer_baseline`; T55 now requires rc 2 + its anchored
+empty-scope refusal; T82 now requires rc 2 + the anchored third-path collision
+message; the prompt envelope no longer tells reviewers that "the judge …
+call[s] the arc closed"; the `[HIGH]` is registered in `FORMAT.md` §7 as a
+STATED limitation (tamper-evident against accident, **not** against a
+determined writer).
+**MEASURED MISTAKE, fixed, worth keeping as a CLASS:** deleting the three dead
+teeth dropped the suite to 184/187, because `expect_observed` had a SIDE
+EFFECT — it GENERATED the report T89b/T94b/T96b then grep. They were not
+vacuous teeth; they were vacuous ASSERTIONS attached to a load-bearing call.
+Bare `arcreport` calls restored the generation with the false pass still gone.
+**Before deleting a dead assertion, check what its setup was silently
+providing.** NOTHING REMAINS on decision 2.
+
+**Decision 1 — B11: generator DONE + COMMITTED (`1be6abd`), wiring NOT done.**
+`port/foh/make-jitter-flow.js` is validated end-to-end: of the 3x3 product over
+f01's two counted legs (releases 703 and 744), EXACTLY ONE — x0/y+1 — is
+byte-identical to the real device shot; the other eight differ. All four
+refusal paths proven by execution.
+**REMAINING:** (a) per-flow leg declarations — f01 = `703,744` (from its own
+"LEFT+DOWN clamps, then RIGHT x33 … UP x36" comment); f02/f05 still need their
+legs read off their clamp comments, and NOTE f02's `I 980 L` -> `I 995 -` drag
+*deliberately ends ON the clamp*, so it is likely absorbed and contributes no
+distinct image; (b) judge-side acceptance set in `judge_dev_shot`, printing the
+matched variant AND the count of DISTINCT images the set collapses to (that
+count is the honest measure of how permissive it really is); (c) a tooth
+proving a 2-frame offset still FAILS; (d) two device runs.
+
+**Nothing is half-edited on disk.** The main tree is clean apart from
+pre-existing untracked files; the only uncommitted work is R4's, isolated in
+its worktree.
+
+### 2026-08-01 (earlier) — THREE OWNER DECISIONS ARE NOW PENDING; the queue is decision-blocked, not work-blocked
 
 Everything the driver could advance without a ruling has been advanced. What
 remains all needs Chase:
