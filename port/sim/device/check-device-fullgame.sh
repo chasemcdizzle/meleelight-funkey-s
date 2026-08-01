@@ -125,6 +125,39 @@ N_GOLDENS_PIN=12
 FRAMES_PIN=3600
 BUDGET_NS=16666667
 P99_FULL_LIMIT_NS=16670000             # the 16.67 ms frame budget, integer ns
+
+# --- THE OWNER-RATIFIED SKIP ALLOWANCE (Chase, 2026-08-01) -------------------
+# AUTHORITY: docs/STATE.md §rulings, the 2026-08-01 "THREE RATIFICATIONS"
+# bullet, decision 1. This bar was `skips == 0` until that ruling. It is a
+# RATIFIED DEVIATION, not a weakening, and the difference is mechanical:
+#   * the check still COUNTS every skip,
+#   * the check still PRINTS every count, per leg and per run, on the pass
+#     path as well as the fail path (a silent allowance is the thing HARD
+#     RULE 3 forbids — see skip_allowance_report below, which is called
+#     unconditionally),
+#   * P99_FULL_LIMIT_NS is UNCHANGED. That is what still protects the player:
+#     a skip that matters is a skip that blows the frame budget, and the
+#     budget assert is untouched below.
+#
+# THE CLASS (B9, capped-closed with this ruling): the skip tracks per-leg MMC
+# interrupt count, NOT workload. Pass 1 g06 = 2820 mmcirq (and the only leg
+# with pswpin=7) -> 7 skips against a 198-485 baseline; pass 2 m01 = 2227 ->
+# 1 skip. `low_bat_check` was verified quiesced per leg in BOTH passes, so
+# this is a SECOND stall source, distinct from the closed iter-74 class.
+#
+# THE BOUND, from measurement rather than convenience — 2 passes x 12 legs =
+# 24 leg-runs (.loop/r5-fullgame-20260731.log, -p2.log):
+#   observed per-leg counts : g06=7, g05=1, m01=1, the other 21 leg-runs = 0
+#   observed per-run totals : 8 and 1
+# so the per-leg bound sits ONE above the observed max, and the per-run bound
+# 50% above the observed max. A regression past the measured noise still fails
+# the run. Widening either number is a REVIEWED, owner-visible edit.
+SKIP_ALLOW_PER_LEG=8
+SKIP_ALLOW_PER_RUN=12
+SKIPS_TOTAL=0                          # summed across legs; printed either way
+SKIPS_WORST_LEG=none
+SKIPS_WORST=0
+
 WALL_MIN_MS=58000                      # 3600 paced frames == 60.0 s nominal
 WALL_MAX_MS=78000
 READY_TRIES=90
@@ -225,7 +258,7 @@ QW_POST_SLACK_S=10
 # counter — it keeps its own exact rc-2 assertion. Current inventory:
 # 18 tooth_expect calls (T1b T2-T12 T15-T20) + 3 counted controls
 # (T13 T14 T21) = 21.
-TEETH_PIN=21
+TEETH_PIN=22
 # The DIRECT-ENTRY zero-tick producer line, MEASURED identical across all
 # 24 host+device logs. Held as ONE literal (see assert_direct_bypass).
 FOH_BYPASS_LINE='foh_dev foh: 0 ticks, 0 transitions, 0 shots, 0 render skips, 0 failed presents, launched=1'
@@ -1148,7 +1181,10 @@ judge_applog() { # <label> <log> <frames> <rate> <samples> <channels> <stage-tok
   local tok="$7" dir="$8" tstarts="$9" tstops="${10}" pinid="${11:-}"
   assert_direct_bypass "$lg" "$label"
   parse_match_summary "$lg" "$fr"
-  [ "$match_skips" = 0 ] || fail "$label: match summary reports $match_skips render skips"
+  # OWNER-RATIFIED ALLOWANCE (2026-08-01, see SKIP_ALLOW_PER_LEG): was `= 0`.
+  # The count is still parsed, still compared, and still named in the failure.
+  [ "$match_skips" -le "$SKIP_ALLOW_PER_LEG" ] \
+    || fail "$label: match summary reports $match_skips render skips, over the ratified per-leg allowance of $SKIP_ALLOW_PER_LEG"
   [ "$match_fails" = 0 ] || fail "$label: match summary reports $match_fails failed presents"
   [ "$match_wall_ms" -ge "$WALL_MIN_MS" ] && [ "$match_wall_ms" -le "$WALL_MAX_MS" ] \
     || fail "$label: match wall ${match_wall_ms} ms outside [$WALL_MIN_MS,$WALL_MAX_MS] — not a 60 fps paced run"
@@ -1234,7 +1270,7 @@ judge_timing() { # <label> <timing> <frames>
   : "$full_p99_ns" "$full_p99_ms" "$skips" "$rendered"
   # PERSIST THE p99 BEFORE THE skips GATE (review-113-5 [L]). The p99 has
   # already been parsed and grammar-checked at this point, and it is a VALID
-  # measurement whether or not the leg then fails `skips==0`. Aggregating it
+  # measurement whether or not the leg then busts the skip allowance. Aggregating it
   # only on the pass path meant a skip-failing leg could carry the run's
   # NARROWEST margin and never appear in the margin summary — and a failing
   # run emitted no margin line at all. Written next to the timing artifact so
@@ -1246,7 +1282,14 @@ judge_timing() { # <label> <timing> <frames>
   # ever ran — a diagnostic failing a leg the app itself passed, which is the
   # settled iter-111 H1 rule. Losing the margin line is the correct failure.
   printf '%s %s\n' "$full_p99_ns" "$full_p99_ms" > "$2.p99" || true
-  [ "$skips" = 0 ] || fail "$label: timing artifact reports $skips render skips (want 0)"
+  # PERSIST THE SKIP COUNT BEFORE ITS OWN GATE, for the same reason the p99 is
+  # persisted above: the count is a VALID measurement whether or not the leg
+  # then exceeds the allowance, and the run-level report must be able to state
+  # a failing leg's count too. Diagnostic write; nothing decides on this file.
+  printf '%s\n' "$skips" > "$2.skips" || true
+  # OWNER-RATIFIED ALLOWANCE (2026-08-01, see SKIP_ALLOW_PER_LEG): was `= 0`.
+  [ "$skips" -le "$SKIP_ALLOW_PER_LEG" ] \
+    || fail "$label: timing artifact reports $skips render skips, over the ratified per-leg allowance of $SKIP_ALLOW_PER_LEG"
   [ "$rendered" = "$fr" ] || fail "$label: rendered $rendered != $fr"
   [ "$full_p99_ns" -lt "$P99_FULL_LIMIT_NS" ] \
     || fail "$label: p99 ${full_p99_ms} ms >= the 16.67 ms frame budget"
@@ -2360,13 +2403,13 @@ EOF
   # bytes. Clearing it here makes "file present" mean "this judgment wrote
   # it", which is exactly what the fold assumes.
   rm -f "$BUILD/$id.legresult" "$BUILD/$id.legresult.tmp" \
-        "$BUILD/$id.dev-tim.txt.p99" \
+        "$BUILD/$id.dev-tim.txt.p99" "$BUILD/$id.dev-tim.txt.skips" \
         "$BUILD/$id.dev-applog.txt.mustrack.got" \
         "$BUILD/$id.dev-applog.txt.mustrack.want"
   lrc=0
   run_guarded lrc judge_leg "$id" "$name" "$gdir" "$mfarg" "$frames" "$tok"
   # THE MARGIN, gathered from EVERY leg whose timing parsed (review-113-5 [L]).
-  # Read outside the pass branch on purpose: a leg that failed `skips==0` still
+  # Read outside the pass branch on purpose: a leg that busted the allowance still
   # measured a real p99, and it may be the narrowest one in the run.
   if [ -f "$BUILD/$id.dev-tim.txt.p99" ]; then
     mline="$(head -1 "$BUILD/$id.dev-tim.txt.p99")"
@@ -2375,6 +2418,22 @@ EOF
       MARGIN_WORST_NS="${BASH_REMATCH[1]}"
       MARGIN_WORST_MS="${BASH_REMATCH[2]}"
       MARGIN_WORST_LEG="$id"
+    fi
+  fi
+  # THE SKIP COUNT, gathered from EVERY leg whose timing parsed — read outside
+  # the pass branch for the same reason as the margin: a leg that BUSTED the
+  # allowance still measured a real count, and the run report must state it.
+  # Grammar-checked before use; an unreadable count is a hard failure rather
+  # than a silent 0, because a silently-zeroed count is exactly how a ratified
+  # allowance would rot into an unmeasured one.
+  legskips=0
+  if [ -f "$BUILD/$id.dev-tim.txt.skips" ]; then
+    legskips="$(head -1 "$BUILD/$id.dev-tim.txt.skips")"
+    [[ "$legskips" =~ ^[0-9]{1,6}$ ]] \
+      || fail "leg $id: persisted skip count fails its grammar ('$legskips')"
+    SKIPS_TOTAL=$((SKIPS_TOTAL + legskips))
+    if [ "$legskips" -gt "$SKIPS_WORST" ]; then
+      SKIPS_WORST="$legskips"; SKIPS_WORST_LEG="$id"
     fi
   fi
   if [ "$lrc" = 0 ] && [ -f "$BUILD/$id.legresult" ]; then
@@ -2394,7 +2453,10 @@ EOF
       P99_WORST_NS="$lp99ns"; P99_WORST_MS="$lp99ms"
     fi
     pass=$((pass + 1))
-    echo "   -> leg $id OK (stream verdict-exact, p99 ${lp99ms} ms, skips 0, underruns 0, starves 0, starts $lstarts)"
+    # `skips` was a hardcoded literal 0 here until the 2026-08-01 ratification.
+    # It now prints the MEASURED count on the PASS path, which is the whole
+    # mechanism that keeps the allowance loud instead of silent.
+    echo "   -> leg $id OK (stream verdict-exact, p99 ${lp99ms} ms, skips ${legskips}/allow${SKIP_ALLOW_PER_LEG}, underruns 0, starves 0, starts $lstarts)"
   else
     printf 'FAIL rc=%s\n' "$lrc" > "$BUILD/$id.legresult"
     FAILED_LEGS="$FAILED_LEGS $id"
@@ -2461,8 +2523,12 @@ EOF
 done
 # THE EVIDENCE-BAR SUMMARY (review-112-2 H1, dispositioned — see below).
 # The driver's bar for increment 3d is "d_pswpout ≈0 on ALL legs INCLUDING
-# leg 1, and skips==0 on all 12". `skips==0` is already a hard pin of the
-# verdict. The SWAP half is diagnostic, and it stays diagnostic ON PURPOSE:
+# leg 1, and skips==0 on all 12". The SKIP half is still a hard pin of the
+# verdict, but its BOUND changed on 2026-08-01: the owner ratified a named,
+# measured per-leg/per-run allowance (see SKIP_ALLOW_PER_LEG) after the class
+# was attributed to MMC interrupt count rather than workload. The count is
+# still asserted and still printed; only the number it is compared against
+# moved. The SWAP half is diagnostic, and it stays diagnostic ON PURPOSE:
 #   - the sd-diag arm was ruled DECISION-INERT by a previous review round
 #     (iter-111 round 2 H1: a diagnostic must never be able to fail a leg the
 #     app itself passed), and making it verdict-bearing reverses that;
@@ -2553,6 +2619,15 @@ if [ -n "$MARGIN_WORST_MS" ]; then
 else
   echo "   -> p99 margin: no timing-valid leg produced a p99"
 fi
+# THE SKIP LEDGER, printed UNCONDITIONALLY and BEFORE its own gate — the same
+# placement rule as the p99 margin, and the mechanism that makes the
+# 2026-08-01 ratified allowance LOUD rather than silent. It prints on a clean
+# run (SKIPS_TOTAL 0), on an allowed run, and on a busted run. Deleting or
+# conditioning this line would convert a ratified deviation into an unmeasured
+# one, which is what HARD RULE 3 forbids.
+echo "   -> skip ledger (OWNER-RATIFIED ALLOWANCE, docs/STATE.md §rulings 2026-08-01): total ${SKIPS_TOTAL}/allow${SKIP_ALLOW_PER_RUN} across ${N_GOLDENS_PIN} legs, worst leg ${SKIPS_WORST_LEG} ${SKIPS_WORST}/allow${SKIP_ALLOW_PER_LEG}; p99 bar UNCHANGED at 16.670 ms"
+[ "$SKIPS_TOTAL" -le "$SKIP_ALLOW_PER_RUN" ] \
+  || fail "run total ${SKIPS_TOTAL} render skips, over the ratified per-run allowance of ${SKIP_ALLOW_PER_RUN} (worst leg $SKIPS_WORST_LEG with $SKIPS_WORST)"
 
 if [ -n "$FAILED_LEGS" ]; then
   fail "legs failed judgment:$FAILED_LEGS ($pass/$N_GOLDENS_PIN passed) — see the per-leg diagnostics above"
@@ -2622,6 +2697,7 @@ T21-reserved-rc
 T21-reserved-rcvar
 T21-uppercase-special
 T3
+T3b
 T4
 T5
 T6
@@ -2737,13 +2813,64 @@ tooth_expect T2 1 \
   -- judge_bstate "tooth2" "$T/t2.bstate.txt" "$BUILD/twin-g01/bstate.txt"
 echo "    T2 OK: a perturbed BRIDGE-STATE copy dies in the PRODUCTION judge_bstate (rc 1, pinned diagnostic)"
 
-# T3 — a skipped frame in a timing COPY -> judge_timing's skips==0 dies.
-awk 'NR==7{print $1" 0 0 1"; next}{print}' "$BUILD/g01.dev-tim.txt" > "$T/t3.tim.txt"
+# T3 — an OVER-ALLOWANCE skip burst in a timing COPY -> judge_timing dies.
+# RE-ARMED for the 2026-08-01 ratified allowance. This tooth injected exactly
+# ONE skip while the bar was `== 0`. One skip is now INSIDE the allowance, so
+# the old fixture would have PASSED and this tooth would have gone dead in
+# silence — the precise failure class the R4 review measured the same day (an
+# assertion that no longer depends on its own perturbation). It now injects
+# SKIP_ALLOW_PER_LEG + 1 rows, so the BOUND is what is under test.
+# The BASE artifact's own skip count is MEASURED, never assumed to be 0. Under
+# the ratified allowance a real g01 leg MAY carry skips, so a fixture built on
+# "base has none" would make this tooth fail for a reason that has nothing to
+# do with what it tests. Both fixtures below are expressed as a DELTA on the
+# measured base, and the injection targets rows the base does not already mark.
+skipcount() { awk '$4 == 1' "$1" | wc -l | tr -d ' '; }
+t3base="$(skipcount "$BUILD/g01.dev-tim.txt")"
+t3n=$((SKIP_ALLOW_PER_LEG + 1 - t3base))
+[ "$t3n" -ge 1 ] \
+  || fail "T3: base g01 timing already carries $t3base skips, at or over the allowance — the tooth cannot inject a distinguishable burst"
+awk -v n="$t3n" 'BEGIN{c=0} $4 == 1 {print; next} c < n {print $1" 0 0 1"; c++; next} {print}' \
+  "$BUILD/g01.dev-tim.txt" > "$T/t3.tim.txt"
 cmp -s "$T/t3.tim.txt" "$BUILD/g01.dev-tim.txt" && fail "T3: skip injection was a no-op (dead tooth)"
+t3got="$(skipcount "$T/t3.tim.txt")"
+[ "$t3got" = "$((SKIP_ALLOW_PER_LEG + 1))" ] \
+  || fail "T3: the fixture carries $t3got skip rows, want EXACTLY $((SKIP_ALLOW_PER_LEG + 1)) (allowance + 1) — the tooth would not be testing the bound"
 tooth_expect T3 1 \
-  '^FULLGAME FAIL: tooth3: timing artifact reports 1 render skips \(want 0\)$' \
+  "^FULLGAME FAIL: tooth3: timing artifact reports ${t3got} render skips, over the ratified per-leg allowance of ${SKIP_ALLOW_PER_LEG}\$" \
   -- judge_timing "tooth3" "$T/t3.tim.txt" "$FRAMES_PIN"
-echo "    T3 OK: an injected render skip dies in the production timing judge (rc 1, pinned diagnostic)"
+echo "    T3 OK: $t3got skips (allowance + 1) die in the production timing judge (rc 1, pinned diagnostic)"
+
+# T3b — THE ALLOWANCE IS LOUD, NOT SILENT. The companion to T3: a
+# within-allowance skip must PASS the judge AND still be counted and
+# persisted. Without this tooth the ratified allowance could rot into "skips
+# are ignored", which is exactly what the owner's ruling refuses — the ruling
+# is that the number STAYS ON THE PAGE. T3 alone cannot catch that rot,
+# because a judge that ignored skips entirely would still fail on 9 of them
+# only if it still counted; a judge that stopped counting would pass T3's
+# fixture. So this tooth asserts the MEASUREMENT, not just the verdict.
+awk 'BEGIN{c=0} $4 == 1 {print; next} c < 1 {print $1" 0 0 1"; c++; next} {print}' \
+  "$BUILD/g01.dev-tim.txt" > "$T/t3b.tim.txt"
+cmp -s "$T/t3b.tim.txt" "$BUILD/g01.dev-tim.txt" && fail "T3b: skip injection was a no-op (dead tooth)"
+t3bwant=$((t3base + 1))
+[ "$t3bwant" -le "$SKIP_ALLOW_PER_LEG" ] \
+  || fail "T3b: base+1 = $t3bwant is not INSIDE the per-leg allowance $SKIP_ALLOW_PER_LEG — this tooth must exercise the PASS path"
+rm -f "$T/t3b.tim.txt.skips"
+set +e
+( set -e; judge_timing "tooth3b" "$T/t3b.tim.txt" "$FRAMES_PIN" ) >/dev/null 2>"$T/T3b.err"
+t3brc=$?
+set -e
+made "$T/T3b.err"
+[ "$t3brc" = 0 ] \
+  || fail "T3b: a within-allowance skip must PASS the production judge, got rc $t3brc — diagnostic: $(tr '\n' '|' < "$T/T3b.err")"
+[ -f "$T/t3b.tim.txt.skips" ] \
+  || fail "T3b: the judge passed but persisted NO skip count — the allowance would be silent"
+t3bgot="$(head -1 "$T/t3b.tim.txt.skips")"
+[ "$t3bgot" = "$t3bwant" ] \
+  || fail "T3b: persisted skip count is '$t3bgot', want EXACTLY $t3bwant (measured base $t3base + 1 injected) — the count must be measured, not assumed"
+tooth_ledger T3b
+teeth=$((teeth + 1))
+echo "    T3b OK: a within-allowance skip PASSES the judge and is still counted + persisted (rc 0, count == $t3bwant)"
 
 # T4 — an over-budget frame in a timing COPY -> the p99 assert dies.
 # render/present are DELIBERATELY UNEQUAL (1000 vs 2000). They used to be
@@ -3017,4 +3144,8 @@ cmp -s "$T/ledger.sorted" "$T/ledger.want" \
 echo "== [8/9] hygiene =="
 rig_no_commit_guard "$BUILD" "$DEVB" "$TABLES" "$AUDIO_OUT"
 
-echo "FULLGAME CONFORMS ${pass}/${N_GOLDENS_PIN} (render+sfx+music live; live-ai=${LIVE_AI_CSV} p99=${P99_WORST_MS}ms skips=0 underruns=0 starves=0 presentfails=0 teeth=$teeth)${ATTRIB_TAG}"
+# `skips=0` was a hardcoded literal in this verdict line until the 2026-08-01
+# ratification. It now carries the MEASURED run total and the ratified bound,
+# so the terminal line a reader quotes states the deviation instead of hiding
+# it behind a constant.
+echo "FULLGAME CONFORMS ${pass}/${N_GOLDENS_PIN} (render+sfx+music live; live-ai=${LIVE_AI_CSV} p99=${P99_WORST_MS}ms skips=${SKIPS_TOTAL}/allow${SKIP_ALLOW_PER_RUN} underruns=0 starves=0 presentfails=0 teeth=$teeth)${ATTRIB_TAG}"
