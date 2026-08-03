@@ -109,7 +109,7 @@ mkdir -p "$VDIR"
 # line (a full-byte self-row plus this anchor would be a two-unknown
 # hash fixed point with no solution); the excluded line is protected
 # by the anchor equality itself — a wrong literal IS a refusal.
-MANIFEST_SHA256=0a5f5957104443429ba9106b6b82825d20bef273a8c41e426311cedc8a1588ee
+MANIFEST_SHA256=ed6f5b43c6fa714c3a36dd745bb0fb768188aab1e9f867f14dafc9f42bbf4781
 
 # AUTHORITATIVE — computed ONCE, then readonly (the sentinel lockout).
 # Any dev/canned-evidence signal zeroes it; the `M4 GATE OK` sentinel
@@ -1096,7 +1096,18 @@ p99_under_budget() {
 # Every change in this block is strictly NARROWING: the accepted
 # language is a proper subset of what it was, so no run that passed
 # before on genuine producer output can fail now.
-FULLGAME_RE='^FULLGAME CONFORMS 12/12 \(render\+sfx\+music live; live-ai=g07,g08,m01,m02 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=0 underruns=0 starves=0 presentfails=0 teeth=21\)$'
+# FULLGAME's skip field tracks the 2026-08-01 OWNER-RATIFIED ALLOWANCE
+# (docs/STATE.md §rulings; review-b9-r5 H4 measured that the old `skips=0`
+# grammar rejected BOTH the clean and the allowed new terminal line, so a
+# passing suite could not satisfy this consumer at all). The producer now
+# emits `skips=<n>/allow12`. This consumer RE-ENFORCES the per-run bound
+# independently rather than accepting any integer: `(0|[1-9]|1[0-2])` is
+# exactly 0-12, so a producer that widened its own cap and still printed
+# `/allow12` is refused here. `teeth=25` tracks the two teeth the
+# reconciliation judge added (T3c, T3c2) plus T22, the producer-side tooth
+# that reads THIS pattern out of this file's own bytes and proves the two
+# grammars compatible in-run instead of only at re-pin time.
+FULLGAME_RE='^FULLGAME CONFORMS 12/12 \(render\+sfx\+music live; live-ai=g07,g08,m01,m02 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=(0|[1-9]|1[0-2])/allow12 underruns=0 starves=0 presentfails=0 teeth=25\)$'
 TARGET_RE='^DEVICE TARGET CONFORMS \(goldens=2 flows=2 shots=4 fbwit=4 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=0 underruns=0 starves=0 starts f06-target-t01=15 f07-target-t02=31 sfxpin=15/31 music=menu>targettest:5/5 live=f08-live-target:(0|[1-9][0-9]{0,5})f/(0|[1-9][0-9]{0,5})rows/opts-ok bound=f09-live-bound:(0|[1-9][0-9]{0,5})f/(0|[1-9][0-9]{0,5})rows teeth=6\)$'
 FOH_RE='^DEVICE FOH OK \(flows=5 shots=13 bridge=1 states=3 opk=evidence fbwit=15 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=0 underruns=0 starves=0 starts f01-vs-g01=(0|[1-9][0-9]{0,5}) f02-cpu-m01=(0|[1-9][0-9]{0,5}) f03-options=(0|[1-9][0-9]{0,5}) f04-nav=(0|[1-9][0-9]{0,5}) f05-vs-g03=(0|[1-9][0-9]{0,5}) teeth=15\)$'
 OPKFOH_RE='^OPK FOH LAUNCH OK \(frontend-launched via gmenu2x into the FOH, boot marker bin-sha == stamp, evidence rc=0, 1 transitions vs frozen, shot structural\)$'

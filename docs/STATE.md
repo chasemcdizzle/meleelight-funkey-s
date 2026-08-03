@@ -1529,6 +1529,75 @@ surviving sentence claims authority the code no longer has.
 - **Liveness is a process + log-tail check, not one mtime window** — a lane
   mid-adb-push looks dead for minutes.
 
+### 2026-08-03 (latest) — B9 r5 came back NO-GO; all 7 findings FIXED on the host. DEVICE VERIFICATION IS OWED.
+
+The detached round finished: `.loop/review-b9-r5-20260801.log`, `CODEX_RC=0`,
+**VERDICT: NO-GO** (last anchored `## Findings` at line 8389) — 4 HIGH, 2
+MEDIUM, 1 LOW. Every one is now fixed. The arc stays **arc-in-flight**: a
+NO-GO round's fixes do not close an arc, and nothing below has run on
+hardware.
+
+**H1 — the two skip witnesses were never reconciled.** The app-log
+`match_skips` and the timing artifact's `skips` were each independently
+bounded by `SKIP_ALLOW_PER_LEG` and only the timing one fed `SKIPS_TOTAL`, so
+12 legs at 8 app skips each — 96 — passed every predicate against a zero
+ledger (reviewer-executed). NEW production judge `judge_skip_witnesses`
+requires exact equality, called from `judge_leg` once both witnesses are in
+hand. **This is sound at the source, not just plausible:** `foh_dev.c:3318`
+does `matchSkips++` in the `else` arm of `if (!skip)` and `:3325` sets
+`tim[f].skipped` immediately after — same event, equal by construction.
+MEASURED on the archived 2026-07-31 pass: app == timing on all 12 legs
+(m01 = 1/1, the other eleven 0/0), so the bar costs a genuine run nothing.
+Teeth T3c/T3c2 pin both directions.
+
+**H2 — the decision-bearing `.skips` write was `|| true`.** It now writes to
+a temp and renames, and a failed write FAILS the leg. It is not a diagnostic:
+the per-run cap sums it. Reader side: a missing file used to fold as `0`; it
+is now `unknown`, counted in `SKIPS_UNKNOWN`, named in the ledger, and a
+post-loop assert makes "all legs passed but some carry no judged count" a
+hard failure.
+
+**H3 — T3b was deterministically broken.** It called `made` on the stderr of
+a command it expects to SUCCEED; `made` demands a NON-EMPTY file. MEASURED
+here, not taken on faith: `node port/gfx/judge-render-timing.js` on the real
+fixture → `rc=0 stderr_bytes=0`, so the old assertion failed 100% of the
+time. Now asserts stderr is EMPTY. Its fixture also handles a base already at
+the allowance by REMOVING a skip instead of constructing allowance+1 —
+validated at base 0 (real g01), 3 and 8, row counts preserved.
+
+**H4 — the M4 consumer could not accept a passing suite.** `FULLGAME_RE`
+still demanded `skips=0 teeth=21` while the producer emits
+`skips=N/allow12 teeth=<n>`. Updated, and the consumer now RE-ENFORCES the
+bound itself (`(0|[1-9]|1[0-2])`) rather than trusting the printed `/allow12`.
+CLASS FIX rather than a point fix: the terminal line is composed in ONE place
+(`verdict_line`) and NEW tooth **T22** reads `FULLGAME_RE` out of
+verify_m4.sh's OWN BYTES and proves compatibility in-run. **EXECUTED ON THE
+HOST, 7/7:** accepts clean + at-bound; refuses over-bound, teeth-drift,
+short-legs, pre-allowance and `[ATTRIB-ARMED]`.
+
+**M1** — unmeasured legs are UNKNOWN and the ledger states its coverage
+(`over M/12 judged legs`) instead of claiming a total across all 12; the raw
+unjudged skip-row count is reported separately, never folded in.
+**M2** — both stale rows re-pinned and all three anchors verified consistent:
+fullgame `038ec87e…`, verify_m4 (normalized) `9ff4b01b…`, `MANIFEST_SHA256=`
+`ed6f5b43…`. **LOW** — `.loop/b9/bench.c`'s pre-seeded-framebuffer claim
+narrowed; `foh_render.c:2179` `rast_clear` wipes fb+ink first, so the seed is
+dead — preexisting-destination and clip coverage belong to `primdiff.c`.
+
+`TEETH_PIN` 22 → **25** (T3c, T3c2, T22); `FULLGAME_RE` re-pinned to match.
+
+**WHAT IS AND IS NOT PROVEN.** Host-executed: both scripts parse; T22's 7
+grammar cases; T3b's fixture at three bases; the judge's rc/stderr; witness
+equality on the 12 archived artifacts; all three manifest pins.
+**NOT run: anything requiring the FunKey-S — no device was attached this
+turn** (`adb devices` empty). The teeth suite and every leg judgment execute
+only inside a real device run, so `check-device-fullgame.sh` has NOT been
+executed end to end since these edits. **NEXT, in order: (1) attach the
+device and run `bash port/sim/device/check-device-fullgame.sh` to green,
+(2) a fresh review round on the new bytes, (3) only then consider the five
+arc rows.** B11's wiring (leg declarations, `judge_dev_shot` acceptance set,
+the 2-frame tooth, two device runs) is untouched and still outstanding.
+
 ### 2026-08-01 (CHECKPOINT — paused at owner request mid-execution of the three ratified decisions)
 
 All three decisions are ratified (§rulings) and IN EXECUTION. Resume state:
