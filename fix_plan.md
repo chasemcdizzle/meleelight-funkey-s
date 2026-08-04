@@ -2973,6 +2973,42 @@ fast-forward, a 2500-frame (~41.7 s) auto-exit that plays `complete` or
   counts (host `flows=7 shots=19`, device `flows=5 shots=15`), and manifest rows
   `:398,:399`. Size: MEDIUM.
 
+**VERIFICATION SWEEP 2026-08-03 (tick 2) — A13, D8-later and WJ-later are ALL
+GENUINELY OPEN.** The stale-row streak ends at three. Each re-verified by direct
+read, with scope now precise:
+
+- **A13 OPEN — and the titles are INVERTED relative to the goal.** Both .desktop
+  files already exist with distinct names, so the surface looks done; it is not.
+  `check-device-opk.sh:270-292` shows the two build paths: `OPK_FOH=1` builds
+  **`mlfk-foh-launch.opk`** (bin `foh_device`, the REAL front-end = the PLAY
+  install) carrying `meleelight-foh.funkey-s.desktop` -> **`Name=MeleeLight
+  FOH`**; the else branch builds `mlfk-evidence.opk` (bin `gfx_device`, the
+  evidence build) carrying `meleelight.funkey-s.desktop` -> **`Name=MeleeLight`**.
+  **The clean name is on the EVIDENCE build and the play install wears "FOH"** —
+  exactly backwards from A13's stated end state. Fix = swap the names (play ->
+  `MeleeLight`, evidence -> a distinct title such as `MeleeLight EV`), and
+  **re-measure `NAV_LINK`** (`check-device-opk.sh:280`, currently 2 "measured
+  grid link of MeleeLight FOH") because the frontend grid orders by title, so
+  renaming moves the link the nav pin depends on. Both .desktop files are pinned
+  m4 producers.
+- **D8-later OPEN.** No name-entry screen exists anywhere: zero hits for
+  `FOH_NAME`/`NAME_ENTRY`/`nameEntry` across foh.h, foh.c and foh_render.c.
+- **WJ-later OPEN, and precisely scoped: the toggle is PLUMBED but the SIM
+  IGNORES IT.** The option exists and is selectable (`foh.c:884`
+  `ev_sel(s, "walljump", s->everyCharWallJump)`), and it reaches the launch line
+  (`foh_dev.c:2241` emits `walljump=%d`; the grammar is pinned at
+  `check-foh-flows.sh:332`). But **`everyCharWallJump` appears NOWHERE under
+  `port/sim/`** — the sim's only walljump input is the per-state table flag
+  (`physics.c:775-777`, `canWallJump = FLAGS(S,i)->wallJumpAble`). Upstream's
+  semantics live at `src/menus/css.js:89,109` and `gameplaymenu.js:53,239`.
+  So WJ-later is not "wire a menu row" — it is "make the setting reach and
+  change the simulation", which lands on the CHECKSUM surface and therefore
+  needs its faithfulness argument made up front.
+
+**TIER 1 REMAINING, ALL FIVE CONFIRMED OPEN: A7 · A13 · D8-later · WJ-later ·
+A14.** A7 is blocked on the Math.random ratification; the other four are not
+blocked.
+
 **MEASURED 2026-08-03 — TIER 1's FIRST THREE ROWS ARE STALE. A3, A4 AND A5 ARE
 ALREADY BUILT.** Verified by direct read, not inference:
 - **A3 DONE.** `port/gfx/s1_input.h:165` names it: *"The ROLE resolution, in ONE
