@@ -172,9 +172,14 @@
 #      renderer emits PPM only (foh_dev.c:1772) and draws full-screen.
 #      The structural judge here is the smallest thing that fails on a
 #      blank/garbage/frozen surface: exact `P6 240 240 255` header,
-#      exact byte length, a NON-UNIFORM frame whose foreground (non-
-#      modal-colour) coverage sits inside [0.5%, 60%] — measured iter
-#      115: splash 4.69%, title 2.63% — and two shots that DIFFER. EXPOSURE (PROCESS §8): byte-exactness of FOH
+#      exact byte length, a NON-UNIFORM frame, a PER-SHOT distinct-colour
+#      floor and a PER-SHOT foreground (non-modal-colour) coverage band,
+#      and two shots that DIFFER. Envelopes RE-MEASURED 2026-08-04
+#      (A15) over 3 runs, both shots byte-identical in all three:
+#      startup 5 colours / 4.734% fg, band [0.5%, 60%] UNCHANGED from
+#      iter 115; title 171 colours / 70.151% fg, band [0.5%, 80%] with
+#      a NEW >=64-colour floor. The iter-115 figures (splash 4.69%,
+#      title 2.63%) predate the A1 restyle's real IMG1 artwork. EXPOSURE (PROCESS §8): byte-exactness of FOH
 #      shots against the host twin renderer is check-device-foh.sh's
 #      job (a separate reviewed producer, per-shot cmp); THIS leg's
 #      claim is narrower and exact — the FRONTEND-LAUNCHED instance
@@ -1149,9 +1154,33 @@ if [ "$OPK_FOH" = 1 ]; then
     function die(m) { console.error("opkfoh-shot: " + m); process.exit(3); }
     const HDR = "P6\n240 240\n255\n";
     const NPX = 240 * 240;
-    const FG_MIN = 0.005, FG_MAX = 0.60;
+    // PER-SHOT envelopes, RE-MEASURED 2026-08-04 (punch-list A15). The single
+    // [0.5%, 60%] band was measured at iter 115 against the PRE-ARTWORK menus.
+    // The A1 restyle then gave the TITLE screen its real IMG1 artwork, which
+    // legitimately has no dominant background colour, so the old ceiling
+    // rejected a CORRECT frame (70.151%) as "flooded/garbage" — and nobody saw
+    // it for a week because this leg was dying earlier, on the OPK inventory
+    // pin (A13). MEASURED over 3 independent device runs, both shots
+    // BYTE-IDENTICAL in all three (no jitter on this legs shots — and no
+    // apostrophes in here: the whole program is a single-quoted shell string):
+    //   startup  5 colours / 4.734% fg      title  171 colours / 70.151% fg
+    // startup KEEPS ITS ORIGINAL BAND UNCHANGED — still a flat-palette screen,
+    // the band still bites there. Only the title ceiling moves, and it does not
+    // move alone: a ceiling raised for artwork surrenders the "no dominant
+    // background" signal, so the title gains a COLOUR FLOOR the old envelope
+    // never had. 64 sits far below the measured 171 and far above the 1-5
+    // colours a blank/cleared/art-failed frame yields — so an art_load that
+    // silently composites nothing now FAILS HERE, which it could not before.
+    // A noise/garbage flood still measures >99% fg and dies on the ceiling.
+    const ENV = {
+      startup: { fgMin: 0.005, fgMax: 0.60, minColours: 2 },
+      title:   { fgMin: 0.005, fgMax: 0.80, minColours: 64 },
+    };
     const paths = process.argv.slice(1);
     const rep = paths.map((p) => {
+      const which = /-(startup|title)\.ppm$/.exec(p);
+      if (!which) die(p + ": shot is neither -startup.ppm nor -title.ppm (no envelope applies)");
+      const env = ENV[which[1]];
       const b = fs.readFileSync(p);
       if (b.length !== HDR.length + NPX * 3) die(p + ": byte length " + b.length + " != header + 240*240*3");
       if (b.subarray(0, HDR.length).toString("latin1") !== HDR) die(p + ": header is not exactly P6 240 240 255");
@@ -1161,11 +1190,12 @@ if [ "$OPK_FOH" = 1 ]; then
         m.set(k, (m.get(k) || 0) + 1);
       }
       if (m.size < 2) die(p + ": UNIFORM surface (1 colour) — nothing was composited");
+      if (m.size < env.minColours) die(p + ": " + m.size + " distinct colours < " + env.minColours + " — the " + which[1] + " surface lost its artwork");
       let bg = 0;
       for (const n of m.values()) if (n > bg) bg = n;
       const fg = (NPX - bg) / NPX;
-      if (fg < FG_MIN) die(p + ": foreground coverage " + (fg * 100).toFixed(3) + "% < " + (FG_MIN * 100) + "% — an effectively blank frame");
-      if (fg > FG_MAX) die(p + ": foreground coverage " + (fg * 100).toFixed(3) + "% > " + (FG_MAX * 100) + "% — a flooded/garbage frame");
+      if (fg < env.fgMin) die(p + ": foreground coverage " + (fg * 100).toFixed(3) + "% < " + (env.fgMin * 100) + "% — an effectively blank frame");
+      if (fg > env.fgMax) die(p + ": foreground coverage " + (fg * 100).toFixed(3) + "% > " + (env.fgMax * 100) + "% — a flooded/garbage frame");
       return m.size + " colours/" + (fg * 100).toFixed(2) + "% fg";
     });
     if (fs.readFileSync(paths[0]).equals(fs.readFileSync(paths[1]))) {

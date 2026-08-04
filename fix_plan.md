@@ -2008,24 +2008,10 @@ Sequence: punch list → owner re-play/ratification → post-gate window
   /mnt/Applications/meleelight.opk by the new committed producer
   port/gfx/opk/install-play-opk.sh.
 
-- A15 (P1, FOUND 2026-08-04 by A13; NOT caused by it) the FOH arm of
-  check-device-opk.sh fails its structural shot judge: the title shot
-  measures foreground coverage 70.151%, outside the [0.5%, 60%] band.
-  The band was measured at iter 115 against the PRE-ARTWORK title
-  screen (splash 4.69%, title 2.63%); the A1 restyle then landed the
-  real upstream IMG1 artwork, which legitimately fills ~70% of the
-  frame. The frame is CORRECT — inspected, it renders "MELEE LIGHT /
-  PRESS START" over the radial-burst background. Nobody saw this for a
-  week because the leg died EARLIER, at the OPK inventory pin (red
-  since 2026-07-27, last green 2026-07-26 `.loop/m4-t115-opkfoh-run4.log`);
-  A13 fixed the inventory and unmasked it. Evidence: `.loop/a13-opk-foh.log`.
-  Fix = RE-MEASURE the band against the current renderer (both shots,
-  both arms, repeat runs — this leg shares the B11 jitter surface), and
-  record the measurement. NOT a loosening-by-convenience: the band
-  exists to reject blank/garbage/frozen frames and must still do that,
-  so the new upper bound is measured-then-frozen, never rounded up.
-  done-check: `MLFK_OPK_FOH=1 bash port/gfx/check-device-opk.sh` →
-  `OPK FOH LAUNCH OK (...)`, rc 0.
+- A15 — DONE 2026-08-04 (see docs/AGENT-LOG.md). Per-shot envelopes,
+  re-measured over 3 device runs (both shots byte-identical in all three).
+  startup band UNCHANGED; title ceiling 60% -> 80% and a NEW >=64-colour
+  floor that the old envelope never had. 6 teeth, `.loop/a15-teeth.log`.
 
 - A16 — DONE 2026-08-04 (see docs/AGENT-LOG.md). Cite token re-worded to
   `skips-eq-frames`, cite charset documented in the manifest's own record

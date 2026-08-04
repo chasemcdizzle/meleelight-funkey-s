@@ -15,13 +15,11 @@ Loop entry per `docs/LOOP.md` §B; this block is the short version.
   1. FIVE `arc-in-flight` manifest rows (`verify_m4.sh` hard-refuses on any):
      `check-device-fullgame.sh`, `check-device-opk.sh`, `verify_m4.sh`,
      `check-assets-expected.js`, `expected-assets.json`.
-  2. **The OPK leg is still RED, but for a NEW reason — A15, not the old
-     inventory drift.** A13 fixed the drift (device inventory now equals the
-     pin, both arms navigate correctly) and that unmasked a defect hidden
-     behind it since 2026-07-27: the FOH arm's structural shot judge rejects
-     the title shot at 70.151% foreground vs its [0.5%, 60%] band. The frame
-     is CORRECT — the band was measured pre-artwork. Evidence
-     `.loop/a13-opk-foh.log`.
+  2. ~~The OPK leg~~ **FIXED 2026-08-04. BOTH ARMS GREEN.** A13 cleared the
+     inventory drift, A15 re-measured the shot envelope that drift had been
+     hiding. `bash port/gfx/check-device-opk.sh` -> `OPK LAUNCH OK` rc 0
+     (`.loop/a15-regress-m3.log`); `MLFK_OPK_FOH=1 ...` ->
+     `OPK FOH LAUNCH OK` rc 0 (`.loop/a15-verify-foh.log`).
   3. **`verify_m4.sh` still does not reach its arc check — now A17, not A16.**
      A16 (cite grammar) is FIXED; the gate cleared that stage and refuses one
      stage later: `port/foh/check-device-foh.sh` COMMITTED bytes != its pinned
@@ -52,22 +50,22 @@ Loop entry per `docs/LOOP.md` §B; this block is the short version.
 | 7 | WJ-later | PRE-REGISTER the checksum-surface change before any code (owner-ratified) |
 | 8 | A14 glyph atlas | LARGE, deliberately last |
 **TIER 2** = everything else, prior order preserved, B11 first, R8 last.
-**JUMPED THE QUEUE (both found by A13, both block the M4 gate):** A15 (P1,
-FOH shot band) then A16 (P2, manifest row grammar). Both are small and both
-stand between the gate and an honest verdict — do them before D8-later.
+**JUMPED THE QUEUE (all found 2026-08-04, chained behind one another):**
+A15 **DONE**, A16 **DONE**, **A17 OPEN — needs an owner call, see below.**
 
-## NEXT ACTION (A15 — re-measure the FOH shot band)
-The judge's [0.5%, 60%] foreground band was measured at iter 115 against the
-PRE-ARTWORK title screen (splash 4.69%, title 2.63%). The A1 restyle landed the
-real IMG1 artwork; the title shot now measures 70.151% and the frame is CORRECT
-(inspected: "MELEE LIGHT / PRESS START" over the radial-burst background).
-1. Re-measure BOTH shots on BOTH arms, repeat runs — this leg shares the B11
-   jitter surface, so one sample is not a measurement.
-2. Re-freeze the band from what you measured. It must still reject
-   blank/garbage/frozen frames: never round the upper bound up for headroom,
-   and say in the code what the new number was measured against.
-3. `MLFK_OPK_FOH=1 bash port/gfx/check-device-opk.sh` -> `OPK FOH LAUNCH OK`,
-   rc 0. Then re-pin the manifest row + `MANIFEST_SHA256`.
+## NEXT ACTION (A17 — an owner-visible provenance call, NOT a driver fix)
+`verify_m4.sh` refuses at [0]: `port/foh/check-device-foh.sh` COMMITTED bytes
+(b157b8e5) != its pinned sha (446897bb). The row's `reviewed-go` cite names the
+CSS-mechanics arc that landed in **0cff450**; commit **ef31e53** afterwards
+added **418 lines** to that file and the row was never re-pinned. **The row
+claims a review that does not cover its bytes.**
+The driver did NOT re-pin it, deliberately: re-pinning green under an unchanged
+`reviewed-go` manufactures a review that never happened. Two honest routes —
+(a) establish that some later arc demonstrably covers ef31e53's delta, re-pin
+`reviewed-go` citing it; or (b) re-pin the bytes as `arc-pending` and let the
+row join the unclosed set (gate stays refusing, but for a TRUE reason).
+**Ask Chase which.** Route (b) is the driver's recommendation: it is true today
+and costs nothing that is not already owed by the five in-flight rows.
 
 ## STANDING HAZARDS (learned the hard way this session)
 - **Re-verify a queue row against the TREE before starting it.** Three tier-1

@@ -21753,3 +21753,69 @@ reading did.
 
 **NEXT.** A15 (the FOH shot band — samples measured byte-identical across runs,
 edit pending sample 3), then A17 (owner-visible provenance call).
+
+## driver — 2026-08-04 — A15 DONE: the FOH shot band was measured against a screen that no longer exists. Re-measured PER SHOT, and the ceiling did not move alone — the title gained a colour floor the old envelope never had
+
+**TASK.** A15 (filed by A13 the same day). Phase M4. Branch `agent/auto`.
+
+**DEFECT.** The FOH arm's structural shot judge rejected a CORRECT frame. Its
+single `[0.5%, 60%]` foreground band was measured at iter 115 against the
+PRE-ARTWORK menus (splash 4.69%, title 2.63%); the A1 restyle then gave the
+TITLE screen its real IMG1 artwork, which legitimately has no dominant
+background colour. Measured now: 70.151%. I converted the pulled PPM and
+LOOKED at it before touching anything — "MELEE LIGHT / PRESS START" over the
+radial-burst background, clean. The frame was right and the ruler was wrong.
+
+**MEASUREMENT (3 independent device runs, `.loop/a15-sample2.log`,
+`.loop/a15-sample3.log`, shots banked in `.loop/a15/`).** Both shots came back
+**BYTE-IDENTICAL in all three runs** (`cmp`) — this leg's shots carry NO
+jitter, unlike the B11-exposed FOH flow shots, so the numbers are exact rather
+than sampled:
+  startup  5 colours / 4.734% fg      title  171 colours / 70.151% fg
+Only the TITLE changed; the startup splash still measures where iter 115 left
+it, which is why its band is untouched.
+
+**COMMITTED FORM — per-shot envelopes, and the ceiling does not move alone.**
+`startup {fgMin .005, fgMax .60, minColours 2}` — UNCHANGED, the band still
+bites on a flat-palette screen. `title {fgMin .005, fgMax .80, minColours 64}`.
+The reasoning matters more than the numbers: raising a ceiling FOR artwork
+surrenders the very signal the ceiling was reading (no dominant background), so
+paying for it with a NEW distinct-colour floor keeps the leg at least as strong
+as before, not weaker with a note attached. 64 sits far below the measured 171
+and far above the 1-5 colours a blank/cleared/art-failed frame yields — so **an
+`art_load` that silently composites nothing now FAILS here, which it could not
+before**. A noise flood still measures >99% and dies on the ceiling.
+
+**TEETH — 6, all proven (`.loop/a15-teeth.log`), judge extracted VERBATIM from
+the check and invoked the way the check invokes it.** (0) the real pair PASSES
+rc 0; (1) a 3-colour art-lost title DIES on the new floor — the old envelope
+would have passed it; (2) noise at 99.424% DIES on the 80% ceiling; (3) the
+70.151% frame presented AS startup still DIES at 60%, proving startup was not
+loosened; (4) an unrecognised shot name DIES (no envelope silently applies);
+(5) two identical shots DIE as a frozen surface.
+
+**VERIFIED ON HARDWARE.** `MLFK_OPK_FOH=1 bash port/gfx/check-device-opk.sh` ->
+`OPK FOH LAUNCH OK (...)` rc 0, `.loop/a15-verify-foh.log`, judge line
+`shots structural OK (startup 5 colours/4.73% fg, title 171 colours/70.15% fg,
+frames differ)`. M3 arm re-run as a regression guard: `.loop/a15-regress-m3.log`.
+Manifest row for check-device-opk.sh re-pinned + MANIFEST_SHA256 re-anchored.
+
+**ZOOM OUT (HARD RULE 8).** Instance: a frozen threshold outlived the thing it
+measured, and the check reported the CORRECT frame as garbage. Class: **a
+measured-then-frozen constant is a claim about a rendering that some later
+feature is free to change, and nothing links the two.** The artwork landed in
+A1; the number that described the pre-artwork screen sat three files away and
+nobody was told. This is the same family as today's other three findings, and
+the honest generalisation is not "re-measure more often" — it is **when a
+threshold has to move for a legitimate change, ask what signal the old bound
+was reading, and replace THAT signal, not just the number.** Here the ceiling
+was reading "there is a dominant background"; artwork removed the property, so
+the replacement had to be a different measurement (colour count) rather than a
+bigger version of the dead one. A ceiling raised alone would have left this leg
+strictly weaker while looking maintained — which is how a check quietly stops
+being a check. Instrument, cheap and standing: **a threshold edit that only
+loosens is incomplete; land it with the tooth that shows what still fails.**
+
+**NEXT.** A17 (the unreviewed 418-line delta pinned `reviewed-go` — an
+owner-visible provenance call, deliberately not resolved by the driver), then
+tier-1 resumes at D8-later.
