@@ -609,25 +609,48 @@ fix is a recorded re-proportioning here, not a silent nudge in the C.
 `port/foh/foh.c:634` ("Upstream also clears the port's name tag; tags are
 DEVIATION D8 and not in this build") — that comment is the hook.
 
-**D18.2 — RNG COUPLING, REGISTERED BEFORE ANY CODE (owner's standing rule for
-checksum-surface changes).** MEASURED 2026-08-04: the FOH currently draws **no
-RNG at all** (`port/foh/` has no `ml_random` call; `foh_app.c:328`'s
-`mulberry_inv` only COUNTS draws). Random-tag would be the first, and upstream's
-`Math.random()` at `css.js:425` comes from the SAME global stream the simulation
-consumes — so upstream, a player who presses random-tag before starting a match
-shifts that match's RNG. Mirroring that is the faithful choice and this spec
-takes it. The consequences, stated rather than discovered later:
-- Every frozen golden was recorded by driving the match directly, not through
-  the FOH, so none of them is affected.
-- The device flow legs launch matches THROUGH the menus and compare a stream
-  prefix to a frozen golden (`check-device-opk.sh`). Those flows must therefore
-  never press random-tag, or the golden they are compared against has to be
-  re-frozen under the CHECKSUM.md §8 procedure. **A flow that presses it is not
-  a free addition** — it is a golden re-freeze.
-- The draw expression is carried verbatim, quirk included:
+**DEVIATION D19 — the random-tag draw uses a FOH-LOCAL stream and CANNOT shift
+the match. Registered before any code (owner's standing rule for
+checksum-surface changes).**
+
+*The first draft of this section said the opposite and was wrong.* It claimed
+we would mirror upstream's coupling. Measuring the port refuted it, and the
+refutation is the interesting part, so it is recorded rather than quietly
+replaced.
+
+MEASURED 2026-08-04:
+- The FOH draws **no RNG at all** today — `port/foh/` contains no `ml_random`
+  call, and `foh_app.c:328`'s `mulberry_inv` only COUNTS draws.
+- Upstream `css.js:425` draws from the SAME global stream the simulation
+  consumes, so upstream a player who presses random-tag before a match shifts
+  that match's RNG.
+- **Our port cannot reproduce that, by construction.** The browser's entire
+  pre-match menu RNG consumption is modelled as a CONSTANT: the launch path
+  seeds the sim and burns exactly **465 boot draws** (`foh_dev.c:51`,
+  `sim_boot.c:8` — "465 boot draws (menu plane)"), a figure pinned by the qjs
+  boot guard (CLAUDE.md M0 task 6) because "mulberry32 state is never re-seeded
+  at setupMatch, so boot draw count misalignment silently shifts the in-match
+  stream". The FOH runs BEFORE `sim_setup_match`; there is no sim stream in
+  existence for it to draw from.
+
+So the choice is not "mirror or deviate" — mirroring is unavailable, and
+faking it by making the FOH draw into the sim's stream would corrupt the 465
+pin and silently shift every in-match stream. **The random-tag draw therefore
+comes from a FOH-LOCAL mulberry32 (`port/sim/ml_rng.h` is header-only inline,
+so this links nothing new), and pressing random-tag has NO effect on the match
+that follows.** The port is strictly MORE deterministic than upstream here:
+same seed, same match, whatever the player did to the tags.
+
+Consequences, stated rather than discovered later:
+- No frozen golden is affected, and no flow becomes a golden re-freeze. A flow
+  MAY press random-tag freely — the opposite of what the first draft concluded.
+- The FOH-local stream's seed is a new invented value; record it at the
+  implementation site.
+- The draw EXPRESSION is still carried verbatim, quirk included:
   `Math.round((randomTags.length - 1) * Math.random())` with 34 tags is
-  `js_round(33 · r)`, which yields 0..33 with the two endpoints at half weight.
-  Use `js_round` (ECMAScript ties-toward-+Inf), never `floor(x+0.5)`.
+  `js_round(33 · r)`, yielding 0..33 with both endpoints at half weight. Use
+  `js_round` (ECMAScript ties-toward-+Inf), never `floor(x+0.5)`. Faithfulness
+  survives in the expression even where it cannot survive in the plumbing.
 
 ### 2.10 Ready to fight, and launch
 
