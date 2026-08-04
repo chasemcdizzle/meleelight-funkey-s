@@ -2973,6 +2973,35 @@ fast-forward, a 2500-frame (~41.7 s) auto-exit that plays `complete` or
   counts (host `flows=7 shots=19`, device `flows=5 shots=15`), and manifest rows
   `:398,:399`. Size: MEDIUM.
 
+**D8-later TICK-4 FINDING (2026-08-03) — THE ITEM'S PREMISE IS
+SELF-CONTRADICTORY: THERE IS NOTHING TO BE FAITHFUL TO.**
+D8 is a RATIFIED CUT, not an unbuilt feature. `docs/MENU-SPEC.md:514`:
+*"DEVIATION D8 — name tags are cut."* Upstream's name entry is a **jQuery HTML
+`<input>` overlay** (`css.js:438`, committed by `keys[13]`); the deviation table
+at `:1719` records *"Name tags: keep random + clear, cut free-text entry"*, and
+`:1575` gives the reason: **"No DOM, no keyboard."**
+
+So "D8-later: a faithful NAME-ENTRY screen" cannot be a transliteration the way
+A7 is. **Upstream has NO canvas name-entry code to port** — its implementation is
+a DOM widget the browser draws, not game code. Any name-entry screen here must be
+an INVENTED on-screen keyboard, which makes "faithful" unavailable by
+construction. That is a DESIGN decision, and MENU-SPEC's whole mechanism for
+those is pre-registration before code (D12's precedent).
+
+Also measured: `MENU-SPEC.md:620` row 19 lists name tags as **"Not implemented"**
+in the port with random/clear surviving the deviation — so even the two behaviours
+D8 KEEPS are unbuilt. D8-later therefore splits into two distinct pieces worth
+sequencing separately:
+  (i) **random-tag + clear-tag** — these DO have upstream code
+      (`css.js:415-439`) and are a real transliteration, S-sized
+      (`MENU-SPEC.md:1759` groups them with the other CSS secondary widgets:
+      *"All are cursor + A once (1) lands"*).
+  (ii) **free-text entry** — no upstream reference; needs an invented soft
+      keyboard and an owner-ratified UX before any code.
+
+**OWNER DECISION NEEDED:** does D8-later mean (i), (ii), or both? If (ii), the UX
+needs pre-registering the way D12 was. NOTHING EDITED.
+
 **A13 TICK-3 FINDING (2026-08-03) — A13 IS ENTANGLED WITH A LIVE DEVICE-STATE
 DRIFT, AND THE OPK GATE LEG IS ALREADY RED FOR AN UNRELATED REASON.**
 MEASURED against the attached device (`find /mnt -maxdepth 2 -name '*.opk'`,
