@@ -1,3 +1,70 @@
+# ▶ RESUME HERE (written 2026-08-04 for a cold restart — read this first, then §rulings)
+
+**Branch `agent/auto`, tree clean, everything committed. Phase M4.**
+Loop entry per `docs/LOOP.md` §B; this block is the short version.
+
+## What is true right now
+- **B9 arc: r5's seven findings are FIXED and VERIFIED GREEN ON HARDWARE.**
+  `bash port/sim/device/check-device-fullgame.sh` -> `FULLGAME CONFORMS 12/12
+  (… p99=16.562ms skips=0/allow12 … teeth=25)` rc 0, evidence
+  `.loop/fullgame-b9r5-verify4-20260803T174600.log`. The row is STILL
+  `arc-in-flight` — **green bytes are not a closed arc**; a NO-GO round's fixes
+  do not close one. A fresh review round is owed and now also owes coverage of
+  the frame-conservation repair.
+- **The M4 gate cannot pass yet, for TWO independent reasons:**
+  1. FIVE `arc-in-flight` manifest rows (`verify_m4.sh` hard-refuses on any):
+     `check-device-fullgame.sh`, `check-device-opk.sh`, `verify_m4.sh`,
+     `check-assets-expected.js`, `expected-assets.json`.
+  2. **The OPK leg is ALREADY RED for a DEVICE-STATE reason with no code
+     involved** — `OPK_INVENTORY_PIN` no longer matches the device (see A13).
+- **p99 headroom is 108 µs** (s01 16.562 vs 16.670 ms budget). Swings ~600 µs
+  run to run. The gate can go red on timing alone. Standing risk, not actioned.
+- **B11 is DEFERRED** (owner, 2026-08-03) and its cost is live: 3 of 15 judged
+  shots pass or fail BY LUCK. **A green FOH leg is not evidence the judgment is
+  sound, and a red one is not evidence of a regression** — check any red on
+  `f01/css`, `f02/css-cpu`, `f05/css` against the B11 signature FIRST.
+
+## THE QUEUE — TIER 1, in owner order
+| # | Item | State |
+|---|---|---|
+| 1 | A3 | **ALREADY BUILT** (measured 2026-08-03) — skip |
+| 2 | A4 | **ALREADY BUILT**; NATURAL default ratified correct — skip |
+| 3 | A5 | **ALREADY BUILT** — skip |
+| 4 | A7 credits | **BLOCKED** on the owner's `Math.random` call — the ONLY open question |
+| 5 | A13 opk title | **READY — START HERE** (fully unblocked, scope exact) |
+| 6 | D8-later | REDIRECTED to a novel Melee-style letter grid; needs a MENU-SPEC deviation registered first |
+| 7 | WJ-later | PRE-REGISTER the checksum-surface change before any code (owner-ratified) |
+| 8 | A14 glyph atlas | LARGE, deliberately last |
+**TIER 2** = everything else, prior order preserved, B11 first, R8 last.
+
+## NEXT ACTION (A13, fully specified — no decisions left)
+Owner granted full device authority: *"you can delete that, pin whatever."*
+1. `port/gfx/opk/meleelight-foh.funkey-s.desktop`: `Name=MeleeLight FOH` ->
+   **`Name=MeleeLight`**; `meleelight.funkey-s.desktop`: `Name=MeleeLight` ->
+   **`Name=MeleeLight EV`**. Minimal fix ratified — do NOT rename the .desktop
+   files. File names and titles end up deliberately crossed; that is accepted
+   and recorded, not a bug to re-discover.
+2. Target OPK filename is **`meleelight.opk`**. Delete the stale
+   `/mnt/Applications/meleelight-foh.opk` (Jul 29) from the device.
+3. **Re-measure BOTH `NAV_LINK` values** (`check-device-opk.sh:280`, `:293`) and
+   re-pin `OPK_INVENTORY_PIN` (`:314`) to measured reality — the grid orders
+   alphabetically by `.desktop Name`, so the rename moves it too. ONE re-measure
+   pass covers both the rename and the pre-existing drift.
+4. Re-pin the manifest row for `meleelight-foh.funkey-s.desktop` (pinned;
+   `meleelight.funkey-s.desktop` is NOT in the manifest) + `check-device-opk.sh`,
+   then recompute `MANIFEST_SHA256` in `verify_m4.sh`. Device-verify.
+
+## STANDING HAZARDS (learned the hard way this session)
+- **Re-verify a queue row against the TREE before starting it.** Three tier-1
+  rows described finished work. Two more described work of a different shape.
+- **Derive from measured output; never transcribe by eye.** A hand-typed tooth
+  pin cost a 40-minute device run.
+- **`docs/LOOP.md` §A-par:** parallel worktree lanes start at A14, NOT before.
+  One device + one riglib lock means verification never parallelizes.
+- Only `port/sim/device/` changed this session. **No C, no game code.**
+
+---
+
 # STATE.md — current truth (driver-updated every turn)
 
 _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
