@@ -109,7 +109,7 @@ mkdir -p "$VDIR"
 # line (a full-byte self-row plus this anchor would be a two-unknown
 # hash fixed point with no solution); the excluded line is protected
 # by the anchor equality itself — a wrong literal IS a refusal.
-MANIFEST_SHA256=3673c119d86ccf27a187f208ebd2381d9f3083f759e752640ff295cc07510764
+MANIFEST_SHA256=b9fe44328179e2670b66e87e60cd72bacbaf1aa188f2f0f9e5e533646af7c021
 
 # AUTHORITATIVE — computed ONCE, then readonly (the sentinel lockout).
 # Any dev/canned-evidence signal zeroes it; the `M4 GATE OK` sentinel

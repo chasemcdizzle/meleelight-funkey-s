@@ -21700,3 +21700,56 @@ behind one drifted pin.
 
 **NEXT.** A15 (unblocks the FOH arm and the M4 OPK leg), then A16 (unblocks the
 gate's real refusal message), then tier-1 continues at D8-later.
+
+## driver — 2026-08-04 — A16 DONE: the M4 gate's refusal message was lying about WHY. Fixing the cite grammar advanced it one stage and exposed A17, an unreviewed 418-line delta hiding behind a `reviewed-go` pin
+
+**TASK.** A16 (filed hours earlier by A13). Phase M4. Branch `agent/auto`.
+Host-only — no device leg, run while an A15 device sample was in flight.
+
+**DEFECT.** `verify_m4.sh` refused at step [0] on ROW GRAMMAR, not on the
+arc-in-flight rows STATE.md named as the M4 blocker. One cite of 89 contained
+`=` (`...+skips==frames-812059a-defect`, written 2026-08-03), which
+`verify_m4.sh:674` forbids in the cite field `[A-Za-z0-9._/:{},+-]+`. Checked
+every row programmatically: 88 of 89 legal, exactly one offender.
+
+**FIX + CLASS FIX.** Cite re-worded to `skips-eq-frames-812059a-defect` (same
+meaning: the 812059a defect made skips equal frames). Then the class: the
+manifest's own "Record grammar" block documented the STATUS tokens but never
+the CITE CHARSET — so a cite author had no local statement of what is legal,
+and the rejection lives in a different file. The charset is now stated where
+cites are WRITTEN, with the `=`-spells-`eq` rule and this incident named.
+`MANIFEST_SHA256` re-anchored to b9fe4432.
+
+**VERIFIED.** `bash port/sim/device/verify_m4.sh` (`.loop/a16-verify-m4.log`)
+now CLEARS the grammar stage — the refusal moved forward to the byte-pin stage.
+
+**A17 FOUND, PRE-EXISTING, NOT RE-PINNED (deliberately).** The next refusal:
+`port/foh/check-device-foh.sh` current bytes (b157b8e5) != pinned (446897bb).
+This is NOT a working-tree edit — the COMMITTED bytes differ. The row's
+`reviewed-go` cite names the CSS-mechanics arc that landed in 0cff450, but
+commit **ef31e53** afterwards added **418 lines** to that file and nobody
+re-pinned the row. The row therefore claims a review that does not cover the
+bytes it pins. I did NOT re-pin it: re-pinning to current bytes under an
+unchanged `reviewed-go` would manufacture a review that never happened, which
+is faking the gate (HARD RULE 3, and PLAN's "never fake a gate"). Filed as A17
+with the two honest resolutions spelled out; it is a provenance call, not a
+driver convenience.
+
+**ZOOM OUT (HARD RULE 8).** Instance: three defects in one chain, each hidden
+by the one in front (inventory pin -> shot band -> cite grammar -> stale byte
+pin). Class: **fail-closed checks serialize their own findings — a gate reports
+only its FIRST objection, so N defects take N fix-and-rerun cycles to even
+BECOME VISIBLE, and a long-red check is not one bug, it is an unknown-length
+queue.** The consequence for planning is concrete and was wrong on the page
+today: STATE.md attributed the M4 block to arc-in-flight rows, which the gate
+has not yet reached and could not have reported. Standing instrument: **never
+infer a check's remaining work from its current message — the message is the
+first item of a queue whose length is unknown until you drain it.** Budget
+long-red checks as "unknown N", and after every fix RUN IT AGAIN IMMEDIATELY
+rather than assuming the next stage is clean. Corollary: the fastest way to
+learn what actually blocks a gate is to fix cheap objections in a tight loop,
+which is why A16 (a two-token edit) bought more information than a day of
+reading did.
+
+**NEXT.** A15 (the FOH shot band — samples measured byte-identical across runs,
+edit pending sample 3), then A17 (owner-visible provenance call).

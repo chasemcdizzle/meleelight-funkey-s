@@ -2027,16 +2027,26 @@ Sequence: punch list → owner re-play/ratification → post-gate window
   done-check: `MLFK_OPK_FOH=1 bash port/gfx/check-device-opk.sh` →
   `OPK FOH LAUNCH OK (...)`, rc 0.
 
-- A16 (P2, FOUND 2026-08-04) verify_m4.sh refuses at [0] before any arc
-  check because ONE manifest row fails the anchored row grammar
-  (`verify_m4.sh:674`, note field `[A-Za-z0-9._/:{},+-]+` — no `=`):
-  check-device-fullgame.sh's note ends `...+skips==frames-812059a-defect`.
-  Introduced 2026-08-03; every other row of 89 passes. Consequence: the
-  gate's arc-in-flight refusal — the thing STATE.md says blocks M4 — is
-  not the message you actually get. Fix = re-word that note token
-  (e.g. `skips-eq-frames`) and re-anchor MANIFEST_SHA256.
+- A16 — DONE 2026-08-04 (see docs/AGENT-LOG.md). Cite token re-worded to
+  `skips-eq-frames`, cite charset documented in the manifest's own record
+  grammar, MANIFEST_SHA256 re-anchored. verify_m4.sh now clears the grammar
+  stage. It refuses one stage LATER, on A17 — not on arc-in-flight yet.
+
+- A17 (P1, FOUND 2026-08-04 by A16; NOT caused by it) `verify_m4.sh` refuses
+  at [0]: `port/foh/check-device-foh.sh` bytes do not match its pinned sha
+  (pinned 446897bb, current b157b8e5). NOT a working-tree edit — the
+  COMMITTED bytes differ from the pin. Cause: the row's `reviewed-go` cite
+  names the CSS-mechanics arc (`.loop/review-cssmech-r11.log`, landed
+  0cff450), but commit **ef31e53** later added **418 lines** to that file and
+  the row was never re-pinned. So the row claims a review that does not cover
+  the current bytes. **DO NOT re-pin it green to clear the gate** — that is
+  faking the gate: the delta's review status must be ESTABLISHED first.
+  Either (a) find an arc that demonstrably covers ef31e53's delta and re-pin
+  `reviewed-go` citing it, or (b) re-pin the bytes with an honest
+  `arc-pending` and let it join the unclosed set. This is an owner-visible
+  provenance call, not a driver convenience.
   done-check: `bash port/sim/device/verify_m4.sh` refuses naming
-  arc-in-flight rows, not row grammar.
+  arc-in-flight/arc-pending rows — i.e. reaches [0b], its real blocker.
 
 ## A8 AUDIT CONSEQUENCES (iter 120; evidence .loop/reuse-audit/REPORT.md)
 - A14 (P0, folded into A1) glyph-atlas swap: menus must draw with the

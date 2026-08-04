@@ -22,10 +22,17 @@ Loop entry per `docs/LOOP.md` §B; this block is the short version.
      the title shot at 70.151% foreground vs its [0.5%, 60%] band. The frame
      is CORRECT — the band was measured pre-artwork. Evidence
      `.loop/a13-opk-foh.log`.
-  3. **`verify_m4.sh` does not even reach its arc check (A16).** It refuses at
-     [0] on ROW GRAMMAR: check-device-fullgame.sh's note token
-     `skips==frames-...` contains `=`, forbidden by `verify_m4.sh:674`.
-     88 of 89 rows pass. So reason 1 is real but is NOT the message you get.
+  3. **`verify_m4.sh` still does not reach its arc check — now A17, not A16.**
+     A16 (cite grammar) is FIXED; the gate cleared that stage and refuses one
+     stage later: `port/foh/check-device-foh.sh` COMMITTED bytes != its pinned
+     sha. Commit ef31e53 added 418 lines to it after the arc its `reviewed-go`
+     row cites. **Not re-pinned on purpose** — that would manufacture a review.
+     Owner-visible provenance call; see A17 in fix_plan.md.
+- **A GATE'S MESSAGE IS THE FIRST ITEM OF A QUEUE, NOT THE BLOCKER LIST.**
+  Four defects surfaced today one behind the other (inventory pin -> shot band
+  -> cite grammar -> stale byte pin), each invisible until the one in front was
+  fixed. Reason 1 above is real but the gate has NEVER reached it, so it cannot
+  be the count. Treat any long-red check as "unknown N remaining".
 - **p99 headroom is 108 µs** (s01 16.562 vs 16.670 ms budget). Swings ~600 µs
   run to run. The gate can go red on timing alone. Standing risk, not actioned.
 - **B11 is DEFERRED** (owner, 2026-08-03) and its cost is live: 3 of 15 judged
