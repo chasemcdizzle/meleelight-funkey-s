@@ -2973,6 +2973,56 @@ fast-forward, a 2500-frame (~41.7 s) auto-exit that plays `complete` or
   counts (host `flows=7 shots=19`, device `flows=5 shots=15`), and manifest rows
   `:398,:399`. Size: MEDIUM.
 
+**A13 TICK-3 FINDING (2026-08-03) — A13 IS ENTANGLED WITH A LIVE DEVICE-STATE
+DRIFT, AND THE OPK GATE LEG IS ALREADY RED FOR AN UNRELATED REASON.**
+MEASURED against the attached device (`find /mnt -maxdepth 2 -name '*.opk'`,
+24 entries each side, AppleDouble `._*` excluded). Exactly ONE substitution vs
+`check-device-opk.sh`'s `OPK_INVENTORY_PIN`:
+- IN PIN, ABSENT FROM DEVICE: `/mnt/Applications/meleelight.opk`
+- ON DEVICE, ABSENT FROM PIN: `/mnt/Applications/meleelight-foh.opk` (Jul 29 2026)
+
+The owner replaced the old play install with the FOH build. Everything else in
+the 24-entry inventory matches.
+
+**CONSEQUENCES, all measured not assumed:**
+1. `check-device-opk.sh` step [5] fails at the inventory pin — *"the frontend OPK
+   inventory differs from the pin the frozen navigation was measured against"*
+   (`:817`). **The M4 gate's OPK leg is therefore ALREADY RED, for a device-state
+   reason with no code involved.** The guard is behaving exactly as designed —
+   it dies loud with a re-measure instruction rather than mis-navigating.
+2. **Both NAV_LINK pins are stale.** They were measured against the grid
+   *link 0 "Mario 64" · link 1 "MeleeLight" (play install) · link 2 "MeleeLight
+   FOH" (ours) · link 3 "PicoArch"* (`:125-129`). With `meleelight.opk` gone,
+   "MeleeLight FOH" moves to link 1; the FOH arm's `NAV_LINK=2` (`:280`) and the
+   other arm's `NAV_LINK=1` (`:293`, "measured grid link of MeleeLight") both no
+   longer describe the device.
+3. **A13's rename moves the grid too**, since gmenu2x orders the games grid
+   alphabetically by `.desktop Name`. So A13 and this drift MUST be fixed in ONE
+   re-measure pass — doing them separately means measuring the grid twice and
+   re-pinning twice.
+
+**WHY THIS STOPS HERE — OWNER DECISION, NOT A TASK.** `OPK_INVENTORY_PIN`
+encodes *what is installed on Chase's own device*. Re-pinning it silently would
+be the driver deciding what his handheld should contain. Two things are needed
+before A13 can be executed:
+  (a) **Is `meleelight-foh.opk` the intended permanent play install, and should
+      `meleelight.opk` stay gone?** If a `meleelight.opk` is coming back, the
+      grid gains an entry and the re-measure changes again.
+  (b) **Confirm the A13 end-state titles** now that the collision A13 was written
+      against has changed shape. With no `meleelight.opk` present, the only title
+      collision left is between the FOH play build and the EVIDENCE OPK
+      (`mlfk-evidence.opk`, `meleelight.funkey-s.desktop`, `Name=MeleeLight`).
+      Minimal fix satisfying A13's stated end state:
+      `meleelight-foh.funkey-s.desktop` -> `Name=MeleeLight` and
+      `meleelight.funkey-s.desktop` -> `Name=MeleeLight EV`. NOTE this leaves
+      file names and titles deliberately crossed (the file called `-foh` carries
+      the clean title); renaming the FILES too is more churn and more pin
+      surface for zero functional gain — say so if the tidier layout is wanted.
+
+**NOTHING WAS EDITED.** No `.desktop`, no pin, no NAV_LINK. The A13 work itself
+is small; it is gated on (a) and (b), and on one device grid re-measure that
+should cover the drift and the rename together.
+
 **VERIFICATION SWEEP 2026-08-03 (tick 2) — A13, D8-later and WJ-later are ALL
 GENUINELY OPEN.** The stale-row streak ends at three. Each re-verified by direct
 read, with scope now precise:
