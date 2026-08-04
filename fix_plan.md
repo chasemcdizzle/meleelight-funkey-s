@@ -3122,8 +3122,8 @@ ALREADY BUILT.** Verified by direct read, not inference:
   THREE styles and `CTL_STYLE_DEFAULT` resolves to **NATURAL**, described at
   `s1_input.h:12-14` as *"the ssb64-modelled 1:1 scheme and the DEFAULT"*. Either
   the semantics were re-ratified after 2026-07-27 and this row was never
-  updated, or the default drifted unratified. **OWNER QUESTION, not a defect
-  claim.**
+  updated, or the default drifted unratified. **RESOLVED 2026-08-03: NATURAL is correct — the CODE was right and the ROW was
+  stale. Owner: "natural should be default." No code change.**
 - **A5 DONE.** The Controls screen selects: `foh.c:1055-1075` — up/down toggles
   `ctlRow`, left/right on row 0 cycles the three styles wrapping over
   `CTL_STYLE_COUNT`, row 1 flips the Mod shoulder via `ctl_mod_on_r_set`. Enum
@@ -3134,6 +3134,41 @@ A14.** A7 and A14 are confirmed open by direct read (A7 is still
 `ev_refused(s,"credits")` at `foh.c:261`; `foh_render.c` never calls
 `gfx_glyphs_load`). A13, D8-later and WJ-later are NOT yet re-verified — given
 three stale rows in a row, verify each before starting it.
+
+## OWNER RULINGS 2026-08-03 (round 2) — A13 unblocked, WJ pre-registered, D8 redirected, A4 settled
+
+Verbatim: *"2. you can replace and do whatever you want. we are always working
+here, you are the only one who has ever put .opk on my device. you can delete
+that, pin whatever. just use best practices, what our code reflects, what
+testing reflects, etc.  3. pre-register it please.  4. why not match the real
+melee name select? novel screen (doesn't match the original melee light). that'd
+be awesome  5. natural should be default."*
+
+- **A13 FULLY UNBLOCKED.** Owner grants full authority over device OPK state:
+  the driver is the only party who has ever installed an OPK there. Sanctioned:
+  delete the stale `/mnt/Applications/meleelight-foh.opk`, install under the
+  target name **`meleelight.opk`**, re-pin `OPK_INVENTORY_PIN` to measured
+  reality, and re-measure both `NAV_LINK` values. Do it by best practice and by
+  what the code and tests already reflect. The minimal `Name=` swap stands
+  (crossed file/title names accepted, recorded above).
+- **WJ-later: PRE-REGISTER, ratified.** The walljump setting must reach the
+  simulation, which is the CHECKSUM surface. Write the faithfulness argument and
+  the exact change BEFORE code, owner-visible, the way D12 was pre-registered.
+- **D8-later REDIRECTED — NOVEL SCREEN, MODELLED ON REAL MELEE.** Owner:
+  *"why not match the real melee name select? novel screen (doesn't match the
+  original melee light)."* This is a DELIBERATE DEPARTURE from upstream, chosen
+  knowingly: upstream's name entry is a jQuery DOM `<input>` with no canvas
+  code, so there was never anything to be faithful to (see the tick-4 finding).
+  Real Melee's name entry is a LETTER GRID driven by stick + A — which suits a
+  d-pad handheld far better than a text box. **This needs registering as a NEW
+  DEVIATION in MENU-SPEC** (it is the first invented SCREEN, distinct from
+  invented values), including which Melee behaviours are modelled and which are
+  not. Scope: (i) random-tag + clear-tag are still a real upstream
+  transliteration (`css.js:415-439`) and can land independently; (ii) the letter
+  grid is the novel work.
+- **A4 SETTLED: NATURAL is the correct default.** The code was RIGHT and the
+  punch-list row was stale — no code change. The 2026-07-27 row's *"normal
+  default"* is superseded. `CTL_STYLE_DEFAULT` -> NATURAL stands as built.
 
 ## OWNER RULING 2026-08-03 — RE-PRIORITIZATION; B11 DEFERRED (Chase, in session)
 
