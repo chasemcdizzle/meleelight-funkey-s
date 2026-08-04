@@ -1967,7 +1967,16 @@ overruns):
 - A4 (P1) control-style system: box + normal, switchable, normal
   default (owner ratified semantics 2026-07-27).
 - A5 (P1) Controls screen selection wired (candidate: style selector).
-- A6 (P2) Audio options tab functional.
+- A6 (P2) Audio options tab functional. **MEASURED 2026-08-03: ESSENTIALLY
+  ALREADY BUILT — this row was stale.** `FOH_OPT_AUDIO` is a complete live
+  screen: enum `foh.h:338`, token `foh.c:34`, entry arm `foh.c:242`,
+  `step_opt_audio` `foh.c:938-999` (B-exit, row nav, ±0.1 volume carrying
+  upstream's float dust), render `foh_render.c:1810-1894`, judged edges
+  `judge-foh-trace.js:88-89`, and a committed flow leg with a
+  `SHOT options-audio`. RESIDUAL is at most the live-mixer bus push noted at
+  `foh.c:975-977` as a pending cross-lane patch — NOT a screen build. A6 is
+  therefore the finished TEMPLATE that A7 copies, not work that shares A7's
+  remaining cost.
 - A7 (P2) Credits functional.
 - A8 (P2) reuse audit report to owner.
 Sequence: punch list → owner re-play/ratification → post-gate window
@@ -2888,6 +2897,81 @@ above, music reader on CFS) plus the SPIN_NS 3->2 ms retune with enough passes
 for statistical power.
 `done-check:` `check-device-fullgame.sh` prints `FULLGAME CONFORMS 12/12` rc 0 on
 two consecutive passes with the ratified allowance removed.
+
+## RECON 2026-08-03 (read-only agents; A14 + A7) — TWO FINDINGS THAT CHANGE PLANS
+
+### A14 IS LARGE, AND THE DRIVER'S PLACEMENT RATIONALE WAS WRONG
+
+**The atlas holds 43 glyphs and ZERO LETTERS.** `port/gfx/vfxglyphs-frozen.txt`
+carries only `0-9` (×4 faces), `:` (font0), `%` (font2), space (font3), plus 2
+pre-composited sprites (`ready`, `go`). The menus need **72 distinct characters
+including all 26 uppercase letters**. Coverage today: **13 of 72**.
+- **No face matches.** Menus need `700 35px Arial` upright and
+  `italic 900 48px Arial`; the atlas has neither at any size. Font 3 is
+  `italic 700 70px` — wrong weight, wrong size, 14 px tall vs face 2's 9.
+- **Every layout constant dies.** Atlas advances are 4.449/2.781/4.716/7.786;
+  `foh_font.c` advances are 6 and 7. Every column x, `text_in` clip width, the
+  65 px SSS strips (`foh_render.c:55-58`) and 44/58 px name-plates (`:46-48`)
+  are computed against 6/7 across a 2,198-line file.
+- **The code path does not exist.** `gfx_glyphs_load` is unreachable from the
+  menu path — `foh_dev.c:1802-1804` actively REJECTS `--glyphs` with no bridge
+  mode active, which is exactly how menus run. It also takes `Gfx*` where the
+  FOH has a bare `Raster*`.
+- **BIGGEST RISK — the iter-72 jitter class reopens at ~10x surface.**
+  `expected-render.json` freezes `maxDiffPixels = 16` / `maxChannelDelta = 4`,
+  measured against 43 glyphs, under a rule that they are NEVER loosened once
+  set. A menu atlas is roughly an order of magnitude more ink. Probe the
+  EXTENDED atlas with `port/gfx/glyph-jitter-probe.js` and freeze new tolerances
+  BEFORE the first passing done-check — the reverse order re-creates the flaky
+  false oracle iter 72 existed to kill.
+
+**DRIVER CORRECTION — the position-3 placement rests on a FALSE premise.** It
+was justified by "A14 invalidates every menu shot reference, so land it first
+and pay the re-capture once instead of twice." **There are no frozen shot
+references.** Zero `.ppm` files are committed; the 15 judged shots are
+device-vs-host-twin generated IN THE SAME RUN (`check-device-foh.sh:1583-1584,
+:1845, :2068-2069`) and `check-foh-flows.sh` is run-A vs run-B self-consistency.
+The `.expect` files are FOHTRACE1 state traces with no pixel content, so the 20
+pinned `port/foh/flows/` manifest rows do not move either. Only ONE manifest row
+is invalidated by rasterization: `m4-freeze-manifest.txt:459`
+(`vfxglyphs-frozen.txt`). **The surviving argument for early placement is much
+weaker** — only that A5/A7/D8-later would be authored against face 1's
+uppercase-only constraint and re-laid afterwards, and since A14 re-lays EVERY
+existing screen regardless, 2-3 more is incremental rather than multiplicative.
+**Driver recommendation: move A14 back behind A5/A7 or return it to TIER 2.**
+Owner call — the current position-3 slot stands until then.
+
+### A7 IS NOT A CREDITS ROLL, AND IT NEEDS A RATIFICATION BEFORE CODE
+
+Upstream `src/menus/credits.js` (422 lines) is a **Star Fox shooting gallery**:
+a 100-star warp field, 14 scrolling wobbling names, a rotating reticle, twin
+converging tapered lasers on A, X/Y laser-colour cycling, START/L/R
+fast-forward, a 2500-frame (~41.7 s) auto-exit that plays `complete` or
+`failure` by whether all 14 names were shot.
+- **MENU-SPEC §8 (`docs/MENU-SPEC.md:1202-1291`) already specifies it**,
+  including pre-registered **DEVIATION D12** (relative reticle integrating
+  `lsX/lsY` — upstream's absolute `rawX/rawY` yields only 9 reachable d-pad
+  positions) and **Quirk Q6** (unconditional exit timer). Transliterate against
+  that section; do not redesign.
+- The port can draw all of it: `fill_rect`, `lineW8`, `ring8`, `arc_pts`,
+  `stroke_closed`, `rrect` already exist. Sounds all present in
+  `sounds.json` (`foxlaserfire`, `targetBreak`, `complete`, `failure`).
+- **BLOCKING — OWNER RATIFICATION REQUIRED BEFORE CODE.** credits.js calls
+  `Math.random()` in three places (star spawn/respawn, name x, name wobble).
+  **The FOH is RNG-free BY CONSTRUCTION** (`foh_app.c:21-23`), and the SSS
+  RANDOM slot is a REGISTERED REFUSAL precisely because `Math.random` is the
+  seeded oracle stream (`foh.h:76-80`). Substituting an authored table or an
+  index hash is a **NEW DEVIATION CLASS — "we invented values upstream drew"** —
+  landing in the one subsystem whose whole contract is "no invented values".
+  This needs ratifying up front, the way D12 was pre-registered, or the arc gets
+  rejected at review for exactly that reason.
+- Face 1 lacks `&`, needed by two info strings; mixed-case names must be
+  uppercased at the render site (`foh_render.c:1972` precedent).
+- Cost is mostly EVIDENCE, not C: ~200-250 lines of C, but `judge-foh-trace.js`
+  EDGES/REFUSED, `judge-grammar.frozen.txt`, the judge sha pinned twice in
+  `check-device-foh.sh:237,419`, `judge-domains.authored.txt:223`, flow/shot
+  counts (host `flows=7 shots=19`, device `flows=5 shots=15`), and manifest rows
+  `:398,:399`. Size: MEDIUM.
 
 ## OWNER RULING 2026-08-03 — RE-PRIORITIZATION; B11 DEFERRED (Chase, in session)
 
