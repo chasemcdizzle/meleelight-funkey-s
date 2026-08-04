@@ -156,6 +156,34 @@
 #                                              .loop/review-b9-3-codex.log [M])
 # While any remains, an AUTHORITATIVE run REFUSES before leg 1 — the
 # truthful outcome until the B9 arc reaches an anchored VERDICT: GO.
+#
+# ROW/RECORD RECONCILIATION 2026-08-04 (punch-list A17, owner route (b)).
+# The list directly above named port/foh/check-device-foh.sh as
+# `arc-in-flight`, but that ROW still carried the token `reviewed-go` — this
+# file disagreed with itself, and the row won, because the row is what
+# verify_m4.sh parses. Worse, the row pinned sha 446897bb while the COMMITTED
+# bytes were b157b8e5: commit ef31e53 added 418 lines to that file AFTER the
+# CSS-mechanics arc its cite names (landed 0cff450), so the `reviewed-go`
+# claim was attached to bytes that no longer existed. Both halves are now
+# corrected together — bytes re-pinned to the committed file, token set to
+# `arc-in-flight` to match the record above. The row was NOT re-pinned green:
+# re-citing an older log over newer bytes is exactly what line 139 forbids.
+# Owner chose this route in session over hunting for a covering arc.
+# MEASURED at the same time, so the reconciliation is not a spot fix: all 89
+# rows were re-hashed against their current bytes and this was the ONLY real
+# mismatch (verify_m4.sh's own row is normalized — it excludes the
+# ^MANIFEST_SHA256= line — and matches).
+# THE UNCLOSED COUNT IS NOW SIX, not the seven listed above: since that
+# paragraph was written, port/sim/target/check-device-target.sh and
+# port/gfx/opk/mlfk-foh.sh closed arcs of their own (see their cites) while
+# check-device-foh.sh joined. Do not read a count off this prose — the six are
+# whatever verify_m4.sh [0b] PRINTS, which as of 2026-08-04 is:
+#     port/sim/device/check-device-fullgame.sh   port/foh/check-device-foh.sh
+#     port/gfx/check-device-opk.sh               pipeline/expected-assets.json
+#     pipeline/lib/check-assets-expected.js      port/sim/device/verify_m4.sh
+# Step [0] itself is CLEAN as of this change: 89 producers, all bytes match
+# their pins, 185 cited artifacts exist, every reviewed-go row cites a log
+# whose terminal anchored verdict is GO.
 # Rounds so far, every finding fixed: .loop/review-b9-1-codex.log (NO-GO;
 # 1 [H] + 3 [M] + 1 [L]), .loop/review-b9-2-codex.log (NO-GO; 1 [M] +
 # 2 [L]), .loop/review-b9-3-codex.log (NO-GO; 1 [H] + 1 [M] + 1 [L] — the
@@ -403,7 +431,7 @@ a48c47b0bc682abbade75d38ec00832d4235f6f22dd7e5015eba516213688b6b port/goldens-m4
 677c81e677ece8dc2442ab340a7227bfb4ce44d416348d357327db76f4032daf port/goldens-m4/t01-fox-lasers-tstage1.target.sha256.json reviewed-go .loop/review-98-1.log-GO-target-rig-arc-closure-scanned-every-goldens-m4-json+round-.loop/review-94-1.log-NO-commit-since-927294e
 6e4116060b6e81fa57313c6fe08544201edfa23a7eb4d8b5f2e0362f3e906afb port/goldens-m4/t02-falcon-melee-tstage2.sha256.json reviewed-go .loop/review-98-1.log-GO-target-rig-arc-closure-scanned-every-goldens-m4-json+round-.loop/review-94-1.log-NO-commit-since-927294e
 d0718dd760ffa802326f2de42078bd8cc55de75440113fa0b7d34e676a757e30 port/goldens-m4/t02-falcon-melee-tstage2.target.sha256.json reviewed-go .loop/review-98-1.log-GO-target-rig-arc-closure-scanned-every-goldens-m4-json+round-.loop/review-94-1.log-NO-commit-since-927294e
-446897bbdba7122e2886a893be233cc2cf5c9f322ff55347857967cd4c6a813e port/foh/check-device-foh.sh reviewed-go CSS-mechanics-arc-iter131-codex-r11-GO-.loop/review-cssmech-r11.log-11-rounds-each-cmp-proven-non-replay-MENU-SPEC-2-items-1+2+3+4+match-exit-arc-GO-PROCESS-11-fallback-BOTH-reviewers-GO-.loop/review-mexit-r7g.log-.loop/review-mexit-r7o.log-merged-2026-07-30+menus-arc-CAPPED-CLOSED-driver-accepted-AGENT-LOG-2026-07-30-owner-ruling-r21-cap-TierA-plus-discharged-.loop/menus-tierA-r8-20260731T011919Z.log-rounds-.loop/menus-p2-r21.log-merged-2026-07-30
+b157b8e58f51b98f1be86e79489ced9402002c10fe6bc5950f970955e75f8607 port/foh/check-device-foh.sh arc-in-flight A17-owner-route-b-2026-08-04-bytes-REPINNED-to-COMMITTED-ef31e53-added-418-lines-AFTER-the-cited-cssmech-arc-landed-in-0cff450-so-the-prior-reviewed-go-pinned-DIFFERENT-bytes-status-corrected-to-arc-in-flight-which-is-what-this-files-own-UNCLOSED-ROWS-record-already-listed-driver-did-NOT-re-pin-it-green+PRIOR-CITE-RETAINED-CSS-mechanics-arc-iter131-codex-r11-GO-.loop/review-cssmech-r11.log-11-rounds-each-cmp-proven-non-replay-MENU-SPEC-2-items-1+2+3+4+match-exit-arc-GO-PROCESS-11-fallback-BOTH-reviewers-GO-.loop/review-mexit-r7g.log-.loop/review-mexit-r7o.log-merged-2026-07-30+menus-arc-CAPPED-CLOSED-driver-accepted-AGENT-LOG-2026-07-30-owner-ruling-r21-cap-TierA-plus-discharged-.loop/menus-tierA-r8-20260731T011919Z.log-rounds-.loop/menus-p2-r21.log-merged-2026-07-30
 e709c03b2631ad0ab66a3f010c86905d9d1d5c81550d0143d7ca0799b95db878 port/foh/judge-foh-trace.js reviewed-go CSS-mechanics-arc-iter131-codex-r11-GO-.loop/review-cssmech-r11.log-11-rounds-each-cmp-proven-non-replay-MENU-SPEC-2-items-1+2+3+4+menus-arc-CAPPED-CLOSED-driver-accepted-AGENT-LOG-2026-07-30-owner-ruling-r21-cap-TierA-plus-discharged-.loop/menus-tierA-r8-20260731T011919Z.log-rounds-.loop/menus-p2-r21.log-merged-2026-07-30
 a1353a71a66bb05bc28d547eee9385cfa8da7baf784f9e038bd31834cabb9cb8 port/foh/normalize-foh-trace.js reviewed-go CSS-mechanics-arc-iter131-codex-r11-GO-.loop/review-cssmech-r11.log-11-rounds-each-cmp-proven-non-replay-MENU-SPEC-2-items-1+2+3+4+menus-arc-CAPPED-CLOSED-driver-accepted-AGENT-LOG-2026-07-30-owner-ruling-r21-cap-TierA-plus-discharged-.loop/menus-tierA-r8-20260731T011919Z.log-rounds-.loop/menus-p2-r21.log-merged-2026-07-30
 1163e9c18323ac06aaaec4ee3068691d7d67ebbf98b3500a343a69c80ca793ea port/foh/flow-to-fkscript.js reviewed-go CSS-mechanics-arc-iter131-codex-r11-GO-.loop/review-cssmech-r11.log-11-rounds-each-cmp-proven-non-replay-MENU-SPEC-2-items-1+2+3+4

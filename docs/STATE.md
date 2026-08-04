@@ -12,20 +12,22 @@ Loop entry per `docs/LOOP.md` §B; this block is the short version.
   do not close one. A fresh review round is owed and now also owes coverage of
   the frame-conservation repair.
 - **The M4 gate cannot pass yet, for THREE independent reasons:**
-  1. FIVE `arc-in-flight` manifest rows (`verify_m4.sh` hard-refuses on any):
-     `check-device-fullgame.sh`, `check-device-opk.sh`, `verify_m4.sh`,
-     `check-assets-expected.js`, `expected-assets.json`.
+  1. **SIX `arc-in-flight` rows — the gate's own [0b] output, not a guess**
+     (`.loop/a17-verify-m4-final.log`): `check-device-fullgame.sh`,
+     `check-device-foh.sh`, `check-device-opk.sh`, `expected-assets.json`,
+     `check-assets-expected.js`, `verify_m4.sh`. (This page said FIVE for
+     weeks; the gate had never reached this stage to contradict it. Read the
+     list off `[0b]`, never off a page.) **This is now the ONLY blocker**, and
+     it is review-arc work with an owner in the loop — not a hidden defect.
   2. ~~The OPK leg~~ **FIXED 2026-08-04. BOTH ARMS GREEN.** A13 cleared the
      inventory drift, A15 re-measured the shot envelope that drift had been
      hiding. `bash port/gfx/check-device-opk.sh` -> `OPK LAUNCH OK` rc 0
      (`.loop/a15-regress-m3.log`); `MLFK_OPK_FOH=1 ...` ->
      `OPK FOH LAUNCH OK` rc 0 (`.loop/a15-verify-foh.log`).
-  3. **`verify_m4.sh` still does not reach its arc check — now A17, not A16.**
-     A16 (cite grammar) is FIXED; the gate cleared that stage and refuses one
-     stage later: `port/foh/check-device-foh.sh` COMMITTED bytes != its pinned
-     sha. Commit ef31e53 added 418 lines to it after the arc its `reviewed-go`
-     row cites. **Not re-pinned on purpose** — that would manufacture a review.
-     Owner-visible provenance call; see A17 in fix_plan.md.
+  3. ~~verify_m4.sh cannot reach its arc check~~ **FIXED (A16 + A17).** Step
+     [0] is CLEAN: 89 producers, all pins match, 185 cited artifacts exist,
+     every `reviewed-go` row cites a terminal GO. The gate now reaches **[0b]**
+     and refuses on the truth — see the corrected list below.
 - **A GATE'S MESSAGE IS THE FIRST ITEM OF A QUEUE, NOT THE BLOCKER LIST.**
   Four defects surfaced today one behind the other (inventory pin -> shot band
   -> cite grammar -> stale byte pin), each invisible until the one in front was
@@ -50,22 +52,18 @@ Loop entry per `docs/LOOP.md` §B; this block is the short version.
 | 7 | WJ-later | PRE-REGISTER the checksum-surface change before any code (owner-ratified) |
 | 8 | A14 glyph atlas | LARGE, deliberately last |
 **TIER 2** = everything else, prior order preserved, B11 first, R8 last.
-**JUMPED THE QUEUE (all found 2026-08-04, chained behind one another):**
-A15 **DONE**, A16 **DONE**, **A17 OPEN — needs an owner call, see below.**
+**JUMPED THE QUEUE (all found 2026-08-04, one fail-closed chain, all DONE):**
+A13 -> A15 -> A16 -> A17. Each was invisible until the one in front was fixed.
 
-## NEXT ACTION (A17 — an owner-visible provenance call, NOT a driver fix)
-`verify_m4.sh` refuses at [0]: `port/foh/check-device-foh.sh` COMMITTED bytes
-(b157b8e5) != its pinned sha (446897bb). The row's `reviewed-go` cite names the
-CSS-mechanics arc that landed in **0cff450**; commit **ef31e53** afterwards
-added **418 lines** to that file and the row was never re-pinned. **The row
-claims a review that does not cover its bytes.**
-The driver did NOT re-pin it, deliberately: re-pinning green under an unchanged
-`reviewed-go` manufactures a review that never happened. Two honest routes —
-(a) establish that some later arc demonstrably covers ef31e53's delta, re-pin
-`reviewed-go` citing it; or (b) re-pin the bytes as `arc-pending` and let the
-row join the unclosed set (gate stays refusing, but for a TRUE reason).
-**Ask Chase which.** Route (b) is the driver's recommendation: it is true today
-and costs nothing that is not already owed by the five in-flight rows.
+## NEXT ACTION (D8-later — tier 1 resumes)
+Novel Melee-style name entry, owner-redirected 2026-08-03. **Register the
+MENU-SPEC deviation FIRST** — it is the first invented SCREEN, distinct from
+invented values — naming which real-Melee behaviours are modelled and which
+are not. Scope splits: (i) random-tag + clear-tag are a real upstream
+transliteration (`css.js:415-439`) and can land independently; (ii) the letter
+grid is the novel work. Upstream's name entry is a jQuery DOM `<input>` with
+no canvas code, so there is nothing to be faithful to — that is why this is a
+knowing departure, not a port.
 
 ## STANDING HAZARDS (learned the hard way this session)
 - **Re-verify a queue row against the TREE before starting it.** Three tier-1

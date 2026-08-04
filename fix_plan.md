@@ -2018,21 +2018,23 @@ Sequence: punch list → owner re-play/ratification → post-gate window
   grammar, MANIFEST_SHA256 re-anchored. verify_m4.sh now clears the grammar
   stage. It refuses one stage LATER, on A17 — not on arc-in-flight yet.
 
-- A17 (P1, FOUND 2026-08-04 by A16; NOT caused by it) `verify_m4.sh` refuses
-  at [0]: `port/foh/check-device-foh.sh` bytes do not match its pinned sha
-  (pinned 446897bb, current b157b8e5). NOT a working-tree edit — the
-  COMMITTED bytes differ from the pin. Cause: the row's `reviewed-go` cite
-  names the CSS-mechanics arc (`.loop/review-cssmech-r11.log`, landed
-  0cff450), but commit **ef31e53** later added **418 lines** to that file and
-  the row was never re-pinned. So the row claims a review that does not cover
-  the current bytes. **DO NOT re-pin it green to clear the gate** — that is
-  faking the gate: the delta's review status must be ESTABLISHED first.
-  Either (a) find an arc that demonstrably covers ef31e53's delta and re-pin
-  `reviewed-go` citing it, or (b) re-pin the bytes with an honest
-  `arc-pending` and let it join the unclosed set. This is an owner-visible
-  provenance call, not a driver convenience.
-  done-check: `bash port/sim/device/verify_m4.sh` refuses naming
-  arc-in-flight/arc-pending rows — i.e. reaches [0b], its real blocker.
+- A17 — DONE 2026-08-04, owner route (b) (see docs/AGENT-LOG.md). Bytes
+  re-pinned to the committed file, status corrected `reviewed-go` ->
+  `arc-in-flight` (which is what the manifest's own UNCLOSED ROWS record
+  already said). Step [0] is now CLEAN — 89 producers, all pins match, 185
+  cited artifacts exist — and the gate reaches [0b], its real blocker.
+
+## M4 GATE — THE REMAINING BLOCKER (state of record 2026-08-04)
+`bash port/sim/device/verify_m4.sh` reaches **[0b]** and refuses on **6**
+producers lacking review closure, all `arc-in-flight` (evidence
+`.loop/a17-verify-m4-final.log`):
+`check-device-fullgame.sh` · `check-device-foh.sh` · `check-device-opk.sh` ·
+`expected-assets.json` · `check-assets-expected.js` · `verify_m4.sh`.
+This is the TRUE blocker list — earlier pages said five, and the gate had
+never reached this stage to contradict them. Closing these is review-arc work
+(PROCESS §3 -> §4), not code: the B9 arc owes a fresh round covering the
+frame-conservation repair, and the A13/A15 edits to check-device-opk.sh ride
+the same in-flight row.
 
 ## A8 AUDIT CONSEQUENCES (iter 120; evidence .loop/reuse-audit/REPORT.md)
 - A14 (P0, folded into A1) glyph-atlas swap: menus must draw with the

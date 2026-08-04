@@ -21819,3 +21819,67 @@ loosens is incomplete; land it with the tooth that shows what still fails.**
 **NEXT.** A17 (the unreviewed 418-line delta pinned `reviewed-go` — an
 owner-visible provenance call, deliberately not resolved by the driver), then
 tier-1 resumes at D8-later.
+
+## driver — 2026-08-04 — A17 DONE (owner route b): a `reviewed-go` row was pinning bytes that no longer existed, and this file disagreed with itself about it. Step [0] is now clean and the gate finally reaches its REAL blocker
+
+**TASK.** A17, filed by A16 the same day. Owner chose route (b) in session
+("b"). Phase M4. Branch `agent/auto`. Host-only.
+
+**DEFECT.** `verify_m4.sh` refused at [0]: `port/foh/check-device-foh.sh`
+committed bytes b157b8e5 != pinned 446897bb. The row's `reviewed-go` cite names
+the CSS-mechanics arc that landed in 0cff450; commit **ef31e53** afterwards
+added **418 lines** and nobody re-pinned. The `reviewed-go` claim was therefore
+attached to bytes that no longer existed.
+
+**AND THE FILE DISAGREED WITH ITSELF.** The manifest's own UNCLOSED ROWS
+state-of-record paragraph ALREADY listed check-device-foh.sh among seven
+`arc-in-flight` rows — while its ROW said `reviewed-go`. The row wins, because
+the row is what verify_m4.sh parses; the prose was decoration. So this was not
+one error but two halves of the same stale edit, and fixing only the sha would
+have left a `reviewed-go` token the record itself contradicted.
+
+**ROUTE (b), APPLIED TO BOTH HALVES.** Bytes re-pinned to the committed file;
+token corrected to `arc-in-flight`. NOT re-pinned green — re-citing an older
+log over newer bytes is what this file's own line 139 forbids, and it is the
+difference between a gate and a decoration. Reconciliation recorded in the
+manifest at the point of authorship, naming ef31e53 and the owner ruling.
+
+**DRAINED THE QUEUE INSTEAD OF POPPING IT (today's lesson, applied).** Rather
+than fix one row and re-run, I re-hashed ALL 89 rows against their current
+bytes first. Exactly ONE real mismatch — this one. (verify_m4.sh's own row is
+NORMALIZED, excluding the `^MANIFEST_SHA256=` line, so a plain sha comparison
+reports a false positive there; computed the normalized hash and it matches.)
+Knowing the queue was one deep BEFORE fixing turned an unknown-length grind
+into a single bounded edit.
+
+**RESULT — step [0] is CLEAN for the first time** (`.loop/a17-verify-m4-final.log`):
+`freeze manifest OK: 89 producers, all bytes match their pins (manifest anchor
+verified)` + `cite evidence OK: 185 referenced artifact(s) exist ... every
+reviewed-go row cites a log whose TERMINAL anchored verdict is GO`. The gate
+now reaches **[0b]** and refuses on the truth: **6** producers lack review
+closure, all `arc-in-flight` — check-device-fullgame.sh, check-device-foh.sh,
+check-device-opk.sh, expected-assets.json, check-assets-expected.js,
+verify_m4.sh. Also corrected the manifest prose, which said SEVEN: two rows
+closed arcs of their own since that paragraph was written and this one joined.
+
+**ZOOM OUT (HARD RULE 8).** Instance: a status token and a state-of-record
+paragraph in the SAME file disagreed for weeks, and the machine-read one was
+wrong. Class: **when a fact is written twice — once for the parser, once for
+the reader — they drift, and the human-readable copy is the one that rots
+unnoticed, because nothing fails when it is wrong.** Today produced three
+instances (this row vs the UNCLOSED list; STATE.md's "five arc-in-flight" vs
+the gate's six; check-device-opk.sh's header claiming the M3 nav was
+unfixable-here). The instrument is not "keep docs in sync" — it is
+**derive the prose from the parsed data or delete it**. Where deriving is not
+practical, the prose must say WHERE THE TRUTH LIVES rather than restate it,
+which is why the manifest now says "do not read a count off this prose — the
+six are whatever verify_m4.sh [0b] PRINTS". That sentence cannot rot.
+
+**SESSION ARC (five items, one chain).** A13 -> A15 -> A16 -> A17 were not four
+tasks; they were one fail-closed queue drained in order, each invisible until
+the one in front was fixed. What remains is NOT of that kind: closing six
+review arcs is process work with an owner in the loop, not a hidden defect.
+
+**NEXT.** Tier-1 resumes at D8-later (novel Melee-style name-entry letter grid;
+needs a MENU-SPEC deviation registered first). The six arc-in-flight rows are
+the M4 gate's standing blocker and are review work, not driver work.
