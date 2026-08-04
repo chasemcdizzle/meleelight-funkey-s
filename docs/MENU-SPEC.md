@@ -521,6 +521,62 @@ they need only `randomTags` (34 strings, `main.js:142`) and a boolean, and
 they are what makes the port panels show something other than the character
 name (`css.js:1006-1008`). Drop only the free-text third.
 
+**DEVIATION D18 — free-text name entry RETURNS as a NOVEL letter-grid screen
+modelled on real Melee. SUPERSEDES D8's "drop the free-text third".**
+Owner ruling 2026-08-03, verbatim: *"why not match the real melee name select?
+novel screen (doesn't match the original melee light). that'd be awesome"*.
+
+*Why this is a DEVIATION and not a port.* Every other DEVIATION in this file
+departs from an upstream behaviour because the hardware cannot carry it. This
+one is different in kind and must not be filed as if it were the same: **there
+is no upstream behaviour to be faithful to.** Upstream's name entry is a DOM
+`<textarea>` shown by jQuery (`css.js:438`) and read back on commit
+(`css.js:176`); there is no canvas code, no layout, no cursor, no glyph
+handling — nothing a port could reproduce or diverge from. So this is the
+FIRST INVENTED SCREEN in the port, distinct from the invented *values* the
+restyle already carries. It is a knowing departure, taken because a letter
+grid on a d-pad handheld is better than a text box that cannot exist.
+
+*What is MEASURED from upstream and therefore BINDING.*
+- Commit is the A rising edge or Enter (`css.js:443-444`); Enter has no device
+  key, so A is the commit and the grid needs its own visible confirm affordance.
+- Entry is MODAL: while `choosingTag > -1` the entire per-slot CSS input block
+  is skipped (`css.js:185`), so grabbing, port cycling, palette and CPU-level
+  input are all dead during entry. The letter grid inherits this exactly.
+- Maximum length is **10** — `maxlength="10"` on every `#pTagEdit<i>`
+  (`dist/meleelight.html:227`). Not 4. Real Melee's 4-character tag is NOT the
+  bound here; upstream's own data would not fit it.
+- The committed string replaces the character name in the port panel, gated by
+  `hasTag[i]` (`css.js:1006-1008`).
+- The grid alphabet MUST span every character reachable by the random-tag
+  widget, or "random" can produce a name the grid cannot display or edit.
+  Measured over the 34 `randomTags` (`main.js:142`; 33 unique, `"S2J"` appears
+  twice): **54 distinct characters** — 23 uppercase, 22 lowercase, digits `0`
+  and `2`, and the 7 symbols `! $ ( ) . [ ]`. Mixed case is therefore
+  mandatory (`Panda`, `Mang0`, `aMSa`, `HungryBox`), and a naive A-Z-only grid
+  is measurably wrong.
+
+*What is MODELLED on real Melee — SHAPE ONLY, and NOT measured.* This repo has
+no Melee build to measure and none is obtainable here, so every claim in this
+paragraph is a design intent, not a fact, and carries no citation by
+construction. Modelled: a fixed grid of glyphs; the d-pad moves a cursor cell
+by cell; A appends the highlighted glyph; B deletes the last character; the
+name renders as it is typed. NOT modelled, and deliberately: Melee's
+4-character limit (upstream's 10 wins, above), its exact grid dimensions,
+glyph order, page/shift mechanism, sound set, and any animation. Where a
+detail is ours rather than Melee's, it is ours — do not later "correct" the
+port toward half-remembered Melee behaviour and call it faithfulness.
+
+*Scope split (owner-stated, and the two halves are independent).*
+(i) **random-tag + clear-tag** (`css.js:421-431`) are a REAL upstream
+transliteration and may land alone, with no grid;
+(ii) **the letter grid** is the novel work and needs this deviation registered
+first — which this section is.
+
+*Open, to settle at implementation time, not now:* cursor wrap at grid edges,
+whether B on an empty name exits entry or is a no-op, and the confirm
+affordance's label. Each is invented; each gets recorded here when chosen.
+
 ### 2.10 Ready to fight, and launch
 
 `readyToFight` is computed **in the draw function**, `css.js:1167-1181`:

@@ -21883,3 +21883,59 @@ review arcs is process work with an owner in the loop, not a hidden defect.
 **NEXT.** Tier-1 resumes at D8-later (novel Melee-style name-entry letter grid;
 needs a MENU-SPEC deviation registered first). The six arc-in-flight rows are
 the M4 gate's standing blocker and are review work, not driver work.
+
+## driver — 2026-08-04 — D8-later PRE-REGISTERED: MENU-SPEC DEVIATION D18. Registration only, no code — and the measurement already refuted two plausible design assumptions
+
+**TASK.** D8-later's mandatory first step (owner ruling 2026-08-03 round 2):
+register the novel name-entry screen as a MENU-SPEC deviation BEFORE any code.
+Phase M4. Branch `agent/auto`. Host-only, no device.
+
+**COMMITTED FORM.** `docs/MENU-SPEC.md` §2.9 gains **DEVIATION D18**,
+superseding D8's "drop the free-text third". It separates three things the
+spec's other deviations never had to separate:
+1. **Why this is a DEVIATION and not a port.** Every other deviation departs
+   from an upstream BEHAVIOUR because the hardware cannot carry it. Here there
+   is no behaviour: upstream's name entry is a DOM `<textarea>` shown by jQuery
+   (`css.js:438`) and read on commit (`css.js:176`) — no canvas code, no
+   cursor, no glyphs. It is the port's FIRST INVENTED SCREEN, distinct from the
+   invented VALUES the restyle already carries.
+2. **What is MEASURED and therefore binding** — commit on the A rising edge
+   (`css.js:443`, Enter has no device key); entry is MODAL, the whole per-slot
+   input block is skipped while `choosingTag > -1` (`css.js:185`); the
+   committed string replaces the character name gated by `hasTag[i]`
+   (`css.js:1006-1008`).
+3. **What is MODELLED on real Melee — SHAPE ONLY, and explicitly NOT measured.**
+   No Melee build exists here and none is obtainable, so those claims carry no
+   citation BY CONSTRUCTION and say so. Grid + d-pad cursor + A appends + B
+   deletes is design intent; Melee's grid dimensions, glyph order, shift/page
+   mechanism, sounds and animation are NOT modelled.
+
+**THE MEASUREMENT REFUTED TWO ASSUMPTIONS I WOULD OTHERWISE HAVE CODED.**
+- **Length is 10, not 4.** `maxlength="10"` on every `#pTagEdit<i>`
+  (`dist/meleelight.html:227`). Real Melee's 4-character tag is the obvious
+  thing to copy and it is WRONG here — upstream's own `randomTags` data does
+  not fit in 4 (`HungryBox`, `SilentWolf`, `Westballz`).
+- **The alphabet is not A-Z.** The grid must span every character the
+  random-tag widget can produce, or "random" yields a name the grid cannot
+  display or edit. Measured over the 34 `randomTags` (`main.js:142`; 33 unique
+  — `"S2J"` appears twice): **54 distinct characters** = 23 uppercase, 22
+  lowercase, digits `0` and `2`, symbols `! $ ( ) . [ ]`. Mixed case is
+  MANDATORY (`Panda`, `Mang0`, `aMSa`).
+
+**ZOOM OUT (HARD RULE 8).** Instance: a screen with no upstream counterpart
+still had hard, measurable constraints — they just lived in a sibling widget
+(random tags) and a markup attribute rather than in the screen itself. Class:
+**"nothing to be faithful to" is a statement about one file, not about the
+feature — the constraints on an invented surface come from everything that
+FEEDS it and everything that CONSUMES it.** The instrument that produced both
+refutations was the same one: enumerate the data the feature must round-trip
+(here the 34 tags a neighbouring button can inject) and derive the domain from
+it, rather than from the feature's own absent source. Second, smaller instrument
+now written into the spec itself: when a design claim CANNOT be measured, say
+so in the text and say why, so a later reader cannot mistake intent for
+evidence — D18 marks its real-Melee paragraph as uncitable by construction, and
+warns against "correcting" the port toward half-remembered Melee behaviour.
+
+**NEXT.** D8-later part (i) — the random-tag/clear-tag transliteration
+(`css.js:421-431`), which is real upstream behaviour and lands independently of
+the grid. Then part (ii), the grid itself.
