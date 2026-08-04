@@ -2905,7 +2905,37 @@ priority now (in that order). move everything to after that (preserve order)."*
    (owner-ratified semantics 2026-07-27). `port/gfx/ctl_style.c` exists and is
    already persisted (foh_app.c:458 load, :511 save) — the plane is built; what
    is missing is the user-facing half.
-3. **A5** (P1) Controls screen selection wired (candidate: the style selector).
+3. **A14** (P0) glyph-atlas swap — menus draw with the BROWSER-RASTERIZED
+   VFXGLYPHS1 atlas (`port/gfx/vfxglyphs-frozen.txt`) instead of the
+   hand-authored `port/foh/foh_font.c`. Extend `__gfxDumpGlyphs()` to cover the
+   menu strings, point `foh_render.c` at `gfx_glyphs_load()`, keep foh_font.c as
+   a LOUD fallback.
+   **PLACED HERE BY DRIVER JUDGMENT under the owner's explicit delegation**
+   (*"put a14 wherever you think it belongs"*) — this slot is NOT an owner
+   ruling and is amendable on request. Reasoning, so the choice can be argued
+   with:
+   - **A5, A7 and D8-later are the first items that author NEW TEXT-BEARING
+     SCREENS.** A14 changes how every glyph rasterizes, so it invalidates every
+     menu screenshot reference either way. Landing it BEFORE the screen work
+     pays that re-capture ONCE; landing it after pays it twice, because each new
+     screen would be authored and shot against a font that is about to change.
+   - **The current font actively distorts render-site code.** foh_render.c:1926
+     records that foh_font.c's face 1 is UPPERCASE-ONLY (49 glyphs), and :1972
+     uppercases at the RENDER site rather than in ctl_style.c specifically to
+     work around it. A5 is the controls screen — authoring it against that
+     constraint and then removing the constraint is wasted work.
+   - It stays BEHIND A3 and A4 because neither draws new text: A3 is input
+     binding, A4 is the control-style state plane (already persisted).
+   - MEASURED OPEN (2026-08-03): foh_render.c has ZERO references to
+     `gfx_glyphs_load` and still cites foh_font.c at :574, :1878, :1926, :1972.
+   - COST TO EXPECT: `vfxglyphs-frozen.txt` is a PINNED producer with a
+     `reviewed-go` row, so this carries its own arc + re-pin, and glyph
+     comparison is already known-touchy (the iter-72 glyph-jitter class fix).
+   - NOT a B11 hazard: shot REFERENCES are host twins and the host is
+     deterministic — the ±1 jitter is device-injector wall clock only. So the
+     re-capture is safe to do with B11 still deferred; the 3 jitter-exposed
+     shots stay coin flips on device, unchanged in kind.
+4. **A5** (P1) Controls screen selection wired (candidate: the style selector).
    NOTE: the owner's message listed "A4/A5, A5" — read as A4 then A5, and the
    duplicate treated as a slip. If A5 was meant to sit somewhere else in the
    order, say so and this list is amended.
