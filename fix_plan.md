@@ -2036,6 +2036,54 @@ never reached this stage to contradict them. Closing these is review-arc work
 frame-conservation repair, and the A13/A20 edits to check-device-opk.sh ride
 the same in-flight row.
 
+## PUNCH-LIST STATUS RECONCILIATION 2026-08-04 (read this before starting ANY row)
+
+The rows below are a LOG, not a queue: a completed item keeps its original
+bullet and gains a separate `X DONE` line further down the file. Reading a
+bullet alone therefore tells you nothing, and a text scan that ignores the
+supersession lines reports A3/A4/A5 as open when they are built. That
+convention is fine, but it must be READ correctly — this block is the index.
+
+**SUPERSEDED / DONE (marker line cited):** A1 Phase-1 merged (L2180) · A2
+(L2118) · A3 (L3128) · A4 (L3137, semantics SETTLED L3190) · A5 (L3148) ·
+A9 (L2095) · A11 + A12 (L2180) · A13 (L2006) · A17 (L2199) · A18 (L2200) ·
+A20/A21/A22 (2026-08-04) · B3 (L2136) · B9 (L2196) · U1 (L2331).
+**OWNER-DEFERRED:** B11 (2026-08-03, deferred NOT cancelled).
+**OWNER-DECIDED, no work:** A10 ("No work now" until after A1) · A19
+(restart deliberately skipped — upstream has no restart-match semantics).
+
+**PROBED AGAINST THE TREE 2026-08-04 — genuinely OPEN, with the evidence:**
+- **B1 (P1) OPEN.** `blend565` is still at `port/gfx/raster.c:87` and the
+  comment at `:136` records that new drawing "dodges blend565's blue spill" —
+  routed around, not fixed. Still corrupts blue on every partial-alpha blend
+  the GAME renders.
+- **B7 (P1) OPEN.** The interim canonical-phase seam is live —
+  `foh_look_canonical` called at `port/foh/foh_app.c:548` and referenced at
+  `foh_dev.c:2273`. B7 replaces it with the device→host look-plane injection.
+- **B8 (P1) OPEN.** `check-device-fullgame.sh` still reads `teeth=21`
+  (`:1375`, `:2048`); B8 is the 21 -> 22 machine-plane tooth.
+- **C7 (P2) OPEN.** `--seed 1337` is literally on the play path,
+  `port/gfx/opk/mlfk-foh.sh:166`.
+- **A14 (P0) OPEN, and its shape is CORRECTED at L2067** — VFXGLYPHS1 has
+  ZERO letters, so the swap cannot land as-is; the corrected sequence there
+  is binding.
+- **A7 (P2) OPEN and BLOCKED** on the owner's `Math.random` ruling.
+- **B10 (P1) OPEN but RESTATED:** it says "flip the 12 arc-in-flight rows".
+  MEASURED 2026-08-04: the gate refuses on **6**, not 12 — see the M4 GATE
+  block above. Use the gate's `[0b]` output, never this count.
+
+**PROBED AND FOUND ALREADY SATISFIED:**
+- **B6 (P1) DONE.** `check-device-target.sh:1203` names exactly the missing
+  combination — "`--bridge live` + a TARGET launch — the exact play-path
+  combination" — and drives it at `:1246`.
+- **A6 (P2) effectively DONE** by its own measured 2026-08-03 text; the
+  residual is the live-mixer bus push at `foh.c:975-977`, not a screen build.
+
+**NOT RE-PROBED — status unknown, do not trust either way:** A8, A15, A16,
+U2, U4, B2 (largely answered by B9's 9.06 ms measurement), B4, B5, C8, C9,
+C10, C12, C13, C14, C17. Each needs the same treatment as the block above
+BEFORE it is started. That is cheap and it has now paid three times.
+
 ## A8 AUDIT CONSEQUENCES (iter 120; evidence .loop/reuse-audit/REPORT.md)
 - A14 (P0, folded into A1) glyph-atlas swap: menus must draw with the
   BROWSER-RASTERIZED VFXGLYPHS1 atlas (port/gfx/vfxglyphs-frozen.txt,
