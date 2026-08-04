@@ -1312,7 +1312,23 @@ judge_timing() { # <label> <timing> <frames>
   # OWNER-RATIFIED ALLOWANCE (2026-08-01, see SKIP_ALLOW_PER_LEG): was `= 0`.
   [ "$skips" -le "$SKIP_ALLOW_PER_LEG" ] \
     || fail "$label: timing artifact reports $skips render skips, over the ratified per-leg allowance of $SKIP_ALLOW_PER_LEG"
-  [ "$rendered" = "$fr" ] || fail "$label: rendered $rendered != $fr"
+  # FRAME CONSERVATION, not "nothing was skipped" (MEASURED 2026-08-03).
+  # This was `[ "$rendered" = "$fr" ]`, which is only correct when skips == 0 —
+  # it was written under the OLD bar and the 2026-08-01 allowance did not carry
+  # it. A skipped frame is BY DEFINITION not rendered, so `skips <= 8` and
+  # `rendered == frames` are contradictory: the ratified allowance could never
+  # pass on hardware. First device run where a leg actually skipped
+  # (.loop/fullgame-b9r5-verify-20260803T150537.log) proved it — g01 and g04
+  # each skipped exactly 1 frame, cleared the per-leg allowance, and then died
+  # on `rendered 3599 != 3600`. NOT A LOOSENING: the bar is still "every frame
+  # is accounted for", now partitioned correctly instead of assuming one side
+  # is empty. judge-render-timing.js:277 already enforces exactly this
+  # (`render.length + skips !== expected` -> die "population bookkeeping
+  # error"), so this shell assert is a REDUNDANT independent restatement, not
+  # the primary guarantee — it survives only to catch a future judge that lost
+  # its own bookkeeping check.
+  [ "$((rendered + skips))" = "$fr" ] \
+    || fail "$label: frame accounting BROKEN — rendered $rendered + skips $skips != $fr frames"
   [ "$full_p99_ns" -lt "$P99_FULL_LIMIT_NS" ] \
     || fail "$label: p99 ${full_p99_ms} ms >= the 16.67 ms frame budget"
 }
@@ -2788,8 +2804,11 @@ T21-reserved-eopt
 T21-reserved-rc
 T21-reserved-rcvar
 T21-uppercase-special
+T22
 T3
 T3b
+T3c
+T3c2
 T4
 T5
 T6
@@ -2997,7 +3016,7 @@ tooth_expect T3c 1 \
   "^FULLGAME FAIL: tooth3c: skip witnesses DISAGREE — app-log match summary reports $SKIP_ALLOW_PER_LEG render skips, timing artifact reports 0; these count the same event and must be equal\$" \
   -- judge_skip_witnesses "tooth3c" "$SKIP_ALLOW_PER_LEG" 0
 tooth_expect T3c2 1 \
-  "^FULLGAME FAIL: tooth3c2: skip witnesses DISAGREE — app-log match summary reports 0, timing artifact reports $SKIP_ALLOW_PER_LEG; these count the same event and must be equal\$" \
+  "^FULLGAME FAIL: tooth3c2: skip witnesses DISAGREE — app-log match summary reports 0 render skips, timing artifact reports $SKIP_ALLOW_PER_LEG; these count the same event and must be equal\$" \
   -- judge_skip_witnesses "tooth3c2" 0 "$SKIP_ALLOW_PER_LEG"
 echo "    T3c OK: disagreeing skip witnesses die in the PRODUCTION reconciliation judge, both directions (rc 1, pinned diagnostics)"
 

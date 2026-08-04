@@ -1586,17 +1586,48 @@ dead — preexisting-destination and clip coverage belong to `primdiff.c`.
 
 `TEETH_PIN` 22 → **25** (T3c, T3c2, T22); `FULLGAME_RE` re-pinned to match.
 
-**WHAT IS AND IS NOT PROVEN.** Host-executed: both scripts parse; T22's 7
-grammar cases; T3b's fixture at three bases; the judge's rc/stderr; witness
-equality on the 12 archived artifacts; all three manifest pins.
-**NOT run: anything requiring the FunKey-S — no device was attached this
-turn** (`adb devices` empty). The teeth suite and every leg judgment execute
-only inside a real device run, so `check-device-fullgame.sh` has NOT been
-executed end to end since these edits. **NEXT, in order: (1) attach the
-device and run `bash port/sim/device/check-device-fullgame.sh` to green,
-(2) a fresh review round on the new bytes, (3) only then consider the five
-arc rows.** B11's wiring (leg declarations, `judge_dev_shot` acceptance set,
-the 2-frame tooth, two device runs) is untouched and still outstanding.
+**VERIFIED ON HARDWARE (same day, device attached mid-session).**
+`bash port/sim/device/check-device-fullgame.sh` -> `FULLGAME CONFORMS 12/12
+(render+sfx+music live; live-ai=g07,g08,m01,m02 p99=16.562ms skips=0/allow12
+underruns=0 starves=0 presentfails=0 teeth=25)`, **rc 0**
+(`.loop/fullgame-b9r5-verify4-20260803T174600.log`). The REAL terminal line
+was then checked against `FULLGAME_RE` extracted from verify_m4.sh's bytes:
+MATCHES — H4 is closed end to end, not just synthetically. T3b, T3c and T22
+all executed green on the device.
+
+**A SECOND DEFECT, FOUND ONLY BY RUNNING IT: the ratified allowance was
+INOPERATIVE.** Run 1 went red 10/12 — g01 and g04 each skipped exactly 1
+frame, cleared the per-leg allowance, then died on `rendered 3599 != 3600`.
+`judge_timing` still asserted `rendered == frames`, and a skipped frame is by
+definition not rendered, so `skips <= 8` and `rendered == frames` are
+contradictory: **no skip could ever pass, and the 2026-08-01 ratification
+could not do what it says.** Defect originates in `812059a` (the allowance
+commit), NOT in the r5 fixes; the r5 reviewer could not see it because it
+only manifests when a leg actually skips, and the bound itself was measured
+while the bar was still `skips == 0`. REPAIRED to frame conservation
+`rendered + skips == frames`. **NOT a loosening** —
+`judge-render-timing.js:277` already enforces exactly this
+(`render.length + skips !== expected` -> die), so the shell assert is a
+redundant restatement of a law the FROZEN judge owns; the fixed form also
+catches a witness disagreement the old one could not see. T3b would have
+died on this too, so the H3 fix alone was necessary but not sufficient.
+**This is the one edit in this change that touches a PASS CONDITION and it is
+owner-overrulable.**
+
+**STANDING RISK, MEASURED AND WORSE THAN THE PAGE SAYS: p99 headroom is
+108 µs.** Worst leg s01 16.562 ms vs the 16.670 ms budget (107,958 ns). This
+page's standing figure is 439-566 µs and run 2 of this session measured 744 µs
+(m01 15.926 ms) — so p99 swings ~600 µs run to run and this run landed within
+108 µs of a RED gate on timing alone, with no code change involved. Skips are
+likewise nondeterministic (run 1 = 2 across g01+g04; runs 2/4 = 0), which is
+exactly the noise the allowance exists to absorb.
+
+**STILL OPEN.** The arc stays **arc-in-flight**: green bytes are not a closed
+arc. **NEXT: (1) a fresh review round on the new bytes — it now owes coverage
+of the conservation repair as well as the seven r5 findings, (2) only then
+the five arc rows.** B11's wiring (per-flow leg declarations,
+`judge_dev_shot` acceptance set, the 2-frame tooth, two device runs) is
+untouched and still outstanding.
 
 ### 2026-08-01 (CHECKPOINT — paused at owner request mid-execution of the three ratified decisions)
 
