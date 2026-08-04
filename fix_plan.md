@@ -2973,6 +2973,39 @@ fast-forward, a 2500-frame (~41.7 s) auto-exit that plays `complete` or
   counts (host `flows=7 shots=19`, device `flows=5 shots=15`), and manifest rows
   `:398,:399`. Size: MEDIUM.
 
+**MEASURED 2026-08-03 — TIER 1's FIRST THREE ROWS ARE STALE. A3, A4 AND A5 ARE
+ALREADY BUILT.** Verified by direct read, not inference:
+- **A3 DONE.** `port/gfx/s1_input.h:165` names it: *"The ROLE resolution, in ONE
+  place (fix_plan A3 + the 2026-07-29 Mod-shoulder swap)."* `ctl_roles()`
+  (`:173-183`) gives NORMAL and NATURAL `*shield = (p->l || p->r)` — L is a
+  second shield button — and BOX puts Mod on one shoulder, shield on the other,
+  swappable via `modOnR`. `:11` states it outright: *"with L joining R as a
+  second shield button (A3)"*. The row builder emits `in.r = true` on shield
+  (`s1_input_row_style`), NOT `in.l` — deliberate: `:37-38` records digital
+  shield as `r=true, rA=1.0`, single-stage, no light shield, `l/lA stay
+  false/0`. So "currently unbound" has been false since ~2026-07-29.
+- **A4 DONE.** Three styles exist, switchable and persisted:
+  `CTL_STYLE_BOX|NORMAL|NATURAL` with per-style chord tables
+  (`ctl_style_table`, `s1_input.h:151-158`), `ctl_style_get/set`
+  (`ctl_style.c:18-22`), persisted through `FohPersist.ctlStyle`.
+  **DISCREPANCY TO RESOLVE:** the A4 row says *"box + normal, switchable,
+  normal default (owner ratified semantics 2026-07-27)"*, but the build has
+  THREE styles and `CTL_STYLE_DEFAULT` resolves to **NATURAL**, described at
+  `s1_input.h:12-14` as *"the ssb64-modelled 1:1 scheme and the DEFAULT"*. Either
+  the semantics were re-ratified after 2026-07-27 and this row was never
+  updated, or the default drifted unratified. **OWNER QUESTION, not a defect
+  claim.**
+- **A5 DONE.** The Controls screen selects: `foh.c:1055-1075` — up/down toggles
+  `ctlRow`, left/right on row 0 cycles the three styles wrapping over
+  `CTL_STYLE_COUNT`, row 1 flips the Mod shoulder via `ctl_mod_on_r_set`. Enum
+  values are a frozen wire format stored verbatim in persist.
+
+**TIER 1's REAL REMAINING CONTENT is therefore: A7 · A13 · D8-later · WJ-later ·
+A14.** A7 and A14 are confirmed open by direct read (A7 is still
+`ev_refused(s,"credits")` at `foh.c:261`; `foh_render.c` never calls
+`gfx_glyphs_load`). A13, D8-later and WJ-later are NOT yet re-verified — given
+three stale rows in a row, verify each before starting it.
+
 ## OWNER RULING 2026-08-03 — RE-PRIORITIZATION; B11 DEFERRED (Chase, in session)
 
 Verbatim: *"let's skip B11 I am totally done with all this for now. defer it
