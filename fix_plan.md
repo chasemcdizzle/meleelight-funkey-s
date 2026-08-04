@@ -2888,3 +2888,66 @@ above, music reader on CFS) plus the SPIN_NS 3->2 ms retune with enough passes
 for statistical power.
 `done-check:` `check-device-fullgame.sh` prints `FULLGAME CONFORMS 12/12` rc 0 on
 two consecutive passes with the ratified allowance removed.
+
+## OWNER RULING 2026-08-03 — RE-PRIORITIZATION; B11 DEFERRED (Chase, in session)
+
+Verbatim: *"let's skip B11 I am totally done with all this for now. defer it
+until after we're done. … A3, A4/A5, A5, A7, A13, D8-later, wj-later are all
+priority now (in that order). move everything to after that (preserve order)."*
+
+### The new order of work
+
+**TIER 1 — do these first, in this order:**
+1. **A3** (P1) L shoulder = shield/air-dodge. Currently unbound: keymap-frozen.txt
+   maps `l -> K k` / `r -> N n` as raw keysyms only, with no shield/air-dodge
+   binding behind them.
+2. **A4** (P1) control-style system: box + normal, switchable, normal default
+   (owner-ratified semantics 2026-07-27). `port/gfx/ctl_style.c` exists and is
+   already persisted (foh_app.c:458 load, :511 save) — the plane is built; what
+   is missing is the user-facing half.
+3. **A5** (P1) Controls screen selection wired (candidate: the style selector).
+   NOTE: the owner's message listed "A4/A5, A5" — read as A4 then A5, and the
+   duplicate treated as a slip. If A5 was meant to sit somewhere else in the
+   order, say so and this list is amended.
+4. **A7** (P2) Credits functional. A16 already measured upstream credits.js as
+   422 lines of ZERO-DOM canvas code — this is a TRANSLITERATION, not a new
+   feature. The menu label "CREDITS" already exists (foh_render.c:39); no
+   credits screen exists in the FohScreen enum.
+5. **A13** (P2) app title on the FunKey home screen must not read "FOH".
+   Constraint that produced it is unchanged: check-device-opk.sh NAVIGATES BY
+   TITLE, so the PLAY install and the EVIDENCE OPK must keep DISTINCT titles.
+   End state: PLAY = `Name=MeleeLight`, EVIDENCE = a distinct title. Both
+   .desktop files are PINNED m4 producers — carries its own arc, re-pin and one
+   device nav verification.
+6. **D8-later** a faithful NAME-ENTRY screen.
+7. **WJ-later** make walljump actually work.
+
+**TIER 2 — everything else, ORDER PRESERVED as it stood before this ruling:**
+B11 (below), then A1/A14/A15 look-fidelity remainder, A6, A16, U1, U2, D6-later,
+C3, the R-items, and R8 last per the 2026-08-01 ruling.
+
+### B11 — DEFERRED (was: blocks R-item-1 and M4 gate leg [2])
+
+B11 is **NOT cancelled and NOT descoped.** The owner's 2026-08-01 ratification
+of the three-way byte-exact acceptance set STANDS; only its POSITION moves, to
+after Tier 1 and after the rest of Tier 2.
+
+**The mechanical consequence, stated rather than papered over — the same
+discipline the 2026-08-01 B9 deferral demanded:**
+- B11's defect is INTERMITTENT, not deterministic. `check-device-foh.sh` and
+  `verify_m4.sh` leg [2] judge 3 of 15 shots (f01/css, f02/css-cpu, f05/css)
+  against a rig whose own injector documents +/-1 device frame of jitter. Those
+  legs therefore PASS OR FAIL BY LUCK until B11 lands.
+- So while B11 is deferred, **a green FOH leg is not evidence the judgment is
+  sound, and a red one is not evidence of a regression.** Any FOH/gate red on
+  one of those three shots must be checked against the B11 signature FIRST
+  (device shot == a hold+/-1 host twin, byte-exact) before anything is
+  "diagnosed".
+- The generator is already committed (`1be6abd`,
+  `port/foh/make-jitter-flow.js`), validated end to end: of the 3x3 product over
+  f01's two counted legs, exactly one (x0/y+1) is byte-identical to the real
+  device shot. That work is banked, not lost.
+
+`done-check:` unchanged from the B11 block above — `DEVICE FOH OK (… shots=15 …)`
+rc 0 on two consecutive device runs, accepted jitter offset printed per
+jitter-exposed shot, plus a tooth proving a 2-frame offset still FAILS.

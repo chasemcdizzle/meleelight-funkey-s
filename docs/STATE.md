@@ -5,6 +5,25 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## §rulings (standing owner directives, day-tagged)
 
+- **2026-08-03 — RE-PRIORITIZATION; B11 DEFERRED (Chase, in session).** Verbatim:
+  *"let's skip B11 I am totally done with all this for now. defer it until after
+  we're done. … A3, A4/A5, A5, A7, A13, D8-later, wj-later are all priority now
+  (in that order). move everything to after that (preserve order)."*
+  **TIER 1, in order: A3 · A4 · A5 · A7 · A13 · D8-later · WJ-later.**
+  (The message listed "A4/A5, A5"; read as A4 then A5, duplicate treated as a
+  slip — amend if that was not the intent.) **TIER 2 = everything else with its
+  prior order preserved**, B11 first among them, R8 still last.
+  **B11 is deferred, NOT cancelled** — the 2026-08-01 three-way byte-exact
+  ratification stands, only its position moves. **MECHANICAL CONSEQUENCE, stated
+  not papered over:** B11's defect is INTERMITTENT, so `check-device-foh.sh` and
+  `verify_m4.sh` leg [2] pass or fail BY LUCK on 3 of 15 shots (f01/css,
+  f02/css-cpu, f05/css) until it lands. **A green FOH leg is therefore not
+  evidence the judgment is sound, and a red one is not evidence of a
+  regression** — check any red on those three against the B11 signature (device
+  shot == a hold±1 host twin, byte-exact) BEFORE diagnosing anything else. The
+  generator is banked and committed (`1be6abd`). Full detail: fix_plan.md
+  §"OWNER RULING 2026-08-03".
+
 - **2026-08-01 — THREE RATIFICATIONS (Chase, in session, after a full written
   briefing of the options and their costs).** Verbatim: *"option A close the arc
   and approve a named skip allowance yes. decision 1: C yes please. decision 2:
