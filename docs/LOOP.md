@@ -30,6 +30,50 @@ You have full authority over engineering AND product-default decisions:
 - A **milestone exit gate** (`CLAUDE.md §Gates`) = the contract proving a
   whole phase. Run **only on a phase-advance iteration**, never per task.
 
+## A-par. PARALLELIZATION IMPERATIVES (owner-authorized 2026-08-03)
+
+**AUTHORIZATION.** `docs/LOOP.md` is a HARD RULE 3 never-edit file. This
+section exists ONLY because the owner directed it in session, verbatim:
+*"ok put in the loop files to parallelize starting at a14 not before please.
+just make the parallelization as part of the loop imperitaves."* The section
+is purely ADDITIVE — it weakens no gate, no check and no cap.
+
+1. **PARALLELIZATION STARTS AT A14. NOT BEFORE.** Every tier-1 item up to and
+   including **A4 runs SERIAL on `agent/auto`**, one task per iteration, per
+   HARD RULE 6. A3 in particular is serial: it is the friction probe. Its real
+   end-to-end cost — arc + manifest re-pin + device verify — is the MEASUREMENT
+   that sizes every later lane decision. Do not guess that number; produce it.
+2. **FROM A14 ONWARD, worktree lanes are permitted** — and are the ONLY
+   sanctioned form of parallel writing. Never two writers in one working tree:
+   that is `§matchexit-contested` (2026-07-30), where a frozen review packet
+   went stale WITHIN MINUTES with zero edits of its own and every line-number
+   cite invalidated itself. *"No authenticated round object can exist while two
+   writers hold the tree."*
+3. **SPLIT BY PLANE, NEVER BY ITEM COUNT.** The number of lanes equals the
+   number of file-disjoint planes, not the number of open items. Measured
+   planes as of this ruling:
+   - **menus/text** — `foh_render.c`, `foh.h`, `foh_app.c`, the glyph atlas:
+     A14 -> A5 -> A7 -> D8-later. **SERIAL WITHIN THE LANE** — they share files
+     and always will.
+   - **input/engine** — keymap, sim input seam, engine: WJ-later.
+   - **packaging** — `.desktop` files, `check-device-opk.sh`: A13.
+4. **VERIFICATION NEVER PARALLELIZES.** There is ONE physical FunKey-S and
+   `riglib.sh` holds a shared no-reclaim lock. Device legs are 30-40 min and
+   queue globally. Lanes buy parallel EDITING, never parallel VERIFYING — size
+   any lane plan against the device queue, not against agent count.
+5. **ONE BATCHED RE-PIN PASS, DRIVER-ONLY, AT THE END** (the R2 pattern).
+   `MANIFEST_SHA256` is a single anchor over the whole freeze manifest, so
+   concurrent re-pinning collides by construction.
+6. **ARCS REVIEW PRE-MERGE BYTES — RE-VERIFY ON THE MERGED BYTES.** A lane's
+   GO is a verdict on the lane's bytes, which are not the merged bytes. R4 is
+   the precedent: it was verified `REVIEW ARTIFACT TEETH OK (187/187)` ON THE
+   MERGED TREE, not just in its lane. Budget N lanes = N arcs + 1 merge + 1
+   merged-byte re-verification on the serialized device.
+7. **HARD RULE 4 STILL BINDS.** The autonomous run lives on `agent/auto`. Git
+   cannot check out one branch in two worktrees, so lanes carry their own
+   branches and are driver-merged back — they are supervised side lanes, NOT
+   "the autonomous run".
+
 ## A. Guards (FATAL; never dirty a tracked file here)
 
 1. **Branch:** HEAD must be `agent/auto`. Else → write `.loop/STOP.txt`
