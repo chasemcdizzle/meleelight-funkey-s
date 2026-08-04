@@ -3,3 +3,8 @@ vendor/
 build*/
 .DS_Store
 spikes/device-audio/audiotest
+# local agent-tooling artifacts (never project state; LOOP.md §A.2 needs a clean tree)
+.tokensave/
+AGENTS.md
+CLAUDE.local.md
+scratch-*.js
