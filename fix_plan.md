@@ -3180,6 +3180,39 @@ read, with scope now precise:
   change the simulation", which lands on the CHECKSUM surface and therefore
   needs its faithfulness argument made up front.
 
+  **WJ-later PRE-REGISTRATION, 2026-08-04 (the owner-ratified step) — AND IT
+  RESOLVES TO "NO CODE". The row above states the scope BACKWARDS.** The
+  faithfulness argument was written up front exactly as ordered, and it says
+  the opposite of what the row assumes:
+  - **MEASURED: `everyCharWallJump` is a DEAD TOGGLE UPSTREAM.** All five
+    occurrences in `src/`: `gameplaymenu.js:53` (the `^= true` toggle),
+    `gameplaymenu.js:239` (draws its own row), `css.js:89` + `css.js:109`
+    (label + OFF/ON formatter), `settings.js:51` (default `0`). **Zero
+    simulation reads.** The only walljump gate in physics is the PER-CHARACTER
+    attribute — `player[i].charAttributes.walljump`, `physics.js:134` — which
+    the setting never touches.
+  - **MENU-SPEC §3 ALREADY CLOSED THIS on 2026-07-29** and says so in terms:
+    "Implementing it faithfully means: add the row, persist 0/1, and wire it to
+    nothing… **Do not invent a walljump rule to give it meaning; that would be
+    a faithfulness violation.**" Its gap table row 4 records our port as
+    "present, faithfully DEAD (row + persisted bit, zero MECHANICS consumers)"
+    — **CLOSED**.
+  - **So "the SIM IGNORES IT" is not the defect. It is the correct
+    behaviour**, and the port already reproduces it. Making the setting reach
+    the simulation would violate HARD RULE 5 (the browser original is ground
+    truth) and would churn the checksum surface to add a rule upstream does
+    not have.
+  - **The only way this becomes work is as a KNOWING DEVIATION** — an owner
+    request for a house rule, in the D18 mould (invented on purpose, registered
+    as such), NOT as a port fix. If the owner wants it: the change is one
+    disjunction at the `physics.c:775-777` equivalent
+    (`canWallJump = FLAGS(S,i)->wallJumpAble || everyCharWallJump`), it is
+    SAFE for every frozen golden because the default is `0` and all goldens
+    were recorded at the settings defaults (`sim_boot.c` gameSettings note), so
+    the flag OFF is bit-identical to today — but it must be registered as a
+    deviation first, and the toggle must default OFF forever.
+  - **DRIVER RECOMMENDATION: close WJ-later as ALREADY SATISFIED.** No code.
+
 **TIER 1 REMAINING, ALL FIVE CONFIRMED OPEN: A7 · A13 · D8-later · WJ-later ·
 A14.** A7 is blocked on the Math.random ratification; the other four are not
 blocked.

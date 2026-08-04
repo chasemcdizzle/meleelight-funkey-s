@@ -22002,3 +22002,56 @@ consumes it, and I checked only one side twice.
 
 **NEXT.** D8-later is blocked behind A14 (both halves). Tier-1 continues at
 WJ-later, whose first step is the same pre-registration discipline.
+
+## driver — 2026-08-04 — WJ-later PRE-REGISTERED, and the pre-registration killed the item: the setting is DEAD UPSTREAM, our port already matches, and the row's stated scope would have violated HARD RULE 5
+
+**TASK.** WJ-later's owner-ratified first step (2026-08-03: "pre-register it
+please", the D12 discipline). Phase M4. Result: **no code, and the item closes
+as already satisfied.** This is what pre-registration is for.
+
+**THE ROW SAID THE SCOPE WAS "MAKE THE SETTING REACH THE SIMULATION".** It is
+backwards. MEASURED — all five occurrences of `everyCharWallJump` in upstream
+`src/`: `gameplaymenu.js:53` (the `^= true`), `gameplaymenu.js:239` (draws its
+own row), `css.js:89`/`css.js:109` (label + OFF/ON formatter), `settings.js:51`
+(default `0`). **Zero simulation reads.** Physics gates walljump on the
+PER-CHARACTER attribute `player[i].charAttributes.walljump` (`physics.js:134`),
+which the setting never touches. Upstream's "Everyone Walljumps" toggle changes
+nothing about play.
+
+**AND THE PROJECT ALREADY KNEW.** MENU-SPEC §3 settled it on 2026-07-29:
+"Implementing it faithfully means: add the row, persist 0/1, and wire it to
+nothing… **Do not invent a walljump rule to give it meaning; that would be a
+faithfulness violation.**" Its gap table row 4 records our port as "present,
+faithfully DEAD (row + persisted bit, zero MECHANICS consumers)" — **CLOSED**.
+So the punch-list row and a closed spec item flatly contradicted each other, and
+the row was the one that was wrong.
+
+**WHAT ACTING ON THE ROW WOULD HAVE COST.** It would have added a rule upstream
+does not have (HARD RULE 5), on the CHECKSUM surface, against a spec line that
+forbids it by name. The pre-registration the owner insisted on is precisely what
+caught it — before code, before a golden re-freeze, before an arc.
+
+**IF THE OWNER WANTS IT ANYWAY**, it is a house rule in the D18 mould — invented
+on purpose and registered as such, not a port fix. Recorded for that case: the
+change is one disjunction at the `physics.c:775-777` equivalent
+(`canWallJump = FLAGS(S,i)->wallJumpAble || everyCharWallJump`), and it is safe
+for every frozen golden because the default is `0` and all goldens were recorded
+at the settings defaults, so flag-OFF is bit-identical to today. It must default
+OFF forever.
+
+**ZOOM OUT (HARD RULE 8).** Instance: a punch-list row asked for work that a
+CLOSED spec item explicitly forbids, and the two lived in the same repo saying
+opposite things for a week. Class: **the punch list and the spec are two
+descriptions of the same intent maintained by different acts — the spec is
+updated when something is MEASURED, the row when something is NOTICED — so they
+drift the moment a measurement lands without anyone re-reading the row.** This
+is the fourth stale-claim finding today and the most expensive one avoided: the
+others cost a wasted probe, this one would have cost a faithfulness violation
+shipped through an arc. The standing instrument is one line and it is now
+habit-forming: **before starting a row, grep the SPEC for its subject, not just
+the tree.** The tree tells you what is built; the spec tells you what is
+supposed to exist, and a row can contradict either.
+
+**NEXT.** WJ-later closes as satisfied (driver recommendation; owner may amend).
+Tier-1's remaining content is A7 (blocked on the owner's Math.random ruling),
+D8-later (blocked on A14), and A14 itself.
