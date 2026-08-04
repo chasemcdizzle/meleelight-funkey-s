@@ -138,6 +138,14 @@ typedef struct {
   bool turbo;
   double phantomThreshold;
   double tapJumpOff[4]; // tapJumpOffp1..4 (turbo interrupt path only)
+  // everyCharWallJump — MENU-SPEC **DEVIATION D20**, an owner-requested HOUSE
+  // RULE (2026-08-04), NOT a transliteration. Upstream declares this setting
+  // (settings.js:51), toggles it (gameplaymenu.js:53) and DISPLAYS it, but no
+  // mechanic ever reads it — the walljump gate is the per-character attribute
+  // alone (physics.js:134). We deliberately give the dead toggle meaning.
+  // DEFAULT FALSE, FOREVER: every frozen golden was recorded at the settings
+  // defaults, so flag-off must stay bit-identical to the faithful port.
+  bool everyCharWallJump;
   MlStageX stage;
   // physics.js module state, chained across records (header note):
   SquashDatum ecbSquashData[4];

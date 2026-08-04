@@ -702,6 +702,9 @@ int main(int argc, char **argv) {
   G.sim.turbo = foh.turbo != 0;
   G.sim.lCancelType = foh.lCancelType;
   for (int i = 0; i < 4; i++) G.sim.tapJumpOff[i] = foh.tapJumpOff[i];
+  // MENU-SPEC DEVIATION D20 (owner-requested house rule): the setting the
+  // LAUNCH line has always carried now actually reaches the simulation.
+  G.sim.everyCharWallJump = foh.everyCharWallJump != 0;
   // phantomThreshold has no widget (MENU-SPEC §3.2) but IS persisted and
   // IS on the checksum surface, so the value the file round-trips is the
   // value the sim gets — not a second, independently-defaulted copy in

@@ -433,6 +433,12 @@ void sim_setup_match(GameState *g, int p1, int p2, int p2type, int difficulty,
   g->sim.lCancelType = 0;
   g->sim.turbo = false;
   g->sim.phantomThreshold = 0.01;
+  // everyCharWallJump: upstream default 0 (settings.js:51). Written
+  // EXPLICITLY rather than left to the caller's memset because MENU-SPEC
+  // DEVIATION D20 gives this flag real mechanical effect — every frozen
+  // golden depends on it being false here, so the default is stated, not
+  // inherited.
+  g->sim.everyCharWallJump = false;
   for (int i = 0; i < 4; i++) g->sim.tapJumpOff[i] = 0;
   // module queues start empty
   hd_resetHitQueue(&g->hq);

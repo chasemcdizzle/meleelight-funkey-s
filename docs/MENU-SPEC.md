@@ -847,6 +847,45 @@ correct and cheapest outcome — the owner noticed its absence because it is
 *visible*, not because it changes play. Do not invent a walljump rule to
 give it meaning; that would be a faithfulness violation.
 
+**DEVIATION D20 — the owner asked for it anyway, knowingly (2026-08-04).**
+Verbatim: *"i want real everyone-walljumps. deliberate deviation."* Presented
+with the measurement above — that the toggle is dead upstream and that giving
+it meaning is a departure, not a fix — the owner chose the departure. **This is
+a HOUSE RULE, and the paragraph above stays exactly as written**: it remains
+the correct description of UPSTREAM, and of what a faithfulness argument
+concludes on its own. D20 is what overrides it, on the owner's authority, and
+nothing else in this port may cite "everyone walljumps" as precedent for
+inventing mechanics.
+
+*The change, exactly.* One conjunct at the per-character ABILITY gate —
+`port/sim/physics.c:368`, the mirror of `physics.js:132-134`:
+
+```
+    if (sign * in[0].lsX >= 0.7 && sign * in[3].lsX <= 0 &&
+        (ATTR(S, i)->walljump || S->everyCharWallJump)) {
+```
+
+Placement is load-bearing and was corrected during implementation: it goes at
+the per-character attribute (`charAttributes.walljump`), NOT at the
+per-action-state `wallJumpAble` flag (`physics.c:777`). The setting means
+"every CHARACTER can walljump", not "every STATE can be walljumped out of" —
+putting it at the state flag would let characters walljump out of states
+upstream never allows, which is a different and much larger rule.
+
+*Safety, and why no golden moves.* `everyCharWallJump` **defaults false and
+must stay false forever** (`settings.js:51` is `0`; `sim_boot.c` now writes the
+default EXPLICITLY rather than inheriting a memset, because the flag has real
+mechanical effect). Every frozen golden was recorded at the settings defaults,
+so flag-off is bit-identical to the faithful port — VERIFIED: `bash
+port/sim/check-sim.sh` -> `SIM CONFORMS`, all 8 goldens exact, after the change.
+
+*Reachability.* The FOH LAUNCH line has always carried `walljump=%d`
+(`foh_dev.c:2245`, `foh_app.c:538`) while nothing consumed it; the three
+`G.sim` apply sites now do (`foh_app.c:704`, `foh_dev.c` ×2, the target-live
+one guarded by `tgtLive` exactly like its siblings so recorded target goldens
+keep the settings they were recorded against). `sim_host --walljump-all`
+exposes the same flag to the harness so the deviation is testable.
+
 ### 3.4 Navigation and persistence
 
 `gameplayMenuControls(i, input)` (`gameplaymenu.js:23-164`), one `else if`
@@ -1870,6 +1909,9 @@ state; each entry points at the section that carries the evidence):
 | D15 | Added `B` exit on the no-controller screen (upstream has no B handler; mouse-only Quit) | §9.2 |
 | D16 | Front-of-house navigation is RISING-EDGE only — holding a direction steps ONCE, where upstream repeats 1-then-every-10 frames. Applies to every FOH screen incl. §3 and §4 | §5.5 row 6 |
 | D17 | A CPU in port 1 cannot LAUNCH (`sim_setup_match` carries no P1 type) — menu plane unchanged | §2.7 |
+| D18 | Name entry becomes a NOVEL letter-grid screen modelled on real Melee (upstream has no canvas name entry at all) — supersedes D8's "cut free-text"; blocked on A14's glyph coverage | §2.9 |
+| D19 | The random-tag draw uses a FOH-LOCAL stream and cannot shift the match (upstream shares the sim's stream; our 465-boot-draw pin makes that unavailable) | §2.9 |
+| D20 | **HOUSE RULE, owner-requested 2026-08-04:** "Everyone Walljumps" — dead upstream — is given real mechanical effect at the per-character ability gate. Defaults OFF forever; flag-off is bit-identical | §3.3 |
 
 ---
 

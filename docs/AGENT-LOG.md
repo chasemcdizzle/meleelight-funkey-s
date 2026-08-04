@@ -22055,3 +22055,78 @@ supposed to exist, and a row can contradict either.
 **NEXT.** WJ-later closes as satisfied (driver recommendation; owner may amend).
 Tier-1's remaining content is A7 (blocked on the owner's Math.random ruling),
 D8-later (blocked on A14), and A14 itself.
+
+## driver — 2026-08-04 — WJ-later IMPLEMENTED as owner-requested DEVIATION D20 (house rule). Flag-off bit-identical across all 8 goldens; the flag is measurably non-vacuous; the POSITIVE tooth is outstanding and is NOT claimed
+
+**TASK.** WJ-later, reopened by owner ruling the same day. Verbatim: *"i want
+real everyone-walljumps. deliberate deviation."* Phase M4. Branch `agent/auto`.
+
+**CONTEXT — the owner overrode a driver recommendation, with the measurement in
+front of them.** Hours earlier the pre-registration concluded WJ-later should
+close as already satisfied: the toggle is dead upstream (zero simulation reads)
+and MENU-SPEC §3 forbids inventing a rule to give it meaning. The owner read
+that and asked for the rule anyway, explicitly as a deviation. That is a
+legitimate call and it is recorded as one: **MENU-SPEC DEVIATION D20, HOUSE
+RULE**. The §3.3 faithfulness paragraph STAYS exactly as written — it remains
+the correct description of upstream — and D20 sits beneath it as the override.
+The registry entry says so, and says nothing else in this port may cite it as
+precedent for inventing mechanics.
+
+**THE CHANGE, AND A PLACEMENT CORRECTION.** One conjunct at
+`port/sim/physics.c:368`, the mirror of `physics.js:132-134`:
+`(ATTR(S, i)->walljump || S->everyCharWallJump)`. My own pre-registration note
+had named `physics.c:775-777` as the site; that is WRONG and was corrected
+during implementation. `:777` is the per-action-state `wallJumpAble` flag; the
+setting means "every CHARACTER can walljump", not "every STATE can be
+walljumped out of". Putting it at the state flag would have let characters
+walljump out of states upstream never permits — a much larger, different rule
+that nobody asked for. Read the two sites before trusting either name.
+
+Plumbing reused the three `G.sim` apply sites that already existed for
+turbo/lCancelType/tapJumpOff (`foh_app.c:704`, `foh_dev.c` x2 — the target one
+guarded by `tgtLive` exactly like its siblings, so recorded target goldens keep
+the settings they were recorded against). The LAUNCH line has carried
+`walljump=%d` all along with nothing consuming it; it is consumed now.
+`sim_boot.c` writes the `false` default EXPLICITLY rather than inheriting a
+memset, because the flag now has mechanical effect. `sim_host --walljump-all`
+exposes it so the deviation is testable from the harness.
+
+**VERIFIED — REGRESSION SIDE, COMPLETE.** `bash port/sim/check-sim.sh` ->
+`SIM CONFORMS`, all 8 goldens exact, run twice (before and after the sim_main
+flag was added): `.loop/wj-check-sim.log`, `.loop/wj-check-sim2.log`. Flag-off
+is bit-identical to the faithful port, which is the property the whole design
+rests on.
+
+**THE FLAG IS NON-VACUOUS — measured, not assumed.** Compiled the generated
+CTAB1 table and read the values directly: **marth `walljump=0`, puff
+`walljump=0`, fox/falco/falcon `=1`**. Upstream `attributes.js` has no
+`walljump` key at all for marth or puff, so the read is `undefined` -> falsy.
+D20 is precisely what lets those two walljump. Worth stating because a house
+rule that turned out to change nothing would have been the worse outcome than
+not building it.
+
+**OUTSTANDING, EXPLICITLY NOT CLAIMED: the POSITIVE tooth.** All 6 human
+goldens replay BYTE-IDENTICAL under `--walljump-all` (measured, per-golden
+`cmp`). That is not a defect — the arm needs a prior wall collision to put
+`wallJumpTimer` in `[0,120)` AND the stick held into the wall, and no golden
+puts marth or puff in that position. The consequence is that this change has a
+REGRESSION proof and no POSITIVE proof: nothing yet demonstrates a walljump
+that only happens with the flag on. Filed as its own task — a synthetic trace
+driving marth or puff into a wall. **Until it exists, D20 is implemented and
+regression-safe but not witnessed.**
+
+**ZOOM OUT (HARD RULE 8).** Instance: the natural verification (replay the
+goldens with the flag on) proved nothing, because the goldens never reach the
+new code. Class: **a regression suite verifies that you did not break what it
+covers; it says nothing about a feature it does not exercise, and a green
+"nothing changed" can be mistaken for "the change works".** Here the two
+outcomes are literally the same bytes — an identical stream is exactly what a
+NO-OP change produces too. The instrument that separated them was cheap and is
+the general one: **when a change is gated on data, read the data.** Compiling
+the attribute table took a minute and turned "no golden diverges" from
+ambiguous into precise: the gate is real, it is unreached. Do that before
+building a synthetic witness, not after.
+
+**NEXT.** The D20 positive tooth (own task). A7 credits is unblocked — the
+owner delegated the RNG choice, and D19's measurement already answers it: a
+FOH-local stream, for the same reason.

@@ -3211,7 +3211,34 @@ read, with scope now precise:
     were recorded at the settings defaults (`sim_boot.c` gameSettings note), so
     the flag OFF is bit-identical to today — but it must be registered as a
     deviation first, and the toggle must default OFF forever.
-  - **DRIVER RECOMMENDATION: close WJ-later as ALREADY SATISFIED.** No code.
+  - ~~DRIVER RECOMMENDATION: close WJ-later as ALREADY SATISFIED.~~
+  - **OWNER OVERRODE THE RECOMMENDATION, 2026-08-04, knowingly.** Verbatim:
+    *"i want real everyone-walljumps. deliberate deviation."* Presented with
+    the measurement above — dead toggle upstream, giving it meaning is a
+    departure not a fix — the owner chose the departure. Registered as
+    **MENU-SPEC DEVIATION D20** (house rule). The faithfulness paragraph in
+    MENU-SPEC §3.3 STAYS as written: it is still the correct description of
+    upstream, and D20 is what overrides it, on owner authority. Nothing else
+    in this port may cite this as precedent for inventing mechanics.
+  - **IMPLEMENTED + VERIFIED 2026-08-04.** One conjunct at `physics.c:368`
+    (the per-character ABILITY gate, mirror of `physics.js:134`) — NOT at the
+    per-action-state `wallJumpAble` flag at `:777`, which would be a much
+    larger and different rule. Plumbed through the three `G.sim` apply sites
+    that already existed for turbo/lcancel/tapjump; `sim_host --walljump-all`
+    exposes it to the harness. `bash port/sim/check-sim.sh` -> `SIM CONFORMS`,
+    all 8 goldens exact — flag-off is bit-identical, as required.
+  - **THE FLAG IS NON-VACUOUS, measured from the compiled CTAB1 table:**
+    marth `walljump=0`, puff `walljump=0`, fox/falco/falcon `=1`. Upstream
+    `attributes.js` simply has no `walljump` key for marth or puff, so the
+    read is `undefined` -> falsy. D20 is what lets those two walljump.
+  - **OUTSTANDING, and NOT claimed as done — the POSITIVE tooth.** All 6 human
+    goldens replay BYTE-IDENTICAL with `--walljump-all` (measured), because
+    none of them ever reaches the gate with marth or puff: the arm needs a
+    prior wall collision to put `wallJumpTimer` in `[0,120)` AND the stick held
+    into the wall. So the goldens cannot witness the new behaviour, and the
+    change currently has a regression proof but no POSITIVE proof. Needed: a
+    synthetic trace that drives marth or puff into a wall and holds in, showing
+    WALLJUMP dispatches with the flag ON and not with it OFF.
 
 **TIER 1 REMAINING, ALL FIVE CONFIRMED OPEN: A7 · A13 · D8-later · WJ-later ·
 A14.** A7 is blocked on the Math.random ratification; the other four are not

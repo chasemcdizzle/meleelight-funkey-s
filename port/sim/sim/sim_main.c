@@ -191,6 +191,7 @@ int main(int argc, char **argv) {
   long seed = -1, p1 = -1, p2 = -1, stage = -1, frames = -1, difficulty = 3;
   bool cpu = false;
   bool aiCover = false;      // M4 task 5: post-run arm-table dump (stderr)
+  bool wallJumpAll = false;  // MENU-SPEC D20 house rule; default = upstream
   bool tapJumpOffP1 = false; // M3 task 5: replays of S1 live sessions
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i];
@@ -207,6 +208,10 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--difficulty") == 0 && hasV) difficulty = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--cpu") == 0) cpu = true;
     else if (strcmp(a, "--ai-cover") == 0) aiCover = true;
+    // MENU-SPEC DEVIATION D20 (owner-requested house rule): the same flag the
+    // FOH launch line carries, exposed here so the deviation is TESTABLE from
+    // the harness. Absent = upstream behaviour = every golden unaffected.
+    else if (strcmp(a, "--walljump-all") == 0) wallJumpAll = true;
     else if (strcmp(a, "--tapjump-off-p1") == 0) tapJumpOffP1 = true;
     else if (strcmp(a, "--dump-frames") == 0 && hasV) dumpFrames = argv[++i];
     else {
@@ -264,6 +269,8 @@ int main(int argc, char **argv) {
   // ran with this setting, so its trace replays under the same one.
   // Default (flag absent) unchanged: golden replays are unaffected.
   if (tapJumpOffP1) G.sim.tapJumpOff[0] = 1;
+  // D20: set AFTER sim_setup_match, like every other gameSettings override.
+  if (wallJumpAll) G.sim.everyCharWallJump = true;
   G.rngStateAtFrame1 = G.rng.a;
 
   uint64_t *tbuf = 0; // --timing: RAM buffer, flushed after the loop

@@ -2480,6 +2480,10 @@ foh_phase:;
         G.sim.turbo = foh.turbo != 0;
         G.sim.lCancelType = foh.lCancelType;
         for (int i = 0; i < 4; i++) G.sim.tapJumpOff[i] = foh.tapJumpOff[i];
+        // MENU-SPEC DEVIATION D20 (owner-requested house rule). Guarded by
+        // tgtLive exactly like its siblings: the recorded target goldens must
+        // keep the settings they were recorded against.
+        G.sim.everyCharWallJump = foh.everyCharWallJump != 0;
       }
       G.rngStateAtFrame1 = G.rng.a;
       // TBRIDGE-STATE witness (read back from GameState + the target
@@ -3068,6 +3072,8 @@ foh_phase:;
     G.sim.turbo = foh.turbo != 0;
     G.sim.lCancelType = foh.lCancelType;
     for (int i = 0; i < 4; i++) G.sim.tapJumpOff[i] = foh.tapJumpOff[i];
+    // MENU-SPEC DEVIATION D20 (owner-requested house rule).
+    G.sim.everyCharWallJump = foh.everyCharWallJump != 0;
     // C18 evidence arm: shorten the REAL clock (see --match-timer above).
     // Live play only — the evidence bridges never pass it, and with the
     // finish hook NULL there the expiry would still be the loud trap.

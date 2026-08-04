@@ -364,8 +364,16 @@ static void dealWithWallCollision(MlSim *S, double i, Vec2D newPosition,
       }
     }
     if (p->phys.wallJumpTimer >= 0 && p->phys.wallJumpTimer < 120) {
+      // physics.js:132-134 verbatim, EXCEPT the third conjunct. Upstream reads
+      // `player[i].charAttributes.walljump` alone; MENU-SPEC DEVIATION D20 (an
+      // owner-requested house rule, 2026-08-04) lets the "Everyone Walljumps"
+      // setting — dead upstream — override the per-character attribute. The
+      // disjunction is placed HERE, at the per-character ABILITY gate, not at
+      // the per-action-state `wallJumpAble` flag (:777): the setting means
+      // "every character can walljump", not "every state can be walljumped out
+      // of". With the flag false this is bit-identical to upstream.
       if (sign * in[0].lsX >= 0.7 && sign * in[3].lsX <= 0 &&
-          ATTR(S, i)->walljump) {
+          (ATTR(S, i)->walljump || S->everyCharWallJump)) {
         p->phys.wallJumpTimer = 254;
         p->phys.face = sign;
         dsp(S, "init", "WALLJUMP", i);
