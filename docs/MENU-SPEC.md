@@ -577,6 +577,58 @@ first — which this section is.
 whether B on an empty name exits entry or is a no-op, and the confirm
 affordance's label. Each is invented; each gets recorded here when chosen.
 
+**D18.1 — THE TAG ROW: measured upstream shape, re-laid-out per DEVIATION D4.**
+Upstream's tag widget is ONE clickable row per port, `css.js:415-439`: hit
+region `handPos.y` in (640, 680) and `handPos.x` in (130 + i·225, 310 + i·225)
+— 180 px wide — split by x into three zones that share one A-press arm:
+
+| zone | upstream x | width | share | action (`css.js`) |
+|---|---|---|---|---|
+| random | `< 154 + i·225` | 24 | 13.3% | `menuSelect`; `hasTag[i]=true`; `tagText[i]=randomTags[…]` (`:423-426`) |
+| set | middle | 132 | 73.3% | `menuSelect`; `hasTag[i]=true`; `choosingTag=i` — the D18 grid (`:432-438`) |
+| remove | `> 286 + i·225` | 24 | 13.3% | `menuSelect`; `hasTag[i]=false` (`:428-430`) |
+
+Our port panel is 58 px wide at `foh_css_panel_x(k)`, `FOH_CSS_PANEL_Y` 96,
+`FOH_CSS_PANEL_H` 120, so it ends at y=216 and the 240×240 screen leaves a free
+strip below it (measured: READY TO FIGHT is at y=68, the ghost port letter at
+y=194, the CPU slider at y=174-200 — nothing occupies 216-240). The tag row is
+therefore **y 217..229** (12 px, the same height as the name plate at
+`foh_render.c:1495`), full panel width, with the three zones carried at
+upstream's PROPORTIONS rather than its pixels: **random x..x+8 · set x+8..x+50
+· remove x+50..x+58** (58 × 24/180 = 7.73 → 8; 58 × 132/180 = 42.5 → 42;
+8+42+8 = 58 exactly). Two 8 px targets are small for a d-pad cursor; that is a
+consequence of honouring the proportions, and if play shows it is unusable the
+fix is a recorded re-proportioning here, not a silent nudge in the C.
+
+**The committed tag REPLACES the character name in the panel**, gated by
+`hasTag[i]` (`css.js:1006-1008`) — in our renderer that is the single
+`kCharShort[nameChr]` argument at `foh_render.c:1496`, same plate, same box.
+
+**Port-type cycling CLEARS the tag**: `togglePort(j)` is immediately followed by
+`hasTag[j] = false` (`css.js:353`). Our cycle site already notes this at
+`port/foh/foh.c:634` ("Upstream also clears the port's name tag; tags are
+DEVIATION D8 and not in this build") — that comment is the hook.
+
+**D18.2 — RNG COUPLING, REGISTERED BEFORE ANY CODE (owner's standing rule for
+checksum-surface changes).** MEASURED 2026-08-04: the FOH currently draws **no
+RNG at all** (`port/foh/` has no `ml_random` call; `foh_app.c:328`'s
+`mulberry_inv` only COUNTS draws). Random-tag would be the first, and upstream's
+`Math.random()` at `css.js:425` comes from the SAME global stream the simulation
+consumes — so upstream, a player who presses random-tag before starting a match
+shifts that match's RNG. Mirroring that is the faithful choice and this spec
+takes it. The consequences, stated rather than discovered later:
+- Every frozen golden was recorded by driving the match directly, not through
+  the FOH, so none of them is affected.
+- The device flow legs launch matches THROUGH the menus and compare a stream
+  prefix to a frozen golden (`check-device-opk.sh`). Those flows must therefore
+  never press random-tag, or the golden they are compared against has to be
+  re-frozen under the CHECKSUM.md §8 procedure. **A flow that presses it is not
+  a free addition** — it is a golden re-freeze.
+- The draw expression is carried verbatim, quirk included:
+  `Math.round((randomTags.length - 1) * Math.random())` with 34 tags is
+  `js_round(33 · r)`, which yields 0..33 with the two endpoints at half weight.
+  Use `js_round` (ECMAScript ties-toward-+Inf), never `floor(x+0.5)`.
+
 ### 2.10 Ready to fight, and launch
 
 `readyToFight` is computed **in the draw function**, `css.js:1167-1181`:
