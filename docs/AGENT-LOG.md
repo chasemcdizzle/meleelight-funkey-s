@@ -21667,8 +21667,8 @@ byte, so adding it would force every device check to rebuild for nothing.
 6. Re-pin: manifest row for `check-device-opk.sh` + `MANIFEST_SHA256` in
    verify_m4.sh. Anchor re-verified by running the gate (`.loop/a13-verify-m4-anchor.log`).
 
-**TWO DEFECTS FOUND, NEITHER CAUSED BY A13, BOTH FILED (A15, A16).**
-- **A15 (P1).** The FOH arm's structural shot judge fails: title shot
+**TWO DEFECTS FOUND, NEITHER CAUSED BY A13, BOTH FILED (A20, A21).**
+- **A20 (P1).** The FOH arm's structural shot judge fails: title shot
   foreground coverage 70.151% vs its [0.5%, 60%] band. The band was measured at
   iter 115 against the PRE-ARTWORK title screen (title 2.63%); the A1 restyle
   then landed the real IMG1 artwork. The frame is CORRECT — I converted and
@@ -21677,7 +21677,7 @@ byte, so adding it would force every device check to rebuild for nothing.
   but red EARLIER, at the inventory pin, which masked this entirely. A13 fixed
   the mask and the older defect surfaced. Fix is a measured-then-frozen
   re-measure of the band, never a convenience round-up.
-- **A16 (P2).** `verify_m4.sh` refuses at [0] on ROW GRAMMAR, not on
+- **A21 (P2).** `verify_m4.sh` refuses at [0] on ROW GRAMMAR, not on
   arc-in-flight: check-device-fullgame.sh's note token `skips==frames-...`
   contains `=`, which `verify_m4.sh:674` forbids. Introduced 2026-08-03. 88 of
   89 rows pass (checked all of them). So the refusal STATE.md attributes to
@@ -21695,16 +21695,16 @@ said the M3 arm's ambiguity was unfixable-here, and the shot band said 60% —
 three written claims, all true when written, all quietly false by today. Every
 one was caught by measuring. The cheapest standing instrument remains: when a
 check has been red for a while, FIX THE FIRST FAILURE AND RUN IT AGAIN — a
-stale red masks everything downstream of it, and A15 sat invisible for a week
+stale red masks everything downstream of it, and A20 sat invisible for a week
 behind one drifted pin.
 
-**NEXT.** A15 (unblocks the FOH arm and the M4 OPK leg), then A16 (unblocks the
+**NEXT.** A20 (unblocks the FOH arm and the M4 OPK leg), then A21 (unblocks the
 gate's real refusal message), then tier-1 continues at D8-later.
 
-## driver — 2026-08-04 — A16 DONE: the M4 gate's refusal message was lying about WHY. Fixing the cite grammar advanced it one stage and exposed A17, an unreviewed 418-line delta hiding behind a `reviewed-go` pin
+## driver — 2026-08-04 — A21 DONE: the M4 gate's refusal message was lying about WHY. Fixing the cite grammar advanced it one stage and exposed A22, an unreviewed 418-line delta hiding behind a `reviewed-go` pin
 
-**TASK.** A16 (filed hours earlier by A13). Phase M4. Branch `agent/auto`.
-Host-only — no device leg, run while an A15 device sample was in flight.
+**TASK.** A21 (filed hours earlier by A13). Phase M4. Branch `agent/auto`.
+Host-only — no device leg, run while an A20 device sample was in flight.
 
 **DEFECT.** `verify_m4.sh` refused at step [0] on ROW GRAMMAR, not on the
 arc-in-flight rows STATE.md named as the M4 blocker. One cite of 89 contained
@@ -21723,7 +21723,7 @@ cites are WRITTEN, with the `=`-spells-`eq` rule and this incident named.
 **VERIFIED.** `bash port/sim/device/verify_m4.sh` (`.loop/a16-verify-m4.log`)
 now CLEARS the grammar stage — the refusal moved forward to the byte-pin stage.
 
-**A17 FOUND, PRE-EXISTING, NOT RE-PINNED (deliberately).** The next refusal:
+**A22 FOUND, PRE-EXISTING, NOT RE-PINNED (deliberately).** The next refusal:
 `port/foh/check-device-foh.sh` current bytes (b157b8e5) != pinned (446897bb).
 This is NOT a working-tree edit — the COMMITTED bytes differ. The row's
 `reviewed-go` cite names the CSS-mechanics arc that landed in 0cff450, but
@@ -21731,7 +21731,7 @@ commit **ef31e53** afterwards added **418 lines** to that file and nobody
 re-pinned the row. The row therefore claims a review that does not cover the
 bytes it pins. I did NOT re-pin it: re-pinning to current bytes under an
 unchanged `reviewed-go` would manufacture a review that never happened, which
-is faking the gate (HARD RULE 3, and PLAN's "never fake a gate"). Filed as A17
+is faking the gate (HARD RULE 3, and PLAN's "never fake a gate"). Filed as A22
 with the two honest resolutions spelled out; it is a provenance call, not a
 driver convenience.
 
@@ -21748,15 +21748,15 @@ first item of a queue whose length is unknown until you drain it.** Budget
 long-red checks as "unknown N", and after every fix RUN IT AGAIN IMMEDIATELY
 rather than assuming the next stage is clean. Corollary: the fastest way to
 learn what actually blocks a gate is to fix cheap objections in a tight loop,
-which is why A16 (a two-token edit) bought more information than a day of
+which is why A21 (a two-token edit) bought more information than a day of
 reading did.
 
-**NEXT.** A15 (the FOH shot band — samples measured byte-identical across runs,
-edit pending sample 3), then A17 (owner-visible provenance call).
+**NEXT.** A20 (the FOH shot band — samples measured byte-identical across runs,
+edit pending sample 3), then A22 (owner-visible provenance call).
 
-## driver — 2026-08-04 — A15 DONE: the FOH shot band was measured against a screen that no longer exists. Re-measured PER SHOT, and the ceiling did not move alone — the title gained a colour floor the old envelope never had
+## driver — 2026-08-04 — A20 DONE: the FOH shot band was measured against a screen that no longer exists. Re-measured PER SHOT, and the ceiling did not move alone — the title gained a colour floor the old envelope never had
 
-**TASK.** A15 (filed by A13 the same day). Phase M4. Branch `agent/auto`.
+**TASK.** A20 (filed by A13 the same day). Phase M4. Branch `agent/auto`.
 
 **DEFECT.** The FOH arm's structural shot judge rejected a CORRECT frame. Its
 single `[0.5%, 60%]` foreground band was measured at iter 115 against the
@@ -21816,13 +21816,13 @@ strictly weaker while looking maintained — which is how a check quietly stops
 being a check. Instrument, cheap and standing: **a threshold edit that only
 loosens is incomplete; land it with the tooth that shows what still fails.**
 
-**NEXT.** A17 (the unreviewed 418-line delta pinned `reviewed-go` — an
+**NEXT.** A22 (the unreviewed 418-line delta pinned `reviewed-go` — an
 owner-visible provenance call, deliberately not resolved by the driver), then
 tier-1 resumes at D8-later.
 
-## driver — 2026-08-04 — A17 DONE (owner route b): a `reviewed-go` row was pinning bytes that no longer existed, and this file disagreed with itself about it. Step [0] is now clean and the gate finally reaches its REAL blocker
+## driver — 2026-08-04 — A22 DONE (owner route b): a `reviewed-go` row was pinning bytes that no longer existed, and this file disagreed with itself about it. Step [0] is now clean and the gate finally reaches its REAL blocker
 
-**TASK.** A17, filed by A16 the same day. Owner chose route (b) in session
+**TASK.** A22, filed by A21 the same day. Owner chose route (b) in session
 ("b"). Phase M4. Branch `agent/auto`. Host-only.
 
 **DEFECT.** `verify_m4.sh` refused at [0]: `port/foh/check-device-foh.sh`
@@ -21875,7 +21875,7 @@ practical, the prose must say WHERE THE TRUTH LIVES rather than restate it,
 which is why the manifest now says "do not read a count off this prose — the
 six are whatever verify_m4.sh [0b] PRINTS". That sentence cannot rot.
 
-**SESSION ARC (five items, one chain).** A13 -> A15 -> A16 -> A17 were not four
+**SESSION ARC (five items, one chain).** A13 -> A20 -> A21 -> A22 were not four
 tasks; they were one fail-closed queue drained in order, each invisible until
 the one in front was fixed. What remains is NOT of that kind: closing six
 review arcs is process work with an owner in the loop, not a hidden defect.

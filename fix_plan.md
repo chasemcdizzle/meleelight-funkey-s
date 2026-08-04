@@ -2008,17 +2008,17 @@ Sequence: punch list → owner re-play/ratification → post-gate window
   /mnt/Applications/meleelight.opk by the new committed producer
   port/gfx/opk/install-play-opk.sh.
 
-- A15 — DONE 2026-08-04 (see docs/AGENT-LOG.md). Per-shot envelopes,
+- A20 — DONE 2026-08-04 (see docs/AGENT-LOG.md). Per-shot envelopes,
   re-measured over 3 device runs (both shots byte-identical in all three).
   startup band UNCHANGED; title ceiling 60% -> 80% and a NEW >=64-colour
   floor that the old envelope never had. 6 teeth, `.loop/a15-teeth.log`.
 
-- A16 — DONE 2026-08-04 (see docs/AGENT-LOG.md). Cite token re-worded to
+- A21 — DONE 2026-08-04 (see docs/AGENT-LOG.md). Cite token re-worded to
   `skips-eq-frames`, cite charset documented in the manifest's own record
   grammar, MANIFEST_SHA256 re-anchored. verify_m4.sh now clears the grammar
-  stage. It refuses one stage LATER, on A17 — not on arc-in-flight yet.
+  stage. It refuses one stage LATER, on A22 — not on arc-in-flight yet.
 
-- A17 — DONE 2026-08-04, owner route (b) (see docs/AGENT-LOG.md). Bytes
+- A22 — DONE 2026-08-04, owner route (b) (see docs/AGENT-LOG.md). Bytes
   re-pinned to the committed file, status corrected `reviewed-go` ->
   `arc-in-flight` (which is what the manifest's own UNCLOSED ROWS record
   already said). Step [0] is now CLEAN — 89 producers, all pins match, 185
@@ -2033,7 +2033,7 @@ producers lacking review closure, all `arc-in-flight` (evidence
 This is the TRUE blocker list — earlier pages said five, and the gate had
 never reached this stage to contradict them. Closing these is review-arc work
 (PROCESS §3 -> §4), not code: the B9 arc owes a fresh round covering the
-frame-conservation repair, and the A13/A15 edits to check-device-opk.sh ride
+frame-conservation repair, and the A13/A20 edits to check-device-opk.sh ride
 the same in-flight row.
 
 ## A8 AUDIT CONSEQUENCES (iter 120; evidence .loop/reuse-audit/REPORT.md)

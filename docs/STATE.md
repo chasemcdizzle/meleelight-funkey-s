@@ -20,11 +20,11 @@ Loop entry per `docs/LOOP.md` §B; this block is the short version.
      list off `[0b]`, never off a page.) **This is now the ONLY blocker**, and
      it is review-arc work with an owner in the loop — not a hidden defect.
   2. ~~The OPK leg~~ **FIXED 2026-08-04. BOTH ARMS GREEN.** A13 cleared the
-     inventory drift, A15 re-measured the shot envelope that drift had been
+     inventory drift, A20 re-measured the shot envelope that drift had been
      hiding. `bash port/gfx/check-device-opk.sh` -> `OPK LAUNCH OK` rc 0
      (`.loop/a15-regress-m3.log`); `MLFK_OPK_FOH=1 ...` ->
      `OPK FOH LAUNCH OK` rc 0 (`.loop/a15-verify-foh.log`).
-  3. ~~verify_m4.sh cannot reach its arc check~~ **FIXED (A16 + A17).** Step
+  3. ~~verify_m4.sh cannot reach its arc check~~ **FIXED (A21 + A22).** Step
      [0] is CLEAN: 89 producers, all pins match, 185 cited artifacts exist,
      every `reviewed-go` row cites a terminal GO. The gate now reaches **[0b]**
      and refuses on the truth — see the corrected list below.
@@ -53,7 +53,7 @@ Loop entry per `docs/LOOP.md` §B; this block is the short version.
 | 8 | A14 glyph atlas | LARGE, deliberately last |
 **TIER 2** = everything else, prior order preserved, B11 first, R8 last.
 **JUMPED THE QUEUE (all found 2026-08-04, one fail-closed chain, all DONE):**
-A13 -> A15 -> A16 -> A17. Each was invisible until the one in front was fixed.
+A13 -> A20 -> A21 -> A22. Each was invisible until the one in front was fixed.
 
 ## NEXT ACTION (D8-later — tier 1 resumes)
 Novel Melee-style name entry, owner-redirected 2026-08-03. **Register the
@@ -73,7 +73,7 @@ knowing departure, not a port.
   installed a coin-flip FALSE PASS on the FOH arm, because two .desktop files
   were serving three roles. Three greps inverted the answer.
 - **A stale red masks everything downstream of it.** The OPK leg died at the
-  inventory pin for a week; A15 sat invisible behind it the whole time. When a
+  inventory pin for a week; A20 sat invisible behind it the whole time. When a
   check has been red a while, fix the FIRST failure and RUN IT AGAIN.
 - **Derive from measured output; never transcribe by eye.** A hand-typed tooth
   pin cost a 40-minute device run.
