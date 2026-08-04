@@ -21939,3 +21939,66 @@ warns against "correcting" the port toward half-remembered Melee behaviour.
 **NEXT.** D8-later part (i) — the random-tag/clear-tag transliteration
 (`css.js:421-431`), which is real upstream behaviour and lands independently of
 the grid. Then part (ii), the grid itself.
+
+## driver — 2026-08-04 — D8-later (i) attempted, BUILT, then REVERTED: the font cannot draw upstream's own tag data. A14 is a hard prerequisite, and A14's planned glyph set was measurably insufficient
+
+**TASK.** D8-later part (i), the random-tag/clear-tag transliteration. Phase M4.
+Branch `agent/auto`. Result: **no code lands**; two specs and one punch-list
+scope are corrected instead. Nothing is left half-built — tree clean.
+
+**WHAT WAS BUILT AND WHY IT WAS REVERTED.** The full increment was written and
+compiled clean under `-Wall -Wextra -Werror` across all six FOH TUs: `kRandomTags`
+verbatim (34 entries, upstream order, the duplicate `"S2J"` kept), the three-zone
+hit row, the port-cycle tag clear (`css.js:353`), the name-plate substitution
+(`css.js:1006-1008`), and a FOH-local mulberry32. Then the host flow check died
+at the first frame: `SIM FATAL frame 0: foh_font: no glyph for requested
+character` (`.loop/d8i-flows.log`).
+
+**ROOT CAUSE, MEASURED FROM THE FONT ITSELF.** `port/foh/foh_font.c` face 1 = 49
+glyphs (space, `!'()+,-./`, `0-9`, `:<>`, `A-Z`); face 2 = 51 (same plus `&?`).
+**Neither face has a single lowercase letter.** Upstream's `randomTags` span 54
+distinct characters, so **25 are unrenderable**: all 22 lowercase plus `$`, `[`,
+`]` — `Panda`, `aMSa`, `Westballz`, `HungryBox`, `[A]rmada`, `Hax$`, `(.Y.)`.
+Hand-authoring the missing glyphs is explicitly forbidden (`foh_font.c:71`
+"face 1's coverage is deliberately NOT widened"; punch-list A8-F2 named the debt).
+So the widget cannot draw its own data, and the honest outcome is a revert, not a
+gated stub or a silently narrowed tag set. A tag list with the lowercase entries
+quietly dropped would have LOOKED like the feature.
+
+**A14's SCOPE WAS WRONG AND IS NOW AMENDED.** A14's corrected sequence (fix_plan
+L2067) planned to add `A-Z + .,!?&'` to the VFXGLYPHS1 capture. That still leaves
+every lowercase letter and `$[]` missing, so **A14 as planned would not have
+unblocked D8 either** — the second re-freeze would only have been discovered
+after the first one shipped. The capture must add **a-z and `$[]` alongside A-Z,
+in the SAME capture**: `vfxglyphs-frozen.txt` is a DEVICE-consumed frozen
+artifact (`check-device-foh.sh:1216` pushes it via `--glyphs`), so splitting the
+work costs a second re-freeze plus a second round of device legs.
+
+**ALSO SETTLED ON THE WAY (both committed before the revert, both still valid).**
+MENU-SPEC **D18.1** fixes the tag row's geometry — upstream's 180 px row
+(24/132/24) carried as PROPORTIONS onto our 58 px panel as 8/42/8, in the
+measurably free 216..240 band. MENU-SPEC **D19** replaced a WRONG first draft:
+I had written that we would mirror upstream's RNG coupling, where a menu draw
+shifts the following match. Measuring refuted it — the launch path burns a
+pinned 465 boot draws (`foh_dev.c:51`, `sim_boot.c:8`) that model the browser's
+whole menu plane as a constant, and the FOH runs before `sim_setup_match`
+exists. Mirroring was never available; faking it would corrupt the pin and shift
+every in-match stream. The draw is FOH-local and cannot affect a match, so the
+port is strictly more deterministic than upstream here.
+
+**ZOOM OUT (HARD RULE 8).** Instance: a feature was fully specified, fully
+written, compiled clean, and was impossible — because a dependency two layers
+away could not draw the alphabet the data uses. Class: **"is it implementable"
+is a question about the OUTPUT surface, and specs answer it about the INPUT
+surface.** D18 measured the data domain thoroughly and correctly — 54 characters,
+maxlength 10, the modal gate — and every one of those measurements was about
+what the feature CONSUMES. Nothing asked what the renderer can EMIT, so the
+blocker survived a spec, a design and a build. The instrument is cheap and now
+written into D18: **when a feature's domain is data, diff that domain against
+the renderer's coverage BEFORE writing code** — one `set(data) - set(font)` on
+two files would have cost minutes and been decisive. Same shape as today's
+earlier finding: the constraints on a surface come from what feeds it AND what
+consumes it, and I checked only one side twice.
+
+**NEXT.** D8-later is blocked behind A14 (both halves). Tier-1 continues at
+WJ-later, whose first step is the same pre-registration discipline.

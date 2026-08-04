@@ -567,6 +567,19 @@ glyph order, page/shift mechanism, sound set, and any animation. Where a
 detail is ours rather than Melee's, it is ours — do not later "correct" the
 port toward half-remembered Melee behaviour and call it faithfulness.
 
+*BLOCKING CONSTRAINT — the font cannot draw the data (measured 2026-08-04).*
+Both halves of D8 are blocked on the A14 glyph-atlas swap, and the attempt that
+proved it is why this paragraph exists. Coverage read directly from
+`port/foh/foh_font.c`: face 1 = 49 glyphs (space, `!'()+,-./`, `0-9`, `:<>`,
+`A-Z`), face 2 = 51 (same plus `&?`). **Neither face has a single lowercase
+letter.** Against the 54 characters `randomTags` spans, **25 are unrenderable**
+— all 22 lowercase plus `$`, `[`, `]`. A tag widget built today `gfx_fatal`s on
+the first `Panda` (reproduced: `SIM FATAL frame 0: foh_font: no glyph for
+requested character`). Hand-authoring the missing glyphs is explicitly
+forbidden — `foh_font.c:71` ("face 1's coverage is deliberately NOT widened")
+and punch-list A8-F2. So the order is fixed: **A14 first, and A14's capture
+must include a-z and `$[]`, not just the A-Z its plan named.**
+
 *Scope split (owner-stated, and the two halves are independent).*
 (i) **random-tag + clear-tag** (`css.js:421-431`) are a REAL upstream
 transliteration and may land alone, with no grid;

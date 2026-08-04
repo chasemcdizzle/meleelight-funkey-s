@@ -2125,6 +2125,19 @@ BEFORE it is started. That is cheap and it has now paid three times.
   `italic 700 70px Arial` = upstream's menu weight, and captured heights
   (5/7/9/12-14 px) suit 240x240. NOTE: hand-authoring more glyphs is
   forbidden in the meantime (that is the debt A8-F2 named).
+  **A14 SCOPE AMENDED 2026-08-04 (measured by the D8-later attempt): the
+  planned `A-Z + .,!?&'` addition is NOT ENOUGH, and A14 is now a BLOCKER for
+  D8-later.** Face coverage measured directly from `port/foh/foh_font.c`:
+  face 1 has 49 glyphs (space, `!'()+,-./`, `0-9`, `:<>`, `A-Z`), face 2 has
+  51 (same plus `&?`). **NEITHER FACE HAS A SINGLE LOWERCASE LETTER.**
+  Upstream's own `randomTags` (main.js:142) span 54 distinct characters, so
+  **25 are unrenderable today**: all 22 lowercase, plus `$`, `[`, `]`
+  (`Panda`, `aMSa`, `Westballz`, `HungryBox`, `[A]rmada`, `Hax$`, `(.Y.)`).
+  A tag widget therefore cannot draw upstream's own data, and `gfx_fatal`
+  fires at the first one (reproduced: `SIM FATAL frame 0: foh_font: no glyph
+  for requested character`, `.loop/d8i-flows.log`). The A14 browser re-capture
+  must add **a-z and `$[]` as well as A-Z**, in the SAME capture — splitting it
+  costs a second re-freeze of a device-consumed frozen artifact.
 - B1 (P1, NEW — pre-existing, found by the Phase-0 arc) **raster.c:69
   blend565() corrupts blue on EVERY partial-alpha blend**: it packs r+b
   into one field and the red term's low bits spill into blue (verified
