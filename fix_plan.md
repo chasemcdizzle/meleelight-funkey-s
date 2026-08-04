@@ -3002,6 +3002,20 @@ sequencing separately:
 **OWNER DECISION NEEDED:** does D8-later mean (i), (ii), or both? If (ii), the UX
 needs pre-registering the way D12 was. NOTHING EDITED.
 
+**A13 OWNER ANSWERS 2026-08-03 (partial — one question still open).** Verbatim:
+*"1. meleelight.opk is what I want to name it eventually  2. minimal fix is fine."*
+- **Target OPK filename = `meleelight.opk`** for the play install, "eventually" —
+  so the FILE rename is sanctioned but not necessarily in this pass.
+- **MINIMAL FIX RATIFIED**: change the `Name=` fields in place; do NOT rename the
+  `.desktop` files. Accepted consequence, stated on the page so it is not
+  rediscovered as a bug: the file called `meleelight-foh.funkey-s.desktop` will
+  carry the clean title `Name=MeleeLight`, and `meleelight.funkey-s.desktop` will
+  carry `Name=MeleeLight EV`. File names and titles are deliberately crossed.
+- **STILL OPEN:** whether `/mnt/Applications/meleelight-foh.opk` (the Jul 29
+  build currently installed) is the PERMANENT play install, since
+  `OPK_INVENTORY_PIN` must record whatever is really there before NAV_LINK can be
+  re-measured.
+
 **A13 TICK-3 FINDING (2026-08-03) — A13 IS ENTANGLED WITH A LIVE DEVICE-STATE
 DRIFT, AND THE OPK GATE LEG IS ALREADY RED FOR AN UNRELATED REASON.**
 MEASURED against the attached device (`find /mnt -maxdepth 2 -name '*.opk'`,
