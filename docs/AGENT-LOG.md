@@ -21503,3 +21503,100 @@ and this turn's B11 both come from the same family — **evidence that is weaker
 or stronger than it appears**. B11: a judgment STRICTER than the determinism of
 the thing judged. R4: teeth WEAKER than the count they are cited as. Both pass
 review reading because the number on the page looks right.
+
+## driver — 2026-08-03/04 — B9 r5 findings CLOSED and DEVICE-GREEN; a SECOND defect found that made the ratified skip allowance inoperative; three tier-1 rows found ALREADY BUILT; owner re-prioritised and answered five decisions
+
+**SESSION SHAPE.** 14 commits. **Only two touched code** — both in
+`port/sim/device/`. No C changed; no game code changed. The rest is rulings,
+recon and findings. That ratio is the honest headline: most of this session was
+discovering that the queue did not describe the tree.
+
+**B9 ARC — r5's SEVEN FINDINGS ALL FIXED, THEN GREEN ON HARDWARE.**
+`.loop/review-b9-r5-20260801.log` finished `CODEX_RC=0`, `VERDICT: NO-GO`,
+4 HIGH / 2 MEDIUM / 1 LOW. Fixed in `85af6d0`:
+- **H1** the two skip witnesses were never reconciled — app-log and timing were
+  bounded independently and only timing fed the run cap, so 12 legs at 8 app
+  skips each (96) passed against a zero ledger. NEW production judge
+  `judge_skip_witnesses` requires exact equality. Sound at source, not just
+  plausible: `foh_dev.c:3318` `matchSkips++` and `:3325` `tim[f].skipped` are the
+  same `if (skip)` arm. MEASURED equal on all 12 archived legs.
+- **H2** the decision-bearing `.skips` write was `|| true` and a missing file
+  folded as 0. Now required + atomic; absence is UNKNOWN, counted, named.
+- **H3** T3b called `made` (non-empty required) on the stderr of a command it
+  expects to SUCCEED — MEASURED `rc=0 stderr_bytes=0`, so it failed 100% of the
+  time. Now asserts stderr EMPTY.
+- **H4** `verify_m4.sh`'s `FULLGAME_RE` still demanded `skips=0 teeth=21`, so a
+  PASSING suite could not satisfy its own consumer. CLASS FIX: the verdict is
+  composed in ONE place (`verdict_line`) and NEW tooth **T22** reads
+  `FULLGAME_RE` out of verify_m4.sh's OWN BYTES.
+- M1 unmeasured legs are UNKNOWN and the ledger states its coverage; M2 rows
+  re-pinned; LOW the bench.c pre-seeded-framebuffer claim narrowed.
+`TEETH_PIN` 22 -> 25 (T3c, T3c2, T22).
+
+**THE SECOND DEFECT — ONLY A REAL RUN COULD FIND IT (`160f946`).** Run 1 went red
+10/12: g01 and g04 each skipped exactly ONE frame, cleared the per-leg
+allowance, then died on `rendered 3599 != 3600`. `judge_timing` still asserted
+`rendered == frames`, and a skipped frame is BY DEFINITION not rendered — so
+`skips <= 8` and `rendered == frames` are contradictory. **The owner's
+2026-08-01 ratification could never have passed on hardware.** Originates in
+`812059a`, not in the r5 fixes; the r5 reviewer could not see it because it
+manifests only when a leg actually skips, and the bound itself was measured
+while the bar was still `skips == 0`. Repaired to `rendered + skips == frames`.
+NOT a loosening — `judge-render-timing.js:277` already enforces exactly this;
+the shell assert is a redundant restatement of a law the FROZEN judge owns. T3b
+would have died on it too, so the H3 fix alone was necessary but not sufficient.
+
+**FOUR DEVICE RUNS, each clearing the last failure.** (1) 10/12, the defect
+above. (2) 12/12 legs + T1-T3b green — first successful execution of the
+allowance's PASS path anywhere — my T3c2 pin omitted `render skips`. (3) all 32
+teeth ran incl. T22 — I had not extended the frozen ledger inventory. (4)
+**`FULLGAME CONFORMS 12/12 (… p99=16.562ms skips=0/allow12 … teeth=25)` rc 0**
+(`.loop/fullgame-b9r5-verify4-20260803T174600.log`). The REAL terminal line then
+checked against `FULLGAME_RE` extracted from verify_m4.sh's bytes: MATCHES.
+Both my own failures were bookkeeping in my additions, caught by the existing
+machinery, and both were re-fixed by DERIVING from measured output rather than
+transcribing — the T3c2 typo is the standing argument against checking by eye.
+
+**STANDING RISK, WORSE THAN THE PAGE SAYS: p99 headroom 108 µs.** Worst leg s01
+16.562 ms vs the 16.670 ms budget. The page's standing figure is 439-566 µs and
+run 2 measured 744 µs — so p99 swings ~600 µs run to run and run 4 landed 108 µs
+from a red gate on timing alone, no code involved.
+
+**THE QUEUE DID NOT DESCRIBE THE TREE — three tier-1 rows already built.**
+Verified by direct read, not inference. **A3** (`s1_input.h:165` names the item;
+NORMAL/NATURAL give `*shield = (p->l || p->r)`; shield emits `in.r`, not `in.l`,
+deliberately). **A4** (three styles, per-style chord tables, persisted).
+**A5** (`foh.c:1055-1075` cycles styles and flips the Mod shoulder). **A6** was
+stale too. Then the streak ENDED: A13, D8-later and WJ-later all verified
+genuinely open, with scope corrected on two of them.
+
+**A13 IS ENTANGLED WITH A LIVE DEVICE DRIFT — AND THE OPK GATE LEG IS ALREADY
+RED.** Measured, 24 entries each side, exactly ONE substitution vs
+`OPK_INVENTORY_PIN`: `/mnt/Applications/meleelight.opk` is pinned but ABSENT;
+`/mnt/Applications/meleelight-foh.opk` (Jul 29) is present but UNPINNED. So
+`check-device-opk.sh` step [5] fails at `:817` for a DEVICE-STATE reason with no
+code involved, and both `NAV_LINK` pins (`:280`, `:293`) misdescribe the grid.
+The guard is behaving exactly as designed. A13's rename moves the grid too, so
+both must be fixed in ONE re-measure pass.
+
+**BLOCKERS — none outstanding; the owner cleared all five.** Recorded in
+fix_plan.md §"OWNER RULINGS 2026-08-03 (round 2)" and §rulings: A13 full device
+authority (delete/install/pin freely, target name `meleelight.opk`, minimal
+`Name=` swap); WJ-later PRE-REGISTER before code; D8-later REDIRECTED to a NOVEL
+screen modelled on REAL MELEE's letter grid (a knowing departure — upstream's
+name entry is a DOM `<input>` with no canvas code, so there was never anything
+to be faithful to); A4 settled, NATURAL is correct and the CODE was right.
+**ONE question still open: the credits `Math.random` substitution (A7).**
+
+**ZOOM OUT (HARD RULE 8).** Instance: three tier-1 rows described work already
+done, and two more described work of a different shape than their one-liners.
+Class: **a queue row is a claim about the tree, and claims rot silently while
+code moves.** Nothing was lying — each row was true when written. The general
+instrument is cheap and should be standing practice: **re-verify a row against
+the tree immediately before starting it, never from the row's own text.** Two
+starts were saved today by doing this, and the one time I trusted my own
+reasoning instead of measuring (the A14 placement rationale) I was wrong within
+the hour. Same family as the session's other finding — the frame-conservation
+bug, the T3c2 typo, and the stale OPK pin are all **a written claim that stopped
+matching a moving reality**, and all four were caught by measuring rather than
+by reading.
