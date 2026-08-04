@@ -11,12 +11,21 @@ Loop entry per `docs/LOOP.md` §B; this block is the short version.
   `arc-in-flight` — **green bytes are not a closed arc**; a NO-GO round's fixes
   do not close one. A fresh review round is owed and now also owes coverage of
   the frame-conservation repair.
-- **The M4 gate cannot pass yet, for TWO independent reasons:**
+- **The M4 gate cannot pass yet, for THREE independent reasons:**
   1. FIVE `arc-in-flight` manifest rows (`verify_m4.sh` hard-refuses on any):
      `check-device-fullgame.sh`, `check-device-opk.sh`, `verify_m4.sh`,
      `check-assets-expected.js`, `expected-assets.json`.
-  2. **The OPK leg is ALREADY RED for a DEVICE-STATE reason with no code
-     involved** — `OPK_INVENTORY_PIN` no longer matches the device (see A13).
+  2. **The OPK leg is still RED, but for a NEW reason — A15, not the old
+     inventory drift.** A13 fixed the drift (device inventory now equals the
+     pin, both arms navigate correctly) and that unmasked a defect hidden
+     behind it since 2026-07-27: the FOH arm's structural shot judge rejects
+     the title shot at 70.151% foreground vs its [0.5%, 60%] band. The frame
+     is CORRECT — the band was measured pre-artwork. Evidence
+     `.loop/a13-opk-foh.log`.
+  3. **`verify_m4.sh` does not even reach its arc check (A16).** It refuses at
+     [0] on ROW GRAMMAR: check-device-fullgame.sh's note token
+     `skips==frames-...` contains `=`, forbidden by `verify_m4.sh:674`.
+     88 of 89 rows pass. So reason 1 is real but is NOT the message you get.
 - **p99 headroom is 108 µs** (s01 16.562 vs 16.670 ms budget). Swings ~600 µs
   run to run. The gate can go red on timing alone. Standing risk, not actioned.
 - **B11 is DEFERRED** (owner, 2026-08-03) and its cost is live: 3 of 15 judged
@@ -31,37 +40,43 @@ Loop entry per `docs/LOOP.md` §B; this block is the short version.
 | 2 | A4 | **ALREADY BUILT**; NATURAL default ratified correct — skip |
 | 3 | A5 | **ALREADY BUILT** — skip |
 | 4 | A7 credits | **BLOCKED** on the owner's `Math.random` call — the ONLY open question |
-| 5 | A13 opk title | **READY — START HERE** (fully unblocked, scope exact) |
+| 5 | A13 opk title | **DONE 2026-08-04** — three roles, three .desktop files, three titles; play install rebuilt as `meleelight.opk` |
 | 6 | D8-later | REDIRECTED to a novel Melee-style letter grid; needs a MENU-SPEC deviation registered first |
 | 7 | WJ-later | PRE-REGISTER the checksum-surface change before any code (owner-ratified) |
 | 8 | A14 glyph atlas | LARGE, deliberately last |
 **TIER 2** = everything else, prior order preserved, B11 first, R8 last.
+**JUMPED THE QUEUE (both found by A13, both block the M4 gate):** A15 (P1,
+FOH shot band) then A16 (P2, manifest row grammar). Both are small and both
+stand between the gate and an honest verdict — do them before D8-later.
 
-## NEXT ACTION (A13, fully specified — no decisions left)
-Owner granted full device authority: *"you can delete that, pin whatever."*
-1. `port/gfx/opk/meleelight-foh.funkey-s.desktop`: `Name=MeleeLight FOH` ->
-   **`Name=MeleeLight`**; `meleelight.funkey-s.desktop`: `Name=MeleeLight` ->
-   **`Name=MeleeLight EV`**. Minimal fix ratified — do NOT rename the .desktop
-   files. File names and titles end up deliberately crossed; that is accepted
-   and recorded, not a bug to re-discover.
-2. Target OPK filename is **`meleelight.opk`**. Delete the stale
-   `/mnt/Applications/meleelight-foh.opk` (Jul 29) from the device.
-3. **Re-measure BOTH `NAV_LINK` values** (`check-device-opk.sh:280`, `:293`) and
-   re-pin `OPK_INVENTORY_PIN` (`:314`) to measured reality — the grid orders
-   alphabetically by `.desktop Name`, so the rename moves it too. ONE re-measure
-   pass covers both the rename and the pre-existing drift.
-4. Re-pin the manifest row for `meleelight-foh.funkey-s.desktop` (pinned;
-   `meleelight.funkey-s.desktop` is NOT in the manifest) + `check-device-opk.sh`,
-   then recompute `MANIFEST_SHA256` in `verify_m4.sh`. Device-verify.
+## NEXT ACTION (A15 — re-measure the FOH shot band)
+The judge's [0.5%, 60%] foreground band was measured at iter 115 against the
+PRE-ARTWORK title screen (splash 4.69%, title 2.63%). The A1 restyle landed the
+real IMG1 artwork; the title shot now measures 70.151% and the frame is CORRECT
+(inspected: "MELEE LIGHT / PRESS START" over the radial-burst background).
+1. Re-measure BOTH shots on BOTH arms, repeat runs — this leg shares the B11
+   jitter surface, so one sample is not a measurement.
+2. Re-freeze the band from what you measured. It must still reject
+   blank/garbage/frozen frames: never round the upper bound up for headroom,
+   and say in the code what the new number was measured against.
+3. `MLFK_OPK_FOH=1 bash port/gfx/check-device-opk.sh` -> `OPK FOH LAUNCH OK`,
+   rc 0. Then re-pin the manifest row + `MANIFEST_SHA256`.
 
 ## STANDING HAZARDS (learned the hard way this session)
 - **Re-verify a queue row against the TREE before starting it.** Three tier-1
   rows described finished work. Two more described work of a different shape.
+- **Re-verify the SOLUTION against the tree too, not just the problem** (A13,
+  2026-08-04). The ratified "minimal fix, no decisions left" would have
+  installed a coin-flip FALSE PASS on the FOH arm, because two .desktop files
+  were serving three roles. Three greps inverted the answer.
+- **A stale red masks everything downstream of it.** The OPK leg died at the
+  inventory pin for a week; A15 sat invisible behind it the whole time. When a
+  check has been red a while, fix the FIRST failure and RUN IT AGAIN.
 - **Derive from measured output; never transcribe by eye.** A hand-typed tooth
   pin cost a 40-minute device run.
 - **`docs/LOOP.md` §A-par:** parallel worktree lanes start at A14, NOT before.
   One device + one riglib lock means verification never parallelizes.
-- Only `port/sim/device/` changed this session. **No C, no game code.**
+- Only `port/sim/device/` and `port/gfx/opk/` changed. **No C, no game code.**
 
 ---
 

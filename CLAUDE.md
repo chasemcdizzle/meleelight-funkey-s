@@ -1014,6 +1014,29 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   DAMAGE state, wide blastzones suppress SD KOs, and a d1 CPU deals no
   kill knockback (marthAI's whole action block is `pdiff>=2`-gated:
   d1 proves its OFF side); diagnose before re-rolling seeds.
+- **Persistent play install (A13 committed form):** `bash
+  port/gfx/opk/install-play-opk.sh` → `PLAY OPK INSTALLED (...)`, exit 0 —
+  builds the PLAY OPK (shared rig arm stamp; SDK-container mksquashfs 4.4;
+  unsquashfs cmp of all 5 members) and installs it as
+  `/mnt/Applications/meleelight.opk`, sha-verified host==device, retiring the
+  pre-A13 name `meleelight-foh.opk` verified-gone. NOT a gate: it provisions
+  the device; `check-device-opk.sh`'s `OPK_INVENTORY_PIN` is what notices if
+  it goes missing or changes name. Restart the frontend to see the new entry
+  (gmenu2x caches the grid it scanned at startup). **THREE ROLES, THREE
+  .desktop FILES, THREE DISTINCT `Name=` VALUES — never let two converge:**
+  play `meleelight-play.funkey-s.desktop` "MeleeLight" · M3 evidence
+  `meleelight.funkey-s.desktop` "MeleeLight EV" (`NAV_LINK=2`) · FOH evidence
+  `meleelight-foh.funkey-s.desktop` "MeleeLight FOH" (`NAV_LINK=2`). The grid
+  is ordered alphabetically by `Name`, both checks navigate to a MEASURED link
+  index, and on the FOH arm the play install runs the SAME launcher and writes
+  the SAME boot marker with the SAME `foh_device` sha — so equal titles there
+  are a FALSE-PASS hole, not merely an ambiguity. Editing any `Name=` means
+  re-measuring both `NAV_LINK`s in the same change (the installer's grammar
+  check says so on failure). Gotcha classes: (1) a script that sources
+  `riglib.sh` must define `DTMP`/`DSD`/`FDC` itself — the lock, the recovery
+  claim and `rig_srchash` read them, and `set -u` dies mid-run otherwise;
+  (2) a new device script should NOT join `RIG_SCRIPTS` unless its bytes can
+  change a COMPILED byte — joining it forces every device check to rebuild.
 
 ## Build/gotcha notes (the loop appends here)
 

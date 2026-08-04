@@ -21600,3 +21600,103 @@ the hour. Same family as the session's other finding — the frame-conservation
 bug, the T3c2 typo, and the stale OPK pin are all **a written claim that stopped
 matching a moving reality**, and all four were caught by measuring rather than
 by reading.
+
+## driver — 2026-08-04 — A13 DONE: three roles, three .desktop files, three titles. The "minimal fix" as ratified would have opened a FALSE-PASS hole; fixing it properly also cleared the M3 arm's iter-73 block and unmasked a week-old red
+
+**TASK.** A13 (tier-1, position 5): the FunKey home screen must not read "FOH".
+Phase M4. Branch `agent/auto`. Device `12c00003237f5528` on ADB.
+
+**GUARD REPAIR FIRST (commit 1 of 2).** LOOP §A.2 wants an empty
+`git status --porcelain`; the tree carried four untracked local tool
+artifacts (`.tokensave/`, `AGENTS.md`, `CLAUDE.local.md`, `scratch-b8.js`).
+They are not project state and they trip the clean-tree guard on EVERY
+iteration, so they are gitignored. No tracked file touched.
+
+**THE RATIFIED MINIMAL FIX HAD A HOLE — measured, not reasoned.** STATE.md's
+NEXT ACTION was "fully specified, no decisions left": cross the two `Name=`
+fields (`meleelight-foh.funkey-s.desktop` -> `MeleeLight`,
+`meleelight.funkey-s.desktop` -> `MeleeLight EV`). But the PLAY install and
+check-device-opk.sh's throwaway FOH OPK are built from the SAME file
+(`check-device-opk.sh:274`), so that swap gives TWO grid entries titled
+"MeleeLight" — the iter-73 stale-nav class, moved from the M3 arm to the FOH
+arm. Worse than ambiguous: both entries run the SAME `mlfk-foh.sh` and write
+the SAME boot marker at the SAME path carrying the SAME `foh_device` sha (one
+shared arm-build stamp), so a landing on the play install is the ONE wrong
+landing this leg's evidence cannot tell from a right one. A coin-flip
+FALSE PASS, not a loud failure. Owner took the corrected option in session.
+
+**WHAT WAS ACTUALLY WRONG (root cause, not symptom).** `mlfk-foh.sh:7-10`
+promised the play install would carry a UNIQUE title vs the evidence OPKs.
+That promise was never written down as a FILE — there were two .desktop files
+for three roles, so the play install was hand-built from the check's own
+desktop and inherited the check's title. A hand-made install nothing could
+reproduce is exactly why `/mnt/Applications/meleelight-foh.opk` (Jul 29) drifted
+away from a pin naming `meleelight.opk`.
+
+**COMMITTED FORM.** Three roles, three .desktop files, three distinct Names:
+play `meleelight-play.funkey-s.desktop` "MeleeLight" (NEW) · M3 evidence
+`meleelight.funkey-s.desktop` "MeleeLight EV" · FOH evidence
+`meleelight-foh.funkey-s.desktop` "MeleeLight FOH" (UNCHANGED — so its pinned
+manifest row did not move). New producer `port/gfx/opk/install-play-opk.sh`
+builds the play OPK the same way the check builds its own (shared rig arm
+stamp, SDK-container mksquashfs 4.4, unsquashfs cmp of every member), pushes it
+as `/mnt/Applications/meleelight.opk` sha-verified, and retires the pre-A13
+name verified-gone. It asserts the play desktop's bytes under the same anchored
+whole-file grammar the check uses, and its failure message names the NAV_LINK
+re-measure the Name line implies — so the coupling has teeth at the edit site.
+Deliberately NOT in riglib's RIG_SCRIPTS: its bytes cannot change a compiled
+byte, so adding it would force every device check to rebuild for nothing.
+
+**MEASURED, on the device, in this order.**
+1. Ground truth BEFORE any edit: `/mnt/Applications/meleelight-foh.opk` present
+   (Jul 29), `meleelight.opk` ABSENT — the tick-3 finding reproduced exactly.
+2. Install: `.loop/a13-install-play-opk.log` rc 0 — `meleelight.opk` sha
+   d16a49a1 host==device, 5 members verified through unsquashfs, pre-A13 name
+   verified absent.
+3. Inventory pin: device inventory now EQUALS the committed
+   `OPK_INVENTORY_PIN` byte for byte — the pin needed NO edit. It was already
+   written for this end state; the DEVICE had drifted from it.
+4. M3 arm, `NAV_LINK` 1 -> 2 (measured — "MeleeLight EV" sorts after
+   "MeleeLight"): `.loop/a13-opk-m3.log` rc 0, `OPK LAUNCH OK`, boot marker
+   bin-sha == stamp, stream prefix 900/900 vs frozen g01. This CLEARS the M3
+   arm's long-standing iter-73 block (`check-device-opk.sh:193` claimed it was
+   unfixable-here; that paragraph is now rewritten, not left to rot).
+5. FOH arm, `NAV_LINK` 2 (unchanged, re-verified): `.loop/a13-opk-foh.log` —
+   inventory OK, nav OK, boot marker OK (`mode evidence`, sha == stamp), FOH
+   trace grammar OK, transitions=1. FAILS LATER, at the shot judge. See below.
+6. Re-pin: manifest row for `check-device-opk.sh` + `MANIFEST_SHA256` in
+   verify_m4.sh. Anchor re-verified by running the gate (`.loop/a13-verify-m4-anchor.log`).
+
+**TWO DEFECTS FOUND, NEITHER CAUSED BY A13, BOTH FILED (A15, A16).**
+- **A15 (P1).** The FOH arm's structural shot judge fails: title shot
+  foreground coverage 70.151% vs its [0.5%, 60%] band. The band was measured at
+  iter 115 against the PRE-ARTWORK title screen (title 2.63%); the A1 restyle
+  then landed the real IMG1 artwork. The frame is CORRECT — I converted and
+  LOOKED at it: "MELEE LIGHT / PRESS START" over the radial-burst background,
+  clean. This leg last passed 2026-07-26 and has been red since 2026-07-27 —
+  but red EARLIER, at the inventory pin, which masked this entirely. A13 fixed
+  the mask and the older defect surfaced. Fix is a measured-then-frozen
+  re-measure of the band, never a convenience round-up.
+- **A16 (P2).** `verify_m4.sh` refuses at [0] on ROW GRAMMAR, not on
+  arc-in-flight: check-device-fullgame.sh's note token `skips==frames-...`
+  contains `=`, which `verify_m4.sh:674` forbids. Introduced 2026-08-03. 88 of
+  89 rows pass (checked all of them). So the refusal STATE.md attributes to
+  arc-in-flight is not the one the gate actually prints.
+
+**ZOOM OUT (HARD RULE 8).** Instance: a queue row said "no decisions left" and
+the specified fix would have installed a false-pass. Class: **a ratified
+decision is only as good as the tree it was ratified against — and the tree had
+moved.** Yesterday's log drew the neighbouring lesson (re-verify a ROW against
+the tree before starting it). Today extends it one step: **re-verify the
+SOLUTION against the tree too, not just the problem.** The two-desktops-for-
+three-roles fact was three greps away and it inverted the answer. Same family
+again: `mlfk-foh.sh`'s comment PROMISED unique titles, the manifest comment
+said the M3 arm's ambiguity was unfixable-here, and the shot band said 60% —
+three written claims, all true when written, all quietly false by today. Every
+one was caught by measuring. The cheapest standing instrument remains: when a
+check has been red for a while, FIX THE FIRST FAILURE AND RUN IT AGAIN — a
+stale red masks everything downstream of it, and A15 sat invisible for a week
+behind one drifted pin.
+
+**NEXT.** A15 (unblocks the FOH arm and the M4 OPK leg), then A16 (unblocks the
+gate's real refusal message), then tier-1 continues at D8-later.

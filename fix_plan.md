@@ -2003,17 +2003,40 @@ Sequence: punch list → owner re-play/ratification → post-gate window
 - A12 (P1) HOME/MENU button (keysym q) does nothing — wire to the
   same fk_menu-style overlay (quit-to-frontend at minimum), matching
   the ssb64 port's behavior.
-- A13 (P2, owner 2026-07-27; do LAST, after testing/fixes settle) app
-  title on the FunKey home screen must not read "FOH": the play
-  install currently ships meleelight-foh.funkey-s.desktop
-  `Name=MeleeLight FOH`. NOTE the constraint that produced it — the
-  iter-73 stale-nav class needs the EVIDENCE OPK and the PLAY install
-  to carry DISTINCT titles (check-device-opk.sh navigates by title).
-  Correct end state: PLAY install `Name=MeleeLight` (its own desktop,
-  the meleelight.funkey-s.desktop lineage), EVIDENCE OPK keeps a
-  distinct title (e.g. "MeleeLight EV"). Both .desktop files are
-  PINNED m4 producers (+ nav pins in check-device-opk.sh): the change
-  carries its own arc + re-pin + one device nav verification.
+- A13 — DONE 2026-08-04 (see docs/AGENT-LOG.md). Three roles, three
+  .desktop files, three distinct titles; play install rebuilt as
+  /mnt/Applications/meleelight.opk by the new committed producer
+  port/gfx/opk/install-play-opk.sh.
+
+- A15 (P1, FOUND 2026-08-04 by A13; NOT caused by it) the FOH arm of
+  check-device-opk.sh fails its structural shot judge: the title shot
+  measures foreground coverage 70.151%, outside the [0.5%, 60%] band.
+  The band was measured at iter 115 against the PRE-ARTWORK title
+  screen (splash 4.69%, title 2.63%); the A1 restyle then landed the
+  real upstream IMG1 artwork, which legitimately fills ~70% of the
+  frame. The frame is CORRECT — inspected, it renders "MELEE LIGHT /
+  PRESS START" over the radial-burst background. Nobody saw this for a
+  week because the leg died EARLIER, at the OPK inventory pin (red
+  since 2026-07-27, last green 2026-07-26 `.loop/m4-t115-opkfoh-run4.log`);
+  A13 fixed the inventory and unmasked it. Evidence: `.loop/a13-opk-foh.log`.
+  Fix = RE-MEASURE the band against the current renderer (both shots,
+  both arms, repeat runs — this leg shares the B11 jitter surface), and
+  record the measurement. NOT a loosening-by-convenience: the band
+  exists to reject blank/garbage/frozen frames and must still do that,
+  so the new upper bound is measured-then-frozen, never rounded up.
+  done-check: `MLFK_OPK_FOH=1 bash port/gfx/check-device-opk.sh` →
+  `OPK FOH LAUNCH OK (...)`, rc 0.
+
+- A16 (P2, FOUND 2026-08-04) verify_m4.sh refuses at [0] before any arc
+  check because ONE manifest row fails the anchored row grammar
+  (`verify_m4.sh:674`, note field `[A-Za-z0-9._/:{},+-]+` — no `=`):
+  check-device-fullgame.sh's note ends `...+skips==frames-812059a-defect`.
+  Introduced 2026-08-03; every other row of 89 passes. Consequence: the
+  gate's arc-in-flight refusal — the thing STATE.md says blocks M4 — is
+  not the message you actually get. Fix = re-word that note token
+  (e.g. `skips-eq-frames`) and re-anchor MANIFEST_SHA256.
+  done-check: `bash port/sim/device/verify_m4.sh` refuses naming
+  arc-in-flight rows, not row grammar.
 
 ## A8 AUDIT CONSEQUENCES (iter 120; evidence .loop/reuse-audit/REPORT.md)
 - A14 (P0, folded into A1) glyph-atlas swap: menus must draw with the

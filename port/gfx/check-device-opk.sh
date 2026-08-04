@@ -118,15 +118,25 @@
 #   B. TITLE (the iter-73 stale-nav class, fixed at the cause): the FOH
 #      OPK's .desktop Name is "MeleeLight FOH" — UNIQUE on the device.
 #      The persistent play install /mnt/Applications/meleelight.opk
-#      (title "MeleeLight", pushed by the driver after the M3 human
-#      gate) is NEVER touched, and no longer makes the navigation
-#      ambiguous: iter 73 measured the failure of the M3 arm's
-#      single-`r` nav against TWO same-title entries. MEASURED games
-#      order (iter 115 — device OPK inventory probe + framebuffer
-#      witness of the live grid): link 0 "Mario 64 (U)" (/mnt/Native
-#      games/sm64_us_v1.3), link 1 "MeleeLight" (the play install),
-#      link 2 "MeleeLight FOH" (ours), link 3 "PicoArch", link 4
-#      "Super Smash Bros." — hence NAV_LINK=2 here vs the M3 arm's 1.
+#      (title "MeleeLight", built and pushed by
+#      port/gfx/opk/install-play-opk.sh) is NEVER touched, and no
+#      longer makes the navigation ambiguous: iter 73 measured the
+#      failure of the M3 arm's single-`r` nav against TWO same-title
+#      entries. MEASURED games order (iter 115 — device OPK inventory
+#      probe + framebuffer witness of the live grid; re-measured at
+#      A13, the play install and the evidence OPKs renamed): link 0
+#      "Mario 64 (U)" (/mnt/Native games/sm64_us_v1.3), link 1
+#      "MeleeLight" (the play install), link 2 OURS — "MeleeLight FOH"
+#      on this arm, "MeleeLight EV" on the M3 arm — link 3 "PicoArch",
+#      link 4 "Super Smash Bros." Both arms therefore run NAV_LINK=2.
+#      A13 note — the unique title is LOAD-BEARING on this arm, not
+#      cosmetic: the play install runs the SAME mlfk-foh.sh and writes
+#      the SAME boot marker at the SAME path carrying the SAME
+#      foh_device sha (both come from the shared arm-build stamp), so
+#      a landing on the play install is the one wrong landing this
+#      leg's evidence could NOT tell from a right one. Three roles,
+#      three .desktop files, three distinct Names is what keeps the
+#      link index unambiguous — never let two of them converge.
 #      The
 #      inherited-state assumption is asserted, not assumed: the
 #      games-section OPK inventory is pinned below (FOH_APPS_PIN) and a
@@ -188,12 +198,12 @@
 #       forced and restored instead of assumed;
 #   (c) the boot marker is compared WHOLE-FILE byte-exact instead of
 #       line-wise (same accept set, no trailing-byte hole).
-# The M3 arm additionally remains blocked on a DEVICE-STATE issue this
-# change does not touch: the persistent play install
-# /mnt/Applications/meleelight.opk carries the SAME title as the M3
-# evidence OPK ("MeleeLight"), so its NAV_LINK=1 is ambiguous while both
-# are installed (measured iter 73, unchanged here — the FOH arm's unique
-# title is the sanctioned way around it).
+# The M3 arm's own long-standing DEVICE-STATE block is CLEARED at A13,
+# not inherited: the persistent play install used to carry the SAME
+# title as the M3 evidence OPK ("MeleeLight"), which made its old
+# NAV_LINK=1 ambiguous while both were installed (measured iter 73).
+# The M3 evidence OPK is now "MeleeLight EV" and sorts after the play
+# install, so its link index is unambiguous and measured at 2.
 #
 # Rig plumbing INHERITED from port/sim/device/riglib.sh (Tier-A arc,
 # VERDICT: GO): nonce-dsh, pullv, rm-before-produce+made(), shared
@@ -290,7 +300,7 @@ else
   OPK_APPLOG=mlfk.log
   OPK_APPLOG_HOST=$DEVB/opk-mlfk.log
   MARKER_LINE1='MLFK OPK BOOT'
-  NAV_LINK=1                 # measured grid link of "MeleeLight"
+  NAV_LINK=2                 # measured grid link of "MeleeLight EV"
 fi
 # The grid walk (header §3): 2 columns, `d` = +2, `r` = +1 within the
 # row. Integer arithmetic, no floats — link = 2*downs + rights.
@@ -533,12 +543,15 @@ made "$DESKTOP" "$LAUNCHER" "$ICON"
 # ships (a field drift is a reviewed change) + the MANDATORY trailing
 # empty line (file ends in exactly one empty line: last two bytes \n\n,
 # not more — measured envelope requirement). The FOH entry differs in
-# exactly three fields (Name/Comment/Exec) — and its UNIQUE Name is
-# what makes the frontend navigation unambiguous (header section B).
+# exactly three fields (Name/Comment/Exec) — and each arm's UNIQUE Name
+# is what makes the frontend navigation unambiguous (header section B).
+# Three roles, three titles, none equal: the play install is
+# "MeleeLight" (meleelight-play.funkey-s.desktop, A13), this M3
+# evidence OPK is "MeleeLight EV", the FOH OPK is "MeleeLight FOH".
 if [ "$OPK_FOH" = 1 ]; then
   desktop_want=$'[Desktop Entry]\nName=MeleeLight FOH\nComment=MeleeLight FOH port (private build)\nExec=mlfk-foh.sh\nTerminal=false\nType=Application\nStartupNotify=true\nIcon=icon32\nCategories=games;\n\n'
 else
-  desktop_want=$'[Desktop Entry]\nName=MeleeLight\nComment=MeleeLight port (private build)\nExec=mlfk.sh\nTerminal=false\nType=Application\nStartupNotify=true\nIcon=icon32\nCategories=games;\n\n'
+  desktop_want=$'[Desktop Entry]\nName=MeleeLight EV\nComment=MeleeLight port (private build)\nExec=mlfk.sh\nTerminal=false\nType=Application\nStartupNotify=true\nIcon=icon32\nCategories=games;\n\n'
 fi
 if ! printf '%s' "$desktop_want" | cmp -s - "$DESKTOP"; then
   echo "DEVICE FAIL: $DESKTOP does not match the pinned desktop-entry bytes (incl. the mandatory trailing empty line)" >&2
