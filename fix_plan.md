@@ -2989,37 +2989,7 @@ priority now (in that order). move everything to after that (preserve order)."*
    (owner-ratified semantics 2026-07-27). `port/gfx/ctl_style.c` exists and is
    already persisted (foh_app.c:458 load, :511 save) — the plane is built; what
    is missing is the user-facing half.
-3. **A14** (P0) glyph-atlas swap — menus draw with the BROWSER-RASTERIZED
-   VFXGLYPHS1 atlas (`port/gfx/vfxglyphs-frozen.txt`) instead of the
-   hand-authored `port/foh/foh_font.c`. Extend `__gfxDumpGlyphs()` to cover the
-   menu strings, point `foh_render.c` at `gfx_glyphs_load()`, keep foh_font.c as
-   a LOUD fallback.
-   **PLACED HERE BY DRIVER JUDGMENT under the owner's explicit delegation**
-   (*"put a14 wherever you think it belongs"*) — this slot is NOT an owner
-   ruling and is amendable on request. Reasoning, so the choice can be argued
-   with:
-   - **A5, A7 and D8-later are the first items that author NEW TEXT-BEARING
-     SCREENS.** A14 changes how every glyph rasterizes, so it invalidates every
-     menu screenshot reference either way. Landing it BEFORE the screen work
-     pays that re-capture ONCE; landing it after pays it twice, because each new
-     screen would be authored and shot against a font that is about to change.
-   - **The current font actively distorts render-site code.** foh_render.c:1926
-     records that foh_font.c's face 1 is UPPERCASE-ONLY (49 glyphs), and :1972
-     uppercases at the RENDER site rather than in ctl_style.c specifically to
-     work around it. A5 is the controls screen — authoring it against that
-     constraint and then removing the constraint is wasted work.
-   - It stays BEHIND A3 and A4 because neither draws new text: A3 is input
-     binding, A4 is the control-style state plane (already persisted).
-   - MEASURED OPEN (2026-08-03): foh_render.c has ZERO references to
-     `gfx_glyphs_load` and still cites foh_font.c at :574, :1878, :1926, :1972.
-   - COST TO EXPECT: `vfxglyphs-frozen.txt` is a PINNED producer with a
-     `reviewed-go` row, so this carries its own arc + re-pin, and glyph
-     comparison is already known-touchy (the iter-72 glyph-jitter class fix).
-   - NOT a B11 hazard: shot REFERENCES are host twins and the host is
-     deterministic — the ±1 jitter is device-injector wall clock only. So the
-     re-capture is safe to do with B11 still deferred; the 3 jitter-exposed
-     shots stay coin flips on device, unchanged in kind.
-4. **A5** (P1) Controls screen selection wired (candidate: the style selector).
+3. **A5** (P1) Controls screen selection wired (candidate: the style selector).
    NOTE: the owner's message listed "A4/A5, A5" — read as A4 then A5, and the
    duplicate treated as a slip. If A5 was meant to sit somewhere else in the
    order, say so and this list is amended.
@@ -3035,6 +3005,41 @@ priority now (in that order). move everything to after that (preserve order)."*
    device nav verification.
 6. **D8-later** a faithful NAME-ENTRY screen.
 7. **WJ-later** make walljump actually work.
+8. **A14** (P0) glyph-atlas swap — menus draw with the BROWSER-RASTERIZED
+   VFXGLYPHS1 atlas (`port/gfx/vfxglyphs-frozen.txt`) instead of the
+   hand-authored `port/foh/foh_font.c`. Extend `__gfxDumpGlyphs()` to cover the
+   menu strings, point `foh_render.c` at `gfx_glyphs_load()`, keep foh_font.c as
+   a LOUD fallback.
+   **MOVED HERE (tier-1 LAST) 2026-08-03 BY DRIVER JUDGMENT** under the owner's
+   second delegation (*"ok move a14 wherever you want"*), after recon REFUTED
+   the rationale for its original position-3 slot. NOT an owner ruling;
+   amendable. Reasoning, so the choice can be argued with:
+   - **The relayout cost is POSITION-NEUTRAL.** The position-3 slot was
+     justified by "landing it first pays the shot re-capture once instead of
+     twice." That premise was false (no frozen shot references exist). The true
+     shape: A14 re-lays whatever screens exist when it lands, and screens built
+     AFTER it are authored against the new font. **Either order costs exactly
+     ONE relayout pass.** So relayout argues for no position at all, and the
+     decision falls to risk sequencing.
+   - **Risk sequencing puts it last.** A14 is LARGE (two new faces, ~63 new
+     codepoints each, every layout constant in a 2,198-line file, plus a code
+     path that does not currently exist), and it carries a LIVE ORACLE HAZARD —
+     the iter-72 glyph-jitter class reopening at ~10x surface against a
+     never-loosenable `maxDiffPixels = 16`. Nothing functional should queue
+     behind that.
+   - **It is cosmetic; every item the owner named is functional.** A3/A4/A5/A7/
+     A13/D8/WJ are behaviour. A14 is how the text looks. It also belongs with
+     A1, the look-fidelity effort it was folded into by the A8 audit — sitting
+     at the tier-1/tier-2 boundary puts it adjacent to that work.
+   - MEASURED OPEN (2026-08-03): foh_render.c has ZERO references to
+     `gfx_glyphs_load` and still cites foh_font.c at :574, :1878, :1926, :1972.
+   - COST TO EXPECT: `vfxglyphs-frozen.txt` is a PINNED producer with a
+     `reviewed-go` row, so this carries its own arc + re-pin, and glyph
+     comparison is already known-touchy (the iter-72 glyph-jitter class fix).
+   - NOT a B11 hazard: shot REFERENCES are host twins and the host is
+     deterministic — the ±1 jitter is device-injector wall clock only. So the
+     re-capture is safe to do with B11 still deferred; the 3 jitter-exposed
+     shots stay coin flips on device, unchanged in kind.
 
 **TIER 2 — everything else, ORDER PRESERVED as it stood before this ruling:**
 B11 (below), then A1/A14/A15 look-fidelity remainder, A6, A16, U1, U2, D6-later,

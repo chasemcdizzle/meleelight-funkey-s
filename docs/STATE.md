@@ -9,14 +9,16 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
   *"let's skip B11 I am totally done with all this for now. defer it until after
   we're done. … A3, A4/A5, A5, A7, A13, D8-later, wj-later are all priority now
   (in that order). move everything to after that (preserve order)."*
-  **TIER 1, in order: A3 · A4 · A14 · A5 · A7 · A13 · D8-later · WJ-later.**
-  (**A14 placed by DRIVER JUDGMENT** under the owner's explicit delegation —
-  *"put a14 wherever you think it belongs"* — NOT an owner ruling, amendable.
-  It sits ahead of A5/A7/D8-later because those author the first NEW
-  TEXT-BEARING SCREENS and A14 invalidates every menu shot reference either
-  way: before = pay the re-capture once, after = pay it twice. It also removes
-  the uppercase-only face-1 constraint that A5 would otherwise be authored
-  against. Full reasoning: fix_plan.md.)
+  **TIER 1, in order: A3 · A4 · A5 · A7 · A13 · D8-later · WJ-later · A14.**
+  (**A14 placed LAST by DRIVER JUDGMENT** under the owner's second delegation —
+  *"ok move a14 wherever you want"* — NOT an owner ruling, amendable. It was
+  first placed at position 3; RECON REFUTED that rationale. Relayout is
+  POSITION-NEUTRAL — A14 re-lays whatever exists when it lands and later screens
+  are authored against the new font, so either order costs ONE pass. Risk
+  sequencing therefore decides, and it puts A14 last: it is LARGE, it carries a
+  live oracle hazard (iter-72 jitter at ~10x against a never-loosenable
+  `maxDiffPixels = 16`), and it is cosmetic while every owner-named item is
+  functional. Full reasoning: fix_plan.md.)
   (The message listed "A4/A5, A5"; read as A4 then A5, duplicate treated as a
   slip — amend if that was not the intent.) **TIER 2 = everything else with its
   prior order preserved**, B11 first among them, R8 still last.
