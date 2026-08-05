@@ -2036,6 +2036,46 @@ never reached this stage to contradict them. Closing these is review-arc work
 frame-conservation repair, and the A13/A20 edits to check-device-opk.sh ride
 the same in-flight row.
 
+## A14 SECOND HALF — DESIGN DECIDED 2026-08-05 (do not re-litigate)
+
+**Approach: swap the IMPLEMENTATION, not the call sites.** Rewrite
+`foh_text2`/`foh_text` BODIES onto the atlas; leave all 41 call sites alone.
+
+*Why, and what was rejected.* The expensive, risky part of this change is NOT
+the 41 mechanical edits — it is the relayout and the frozen-shot re-freeze (15
+menu shots plus their device twins). Swapping the body decouples them: land the
+render change with call sites untouched, SEE what moved, tune metrics in ONE
+function, re-freeze ONCE.
+- REJECTED, big-bang (edit all 41 sites + relayout + re-freeze together): a
+  wrong shot then cannot be attributed to a call-site edit vs a metric change.
+- REJECTED, per-screen behind a flag: it multiplies the one genuinely expensive
+  artifact — frozen shots x device twins — by the number of screens, and buys
+  granularity on the part that was never risky. It also puts two fonts on
+  screen at once mid-transition.
+
+*The seam already exists and needs no adapter.* `gfx_glyph_text` is
+`Gfx`-based only at the surface: `blit_mask` calls
+`rast_blit_a8mask(&g->rz, ...)`, so the atlas renderer is RASTER-based
+underneath. Add `gfx_glyph_text_rz(Raster*, fontId, s, penX, penY, fill,
+stroke, strokeFirst)` in `gfx_overlay.c`, have `gfx_glyph_text` delegate to it,
+and call it from `foh_text2`. That is an API extraction, NOT a translation
+layer — do not build a coordinate-converting wrapper, which is the failure mode
+this approach risks.
+- Font mapping: italic -> spec 3 (`italic 700 70px Arial` IS upstream's menu
+  weight), non-italic -> spec 0.
+- `foh_text2_width` must move to `gfx_glyph_text_width`; today it returns
+  `(n*7-1)*scale` from FIXED cells, while atlas advances are per-glyph device
+  px. **That difference IS the relayout.**
+- `foh_font.c` face 2 stays as a LOUD fallback (`gfx_fatal` on a missing
+  glyph, never a placeholder box — a silent fallback would have hidden exactly
+  the D8 bug). Delete the 6x9 face only once green.
+- MEASURE FIRST: diff atlas advance widths against `(n*7-1)*scale` per menu
+  string BEFORE touching layout. That predicts which screens shift instead of
+  discovering it in shots.
+
+*Deliberately NOT started this session:* the seam alone, with no swap behind
+it, is scaffolding for later. It lands with the swap or not at all.
+
 ## D20 MARTH WITNESS (#16) — still open, and the instrument was the story
 
 **State:** D20 has a REGRESSION proof (8/8 goldens bit-identical flag-off), a
