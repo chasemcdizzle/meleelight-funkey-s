@@ -153,11 +153,18 @@ if (e.iouThreshold !== 0.92) {
   process.exit(1);
 }
 const bp = e.browserPin;
-if (!bp || bp.name !== "chromium" || bp.channel !== "chrome" ||
-    bp.version !== "151.0.7922.71") {
+// TWIN of the capture-canvas.js pin — kept deliberately duplicated so the
+// MLFK_GFX_REUSE_CANVAS hatch, which launches no browser at all, still has the
+// identity asserted. Channel moved chrome -> chrome-for-testing 2026-08-05;
+// the VERSION is unchanged and still exact, and both copies must move together.
+// (No apostrophes in here: the whole program is a single-quoted shell string.)
+if (!bp || bp.name !== "chromium" || bp.channel !== "chrome-for-testing" ||
+    bp.version !== "151.0.7922.71" ||
+    typeof bp.executablePath !== "string" || !bp.executablePath) {
   console.error("check-render: browserPin violated — every bound in this file was " +
-    "measured on chromium/chrome 151.0.7922.71 (EXACT: Skia rasterizes " +
-    "differently at patch level)");
+    "measured on chromium 151.0.7922.71 (EXACT: Skia rasterizes " +
+    "differently at patch level), pinned to the Chrome-for-Testing binary " +
+    "named by browserPin.executablePath");
   process.exit(1);
 }
 if (e.seedThreshold !== undefined) {

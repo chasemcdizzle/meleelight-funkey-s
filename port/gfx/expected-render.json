@@ -145,8 +145,9 @@
   "iouThreshold": 0.92,
   "browserPin": {
     "name": "chromium",
-    "channel": "chrome",
+    "channel": "chrome-for-testing",
     "version": "151.0.7922.71",
+    "executablePath": "/Users/chase/.cache/meleelight-funkey-s/cft-151.0.7922.71/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
     "previousVersions": ["150.0.7871.187"],
     "refreezeLog": [
       "2026-07-30 (review-134 r4, writer): the host's Chrome auto-updated",
@@ -178,7 +179,21 @@
       "it is NOT a widened bound, and the accompanying ART bound change in",
       "this same round was a TIGHTENING (0.63 -> 0.645).",
       "Spread evidence: .loop/render-chrome151-measure.log (capture 1) + the",
-      "5-capture spread summary recorded in .loop/renderjudge-progress.md."
+      "5-capture spread summary recorded in .loop/renderjudge-progress.md.",
+      "2026-08-05 (driver): CHANNEL ONLY, 'chrome' -> 'chrome-for-testing'.",
+      "The VERSION is UNCHANGED and still exact (151.0.7922.71) and NO BOUND",
+      "was touched: this is NOT a re-measure and makes no metric claim.",
+      "Cause: channel 'chrome' resolves to whatever Google Chrome the host",
+      "happens to have, the host auto-updated to 151.0.7922.76, and the pin",
+      "then fired on every run so NO capture of any kind could be taken",
+      "(.loop/a14-render1.log). Re-measuring on each Chrome update would make",
+      "these frozen bounds a function of the developer's browser update",
+      "schedule. Chrome for Testing publishes THIS EXACT BUILD immutably and",
+      "never self-updates, so the engine stops being ambient state.",
+      "The pin is STRICTER after this change, not looser: it names an exact",
+      "BINARY (executablePath, existence asserted, no fallback launch) in",
+      "addition to the exact version. The re-measure protocol in `note` below",
+      "is UNCHANGED and still binds any future VERSION move."
     ],
     "note": [
       "review-134 r1 M1. Every bound in this file is a measured property of",

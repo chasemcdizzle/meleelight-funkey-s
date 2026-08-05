@@ -149,12 +149,26 @@ if (EXPECTED_RENDER.iouThreshold !== 0.92) {
 // carries its own copy and applies it to the SIDECAR, so the reuse hatch is
 // covered too.
 const BROWSER_PIN = EXPECTED_RENDER.browserPin;
-if (!BROWSER_PIN || BROWSER_PIN.name !== "chromium" || BROWSER_PIN.channel !== "chrome" ||
-    BROWSER_PIN.version !== "151.0.7922.71") {
+if (!BROWSER_PIN || BROWSER_PIN.name !== "chromium" ||
+    BROWSER_PIN.channel !== "chrome-for-testing" ||
+    BROWSER_PIN.version !== "151.0.7922.71" ||
+    typeof BROWSER_PIN.executablePath !== "string" || !BROWSER_PIN.executablePath) {
   console.error("capture-canvas: browserPin malformed or not the frozen value " +
-    "(chromium / chrome / 151.0.7922.71)");
+    "(chromium / chrome-for-testing / 151.0.7922.71 / executablePath)");
   process.exit(1);
 }
+// CHANNEL "chrome" -> "chrome-for-testing" (2026-08-05). The pin's VERSION is
+// unchanged and still exact: this is the SAME Chromium build number the bounds
+// were measured on, obtained from a source that is versioned and immutable.
+// Why the channel had to move: `channel: "chrome"` resolves to whatever Google
+// Chrome the machine happens to have, and Chrome auto-updated to
+// 151.0.7922.76, so the pin fired on every run and NO capture could be taken.
+// Chasing it by re-measuring on each new Chrome makes the frozen bounds a
+// function of the developer's browser update schedule. Chrome for Testing is
+// the fix at the cause: a given version is downloadable forever and never
+// self-updates, so the engine stops being ambient state. The pin gets
+// STRICTER, not looser — it now names an exact binary as well as an exact
+// version, and the equality check below is untouched.
 
 const CONSOLE_ALLOW = EXPECTED_RENDER.consoleErrorAllowlist;
 if (!Array.isArray(CONSOLE_ALLOW) || CONSOLE_ALLOW.length === 0) {
@@ -378,7 +392,22 @@ async function main() {
   // The response is to re-measure (>=6 fresh captures, record the spread)
   // and re-freeze browserPin plus any bound that actually moved — never to
   // widen a bound to silence it.
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  // Launched by EXACT PATH, not by channel — see the channel note at the pin.
+  // No fallback: a missing binary must fail loudly rather than silently hand
+  // the capture to some other rasterizer, which is the exact accident the
+  // paragraph above records.
+  if (!fs.existsSync(BROWSER_PIN.executablePath)) {
+    console.error("capture-canvas: pinned browser missing at " +
+      BROWSER_PIN.executablePath + "\n  Install Chrome for Testing " +
+      BROWSER_PIN.version + " (mac-arm64) there, e.g.\n  curl -sL -o /tmp/cft.zip " +
+      "https://storage.googleapis.com/chrome-for-testing-public/" +
+      BROWSER_PIN.version + "/mac-arm64/chrome-mac-arm64.zip && unzip -q /tmp/cft.zip -d " +
+      "$(dirname \"$(dirname \"$(dirname \"$(dirname \"$(dirname " +
+      BROWSER_PIN.executablePath + ")\")\")\")\")");
+    process.exit(1);
+  }
+  const browser = await chromium.launch({
+    executablePath: BROWSER_PIN.executablePath, headless: true });
   const browserId = { name: browser.browserType().name(), version: browser.version() };
   // EXACT version equality (review-134 r2 M1): Skia rasterization changes at
   // PATCH level, and the fg margin is only 0.0008 IoU — about 3 device cells
