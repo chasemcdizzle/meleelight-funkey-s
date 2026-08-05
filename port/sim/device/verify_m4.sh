@@ -109,7 +109,7 @@ mkdir -p "$VDIR"
 # line (a full-byte self-row plus this anchor would be a two-unknown
 # hash fixed point with no solution); the excluded line is protected
 # by the anchor equality itself — a wrong literal IS a refusal.
-MANIFEST_SHA256=12dbbfc9ef690cc53640437863c679d966aedb1812b7cc763c6200a563f103f3
+MANIFEST_SHA256=172296287cad1ab612d3ec10e2c5ae041e389455b57869e22829fdf0b0a8e337
 
 # AUTHORITATIVE — computed ONCE, then readonly (the sentinel lockout).
 # Any dev/canned-evidence signal zeroes it; the `M4 GATE OK` sentinel
@@ -1109,7 +1109,18 @@ p99_under_budget() {
 # grammars compatible in-run instead of only at re-pin time.
 FULLGAME_RE='^FULLGAME CONFORMS 12/12 \(render\+sfx\+music live; live-ai=g07,g08,m01,m02 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=(0|[1-9]|1[0-2])/allow12 underruns=0 starves=0 presentfails=0 teeth=25\)$'
 TARGET_RE='^DEVICE TARGET CONFORMS \(goldens=2 flows=2 shots=4 fbwit=4 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=0 underruns=0 starves=0 starts f06-target-t01=15 f07-target-t02=31 sfxpin=15/31 music=menu>targettest:5/5 live=f08-live-target:(0|[1-9][0-9]{0,5})f/(0|[1-9][0-9]{0,5})rows/opts-ok bound=f09-live-bound:(0|[1-9][0-9]{0,5})f/(0|[1-9][0-9]{0,5})rows teeth=6\)$'
-FOH_RE='^DEVICE FOH OK \(flows=5 shots=13 bridge=1 states=3 opk=evidence fbwit=15 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=0 underruns=0 starves=0 starts f01-vs-g01=(0|[1-9][0-9]{0,5}) f02-cpu-m01=(0|[1-9][0-9]{0,5}) f03-options=(0|[1-9][0-9]{0,5}) f04-nav=(0|[1-9][0-9]{0,5}) f05-vs-g03=(0|[1-9][0-9]{0,5}) teeth=15\)$'
+# FOH_RE was STALE AGAINST ITS OWN PRODUCER — found 2026-08-05, the H4 class
+# above recurring on a second consumer. It demanded `shots=13` and had no slot
+# for the `vsfinish=1` field, while check-device-foh.sh:2328 has been printing
+# `shots=15 ... vsfinish=1 ...`, so a fully PASSING FOH leg could not satisfy
+# this gate: leg [2] would have failed on grammar AFTER every arc closed.
+# Proven mechanically (a plausible passing line vs this regex) before editing.
+# `shots=15` and `vsfinish=1` are LITERALS in the producer's format string, so
+# both are derivable from source with no device run. `teeth=16` is the count of
+# unconditional column-0 `teeth=$((teeth + 1))` sites in the producer (was 15;
+# punch-list B8 added the machine-plane tooth) — the same derivation rule the
+# H4 note above states.
+FOH_RE='^DEVICE FOH OK \(flows=5 shots=15 bridge=1 states=3 vsfinish=1 opk=evidence fbwit=15 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=0 underruns=0 starves=0 starts f01-vs-g01=(0|[1-9][0-9]{0,5}) f02-cpu-m01=(0|[1-9][0-9]{0,5}) f03-options=(0|[1-9][0-9]{0,5}) f04-nav=(0|[1-9][0-9]{0,5}) f05-vs-g03=(0|[1-9][0-9]{0,5}) teeth=16\)$'
 OPKFOH_RE='^OPK FOH LAUNCH OK \(frontend-launched via gmenu2x into the FOH, boot marker bin-sha == stamp, evidence rc=0, 1 transitions vs frozen, shot structural\)$'
 
 # RESEMBLANCE discriminators (review-108-1 H3): these must be STRICTLY

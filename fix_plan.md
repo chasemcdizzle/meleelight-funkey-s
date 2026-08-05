@@ -2205,10 +2205,21 @@ BEFORE it is started. That is cheap and it has now paid three times.
   Removes the interim canonical-phase seam (one 12-line fn, one seam).
   Changes two GATE scripts + revisits the iter-93 shot-judge design +
   introduces a device→host dependency in a judge → own Tier A+ arc.
-- B8 (P1, required, rides the next FOH increment's arc) machine-plane
-  tooth: perturb menuSelected on a CANONICAL shot and assert the bytes
-  change — guards the risk that canonicalization makes shots blind to
-  menu state. Ledger 21 → 22.
+- B8 — DONE 2026-08-05. T6 in `check-device-foh.sh`: a variant flow inserts
+  `I 377 D` before `SHOT 378 menu-top`, stepping menuSelected once, and the
+  CANONICAL menu-top shot must differ from the twin (`cmp` rc exactly 1). The
+  ledger note said 21 -> 22; the MEASURED count in that file is unconditional
+  column-0 `teeth=$((teeth + 1))` sites, **15 -> 16** (21 was the fullgame
+  ledger, a different file — read the count, never the row).
+  **FOUND WHILE DOING IT — a live M4 blocker nobody had seen:** `verify_m4.sh`'s
+  `FOH_RE` was STALE against its own producer. It demanded `shots=13` and had
+  no slot for the `vsfinish=1` field, while `check-device-foh.sh:2328` prints
+  `shots=15 ... vsfinish=1 ...`. A fully PASSING FOH leg could therefore never
+  satisfy the gate — leg [2] would have failed on GRAMMAR after every arc
+  closed. Proven mechanically before editing, then repaired: `shots=15`,
+  `vsfinish=1`, `teeth=16`, each derived from the producer's source rather
+  than from a run. This is the H4 class recurring on a SECOND consumer (the
+  first was FULLGAME_RE); the note now sits at the regex.
 - A1 PHASE 1 COMPLETE IN WORKTREE agent-ac57efe4e1014b4da (NOT yet
   merged — deliberate): CSS + SSS restyled with real IMG1 artwork
   (portraits in port panels + row cells, stage art 1x in thumbs / 2x in

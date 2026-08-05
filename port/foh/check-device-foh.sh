@@ -1242,6 +1242,43 @@ test ! -f "$BUILD/tooth-gen.fks" || fail "T-gen: generator emitted a script desp
 teeth=$((teeth + 1))
 echo "    T5 OK: fk-script generator dies rc 2 on a non-monotone flow (no output)"
 
+# T6 (punch-list B8) MACHINE-PLANE tooth. B3 fixed the device/host divergence
+# by making shots a pure function of machine state (foh_look_canonical), which
+# is exactly the change that could make them BLIND to menu state: a shot that
+# ignores the animation phase might ignore the SELECTION too, and every
+# menu-shot judgment in this file would then be vacuous. So: perturb
+# menuSelected by ONE step before the menu-top shot and require the canonical
+# shot's bytes to CHANGE. The variant diverges after frame 380 (A now selects
+# a different row) and that is fine — only the menu-top shot is compared.
+rm -rf "$BUILD/tooth-menusel"
+mkdir -p "$BUILD/tooth-menusel/shots"
+node -e '
+  const fs = require("fs");
+  const lines = fs.readFileSync(process.argv[1], "utf8").split("\n");
+  const out = [];
+  let hit = 0;
+  for (const ln of lines) {
+    if (/^SHOT 378 menu-top$/.test(ln)) { out.push("I 377 D"); hit++; }
+    out.push(ln);
+  }
+  if (hit !== 1) { console.error("tooth-menusel: anchor hits " + hit + " (want 1)"); process.exit(2); }
+  fs.writeFileSync(process.argv[2], out.join("\n"));
+' "$FLOWS/f01-vs-g01.flow" "$BUILD/tooth-menusel/f01-vs-g01.flow" \
+  || fail "T-menusel: variant flow generation failed (anchor moved?)"
+made "$BUILD/tooth-menusel/f01-vs-g01.flow"
+MLFK_PERSIST_DIR="$PWD/$BUILD/tooth-menusel/persist" \
+"$BUILD/foh_dev_headless" --flow "$BUILD/tooth-menusel/f01-vs-g01.flow" \
+  --input flow --flow-out "$BUILD/tooth-menusel/trace.txt" \
+  --shots-dir "$BUILD/tooth-menusel/shots" --pace 0 \
+  2> "$BUILD/tooth-menusel/log.txt" || fail "T-menusel: variant run failed outright"
+made "$BUILD/tooth-menusel/shots/menu-top.ppm"
+rc=0
+cmp -s "$BUILD/tooth-menusel/shots/menu-top.ppm" \
+       "$BUILD/twin-f01-vs-g01-a/shots/menu-top.ppm" || rc=$?
+[ "$rc" = 1 ] || fail "T-menusel: a one-step menuSelected change left the CANONICAL menu-top shot byte-identical (cmp rc $rc, want exactly 1) — the shots are blind to menu state and every menu-shot judgment here is vacuous"
+teeth=$((teeth + 1))
+echo "    T6 OK: a menuSelected step changes the canonical menu-top shot (machine plane is visible)"
+
 # --- [5] fk scripts (mechanical derivation, x2 byte-stable) ----------------------
 echo "== [5/9] fk_input scripts (derived x2, byte-stable) =="
 for k in 0 1 2 3 4; do
