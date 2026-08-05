@@ -1,69 +1,54 @@
-# ▶ RESUME HERE (written 2026-08-04 for a cold restart — read this first, then §rulings)
+# ▶ RESUME HERE (rewritten 2026-08-05 — read this first, then §rulings)
 
-**Branch `agent/auto`, tree clean, everything committed. Phase M4.**
-Loop entry per `docs/LOOP.md` §B; this block is the short version.
+**Branch `agent/auto`, tree clean, all committed. Phase M4.**
 
-## What is true right now
-- **B9 arc: r5's seven findings are FIXED and VERIFIED GREEN ON HARDWARE.**
-  `bash port/sim/device/check-device-fullgame.sh` -> `FULLGAME CONFORMS 12/12
-  (… p99=16.562ms skips=0/allow12 … teeth=25)` rc 0, evidence
-  `.loop/fullgame-b9r5-verify4-20260803T174600.log`. The row is STILL
-  `arc-in-flight` — **green bytes are not a closed arc**; a NO-GO round's fixes
-  do not close one. A fresh review round is owed and now also owes coverage of
-  the frame-conservation repair.
-- **The M4 gate cannot pass yet, for THREE independent reasons:**
-  1. **SIX `arc-in-flight` rows — the gate's own [0b] output, not a guess**
-     (`.loop/a17-verify-m4-final.log`): `check-device-fullgame.sh`,
-     `check-device-foh.sh`, `check-device-opk.sh`, `expected-assets.json`,
-     `check-assets-expected.js`, `verify_m4.sh`. (This page said FIVE for
-     weeks; the gate had never reached this stage to contradict it. Read the
-     list off `[0b]`, never off a page.) **This is now the ONLY blocker**, and
-     it is review-arc work with an owner in the loop — not a hidden defect.
-  2. ~~The OPK leg~~ **FIXED 2026-08-04. BOTH ARMS GREEN.** A13 cleared the
-     inventory drift, A20 re-measured the shot envelope that drift had been
-     hiding. `bash port/gfx/check-device-opk.sh` -> `OPK LAUNCH OK` rc 0
-     (`.loop/a15-regress-m3.log`); `MLFK_OPK_FOH=1 ...` ->
-     `OPK FOH LAUNCH OK` rc 0 (`.loop/a15-verify-foh.log`).
-  3. ~~verify_m4.sh cannot reach its arc check~~ **FIXED (A21 + A22).** Step
-     [0] is CLEAN: 89 producers, all pins match, 185 cited artifacts exist,
-     every `reviewed-go` row cites a terminal GO. The gate now reaches **[0b]**
-     and refuses on the truth — see the corrected list below.
-- **A GATE'S MESSAGE IS THE FIRST ITEM OF A QUEUE, NOT THE BLOCKER LIST.**
-  Four defects surfaced today one behind the other (inventory pin -> shot band
-  -> cite grammar -> stale byte pin), each invisible until the one in front was
-  fixed. Reason 1 above is real but the gate has NEVER reached it, so it cannot
-  be the count. Treat any long-red check as "unknown N remaining".
-- **p99 headroom is 108 µs** (s01 16.562 vs 16.670 ms budget). Swings ~600 µs
-  run to run. The gate can go red on timing alone. Standing risk, not actioned.
-- **B11 is DEFERRED** (owner, 2026-08-03) and its cost is live: 3 of 15 judged
-  shots pass or fail BY LUCK. **A green FOH leg is not evidence the judgment is
-  sound, and a red one is not evidence of a regression** — check any red on
-  `f01/css`, `f02/css-cpu`, `f05/css` against the B11 signature FIRST.
+## What changed 2026-08-04/05 (22 commits)
+- **A13 DONE** — home screen reads `MeleeLight`; three roles, three .desktop
+  files, three titles; play install rebuilt by the new committed producer
+  `port/gfx/opk/install-play-opk.sh`. BOTH OPK check arms green.
+- **A20/A21/A22 DONE** — a four-deep chain of defects each hidden behind the
+  one in front (inventory pin -> shot band -> cite grammar -> stale byte pin).
+- **D20 DONE** — owner-requested everyone-walljumps HOUSE RULE. `SIM CONFORMS`
+  8/8 flag-off. Guarded on DATA (`has_ecb_state`): puff is excluded because
+  upstream authored no WALLJUMP ECB for it — the positive tooth found that as
+  a CRASH on its first run. **Not witnessed for marth** (task #16).
+- **C7 DONE** — play path no longer runs a fixed RNG seed; the seed is RECORDED
+  before use because the LAUNCH grammar has no seed field.
+- **B8 DONE** — machine-plane tooth, teeth 15 -> 16. **It found a live M4
+  blocker**: `FOH_RE` could not match its own producer (`shots=13` vs 15, no
+  `vsfinish` slot), so a PASSING FOH leg could never satisfy the gate. Fixed;
+  all four consumer grammars then audited (only FOH_RE was broken).
+- **B1 was ALREADY FIXED** — my 08-04 probe was wrong (it grepped the symbol
+  and a comment instead of running the function). Corrected in-tree.
+- **Browser engine RE-PINNED to Chrome for Testing 151.0.7922.71** — channel
+  `chrome` resolved to the host's auto-updating Chrome, which had moved to
+  .76 and blocked EVERY capture. Same exact build, immutable, never
+  self-updates. NO bound moved: `RENDER OK`, `IOU MIN 0.9208` vs 0.92,
+  identical to the value frozen on real Chrome.
+- **A14 HALF DONE** — glyph atlas widened 43 -> 179 records (A-Z a-z + the
+  measured symbol set), `RENDER OK`, all 5 VFXGLYPHS_SHA256 pins moved, ledger
+  regenerated, cite closure OK.
 
-## THE QUEUE — TIER 1, in owner order
+## THE QUEUE
 | # | Item | State |
 |---|---|---|
-| 1 | A3 | **ALREADY BUILT** (measured 2026-08-03) — skip |
-| 2 | A4 | **ALREADY BUILT**; NATURAL default ratified correct — skip |
-| 3 | A5 | **ALREADY BUILT** — skip |
-| 4 | A7 credits | **BLOCKED** on the owner's `Math.random` call — the ONLY open question |
-| 5 | A13 opk title | **DONE 2026-08-04** — three roles, three .desktop files, three titles; play install rebuilt as `meleelight.opk` |
-| 6 | D8-later | REDIRECTED to a novel Melee-style letter grid; needs a MENU-SPEC deviation registered first |
-| 7 | WJ-later | PRE-REGISTER the checksum-surface change before any code (owner-ratified) |
-| 8 | A14 glyph atlas | LARGE, deliberately last |
-**TIER 2** = everything else, prior order preserved, B11 first, R8 last.
-**JUMPED THE QUEUE (all found 2026-08-04, one fail-closed chain, all DONE):**
-A13 -> A20 -> A21 -> A22. Each was invisible until the one in front was fixed.
+| 1 | **A14 second half** | The `foh_text2` -> `gfx_glyphs_load` SWAP. Glyphs now EXIST but nothing draws them. **Blocks D8.** |
+| 2 | D8-later (i) + (ii) | Tag widgets, then the D18 letter grid. Blocked on A14. |
+| 3 | A7 credits | UNBLOCKED — owner delegated the RNG choice; driver picked a FOH-LOCAL stream (D19's reasoning). 422-line zero-DOM transliteration. |
+| 4 | #16 D20 marth witness | Recipe recorded; needs a jump input to get marth airborne. |
+| 5 | Close the 8 arc-in-flight rows | ONE combined round (they share a blast radius). codex + grok both present. |
+| 6 | M4 gate -> **Chase's acceptance playthrough** | HUMAN GATE, cannot be automated. |
 
-## NEXT ACTION (D8-later — tier 1 resumes)
-Novel Melee-style name entry, owner-redirected 2026-08-03. **Register the
-MENU-SPEC deviation FIRST** — it is the first invented SCREEN, distinct from
-invented values — naming which real-Melee behaviours are modelled and which
-are not. Scope splits: (i) random-tag + clear-tag are a real upstream
-transliteration (`css.js:415-439`) and can land independently; (ii) the letter
-grid is the novel work. Upstream's name entry is a jQuery DOM `<input>` with
-no canvas code, so there is nothing to be faithful to — that is why this is a
-knowing departure, not a port.
+## A14 SECOND HALF — scope, measured 2026-08-05 before stopping
+41 call sites (15 `foh_text2` + 26 `foh_text`) in `foh_render.c` alone, plus
+`foh_pause.c`. The signatures are incompatible by design —
+`gfx_glyph_text(Gfx*, fontId, s, penX, ...)` is pen-based on a `Gfx`, while
+`foh_text2(Raster*, x, y, scale, italic, ...)` is scale-based on a `Raster` —
+and the atlas metrics are the browser's 40px/70px Arial area-averaged to
+device scale, NOT the hand-authored 5x7/6x9 faces. **So every menu screen
+re-lays and all 15 frozen menu shots plus their device twins must be
+re-taken.** Do it in a session with device time available; keep `foh_font.c`
+face 2 as a LOUD fallback and delete the 6x9 face only once green.
 
 ## STANDING HAZARDS (learned the hard way this session)
 - **Re-verify a queue row against the TREE before starting it.** Three tier-1
