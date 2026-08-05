@@ -159,11 +159,26 @@ else
   # SILENTLY answered by relaunching the game instead of surfacing. The app now
   # runs once and every exit code is reported as itself. Re-add a loop only
   # alongside a live producer of the code it answers.
+  # PUNCH-LIST C7: the PLAY path must not run a fixed RNG seed. `--seed 1337`
+  # here meant every real match a player ever started shared one RNG stream —
+  # a port artefact, not upstream behaviour (the browser game runs on the
+  # platform Math.random; the seeded mulberry32 exists for the ORACLE, and
+  # every evidence path keeps its fixed seed precisely because that is what
+  # makes it reproducible — mlfk.sh:122 and the rigs are deliberately
+  # untouched).
+  #
+  # THE SEED IS RECORDED BEFORE IT IS USED, which is the whole point of the
+  # punch-list row: the LAUNCH line's grammar is pinned
+  # (check-foh-flows.sh:332) and carries NO seed field, so without this line a
+  # randomised session could never be reproduced. This log is that record; it
+  # is not grammar-pinned (check-device-foh.sh pins `foh_dev foh:` lines only).
+  SEED="$(( ($(date +%s) + $$) % 2147483647 ))"
+  echo "mlfk-foh.sh: play seed=$SEED" >> "$LOG"
   # shellcheck disable=SC2086 — $SND/$MUS are word lists on purpose
   "$DIR/foh_device" --flow "$DIR/f01-vs-g01.flow" --input poll \
     --flow-out "$EV/foh-trace.txt" \
     --pace 1 --budget-ns 16666667 \
-    --bridge live --simdata "$DATA/simdata.txt" --seed 1337 \
+    --bridge live --simdata "$DATA/simdata.txt" --seed "$SEED" \
     --bstate-out "$EV/bstate.txt" \
     --gfxdata "$DATA/gfxdata-frozen.txt" \
     --vfxdata "$DATA/vfxdata-frozen.txt" \

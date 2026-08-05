@@ -2349,9 +2349,15 @@ Everything below is functionality/fidelity, not styling.
   --record-trace/--record-keys whose buffers are frames-proportional.
   Fix ORDER: make recording opt-in or streaming FIRST, then drop the
   bound.
-- C7 (P2) `--seed 1337` fixed on the play path (class instance #4 in
-  spirit): rec.json carries no seed field — record the seed BEFORE
-  randomising, or replays break.
+- C7 — DONE 2026-08-05. `mlfk-foh.sh`'s LIVE branch now derives a per-launch
+  seed and RECORDS it (`mlfk-foh.sh: play seed=<n>`) BEFORE using it, which is
+  the half the row insisted on: the LAUNCH line's grammar is pinned
+  (`check-foh-flows.sh:332`) and carries no seed field, so an unrecorded random
+  seed would have made a session unreproducible. Evidence paths keep their
+  fixed seeds deliberately — `mlfk.sh:122` and every rig are untouched, because
+  a fixed seed is what makes THEM reproducible. COST, paid honestly: this edits
+  a `reviewed-go` pinned producer, so its manifest row is downgraded to
+  `arc-in-flight` and joins the owed review round (gate now names 7, not 6).
 - C8 (P1) **§11 evidence gap**: C1's Opus 5 fallback GO exists only in
   an agent summary — no .loop/review-c1-opus.log. mlfk-foh.sh's manifest
   row stays `arc-in-flight` until materialized. 2nd instance of this
