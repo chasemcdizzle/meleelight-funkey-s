@@ -61,6 +61,23 @@ static bool frames_data(const MlSim *S, double i, const char *state,
   return false;
 }
 
+// Non-fatal twin of ecb_state below: does this character's CTAB1 data carry
+// the state at all? Exists ONLY for the MENU-SPEC D20 house rule, which must
+// never push a character into a state whose data upstream never authored.
+// MEASURED 2026-08-04: marth has ECB + framesData for WALLJUMP, puff has
+// framesData but NO ECB — because puff cannot walljump upstream, so nobody
+// ever needed the boxes. Without this guard, D20 + puff = `ecb: unknown
+// action state` one frame after the walljump fires (witnessed, g02 frame
+// 1888).
+static bool has_ecb_state(const MlSim *S, double i, const char *state) {
+  const int c = (int)S->characterSelections[slot(i)];
+  const ml_ecb_state_t *tab = ml_ecb_states[c];
+  for (int k = 0; k < ml_ecb_state_count[c]; k++) {
+    if (strcmp(tab[k].name, state) == 0) return true;
+  }
+  return false;
+}
+
 // ecb[characterSelections[i]][state] — CTAB1 lookup. Upstream would throw
 // on a missing state / out-of-range frame (undefined[0]): domain trap.
 static const ml_ecb_state_t *ecb_state(const MlSim *S, double i,
@@ -372,8 +389,15 @@ static void dealWithWallCollision(MlSim *S, double i, Vec2D newPosition,
       // the per-action-state `wallJumpAble` flag (:777): the setting means
       // "every character can walljump", not "every state can be walljumped out
       // of". With the flag false this is bit-identical to upstream.
+      // The D20 arm is GUARDED ON DATA, not on a character list: the house
+      // rule grants walljump to any character whose CTAB1 data can actually
+      // represent the WALLJUMP state. Puff is excluded by that measurement
+      // (no ECB for WALLJUMP — upstream never authored boxes for a state puff
+      // cannot enter), and authoring them would be inventing Nintendo-derived
+      // animation data. Marth is included: it has both ECB and framesData.
       if (sign * in[0].lsX >= 0.7 && sign * in[3].lsX <= 0 &&
-          (ATTR(S, i)->walljump || S->everyCharWallJump)) {
+          (ATTR(S, i)->walljump ||
+           (S->everyCharWallJump && has_ecb_state(S, i, "WALLJUMP")))) {
         p->phys.wallJumpTimer = 254;
         p->phys.face = sign;
         dsp(S, "init", "WALLJUMP", i);

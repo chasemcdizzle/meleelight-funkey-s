@@ -22130,3 +22130,67 @@ building a synthetic witness, not after.
 **NEXT.** The D20 positive tooth (own task). A7 credits is unblocked — the
 owner delegated the RNG choice, and D19's measurement already answers it: a
 FOH-local stream, for the same reason.
+
+## driver — 2026-08-04 — D20 tooth: the positive test found a CRASH on its first run. "Everyone walljumps" is not everyone — puff has no ECB for the state, and the arm is now guarded on DATA
+
+**TASK.** #16, the D20 positive tooth. Phase M4. Branch `agent/auto`.
+
+**FINDING THE WITNESS — measurement, not construction.** The obvious plan was a
+synthetic trace driving a character into a wall. A temporary probe made that
+unnecessary. Instrumenting the walljump window showed it opens **25 times**
+across the 8 goldens, **22 of them for a NON-walljump character**: g02 slot 1
+(puff) enters it 19 times at frames **1884-1902**, g08 3 times, g06 3 times
+(falcon, already able). So the gate is reached constantly — only the stick
+condition fails. A second probe said why: `sign = -1` while `lsX = +0.7`, i.e.
+the player holds AWAY from the wall the whole window. The tooth was therefore
+**one token**: frame 1887, slot 1, `lsX` `3fe6666666666666` -> `bff0000000000000`
+(-1.0), which satisfies both conjuncts (`sign*in0 = 1.0 >= 0.7`,
+`sign*in3 = -0.7 <= 0`). Probe reverted; tree clean.
+
+**THE TOOTH FIRED IMMEDIATELY — AND THE FEATURE CRASHED.**
+`--walljump-all` on that trace: **rc 3, `SIM FATAL frame 1888: ecb: unknown
+action state`**, stream truncated at 1887. Flag-off: rc 0, 3602 lines. So the
+walljump DID fire (D20 works) and then the sim died one frame later.
+
+**ROOT CAUSE, measured from the compiled table.** WALLJUMP data by character:
+marth ECB **yes** / framesData yes; **puff ECB NO** / framesData yes; fox,
+falco, falcon complete. Puff has no ECB boxes for WALLJUMP because upstream
+never authored them for a state puff cannot enter. Granting the ABILITY without
+the DATA pushes the character into a state that cannot be collided.
+
+**FIX — guarded on DATA, not on a character list.** The arm now reads
+`(ATTR(S, i)->walljump || (S->everyCharWallJump && has_ecb_state(S, i,
+"WALLJUMP")))`, with `has_ecb_state` a non-fatal twin of the existing
+`ecb_state` lookup. D20 grants walljump to any character whose data can
+represent the state; puff is excluded by measurement, not by name. Authoring
+the missing boxes would be inventing Nintendo-derived animation data, which
+this project does not do. **So "Everyone Walljumps" really means marth joins
+fox/falco/falcon. That limitation is the data's, and it is now on the page.**
+
+**VERIFIED.** `bash port/sim/check-sim.sh` -> `SIM CONFORMS`, all 8 goldens
+exact, with the guard in (`.loop/wj-guard-sim.log`). The tooth trace under
+`--walljump-all` now exits rc 0 and is BYTE-IDENTICAL to flag-off — the
+exclusion is complete and silent. Evidence banked at `.loop/wj/D20-TOOTH.txt`
+plus the trace itself.
+
+**STILL NOT CLAIMED: a positive witness for MARTH.** The one character D20
+actually adds cannot be witnessed by any golden — the probe found no marth wall
+window at all (the 25 entries are puff x22 and falcon x3). So D20 is now
+regression-proven, crash-proven and scope-measured, but the marth path has
+never executed. #16 stays open for exactly that.
+
+**ZOOM OUT (HARD RULE 8).** Instance: the positive test found a fatal on its
+first execution, in a change that had already passed the full 8-golden
+regression gate twice. Class: **a feature gated OFF by default is verified by
+its off state, which is precisely the state that exercises none of it** — the
+regression suite and the feature are disjoint by construction, so "all green"
+carried exactly zero information about the thing being built. The general
+lesson is sharper than "write a positive test": **when the flag is off in every
+existing test, the FIRST execution of the on-path is the first execution,
+period — treat it as untested code no matter how green the suite is.** The
+cheap instrument that made it tractable was measuring the gate's REACHABILITY
+before trying to construct a case for it: two throwaway probes turned "build a
+synthetic trace from scratch" into "flip one token in an existing one", and the
+same measurement then explained exactly which characters the rule can serve.
+
+**NEXT.** A marth wall-contact trace (the last piece of #16). Then A7 credits.

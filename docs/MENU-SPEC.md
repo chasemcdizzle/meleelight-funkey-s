@@ -879,6 +879,28 @@ mechanical effect). Every frozen golden was recorded at the settings defaults,
 so flag-off is bit-identical to the faithful port — VERIFIED: `bash
 port/sim/check-sim.sh` -> `SIM CONFORMS`, all 8 goldens exact, after the change.
 
+*WHO IT ACTUALLY AFFECTS — and the guard that had to be added.* "Everyone"
+is aspirational; the data decides. Measured from the compiled CTAB1 table:
+
+| char | `walljump` attr | ECB for WALLJUMP | framesData | D20 grants it? |
+|---|---|---|---|---|
+| marth | 0 | **yes** | yes | **YES** |
+| puff | 0 | **NO** | yes | no — excluded |
+| fox / falco / falcon | 1 | yes | yes | already had it |
+
+Puff has no ECB data for WALLJUMP because upstream never authored boxes for a
+state puff cannot enter. Granting the ability alone therefore drove puff into a
+state with no collision data: **witnessed** — a one-token edit to g02 (frame
+1887, puff's `lsX`) made `--walljump-all` die with `SIM FATAL frame 1888: ecb:
+unknown action state`, stream truncated. Authoring the missing boxes would mean
+inventing Nintendo-derived animation data, which this project does not do.
+
+So the arm is **guarded on DATA, not on a character list**
+(`has_ecb_state(S, i, "WALLJUMP")`): D20 grants walljump to any character whose
+data can represent the state. Puff is excluded silently and correctly — with
+the guard, that same trace runs to completion byte-identical to flag-off.
+Evidence: `.loop/wj/D20-TOOTH.txt`.
+
 *Reachability.* The FOH LAUNCH line has always carried `walljump=%d`
 (`foh_dev.c:2245`, `foh_app.c:538`) while nothing consumed it; the three
 `G.sim` apply sites now do (`foh_app.c:704`, `foh_dev.c` ×2, the target-live
