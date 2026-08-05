@@ -2036,6 +2036,40 @@ never reached this stage to contradict them. Closing these is review-arc work
 frame-conservation repair, and the A13/A20 edits to check-device-opk.sh ride
 the same in-flight row.
 
+## D20 MARTH WITNESS (#16) — still open, and the instrument was the story
+
+**State:** D20 has a REGRESSION proof (8/8 goldens bit-identical flag-off), a
+CRASH proof (the tooth found puff's missing WALLJUMP ECB on its first run) and
+a MEASURED scope (marth is the only character it adds). The marth path itself
+has still never executed.
+
+**2026-08-05 attempt, and why its null results are trustworthy only after the
+third fix.** Twelve synthetic traces were swept and all reported "no
+divergence". All twelve were MEANINGLESS, for three separate instrument bugs
+found in sequence:
+1. `lsX` set but `rawX` left 0 — the real traces set BOTH, because
+   interpretInputs derives the processed stick from raw.
+2. Slot separators written as `... | | ` — a SPACE where slot 2 begins, so
+   every run died `SIM FATAL frame 0: trace: short slot token list` and wrote
+   an EMPTY stream. Two empty files `cmp` as identical, so the sweep reported
+   "no divergence" while nothing had run at all.
+3. The comparison itself was never sanity-checked against a known-good
+   positive until last.
+Correct row form: `slot0 + "|" + slot1 + "||"` — bare pipes, no spaces, slots
+2/3 empty. With the instrument fixed and PROVEN (null vs J1 diverge), six
+walk+jump+drift patterns across stages 0 and 1 still produce **zero** marth
+wall-window frames. That result is real; the earlier ones were not.
+
+**THE LESSON, which cost more than the feature:** a null result from an
+unverified instrument is not evidence of anything. Prove the instrument can
+produce a POSITIVE before trusting a negative — here, one `cmp` of a
+known-moving input against a null input would have caught all three bugs
+immediately, and it was the last thing tried instead of the first.
+
+**Next attempt should stop guessing at geometry:** read the wall segments out
+of the STAB1 stage data and aim at a measured x, rather than sweeping
+walk-off-and-drift patterns and hoping.
+
 ## GATE CONSUMER/PRODUCER GRAMMAR AUDIT — 2026-08-05 (all four verdict consumers)
 
 Triggered by B8 finding `FOH_RE` stale against its own producer. Every anchored
