@@ -2186,6 +2186,35 @@ A20/A21/A22 (2026-08-04) · B3 (L2136) · B9 (L2196) · U1 (L2331).
   `italic 700 70px Arial` = upstream's menu weight, and captured heights
   (5/7/9/12-14 px) suit 240x240. NOTE: hand-authoring more glyphs is
   forbidden in the meantime (that is the debt A8-F2 named).
+  **A14 IS BLOCKED ON THE BROWSER IDENTITY PIN (measured 2026-08-05).**
+  `bash port/gfx/check-render.sh` dies before any glyph work:
+  `capture-canvas: browser identity pin violated — launched chromium
+  151.0.7922.76, pinned chromium 151.0.7922.71` (`capture-canvas.js:153`,
+  `.loop/a14-render1.log`). The installed Chrome auto-updated past the pinned
+  engine, and every render bound in `expected-render.json` was measured on
+  .71 — so NO re-capture of any kind can run here until that is settled, and
+  widening the pin is exactly what the error forbids. A14 cannot proceed;
+  neither can any other glyph/render re-freeze. **This is environment drift,
+  not a code defect, and it was NOT introduced by A14.**
+  **THE CHAR SET IS MEASURED AND READY TO APPLY** the moment the engine
+  question is settled — one edit to `port/gfx/gfx-pagelib.js` GLYPH_FONTS,
+  specs 0 and 3 only (spec 3 IS upstream's menu weight; specs 1/2 stay
+  HUD-only), with `:` and ` ` moved OUT of the per-spec prefixes so no glyph
+  is emitted twice:
+  ```
+  MENU_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz !$&'()+,-./:>?[]"
+  spec0.chars = "0123456789" + MENU_CHARS   spec3.chars = "0123456789" + MENU_CHARS
+  ```
+  69 + 10 = **79 glyphs per widened spec, zero duplicates** (verified), taking
+  the artifact from 43 glyph records to 179. Derivation, in two parts because
+  the halves have different domains: (a) every string literal reaching
+  `foh_text`/`foh_text2`/`text_in` across `foh_render.c`, `foh.c`,
+  `foh_pause.c` = 40 distinct chars; (b) what name entry can PRODUCE — the
+  full alphabet, NOT the 22 lowercase letters that happen to occur in
+  `randomTags`, because a grid that cannot spell `j`, `q`, `v` or `w` is
+  broken by construction. Sample data sizes the symbols; the DOMAIN sizes the
+  letters.
+
   **A14 SCOPE AMENDED 2026-08-04 (measured by the D8-later attempt): the
   planned `A-Z + .,!?&'` addition is NOT ENOUGH, and A14 is now a BLOCKER for
   D8-later.** Face coverage measured directly from `port/foh/foh_font.c`:
