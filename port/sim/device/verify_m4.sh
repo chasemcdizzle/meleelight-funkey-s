@@ -109,7 +109,7 @@ mkdir -p "$VDIR"
 # line (a full-byte self-row plus this anchor would be a two-unknown
 # hash fixed point with no solution); the excluded line is protected
 # by the anchor equality itself — a wrong literal IS a refusal.
-MANIFEST_SHA256=f223c2ced3bc14798e5f219c467e701c23d12b587e6d73e54d0814b920219a1c
+MANIFEST_SHA256=12ce792662aaa3faae825d9f8ecfef5cddca80b9aae616cc1b566d564f0c8093
 
 # AUTHORITATIVE — computed ONCE, then readonly (the sentinel lockout).
 # Any dev/canned-evidence signal zeroes it; the `M4 GATE OK` sentinel
@@ -1111,7 +1111,9 @@ FULLGAME_RE='^FULLGAME CONFORMS 12/12 \(render\+sfx\+music live; live-ai=g07,g08
 TARGET_RE='^DEVICE TARGET CONFORMS \(goldens=2 flows=2 shots=4 fbwit=4 p99=(0|[1-9][0-9]{0,2})\.[0-9]{3}ms skips=0 underruns=0 starves=0 starts f06-target-t01=15 f07-target-t02=31 sfxpin=15/31 music=menu>targettest:5/5 live=f08-live-target:(0|[1-9][0-9]{0,5})f/(0|[1-9][0-9]{0,5})rows/opts-ok bound=f09-live-bound:(0|[1-9][0-9]{0,5})f/(0|[1-9][0-9]{0,5})rows teeth=6\)$'
 # FOH_RE was STALE AGAINST ITS OWN PRODUCER — found 2026-08-05, the H4 class
 # above recurring on a second consumer. It demanded `shots=13` and had no slot
-# for the `vsfinish=1` field, while check-device-foh.sh:2328 has been printing
+# for the `vsfinish=1` field, while check-device-foh.sh's verdict echo (grep
+# for `DEVICE FOH OK` — a line number here would rot the moment a tooth is
+# inserted above it, as one did) has been printing
 # `shots=15 ... vsfinish=1 ...`, so a fully PASSING FOH leg could not satisfy
 # this gate: leg [2] would have failed on grammar AFTER every arc closed.
 # Proven mechanically (a plausible passing line vs this regex) before editing.

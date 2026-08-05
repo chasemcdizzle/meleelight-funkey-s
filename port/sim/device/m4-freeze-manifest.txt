@@ -173,14 +173,14 @@
 # rows were re-hashed against their current bytes and this was the ONLY real
 # mismatch (verify_m4.sh's own row is normalized — it excludes the
 # ^MANIFEST_SHA256= line — and matches).
-# THE UNCLOSED COUNT IS NOW SIX, not the seven listed above: since that
-# paragraph was written, port/sim/target/check-device-target.sh and
-# port/gfx/opk/mlfk-foh.sh closed arcs of their own (see their cites) while
-# check-device-foh.sh joined. Do not read a count off this prose — the six are
-# whatever verify_m4.sh [0b] PRINTS, which as of 2026-08-04 is:
-#     port/sim/device/check-device-fullgame.sh   port/foh/check-device-foh.sh
-#     port/gfx/check-device-opk.sh               pipeline/expected-assets.json
-#     pipeline/lib/check-assets-expected.js      port/sim/device/verify_m4.sh
+# THERE IS DELIBERATELY NO COUNT HERE. An earlier version of this paragraph
+# said "SIX", went stale within a day as C7 and A14 downgraded two more rows,
+# and was caught by review (2026-08-05, opus5 fallback round) — the third
+# instance of the C13 class in this file alone. A count restated in prose is a
+# second copy of a fact the parser already owns, and the prose copy is the one
+# that rots, because nothing fails when it is wrong.
+# THE UNCLOSED SET IS WHATEVER `verify_m4.sh [0b]` PRINTS. Run it. Do not
+# maintain a list here, and do not "helpfully" add one back.
 # Step [0] itself is CLEAN as of this change: 89 producers, all bytes match
 # their pins, 185 cited artifacts exist, every reviewed-go row cites a log
 # whose terminal anchored verdict is GO.
@@ -455,7 +455,7 @@ f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/
 ec578b42d0490448d61bef3f21c958105a48d99c4cc1a5d403a742e7627b8e18 pipeline/lib/check-expected.js reviewed-go .loop/review-117-plib-4o.log-GO-closure-round+.loop/review-117-plib-2o.log-GO+NO-GO-rounds-.loop/review-116-plib-1.log-.loop/review-116-plib-2-grok.log-.loop/review-117-plib-1.log+PROCESS-11-Opus-5-second-codex-aborted-x3-cyberfilter-grok-x3-no-verdict
 31e5946a0269095f7895b01aaf7f78e9c3496aae75c638b8cd1b4a678c4bd29b pipeline/expected.json reviewed-go .loop/review-117-plib-4o.log-GO-closure-round+.loop/review-117-plib-2o.log-GO+NO-GO-rounds-.loop/review-116-plib-1.log-.loop/review-116-plib-2-grok.log-.loop/review-117-plib-1.log+PROCESS-11-Opus-5-second-codex-aborted-x3-cyberfilter-grok-x3-no-verdict
 a574fec40685b6770e85d55ee1aaabd35553caab00c9aeadec0ea234b4173590 pipeline/lib/tables-anim-xref.js grandfathered-m1 M1-era-checker-unchanged-since-iter10-21da425-proven-by-the-M1-EXIT-GATE-PIPELINE-OK+newly-pinned-per-.loop/review-117-jrt-8.log-H+era-token-corrected-m2-to-m1-per-iter-118-driver-ruling-2-dissolving-review-117-delta-1-H2-vs-jrt-9b-L
-d060097aea6cb23e8efc282bd3139cd52025210ac3ba9274f60d895cb66b44b4 port/sim/device/verify_m4.sh arc-in-flight FOH_RE-staleness-repair-2026-08-05-consumer-demanded-shots-13-and-had-no-vsfinish-slot-while-the-producer-printed-shots-15-vsfinish-1-so-a-PASSING-leg-could-not-satisfy-the-gate-H4-class-2nd-instance+B9-headroom+artwork-arc-IN-FLIGHT-REQUIRED_PRODUCERS-87-to-89+anchor-recomputed-.loop/review-b9-3-codex.log-M-status-claim-corrected+PRIOR-CLOSURE-iter-119-delta-arc-CLOSED-r7-codex-PROVEN-FAILED-3-malfunctions-PROCESS-11-fallback-DUAL-GO-grok-.loop/review-119-delta-7-grok2.log-GO+opus5-.loop/review-119-delta-7-opus.log-GO-prior-rounds-.loop/review-119-delta-5b-codex.log-NO-GO+.loop/review-119-delta-6b-codex.log-NO-GO-all-Highs-FIXED-with-teeth+earlier-.loop/review-108-4.log-r4-GO
+7375c4b6fc5ca80ff9eaa74cb22c8dec438ee909ba3772f28f0c6cb3d3cd8c5b port/sim/device/verify_m4.sh arc-in-flight FOH_RE-staleness-repair-2026-08-05-consumer-demanded-shots-13-and-had-no-vsfinish-slot-while-the-producer-printed-shots-15-vsfinish-1-so-a-PASSING-leg-could-not-satisfy-the-gate-H4-class-2nd-instance+B9-headroom+artwork-arc-IN-FLIGHT-REQUIRED_PRODUCERS-87-to-89+anchor-recomputed-.loop/review-b9-3-codex.log-M-status-claim-corrected+PRIOR-CLOSURE-iter-119-delta-arc-CLOSED-r7-codex-PROVEN-FAILED-3-malfunctions-PROCESS-11-fallback-DUAL-GO-grok-.loop/review-119-delta-7-grok2.log-GO+opus5-.loop/review-119-delta-7-opus.log-GO-prior-rounds-.loop/review-119-delta-5b-codex.log-NO-GO+.loop/review-119-delta-6b-codex.log-NO-GO-all-Highs-FIXED-with-teeth+earlier-.loop/review-108-4.log-r4-GO
 
 # --- FROZEN REFERENCE DATA (added iter 118, review-117-delta-1 [H1]) ---
 # The 23 artifacts the M4 judges compare evidence AGAINST, previously
