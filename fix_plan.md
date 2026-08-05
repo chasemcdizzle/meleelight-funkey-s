@@ -2036,6 +2036,33 @@ never reached this stage to contradict them. Closing these is review-arc work
 frame-conservation repair, and the A13/A20 edits to check-device-opk.sh ride
 the same in-flight row.
 
+## GATE CONSUMER/PRODUCER GRAMMAR AUDIT — 2026-08-05 (all four verdict consumers)
+
+Triggered by B8 finding `FOH_RE` stale against its own producer. Every anchored
+consumer grammar in `verify_m4.sh` was then checked the SAME way: extract the
+producer's `echo`/`printf` format, split off shell expansions, and require every
+literal chunk to appear in the consumer regex. **No device run needed — a
+literal in a format string is derivable from source.**
+
+| consumer | producer | literals | pinned values | verdict |
+|---|---|---|---|---|
+| `FULLGAME_RE` | `check-device-fullgame.sh:1380` | all present | `12/12` == `N_GOLDENS_PIN=12`; `allow12` == `SKIP_ALLOW_PER_RUN=12`; `g07,g08,m01,m02` == `PINNED_LIVE_AI_SET`; `teeth=25` == last green run | **OK** |
+| `TARGET_RE` | `check-device-target.sh` | all present | `teeth=6` == 6 col-0 increments | **OK** |
+| `FOH_RE` | `check-device-foh.sh:2328` | **`shots=15` and `vsfinish=1` MISSING** | `teeth=15` was right pre-B8 | **WAS BROKEN — fixed** |
+| `OPKFOH_RE` | `check-device-opk.sh` | exact literal | none | **OK** |
+
+**NOT verified, and not claimed:** the DYNAMIC pins that only a device run can
+produce — `TARGET_RE`'s `fbwit=4` / `sfxpin=15/31` / per-flow `starts`, and
+`FOH_RE`'s `fbwit=15`. Literal STRUCTURE is proven; those VALUES are not.
+`teeth` in fullgame is loop-dependent (its tooth at `:2855` is indented and runs
+per leg), so 25 is not a col-0 count there — do not "correct" it to 5.
+
+**Why this class matters more than it looks:** a stale consumer only bites when
+the leg PASSES, i.e. after every arc closes — the worst possible moment, and
+invisible until then because the arc refusal fires first. Two instances now
+(FULLGAME_RE 2026-08-01, FOH_RE 2026-08-05). Re-run this audit after ANY edit
+to a producer's verdict line.
+
 ## PUNCH-LIST STATUS RECONCILIATION 2026-08-04 (read this before starting ANY row)
 
 The rows below are a LOG, not a queue: a completed item keeps its original
