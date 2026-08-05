@@ -78,7 +78,7 @@ AGENT_LOG=docs/AGENT-LOG.md
 #   python3 port/sim/device/gen-closure-ledger.py --write
 # which prints the replacement value. (No fixed point to solve: the ledger
 # does not contain this script's hash, unlike the manifest/gate pair.)
-LEDGER_SHA256=5dea6df7121a2f9afaa0ace45781d0190b8d41d76a75bc2dc9a26d7f25c98414
+LEDGER_SHA256=6c9df647b43b30ed26efcffda49615d88b1d80cd8b5df32ee031df177982fdba
 
 refuse() { echo "CITE CLOSURE REFUSED: $*" >&2; exit 1; }
 

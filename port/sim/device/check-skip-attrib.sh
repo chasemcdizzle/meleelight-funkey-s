@@ -103,7 +103,7 @@ VFXGLYPHS_FROZEN=$GFX/vfxglyphs-frozen.txt
 # files' shas, iter-72 rule).
 GFXDATA_SHA256=5499a3dd5fc374d6ed988faf0bef6fa2e189eb314e892bdd83c7534dc0865c94
 VFXDATA_SHA256=545015a3d7e3bc138059fcb9711040758e729a7d21aac650b009ed7fdb5bd662
-VFXGLYPHS_SHA256=8926cab4d648579d099053994bf309943b5a6bc3c5abf733af9ac6b71f3cbbeb
+VFXGLYPHS_SHA256=a9f08ad66cbf3f52d4003b87b7ff8f529367aa8b28bf08dbebfc3d6296d995d6
 SHOT_FRAME=900
 # Quiesce-bracket slacks (iter 78, review-76 M1 — the exact-window
 # STANDING TOOTH; quiesce arm only in this script): device-clock stamp

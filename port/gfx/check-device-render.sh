@@ -127,7 +127,7 @@ GFXDATA_SHA256=5499a3dd5fc374d6ed988faf0bef6fa2e189eb314e892bdd83c7534dc0865c94
 VFXDATA_FROZEN=$GFX/vfxdata-frozen.txt
 VFXDATA_SHA256=545015a3d7e3bc138059fcb9711040758e729a7d21aac650b009ed7fdb5bd662
 VFXGLYPHS_FROZEN=$GFX/vfxglyphs-frozen.txt
-VFXGLYPHS_SHA256=8926cab4d648579d099053994bf309943b5a6bc3c5abf733af9ac6b71f3cbbeb
+VFXGLYPHS_SHA256=a9f08ad66cbf3f52d4003b87b7ff8f529367aa8b28bf08dbebfc3d6296d995d6
 # M4 task 3: the frozen legibility constant (documented adaptation;
 # rationale + authority in gfx.h). Twin-pinned: this literal must match
 # the gfx.h #define — constant drift dies loudly here, never silently.

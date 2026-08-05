@@ -223,11 +223,36 @@
   // --- VFXGLYPHS1 (browser-rasterized text plane; M4 task 2) ---------------
   // Fonts in the exact upstream draw forms (render.js renderOverlay +
   // dVfx/start.js): id order is the C GfxFontId enum.
+  // MENU_CHARS (punch-list A14). Specs 1 and 2 stay HUD-only — they are the
+  // damage/percent readouts and no menu text draws through them. Specs 0 and 3
+  // gain the menu domain: spec 3 because `italic 700 70px Arial` IS upstream's
+  // menu weight, spec 0 because the FOH small face draws through it.
+  //
+  // MEASURED, in two parts, because the halves have DIFFERENT domains:
+  //   (a) what the FOH draws today — every literal reaching foh_text/
+  //       foh_text2/text_in across foh_render.c, foh.c, foh_pause.c: 40
+  //       distinct characters;
+  //   (b) what name entry can PRODUCE (MENU-SPEC D18) — the FULL alphabet.
+  //       Upstream's randomTags span 54 distinct chars but use only 22 of the
+  //       26 lowercase letters, and sizing the grid from that sample would
+  //       ship a name screen that cannot spell j, q, v or w. Sample data sizes
+  //       the SYMBOLS; the domain sizes the LETTERS.
+  // A14's original plan (`A-Z + .,!?&'`) was measurably short — it left every
+  // lowercase letter and `$[]` out, so D8 would still have hit
+  // `foh_font: no glyph`, and the second re-freeze would only have surfaced
+  // after the first shipped. vfxglyphs-frozen.txt is DEVICE-consumed
+  // (check-device-foh.sh pushes it via --glyphs), so this is ONE capture.
+  //
+  // `:` and ` ` live HERE, not in the per-spec prefixes: spec 0 used to end in
+  // `:` and spec 3 in ` `, and re-appending either would emit a duplicate
+  // GLYPH record for the same codepoint.
+  const MENU_CHARS =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz !$&'()+,-./:>?[]";
   const GLYPH_FONTS = [
-    { font: "900 40px Arial", lw: 2, xscale: 1, chars: "0123456789:" },
+    { font: "900 40px Arial", lw: 2, xscale: 1, chars: "0123456789" + MENU_CHARS },
     { font: "900 25px Arial", lw: 2, xscale: 1, chars: "0123456789" },
     { font: "900 53px Arial", lw: 2, xscale: 0.8, chars: "0123456789%" },
-    { font: "italic 700 70px Arial", lw: 10, xscale: 1, chars: "0123456789 " },
+    { font: "italic 700 70px Arial", lw: 10, xscale: 1, chars: "0123456789" + MENU_CHARS },
   ];
   const GPEN_X = 200, GPEN_Y = 600; // 5-grid-aligned pen for glyph rasters
 
