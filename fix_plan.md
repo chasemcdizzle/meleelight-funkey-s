@@ -2106,10 +2106,44 @@ A20/A21/A22 (2026-08-04) · B3 (L2136) · B9 (L2196) · U1 (L2331).
 - **A6 (P2) effectively DONE** by its own measured 2026-08-03 text; the
   residual is the live-mixer bus push at `foh.c:975-977`, not a screen build.
 
-**NOT RE-PROBED — status unknown, do not trust either way:** A8, A15, A16,
-U2, U4, B2 (largely answered by B9's 9.06 ms measurement), B4, B5, C8, C9,
-C10, C12, C13, C14, C17. Each needs the same treatment as the block above
-BEFORE it is started. That is cheap and it has now paid three times.
+**ALL 15 NOW PROBED (2026-08-05) — the block below replaces "status unknown".**
+
+*Found ALREADY SATISFIED (close them):*
+- **A8** — `.loop/reuse-audit/REPORT.md` exists and its consequences are filed
+  as A14/A15/A16/U1/U2. The audit was delivered; the row outlived it.
+- **B2** — answered by B9's measurement: title render 16.96 -> 9.06 ms, margin
+  -0.29 -> +7.61 ms. The "UNVERIFIED on hardware" claim is stale.
+- **B5** — `port/sim/target/target_finish_probe.c` EXISTS; foh.h already says
+  "the finish probe owns mechanical coverage". The FINISH arm is covered.
+- **C8** — `.loop/review-c1-opus.log` EXISTS. The §11 evidence gap is closed
+  (mlfk-foh.sh is arc-in-flight again, but for C7's reasons, not this one).
+- **A16** — not work at all: it is a FRAMING note recording that audiomenu/
+  credits/keytest/keyboardmenu are transliterations. Nothing to build.
+
+*Confirmed STILL OPEN, with the probe that says so:*
+- **A15** (P1) menu-look ORACLE — `port/gfx/capture-canvas.js` contains no menu
+  capture; its only `css` hit is a MIME-type string. Not built.
+- **U2** (P2) — `gfx-pagelib.js` has ZERO `target` hits, so target rasterization
+  still has no browser judge (twin-vs-device only).
+- **U4** (P2) — `check-device-render.sh` was last touched at iter 80, BEFORE
+  U1's `col8()` rounding changed background pixels. The device evidence it
+  pins was never re-taken.
+- **B4** (P1) — `FOH_TMATCH` has no exit `ev_trans` in `foh.c` (only the entry
+  at `:802`), so target-match is still terminal in the machine.
+- **C9** (P2) — zero exit-code assertions for C1's boolean in
+  `check-device-foh.sh`.
+- **C10** (P2) — no launcher grep-assert in either candidate host.
+- **C12** (P2) — `ART_SHA="$hsum"` survives at `check-device-foh.sh:1408` as
+  the file's ONLY occurrence: assigned, never read. (The `raster.c:122` comment
+  item reads as already corrected; the other two need their own look.)
+- **C14** (P2) — `oracle/meleelight-harness.patch` does touch `main.js`, so
+  cites read off the patched clone still shift. Citation-only.
+- **C17** (P2) — `DEV_NEG`/`DEV_POS` still live in `normalize-foh-trace.js` and
+  `check-judge-regression.sh`, unvalidated since the 3x injector cadence
+  retired. Needs a device session.
+- **C13** (P2) — the class is real and recurred THIS session: the manifest's
+  UNCLOSED-ROWS prose said SEVEN while the gate printed six (fixed 2026-08-04
+  by telling the prose to stop restating the count). Still zero enforcement.
 
 ## A8 AUDIT CONSEQUENCES (iter 120; evidence .loop/reuse-audit/REPORT.md)
 - A14 (P0, folded into A1) glyph-atlas swap: menus must draw with the
