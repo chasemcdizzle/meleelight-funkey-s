@@ -2036,6 +2036,30 @@ never reached this stage to contradict them. Closing these is review-arc work
 frame-conservation repair, and the A13/A20 edits to check-device-opk.sh ride
 the same in-flight row.
 
+## ARC m4-close-20260805 — ATTEMPTED, CANNOT CLOSE TODAY (all three reviewers)
+
+One combined round was launched over all 8 unclosed producers plus the code
+riding them (scope + prompt: `.loop/arc-20260805/`). **All three reviewers are
+unavailable for a DIFFERENT reason, each recorded as an artifact:**
+
+| round | reviewer | outcome | why |
+|---|---|---|---|
+| 1 | codex (primary) | VOID rc=1 | **Out of credits until 2026-08-07** — `ERROR: You've hit your usage limit` |
+| 2 | grok (§11 fallback) | VOID rc=0 | `grok --prompt-file … --permission-mode plan` ACKNOWLEDGES and exits after one message. It never reviews, so there is no verdict to read. **The invocation in `port/review/reviewers.sh:27` does not work for this purpose.** |
+| 3 | opus5 (§11 fallback) | VOID rc=0, `void-reason: no-verdict` | Produced a REAL review with findings, then wrote `**VERDICT: GO**` — markdown-bolded, so not an anchored line. Correct refusal: the anchor is what stops verdict laundering. |
+
+**PROCESS §11's fallback needs BOTH pair members**, so opus5 alone cannot close
+the arc even after its formatting is fixed. **The arc is blocked until codex
+returns (2026-08-07) or `reviewers.sh`'s grok invocation is repaired.**
+
+**Round 3's findings were acted on immediately** — both Mediums were driver
+regressions from this same session (the manifest's stale "SIX" count and a
+line-number citation that rotted in the commit that wrote it). Fixed; see the
+2026-08-05 commit. That is the round paying for itself despite being VOID.
+
+**Prompt already hardened** for the re-run: `.loop/arc-20260805/prompt.md` now
+states the verdict-line rule literally, with the round-3 failure as the reason.
+
 ## A14 SECOND HALF — DESIGN DECIDED 2026-08-05 (do not re-litigate)
 
 **Approach: swap the IMPLEMENTATION, not the call sites.** Rewrite
