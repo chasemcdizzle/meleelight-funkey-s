@@ -2080,10 +2080,21 @@ A20/A21/A22 (2026-08-04) · B3 (L2136) · B9 (L2196) · U1 (L2331).
 (restart deliberately skipped — upstream has no restart-match semantics).
 
 **PROBED AGAINST THE TREE 2026-08-04 — genuinely OPEN, with the evidence:**
-- **B1 (P1) OPEN.** `blend565` is still at `port/gfx/raster.c:87` and the
-  comment at `:136` records that new drawing "dodges blend565's blue spill" —
-  routed around, not fixed. Still corrupts blue on every partial-alpha blend
-  the GAME renders.
+- ~~**B1 (P1) OPEN.**~~ **WRONG — B1 IS FIXED. Corrected 2026-08-05.**
+  `port/gfx/raster.c:87-93` blends the three channels SEPARATELY, which is
+  precisely the prescribed fix, and the comment above it (`:81-86`) states it.
+  RUN, not read: `rgb(147,14,42)` at `a=87` over `rgb(39,0,91)` now yields
+  blue 5-bit **8** (the arithmetic value is 8.96, i.e. the row's "correct 9"
+  truncated), against the reported buggy **25**. Landed in `8ff1aff`.
+  **HOW THE 2026-08-04 PROBE GOT IT WRONG, because the mistake is the useful
+  part:** it grepped for the SYMBOL (`blend565` still present at `:87`) and
+  for a COMMENT (`:136` "dodges blend565's blue spill" — true, and about a
+  different, still-valid perf choice), and concluded "routed around, not
+  fixed". Both observations were accurate and the conclusion was false. A
+  probe must exercise the BEHAVIOUR the row describes: compiling the function
+  and feeding it the row's own numbers took two minutes and was decisive.
+  Grepping for a defect's vocabulary finds the discussion of the defect, not
+  the defect.
 - **B7 (P1) OPEN.** The interim canonical-phase seam is live —
   `foh_look_canonical` called at `port/foh/foh_app.c:548` and referenced at
   `foh_dev.c:2273`. B7 replaces it with the device→host look-plane injection.
