@@ -38,6 +38,36 @@
 | 4 | #16 D20 marth witness | Recipe recorded; needs a jump input to get marth airborne. |
 | 5 | Close the 8 arc-in-flight rows | ONE combined round (they share a blast radius). codex + grok both present. |
 | 6 | M4 gate -> **Chase's acceptance playthrough** | HUMAN GATE, cannot be automated. |
+| 7 | **A23-A26 (owner playthrough #3, 2026-08-22)** | NEW, UNPRIORITIZED — owner slots them. Grounded + spec'd in fix_plan.md. See below. |
+
+### A23-A26 — owner playthrough #3 (2026-08-22), summary
+Full text + file:line grounding: `fix_plan.md` §"OWNER PLAYTHROUGH #3".
+**Not self-prioritized** — they arrived mid-Tier-1 and the gate is still
+blocked on the 8 arc-in-flight rows.
+- **A23 (P1)** CSS `BACK` wedge: make it hit-testable + hold-to-back with a
+  red fill bar. The wedge is DRAWN (`foh_render.c:1367-1372`) and already
+  flagged as not-hit-testable (`foh_render.c:222`); the 30-frame hold counter
+  `bHold` ALREADY EXISTS (`foh.h:438`, `foh.c:466-477`). Two additions, not a
+  rewrite. **Measure upstream first** — if it draws no bar, the bar is a D-row.
+- **A24 (P2)** Controls menu: row says "Keyboard Controls" -> "Controls";
+  the "Keyboard" entry is really the FunKey buttons -> rename; FunKey goes
+  FIRST (no controller path exists yet). 9 sites listed in fix_plan.
+  **Reordering is NOT display-only** — it swaps index->gameMode routing
+  (`foh.h:495` C30(c) is a live consumer). Owner picks the new name.
+- **A25 (P1)** Target select, THREE different root causes: (a) selection is a
+  1px pink-vs-grey border (`foh_render.c:2056`) — genuinely invisible;
+  (b) **L is already implemented and already bound** (`foh.c:779-786`,
+  `keymap-frozen.txt`) so this is a DIAGNOSIS row — and **if L never reaches
+  the app it is the same defect as the open A3, fix it once at the input
+  layer**; (c) free hand cursor on TSS, DRY-shared with CSS — spec'd in full:
+  extract `foh_hand.{c,h}`, **CSS must come out byte-identical first**, then
+  adopt on TSS. Note SSS's pointer was already rewritten INTO a grid cursor
+  (`foh.h:74`), so this reverses that for one screen = registered deviation.
+- **A26 (P2)** Hibernate/resume. **NO suspend/resume handling exists** and
+  **no donor to copy** (ssb64 has none either). `foh_persist` is the right
+  home. **FIRST STEP IS MEASUREMENT, NOT CODE**: close the lid and reopen —
+  if the kernel suspends transparently this row may collapse to near-zero.
+  `done-check:` deliberately left *(REPLAN)* until that measurement lands.
 
 ## A14 SECOND HALF — scope, measured 2026-08-05 before stopping
 41 call sites (15 `foh_text2` + 26 `foh_text`) in `foh_render.c` alone, plus

@@ -3625,3 +3625,281 @@ discipline the 2026-08-01 B9 deferral demanded:**
 `done-check:` unchanged from the B11 block above — `DEVICE FOH OK (… shots=15 …)`
 rc 0 on two consecutive device runs, accepted jitter offset printed per
 jitter-exposed shot, plus a tooth proving a 2-frame offset still FAILS.
+
+## OWNER PLAYTHROUGH #3 (Chase, 2026-08-22) — four new rows, A23-A26
+
+Reported in session on the freshly provisioned play OPK. Each row below is
+GROUNDED (file:line measured 2026-08-22, not recalled) and states its
+mechanical consequence, because three of the four touch JUDGED surfaces and
+will force re-freezes.
+
+**Priority is NOT assigned here** — these arrive while Tier 1 (A14 second
+half → D8-later → A7) is mid-flight and the M4 gate is still blocked on the
+8 arc-in-flight rows. Owner slots them; the driver does not self-promote.
+
+---
+
+### A23 (P1) — CSS "BACK" wedge: hit-testable + hold-to-back with a red fill bar
+
+**Symptom (owner):** "clicking back button does nothing in top right of the
+vs. screen." Wanted: real-Melee behavior — hold it (either by holding the
+hand cursor on it, OR by holding the B button) and a small **red bar fills
+below the BACK button**; when it fills, it actually backs out.
+
+**Ground truth, measured:**
+- The wedge is **DRAWN AT `port/foh/foh_render.c:1367-1372`** — red arrowhead
+  at (198,13)/(206,6)/(206,20), gold `"BACK"` text at (210,10).
+- It is **already registered as a known gap**: `foh_render.c:222` reads
+  *"(a) DRAWN, NOT YET HIT-TESTABLE: the header's BACK wedge and mode
+  ribbon"*. This row closes that note — it is not a new discovery.
+- The **hold machinery already exists**: `FohState.bHold`
+  (`foh.h:438`, "consecutive B frames in CSS (30 = back)"), counted in
+  `step_css` at `foh.c:466-477`, firing `css_back()` (`foh.c:431`) on the
+  `bHold == 30` **equality** edge. The equality (not `>=`) is upstream
+  css.js:188 verbatim and is what makes it fire exactly once per hold —
+  `foh.c:453-454` says so explicitly. **Do not convert it to `>=`.**
+
+**So the work is two additions, not a rewrite:**
+1. **Hit-test + cursor-hold arm.** Make the drawn wedge a hit region for the
+   CSS hand and drive the SAME `bHold` counter when the hand is inside it
+   with A held. One counter, two input paths — never a second timer.
+2. **The red fill bar.** New draw under the wedge, width proportional to
+   `bHold / 30`. Purely presentational, reads the counter, writes nothing.
+
+**FAITHFULNESS — RESOLVE BEFORE CODING (HARD RULE 5).** Upstream meleelight
+css.js has the 30-frame `bHold` but **it must be measured whether it draws a
+progress bar at all.** Two outcomes, two different rows:
+- upstream DOES draw one → this is a fidelity FIX, no deviation needed.
+- upstream does NOT → the bar is an **owner-requested DEVIATION toward real
+  Melee**, and it gets a D-number and a registered entry the same way D20
+  (everyone-walljumps house rule) did. The owner's words — *"behave like how
+  melee does"* — are the ratification; record them at the site.
+  Measure first via the browser harness against the upstream clone; do not
+  guess from memory.
+
+**Mechanical consequence:** CSS is judged by frozen shots and by
+`judge-foh-trace.js`. A new bar drawn on the CSS header changes **every CSS
+shot** (f01/css, f02/css-cpu, f05/css — the same three B11 makes flaky, so
+sequence this against B11 or expect noisy legs). The bar must be COLD in
+judged shots (`foh_look_canonical` pins timers to 0 for exactly this reason —
+see the `tssTimer` precedent at `foh_render.c:2040-2043`): with `bHold == 0`
+the bar is zero-width, so a cold shot is unchanged **only if the bar draws
+nothing at zero**. Make that the design, and it costs no re-freeze at all.
+
+`done-check:` a flow leg that holds the cursor on the wedge and backs out,
+plus one that holds B, both landing the same `bhold` transition already
+emitted by `css_back()`; `DEVICE FOH OK` rc 0; a tooth proving a 29-frame
+hold does NOT back out.
+
+---
+
+### A24 (P2) — Controls menu: wrong label, wrong name, wrong order
+
+**Symptom (owner):** the options row says "Keyboard Controls" but opens a
+submenu offering "Controller" and "Keyboard" — so the row should just say
+**Controls**. Inside, the thing called "Keyboard" **is not a keyboard, it is
+the FunKey-S's own buttons**, so it is misnamed. And **Controller is listed
+first when we cannot even use a controller on FunKey-S yet** — the FunKey
+entry should be first.
+
+**Ground truth, measured — every site that has to move together:**
+| Site | Current |
+|---|---|
+| `foh_render.c:39` | options row label `"KEYBOARD CONTROLS"` |
+| `foh_render.c:41` | submenu labels `{"CONTROLLER", "KEYBOARD"}` |
+| `foh_render.c:79` | blurbs `"CUSTOMIZE & CALIBRATE CONTROLLER."` / `"CUSTOMIZE KEYBOARD CONTROLS."` |
+| `foh_render.c:1125` | width comment pinned to the LONGEST blurb (33 chars) — recompute if blurbs change |
+| `foh_render.c:1902` | screen header `"CONTROLLER"` |
+| `foh_render.c:1936` | screen header `"KEYBOARD"` |
+| `foh.h:22,25,26` | routing comments naming the upstream gameModes |
+| `foh.c:236,265` | the same labels restated in comments |
+| `port/foh/foh_ctl_labels.h` | check whether it restates any of these |
+
+**Screens behind them:** `FOH_CTRL_PAD` = upstream gameMode 14
+(controllermenu.js), `FOH_CTRL_KEY` = gameMode 12 (keyboardmenu.js) —
+`foh.h:339-341`. **Renaming is display-only; DO NOT renumber the enum or the
+gameModes.** The upstream identity is what the judge grammar and the §9.2/§9.3
+notes key on.
+
+**REORDERING IS NOT DISPLAY-ONLY — this is the trap.** The submenu is
+index-selected. Swapping the two rows swaps which index routes to which
+gameMode, and there is already a live consumer: `foh.h:495` C30(c) — *"Controls
+>Keyboard screen's cursor over its TWO settable..."*. Reordering without
+re-measuring is exactly the iter-73 stale-nav class that A13 was cleaning up.
+**Move the labels and the routing in ONE commit, and re-measure every
+selection index that names row 0/1 on this screen.**
+
+**Faithfulness:** upstream menu.js:22-23 is literally `["Controller",
+"Keyboard"]`. Renaming and reordering is a **registered deviation** — owner
+requested, with the reason on the record (there is no controller path on this
+device yet). Register it; do not silently diverge.
+
+**Naming decision needed from owner (do not pick unilaterally):** "FunKey",
+"FUNKEY-S", "HANDHELD", or "BUTTONS" for the renamed entry. Driver
+recommendation: **"FUNKEY"** — shortest, matches the physical device, and fits
+the existing blurb width pin at `foh_render.c:1125`.
+
+**Mechanical consequence:** re-freeze the options + controls shots. If the
+renamed string is longer than the 33-char blurb pin, the width comment at
+`foh_render.c:1125` and the panel geometry both move.
+
+`done-check:` `DEVICE FOH OK` rc 0 with re-frozen shots; a tooth proving row 0
+now routes to the FunKey screen and row 1 to the controller screen.
+
+---
+
+### A25 (P1) — Target select: invisible highlight, dead L, and the free-cursor rewrite
+
+Three complaints, **three genuinely different root causes.** Split them; do
+not fix them as one.
+
+#### (a) The selection highlight is not visible — measured, and it is real
+`foh_render.c:2056` draws the selected tile as a **1-pixel border**:
+`hot` = pink `{251,116,155}` / `{255,182,204}` vs `idle` = grey
+`{166,166,166}`, around a 100x19 black body. Same at `:2069` for "+ ADD CODE".
+One pixel of pink-vs-grey at 240x240 is the whole selection signal. The owner
+is right that it does not read.
+
+Cheapest honest fix: **thicken and/or fill**, not a new mechanism — e.g. a
+2px border plus a subtly lifted body for the selected tile. Note
+`foh_render.c:2049-2050` records that **upstream never brightens a label on
+hover, only its border** — so brightening the LABEL is a deviation, while
+making the BORDER louder is within the existing upstream idiom. Prefer the
+border.
+
+#### (b) L does nothing, R works — this is a DIAGNOSIS row, not an implementation row
+**The L arm is already implemented and looks correct**: `foh.c:779-786`,
+`in->l` → `p1Char - 1` with wrap, `in->r` → `p1Char + 1` with wrap, both
+verbatim from targetselect.js:60-74. The chevrons at `foh_render.c:2074-2077`
+deliberately point along the shoulder axis "which is what the L/R caps say" —
+so the UI promise is real.
+**And L appears bound**: `port/foh/keymap-frozen.txt` has `map l K k`, and
+`platform_sdl1.c:117-135` consumes that keymap table as the single source of
+truth for every field.
+**So something between the FunKey L button and `in->l` is the fault, and it
+has not been isolated yet.** Leads, in order: (1) confirm on device what
+keysym the physical L emits (`foh_dev --dump-keymap` exists per
+`platform_sdl1.c:120-123`, and the device check already cmp's it against the
+frozen file); (2) check whether L is consumed by an earlier arm in the same
+frame; (3) check the FunKey's own button mapping.
+**Zoom-out (HARD RULE 8):** A3 is an open row reading *"L shoulder =
+shield/air-dodge (currently unbound)"*. **If L never reaches the app, A3 and
+A25(b) are the same defect at two call sites and must be fixed once, at the
+input layer.** Check that BEFORE writing any TSS-local workaround.
+
+#### (c) SPEC — free hand cursor on TSS, shared with CSS (owner: "keep things DRY")
+
+**What exists today (measured):**
+- **CSS: a real free 2D cursor.** `foh.h:90-94` — *"FREE 2D hand cursor ...
+  integrated from d-pad every frame"*; `foh.h:374` *"free hand cursor
+  (css.js:64 handPos, DOUBLES, never integers)"*; speed knobs
+  `FOH_CURSOR_SPEED` / `FOH_CURSOR_VX` / `FOH_CURSOR_VY` at `foh.h:297-299`
+  (already a registered deviation, D3); hand type via
+  `foh_css_hand_type()` (`foh.c:374`); hit-testing via `css_cell_at()`
+  (`foh.c:393`) and the panel/rail helpers around it.
+- **TSS: an index cursor.** `tssCursor` (`foh.h:445`), 0..9 grid + slot 10,
+  stepped by d-pad edges at `foh.c:809-828`.
+- **SSS: also an index cursor** (`sssCursor`, `foh.h:440`) — and note
+  `foh.h:74` records that SSS's *"pointer drag"* was ALREADY rewritten INTO a
+  3x2 grid cursor as a deliberate delta.
+
+**That last fact is the most important input to this spec.** The grid cursors
+are not an oversight; they are a ratified rewrite of upstream's mouse for a
+device with no pointer. **Putting a free cursor back on TSS reverses that
+decision for one screen.** The owner has asked for it, so it proceeds — but it
+is a **registered deviation needing a D-number**, and the driver should say
+plainly: TSS will now differ from SSS in interaction model, so either accept
+the inconsistency or plan SSS to follow.
+
+**The DRY extraction — the actual spec:**
+1. **Extract, do not duplicate.** Lift the CSS hand into a screen-agnostic
+   unit, e.g. `port/foh/foh_hand.{c,h}`: state `{double x, y; int type;}`,
+   a step that integrates d-pad input using the existing `FOH_CURSOR_VX/VY`
+   knobs, clamping to a caller-supplied bounds rect.
+2. **Hit-testing is caller-supplied, not baked in.** The shared unit answers
+   "which of these N rects contains the hand" over a table the screen owns.
+   CSS's cell/gutter rule (`css_cell_at`: strict `>` / `<`, so the 2px gutter
+   is genuinely no cell — D4 forbids a hit region where nothing is drawn)
+   becomes the shared rule; TSS inherits it and so gets gutter behavior for
+   free.
+3. **CSS MUST COME OUT BYTE-IDENTICAL.** This is the hard constraint. CSS is
+   covered by frozen shots and by `judge-foh-trace.js` structural traces. The
+   extraction is a **pure refactor on the CSS side**: same doubles, same
+   integration order, same clamp, same hit predicate. Prove it with the
+   EXISTING checks unchanged and green before a single TSS line is written.
+   This is the A14-second-half lesson restated — *swap the implementation, not
+   the call sites*.
+4. **Then, and only then, adopt it on TSS.** Keep the 11 slots' rects as the
+   hit table. **Decide and record what happens to d-pad-to-index**: dropping it
+   changes the TSS flow scripts; keeping both is two cursors on one screen and
+   is worse. Driver recommendation: **replace it**, matching CSS, and re-cut
+   the TSS flow legs.
+5. **Sequence against A25(a).** The highlight fix and the cursor rewrite both
+   re-freeze every TSS shot. **Land them in that order in one arc** so the
+   shots are re-frozen ONCE.
+
+**Mechanical consequence:** TSS shots and any TSS flow leg re-freeze; the TSS
+transition grammar in `judge-foh-trace.js` gains hand-move edges (CSS's
+precedent shows what they look like). `foh_look_canonical`'s cold-shot pinning
+must cover the new hand exactly as it pins `tssTimer`.
+
+`done-check:` all three parts green — a tooth proving the selected tile is
+distinguishable by the shot judge; L changing the character on device; CSS
+checks byte-identical across the extraction; TSS reachable by hand cursor with
+re-frozen shots.
+
+---
+
+### A26 (P2) — Hibernate/resume: reopening the FunKey-S should resume the game
+
+**Symptom (owner):** hibernating the FunKey-S (closing it) should resume the
+game when opened again.
+
+**Ground truth, measured 2026-08-22:**
+- **There is NO suspend/resume handling anywhere in the port.** Grep over
+  `port/gfx/*.c` and `port/foh/*.c` for `SIGTERM|SIGSTOP|SIGCONT|SIGUSR|
+  signal(|sigaction|suspend|resume|hibernat` returns only two unrelated
+  comment hits in `foh_pause.c` (:296, :630).
+- **There is no donor to copy.** The ssb64-funkey-s port (the donor CLAUDE.md
+  names for A11/A12's overlay) has no suspend/resume either — its only
+  `resume` hits are coroutine scheduling.
+- **What DOES exist is adjacent and reusable:** `port/foh/foh_persist.{c,h}`
+  is already *"the ONE persistence chokepoint"* — a versioned, checksummed,
+  deterministic 64-line `MLFKPERSIST4` file on SD, currently holding the 11
+  FOH-editable gameSettings plus target records. It is the right home for any
+  saved state, and its format discipline (versioned + checksummed + host/device
+  `cmp`'d) is the bar a resume file must also meet.
+
+**FIRST STEP IS MEASUREMENT, NOT CODE.** What "hibernate" physically does on
+FunKey OS decides the entire shape of this row, and it is currently UNKNOWN
+(I tried to inspect `/sys/power/` on device but it dropped off USB first).
+Three possible worlds:
+1. **Kernel suspend-to-RAM, process untouched** → possibly nothing to do but
+   handle the clock jump and resync audio; the game may already survive it.
+   **Test this before building anything.**
+2. **The app is signalled then killed** → catch the signal, write a resume
+   file through `foh_persist`, restore on next boot.
+3. **The frontend kills the app outright with no signal** → only a periodic
+   checkpoint can work, and the row needs a scope decision (checkpoint what,
+   how often, at what cost to the 16.67 ms budget).
+
+**Measure world 1 first** — plug the device in, launch, close the lid, reopen,
+and observe. That single experiment may collapse this row to near-zero, and it
+costs minutes.
+
+**Scope question for the owner, once the world is known:** resume to the
+**menu** (cheap, and probably all that world 2/3 justifies) or resume
+**mid-match** (expensive — the sim state is the whole `MlPlayer`/physics plane,
+and a mid-match snapshot is a new serialization surface with its own
+correctness bar). Driver recommendation: **menu-level resume first**; treat
+mid-match resume as a separate, later row.
+
+**Mechanical consequence:** if it becomes a persist-format change, that is a
+`MLFKPERSIST5` bump with the twin host/device `cmp` re-run — the header's own
+v2/v3/v4 history documents the ritual. **Nothing here may run in the frame
+loop** (PLAN §7 / the SD-streaming stall note in CLAUDE.md: SD writes are
+multi-second; log to tmpfs, copy on exit).
+
+`done-check:` *(REPLAN — cannot be written until the measurement above says
+which world we are in; a placeholder check would violate the CHECKER's
+no-placeholder rule.)*
