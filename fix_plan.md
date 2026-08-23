@@ -4666,3 +4666,76 @@ Playwright rewrote `oracle/harness/package.json` from `"playwright": "1.61.1"`
 to `"^1.61.1"`. Lane M caught and reverted it. **Any lane that runs `npm
 install` must re-check that file before committing** — a silently loosened pin
 is exactly the browser-engine drift that cost a whole session on 2026-08-05.
+
+### A38 (P2, NEW 2026-08-23 — owner-requested) — adopt `write-legible-c`, SCOPED
+
+Owner: *"can we add that we want to utilize this: github.com/7etsuo/write-legible-c
+... investigate to see if and how we can incorporate it for claude code and in
+general (does it really require the plugin? what is the plugin doing?)"*
+
+**MEASURED by cloning the repo (11 files total), not from the README:**
+- **The plugin does NOTHING at runtime.** `plugins/write-legible-c/.claude-plugin/plugin.json`
+  contains ONLY metadata — name, version, description, author, homepage,
+  keywords, license. **No `hooks`, no `commands`, no scripts, no executable
+  anything.** `marketplace.json` is a listing that points at the same folder.
+- **The entire payload is TWO markdown files:**
+  `skills/write-legible-c/SKILL.md` (99 lines) and
+  `references/c-standard.md` (772 lines, 18 sections).
+- **It is ALREADY dual-packaged for Claude Code** — a real `.claude-plugin/`
+  directory with Claude Code's own `marketplace.json` schema, not Grok-only as
+  the README's prose suggests.
+- **SO: NO, THE PLUGIN IS NOT REQUIRED.** The skill frontmatter is valid Claude
+  Code (name + description + trigger list). Copying
+  `plugins/write-legible-c/skills/write-legible-c/` to
+  `~/.claude/skills/write-legible-c/` is behaviourally identical to installing
+  the plugin. The plugin is a distribution wrapper, nothing more.
+
+**THE DECISIVE COMPATIBILITY FINDING — the skill defers to us.** Its own
+"Resolve constraints" section says: *"Follow higher-priority user, repository,
+ABI, wire-format, GENERATED-CODE, platform requirements when they conflict with
+this skill"*, *"Do not widen a scoped task into a repository-wide rewrite merely
+because nearby untouched C predates the standard"*, and *"When a required
+constraint forces a deviation, add a comment at the deviation site stating the
+constraint precisely."* It also says *"Do not claim compliance when required
+checks could not run."* **That is compatible with HARD RULES 1-8 by
+construction** — but only if the precedence is stated explicitly, because the
+skill auto-triggers on ANY `.c`/`.h` edit.
+
+**IT MUST BE SCOPED BY DIRECTORY. UNSCOPED IT WOULD DESTROY THE PORT.**
+| Zone | Verdict |
+|---|---|
+| `port/foh/**`, `port/gfx/**`, checks/witnesses, `port/tools/**` | **ADOPT.** Our own code, written fresh. This is exactly its target. |
+| `port/sim/**` (esp. `characters/**/moves/*.c`, `physics.c`, `action_state_shortcuts.c`) | **FORBID.** |
+| `pipeline/build/**` generated `ml_tables.c` / `ml_stages.c` | **FORBID** (generated code; the skill itself exempts this). |
+| `port/fdlibm/**`, `port/ryu/**` | **FORBID** — vendored verbatim, provenance-pinned. |
+
+**WHY THE SIM IS FORBIDDEN, concretely.** Those files are deliberately
+structure-parallel to upstream JS and carry, ON PURPOSE and under HARD RULE 5:
+upstream typos kept verbatim (`hitboxes.FRAMES++`, lowercase `phys.autocancel`,
+THROWBACK's `Math.floor(t+0.01<37)` floor-over-comparison); dead arms that are
+upstream typos (SIDESPECIALGROUNDHIT reads `phys.timer`, DOWNSPECIALGROUNDENDAIR
+reads `player.timer` — both undefined, comparisons always false), commented and
+never "fixed"; **infinite recursion carried verbatim** (SIDESPECIALAIR's
+grounded arm); and magic numbers that are upstream DATA. The standard's "no
+dead code", "no naked literals", "bounded loops, no recursion", "early returns"
+would each **break faithfulness and therefore checksum conformance.** JS
+compound-assignment grouping (`a += b + c`) already cost 22 one-ulp divergences
+when left-flattened — this code is not free to be tidied.
+
+**PROPOSED FORM (do not execute without owner sign-off on the route):**
+1. **Install USER-LEVEL** (`~/.claude/skills/write-legible-c/`), NOT in-tree.
+   **Licensing consequence, and it is the deciding argument:** vendoring MIT
+   code INTO this repo triggers the project rule that `NOTICES` gains an entry
+   BEFORE any third-party code lands in-tree. User-level install keeps it out
+   of the tree entirely and costs nothing.
+2. **State precedence in CLAUDE.md** in one short block: HARD RULES > repo
+   conventions > write-legible-c; and the forbidden-zone table above. Without
+   this the skill auto-loads on sim files.
+3. **Do NOT retrofit.** Applies to code TOUCHED FROM NOW ON in adopted zones
+   only — the skill's own "do not widen a scoped task" rule agrees.
+
+**OPEN QUESTION FOR THE OWNER:** its §17 wants a repo-root `AGENTS.md`. This
+project already carries its conventions in `CLAUDE.md` + `docs/PROCESS.md` +
+`docs/loop/*`. **Recommendation: do NOT add `AGENTS.md`** — a second
+conventions file is a divergence hazard, and CLAUDE.md is already the SSOT the
+skill's own precedence rule tells it to obey.
