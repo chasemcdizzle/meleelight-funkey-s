@@ -4157,3 +4157,49 @@ is the whole investigation.
 
 `done-check:` selecting POWER OFF powers the device down from the play OPK;
 tooth proving a no-op arm fails.
+
+### A29 / A32 — MEASURED 2026-08-23, both rows change shape
+
+**A32 IS NOT AN L-CANCEL BUG. It is a double-negative label.** Measured in
+`render_opt_gameplay` (`foh_render.c:1762-1793`): the gameplay screen has FIVE
+rows — `{"TURBO MODE", "L-CANCEL", "FLASH ON L-CANCEL", "EVERYONE WALLJUMPS",
+"TAPJUMP OFF"}`. **L-CANCEL is row 1 and is a SINGLE GLOBAL value**
+(`vals[1] = kLCancelNames[s->lCancelType]`). The only row with per-player
+P1/P2/P3/P4 columns is row 4, **"TAPJUMP OFF"**
+(`:1789-1791`, `s->tapJumpOff[k] ? "ON" : "OFF"`).
+
+So the "off for p2, p3, p4" the owner saw is **TAPJUMP OFF**, not L-cancel —
+and it is CORRECT: P1 has tap jump disabled because a digital d-pad at full
+deflection tap-jumps on every upward DI (`ctl_style.h:14-23`), and P1 is the
+only human port on this device today.
+
+**The REAL defect here is the double negative:** a row named "TAPJUMP OFF"
+whose value reads "ON" means tap jump is DISABLED. That is genuinely
+unreadable, and it is what made the owner misread the screen.
+**Recommendation: relabel row 4 to "TAP JUMP" and invert the displayed value**
+so ON means tap jump works. Note upstream renders the same double negative
+(:242), so this is a small **deviation** — register it.
+**No L-cancel default change is warranted** (upstream authored default is 0,
+`sim_boot.c:19`); if the owner still wants L-cancel on by default after
+reading the above, that is a separate D-numbered deviation.
+**Re-open only if A33 lands:** with a second physical controller, P2+ become
+human ports and would need `tapJumpOff` too.
+
+**A29 — THERE ARE TWO CHARACTER PLANES, and that is almost certainly the bug.**
+- `p1Char` / `p2Char` — the SELECTION plane, `foh_init` sets **both to 0**
+  (`foh.c:47-49`, "characterSelections default [0,0,0,0] -> marth/marth").
+- `cssChar[2]` — a SEPARATE **TOKEN** plane, `foh.c:342` says so explicitly
+  ("the TOKEN plane (css.js:66), **not setCS's**"); written only through
+  `css_char_of()` (`foh.c:402`) inside `step_css`, and read by the renderer at
+  `foh_render.c:1643`.
+
+The reported display is **marth(0) / puff(1) ALWAYS, regardless of the picks**
+— i.e. a constant `{0, 1}`, which is neither `foh_init`'s `{0,0}` nor the
+picks. **So the renderer is showing an index-identity, not either plane's real
+value.** Investigate in this order: (1) does the CSS panel/token render fall
+back to the port index `k` rather than the plane; (2) do the two planes
+disagree after match exit — is one preserved and the other reset; (3) only
+then look at the re-entry path.
+**Do not "fix" this by resetting both planes on entry** — that would trade a
+wrong display for a silently discarded selection. The tooth belongs in
+`check-mexit-reentry.sh`.
