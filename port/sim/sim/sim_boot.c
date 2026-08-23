@@ -363,6 +363,17 @@ void sim_boot_page(GameState *g) {
   g->startTimer = 1.5;
   g->matchTimer = 480;
   g->frame = 0;
+  // versusMode module let (main.js:140): PAGE state, initialised 0 and
+  // written ONLY by setVersusMode (main.js:237-239, called from the CSS
+  // ribbon at menus/css.js:393 as `setVersusMode(1 - versusMode)` — a
+  // BINARY toggle). startGame does NOT reset it, so it is set here and
+  // never again by the sim: a caller that wants the endless mode writes
+  // g->sim.versusMode = 1 BETWEEN sim_boot_page and sim_setup_match,
+  // because startGame's stocks arm below READS it. Redundant after the
+  // memset, stated for the same reason everyCharWallJump is (sim_setup
+  // _match's tail): every frozen golden was recorded at 0, so the default
+  // is declared, not inherited.
+  g->sim.versusMode = 0;
 }
 
 // --- harnessSetupMatch + startGame ---------------------------------------------
@@ -418,9 +429,16 @@ void sim_setup_match(GameState *g, int p1, int p2, int p2type, int difficulty,
       // note on the outOfCameraTimer surface.
       g->sim.player[n].inCSS = false;
     }
-    // versusMode == 0 (main.js:140): the stocks=1 arm never runs
+    // main.js:1334-1336. NOTE the arm sits OUTSIDE the playerType guard
+    // above, in the SAME loop — so in the endless mode upstream writes
+    // stocks = 1 on ALL FOUR slots, including the inactive ones whose
+    // page-boot player objects initializePlayers never touched. Carried
+    // verbatim (HARD RULE 5); the inactive slots' stocks are unread, but
+    // the write is upstream's.
+    if (g->sim.versusMode != 0) { // `if (versusMode)`; domain is 0|1
+      g->sim.player[n].stocks = 1;
+    }
   }
-  g->sim.versusMode = 0;
   g->matchTimer = 480;
   g->startTimer = 1.5;
   g->starting = true;

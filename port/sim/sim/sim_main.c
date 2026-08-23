@@ -192,6 +192,7 @@ int main(int argc, char **argv) {
   bool cpu = false;
   bool aiCover = false;      // M4 task 5: post-run arm-table dump (stderr)
   bool wallJumpAll = false;  // MENU-SPEC D20 house rule; default = upstream
+  bool versusEndless = false; // upstream versusMode (main.js:140); default 0
   bool tapJumpOffP1 = false; // M3 task 5: replays of S1 live sessions
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i];
@@ -212,6 +213,14 @@ int main(int argc, char **argv) {
     // FOH launch line carries, exposed here so the deviation is TESTABLE from
     // the harness. Absent = upstream behaviour = every golden unaffected.
     else if (strcmp(a, "--walljump-all") == 0) wallJumpAll = true;
+    // upstream's CSS ribbon (setVersusMode, main.js:237) exposed to the
+    // harness so the endless mode is TESTABLE (port/sim/check-versus-
+    // endless.sh). Absent = versusMode 0 = upstream default = every golden
+    // unaffected. NOT listed in the usage string below, for the same reason
+    // --walljump-all is not: check-ai-live.sh's M2-contract witness pins
+    // that rejection to EXACTLY two lines (measured 2026-08-23 — adding a
+    // third line failed it).
+    else if (strcmp(a, "--versus-endless") == 0) versusEndless = true;
     else if (strcmp(a, "--tapjump-off-p1") == 0) tapJumpOffP1 = true;
     else if (strcmp(a, "--dump-frames") == 0 && hasV) dumpFrames = argv[++i];
     else {
@@ -262,6 +271,10 @@ int main(int argc, char **argv) {
     G.hasBridge = true;
   }
 
+  // versusMode is PAGE state the CSS writes BEFORE startGame, and
+  // startGame's stocks=1 arm reads it — so unlike every gameSettings
+  // override below, this one must be set BEFORE sim_setup_match.
+  if (versusEndless) G.sim.versusMode = 1;
   sim_setup_match(&G, (int)p1, (int)p2, cpu ? 1 : 0, (int)difficulty,
                   (int)stage);
   // M3 task 5 (S1 contract): tapJumpOffp1 = 1 for replaying recorded

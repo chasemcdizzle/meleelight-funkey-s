@@ -377,7 +377,12 @@ void sim_game_tick(GameState *g, const MlInput *traceRow[4]) {
   art_executeArticleHits(&g->sim, &g->arts, g->curBuf); // main.js:1078
   ml_ev_reset();
 
-  if (!g->starting /* && !versusMode — versusMode == 0 */) {
+  // main.js:1079. In the ENDLESS mode (versusMode != 0) upstream takes the
+  // ELSE arm every frame for the rest of the match: matchTimer never ticks
+  // (so it never expires and the finishGame trap below is unreachable), and
+  // startTimer just keeps counting down past 0 with `starting` already
+  // false — a harmless free-running decrement. Carried verbatim.
+  if (!g->starting && g->sim.versusMode == 0) { // `!starting && !versusMode`
     // matchTimerTick(input) (main.js:338-350): HUD writes are render
     // ML_MATCH_TIMER_TICK is sim.h's ONE definition of upstream's literal
     // (main.js:339); the HUD guard in gfx_overlay.c reads the same symbol so
