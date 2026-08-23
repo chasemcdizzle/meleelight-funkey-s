@@ -11,6 +11,13 @@ FLOW1
 # while FOH_NETPLAY is 0 (owner ruling C5): spectate/p2p/server, whose
 # page `VS. Melee` no longer opens.
 #
+# ROW ORDER (DEVIATION D25, owner-requested 2026-08-23): the Controls
+# chooser is HANDHELD (controls-keyboard, gameMode 12) at row 0 and
+# CONTROLLER (controls-controller, gameMode 14) at row 1. This flow enters
+# row 0 FIRST, so the A at frame 425 is the HANDHELD entry and the A at 445
+# — after one DOWN — is the CONTROLLER one. Both shots keep their names;
+# only which frame carries which moved.
+#
 # EDGES. Every B-back edge of the live graph fires: controls-controller
 # -> menu-controls, controls-keyboard -> menu-controls, menu-controls ->
 # menu-options, menu-options -> menu-top, plus the CSS hold-B-30 back
@@ -40,14 +47,14 @@ I 416 -
 SHOT 420 menu-controls
 I 425 A
 I 426 -
-SHOT 430 controls-controller
+SHOT 430 controls-keyboard
 I 435 B
 I 436 -
 I 440 D
 I 443 -
 I 445 A
 I 446 -
-SHOT 450 controls-keyboard
+SHOT 450 controls-controller
 I 455 B
 I 456 -
 I 460 B

@@ -3783,6 +3783,54 @@ renamed string is longer than the 33-char blurb pin, the width comment at
 `done-check:` `DEVICE FOH OK` rc 0 with re-frozen shots; a tooth proving row 0
 now routes to the FunKey screen and row 1 to the controller screen.
 
+**DONE 2026-08-23 (lane m-a24) — renames only; the COLLAPSE stays held.**
+Shipped as **DEVIATION D25** (MENU-SPEC §9.1 + §12.1). Name chosen:
+**`HANDHELD`**, not the driver's `FUNKEY` recommendation — it is the RATIFIED
+one (the 2026-08-23 hold note above keeps `CONTROLS` / `HANDHELD` /
+`BOX`/`CLASSIC`/`NATURAL` ratified while suspending the collapse), and it reads
+as a CATEGORY parallel to `CONTROLLER` rather than as a brand.
+
+Every site in the table above moved, plus two the table did not name — both
+found by grep, both live:
+- **`port/foh/foh_snd_witness.c:170-173`** drives the chooser BY ROW INDEX
+  (`controls-A-pad` sel 0, `controls-A-keyboard` sel 1). Swapping the routing
+  without it makes that witness assert the old wiring. Rows swapped and renamed.
+- **`port/foh/flows/f04-nav.{flow,expect}`** enters row 0 then row 1, so the
+  two Controls SHOT markers and four frozen transition lines swap frames. The
+  shot NAMES are unchanged, so `FLOW_SHOTS` (check-foh-flows.sh:288,
+  check-device-foh.sh:486) is a set that still matches and needed no edit.
+
+Sites the table asked about, answered: `foh_ctl_labels.h` restates NONE of
+these strings (it is the button->action table, keyed on `CtlStyle`), so it did
+not move. `foh.h:495` is `optRow`/`optCol`, not a chooser index; the C30(c)
+cursor is `FohState.ctlRow` (foh.h:542) and is the ctl SCREEN's own two-row
+cursor, unrelated to `menuSelected` on the chooser page — measured, not assumed.
+
+**No re-freeze was needed.** The width pin did not move: the new blurb
+`"CUSTOMIZE THE HANDHELD CONTROLS."` is 32 glyphs and
+`"CUSTOMIZE & CALIBRATE CONTROLLER."` is still the widest at exactly the pinned
+230 px — and that is now MEASURED by the witness (widest-of-set over all 14
+blurbs), not counted by hand. Shots are judged pairwise (run A vs run B, host
+vs device) and by name inventory, never against frozen images, so no shot was
+re-frozen.
+
+**A4's half was already shipped** as C31 (`ctl_style_name` returns `"Classic"`;
+`CTL_STYLE_NORMAL` is still enum 0 because `FohPersist.ctlStyle` stores it
+verbatim). It had no tooth — only the frozen keyboard screenshot, which
+exercises the fresh-install NATURAL. It has one now.
+
+`done-check:` **`bash port/foh/check-controls-labels.sh` -> `CONTROLS LABELS
+OK`, exit 0** (host-only). The witness reads the ROW LABEL off the frame, presses
+A on that row through the real `foh_tick`, and reads the destination's HEADER
+off the frame the machine lands on — so a label and its destination cannot
+drift apart. Four negative tests, each required to fail AND to fail only where
+its part is: T1 the old chooser labels + old header, **T2 the routing ternary
+reverted ALONE with the labels left in place** (the half-swap trap: without it
+this check would go green on a build whose first row lies about where it goes),
+T3 the old Options row name, T4 `ctl_style_name` back to `"Normal"`.
+Also green after the change: `bash port/foh/check-foh-flows.sh`.
+**REMAINING (device, not run in this lane):** `DEVICE FOH OK`.
+
 ---
 
 ### A25 (P1) — Target select: invisible highlight, dead L, and the free-cursor rewrite
