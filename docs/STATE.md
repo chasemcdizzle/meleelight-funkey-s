@@ -39,6 +39,7 @@
 | 5 | Close the 8 arc-in-flight rows | ONE combined round (they share a blast radius). codex + grok both present. |
 | 6 | M4 gate -> **Chase's acceptance playthrough** | HUMAN GATE, cannot be automated. |
 | 7 | **A23-A26 (owner playthrough #3, 2026-08-22)** | NEW, UNPRIORITIZED — owner slots them. Grounded + spec'd in fix_plan.md. See below. |
+| 8 | **A27-A34 (playthrough #3 round 2, 2026-08-23)** | NEW. **A28 + A29 are P0 BUGS in shipped behavior**; A34 is a dead control; A33 is a research spike. See fix_plan. |
 
 ### A23-A26 — owner playthrough #3 (2026-08-22), summary
 Full text + file:line grounding: `fix_plan.md` §"OWNER PLAYTHROUGH #3".
@@ -68,6 +69,48 @@ blocked on the 8 arc-in-flight rows.
   home. **FIRST STEP IS MEASUREMENT, NOT CODE**: close the lid and reopen —
   if the kernel suspends transparently this row may collapse to near-zero.
   `done-check:` deliberately left *(REPLAN)* until that measurement lands.
+
+### A27-A34 — playthrough #3 round 2 (2026-08-23), summary
+Full text + grounding: `fix_plan.md` §"OWNER PLAYTHROUGH #3, ROUND 2".
+- **A27 (P1)** CSS mode ribbon (VS Melee -> switch modes). **SAME registered
+  gap as A23** — `foh_render.c:222` names the BACK wedge AND the mode ribbon
+  in one line. **Merge A27 into A23's arc**; doing them apart re-does the
+  plumbing. Read upstream for the real mode set, do not invent one.
+- **A28 (P0, BUG)** constant audio buzz from launch, present before any sound.
+  Idle-path defect. #1 hypothesis: the fill callback does not write silence
+  when zero voices are active (`platform_audio_sdl.h:102`; only the error path
+  memsets). #2: pipeline PCM is 22050 Hz, device opens 44100 — confirm the
+  mixer resamples. **NOTE `verify_m3.sh`'s `underruns == 0` cannot see this**
+  — it measures callback timing, not sample content.
+- **A29 (P0, BUG)** CSS picks lost on re-entry: falco/marth returns as
+  marth/puff = char ids 0/1 = **exactly `cssChar[k] = k`, an identity fill**
+  (`foh.h:429`). Matches neither the picks NOR the documented defaults
+  (fox/marth) — strongest available clue. Tooth belongs in
+  `check-mexit-reentry.sh`.
+- **A30 (P1)** control-style default maps. **SPLIT:** (a) the shoulder swap is
+  a DEFAULT FLIP of the existing orthogonal `modOnR` cell, nearly free
+  (`ctl_style.h:69-77`); (b) the face-button remap edits the **byte-for-byte
+  ratified BOX table** pinned by `s1_sweep.c` + 15 S1 checks = a
+  **re-ratification, not a bug fix**. **Answer the owner's grab question
+  first** — shield+A grabs in Melee, which is why C-layer styles spend X on
+  jump; if it is live here, most of (b) may be unnecessary.
+- **A31 (P1)** Controls screen: make the 9 action rows bindable (today the
+  cursor covers TWO rows — `foh.h:495`, and the labels are display-only);
+  delete the `mod` ROW (keep the cell); kill vestigial `rebind: N/A`; add
+  reset-to-defaults. **Per-player only pays off if A33 lands** — design the
+  table per-port, ship the UI port-0-only. Persistence -> `MLFKPERSIST5`.
+- **A32 (P2)** L-cancel default. **`lCancelType` is a SINGLE GLOBAL SCALAR**
+  (`sim_boot.c:433`) — there is no per-player plane, so either the DISPLAY is
+  the bug or the owner is reading the per-player `tapJumpOff` rows. Measure
+  before changing a default. Turning it on is a **DEVIATION** (upstream
+  authored default is 0), not a fix.
+- **A33 (P2, SPIKE)** GC adapter over micro-USB. Output = a research doc +
+  go/no-go. **Q1 gates everything: does the port do USB HOST at all?** If GO
+  it makes A24's CONTROLLER branch real, justifies A31's per-player plane, and
+  retires the digital-d-pad compromise (`ctl_style.h:14-23`).
+- **A34 (P2, BUG)** POWER OFF is a dead control — but it IS implemented
+  (`foh_pause.c:366,369,570`), so this is DIAGNOSIS. QUIT reportedly works;
+  the diff between the two arms is the investigation.
 
 ## A14 SECOND HALF — scope, measured 2026-08-05 before stopping
 41 call sites (15 `foh_text2` + 26 `foh_text`) in `foh_render.c` alone, plus

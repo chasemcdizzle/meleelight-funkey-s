@@ -3903,3 +3903,257 @@ multi-second; log to tmpfs, copy on exit).
 `done-check:` *(REPLAN — cannot be written until the measurement above says
 which world we are in; a placeholder check would violate the CHECKER's
 no-placeholder rule.)*
+
+## OWNER PLAYTHROUGH #3, ROUND 2 (Chase, 2026-08-23) — A27-A34
+
+Eight more rows from continued play. Same discipline as A23-A26: grounded at
+file:line measured today. **Two of these are outright BUGS in shipped
+behavior (A28, A29) and one is a dead control (A34)** — they outrank the
+cosmetic rows in the menus lane.
+
+---
+
+### A27 (P1) — CSS mode ribbon: no way to change game mode
+
+**Symptom (owner):** *"there's no way to change between stock mode and
+'endless ko fest'... if you click the 'VS Melee' in the CSS it should change
+modes."*
+
+**Ground truth:** the ribbon is drawn at `foh_render.c:1358-1364` (`"VS. MELEE"`
+inside a 6-point wedge). **It is the SAME registered gap as A23** —
+`foh_render.c:222` names both in one breath: *"(a) DRAWN, NOT YET
+HIT-TESTABLE: the header's BACK wedge **and mode ribbon**"*.
+
+**Therefore A23 and A27 are ONE piece of work, not two.** Both need the same
+thing: CSS header widgets become hit-testable by the hand. Do them in one
+change or the second one re-does the first one's plumbing. **Merge A27 into
+A23's arc.**
+
+Open question to settle from upstream before coding: what the mode set
+actually IS (stock / endless / time?) and whether upstream cycles on click or
+opens a picker. Read `menu.js` / `css.js` in the clone — do not invent a mode
+list.
+
+---
+
+### A28 (P0, BUG) — constant audio buzz from launch
+
+**Symptom (owner):** *"when I launch the game there's a buzzing sound coming
+from the speakers (before music even plays) and the whole game / time."*
+Present BEFORE any sound plays and continuously — so this is the idle path,
+not a mixing bug.
+
+**Ground truth:** the device opens audio at **44100 Hz / AUDIO_S16LSB / 2ch**
+with an exact-spec-or-fail check (`port/gfx/platform_audio_sdl.h:120-150`);
+the callback delegates the whole buffer to `g_pa_fill`
+(`platform_audio_sdl.h:102-103`) and only memsets to silence on the
+`len != granted.size` error path (`:97-101`).
+
+**Ranked hypotheses — test in this order:**
+1. **The fill callback does not write silence when zero voices are active**,
+   so the driver replays whatever was last in the buffer. This is the classic
+   cause of exactly this symptom (constant, present before any sound) and it
+   is the FIRST thing to check: does `g_pa_fill` unconditionally initialise
+   every sample frame, or does it only add active voices onto an
+   uninitialised buffer?
+2. **Sample-rate mismatch.** The M1 pipeline converts ALL audio to
+   **22050 Hz** (CLAUDE.md M1 task 4: SFX mono 22050, music stereo 22050) but
+   the device opens at **44100**. Confirm the mixer resamples; if it does not,
+   expect pitch/aliasing artefacts.
+3. DC offset in the converted PCM, or a partially-filled final block.
+
+**Note this is NOT contradicted by the M3 evidence:** `verify_m3.sh` asserts
+`underruns == 0`, which measures callback *timing*, not sample *content*. A
+buffer full of buzz underruns exactly zero times. The existing bar cannot see
+this defect — which is itself worth recording.
+
+`done-check:` audio silent at idle on device, by ear AND by a captured buffer
+assertion that the idle callback output is all-zero.
+
+---
+
+### A29 (P0, BUG) — CSS character selection is lost on re-entry
+
+**Symptom (owner):** select falco (P1) + marth (P2), start, quit to menu,
+return to VS — **P1 shows marth, P2 shows puff.**
+
+**Ground truth, and it names the bug:** marth is char id **0**, puff is char
+id **1**. So the observed state is exactly `cssChar[k] = k` — the identity
+fill. `FohState.cssChar` is `int cssChar[2]` (`foh.h:429`). Something on the
+match-exit path re-initialises the CSS plane to an index-identity default
+instead of preserving the player's picks (or instead of restoring the
+upstream defaults, which are p1=fox(2)/p2=marth(0) per the oracle's own
+documented defaults — note the observed values match NEITHER the picks NOR
+those defaults, which is the strongest clue available).
+
+**Start here:** the match→menu re-entry path, and whoever writes `cssChar`
+outside `step_css`. `check-mexit-reentry.sh` exists and is the natural home
+for the regression tooth.
+
+`done-check:` pick a non-default pair, launch, quit to menu, re-enter CSS,
+assert both slots still read the picks; tooth proving an identity-fill
+regression fails.
+
+---
+
+### A30 (P1) — control-style DEFAULT button maps are wrong
+
+**Symptom (owner), per style:**
+1. **box** — "L should be shield and R should be mod / tilt"; and
+   X→grab, A→jump, Y→special, B→attack.
+2. **classic** — X→grab, A→jump, Y→special, B→attack, R C-stick (HOLD).
+3. **natural** — X→grab, A→jump, Y→special, B→attack, R C-stick (HOLD).
+
+**Ground truth — the current tables:**
+- Styles are `CTL_STYLE_NORMAL=0`, `CTL_STYLE_BOX=1`, `CTL_STYLE_NATURAL=2`,
+  default NATURAL (`port/gfx/ctl_style.h:93-99`).
+- Labels: `foh_ctl_labels.h` — A=ATTACK, B=SPECIAL for every style; X/Y are
+  style-dependent (C-layer styles spend X on JUMP, Y on C-STICK HOLD; NATURAL
+  spends X on GRAB(Z), Y on JUMP); shoulders shield except BOX's Mod.
+
+**SPLIT THIS ROW — the two halves have wildly different costs.**
+
+**(a) The shoulder request is nearly free and is ALREADY a supported
+setting.** `ctl_style.h:69-77` records the 2026-07-29 owner ruling that the
+Mod shoulder is a separate, orthogonal cell, and that swapping is a pure
+RELABELING which leaves the ratified BOX table untouched (proved by dumping
+all 2048 combos under both arrangements). **So (a) is a DEFAULT FLIP of
+`modOnR`, not a table edit.**
+
+**(b) Remapping the face buttons is EXPENSIVE and touches ratified ground.**
+A→jump / B→attack / Y→special inverts the A=ATTACK, B=SPECIAL assignment that
+every style currently shares. For **BOX specifically** this edits the
+"Chase-ratified S1 One-Mod + C-layer table, **byte-for-byte**" (`ctl_style.h:
+27-31`, B0XX/HayBox lineage) — which is pinned by `port/gfx/s1_sweep.c` and
+`check-device-input.sh` across 15 S1 checks. **That is a re-ratification, not
+a bug fix.** Do not touch it without the owner signing for it in writing, the
+same way D14/D20 were signed.
+
+**ANSWER THE OWNER'S PARENTHETICAL FIRST — it may shrink this row a lot.**
+*"(unless there is some other way to grab I don't know about)"*: in Melee,
+**shield + A is a grab**, which is why the C-layer styles can afford to spend
+X on JUMP. Confirm that arm is live in this port and TELL THE OWNER before
+remapping anything — if grab is already reachable from shield+A, the
+motivation for X→grab on BOX/CLASSIC largely evaporates.
+
+**And note A31 may subsume most of (b):** if arbitrary rebinding lands, the
+defaults are just a starting table the player can change, and the argument
+for editing the ratified BOX defaults gets much weaker.
+
+---
+
+### A31 (P1) — Controls screen: real rebinding, and three things that should not be there
+
+**Symptom (owner):** *"you should be able to rebind any of the 'active
+mappings'. currently you can't even go to any of those rows — only change
+between 'style:' and 'mod'. changing 'mod' changes the controls. we don't
+want that. get rid of 'mod' altogether as an option here... what is
+'rebind: N/A', why do we even have that section? also, can we have a 'reset
+to defaults' button. also, how do we set the controls for different players?"*
+
+**Ground truth:** `foh.h:495` (C30(c)) says the cursor covers exactly **TWO
+settable rows** — that is the measured cause of "you can't go to any of those
+rows". The nine action labels come from `foh_ctl_labels.h`
+(`FOH_CTL_LABEL_ROWS 9`) and are **display-only**: there is no per-action
+binding cell anywhere.
+
+**Four sub-items, in dependency order:**
+1. **Make the 9 action rows selectable and bindable.** This is the real work:
+   a per-action binding table + a listening mode. `foh.h:1023` already
+   references a listening-mode design ("hold-A clear, protected primaries") —
+   read it before designing a new one.
+2. **Delete the `mod` row from this screen.** Owner is explicit. Keep the
+   underlying `modOnR` cell (A30(a) needs it, and the BOX table's relabeling
+   proof depends on it) — this is a UI removal, not a model removal.
+3. **`rebind: N/A`** — establish what it was for and delete it if it is
+   vestigial. Owner is right to ask; a row that always reads N/A is dead UI.
+4. **"Reset to defaults" button.** Cheap and clearly correct once (1) exists.
+
+**Per-player controls (the owner's last question) is a REAL design question
+and should NOT be answered casually.** Today the style/mod cells are
+**process-wide** (`ctl_style.h:101`: *"Process-wide active style"*), and
+persistence stores ONE `ctlstyle` line. Per-player bindings means a per-port
+plane in the model, the UI and `MLFKPERSIST` — a format bump. **It only pays
+for itself if A33 lands** (a second physical controller). Recommendation:
+**design the binding table per-port from the start** (cheap now, expensive to
+retrofit) but **ship the UI editing port 0 only** until A33 says whether more
+ports are real.
+
+**Mechanical consequence:** persistence gains a bindings plane →
+`MLFKPERSIST5`, with the twin host/device `cmp` ritual its header documents.
+
+---
+
+### A32 (P2, BUG?) — L-cancel default should be ON for all players
+
+**Symptom (owner):** *"defaults for L-cancel should be on for all players
+(i see off for p2, p3, p4 for some reason?)"*
+
+**Ground truth, and it raises a sharper question than the row does:**
+`lCancelType` is a **SINGLE GLOBAL SCALAR** — `sim_boot.c:433`
+(`g->sim.lCancelType = 0`), persisted as one value (`foh_persist.c:95,276`).
+There is no per-player L-cancel plane at all. The per-player thing that DOES
+exist is `tapJumpOff[4]`.
+
+**So before changing any default, resolve what the owner actually saw:**
+either (i) the options screen renders per-player rows for a global setting —
+in which case **the display is the bug**, and changing defaults would paper
+over it; or (ii) he is reading the `tapJumpOff` rows, which are genuinely
+per-player and genuinely default differently for P1 (CLAUDE.md's
+`--tapjump-off-p1`). **Measure which before touching a default.**
+
+**Faithfulness note:** `lCancelType 0` is the authored UPSTREAM default
+(`sim_boot.c:19`, settings.js:44-56 all-zero). Turning it on by default is a
+**deviation** needing a D-number, not a bug fix — flag that to the owner.
+
+---
+
+### A33 (P2, RESEARCH SPIKE) — GameCube adapter over the FunKey-S micro-USB
+
+**Owner-provided sources:** `github.com/secretkeysio/gcadapterdriver` ·
+`github.com/ToadKing/wii-u-gc-adapter` ·
+`dolphin-emu.org/docs/guides/how-use-official-gc-controller-adapter-wii-u/`
+(owner: *"a really good resource"*).
+
+**A SPIKE, NOT A FEATURE** — output is `docs/research/gc-adapter.md` plus a
+go/no-go, following the `spikes/` precedent. Questions it must answer, in
+feasibility order:
+1. **Does the FunKey-S micro-USB port do USB HOST at all** (OTG capable, and
+   is the kernel built with host + the needed HID/usbfs support)? If no, the
+   spike ends here and everything below is moot. **Answer this first.**
+2. Power: the official adapter expects 500 mA and has its own supply leg —
+   can this device provide or bypass it?
+3. Driver shape: `wii-u-gc-adapter` is libusb userspace → uinput. Is libusb
+   present or cross-buildable with the FunKey SDK? Does uinput exist?
+4. Latency and CPU cost against the 16.67 ms budget (§A-par: perf is the
+   binding constraint on this device).
+5. Licensing: any vendored code needs its `NOTICES` entry BEFORE it lands
+   (project licensing rule).
+
+**Payoff if GO is large and not just "more players":** it makes the
+"CONTROLLER" branch of the Controls menu real (A24), justifies per-player
+bindings (A31), and gives a true analog stick, which retires the whole
+digital-d-pad compromise documented in `ctl_style.h:14-23` (no walk, no
+partial DI angles, no angled f-tilts).
+
+---
+
+### A34 (P2, BUG) — "POWER OFF" does nothing
+
+**Symptom (owner):** *"power off option from funkey-s menu options doesn't
+work."*
+
+**Ground truth: it is implemented, so this is a DIAGNOSIS row.**
+`foh_pause.c:366` defines `SYS_OPT_POWEROFF` in the system menu
+(`{VOLUME, BRIGHTNESS, QUIT, POWER OFF}`), rendered at `:369`, with a live
+arm at `:570`. **The option exists and is wired — find out why the action does
+not take.**
+
+Leads: whether the arm invokes a real shutdown path (and whether that path
+needs privileges the OPK process has), and whether the FunKey frontend expects
+the app to EXIT and let the OS power down rather than powering down itself.
+Compare against QUIT, which reportedly works — the diff between the two arms
+is the whole investigation.
+
+`done-check:` selecting POWER OFF powers the device down from the play OPK;
+tooth proving a no-op arm fails.
