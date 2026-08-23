@@ -4944,3 +4944,64 @@ where it goes.
 
 **Remaining leg:** `DEVICE FOH OK` has NOT been run (no device in-lane). That is
 the outstanding half of this row's done-check.
+
+### A37 — DONE 2026-08-23 (lane S). `versusMode` IS REAL. A27 IS UNBLOCKED.
+
+**THE TICKET'S STATED HAZARD WAS BACKWARDS.** A37's row (written by the driver
+from lane M's report) warned that *"an endless match would run the clock into
+`sim_fatal`"*. Upstream does the OPPOSITE: `main.js:1079` is
+`if (!starting && !versusMode) matchTimerTick(input); else { startTimer -= … }`
+— in endless mode upstream takes the **else** arm every frame forever, so
+`matchTimer` **never ticks and therefore never expires**. The endless loop is
+closed instead by `physics.js:980` (`stocks === 0 && versusMode -> stocks = 1`)
+and `actionStateShortcuts.js:155` (`isFinalDeath` returns false), **both of
+which this port already had.** Fifth premise falsified by measurement this
+session.
+
+**Upstream semantics carried, including the quirk:** `versusMode` is **PAGE
+state**, not match state — `startGame` never resets it (`main.js:140`,
+`:237-239`, toggled `setVersusMode(1 - versusMode)` from `css.js:393`). And
+`main.js:1334-1336`'s "1 stock" arm sits **OUTSIDE** the `playerType[n] > -1`
+guard in the same loop, so **all four slots get `stocks = 1`, inactive ones
+included.** Carried verbatim under HARD RULE 5.
+
+**Changed:** `sim_boot.c` (init moved from `sim_setup_match` to
+`sim_boot_page`, because it is page state; the `stocks = 1` arm with its
+outside-the-guard quirk); `sim_tick.c` (the `&& versusMode == 0` conjunct
+restored); `sim_main.c` (`--versus-endless`, following the `--walljump-all`
+precedent); new `port/sim/check-versus-endless.sh`, which **pins
+`check-sim.sh`'s sha256 rather than duplicating its TU list** — a pattern worth
+copying.
+
+**Results, verbatim.** Flag OFF: `SIM CONFORMS` 8/8 **bit-identical**, plus
+`AI LIVE CONFORMS` 10/10 — the D20 bar, met. Flag ON: `VERSUS ENDLESS OK` —
+frame-1 stocks `4 4 -> 1 1`; over 29,000 frames of g01, versusMode 0 dies at
+`SIM FATAL frame 4749: DEADDOWN: finishGame (final death)` while versusMode 1
+runs to the end `SIM OK`. **Tooth:** dropping the conjunct makes the endless run
+die at `frame 28890: matchTimer expired` — the guard is load-bearing, proven by
+reverse-edit.
+
+**No deviation row: making a ported-but-PINNED upstream feature live is not a
+deviation.**
+
+### ⚠ A SIBLING GATE CAUGHT A BREAK `check-sim.sh` ALONE WOULD HAVE SHIPPED
+Adding `--versus-endless` to the **usage string** failed `check-ai-live.sh`'s
+M2-contract witness, which pins that rejection message to exactly two lines.
+**`check-sim.sh` on its own does not catch this.** Resolved by not listing the
+flag (identical to `--walljump-all`), with the reason commented at the parse
+site. **Standing lesson: on the sim plane, run the SIBLING gates too — the
+checksum gate is not the only contract over those bytes.**
+
+### A27 — UNBLOCKED. EXACT WIRING, MEASURED BY LANE S
+1. Add a `versusMode` field to FOH state (`foh.h` already carries the note);
+   `foh_app.c:535` currently hardcodes `versus=0` in the LAUNCH line.
+2. Write it **IMMEDIATELY BEFORE `sim_setup_match`** — `foh_app.c:698` and
+   `foh_dev.c:3070`: `G.sim.versusMode = foh.versusMode;`
+3. **NOT in the gameSettings block at `foh_app.c:700-713`** where
+   `everyCharWallJump` lives. `startGame`'s stocks arm reads the value DURING
+   setup, so a post-setup write is TOO LATE. The ordering constraint is
+   commented at both the `sim_boot_page` and `sim_main.c` sites.
+4. **Render seam for whoever takes it:** `physics.c:1308` restores stocks AFTER
+   upstream's `lostStockQueue.push`, so the HUD sees the 0 before the respawn.
+   Our C marks that push render-plane no-op — correct today, and exactly the
+   seam endless-mode stock icons will need.
