@@ -1782,16 +1782,17 @@ static void render_sss(const FohState *s, Raster *rz) {
 
 // --- GAMEPLAY OPTIONS (upstream menus/gameplaymenu.js; MENU-SPEC §3) --------
 // The COMPLETE upstream row list, in upstream's order (:178-182), with
-// upstream's value strings (:230/:233/:236/:239/:242) and its one multi-cell
-// row. Labels are the upstream literals uppercased for the 5x7 face, and the
-// value column is right-aligned because "EVERYONE WALLJUMPS" is 18 glyphs on
-// a 240 px screen where upstream had 1200 (D4: our rects, upstream's
-// semantics).
+// upstream's value strings (:230/:233/:236/:239; :242 is inverted on display
+// per DEVIATION D23, spelled out at the row-4 call site below) and its one
+// multi-cell row. Labels are the upstream literals uppercased for the 5x7
+// face, and the value column is right-aligned because "EVERYONE WALLJUMPS"
+// is 18 glyphs on a 240 px screen where upstream had 1200 (D4: our rects,
+// upstream's semantics).
 static void render_opt_gameplay(const FohState *s, Raster *rz) {
   header(rz, "GAMEPLAY");
   static const char *const kRows[5] = {"TURBO MODE", "L-CANCEL",
                                        "FLASH ON L-CANCEL",
-                                       "EVERYONE WALLJUMPS", "TAPJUMP OFF"};
+                                       "EVERYONE WALLJUMPS", "TAP JUMP"};
   const int ys[5] = {40, 66, 92, 118, 144};
   const char *vals[4];
   vals[0] = s->turbo ? "ON" : "OFF";              // :230
@@ -1815,8 +1816,17 @@ static void render_opt_gameplay(const FohState *s, Raster *rz) {
     }
     const char pn[3] = {'P', (char)('1' + k), 0};
     foh_text(rz, x, y, 1, pn, kDim);
-    foh_text(rz, x + 16, y, 1, s->tapJumpOff[k] ? "ON" : "OFF",
-             s->tapJumpOff[k] ? kAccent : kDim);
+    // DEVIATION D23 (A32, owner-reported): upstream's row is the double
+    // negative "Tapjump off" whose value reads "On" when tap jump is
+    // DISABLED (:242). The owner read that row as a defaults bug and filed
+    // one. The STATE plane keeps upstream's polarity — `tapJumpOff` still
+    // means "off", and foh_persist/foh_app/foh_dev hand that bit to the sim
+    // unchanged — so this inverts on DISPLAY ONLY: the label above is
+    // "TAP JUMP" and the value is the ENABLED state, lit when the feature
+    // is on exactly like every other row on this screen.
+    const int tapJumpOn = !s->tapJumpOff[k];
+    foh_text(rz, x + 16, y, 1, tapJumpOn ? "ON" : "OFF",
+             tapJumpOn ? kAccent : kDim);
   }
   text_center(rz, 205, 1, "A: CHANGE   B: BACK", kDim);
 }
@@ -2073,6 +2083,16 @@ static void render_tss(const FohState *s, Raster *rz) {
                             : (RastCol){255, 182, 204, 256};
   const RastCol idle = {166, 166, 166, 256};         // :279
   const RastCol slotBg = {0, 0, 0, 256};             // :195 fillStyle black
+  // DEVIATION D24 (A25a, owner-reported "the highlighting around test 1 and
+  // + ADD CODE you selected is not really visible to the eye"). Upstream's
+  // whole selection signal is a ONE-PIXEL stroke that goes grey -> pink
+  // (:270-279); at 1200 px that reads, at 240 it is 242 changed pixels
+  // around a black box on a busy brown gradient. Two changes, both inside
+  // upstream's own idiom of "the BORDER carries the state, never the label":
+  // the selected slot's border is drawn TWICE (an outer ring 1 px further
+  // out, so 2 px total) and its body is lifted off black to this pink-tinted
+  // ink. The label stays :201's grey in both states (:2049's constant).
+  const RastCol slotSel = {52, 22, 32, 256};
   // :201 `rgba(255,255,255,0.6)` over the black slot body == 153 opaque.
   // CONSTANT: upstream never brightens a label on hover, only its border.
   const RastCol slotTx = {153, 153, 153, 256};
@@ -2081,8 +2101,10 @@ static void render_tss(const FohState *s, Raster *rz) {
   for (int k = 0; k < 10; k++) {
     const int col = k / 5, row = k % 5;
     const int x = 8 + col * 124, y = 30 + row * 22;
-    rrect(rz, x - 1, y - 1, 102, 21, 0, k == s->tssCursor ? hot : idle);
-    fill_rect(rz, x, y, 100, 19, slotBg);
+    const int sel = k == s->tssCursor;
+    if (sel) rrect(rz, x - 2, y - 2, 104, 23, 0, hot);  // D24
+    rrect(rz, x - 1, y - 1, 102, 21, 0, sel ? hot : idle);
+    fill_rect(rz, x, y, 100, 19, sel ? slotSel : slotBg);
     char label[10] = "TARGET ";
     if (k == 9) { label[7] = '1'; label[8] = '0'; label[9] = 0; }
     else { label[7] = (char)('1' + k); label[8] = 0; }
@@ -2093,9 +2115,14 @@ static void render_tss(const FohState *s, Raster *rz) {
   // the d-pad cursor makes it the row below the grid here (rewrite delta).
   {
     const int x = 70, y = 142, w = 100, h = 17;
-    rrect(rz, x - 1, y - 1, w + 2, h + 2, 0,
-          s->tssCursor == 10 ? hot : idle);
-    fill_rect(rz, x, y, w, h, slotBg);
+    const int sel = s->tssCursor == 10;
+    // D24, with one measured asymmetry: the ring grows 1 px on the top and
+    // both sides but NOT the bottom, because the info panel below starts at
+    // y == 160 and its face is a 50% black fill (:2164) that would half
+    // darken exactly that row across the panel's width.
+    if (sel) rrect(rz, x - 2, y - 2, w + 4, h + 3, 0, hot);
+    rrect(rz, x - 1, y - 1, w + 2, h + 2, 0, sel ? hot : idle);
+    fill_rect(rz, x, y, w, h, sel ? slotSel : slotBg);
     foh_text(rz, x + 6, y + 5, 1, "+ ADD CODE", slotTx);
   }
   // the character plate (:210-241): a rounded gradient tile with a chevron
