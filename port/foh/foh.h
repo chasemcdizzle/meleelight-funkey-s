@@ -219,12 +219,24 @@
 //
 // D4 EXCEPTIONS, registered rather than glossed — this build does NOT satisfy
 // the invariant everywhere, and pretending otherwise would be the lie:
-//   (a) DRAWN, NOT YET HIT-TESTABLE: the header's BACK wedge and mode ribbon
-//       (foh_render.c css_header). Both are real upstream widgets
-//       (css.js:358-363 and :390-395) and both belong to MENU-SPEC item 7,
-//       which this arc does not carry. They are left drawn because the design
-//       is owner-approved and must not be restyled; the hit arms land with
-//       item 7.
+//   (a) DRAWN, NOT YET HIT-TESTABLE: the header's mode ribbon
+//       (foh_render.c css_header, upstream css.js:390-395). The BACK wedge
+//       LEFT this list with A23 — it is hit-tested at FOH_CSS_BACK_X0 below.
+//       The ribbon stays, and NOT for want of a rect: its action is
+//       `setVersusMode(1 - versusMode)`, and versusMode is SIM-VISIBLE, not
+//       cosmetic. Upstream reads it at physics.js:980 (a KO at 0 stocks
+//       refills to 1), actionStateShortcuts.js:155 (isFinalDeath is never
+//       final), main.js:1079 (no matchTimer tick) and :1334 (every player
+//       starts on 1 stock), and render.js:397 (no clock drawn). Our sim
+//       carries the READ sites — port/sim/physics.c:1308,
+//       action_state_shortcuts.c:148 — but sim_boot.c:423 pins the value to
+//       0 and sim_tick.c:380 has the `!versusMode` matchTimer arm commented
+//       out as unreachable, so nothing a ribbon wrote could be observed. A
+//       ribbon that toggled its own label and nothing else would be a stub
+//       (HARD RULE 2), so it stays drawn and inert until the LAUNCH line
+//       carries versusMode. Registered: MENU-SPEC §2.9 item 18 + §13.1 item
+//       7, and fix_plan A27 (BLOCKED — those three edits are outside
+//       port/foh/ and land in check-sim.sh's frozen TU list).
 //   (b) HIT-TESTABLE, NOT ALWAYS DRAWN: your OWN token stays grabbable while
 //       your port is N/A, because upstream's grab guard is
 //       `playerType[j] == 1 || i == j` (css.js:300) while its token DRAW is
@@ -248,6 +260,33 @@
 // upstream has (cells 240..335 inside the band 160..400).
 #define FOH_CSS_BAND_TOP 26
 #define FOH_CSS_BAND_BOT 62
+// The BACK wedge's hit region (upstream css.js:358 — `y < 160 && x > 920`),
+// and the hold bar that reports it (css.js:735-746). A23.
+//
+// D4 wants the hit region to be the DRAWN extent, and here upstream's own
+// proportions land on it exactly: 920/1200 of the canvas is 0.7667, and
+// 0.7667 * 240 = 184.0 — which IS the left edge of the black slab css_header
+// draws the wedge on (its quad starts at x 184). So the proportional mapping
+// and the drawn extent agree to the pixel, and one constant serves both.
+// The y half needs no constant: upstream's `y < 160` means "above the roster
+// band" (its band opens at 160, css.js:207), and ours opens at
+// FOH_CSS_BAND_TOP — the same relationship, reusing the same number that
+// already keeps the band and the header from overlapping.
+//
+// Both bounds are STRICT, as upstream's are.
+#define FOH_CSS_BACK_X0 184
+// The hold bar, mapped at upstream's own ratios so it fills at upstream's
+// rate. Upstream runs it from x 1020 to 1020 + 30*6 = 1200 (the right edge)
+// along y 119..125 — the bottom lip of the wedge's gold underline — i.e. it
+// starts at 85% of width, gains 0.5% of width per held frame, and ends flush
+// with the screen. Here: 204 = 0.85 * 240, 1.2 px/frame = 0.5% of 240, and
+// 204 + 30*1.2 = 240, flush with the right edge again. The 1 px left lean
+// (203 on the top edge) is upstream's own 1015-vs-1020 skew, which follows
+// the slab's lean the same way ours does.
+#define FOH_CSS_BACK_BAR_X0 204.0f
+#define FOH_CSS_BACK_BAR_LEAN 203.0f
+#define FOH_CSS_BACK_BAR_PER_FRAME 1.2f
+#define FOH_CSS_BACK_BAR_TOP 24.0f
 // Token rest slots: two ports stack inside one cell (upstream stacks four
 // 2x2 within a 95 px cell; two fit a 44 px one).
 #define FOH_CSS_TOKEN_R 9

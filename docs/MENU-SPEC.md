@@ -495,7 +495,8 @@ cursor speed of §1.2.** No change in semantics; noted only because a
 | Widget | Guard | Line | Action |
 |---|---|---|---|
 | BACK chevron | `y < 160 && x > 920`, A edge | `css.js:358-363` | `menuBack`, `changeGamemode(1)` → main menu |
-| Mode ribbon | `y ∈ (100,160)`, `x ∈ (380,910)`, A edge | `css.js:390-395` | `setVersusMode(1 - versusMode)` |
+| BACK hold bar | `bestHold > 0` (max `bHold[]`) | `css.js:735-746` | red quad, x 1020 → 1020 + 6·`bestHold`, y 119..125 — the wedge's bottom lip filling left to right; full at `bestHold == 30`, the frame the B-hold fires |
+| Mode ribbon | `y ∈ (100,160)`, `x ∈ (380,910)`, A edge | `css.js:390-395` | `setVersusMode(1 - versusMode)` — a BINARY toggle, `main.js:140/237`. `0` = "4-man survival test!" (stocks), `1` = "An endless KO fest!" (`css.js:717-721`) |
 | Palette next | X edge, anywhere | `css.js:366-377` | `pPal[tok]++`, wrap `>6 → 0`; `tok` = carried token's port else self |
 | Palette prev | Y edge, anywhere | `css.js:378-389` | `pPal[tok]--`, wrap `<0 → 6` |
 | Tag: random | `y ∈ (640,680)`, `x < 154 + i*225` | `css.js:421-426` | `hasTag[i]=true`, random from `randomTags` (`main.js:142`) |
@@ -758,9 +759,10 @@ chevron (§2.9) as an A-clickable exit to the same place. A max-of-all-ports
 | 13 | READY TO FIGHT rule | ≥2 non-N/A ports AND no token held (`css.js:1167-1181`) | Banner drawn unconditionally (`foh_render.c:1526-1546`) | **DIFFERS** |
 | 14 | START launches | Only when ready (`css.js:446-451`) | Always (`foh.c:260-264`) | **DIFFERS** |
 | 15 | B-hold 30 → main menu | `css.js:186-194` | Present, 30 frames, → menu-battle (`foh.c:244-256`) | **MATCHES** (destination differs: upstream goes to gameMode 1 = main menu, we go to menu-battle) → **DIFFERS** on destination |
-| 16 | BACK chevron clickable | `css.js:358-363` | Drawn but unreachable (`foh_render.c:1352-1356`) | **MISSING** |
+| 16 | BACK chevron clickable | `css.js:358-363` | Hit-tested at `FOH_CSS_BACK_X0` (`foh.c`'s counter arm), but HELD not clicked — **DEVIATION D22**, A23 | **DIFFERS** on trigger (present, owner-ratified) |
+| 16a | BACK hold bar | `css.js:735-746` | Present, upstream's shape and rate (`foh_render.c` `css_header`); A23 | **MATCHES** |
 | 17 | Palette cycle X/Y, 0..6 | `css.js:366-389` | Not implemented | **MISSING** |
-| 18 | Mode ribbon toggles `versusMode` | `css.js:390-395`, sim-visible | Not implemented; `versus=0` hardcoded in LAUNCH | **MISSING** |
+| 18 | Mode ribbon toggles `versusMode` | `css.js:390-395`, sim-visible | Not implemented; `versusMode` pinned to 0 at `port/sim/sim/sim_boot.c:423`, and `sim_tick.c:380`'s `!versusMode` matchTimer arm is commented out as unreachable. The READ sites ARE ported (`port/sim/physics.c:1308`, `action_state_shortcuts.c:148`), so this is a LAUNCH-LINE gap, not a logic gap — see A27 | **MISSING (BLOCKED — the three edits are in `check-sim.sh`'s frozen TU list)** |
 | 19 | Name tags | random / clear / type (`css.js:415-439`) | Not implemented | **MISSING** (type-tag cut by D8) |
 | 20 | d-pad UP launches unready | `css.js:452-455` | Not implemented | **MISSING — intentional (D2)** |
 | 21 | d-pad RIGHT → Falco | `css.js:456-459` | Not implemented | **MISSING — intentional (D2)** |
@@ -1935,6 +1937,7 @@ state; each entry points at the section that carries the evidence):
 | D19 | The random-tag draw uses a FOH-LOCAL stream and cannot shift the match (upstream shares the sim's stream; our 465-boot-draw pin makes that unavailable) | §2.9 |
 | D20 | **HOUSE RULE, owner-requested 2026-08-04:** "Everyone Walljumps" — dead upstream — is given real mechanical effect at the per-character ability gate. Defaults OFF forever; flag-off is bit-identical | §3.3 |
 | D21 | **A29, owner-reported P0 (2026-08-23):** endGame's token snap lands on the port's CHOSEN cell. Upstream indexes `charIconPos` — a per-CHARACTER array — by PORT number (`css.js:154`, called `main.js:1381-1384`), so upstream's tokens sit on marth/puff after every match regardless of picks. Demonstrably an upstream TYPO, not design: `setChosenChar` passes TWO args (`css.js:146`) to a callee declaring one and dropping it — we honour the argument the caller passes. Cosmetic upstream (four large panels disambiguate); here the token is the ONLY roster-level pick indicator at 240x240 | §2.6 |
+| D22 | **A23, owner-requested P1 (2026-08-22):** the CSS BACK wedge is HELD, not clicked. Upstream hit-tests it as an INSTANT A-click — `handPos.y < 160 && handPos.x > 920` on the A rising edge, calling `changeGamemode(1)` outright (`css.js:358-363`) — and reserves its 30-frame `bHold` counter for the B button (`css.js:186-194`). The owner asked for the arcade behaviour instead: *"I want it to behave like how melee does — holding the cursor OR holding the back button starts progressing a little red bar that fills below the back button, and when it fills it actually backs out."* Those words are the ratification. The deviation is ONLY the TRIGGER: the hand now ARMS upstream's own counter instead of firing instantly, so there is ONE counter with TWO input paths and no second timer. Everything else is upstream verbatim — the 30 frames, the `== 30` equality that fires it exactly once per hold, the `menuBack` sound, and **the red bar itself, which is NOT a deviation**: upstream draws it at `css.js:735-746` (`bestHold` = max over the four ports; a red quad from x 1020 to 1020 + 6·`bestHold` along the wedge's bottom lip, guarded on `bestHold > 0`) and this port simply had not carried it. That `> 0` guard is load-bearing here too — a cold CSS draws no bar, so A23 re-froze **zero** of the judged shots (measured, `check-css-back.sh` T2) | §2.9 |
 
 ---
 

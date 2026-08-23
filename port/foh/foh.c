@@ -476,8 +476,38 @@ static void step_css(FohState *s, const PlatformInput *in,
   // which wins because it is last. Returning here instead would drop all of
   // that, so the pending edge is emitted at the very end of the step and any
   // transition taken in between simply supersedes it.
+  //
+  // DEVIATION D22 (A23, owner-requested 2026-08-22) — the SECOND input path
+  // into this ONE counter. Upstream's BACK wedge is an INSTANT click: css.js:
+  // 358-363 tests `handPos.y < 160 && handPos.x > 920` on the A rising edge
+  // and calls changeGamemode(1) outright, with no hold and no bar. The owner
+  // asked for the arcade behaviour instead — "I want it to behave like how
+  // melee does ... holding the cursor OR holding the back button starts
+  // progressing a little red bar that fills below the back button, and when
+  // it fills it actually backs out" (playthrough #3, 2026-08-22). Those words
+  // are the ratification; MENU-SPEC's D22 row carries the argument.
+  //
+  // The deviation is NARROW and it is only the TRIGGER. The bar itself is
+  // upstream's, verbatim in shape and rate (css.js:735-746, drawn in
+  // foh_render.c's css_header), and the 30-frame counter, its `== 30`
+  // equality and its menuBack are upstream's too. What deviates is that the
+  // hand ARMS the counter rather than firing changeGamemode(1) instantly.
+  // One counter, two input paths — never a second timer, so the bar reports
+  // both paths without knowing which is driving it.
+  //
+  // The hand position read here is LAST frame's — the counter runs at
+  // upstream's site (css.js:186), which is BEFORE the hand integrates
+  // (css.js:195). That is deliberate: last frame's position is the one the
+  // draw pass rendered, i.e. the wedge the player can SEE the cursor on. It
+  // is the same last-frame-value idiom `cssReady` uses at the launch arm
+  // below. Bounds are strict, as upstream's are, and no other CSS widget can
+  // be reached with the hand this high: the panel tabs begin at
+  // FOH_CSS_PANEL_Y (96) and the roster band at FOH_CSS_BAND_TOP (26), so
+  // holding A here cannot also grab, drop or toggle anything.
+  const bool onBack = s->cssHandY < (double)FOH_CSS_BAND_TOP &&
+                      s->cssHandX > (double)FOH_CSS_BACK_X0;
   bool pendingBack = false;
-  if (in->b) {
+  if (in->b || (onBack && in->a)) {
     s->bHold++;
     if (s->bHold == 30) {
       // The SOUND fires HERE, at upstream's site (css.js:189), not with the
