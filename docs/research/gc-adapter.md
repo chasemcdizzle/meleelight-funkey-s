@@ -4,184 +4,173 @@ Research ticket A33 (`fix_plan.md:4175`), lane R. Question: can the official
 Wii U / GameCube controller adapter (or any USB controller) be supported on
 the FunKey-S through its micro-USB port?
 
-**VERDICT: NO-GO.** The FunKey-S micro-USB port cannot act as a USB host.
-The vendor's own hardware reference states the USB **ID pin is deliberately
-unwired** and the board acts "only as an USB device", and the shipped kernel
-contains **no MUSB host code at all** — it is not disabled, it is not
-compiled. Undoing that means rebuilding and reflashing FunKey-OS, an image
-this project neither owns nor ships. We ship an OPK.
+**VERDICT: UNKNOWN — and the unknown is small, cheap and electrical.**
 
-Q1 gates everything and Q1 is NO. §§2-5 below are recorded only to stop the
-question being re-litigated.
+Everything I originally called a blocker turned out to be software living in
+trees the owner already forks and builds (DrUm78's FunKey-OS and kernel).
+Those are three roughly one-line edits, not a research programme. What is
+genuinely not answerable from source is a single electrical question: **can
+USB0's PHY drive a host bus on this board, given VBUS is an input rail and
+the ID pin is unpopulated?** One free command on a reconnected device gets
+most of the way to an answer (§7). Nobody should spend days on this until
+that command has been run — and nobody should abandon it before then either.
 
-> **CORRECTION, same session — owner challenge.** The first draft of this
-> document called power "a second independent kill" and told the reader they
-> would need a self-powered USB hub. **Both claims are retracted; see §2.**
-> The owner pointed out that the official adapter has *two* USB plugs, the
-> grey one being power-only for rumble — so 500 mA is not the binding number
-> and no hub is required. The verdict does not change, because **Q1 alone
-> carries it**, but power is now a weak supporting point rather than a kill.
-> Recorded in place rather than silently edited, so the reasoning stays
-> auditable. Lesson for the next spike: I reached for a second kill before
-> the first one needed help, and got the physics of the peripheral wrong.
-
-- Device: FunKey-S, FunKey-OS 2.3.0, kernel **4.14.14-funkey**, Allwinner V3s
-  (single Cortex-A7 @ 1.2 GHz), ADB id `12c00003237f5528`.
+- Device: FunKey-S running **DrUm78's custom FunKey-OS** (the owner's actual
+  baseline), kernel **4.14.14** from `DrUm78/linux` @ `v1.0.3-funkey-s`,
+  Allwinner V3s, ADB id `12c00003237f5528`.
 - **No device runs were performed** — the device is disconnected for this
-  lane (lane rule 3). Every claim below is from primary source text: the
-  FunKey-Project OS/kernel repositories, the FunKey vendor documentation, and
-  the two owner-provided GitHub projects. Sources are pinned by path and tag.
-- One owner-provided source could not be retrieved: see §6.
+  lane (lane rule 3). Every claim is from primary source text: the DrUm78 and
+  FunKey-Project OS/kernel repositories, FunKey vendor documentation, and the
+  owner-provided GitHub projects, pinned by path, tag and line.
+- One owner-provided source could not be retrieved (§6).
 
 ---
 
-## 1. Q1 — Does the micro-USB port do USB host? **NO.**
+## 0. Corrections — two, both from owner challenges in-session
 
-### 1.1 Hardware: the ID pin is not wired (CITED — vendor primary source)
+Recorded in place rather than silently edited, so the reasoning stays
+auditable. Both corrections moved the verdict.
 
-FunKey Project hardware reference, *USB*
+**C1 — power was never a kill.** The first draft called power "a second
+independent kill" and told the reader to buy a self-powered USB hub. The
+owner pointed out the official adapter has **two** USB plugs, the grey one
+power-only for rumble. So the ticket's 500 mA is not a host-side obligation
+and no hub is involved. See §2. *Lesson: I reached for a second kill before
+the first one needed help, and got the peripheral's physics wrong.*
+
+**C2 — I made a scope decision that was not mine, and it was the load-bearing
+one.** The draft asserted that changing the kernel "means rebuilding and
+reflashing FunKey-OS — an image this project neither owns nor ships. We ship
+an OPK." That sentence did the real work of the NO-GO, and **it was my
+assumption, not a finding.** The owner already runs DrUm78's custom FunKey-OS
+and can fork it. With that corrected the NO-GO collapses, because every
+remaining software obstacle is a line in a tree the owner already builds.
+*Lesson: I converted "I don't know the project's appetite for this" into "the
+project won't do this" and shipped it as a verdict. Scope is the owner's
+call — state the cost, let them price it.*
+
+---
+
+## 1. Q1 — Does the micro-USB port do USB host? **Not as shipped. Tractable in a fork; one electrical unknown remains.**
+
+### 1.1 As shipped, three things say "peripheral" (CITED)
+
+Verified against **DrUm78's tree**, the owner's real baseline — which is
+byte-identical to upstream FunKey-Project in the USB region, so the earlier
+upstream reading holds:
+
+| # | Fact | Source |
+|---|---|---|
+| 1 | `dr_mode = "peripheral"` on the OTG controller | `DrUm78/linux` @ `v1.0.3-funkey-s`, `arch/arm/boot/dts/sun8i-v3s-funkey.dts:251-254` |
+| 2 | `CONFIG_USB_MUSB_GADGET=y`, no `HOST`, no `DUAL_ROLE` | `DrUm78/FunKey-OS` @ `FunKey-OS-DrUm78`, `FunKey/board/funkey/linux.config:115` |
+| 3 | `# CONFIG_HID is not set` / `# CONFIG_USB_HID is not set` | same file, `:107-108` |
+
+In Linux 4.14 the three MUSB roles are a **mutually exclusive Kconfig choice**
+(`drivers/usb/musb/Kconfig`), so as built, host-side MUSB code is not merely
+disabled — it is not compiled. The `&usbphy` node (`:256-260`) declares no
+ID-detect GPIO, so the running kernel performs no role detection at all.
+
+Consistent with observed behaviour: the `adb` marker file at SD root starts
+adbd over USB (`CLAUDE.md`, Device access), and adbd is a FunctionFS gadget
+(`CONFIG_USB_FUNCTIONFS=m`, `:123`).
+
+### 1.2 The ID pin is a red herring for a forced-host build
+
+FunKey vendor hardware reference, *USB*
 (`doc.funkey-project.com/developer_guide/hardware_reference/usb/`, fetched
-2026-08-23). The page states the port has exactly two functions — supplying
-+5 V to power the device and charge the LiPo, and carrying data for firmware/
-ROM transfer — and then, verbatim:
-
-> "the V3s is able to work as either an USB host or USB device using the USB
-> OTG protocol"
-
-…but, because the board only ever operates as a device:
-
-> "we don't need the ID pin to determine by the cable wiring which role we
-> must take."
-
-And on the schematic component itself:
+2026-08-23) — the port carries +5 V, GND, D+ and D−, and on the ID net:
 
 > "The resistor **R4** on the USB ID connector pin should probably not be
 > mounted" — "as we act only as an USB device, this pin should be left
 > floating."
 
-The connector is an edge-mounted Micro-USB, designator **J2**. Wired nets are
-+5 V, GND, D+ and D− only.
+…because "we don't need the ID pin to determine by the cable wiring which
+role we must take." The same page states outright that "the V3s is able to
+work as either an USB host or USB device using the USB OTG protocol."
 
-This is the decisive fact. The SoC is dual-role capable; **the board is not
-wired to use it.** An OTG cable signals host-role by grounding ID, and on
-this board ID terminates in an unpopulated pull-up.
+**The first draft treated this as the decisive hardware kill. That was too
+strong.** The ID pin exists to *auto-negotiate* role from cable wiring. A
+kernel built with `dr_mode = "host"` forces the role and never consults ID —
+the standard arrangement on sunxi boards that wire a micro-B connector with
+no ID routing. An unpopulated R4 blocks *automatic* OTG role-switching, not
+host mode as such.
 
-### 1.2 Software lock A: device tree pins the controller to peripheral (CITED)
+Confidence: **ASSUMED (strong)** — it follows from how `dr_mode` is handled in
+`musb_core` / `phy-sun4i-usb`, but I did not verify it on this board and did
+not read the 4.14 driver source this session. Not a MEASURED claim.
 
-`FunKey-Project/linux`, tag `linux-FunKey-1.0.2`,
-`arch/arm/boot/dts/sun8i-v3s-funkey.dts:210-213`:
+### 1.3 The EHCI0/OHCI0 wrinkle — now interesting rather than dismissible
 
-```
-&usb_otg {
-	dr_mode = "peripheral";
-	status = "okay";
-};
-```
+Both host controllers are **already enabled in the DTS and already built into
+the kernel**: `sun8i-v3s-funkey.dts:86-88` (`&ehci0 { status = "okay"; }`) and
+`:113-115` (`&ohci0`), with `CONFIG_USB_EHCI_HCD=y`, `CONFIG_USB_OHCI_HCD=y`
+and both `_PLATFORM` variants (`linux.config:110-113`).
 
-The board's `&usbphy` node (`:215-220`) supplies `usb0_vbus-supply`,
-`phy-supply` and `vcc`, and declares **no ID-detect GPIO** — so the kernel
-performs no role detection at all. Peripheral is not a default here, it is
-an assertion.
+Against that: `arch/arm/boot/dts/sun8i-v3s.dtsi` declares exactly **one** USB
+PHY (`usbphy: phy@01c19400`, `reg-names = "phy_ctrl", "pmu0"` — a single PMU,
+port 0), and `ehci0`/`ohci0` (`:308-325`) carry **no `phys` phandle at all**.
+On the V3s these are the host side of the *same* USB0 port MUSB owns; there
+is no second connector on the PCB.
 
-This DTS is the one that ships: `FunKey/configs/funkey_defconfig` sets
-`BR2_LINUX_KERNEL_INTREE_DTS_NAME="sun8i-v3s-funkey"`.
+Two readings, and source cannot separate them:
+- **(a) Boilerplate** inherited from the sunxi board-DTS template, registering
+  root hubs that can never enumerate. Most likely.
+- **(b) Live host controllers** already sitting on USB0, starved only because
+  MUSB holds the PHY in peripheral mode.
 
-### 1.3 Software lock B: the kernel has no MUSB host code (CITED)
+If (b), the fork is smaller than §1.4 suggests. **§7 rung 1 distinguishes them
+in one command**, which is why that command is worth running before anyone
+forms an opinion — mine included.
 
-`FunKey-Project/FunKey-OS`, `FunKey/board/funkey/linux.config` — the exact
-file the build consumes (`funkey_defconfig`:
-`BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE=".../board/funkey/linux.config"`),
-lines 107-118:
+### 1.4 What the fork would actually take
 
-```
-# CONFIG_HID is not set
-# CONFIG_USB_HID is not set
-CONFIG_USB=y
-CONFIG_USB_EHCI_HCD=y
-CONFIG_USB_EHCI_HCD_PLATFORM=y
-CONFIG_USB_OHCI_HCD=y
-CONFIG_USB_OHCI_HCD_PLATFORM=y
-CONFIG_USB_MUSB_HDRC=y
-CONFIG_USB_MUSB_GADGET=y
-CONFIG_USB_MUSB_SUNXI=y
-CONFIG_NOP_USB_XCEIV=y
-CONFIG_USB_GADGET=y
-```
+All three edits are in trees the owner already forks and builds:
 
-`CONFIG_USB_MUSB_GADGET=y` with no `CONFIG_USB_MUSB_HOST` and no
-`CONFIG_USB_MUSB_DUAL_ROLE`. In Linux 4.14 these three are a **mutually
-exclusive Kconfig choice** (`drivers/usb/musb/Kconfig`), so the host-side
-MUSB code is not merely disabled at runtime — it is not compiled.
+1. **DTS** — `sun8i-v3s-funkey.dts:251-254`, `dr_mode = "peripheral"` →
+   `"host"` (or `"otg"`). One line.
+2. **Kernel config** — `linux.config:115`, `CONFIG_USB_MUSB_GADGET=y` →
+   `CONFIG_USB_MUSB_DUAL_ROLE=y`. One line. Add `CONFIG_HID` /
+   `CONFIG_USB_HID` only if the generic-gamepad path is wanted; the libusb
+   path in §3 does not need them.
+3. **Buildroot packages** — `FunKey/configs/funkey_defconfig` has no libusb and
+   no udev provider (grep: 0 matches). Add `BR2_PACKAGE_LIBUSB=y` and
+   `BR2_PACKAGE_EUDEV=y`. Two lines; both stock buildroot packages.
 
-`# CONFIG_HID is not set` also means there is **no HID stack whatsoever**.
-(This does not block the libusb approach of §3, which detaches from kernel
-drivers anyway, but it does rule out "any USB gamepad just works".)
+Cost, per DrUm78's own README: a Docker build, **~1.5 h**, ~12 GB disk, plus
+reflash. **Real, but ordinary.**
 
-The gadget list below those lines (`USB_FUNCTIONFS`, `USB_MASS_STORAGE`,
-`USB_ETH`, `USB_G_SERIAL`) is the port's actual job, and matches observed
-behaviour: the `adb` marker file at SD root starts adbd over USB
-(`CLAUDE.md`, Device access), and adbd is a FunctionFS gadget.
-
-### 1.4 The one apparent loophole, closed: EHCI0/OHCI0 are enabled
-
-Honest complication, because it looks like a way out. The board DTS **does**
-enable both host controllers — `sun8i-v3s-funkey.dts:86-88` `&ehci0 { status
-= "okay"; }` and `:113-115` `&ohci0 { status = "okay"; }` — and both drivers
-are built in (§1.3). Taken alone that reads as "host support is present".
-
-It does not survive contact with the SoC device tree.
-`arch/arm/boot/dts/sun8i-v3s.dtsi` declares exactly **one** USB PHY
-(`usbphy: phy@01c19400`, `reg-names = "phy_ctrl", "pmu0"` — a single PMU,
-port 0 only), and `ehci0`/`ohci0` (`:308-325`) carry **no `phys` phandle at
-all**. On the V3s, EHCI0/OHCI0 at `0x01c1a000`/`0x01c1a400` are the *host
-side of the same USB0 port* that MUSB owns — there is no second physical
-port for them to serve, and the FunKey PCB exposes no second connector.
-These two `status = "okay"` lines are almost certainly inherited boilerplate
-from the sunxi board-DTS template.
-
-Whether those controllers register a root hub at boot is **UNKNOWN** and
-would take one command to answer (§7). It does not change the verdict,
-because §1.1 and §2 are hardware-final for the owner's actual use case.
+**One tradeoff to price in (item 2):** peripheral mode is how adb reaches this
+device today, and adb is how every rig script, device check and M3/M4 gate
+talks to it. Dual-role should preserve that, but "should" is doing work in
+that sentence — verify adb survives before building anything on top of the
+new image, and keep a known-good SD image to roll back to.
 
 ---
 
-## 2. Q2 — Power: **NOT the blocker.** (Corrected — the ticket's framing was wrong)
+## 2. Q2 — Power: **not a blocker** (corrected, see C1)
 
-The A33 ticket frames this as "the official adapter expects 500 mA and has
-its own supply leg — can this device provide or bypass it?"
-(`fix_plan.md:4183`). **The answer is "bypass, trivially, with no hub" — and
-that makes the whole 500 mA question moot rather than fatal.**
+The A33 ticket asks whether the device can "provide or bypass" the adapter's
+500 mA (`fix_plan.md:4183`). Answer: **bypass, trivially, with no hub.**
 
-### 2.1 The adapter is already externally powerable by design (CITED)
+### 2.1 The adapter is externally powerable by design (CITED)
 
-The official adapter terminates in **two** USB plugs, and only one carries
-data:
+Two plugs, one data:
+- **Black — data + logic power.** The only *required* plug.
+- **Grey — power only, for rumble.** Nintendo's support page says both should
+  normally be inserted, but if you are short on ports only black is needed;
+  the tradeoff is that rumble stops, because rumble is powered from grey.
 
-- **Black plug — data + logic power.** This is the only plug that is
-  *required*. Nintendo's own support page says both should normally be
-  inserted, but if you are short on ports only the black plug is needed.
-- **Grey plug — power only, for rumble.** Nintendo states the tradeoff of
-  omitting it is simply that rumble stops working, because rumble is powered
-  from the grey leg. Community reports corroborate that unplugging grey was
-  for a time the standard way to disable rumble.
+Source: Nintendo Support, *How to Connect the GameCube Controller Adapter*
+(`en-americas-support.nintendo.com/app/answers/detail/a_id/13287`), with
+corroborating community threads (Smashboards, GBAtemp). Per-leg mA figures are
+**UNKNOWN** — the Dolphin guide that would carry them could not be retrieved
+(§6). The ticket's 500 mA is an unconfirmed aggregate that evidently includes
+the rumble motors, which need not come from the host at all.
 
-Sources: Nintendo Support, *How to Connect the GameCube Controller Adapter*
-(`en-americas-support.nintendo.com/app/answers/detail/a_id/13287`), plus
-corroborating community threads (Smashboards, GBAtemp). The Dolphin guide
-the owner recommended could not be retrieved (§6), so the mA breakdown per
-leg is **UNKNOWN** — the 500 mA in the ticket is an aggregate figure that
-was never confirmed against a primary source, and it evidently includes the
-rumble motors, which live on the leg that does not have to come from the
-host at all.
+### 2.2 What survives, narrowly — and it is now the core question
 
-**Consequence: the earlier "you would need a self-powered hub" claim was
-wrong.** The grey leg is a bare power input; any phone charger or battery
-pack feeds it. There is no hub in this picture.
-
-### 2.2 What is actually true, and much narrower
-
-The board still cannot *source* VBUS on J2. `usb0_vbus-supply =
-<&reg_vcc5v0>` (`sun8i-v3s-funkey.dts:216`) points at a regulator defined in
+The board cannot *source* VBUS. `usb0_vbus-supply = <&reg_vcc5v0>`
+(`sun8i-v3s-funkey.dts:257`) resolves to
 `arch/arm/boot/dts/sunxi-common-regulators.dtsi:105-110`:
 
 ```
@@ -193,78 +182,72 @@ reg_vcc5v0: vcc5v0 {
 };
 ```
 
-A `regulator-fixed` with **no `gpio` and no `vin-supply`** — an always-on
-descriptor for the incoming 5 V rail, not a switchable boost converter. The
-board DTS only adds `regulator-always-on` (`:173-176`). No DRIVEVBUS /
-N_VBUSEN path is declared anywhere in the tree, so nothing can push 5 V
-outward onto J2.
+`regulator-fixed` with **no `gpio` and no `vin-supply`** — a descriptor for the
+incoming 5 V rail, not a switchable boost. No DRIVEVBUS / N_VBUSEN path
+appears anywhere in the tree, so nothing pushes 5 V outward onto J2.
 
-But **"cannot source VBUS" is not the same as "the peripheral goes
-unpowered"**, which is where the first draft went wrong. A USB host asserts
-VBUS for two reasons: to feed a bus-powered device, and to signal port power
-so the device knows to attach. The first reason evaporates here — the
-adapter can take its logic power from an external source. The second is a
-genuine **UNKNOWN**: whether a sunxi EHCI root port that never drives VBUS
-will still enable the port and enumerate a self-powered device is not
-answerable from the device tree, and I did not test it (no device, §7).
+But **"cannot source VBUS" ≠ "the peripheral goes unpowered."** A host asserts
+VBUS both to feed the device *and* to signal port power. C1 removes the first.
+The second is the **central remaining unknown**: whether a sunxi host port
+that never drives VBUS will still enable the port and enumerate a self-powered
+device. Not answerable from the device tree. **This, not power budget, is what
+ticket A33 now turns on.**
 
-A further wrinkle, noted and *not* resolved: on this board VBUS on J2 is an
-**input** to the AXP209 charger. Feeding 5 V in from the adapter's power leg
-would be indistinguishable from plugging in a charger — probably benign, and
-it would charge the console, but it is untested and involves back-feeding a
-rail, so nobody should try it casually.
+Also unresolved and worth care: VBUS on J2 is an **input** to the AXP209
+charger, so feeding 5 V in from the adapter's power leg looks like plugging in
+a charger. Probably benign, probably charges the console — but it back-feeds a
+rail and is untested. Not something to try casually.
 
-For scale only, not as an argument: `sun8i-v3s-funkey.dts:67-70` caps the
-battery at `constant_charge_current_max_microamp = <400000>` — 400 mA for
-the console itself.
-
-**Net: power is a solvable engineering nuisance, not the blocker. Q1 is the
-blocker.**
+For scale only: `sun8i-v3s-funkey.dts:67-70` caps the battery at
+`constant_charge_current_max_microamp = <400000>`.
 
 ---
 
-## 3. Q3 — Driver shape (MOOT, recorded)
+## 3. Q3 — Driver shape (tractable)
 
 **`ToadKing/wii-u-gc-adapter`** (WebFetch 2026-08-23, README). Linux
-userspace, takes over the adapter and exposes each port as a separate virtual
-input device. Requirements, quoted verbatim from the README:
+userspace; takes over the adapter and exposes each port as a separate virtual
+input device. Requirements, verbatim:
 
 > "*   libudev
 > *   libusb(x) >= 1.0.16"
 
-Needs root (it detaches the kernel driver and writes uinput), and the README
-notes `modprobe uinput` if uinput is not autoloaded. License **MIT**. Its
-USB transfer type and polling rate are not documented on the README page and
-were not read from source (no vendoring — lane rule).
+Needs root — it detaches the kernel driver and writes uinput — and the README
+notes `modprobe uinput` if uinput is not autoloaded. License **MIT**. Its USB
+transfer type and poll rate are not on the README and I did not read the
+source (no vendoring, lane rule), so **§4's cost is unquantified**.
 
-- **uinput: PRESENT.** `linux.config:60` `CONFIG_INPUT_UINPUT=y`, alongside
-  `CONFIG_INPUT_EVDEV=y` (`:56`). Independently corroborated in-tree:
-  `port/tools/fk_input.c` creates its own uinput keyboard device and every
-  device check injects through it (`port/tools/fk_input.c:1-12`). This is the
-  one requirement the FunKey-S already satisfies.
-- **libusb / libudev: ABSENT.** Neither `FunKey/configs/funkey_defconfig` nor
-  `SDK/configs/funkey_defconfig` contains any `libusb`, `libudev`, `udev` or
-  `eudev` entry (grep, 0 matches). They would have to be cross-built against
-  the SDK — routine work, but pointless without a host port.
+- **uinput: ALREADY PRESENT.** `linux.config:60` `CONFIG_INPUT_UINPUT=y`, with
+  `CONFIG_INPUT_EVDEV=y` (`:56`). Corroborated in-tree: `port/tools/fk_input.c`
+  creates its own uinput device, and every device check injects through it.
+  The one requirement already satisfied, on both trees.
+- **libusb / libudev: absent, trivially addable.** §1.4 item 3.
 
-**`secretkeysio/gcadapterdriver`** (WebFetch 2026-08-23, README). **This
-project is macOS-only and does not apply here at all.** It ships an Xcode
-kext and a DriverKit system extension, uses Apple driver frameworks (no
-libusb), and its install steps are `kextutil` / `systemextensionsctl`. Its
-README mentions no Linux, embedded, or handheld target. Its stated purpose is
-*overclocking* the adapter's poll rate for Slippi/Dolphin on macOS. Worth
-stating plainly since it was owner-provided: it is not a portable driver.
+**`secretkeysio/gcadapterdriver`** (WebFetch 2026-08-23, README) — **macOS
+only; does not apply.** Xcode kext plus DriverKit system extension, Apple
+driver frameworks, no libusb; installs via `kextutil` / `systemextensionsctl`.
+No Linux, embedded or handheld target anywhere in its README. Its purpose is
+*overclocking* adapter poll rate for Slippi/Dolphin on macOS. Stated plainly
+because it was owner-provided: not a portable driver — though its polling-rate
+work may be worth reading if §4 turns out tight.
 
 ---
 
-## 4. Q4 — Latency and CPU against the 16.67 ms budget (UNKNOWN, unmeasurable)
+## 4. Q4 — Latency and CPU against 16.67 ms (UNKNOWN — the second real risk)
 
-Not measurable without working hardware, and moot. For the record: the
-binding constraint is real. Measured sim-only frame cost on device is
-**p50 4.27-5.81 ms, p99 7.95-10.68 ms** (`docs/research/device-perf.md`),
-leaving roughly 6 ms for render, present and audio on a single Cortex-A7.
-A libusb polling thread plus uinput round-trip plus SDL event pump would
-compete for that same core. Any future revisit must measure, not assume.
+Not measurable without working hardware. Flagged as a genuine risk rather than
+a footnote, because headroom is thin and this is the constraint most likely to
+bite *after* the electrical question resolves favourably.
+
+Measured sim-only cost on device: **p50 4.27-5.81 ms, p99 7.95-10.68 ms**
+(`docs/research/device-perf.md`), leaving roughly 6 ms for render, present and
+audio on one Cortex-A7. A libusb polling thread plus uinput round-trip plus
+SDL event pump competes for that same core, and `wii-u-gc-adapter`'s poll rate
+is unread (§3). Input latency also has a *quality* floor a frame budget does
+not capture: a Melee port whose controller adds 2-3 frames of lag is worse
+than the d-pad it replaced.
+
+Must be measured, not assumed, before any GO is final.
 
 ---
 
@@ -274,117 +257,99 @@ compete for that same core. Any future revisit must measure, not assume.
 - `secretkeysio/gcadapterdriver`: **MIT**, "Copyright 2021 SecretKeys LLC"
   (CITED).
 
-Both are compatible with a private, non-distributed build. Per the project
-licensing rule (`CLAUDE.md`, Licensing/provenance), any vendored third-party
-code needs its `NOTICES` entry **before** it lands in-tree.
+Both compatible with a private, non-distributed build. Per `CLAUDE.md`
+(Licensing/provenance), vendored third-party code needs its `NOTICES` entry
+**before** it lands in-tree.
 
-**Nothing was vendored, copied or committed by this spike, so no `NOTICES`
-change is required.** If A33 were ever revived, the MIT notice must be added
-to `NOTICES` in the same commit that introduces the first line of borrowed
-code, not after.
+**Nothing was vendored by this spike, so no `NOTICES` change is required
+now.** If A33 proceeds, the MIT notice must land in `NOTICES` in the same
+commit as the first borrowed line, not after.
+
+Separate, and worth surfacing early rather than discovering at rung 3: forking
+DrUm78's OS means carrying a GPL-licensed kernel/buildroot fork. Private and
+non-distributed, so no distribution obligation is triggered — but it is a new
+maintenance surface (rebasing onto DrUm78's future releases, and re-applying
+the §1.4 edits each time). That cost belongs in the owner's pricing of this
+ticket, not in a verdict of mine.
 
 ---
 
 ## 6. Source that could not be retrieved
 
 `dolphin-emu.org/docs/guides/how-use-official-gc-controller-adapter-wii-u/`
-returned **HTTP 403 Forbidden** on WebFetch (2026-08-23). The owner called it
-"a really good resource" and it is the likely origin of the 500 mA figure and
-of the adapter's two-plug (data + power) arrangement.
+returned **HTTP 403** on WebFetch (2026-08-23); the wiki equivalent 404'd. The
+owner called it "a really good resource".
 
-Its content is **not reconstructed from memory here.** The verdict does not
-depend on it: that rests on the FunKey vendor hardware reference (§1.1) and
-the board's own device tree and kernel config (§§1.2-1.3), all retrieved
-directly.
-
-**It did, however, cost something.** Not having it is why §2's first draft
-went wrong: the 500 mA figure was taken from the ticket and treated as a
-host-side obligation, when the adapter-side detail this page carries — two
-plugs, one of them power-only — would have shown immediately that it is not.
-The owner had read that page and I had not; that asymmetry is the whole
-error. Anyone re-opening this ticket should read it first (a normal browser
-retrieves it fine; only automated fetch is blocked).
+Its content is **not reconstructed from memory here.** It also cost something
+real: not having it is why §2's first draft was wrong (C1). The adapter-side
+detail it carries — two plugs, one power-only — would have shown immediately
+that 500 mA was not a host-side obligation. A normal browser retrieves the
+page fine; only automated fetch is blocked. **Anyone taking this ticket
+further should read it first**, particularly for per-leg current and any
+polling-rate detail bearing on §4.
 
 ---
 
-## 7. What would have to change, and the one cheap experiment
+## 7. The experiment ladder
 
-To overturn the verdict all of the following would have to hold:
+Ordered by cost. **Do not skip to rung 3.** Rung 1 is free and may sharpen or
+end the ticket by itself.
 
-1. A **custom kernel build** with `CONFIG_USB_MUSB_DUAL_ROLE` (or MUSB
-   dropped so EHCI0 can own the PHY), plus a DTS change off
-   `dr_mode = "peripheral"`, plus `CONFIG_HID`/`CONFIG_USB_HID` if the
-   generic path is wanted. This means **rebuilding and reflashing FunKey-OS**
-   — an OS image this project neither owns nor ships. We ship an OPK.
-   **This is the blocker.** It is not reachable from anything we build.
-2. The adapter powered from its **own grey leg** (§2.1) — cheap and easy, no
-   hub — plus confirmation that a never-powered root port still enumerates a
-   self-powered device (§2.2, UNKNOWN).
-3. `libusb` + `libudev` cross-built into the OPK (§3) — routine.
-
-Only item 1 is hard, and it is hard in a way that is out of scope: it makes
-this a firmware-modification project, not a port feature.
-
-**The one cheap experiment,** if anyone wants §1.4 and §2.2 closed for the
-record (≈10 minutes, needs the device reconnected, a micro-B OTG cable, and
-the adapter's grey plug in any charger — **no hub**):
-
+**Rung 1 — free, needs only a reconnected device. Does a USB root hub exist?**
 ```
-# 1. did the DT-enabled host controllers register root hubs at all?
-adb -s 12c00003237f5528 shell "sh -lc 'ls -d /sys/bus/usb/devices/usb* 2>&1'"
-
-# 2. adapter black plug -> J2 via OTG cable, grey plug -> any charger:
-adb -s 12c00003237f5528 shell "sh -lc 'ls /sys/bus/usb/devices/; dmesg | tail -40'"
+adb -s 12c00003237f5528 shell "sh -lc 'ls -d /sys/bus/usb/devices/usb* 2>&1; dmesg | grep -i -e musb -e ehci -e ohci -e usb0'"
 ```
+Settles §1.3 (a)-vs-(b) on the *shipped* image. Live root hubs mean the fork is
+smaller than §1.4 and confidence rises sharply; absent hubs is the expected
+result and costs nothing.
 
-Outcome 1 (expected): no `usb*` root hub, or a root hub that never
-enumerates — confirms peripheral-only, ticket closed permanently.
-Outcome 2 (surprise): the adapter enumerates — then the shipped kernel is
-doing more than its config suggests, §1.4 flips, and the ceiling moves from
-"impossible" to "needs a libusb cross-build and a charger for the grey leg".
-**That outcome would be worth a GO reconsideration**, which is the honest
-consequence of the owner's correction: with the hub gone and the mA figure
-moot, outcome 2 is no longer an absurd end state.
+**Rung 2 — needs an OTG cable, the adapter, and any USB charger for the grey
+leg. No hub.** Still on the *stock* image: does anything enumerate? Expected
+no, because MUSB holds the PHY in peripheral mode. A positive result would be
+a large surprise and effectively a GO.
 
-Note that step 1 costs nothing and needs no adapter, no cable and no
-charger — it is one command against a reconnected device, and it alone
-decides whether step 2 is worth setting up.
+**Rung 3 — the real test, ~2 h of build plus reflash.** Fork DrUm78's OS with
+the three §1.4 edits, flash, repeat rung 2. This answers the actual question:
+whether USB0 drives a host bus with VBUS unsourced and ID floating (§2.2).
+Keep dual-role so adb survives, verify adb first, and keep a known-good SD
+image to roll back to.
 
-This experiment is **not** run by this spike: the device is disconnected and
-lane rule 3 forbids device runs.
+**Rung 4 — only if 3 passes.** Cross-build `wii-u-gc-adapter` (MIT, §5),
+confirm controllers appear via uinput, then measure §4 against the 16.67 ms
+budget before calling it a GO.
+
+Rungs 1-2 are cheap enough to run opportunistically next time the device is
+connected for something else.
+
+**None of these were run by this spike:** the device is disconnected and lane
+rule 3 forbids device runs.
 
 ---
 
-## 8. What the NO-GO costs, stated plainly
+## 8. Stakes, and what NOT to close
 
-A GO would have been large. Per the ticket, it would have made the
-"CONTROLLER" branch of the Controls menu real (A24), justified per-player
-bindings (A31), and — the real prize — supplied a true analog stick, retiring
-the whole digital-d-pad compromise documented at `port/gfx/ctl_style.h:14-23`:
-no walk, no partial DI angles, no angled f-tilts, no C-stick, and tap jump
-forced off because "a digital d-pad at full deflection tap-jumps on every
-upward DI".
+The payoff is large, and worth restating because it is what justifies rung 3's
+two hours. Per the ticket, a GO makes the "CONTROLLER" branch of the Controls
+menu real (A24), justifies per-player bindings (A31), and — the real prize —
+supplies a **true analog stick**, retiring the digital-d-pad compromise at
+`port/gfx/ctl_style.h:14-23`: no walk, no partial DI angles, no angled
+f-tilts, no C-stick, and tap jump forced off because "a digital d-pad at full
+deflection tap-jumps on every upward DI".
 
-None of that is recoverable through this port. **The digital-d-pad
-compromise is permanent on this hardware, and the analog mapping work
-(`docs/research/b0xx-mapping.md`) is not a stopgap — it is the answer.**
-Consequently:
+**Driver: do NOT close A24, A31 or A32 on this spike's authority.** An earlier
+draft of this document recommended exactly that, on the strength of a NO-GO
+that no longer stands. Their "re-open if A33 lands" clauses stay open until at
+least rung 3 has run:
 
-- **A24 (Controls menu "CONTROLLER" branch):** no second physical controller
-  will ever appear. Scope it to the built-in buttons.
-- **A31 (per-player bindings):** the existing recommendation to ship the UI
-  editing port 0 only stands, and the "retrofit if A33 lands" clause is now
-  dead. Remove it.
-- **A32 / tapJumpOff:** its "re-open only if A33 lands" note
-  (`fix_plan.md:4249`) is likewise dead — P2+ will never be human ports on
-  this device. P1 remains the only human port.
+- **A24** — keep the CONTROLLER branch open; do not scope it to built-in
+  buttons yet.
+- **A31** — the "retrofit if A33 lands" clause stays.
+- **A32 / tapJumpOff** — its `fix_plan.md:4249` re-open note stays; P2+ may yet
+  become human ports.
 
-Driver: these three follow-ups are the actionable output of this spike and
-are for the driver to apply; this lane changed no ticket rows.
+What *is* safe to act on today is unchanged: P1 is currently the only human
+port, so shipping per-player UI for port 0 only remains right, and
+`docs/research/b0xx-mapping.md` remains the answer for the built-in controls
+however A33 resolves.
 
-**One honest caveat on all three.** After the §2 correction, the residual
-uncertainty is no longer negligible — it is one free command (§7 step 1,
-needs only a reconnected device). If that command shows a live USB root hub,
-§1.4 flips and A33 deserves a second look before A24/A31/A32 are closed on
-its authority. Cheap enough that the driver should just run it rather than
-close three tickets on a NO-GO that has one untested assumption left in it.
+This lane changed no ticket rows.
