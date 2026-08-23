@@ -3471,6 +3471,10 @@ ALREADY BUILT.** Verified by direct read, not inference:
   (`s1_input_row_style`), NOT `in.l` — deliberate: `:37-38` records digital
   shield as `r=true, rA=1.0`, single-stage, no light shield, `l/lA stay
   false/0`. So "currently unbound" has been false since ~2026-07-29.
+  **SUPERSEDED IN PART, 2026-08-23 (see A25(b) below): the BINDING is built and
+  correct, but the BUTTON does not arrive — A3's owner symptom is live and is
+  the SAME defect as A25(b), one hop upstream of every line cited here. A3 is
+  REOPENED as blocked on the physical-L keycode measurement, not closed.**
 - **A4 DONE.** Three styles exist, switchable and persisted:
   `CTL_STYLE_BOX|NORMAL|NATURAL` with per-style chord tables
   (`ctl_style_table`, `s1_input.h:151-158`), `ctl_style_get/set`
@@ -3776,16 +3780,76 @@ so the UI promise is real.
 **And L appears bound**: `port/foh/keymap-frozen.txt` has `map l K k`, and
 `platform_sdl1.c:117-135` consumes that keymap table as the single source of
 truth for every field.
-**So something between the FunKey L button and `in->l` is the fault, and it
-has not been isolated yet.** Leads, in order: (1) confirm on device what
-keysym the physical L emits (`foh_dev --dump-keymap` exists per
-`platform_sdl1.c:120-123`, and the device check already cmp's it against the
-frozen file); (2) check whether L is consumed by an earlier arm in the same
-frame; (3) check the FunKey's own button mapping.
-**Zoom-out (HARD RULE 8):** A3 is an open row reading *"L shoulder =
-shield/air-dodge (currently unbound)"*. **If L never reaches the app, A3 and
-A25(b) are the same defect at two call sites and must be fixed once, at the
-input layer.** Check that BEFORE writing any TSS-local workaround.
+**ISOLATED 2026-08-23 (lane I / A25b). THE FAULT IS THE FIRST HOP ONLY:
+physical L button → Linux keycode. Everything downstream of the keycode is
+PROVEN GREEN, ON THE DEVICE.** Measured, not inferred:
+
+- **keysym `k` → `in->l` → `p1Char - 1` is a COMMITTED, FROZEN, ON-DEVICE
+  ASSERTION and it passes.** `port/foh/flows/f07-target-t02.flow:24` is the
+  single line `I 400 K`; `port/foh/flows/f07-target-t02.expect:7` is the
+  frozen `S 400 p1char 4` (marth 0 wrapping to falcon 4 — the wrap witness
+  the flow header names). `port/sim/target/check-device-target.sh:347`
+  drives f06/f07 ON the FunKey-S in leg `[6/8] device legs: fk_input ->
+  uinput -> SDL keysyms -> platform_poll` (`:981`) with `--input poll`
+  argv-pinned (`:1008-1010`), and normalizes the DEVICE trace against that
+  frozen expect. `port/tools/fk_input.c:48-52` injects the FLOW1 letter as
+  the QWERTY `KEY_*` code, so the assertion is literally *Linux `KEY_K` →
+  SDL → `PlatformInput.l` → `p1Char - 1`, on the real hardware.*
+- Re-proven host-side this session by running the real functions (not by
+  reading them): the `platform_sdl1.c:117-135` translation arm over a
+  synthetic `SDL_GetKeyState` array gives `'k' → l=1` and nothing else
+  set; `foh_tick` on `FOH_TSS` then steps p1Char 2→1 on the L edge, 1→2 on
+  the R edge, 0→4 on the L wrap, and does nothing on a held L (edge
+  semantics correct). So leads (2) and (3) of the previous list are DEAD:
+  no earlier arm consumes L, and `pv` is `s->prev` (`foh.c:1089`,
+  latched at `:1136`) and is not clobbered.
+- **WHY NO CHECK HAS EVER COVERED THE BROKEN HOP.** Every device check
+  injects at `/dev/uinput` through *our own* device — `check-device-input.sh`
+  states it outright: *"our OWN uinput device — writing the existing event
+  device does not inject"*. The FunKey's physical buttons instead come from
+  **`fkgpiod`** (`/etc/init.d/S11gpio`), which the rig's quiesce bracket
+  STOPS for the duration of a device run (`riglib.sh` `rig_qd_normalize`,
+  `check-skip-attrib.sh:165`). So the whole rig is structurally blind to
+  physical-button → keycode, by construction, for every button.
+- **AND THE `map l K k` ROW WAS NEVER MEASURED ON THIS DEVICE.** Its
+  provenance is donor archaeology: `docs/research/funkey-envelope.md:77`
+  attributes the letter-keysym set to ssb64's `gfx_present_sdl1.c` ~147-190.
+  Of those letters, `u`,`d`,`l`,`r`,`a`,`b`,`s`,`q` are confirmed by owner
+  play and the OS Fn+Up chord; `n` (R) is confirmed by this very bug report
+  (R works). `k` is the one letter with no independent confirmation, and it
+  is exactly the one that does not work.
+- `keymap-frozen.txt` is a FROZEN artifact and has NOT been touched. If the
+  device measurement below shows physical L emitting something other than
+  `KEY_K`, changing that row is a reviewed change with a paired re-measure
+  (`--dump-keymap` cmp, the f07 fks derivation, and both `NAV_LINK`s are
+  unaffected, but the keymap-swap teeth at `check-device-foh.sh:695`/`:721`
+  and the `T-devswap` device tooth at `:51` are).
+
+**WHAT STILL NEEDS THE DEVICE — and it needs NO new code.** The question is
+purely kernel-level (if physical L emits `KEY_K`, f07 proves the app WILL see
+it; if it does not, that is the bug), so busybox answers it:
+`cat /proc/bus/input/devices` to find the fkgpiod keyboard node, then read
+`/dev/input/eventN` while pressing L and then R and compare. Three outcomes:
+(i) L emits a keycode other than `KEY_K` → the frozen keymap row is wrong;
+(ii) L emits nothing at all → fkgpiod config or the physical switch;
+(iii) L emits `KEY_K` → reopen, because f07 says that case works.
+
+**Zoom-out (HARD RULE 8) — SETTLED: A3 AND A25(b) ARE THE SAME DEFECT.**
+A3's code half is genuinely built and correct — `ctl_roles`
+(`s1_input.h:165-183`) gives NORMAL and NATURAL `*shield = (p->l || p->r)`,
+and NATURAL is the default — so in the default style L is a real shield
+button reading the same `PlatformInput.l` field TSS reads. The 2026-08-03
+note above closed A3 as a *stale row* on the strength of that read; that was
+half right. The BINDING is not missing; the BUTTON is. A3's original owner
+symptom ("L does nothing") and A25(b)'s ("L does nothing") are one fault at
+one hop, and R masks it in the match (R already shields) which is why only
+TSS — where L and R do *different* things — made it visible.
+**Consequences:** (1) do NOT write a TSS-local workaround; (2) the fix, when
+the measurement lands, is ONE line at the input layer and it widens the blast
+radius to the MATCH as well as the menus — L would start shielding /
+air-dodging the moment it starts arriving, which is the intended A3
+behaviour but is a live gameplay change, not a menu change; (3) A3 must be
+reopened as blocked-on-this-measurement, not left closed as stale.
 
 #### (c) SPEC — free hand cursor on TSS, shared with CSS (owner: "keep things DRY")
 
