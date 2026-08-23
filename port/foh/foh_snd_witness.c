@@ -167,10 +167,14 @@ static const SndCase kCases[] = {
      "options-audio", -1},
     {"options-A-gameplay", FOH_MENU_OPTIONS, 1, "a", "menuForward",
      "options-gameplay", -1},
-    {"controls-A-pad", FOH_MENU_CONTROLS, 0, "a", "menuForward",
-     "controls-controller", -1},
-    {"controls-A-keyboard", FOH_MENU_CONTROLS, 1, "a", "menuForward",
+    // DEVIATION D25 (owner-requested 2026-08-23): the Controls chooser's rows
+    // are HANDHELD first, CONTROLLER second, so the ROW INDEXES below are the
+    // swapped ones. The sounds are unchanged (both are changeGamemode leaves,
+    // one menuForward each); what moved is which index reaches which screen.
+    {"controls-A-handheld", FOH_MENU_CONTROLS, 0, "a", "menuForward",
      "controls-keyboard", -1},
+    {"controls-A-pad", FOH_MENU_CONTROLS, 1, "a", "menuForward",
+     "controls-controller", -1},
     // --- refusals: `deny`, exactly once, and the screen does NOT move
     {"top-A-targetbuilder", FOH_MENU_TOP, 2, "a", "deny", "menu-top", 2},
     {"options-A-credits", FOH_MENU_OPTIONS, 3, "a", "deny", "menu-options", 3},

@@ -20,10 +20,18 @@
 //                                        (owner ruling C5, flag below)
 //   menu-options      gameMode 1 mm 1    A on "Options" (menu.js:92-97)
 //   menu-controls     gameMode 1 mm 3    A on "Keyboard Controls"
-//                                        (menu.js:138-141)
+//                                        (menu.js:138-141) — drawn "CONTROLS"
+//                                        (DEVIATION D25)
 //   options-audio     gameMode 10        A on "Audio" (menu.js:130)
 //   controls-controller gameMode 14      A on "Controller" (menu.js:155-157)
+//                                        — D25: now the SECOND row
 //   controls-keyboard gameMode 12        A on "Keyboard" (menu.js:159-161)
+//                                        — D25: now the FIRST row, drawn
+//                                        "HANDHELD" (it is this device's own
+//                                        buttons, not a keyboard). The TOKENS
+//                                        and gameModes above are identity and
+//                                        do not move; only the row order and
+//                                        the painted labels did.
 //   css               gameMode 2         A on "Local VS" (menu.js:105);
 //                                        at FOH_NETPLAY 0 that same action
 //                                        runs from "VS. Melee" directly

@@ -36,9 +36,20 @@ static const char *kMenuTitle[4] = {
 static const char *kMenuText[4][4] = {
     // menuText (menu.js:19-24)
     {"VS. MELEE", "TARGET TEST", "TARGET BUILDER", "OPTIONS"},
-    {"AUDIO", "GAMEPLAY", "KEYBOARD CONTROLS", "CREDITS"},
+    // DEVIATION D25 (MENU-SPEC §12.1, owner-requested 2026-08-23): upstream's
+    // row 2 is "Keyboard Controls" (menu.js:21), but it opens a CHOOSER — the
+    // row was named for one of its own two destinations. It reads "CONTROLS".
+    {"AUDIO", "GAMEPLAY", "CONTROLS", "CREDITS"},
     {"LOCAL VS", "SPECTATE", "P2P", "SERVER"},
-    {"CONTROLLER", "KEYBOARD"},
+    // DEVIATION D25, second half: upstream is ["Controller","Keyboard"]
+    // (menu.js:22-23). What that "Keyboard" row opens on this device is the
+    // FunKey-S's OWN buttons — there is no keyboard — so it is HANDHELD, a
+    // category name parallel to CONTROLLER; and it comes FIRST, because no
+    // controller path exists on this device today.
+    // THE ORDER IS ROUTING, NOT PAINT: foh.c's step_menu maps row 0 to
+    // FOH_CTRL_KEY and row 1 to FOH_CTRL_PAD to match. The upstream gameMode
+    // identities (12 / 14) and the screen tokens are untouched.
+    {"HANDHELD", "CONTROLLER"},
 };
 static const char *kCharNames[5] = {
     // characters.js:2-8 order == the oracle char ids
@@ -76,8 +87,12 @@ static const char *kMenuExpl[4][4] = {
      "CUSTOMIZE & CALIBRATE CONTROLS.", "WHO DID THIS?"},
     {"ONE BOX THIS SCREEN.", "RANKED MODE", "HOSTLESS MULIPLAYER",
      "HOSTED MULTIPLAYER"},
-    {"CUSTOMIZE & CALIBRATE CONTROLLER.", "CUSTOMIZE KEYBOARD CONTROLS.", "",
-     ""},
+    // D25 again: the two blurbs follow their rows. The HANDHELD blurb is 32
+    // glyphs, one under the 33-glyph pin below (the bar width comment at the
+    // explanation bar) — which "CUSTOMIZE & CALIBRATE CONTROLLER." still sets,
+    // so the panel geometry does not move.
+    {"CUSTOMIZE THE HANDHELD CONTROLS.", "CUSTOMIZE & CALIBRATE CONTROLLER.",
+     "", ""},
 };
 
 static const RastCol kBg = {12, 12, 28, 256};
@@ -1971,7 +1986,11 @@ static void foh_upper(char *p) {
 }
 
 static void render_ctrl_key(const FohState *s, Raster *rz) {
-  header(rz, "KEYBOARD");
+  // D25: this screen IS the FunKey-S's own buttons — never a keyboard. The
+  // SCREEN TOKEN stays "controls-keyboard" (foh.c) and the upstream gameMode
+  // stays 12: the rename is the paint, the identity is the wire format that
+  // the judge grammar and every frozen flow expect key on.
+  header(rz, "HANDHELD");
   static const char *const kBtn[9] = {"D-PAD", "A", "B", "X", "Y", "L",
                                       "R", "START", "MENU"};
   // review-r14 MAJOR: these labels used to be the BOX table, hard-coded,

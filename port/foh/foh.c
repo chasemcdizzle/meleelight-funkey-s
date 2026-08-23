@@ -233,7 +233,10 @@ static void step_menu(FohState *s, const PlatformInput *in,
         }
         break;
       case FOH_MENU_OPTIONS:
-        // ["Audio","Gameplay","Keyboard Controls","Credits"]
+        // ["Audio","Gameplay","Keyboard Controls","Credits"] upstream; row 2
+        // is drawn "CONTROLS" here (DEVIATION D25 — it opens a chooser, so
+        // upstream named it after one of its own destinations). Row INDEXES
+        // and actions are upstream's, untouched.
         if (s->menuSelected == 0) {
           // audioMenuSelected (audiomenu.js:15) is MODULE state: it is not
           // reset on entry, so a second visit opens on the row you left.
@@ -262,12 +265,25 @@ static void step_menu(FohState *s, const PlatformInput *in,
         }
         break;
       case FOH_MENU_CONTROLS:
-        // ["Controller","Keyboard"] (menu.js:22-23). Upstream row 1 is
-        // reached by `else`, so ANY non-zero index lands there
-        // (menu.js:159) — mirrored by the ternary below.
+        // DEVIATION D25 (MENU-SPEC §12.1, owner-requested 2026-08-23) — THE
+        // ROWS ARE SWAPPED. Upstream is ["Controller","Keyboard"]
+        // (menu.js:22-23) with Controller first; we draw ["HANDHELD",
+        // "CONTROLLER"] (foh_render.c kMenuText[3]) because the FunKey-S has
+        // no controller path today, so the reachable destination goes first.
+        // THIS TERNARY IS THE OTHER HALF OF THAT RENAME — the screen is
+        // INDEX-selected, so moving the labels without moving the routing
+        // sends row 0 to the wrong destination. The two move together, and
+        // port/foh/check-controls-labels.sh binds them: it asserts the
+        // rendered ROW LABEL and the rendered HEADER of the screen that row
+        // opens, and its T2 reverts exactly this line and must fail.
+        // The upstream gameMode identities are UNCHANGED: FOH_CTRL_KEY is
+        // still 12 and FOH_CTRL_PAD still 14, and so are the screen tokens.
+        // Upstream row 1 is reached by `else`, so ANY non-zero index lands
+        // there (menu.js:159) — that shape is mirrored below, on the row that
+        // is now second.
         snd_push(s, "menuForward"); // menu.js:70 (before any dispatch)
-        ev_trans(s, sc, s->menuSelected == 0 ? FOH_CTRL_PAD : FOH_CTRL_KEY,
-                 "a"); // :155-157 changeGamemode(14) / :159-161 (12)
+        ev_trans(s, sc, s->menuSelected == 0 ? FOH_CTRL_KEY : FOH_CTRL_PAD,
+                 "a"); // :159-161 changeGamemode(12) / :155-157 (14)
         break;
       default: gfx_fatal("foh: step_menu on a non-menu screen");
     }

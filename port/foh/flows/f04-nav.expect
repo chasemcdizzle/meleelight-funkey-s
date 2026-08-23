@@ -5,12 +5,12 @@ S 390 refused targetbuilder
 T 400 menu-top menu-options a
 T 415 menu-options menu-controls a
 SHOT 420 menu-controls
-T 425 menu-controls controls-controller a
-SHOT 430 controls-controller
-T 435 controls-controller menu-controls b
-T 445 menu-controls controls-keyboard a
-SHOT 450 controls-keyboard
-T 455 controls-keyboard menu-controls b
+T 425 menu-controls controls-keyboard a
+SHOT 430 controls-keyboard
+T 435 controls-keyboard menu-controls b
+T 445 menu-controls controls-controller a
+SHOT 450 controls-controller
+T 455 controls-controller menu-controls b
 T 460 menu-controls menu-options b
 S 480 refused credits
 T 485 menu-options menu-top b
