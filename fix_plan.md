@@ -4803,3 +4803,56 @@ data and statistics, not over pixels.
 **Consequence for planning: A14 is cheaper than quoted on the artifact axis and
 unchanged on the device axis.** Its real cost is the 41 call-site rewrite plus
 device leg time — not a freezing ceremony.
+
+### A36 — **CONFIRMED 2026-08-23** (was UNCONFIRMED). Exact mechanism, exact reproducer.
+
+Lane M (B4) hit it and named the mechanism, which the earlier report had only
+generalised: **`oracle/harness/.gitignore`'s rule is `node_modules/` — with a
+TRAILING SLASH, so it matches DIRECTORIES ONLY.** A **symlink** named
+`node_modules` is therefore untracked-but-NOT-ignored, so
+`check-mexit-reentry.sh`'s `tree_fingerprint()` (`:124-146`) lists it, pipes it
+to `xargs shasum`, and `shasum` dies on it. **The guard then fails CLOSED.**
+
+That is why the driver could not reproduce it on `agent/auto` (2026-08-23):
+there the path is a REAL DIRECTORY, which the trailing-slash rule *does* ignore.
+Both observations were correct; only the symlink case trips it.
+
+**PRACTICAL RULE FOR EVERY LANE (this is the part that matters):**
+- **DO NOT `npm install` in a lane worktree** — it loosens the playwright pin
+  (standing hazard above).
+- **DO NOT symlink `oracle/harness/node_modules` in either** — it breaks
+  `check-mexit-reentry.sh` exactly as described.
+- **DO `cp -R` it** (17 MB, 175 files) and `rm -rf` afterwards.
+- `NODE_PATH` does NOT work: `dump-sim-data.js:46` requires an absolute path
+  into that directory.
+
+**Still NOT fixed, deliberately.** `check-mexit-reentry.sh` is a protected check
+(HARD RULE 3) and the failure mode is fail-CLOSED — it errors, it cannot
+false-pass. The one-line `-f` correction is known; it wants a reviewed change,
+not a drive-by.
+
+### THE FALSE-TICKET CLASS — named 2026-08-23, and it has now cost TWO P1 rows
+
+**B4 was a false ticket.** `FOH_TMATCH` genuinely has no exit `ev_trans` in
+`foh.c` — **but neither does `FOH_MATCH`, and the VS exit demonstrably works.**
+`foh.c:1175-1177` says so outright: both match screens are *"terminal for the
+FOH machine; the driver owns the sim from here"*. Target test already exits
+three ways (START -> upstream's own `endGame` hook; all targets destroyed ->
+2500 ms hold; both -> `MEX_TSS` -> `FOH_TSS`), all in `foh_dev.c`, all matching
+upstream's `changeGamemode(7)` exactly. **`foh_dev.c:2794-2801` already carried
+a `B4:` comment saying it was done.**
+
+**A19 was stale in EXACTLY the same way** and is corrected in the same commit.
+
+**THE CLASS, stated so it stops recurring:** *a probe that asserts ABSENCE must
+name the instrument it would FAIL on.* Grepping for `ev_trans` "proves"
+FOH_TMATCH is terminal — and applied honestly it proves the VS match is
+terminal too, which is false. **The instrument was wrong, not the code.** Two
+P1 rows sat "Confirmed STILL OPEN" for months on a grep whose conclusion nobody
+re-ran.
+
+This is the THIRD instance this session of a filed row being falsified by
+actually running the thing (A29's root cause, A32's "L-cancel" symptom, now
+B4+A19), and the SECOND time the 2026-08-04 B1 lesson has repeated verbatim:
+**grepping for a defect's vocabulary finds the discussion of the defect, not
+the defect.**
