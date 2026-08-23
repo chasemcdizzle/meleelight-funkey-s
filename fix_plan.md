@@ -4512,3 +4512,54 @@ with one answer.
   pattern. Register it as a MENU-SPEC deviation with A33 as the cited cause.
 - **This lands WITH the A24/A4 renames in ONE ticket** — same files, same
   shots, and doing them apart re-freezes the controls screens twice.
+
+### A33 — AMENDED 2026-08-23. THE POWER KILL IS RETRACTED. READ BEFORE CITING IT.
+
+The A33 section above cited **FOUR** independent locks. **One of them (Q2,
+power) was WRONG and is retracted in `docs/research/gc-adapter.md` §2, in
+place, so the reasoning stays auditable.**
+
+**What was wrong:** the official adapter has **TWO** USB plugs — black is data
+plus logic power, grey is **power-only, for rumble**. Nintendo's own support
+page says only the black plug is required; omitting grey merely stops rumble.
+So the ticket's **500 mA was never a host-side obligation** — it is an
+aggregate including the rumble motors, which sit on the leg that need not come
+from the host at all. **No self-powered hub is needed**; the grey leg is a bare
+power input any charger feeds. Strike the "powered hub dangling off a keychain
+console" framing entirely.
+
+**What survives from Q2, and it is much narrower:** the board cannot *assert*
+VBUS on J2 (`reg_vcc5v0` is a `regulator-fixed` INPUT rail — no `gpio`, no
+`vin-supply`). But **"cannot source VBUS" is not "the peripheral goes
+unpowered"**, and conflating those was the error. A host asserts VBUS both to
+feed the device and to signal port power; the correction kills the first
+reason, and the second is now recorded as an honest **UNKNOWN**, not a kill.
+
+**THE VERDICT STILL HOLDS — but on ONE leg, not two.** Q1 alone carries it:
+`CONFIG_USB_MUSB_GADGET=y` with no `HOST`/`DUAL_ROLE` (mutually exclusive
+Kconfig in 4.14, so host code is NOT COMPILED), `dr_mode = "peripheral"` in the
+DTS, and the vendor's deliberately floating ID pin. Undoing that means
+**rebuilding and reflashing FunKey-OS**, and this project ships an **OPK** —
+out of scope in a way power never was.
+
+**DRIVER OBLIGATION, NOT YET DISCHARGED.** With the hub gone and the mA figure
+moot, the residual `&ehci0`/`&ohci0` ambiguity (§1.4) is no longer negligible.
+**ONE FREE COMMAND on a reconnected device — no adapter, no cable, no charger:**
+```
+adb -s 12c00003237f5528 shell "sh -lc 'ls -d /sys/bus/usb/devices/usb* 2>&1'"
+```
+If a root hub is live, §1.4 flips and **A33 deserves a second look.**
+**RUN IT BEFORE closing A24 / A31 / A32 on this spike's authority.** Retiring
+three tickets on a NO-GO with an untested assumption inside it is exactly the
+stale-red class this project keeps paying for.
+
+**CONSEQUENCE FOR THE OWNER'S A24 DECISION (driver duty to surface this):**
+the owner ratified collapsing the Controls submenu on the driver's framing
+that CONTROLLER is *"permanently dead, settled in hardware."* **That framing
+was stronger than the evidence now supports.** The accurate statement is:
+*dead for anything this project can ship, because the fix requires reflashing
+the OS.* The decision is still defensible on that basis — but it was taken on
+the stronger claim, so the owner gets told and may re-affirm or revisit.
+**Method lesson recorded by the lane itself:** it reached for a second kill
+before the first needed help, and the HTTP-403 on the Dolphin guide is *why* —
+the owner had read that page and the lane had not.
