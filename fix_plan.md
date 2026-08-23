@@ -4563,3 +4563,106 @@ the stronger claim, so the owner gets told and may re-affirm or revisit.
 **Method lesson recorded by the lane itself:** it reached for a second kill
 before the first needed help, and the HTTP-403 on the Dolphin guide is *why* —
 the owner had read that page and the lane had not.
+
+## A33 — RE-AMENDED 2026-08-23. **VERDICT INVERTED: NO-GO -> UNKNOWN.**
+## THE TWO SECTIONS ABOVE ARE SUPERSEDED. DO NOT ACT ON THEM.
+
+The owner told the spike he can **fork DrUm78's FunKey-OS**, and that collapsed
+the NO-GO. The spike's own words on why it was wrong, recorded rather than
+silently edited: the verdict rested on *"rebuilding and reflashing FunKey-OS —
+an image this project neither owns nor ships"*, which was **pricing the owner's
+appetite for work and calling it evidence.**
+
+**THE FORK IS FOUR LINE-EDITS**, measured against the owner's ACTUAL tree
+(`DrUm78/FunKey-OS` @ `FunKey-OS-DrUm78`, `DrUm78/linux` @ `v1.0.3-funkey-s` —
+byte-identical to upstream in the USB region, so the source reading holds while
+the conclusion does not):
+1. `sun8i-v3s-funkey.dts:251-254` — `dr_mode = "peripheral"` -> `"host"`
+2. `linux.config:115` — `CONFIG_USB_MUSB_GADGET=y` -> `DUAL_ROLE`
+3. `funkey_defconfig` — add `BR2_PACKAGE_LIBUSB=y` + `BR2_PACKAGE_EUDEV=y`
+~1.5 h Docker build + reflash per DrUm78's README. `uinput` is already present.
+**Ordinary work, not a research programme.**
+
+**The ID-pin argument is ALSO walked back** to ASSUMED-strong (not measured):
+that resistor blocks *automatic* OTG role negotiation, and a `dr_mode = "host"`
+build never consults ID. The 4.14 driver source was not read.
+
+**WHAT ACTUALLY REMAINS IS ONE ELECTRICAL QUESTION.** The board cannot SOURCE
+VBUS (`reg_vcc5v0` is a `regulator-fixed` input rail). With the grey-leg
+correction that no longer means the adapter goes unpowered — it means the port
+never *signals* port power. **Whether a sunxi host port that never drives VBUS
+still enumerates a SELF-POWERED device is not answerable from source.**
+
+### §7 is now a COST-ORDERED LADDER, not a verdict
+- **Rung 1 — FREE, device only, no hardware:** `ls -d /sys/bus/usb/devices/usb*`
+  plus a dmesg grep. `&ehci0`/`&ohci0` are ALREADY `okay` and built in with no
+  `phys` phandle on a single-PHY SoC — either boilerplate, or live host
+  controllers starved by MUSB. This settles which.
+- **Rung 2 — OTG cable + any charger on the grey leg, NO hub:** does anything
+  enumerate on the stock image?
+- **Rung 3 — ~2 h:** fork, three edits, flash, retest. **This is the real
+  answer.**
+- **Rung 4:** build the driver, then measure latency (§4).
+
+### TWO RISKS — flagged, not buried
+1. **`adb` RUNS OVER PERIPHERAL MODE.** It is how every rig script and every
+   gate reaches the device. **Verify dual-role preserves adb BEFORE building
+   anything on the new image, and keep a rollback SD.** If dual-role breaks
+   adb, the entire verification rig goes with it — that is a far larger loss
+   than controller support is a gain.
+2. **Latency is a real second risk, not a footnote.** p99 is already
+   7.95-10.68 ms against 16.67 ms (~6 ms headroom) and the adapter's poll rate
+   was never read.
+
+### THE THREE CLOSURES ARE REVERSED — the spike itself reversed them
+The earlier draft told the driver to close **A24 / A31 / A32** on this spike's
+authority. **§8 now says explicitly NOT to.** Those "re-open if A33 lands"
+clauses **STAY OPEN** until at least rung 3 runs. Concretely:
+- **A31** — do NOT assume port-0-only. The per-port binding plane may be needed
+  after all. **Design per-port; ship port-0 UI.** (Which is what the ORIGINAL
+  recommendation said before the NO-GO overrode it.)
+- **A32** — the `tapJumpOff` P1-only re-open note is LIVE again.
+- **A24** — see below. **This one already reached the owner and needs saying.**
+
+### A24 — THE OWNER'S DECISION WAS TAKEN ON RETRACTED EVIDENCE
+The owner ratified collapsing the Controls submenu on the driver's framing that
+CONTROLLER is *"permanently dead, settled in hardware."* **That framing has now
+been retracted twice** — first the power leg, now the whole verdict.
+**The honest current state: a real controller may be possible for ~2 h of OS
+work, pending one free command.** Collapsing the submenu is now the WRONG
+default, because the branch it deletes may become live.
+**DRIVER ACTION TAKEN: A24 is HELD.** The RENAMES (`CONTROLS`, `HANDHELD`,
+`BOX`/`CLASSIC`/`NATURAL`) are unaffected and stay ratified; the COLLAPSE is
+suspended pending rung 1. The owner is told, and re-decides.
+
+### A27 — BLOCKED ON THE SIM PLANE (measured by lane M, 2026-08-23)
+`setVersusMode(1 - versusMode)` is a **BINARY toggle** (`main.js:140/237`):
+0 = "4-man survival test!" (stocks), 1 = "An endless KO fest!" — **exactly the
+two modes the owner named.** It is **SIM-VISIBLE, not cosmetic.** Our sim
+carries the read sites (`port/sim/physics.c:1308`,
+`action_state_shortcuts.c:148`), but three things pin it off:
+1. `port/sim/sim/sim_boot.c:423` pins `versusMode = 0`
+2. `main.js:1334`'s "every player starts on 1 stock" arm is a no-op comment at
+   `sim_boot.c:421`
+3. `port/sim/sim/sim_tick.c:380` has the `!versusMode` matchTimer arm commented
+   out — **an endless match would run the clock into `sim_fatal`**
+
+All three are outside `port/foh/` and INSIDE `check-sim.sh`'s frozen TU list.
+A ribbon that toggles only its own label is a STUB (HARD RULE 2), so lane M
+left it drawn and inert and recorded why. **A37 (below) is the prerequisite;
+the ribbon hit-test is then ~10 lines in the FOH.**
+
+### A37 (P1, NEW — SIM LANE, prerequisite for A27)
+Make `versusMode` real: unpin `sim_boot.c:423`, implement the 1-stock arm at
+`sim_boot.c:421`, and restore the `!versusMode` matchTimer arm at
+`sim_tick.c:380`. **Touches `check-sim.sh`'s frozen TU list, so it is a
+CHECKSUM-SURFACE change** — it must prove all 8 goldens still conform with the
+flag OFF (bit-identical, the D20 pattern), and it is a different PLANE from the
+menus lane so it does not queue behind it.
+
+### STANDING HAZARD (measured by lane M, 2026-08-23)
+**`npm install` in a lane worktree LOOSENS A VERSION PIN.** Provisioning
+Playwright rewrote `oracle/harness/package.json` from `"playwright": "1.61.1"`
+to `"^1.61.1"`. Lane M caught and reverted it. **Any lane that runs `npm
+install` must re-check that file before committing** — a silently loosened pin
+is exactly the browser-engine drift that cost a whole session on 2026-08-05.
