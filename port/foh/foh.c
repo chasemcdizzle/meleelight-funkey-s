@@ -344,12 +344,27 @@ void foh_css_token_pos(const FohState *s, int k, double *x, double *y) {
   double base;
   if (s->cssTokenRest[k] == 2) {
     // endGame's snap slot (main.js:1381-1384 -> css.js:154-156:
-    // `tokenPos[index] = charIconPos[index]`). Note the INDEX: upstream
-    // indexes charIconPos — a per-CHARACTER array — with the PORT number, so
-    // port k's token snaps to CHARACTER k's icon whatever that port actually
-    // picked. That is upstream's own index confusion and it is carried
-    // verbatim (HARD RULE 5), which is why `c` is deliberately unused here.
-    base = (double)(foh_css_cell_x(k) + FOH_CSS_TOKEN_DX);
+    // `tokenPos[index] = charIconPos[index]`).
+    //
+    // DEVIATION D21 (A29, owner-reported P0). Upstream indexes charIconPos —
+    // a per-CHARACTER array — with the PORT number, so upstream's port k
+    // snaps to CHARACTER k's icon whatever that port picked: after any match
+    // the tokens sit on marth and puff forever. This port used to carry that
+    // verbatim and the owner filed it as lost selection, because HERE the
+    // token is the ONLY roster-level indicator of who is picked — render_css
+    // draws no selected-cell highlight, only a hover one (foh_render.c's
+    // css_cell call), where upstream has four large panels and 270 px of
+    // margin to disambiguate. So the same quirk that is cosmetic upstream
+    // reads as "my pick was discarded" on 240x240.
+    //
+    // It is also demonstrably an upstream TYPO rather than a designed
+    // behaviour: setChosenChar calls `setTokenPosSnapToChar(index,
+    // charSelected)` with two arguments (css.js:146) while the callee
+    // declares one and drops it (css.js:154). We honour the argument the
+    // caller passes. Nothing on the LAUNCH plane moves — p1Char/p2Char and
+    // cssChar are untouched by the snap either way; this changes where the
+    // token is DRAWN and hit-tested, and that is the whole deviation.
+    base = (double)(foh_css_cell_x(c) + FOH_CSS_TOKEN_DX); // D21: `c`, not `k`
   } else if (s->cssTokenRest[k] == 0) { // A-drop (css.js:288 family)
     base = (double)(foh_css_cell_x(c) + FOH_CSS_TOKEN_DX);
   } else { // leave-band (css.js:337) — the base/pitch really do differ

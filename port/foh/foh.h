@@ -396,7 +396,9 @@ typedef struct {
   // (css.js:227-233 class), 1 = the leave-band slot (css.js:337), 2 = the
   // endGame SNAP slot (main.js:1381-1384 -> css.js:154). Upstream's three
   // formulas genuinely disagree, so the resting position is PATH DEPENDENT
-  // — see the notes on each arm in foh_css_token_pos (foh.c).
+  // — see the notes on each arm in foh_css_token_pos (foh.c). Slot 2 lands
+  // on the port's CHOSEN cell under DEVIATION D21 (A29), where upstream
+  // lands it on cell `k`; the full argument is on that arm.
   //
   // Slot 2 exists because the A19 in-process return made it OBSERVABLE:
   // endGame snaps every token before landing on the CSS, so a returning
