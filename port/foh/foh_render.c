@@ -1329,8 +1329,16 @@ static const RastCol kPortTint[4] = {{218, 51, 51, 256},
                                      {226, 218, 34, 256},
                                      {44, 217, 29, 256}};
 
-// The silver header: MELEE plate, VS badge, mode ribbon, BACK wedge.
-static void css_header(Raster *rz) {
+// The silver header: MELEE plate, VS badge, mode ribbon, BACK wedge, and the
+// BACK wedge's hold bar.
+//
+// `bHold` is the CSS back counter (FohState.bHold, foh.c's step_css). It is
+// MACHINE state, not look plane, so foh_look_canonical does NOT pin it — and
+// it does not have to: upstream guards the whole bar on `bestHold > 0`
+// (css.js:741) and so does this, which means a cold shot draws exactly the
+// bytes it drew before the bar existed. That guard is the reason A23 costs no
+// re-freeze; do not turn it into a zero-width draw.
+static void css_header(Raster *rz, int bHold) {
   const RastCol h0 = {150, 156, 172, 256}, h1 = {70, 76, 98, 256};
   rrect_v(rz, 0, 0, RAST_W, 26, 0, h0, h1);
   // the black slab the BACK wedge sits on (css.js draws it as a skewed quad)
@@ -1369,6 +1377,26 @@ static void css_header(Raster *rz) {
     const float a[6] = {198.0f, 13.0f, 206.0f, 6.0f, 206.0f, 20.0f};
     poly8(rz, a, 3, red, 256);
     foh_text(rz, 210, 10, 1, "BACK", gold);
+    // The hold bar (css.js:735-746), the owner's "little red bar that fills
+    // below the back button". Upstream takes `bestHold` = max over its four
+    // ports; this device has ONE hand and one port that can hold (D6), so the
+    // max over a one-element set is the element. Upstream's quad is
+    // (1020,125) (abb,125) (abb,119) (1015,119) with abb = 1020 + 6*bestHold,
+    // i.e. a left-to-right fill along the bottom lip of the wedge, leaning 5
+    // px left on its top edge; FOH_CSS_BACK_BAR_* carry that shape at
+    // upstream's own ratios (foh.h). The red is the ARROWHEAD's red, which is
+    // upstream's own identity — css.js paints both the arrowhead (:580) and
+    // the bar (:737) rgb(194,24,8), one colour for one widget — carried here
+    // as this palette's {214,26,26} rather than as two different reds.
+    if (bHold > 0) {
+      const float w = (float)bHold * FOH_CSS_BACK_BAR_PER_FRAME;
+      const float x1 = FOH_CSS_BACK_BAR_X0 + w;
+      const float q[8] = {FOH_CSS_BACK_BAR_X0, 26.0f,
+                          x1,                  26.0f,
+                          x1,                  FOH_CSS_BACK_BAR_TOP,
+                          FOH_CSS_BACK_BAR_LEAN, FOH_CSS_BACK_BAR_TOP};
+      poly8(rz, q, 4, red, 256);
+    }
   }
 }
 
@@ -1562,7 +1590,7 @@ static void render_css(const FohState *s, Raster *rz) {
     const RastCol b0 = {14, 16, 38, 256}, b1 = {4, 4, 12, 256};
     rrect_v(rz, 0, 0, RAST_W, RAST_H, 0, b0, b1);
   }
-  css_header(rz);
+  css_header(rz, s->bHold);
 
   // Which widget the hand is over. HOVER, not a row index — every "hot"
   // below is the same point-in-rect test foh.c acts on (D4).
