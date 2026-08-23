@@ -4739,3 +4739,34 @@ project already carries its conventions in `CLAUDE.md` + `docs/PROCESS.md` +
 `docs/loop/*`. **Recommendation: do NOT add `AGENTS.md`** — a second
 conventions file is a divergence hazard, and CLAUDE.md is already the SSOT the
 skill's own precedence rule tells it to obey.
+
+### CORRECTION 2026-08-23 — "RE-FREEZING SHOTS" IS NOT A THING. I HAD THIS WRONG.
+
+Surfaced by lane M (A32/A25a) and **verified independently by the driver.**
+The driver has repeatedly priced menu work as *"re-freezes all 15 frozen menu
+shots plus their device twins"*. **There are no committed screenshot bytes to
+re-freeze.** Measured:
+- `git ls-files` matching `*.png|bmp|ppm|pgm` returns **5 files, none of them a
+  gate reference**: `port/gfx/opk/icon32.png` (the OPK icon) and four
+  `spikes/device-feasibility/results/*.png` (spike-era research artifacts).
+- **Device shots are judged against a HOST TWIN BUILT IN THE SAME RUN** —
+  `port/foh/check-device-foh.sh:1051`:
+  `cmp "$df" "$rf" || fail "shot $ctx: device shot != host twin reference"`.
+- `check-foh-flows.sh` judges shots **run-A vs run-B** (determinism +
+  distinctness), never against bytes on disk.
+
+**THE REAL COST OF A UI CHANGE IS DEVICE TIME TO RE-RUN THE LEGS (30-40 min
+each), NOT A RE-FREEZING RITUAL.** Re-read STATE.md's A14 note in that light:
+"the 15 shots must be re-taken" means the legs must be RE-RUN, not that
+artifacts must be replaced.
+
+**WHAT IS GENUINELY COMMITTED AND CAN MOVE** (do not over-correct the other
+way): the per-shot statistical ENVELOPES (A20's colour/coverage bands in
+`port/gfx/check-device-opk.sh`), and the frozen DATA planes
+`port/gfx/{gfxdata,vfxdata,vfxglyphs}-frozen.txt` plus their SHA pins — A14's
+first half already moved all five `VFXGLYPHS_SHA256` pins. Those are pins over
+data and statistics, not over pixels.
+
+**Consequence for planning: A14 is cheaper than quoted on the artifact axis and
+unchanged on the device axis.** Its real cost is the 41 call-site rewrite plus
+device leg time — not a freezing ceremony.
