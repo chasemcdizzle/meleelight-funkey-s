@@ -2172,7 +2172,9 @@ convention is fine, but it must be READ correctly — this block is the index.
 **SUPERSEDED / DONE (marker line cited):** A1 Phase-1 merged (L2180) · A2
 (L2118) · A3 (L3128) · A4 (L3137, semantics SETTLED L3190) · A5 (L3148) ·
 A9 (L2095) · A11 + A12 (L2180) · A13 (L2006) · A17 (L2199) · A18 (L2200) ·
-A20/A21/A22 (2026-08-04) · B3 (L2136) · B9 (L2196) · U1 (L2331).
+A20/A21/A22 (2026-08-04) · B3 (L2136) · B4 (L2242, falsified-and-closed
+2026-08-23 — it was never open; A19's own row L2493 was stale the same way) ·
+B9 (L2196) · U1 (L2331).
 **OWNER-DEFERRED:** B11 (2026-08-03, deferred NOT cancelled).
 **OWNER-DECIDED, no work:** A10 ("No work now" until after A1) · A19
 (restart deliberately skipped — upstream has no restart-match semantics).
@@ -2237,8 +2239,28 @@ A20/A21/A22 (2026-08-04) · B3 (L2136) · B9 (L2196) · U1 (L2331).
 - **U4** (P2) — `check-device-render.sh` was last touched at iter 80, BEFORE
   U1's `col8()` rounding changed background pixels. The device evidence it
   pins was never re-taken.
-- **B4** (P1) — `FOH_TMATCH` has no exit `ev_trans` in `foh.c` (only the entry
-  at `:802`), so target-match is still terminal in the machine.
+- ~~**B4** (P1) — `FOH_TMATCH` has no exit `ev_trans` in `foh.c` (only the
+  entry at `:802`), so target-match is still terminal in the machine.~~
+  **WRONG — B4 IS FIXED. Corrected 2026-08-23 (lane M).** The premise is a
+  true grep with a false conclusion, and the instrument disproves itself:
+  `FOH_MATCH` has no exit `ev_trans` either (only the entry at `foh.c:777`),
+  yet the VS match exit demonstrably works. Terminal-in-`foh_tick` is the
+  DESIGN — `foh.c:1175-1177` says the driver owns the sim from there — and
+  the exit lives one layer out, in `foh_dev.c`: a live target match's START
+  quit fires upstream's own `endGame` through `tp_endgame_hook`, sets
+  `g_mexit = MEX_TSS` (`foh_dev.c:2803`; the natural finish does the same at
+  `:2830` after the 2500 ms hold), and the `foh_phase:` re-entry maps that to
+  `foh.screen = FOH_TSS` (`foh_dev.c:3587-3589`) — upstream's
+  `changeGamemode(7)` (main.js:1389-1395, the only reachable side of its
+  `targetTesting` branch in this port). Landed with the C18/C19/B4/A19
+  increment. RUN, not read: `bash port/foh/check-mexit-reentry.sh` →
+  `MEXIT REENTRY OK`, exit 0 — its `[4c]` leg drives the real `foh_tick`
+  through a live target match, quits it with START, and proves the re-entry
+  landed on TARGET SELECT (phase 2 launches a target match with `char=3`, a
+  character phase 1's script cannot reach). Tooth proven live the same day:
+  flipping `:2803` to `MEX_OS` (the pre-fix "drops to the frontend"
+  behaviour) makes that check FAIL at leg B (rc 2, one FOH phase instead of
+  two); reverse-edited back byte-identical.
 - **C9** (P2) — zero exit-code assertions for C1's boolean in
   `check-device-foh.sh`.
 - **C10** (P2) — no launcher grep-assert in either candidate host.
@@ -2384,8 +2406,15 @@ A20/A21/A22 (2026-08-04) · B3 (L2136) · B9 (L2196) · U1 (L2331).
   make the primitives device/host-identical (route through fdlibm or
   integer math), re-verify BOTH device checks green, then the A2 lane's
   ~2 device runs + manifest re-pins + final both-GO.
-- B4 (P1) target-match exit returns to the FRONTEND, not the FOH menus;
-  upstream endGame's state resets unapplied on that path.
+- B4 DONE (C18/C19/B4/A19 increment; re-verified by RUN 2026-08-23, lane M):
+  the target-match exit lands on TARGET SELECT in-process, not the frontend
+  (`foh_dev.c:2803`/`:2830` → `MEX_TSS` → `foh_phase:` re-entry →
+  `FOH_TSS` at `:3587-3589`). Done-check `bash port/foh/check-mexit-reentry.sh`
+  → `MEXIT REENTRY OK`; perturbing the quit back to `MEX_OS` makes it fail.
+  The one part of the old row that SURVIVES is not a gap: upstream endGame's
+  gameEnd/lost-stock/phantom/article resets are still unapplied, and the code
+  says why it is unobservable (`foh_dev.c:2782-2789`) — the driver leaves the
+  match on the next statement and a re-entry rebuilds the sim from scratch.
 - B5 (P2) target FINISH arm (all 10 targets destroyed) is unscriptable →
   uncovered by any rig.
 - B6 (P1) GATE-BLINDNESS CLASS (A2's lesson, generalize): no rig
@@ -2461,9 +2490,13 @@ A20/A21/A22 (2026-08-04) · B3 (L2136) · B9 (L2196) · U1 (L2331).
 - A18 (P1, driver) m4-freeze-manifest re-pin after B9 clears:
   mlfk-foh.sh, foh_dev.c, riglib.sh, check-device-{foh,persist,target,
   fullgame}.sh + NEW rows foh_pause.c, img1.c; then the anchor.
-- A19 (P2) quit-to-menu is a process relaunch, not in-process FOH
-  re-entry (`ponytail:` marked). Restart deliberately skipped —
-  upstream has no restart-match semantics.
+- ~~A19 (P2) quit-to-menu is a process relaunch, not in-process FOH
+  re-entry (`ponytail:` marked).~~ **STALE, same fact as B4 — corrected
+  2026-08-23 (lane M).** The relaunch is GONE: quit-to-menu is
+  `FOH_PAUSE_QUIT_MENU` → `MEX_TITLE` → the in-process `foh_phase:` re-entry,
+  and `FOH_PAUSE_RC_MENU 70` plus the mlfk-foh.sh relaunch loop were deleted
+  with it (`foh_pause.h:161-189`). Same evidence run as B4's. Restart still
+  deliberately skipped — upstream has no restart-match semantics.
 - B9 DONE (iter 126): title render 16.96→9.06 ms, margin −0.29→+7.61 ms
   via three bit-identical -O3 raster run-primitives; menu skips 0. NO
   gate relaxation needed — the owner's "one frame is fine" allowance was
