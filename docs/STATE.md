@@ -1,145 +1,74 @@
-# ▶ RESUME HERE (rewritten 2026-08-05 — read this first, then §rulings)
+# ▶ RESUME HERE (rewritten 2026-08-23 — read this first, then §rulings)
 
-**Branch `agent/auto`, tree clean, all committed. Phase M4.**
+**Branch `agent/auto`, tree clean. Phase M4 — but M4 IS DEFERRED BY OWNER
+RULING (2026-08-23): *"i want to skip m4 for now and just do all my
+features."*** The gate's 8 arc-in-flight rows are untouched; B9 is still the
+keystone (it taints 5 of 8). Feature work runs instead, mapped in
+**`docs/FEATURES-SPEC.md`** (lanes + ticket graph + frontier).
 
-## What changed 2026-08-04/05 (22 commits)
-- **A13 DONE** — home screen reads `MeleeLight`; three roles, three .desktop
-  files, three titles; play install rebuilt by the new committed producer
-  `port/gfx/opk/install-play-opk.sh`. BOTH OPK check arms green.
-- **A20/A21/A22 DONE** — a four-deep chain of defects each hidden behind the
-  one in front (inventory pin -> shot band -> cite grammar -> stale byte pin).
-- **D20 DONE** — owner-requested everyone-walljumps HOUSE RULE. `SIM CONFORMS`
-  8/8 flag-off. Guarded on DATA (`has_ecb_state`): puff is excluded because
-  upstream authored no WALLJUMP ECB for it — the positive tooth found that as
-  a CRASH on its first run. **Not witnessed for marth** (task #16).
-- **C7 DONE** — play path no longer runs a fixed RNG seed; the seed is RECORDED
-  before use because the LAUNCH grammar has no seed field.
-- **B8 DONE** — machine-plane tooth, teeth 15 -> 16. **It found a live M4
-  blocker**: `FOH_RE` could not match its own producer (`shots=13` vs 15, no
-  `vsfinish` slot), so a PASSING FOH leg could never satisfy the gate. Fixed;
-  all four consumer grammars then audited (only FOH_RE was broken).
-- **B1 was ALREADY FIXED** — my 08-04 probe was wrong (it grepped the symbol
-  and a comment instead of running the function). Corrected in-tree.
-- **Browser engine RE-PINNED to Chrome for Testing 151.0.7922.71** — channel
-  `chrome` resolved to the host's auto-updating Chrome, which had moved to
-  .76 and blocked EVERY capture. Same exact build, immutable, never
-  self-updates. NO bound moved: `RENDER OK`, `IOU MIN 0.9208` vs 0.92,
-  identical to the value frozen on real Chrome.
-- **A14 HALF DONE** — glyph atlas widened 43 -> 179 records (A-Z a-z + the
-  measured symbol set), `RENDER OK`, all 5 VFXGLYPHS_SHA256 pins moved, ledger
-  regenerated, cite closure OK.
+## What landed 2026-08-23
+- **A29 FIXED (D21)** — CSS never lost the picks. endGame's token snap indexed
+  the roster by PORT, not by chosen character, so both tokens parked on
+  marth/puff. One token changed. Tooth + negative test.
+- **A23 DONE (D22)** — BACK wedge hit-testable, hold-to-back bar. **The bar was
+  UPSTREAM'S all along** (css.js:735-746) — a fidelity gap, no deviation; only
+  the TRIGGER is ours (upstream's wedge is an instant A-click). **Zero shots
+  re-frozen** (bar draws nothing at bHold==0).
+- **A28 RELOCATED** — the digital audio path is PROVEN CLEAN (poisoned-buffer
+  runs over 7 idle states, bit-zero out). New standing instrument
+  `check-snd-idle.sh` with its tooth as step [2/3]. Buzz is BELOW our mixer.
+- **A25b + A3 = ONE DEFECT, isolated to ONE hop** (physical L button -> Linux
+  keycode). Everything downstream is proven green ON DEVICE by f07. The rig is
+  structurally blind to physical-button->keycode for EVERY button, because
+  every check injects through our own uinput while the buttons come from
+  fkgpiod, which the rig's quiesce bracket stops.
+- **A10 CLOSED, NO CODE** — the build already goes straight to VS. Melee.
+- **A35/A36/A37 registered**; **A32 + A25a in flight**.
 
 ## THE QUEUE
 | # | Item | State |
 |---|---|---|
-| 1 | **A14 second half** | The `foh_text2` -> `gfx_glyphs_load` SWAP. Glyphs now EXIST but nothing draws them. **Blocks D8.** |
-| 2 | D8-later (i) + (ii) | Tag widgets, then the D18 letter grid. Blocked on A14. |
-| 3 | A7 credits | UNBLOCKED — owner delegated the RNG choice; driver picked a FOH-LOCAL stream (D19's reasoning). 422-line zero-DOM transliteration. |
-| 4 | #16 D20 marth witness | Recipe recorded; needs a jump input to get marth airborne. |
-| 5 | Close the 8 arc-in-flight rows | ONE combined round (they share a blast radius). codex + grok both present. |
-| 6 | M4 gate -> **Chase's acceptance playthrough** | HUMAN GATE, cannot be automated. |
-| 7 | **A23-A26 (owner playthrough #3, 2026-08-22)** | NEW, UNPRIORITIZED — owner slots them. Grounded + spec'd in fix_plan.md. See below. |
-| 8 | **A27-A34 (playthrough #3 round 2, 2026-08-23)** | NEW. **A28 + A29 are P0 BUGS in shipped behavior**; A34 is a dead control; A33 is a research spike. See fix_plan. |
+| 1 | A32 + A25a | IN FLIGHT (lane/m-a32) |
+| 2 | **A24 renames** | ratified — but see A24 HOLD below |
+| 3 | A31 · A30b · A25c · B4 · A7 · A14 | ready, SERIAL in lane M |
+| 4 | D8-later | blocked by A14 |
+| 5 | **A37** (sim lane) | prerequisite for A27; different plane, does not queue behind menus |
+| 6 | A28 · A25b/A3 · A34 · A26 | **DEVICE-BLOCKED** |
+| 7 | M4 gate | owner-deferred |
 
-### A23-A26 — owner playthrough #3 (2026-08-22), summary
-Full text + file:line grounding: `fix_plan.md` §"OWNER PLAYTHROUGH #3".
-**Not self-prioritized** — they arrived mid-Tier-1 and the gate is still
-blocked on the 8 arc-in-flight rows.
-- **A23 (P1)** CSS `BACK` wedge: make it hit-testable + hold-to-back with a
-  red fill bar. The wedge is DRAWN (`foh_render.c:1367-1372`) and already
-  flagged as not-hit-testable (`foh_render.c:222`); the 30-frame hold counter
-  `bHold` ALREADY EXISTS (`foh.h:438`, `foh.c:466-477`). Two additions, not a
-  rewrite. **Measure upstream first** — if it draws no bar, the bar is a D-row.
-- **A24 (P2)** Controls menu: row says "Keyboard Controls" -> "Controls";
-  the "Keyboard" entry is really the FunKey buttons -> rename; FunKey goes
-  FIRST (no controller path exists yet). 9 sites listed in fix_plan.
-  **Reordering is NOT display-only** — it swaps index->gameMode routing
-  (`foh.h:495` C30(c) is a live consumer). Owner picks the new name.
-- **A25 (P1)** Target select, THREE different root causes: (a) selection is a
-  1px pink-vs-grey border (`foh_render.c:2056`) — genuinely invisible;
-  (b) **L is already implemented and already bound** (`foh.c:779-786`,
-  `keymap-frozen.txt`) so this is a DIAGNOSIS row — and **if L never reaches
-  the app it is the same defect as the open A3, fix it once at the input
-  layer**; (c) free hand cursor on TSS, DRY-shared with CSS — spec'd in full:
-  extract `foh_hand.{c,h}`, **CSS must come out byte-identical first**, then
-  adopt on TSS. Note SSS's pointer was already rewritten INTO a grid cursor
-  (`foh.h:74`), so this reverses that for one screen = registered deviation.
-- **A26 (P2)** Hibernate/resume. **NO suspend/resume handling exists** and
-  **no donor to copy** (ssb64 has none either). `foh_persist` is the right
-  home. **FIRST STEP IS MEASUREMENT, NOT CODE**: close the lid and reopen —
-  if the kernel suspends transparently this row may collapse to near-zero.
-  `done-check:` deliberately left *(REPLAN)* until that measurement lands.
+## ⚠ A24 IS HELD — and A33 is why
+**A33 went NO-GO -> retraction -> UNKNOWN in one session.** Its NO-GO rested on
+*"an image this project neither owns nor ships"* — **pricing the owner's
+appetite for work and calling it evidence.** The owner can fork DrUm78's OS;
+enabling USB host is **four line-edits + ~1.5 h**. The remaining unknown is one
+electrical question (a port that never drives VBUS — does a self-powered device
+still enumerate?), answerable only on hardware.
+**The owner ratified collapsing the Controls submenu on the retracted framing.
+The RENAMES stand; the COLLAPSE is suspended.** A31's per-port plane and A32's
+re-open note are LIVE again too.
+**RUNG 1 IS FREE AND SETTLES IT:** `ls -d /sys/bus/usb/devices/usb*` on a
+reconnected device.
+**BIGGEST RISK, do not bury it: `adb` RUNS OVER PERIPHERAL MODE.** Dual-role
+could take the whole verification rig with it. Verify before building; keep a
+rollback SD.
 
-### A27-A34 — playthrough #3 round 2 (2026-08-23), summary
-Full text + grounding: `fix_plan.md` §"OWNER PLAYTHROUGH #3, ROUND 2".
-- **A27 (P1)** CSS mode ribbon (VS Melee -> switch modes). **SAME registered
-  gap as A23** — `foh_render.c:222` names the BACK wedge AND the mode ribbon
-  in one line. **Merge A27 into A23's arc**; doing them apart re-does the
-  plumbing. Read upstream for the real mode set, do not invent one.
-- **A28 (P0, BUG)** constant audio buzz from launch, present before any sound.
-  Idle-path defect. #1 hypothesis: the fill callback does not write silence
-  when zero voices are active (`platform_audio_sdl.h:102`; only the error path
-  memsets). #2: pipeline PCM is 22050 Hz, device opens 44100 — confirm the
-  mixer resamples. **NOTE `verify_m3.sh`'s `underruns == 0` cannot see this**
-  — it measures callback timing, not sample content.
-- **A29 (P0, BUG)** CSS picks lost on re-entry: falco/marth returns as
-  marth/puff = char ids 0/1 = **exactly `cssChar[k] = k`, an identity fill**
-  (`foh.h:429`). Matches neither the picks NOR the documented defaults
-  (fox/marth) — strongest available clue. Tooth belongs in
-  `check-mexit-reentry.sh`.
-- **A30 (P1)** control-style default maps. **SPLIT:** (a) the shoulder swap is
-  a DEFAULT FLIP of the existing orthogonal `modOnR` cell, nearly free
-  (`ctl_style.h:69-77`); (b) the face-button remap edits the **byte-for-byte
-  ratified BOX table** pinned by `s1_sweep.c` + 15 S1 checks = a
-  **re-ratification, not a bug fix**. **Answer the owner's grab question
-  first** — shield+A grabs in Melee, which is why C-layer styles spend X on
-  jump; if it is live here, most of (b) may be unnecessary.
-- **A31 (P1)** Controls screen: make the 9 action rows bindable (today the
-  cursor covers TWO rows — `foh.h:495`, and the labels are display-only);
-  delete the `mod` ROW (keep the cell); kill vestigial `rebind: N/A`; add
-  reset-to-defaults. **Per-player only pays off if A33 lands** — design the
-  table per-port, ship the UI port-0-only. Persistence -> `MLFKPERSIST5`.
-- **A32 (P2)** L-cancel default. **`lCancelType` is a SINGLE GLOBAL SCALAR**
-  (`sim_boot.c:433`) — there is no per-player plane, so either the DISPLAY is
-  the bug or the owner is reading the per-player `tapJumpOff` rows. Measure
-  before changing a default. Turning it on is a **DEVIATION** (upstream
-  authored default is 0), not a fix.
-- **A33 (P2, SPIKE)** GC adapter over micro-USB. Output = a research doc +
-  go/no-go. **Q1 gates everything: does the port do USB HOST at all?** If GO
-  it makes A24's CONTROLLER branch real, justifies A31's per-player plane, and
-  retires the digital-d-pad compromise (`ctl_style.h:14-23`).
-- **A34 (P2, BUG)** POWER OFF is a dead control — but it IS implemented
-  (`foh_pause.c:366,369,570`), so this is DIAGNOSIS. QUIT reportedly works;
-  the diff between the two arms is the investigation.
-
-## A14 SECOND HALF — scope, measured 2026-08-05 before stopping
-41 call sites (15 `foh_text2` + 26 `foh_text`) in `foh_render.c` alone, plus
-`foh_pause.c`. The signatures are incompatible by design —
-`gfx_glyph_text(Gfx*, fontId, s, penX, ...)` is pen-based on a `Gfx`, while
-`foh_text2(Raster*, x, y, scale, italic, ...)` is scale-based on a `Raster` —
-and the atlas metrics are the browser's 40px/70px Arial area-averaged to
-device scale, NOT the hand-authored 5x7/6x9 faces. **So every menu screen
-re-lays and all 15 frozen menu shots plus their device twins must be
-re-taken.** Do it in a session with device time available; keep `foh_font.c`
-face 2 as a LOUD fallback and delete the 6x9 face only once green.
-
-## STANDING HAZARDS (learned the hard way this session)
-- **Re-verify a queue row against the TREE before starting it.** Three tier-1
-  rows described finished work. Two more described work of a different shape.
-- **Re-verify the SOLUTION against the tree too, not just the problem** (A13,
-  2026-08-04). The ratified "minimal fix, no decisions left" would have
-  installed a coin-flip FALSE PASS on the FOH arm, because two .desktop files
-  were serving three roles. Three greps inverted the answer.
-- **A stale red masks everything downstream of it.** The OPK leg died at the
-  inventory pin for a week; A20 sat invisible behind it the whole time. When a
-  check has been red a while, fix the FIRST failure and RUN IT AGAIN.
-- **Derive from measured output; never transcribe by eye.** A hand-typed tooth
-  pin cost a 40-minute device run.
-- **`docs/LOOP.md` §A-par:** parallel worktree lanes start at A14, NOT before.
-  One device + one riglib lock means verification never parallelizes.
-- Only `port/sim/device/` and `port/gfx/opk/` changed. **No C, no game code.**
+## STANDING HAZARDS (measured this session)
+- **A STATED `done-check:` IS NOT AUTOMATICALLY A REAL ONE.** A29's row said
+  "assert both slots still read the picks" — that **already passed before the
+  fix**. It tested the plane the bug never touched. When filing a check from a
+  symptom report, name the observable THE REPORTER SAW.
+- **`npm install` in a lane worktree LOOSENS A FROZEN PIN** — it rewrote
+  `oracle/harness/package.json` playwright `1.61.1` -> `^1.61.1`. Re-check that
+  file before committing in any lane.
+- **§A-par.3 makes the menus plane SERIAL.** 9 of 10 remaining feature tickets
+  edit `foh_render.c`; they cannot be parallelised. Lanes buy parallel EDITING
+  only, and §A-par.4 means verification never parallelises at all.
+- **Don't price the owner's appetite as evidence** (A33's own recorded lesson).
+- 13 pre-existing `.claude/worktrees/` are 0 commits ahead with real but
+  already-landed edits — deletable, left alone pending owner word.
 
 ---
+
 
 # STATE.md — current truth (driver-updated every turn)
 
