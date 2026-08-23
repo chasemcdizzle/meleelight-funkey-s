@@ -4466,3 +4466,49 @@ generalised from a worktree-local state. **Left UNFIXED deliberately:
 `check-mexit-reentry.sh` is a protected check (HARD RULE 3) and the failure
 mode is FAIL-CLOSED (it errors, it cannot false-pass), so there is no safety
 pressure to patch it blind.** Re-open with an exact reproducer.
+
+## OWNER DECISIONS 2026-08-23 (round 3) — A10 CLOSED, A24 settled
+
+**A10 — CLOSED, NO WORK REQUIRED. The shipped behaviour is already what the
+owner wants.** Owner, asked whether the dead netplay entries should be greyed:
+*"for A10 yeah just go straight to vs. melee."*
+
+This SUPERSEDES the earlier "don't hide but gray out" answer, which was given
+before the driver had established the current state and flagged its cost. The
+build ships `FOH_NETPLAY 0`, where menu-top's `VS. Melee` row runs the Local VS
+action DIRECTLY (`foh.h:306-311`, menu.js:105) and the whole MPMENU page is
+unreachable — so there is nothing on screen to grey, and greying would have
+meant RESTORING that page and putting a menu walk between `VS. Melee` and the
+CSS. **The owner chose the fast path. A10 requires no code.**
+Nothing is deleted (`foh.h:309-311`): `FOH_MENU_BATTLE`, its labels, its four
+A-arms, its B-back edge and its judge-registered transitions all still exist
+and still compile behind `FOH_NETPLAY 1`. **Do not delete them** — that shell is
+what makes this reversible, and C5 already reasoned it through.
+
+**A24 — SETTLED: COLLAPSE THE SUBMENU.** Owner took the driver recommendation.
+The Controls submenu (`CONTROLLER` / `HANDHELD`) exists ONLY to make a two-way
+choice, and A33 proved one side can never exist on this hardware — so the
+options row `CONTROLS` opens the button-config screen DIRECTLY.
+
+Measured current state of the dead branch, so nobody re-derives it:
+`render_ctrl_pad` (`foh_render.c:1902-1916`) is already an honest dead end —
+it draws `ERROR: NO CONTROLLER DETECTED`, `THE FUNKEY-S HAS NO GAMEPAD PORT`,
+`AND NO CALIBRATION TO RUN.` So this is NOT a correctness fix; it removes a
+guaranteed-wasted navigation step.
+
+**WHY COLLAPSE HERE BUT GREY ELSEWHERE (the distinction that decided it):**
+greying suits a menu that KEEPS live entries beside the dead ones — the page
+still has a job. A two-entry chooser whose purpose IS the choice has no job
+left once one side dies; greying would preserve a screen that asks a question
+with one answer.
+
+**Scope of the collapse (do not over-reach):**
+- `FOH_CTRL_PAD` (upstream gameMode 14) and `render_ctrl_pad` are NOT deleted —
+  same reversibility logic as `FOH_MENU_BATTLE` above. They become unreachable,
+  exactly as `FOH_MENU_BATTLE` already is.
+- The enum, the gameMode numbering and the judge-registered transitions do NOT
+  get renumbered. Routing changes; identity does not.
+- `FOH_MENU_CONTROLS` (the submenu screen) becomes unreachable by the same
+  pattern. Register it as a MENU-SPEC deviation with A33 as the cited cause.
+- **This lands WITH the A24/A4 renames in ONE ticket** — same files, same
+  shots, and doing them apart re-freezes the controls screens twice.
