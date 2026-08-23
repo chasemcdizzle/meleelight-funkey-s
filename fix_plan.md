@@ -4904,3 +4904,43 @@ actually running the thing (A29's root cause, A32's "L-cancel" symptom, now
 B4+A19), and the SECOND time the 2026-08-04 B1 lesson has repeated verbatim:
 **grepping for a defect's vocabulary finds the discussion of the defect, not
 the defect.**
+
+### LANE HYGIENE — BETTER node_modules RECIPE (supersedes the cp -R advice)
+
+Lane M (A24) found the clean way, measured: **`npm install --no-save
+--no-package-lock playwright@1.61.1`**, then verify `oracle/harness/package.json`
+is byte-identical afterwards (it was — sha `1187da80…`). **The pin-loosening
+hazard did not fire**, because `--no-save` stops npm rewriting the manifest.
+That is cheaper than `cp -R` (17 MB, 175 files) and safer than a symlink (which
+breaks `check-mexit-reentry.sh` per A36). **Still verify the manifest sha before
+committing** — the guarantee is the verification, not the flag.
+
+### A24 — DONE 2026-08-23 (D25). Two corrections to the driver's own brief.
+
+1. **A4's `NORMAL` -> `CLASSIC` WAS ALREADY SHIPPED** under C31 —
+   `ctl_style.c:40` already returns `"Classic"` and the render site uppercases
+   it. Zero code needed. It had **no tooth** (only the frozen NATURAL
+   screenshot exercised it), and now it has one. *Fourth* instance this session
+   of a queued row describing finished work.
+2. **The driver's `foh.h:495` warning was MISAIMED.** That site is
+   `optRow`/`optCol`; the C30(c) chooser cursor is `FohState.ctlRow`
+   (`foh.h:542`). The real live consumers were two the brief did NOT name, both
+   found by grep and both of which would have silently asserted the old wiring:
+   `foh_snd_witness.c:170-173` (drives the chooser **by row index**) and
+   `flows/f04-nav.{flow,expect}` (two Controls SHOT markers + four frozen
+   transition lines swap frames). Shot NAMES are unchanged, so the `FLOW_SHOTS`
+   inventories in `check-foh-flows.sh:288` / `check-device-foh.sh:486` are sets
+   that still match and needed no edit.
+   **Lesson: a site table handed down by the driver is a STARTING POINT, not a
+   closed set. Grep for index-driven consumers, not just for the strings.**
+
+**The tooth's design is the transferable part:** it reads the row label off the
+frame, presses A on that row through the real `foh_tick`, then reads the
+DESTINATION SCREEN'S HEADER off the frame the machine actually lands on — so a
+label and its destination cannot drift apart. Its **T2 negative reverts the
+routing ternary ALONE while leaving the labels in place** (the half-swap trap);
+without that test the check goes green on a build whose first row lies about
+where it goes.
+
+**Remaining leg:** `DEVICE FOH OK` has NOT been run (no device in-lane). That is
+the outstanding half of this row's done-check.
