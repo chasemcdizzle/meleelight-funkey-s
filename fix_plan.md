@@ -4331,3 +4331,70 @@ moves the mixer/music fidelity goldens. **Also resolve the apparent tension
 first:** the app demands 44100 and hard-fails on any renegotiation, yet audio
 works on device — so either the spike measured a different REQUEST than the
 app makes, or the doc's reading needs re-taking. Measure before designing.
+
+## A33 CONSEQUENCES — NO-GO, and it CLOSES three standing re-open clauses
+
+**A33 = NO-GO (2026-08-23, lane R; full evidence `docs/research/gc-adapter.md`).**
+Q1 gates the ticket and Q1 is NO: **the FunKey-S micro-USB port cannot host a
+bus-powered device, and it is settled in HARDWARE, not software.** Four
+independent locks, each sufficient alone:
+1. **The USB ID pin is deliberately unwired.** FunKey's OWN hardware reference
+   says resistor **R4** "should probably not be mounted... this pin should be
+   left floating". An OTG cable signals host role by grounding ID; on this
+   board ID terminates in an unpopulated pull-up. The V3s SoC is dual-role
+   capable; **the board is not wired to use it.**
+2. `sun8i-v3s-funkey.dts:210-213` — `dr_mode = "peripheral"`, and `&usbphy`
+   declares no ID-detect GPIO, so the kernel does no role detection at all.
+3. `linux.config:115` — `CONFIG_USB_MUSB_GADGET=y` with no `HOST`/`DUAL_ROLE`.
+   In 4.14 those are a mutually-exclusive Kconfig choice, so host-side MUSB is
+   **not compiled**, not merely disabled. Also `# CONFIG_HID is not set`.
+4. **Power is a second, independent hardware kill:** `reg_vcc5v0` is a
+   `regulator-fixed` with no `gpio` and no `vin-supply` — it is the INCOMING
+   5 V rail, not a boost. Nothing can push VBUS outward. The device also caps
+   its own charge at 400 mA, under the adapter's 500 mA ask.
+
+The one apparent escape was chased and closed: the DTS does mark
+`&ehci0`/`&ohci0` `okay` and both drivers are built in, but the V3s declares
+exactly ONE USB PHY, neither carries a `phys` phandle, and there is no second
+connector — inherited sunxi board-template boilerplate.
+
+Also measured: **`gcadapterdriver` (owner-provided) is macOS-only** — Xcode
+kext/DriverKit, no libusb, no Linux target — so it was never portable here.
+The Dolphin guide URL returned **HTTP 403** and was NOT reconstructed from
+memory; no claim depends on it.
+
+### THE CONSEQUENCE THAT MATTERS MOST
+**The digital-d-pad compromise at `ctl_style.h:14-23` is PERMANENT on this
+hardware** — no walk, no partial DI angles, no angled f-tilts, no C-stick from
+a real analog stick, ever. That makes `docs/research/b0xx-mapping.md` and the
+BOX scheme **the answer, not a stopgap**, and it RAISES the value of A30b/A31
+(button layout is now the only lever the player has).
+
+### Three standing clauses are now DEAD — do not act on them
+- **A24** — no second controller will ever appear. **NEW DESIGN QUESTION FOR
+  THE OWNER (see below).**
+- **A31** — the "design per-port, retrofit if A33 lands" clause is dead.
+  **Ship UI editing port 0 only, and do not build the per-port plane.** This
+  makes A31 materially CHEAPER: no `MLFKPERSIST5` bump for a bindings-per-port
+  plane, only for the bindings themselves.
+- **A32** — the "re-open if A33 lands, P2+ become human ports" note is dead.
+  **P1 stays the only human port.** `tapJumpOff` P1-only is correct forever.
+
+### A24 — OPEN OWNER QUESTION created by this NO-GO
+The Controls submenu has two entries, `CONTROLLER` and (renamed) `HANDHELD`.
+**`CONTROLLER` is now permanently dead UI.** Two options:
+- **(a) Grey it out**, consistent with the owner's 2026-08-23 A10 ruling
+  (*"don't hide but gray out"*) — honest about the hardware, consistent
+  treatment of dead entries.
+- **(b) Collapse the submenu entirely** so `CONTROLS` opens the button config
+  directly — a two-entry menu with one live entry is pointless navigation.
+
+**Driver recommendation: (b) collapse, with a one-line note in the doc that
+the controller branch was removed for hardware reasons.** A10's grey-out
+ruling was about entries whose feature EXISTS upstream but is dead on device;
+this is an entry whose feature can never exist at all. But it is the owner's
+menu — ask.
+**NOTE this also revisits the A24 rename:** `HANDHELD` was chosen partly
+because `HANDHELD vs CONTROLLER` is a clean pair for a future with two device
+classes. With no such future, if the submenu collapses the label question
+mostly disappears; if it stays, `HANDHELD` still reads better than `FUNKEY`.
