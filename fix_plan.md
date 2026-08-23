@@ -4203,3 +4203,67 @@ then look at the re-entry path.
 **Do not "fix" this by resetting both planes on entry** — that would trade a
 wrong display for a silently discarded selection. The tooth belongs in
 `check-mexit-reentry.sh`.
+
+### A28 — MEASURED 2026-08-23 (lane A): THE DIGITAL PATH IS PROVEN CLEAN
+
+All three filed hypotheses are **FALSE, by measurement, not by reading.**
+
+- **H1 (fill leaves the buffer uninitialised) — FALSE.** `snd_mix_fill`
+  (`port/gfx/snd_mixer.h:666-712`) opens each frame with `int32_t acc = 0;`
+  (`:669`) and **ASSIGNS** both outputs (`:709-710`), never accumulates onto
+  them; the voice loop skips inactive voices without touching `out` (`:672`).
+  Proved by compiling the real header and driving the real function with a
+  POISONED output buffer across every idle state the device can hold —
+  bit-zero output in all of them.
+- **H2 (22050 pipeline vs 44100 device) — FALSE, and not a second defect.**
+  Both planes resample: SFX via `m->step = (SND_SRC_RATE << 16) / SND_OUT_RATE`
+  = `0x8000` (`snd_mixer.h:503`, consumed `:670,:678`); music by zero-order
+  hold (`:697`).
+- **H3 — inapplicable at idle:** emitted samples are exactly 0, so no DC term
+  and no partial block.
+
+Also cleared: the music ring is fully written BEFORE `wr` is published
+(`snd_mixer.h:270-289`; `foh_dev.c:983-996,1067-1069`), so the malloc'd ring is
+never read uninitialised; boot leaves music off (`foh_dev.c:1063,1931`).
+
+**NEW STANDING INSTRUMENT:** `bash port/gfx/check-snd-idle.sh` →
+`SND IDLE SILENT cases=7 frames=3245`, exit 0 — compiles `snd_mixer.h`
+verbatim and asserts bit-exact silence over 7 idle cases with a poisoned
+buffer. **Carries its own tooth as step [2/3]** (a run that skips the fill
+must be REJECTED; verified rejecting with `sample 0 ... is -23131`), so it
+cannot go vacuous. Zero production files were edited — patching a path that
+is provably correct would have been a wrong fix.
+
+**A28 IS THEREFORE STILL OPEN, BUT RELOCATED: the buzz is BELOW our mixer.**
+Remaining candidates, both device-side and both needing the FunKey:
+1. **Analog/amp idle noise (leading).** The codec amp is energised by
+   `SDL_OpenAudio` (`platform_audio_sdl.h:132`) and stays energised for the
+   whole process lifetime — which matches the report exactly (starts at
+   launch, precedes any sound, lasts the session).
+   **CHEAPEST DISCRIMINATOR, RUN THIS FIRST:** launch with `sndpack.bin`
+   absent from the data dir — `mlfk-foh.sh` gates on `[ -f "$DATA/sndpack.bin" ]`
+   so `platform_audio_start` is never reached (`foh_dev.c:1928-1935`).
+   **If the buzz persists with audio never opened, it is not ours at all.**
+2. **ALSA xruns at 512 frames / 11.6 ms.** The existing `underruns` counter is
+   BLIND to these BY CONSTRUCTION and the header says so
+   (`platform_audio_sdl.h:44-51`, "DMA-XRUN BLINDNESS"): an xrun makes the SDL
+   write return SOONER, so inter-callback gaps only shrink and the counter
+   stays 0. Test with `--audio-samples 1024` (`foh_dev.c:1555,1701`).
+
+### A35 (P2, REGISTERED OBSERVATION — not a defect, do not "fix" casually)
+
+Surfaced by lane A while clearing A28. `docs/research/audio-spike.md:31-34`
+records the device granting **22050 stereo exactly**, while the app opens
+**44100** and zero-order-hold-upsamples both planes 2x — which places a
+full-amplitude spectral image across roughly 11-22 kHz.
+
+**This is NOT A28** (it exists only while audio is PLAYING, and the reported
+buzz precedes any sound), which is why lane A flagged it rather than acting.
+Recorded so it is not rediscovered later.
+
+**Before touching it, know the blast radius:** the open rate is guarded by an
+exact-spec-or-fail check (`platform_audio_sdl.h:120-150`) and changing it
+moves the mixer/music fidelity goldens. **Also resolve the apparent tension
+first:** the app demands 44100 and hard-fails on any renegotiation, yet audio
+works on device — so either the spike measured a different REQUEST than the
+app makes, or the doc's reading needs re-taking. Measure before designing.
