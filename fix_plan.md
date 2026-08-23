@@ -4398,3 +4398,71 @@ menu — ask.
 because `HANDHELD vs CONTROLLER` is a clean pair for a future with two device
 classes. With no such future, if the submenu collapses the label question
 mostly disappears; if it stays, `HANDHELD` still reads better than `FUNKEY`.
+
+### A29 — CLOSED 2026-08-23 (lane M). MY FILED HYPOTHESIS WAS FALSE.
+
+**Root cause: `port/foh/foh.c:346-353`**, the rest-slot-2 arm of
+`foh_css_token_pos()` — the endGame SNAP slot indexed the roster by the **PORT
+index** (`foh_css_cell_x(k)`) instead of the chosen character
+(`foh_css_cell_x(c)`). `foh_dev.c:1339-1340` (`tdev_end_game`) puts BOTH tokens
+in rest slot 2 on every match exit, so port 0's token snapped to cell 0 (marth)
+and port 1's to cell 1 (puff) — the reported constant `{0,1}`.
+
+**THE FILED HYPOTHESIS ("something re-inits `cssChar` to an index identity")
+WAS WRONG, and the correction is the useful part.** Measured with a driver
+linking the real `foh.c`:
+```
+after picking:     p1Char=3(falco) p2Char=0(marth) cssChar={3,0} rest={0,0}
+after match exit:  p1Char=3(falco) p2Char=0(marth) cssChar={3,0} rest={2,2}
+                   tok0 -> cell 0, tok1 -> cell 1
+```
+**BOTH character planes survive intact and the relaunch uses the real picks.**
+Only the token GRAPHIC lied. It read as lost selection because at 240x240 the
+token is the ONLY roster-level pick indicator — `render_css` draws no
+selected-cell highlight, only a hover one.
+
+**MY `done-check:` FOR THIS ROW WOULD HAVE BEEN VACUOUS.** As written it said
+*"assert both slots still read the picks"* — and that assertion **already
+passed before the fix**. A row's stated check is not automatically a real
+check; this one tested the plane the bug never touched. The real observable is
+the TOKEN CELL. Standing lesson: when filing a `done-check:` from a symptom
+report, name the observable the REPORTER actually saw, not the state you
+suspect underlies it.
+
+**Fix:** one token, `foh_css_cell_x(k)` -> `foh_css_cell_x(c)`, registered as
+**DEVIATION D21** (MENU-SPEC ledger + in-file). Upstream genuinely indexes by
+port, but it is a TYPO not a design — `setChosenChar` passes two args to a
+one-arg callee that drops the second (`css.js:146` vs `:154`). Nothing on the
+launch plane moves; this changes only where a token is drawn and hit-tested.
+
+**Tooth:** `bash port/foh/check-css-token-rest.sh` -> `CSS TOKEN REST CHECK OK`,
+exit 0 (host-only, data-free, ~3 s). Drives the REAL `foh_tick` through real
+CSS gestures with the cursor walked by FEEDBACK (never a copied frame count)
+and no character field hand-poked; picks falco(3)/falcon(4), distinct from the
+defaults `{0,0}`, from index identity `{0,1}`, and from each other. **T1
+negative test** rebuilds against a D21-reverted `foh.c` and requires it to fail
+reproducing `{0,1}` — both directions proven. Grammar-pinned to the two
+`foh_dev.c` lines it mirrors, so a moved production snap kills the check loudly
+instead of testing a stale model.
+
+### A36 (P3, UNCONFIRMED — do NOT "fix" it until it reproduces)
+
+Lane M reported a latent bug in `port/foh/check-mexit-reentry.sh:124-146`:
+`tree_fingerprint()` pipes `git ls-files -o` into `xargs shasum`, and git
+reports a wholly-untracked NESTED CHECKOUT as a bare directory, so an installed
+`oracle/harness/node_modules` would make the check die with
+`shasum: ... Is a directory`.
+
+**I COULD NOT REPRODUCE IT ON `agent/auto` (2026-08-23).** Measured: the tree
+HAS `oracle/harness/node_modules/` installed, and `git ls-files -o
+--exclude-standard` returns it ZERO times because it is gitignored at
+`oracle/harness/.gitignore:1` (`node_modules/`), confirmed with
+`git check-ignore -v`. The check uses `--exclude-standard`, so the entry never
+reaches `xargs`.
+
+So either the lane hit a variant condition (a nested checkout NOT covered by
+that ignore — e.g. a dependency shipping its own `.git`), or the diagnosis
+generalised from a worktree-local state. **Left UNFIXED deliberately:
+`check-mexit-reentry.sh` is a protected check (HARD RULE 3) and the failure
+mode is FAIL-CLOSED (it errors, it cannot false-pass), so there is no safety
+pressure to patch it blind.** Re-open with an exact reproducer.

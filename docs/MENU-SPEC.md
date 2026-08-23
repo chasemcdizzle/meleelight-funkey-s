@@ -1934,6 +1934,7 @@ state; each entry points at the section that carries the evidence):
 | D18 | Name entry becomes a NOVEL letter-grid screen modelled on real Melee (upstream has no canvas name entry at all) — supersedes D8's "cut free-text"; blocked on A14's glyph coverage | §2.9 |
 | D19 | The random-tag draw uses a FOH-LOCAL stream and cannot shift the match (upstream shares the sim's stream; our 465-boot-draw pin makes that unavailable) | §2.9 |
 | D20 | **HOUSE RULE, owner-requested 2026-08-04:** "Everyone Walljumps" — dead upstream — is given real mechanical effect at the per-character ability gate. Defaults OFF forever; flag-off is bit-identical | §3.3 |
+| D21 | **A29, owner-reported P0 (2026-08-23):** endGame's token snap lands on the port's CHOSEN cell. Upstream indexes `charIconPos` — a per-CHARACTER array — by PORT number (`css.js:154`, called `main.js:1381-1384`), so upstream's tokens sit on marth/puff after every match regardless of picks. Demonstrably an upstream TYPO, not design: `setChosenChar` passes TWO args (`css.js:146`) to a callee declaring one and dropping it — we honour the argument the caller passes. Cosmetic upstream (four large panels disambiguate); here the token is the ONLY roster-level pick indicator at 240x240 | §2.6 |
 
 ---
 
