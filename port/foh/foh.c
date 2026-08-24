@@ -1195,7 +1195,7 @@ static void step_ctrl(FohState *s, const PlatformInput *in,
         // NOT touch gameplay/audio settings — they are other screens' rows.
         ctl_bind_reset(0);
         ctl_style_set((int)CTL_STYLE_DEFAULT);
-        ctl_mod_on_r_set(false);
+        ctl_mod_on_r_set(true); // D29: RESET must install the CURRENT default
         snd_push(s, "menuSelect");
       } else {
         snd_push(s, "deny");

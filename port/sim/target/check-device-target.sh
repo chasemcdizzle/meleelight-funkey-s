@@ -140,7 +140,7 @@ f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/
 0bc801ea46b06a63e79377aae164636a5e9f649ee45835748e5f2387b9e04281 oracle/harness/streamlib.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-cba429049d339b653943a7310c0295b78e520f4b35c2995e1d16629c4cec07cd port/foh/judge-foh-trace.js
+8658ae0b23d2d853605f5495fe0fa02b02b645b70aee47944bdb5503a34e10e4 port/foh/judge-foh-trace.js
 a1353a71a66bb05bc28d547eee9385cfa8da7baf784f9e038bd31834cabb9cb8 port/foh/normalize-foh-trace.js
 1163e9c18323ac06aaaec4ee3068691d7d67ebbf98b3500a343a69c80ca793ea port/foh/flow-to-fkscript.js
 4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js
@@ -295,9 +295,9 @@ done <<< "$PRODUCER_PINS"
 [ "$n_pins" = "$N_PINS_WANT" ] || fail "producer pin inventory — $n_pins/$N_PINS_WANT pins verified"
 # twin pins: the judge sha must sit in check-foh-flows.sh's pin table
 # exactly once; sndpack/menu.pcm must equal the sibling device checks'.
-c="$(grep -cF "cba429049d339b653943a7310c0295b78e520f4b35c2995e1d16629c4cec07cd port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
+c="$(grep -cF "8658ae0b23d2d853605f5495fe0fa02b02b645b70aee47944bdb5503a34e10e4 port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
 [ "$c" = 1 ] || fail "twin pin — check-foh-flows.sh does not carry the same judge-foh-trace.js sha exactly once (count $c; paired change rule)"
-c="$(grep -cF "cba429049d339b653943a7310c0295b78e520f4b35c2995e1d16629c4cec07cd port/foh/judge-foh-trace.js" "$FOH/check-device-foh.sh")" || true
+c="$(grep -cF "8658ae0b23d2d853605f5495fe0fa02b02b645b70aee47944bdb5503a34e10e4 port/foh/judge-foh-trace.js" "$FOH/check-device-foh.sh")" || true
 # exactly 2 there: its PRODUCER_PINS row + its own twin grep of
 # check-foh-flows.sh (both carry the sha+path pair)
 [ "$c" = 2 ] || fail "twin pin — check-device-foh.sh does not carry the same judge-foh-trace.js sha exactly twice (count $c; pin row + its twin grep)"

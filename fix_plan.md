@@ -6033,3 +6033,98 @@ Cleanest shape, per lane A: **add `snd_event_menu()` beside `snd_event()` in
 `foh_dev.c:845` at it. Lane A did not add the function alone because an
 uncalled `static` trips `-Werror=unused-function` in TUs that compile the header
 standalone — **function and caller must land in the SAME change.**
+
+## LANE I + DRIVER RE-PIN PASS — 2026-08-24
+
+### A25b/A3 — LANDED, and **THE DRIVER'S PREMISE WAS HALF WRONG**
+I briefed `map l K m`... as `map l M m`. **Wrong: the KEYSYM must change, the
+FLOW LETTER must not.** `K` is hard-pinned in three places a rename breaks for
+zero behavioural gain: `flow-to-fkscript.js:112`
+(`KEYMAP_FLOW_LETTERS = "UDLRABXYSKNQ"` — it DIES if the frozen flow letter
+differs), `foh_app.c:113` (`case 'K': in.l = true`, in the PRODUCT binary), and
+`flows/f07-target-t02.flow:24` (`I 400 K`). **The shipped fix is `map l K m`**
+— flow letter `K`, keysym `m` — and the injector resolves letter -> keysym
+THROUGH the table, so all 7 flows now inject `m` automatically with zero `k`
+left in any generated `.fks`. **Seventh premise falsified by running the code,
+and the fourth of mine.**
+
+**Found by grepping for index/duplicate consumers, not from my list:**
+`platform_sdl2.c:82` held a SECOND, UNDOCUMENTED copy of the mapping
+(`SDL_SCANCODE_K` -> `_M`; scancode space, cannot share the table, now named as
+a duplicate). And `port/gfx/s1-session.script` needed 14x `k` -> `m` —
+**behaviourally required**: the M3 live session injects L as a keysym and would
+have gone SILENTLY DEAD. `s1_input.h` is byte-untouched, so the 15 pinned S1
+checks are behaviourally identical.
+**Stated loudly, as required: L is now a LIVE SHIELD BUTTON in the default
+Natural style — this changes the MATCH, not just the menus.**
+
+### A30(a) modOnR (D29) — LANDED, and it was NOT the one-liner I called it
+`ctl_style.c:18` alone is **INERT**: every FOH binary calls `foh_persist_load()`
+at boot, which runs `foh_persist_defaults()` and then
+`ctl_mod_on_r_set(p.modOnR != 0)`. **Four companion lines were required and are
+now landed by the driver:** `foh_persist.c:52` (the REAL fresh-install default),
+`foh_persist.c:368` (v2/v3 migration), `foh.c:1198` (RESET-TO-DEFAULTS, which
+would otherwise install the RETIRED arrangement), and TWO assertions in
+`foh_rebind_witness.c` (`:484` RESET, `:663` cold boot).
+**`check-rebind.sh` was RED on exactly those assertions and is now GREEN.**
+
+### A30(b) — BLOCKED, and the OWNER HAS A SELF-CONFLICT TO RESOLVE
+Lane I recommends the **DEFAULT-BINDING route, not a table change** — A31's
+rebinder already ships, and the Controls screen renders `ctl_bind_get(0, …)`, so
+a default row stays truthful automatically. The Natural row would be
+`{3,0,2,1,4,5,6,7}`. **Three hard stops kept it unlanded:** the default lives in
+`foh_persist.c:71` (and changing it moves an upgrading player's buttons under
+him — a reviewed call); the table route would make `foh_ctl_labels.h:44-45` LIE
+(it hardcodes ATTACK/SPECIAL and is pinned by `check-foh-flows.sh` leg `[0m]`);
+and **BOX is a genuine STOP — `in.a`/`in.b` are NOT style-branched, so any edit
+hits the pinned `s1_input_row()`, and X->grab is IMPOSSIBLE by permutation
+because BOX never emits `in.z` at all.**
+
+**MEASURED, and it shrinks the ticket: SHIELD + A *IS* A GRAB** — live, every
+style, every character (`GUARD.c:76-79`, `GUARDON.c:101-104` dispatch `GRAB` on
+a fresh A press while shielding). **So X->grab is a CONVENIENCE, not the only
+way to grab, and the case for touching the ratified BOX table is much weaker
+than it looked.**
+
+**⚠ OWNER SELF-CONFLICT (his call, not the driver's):** fix_plan A30 records him
+asking for **R = mod/tilt** (shipped as D29) *and* **R = C-stick HOLD** for
+classic/natural. **R cannot be both.** Freeing Y for `special` in Classic
+requires moving its C-layer to R, which in Natural/Classic also takes R off
+shield duty — contradicting A3's whole "L and R both shield" premise. **One
+permutation cannot serve both styles.**
+
+### DRIVER BATCHED RE-PIN (§A-par.5) — done, and it uncovered a REAL objection
+`judge-foh-trace.js` changed TWICE (A24c's `FOH_CTL_CHOOSER` profile, then
+A27's `versus=[01]`) and only the first re-froze. Re-pinned its sha across **8
+sites in 6 files**, and re-froze `judge-grammar.frozen.txt` via its own producer
+(`dump-judge-grammar.js`), NOT by hand. **5 entries moved — and
+`ENFORCE_REGION` moved for NEITHER file, i.e. the judging loop is
+byte-identical and only the data it accepts changed.** That is the right shape
+for a re-freeze.
+
+**Then the check refused again — correctly, and at a deeper level.**
+`judge-domains.authored.txt:179` authored `versus` as a FIXED LITERAL `0` on
+the reasoning *"the FOH launches VS only; target tests use TLAUNCH"*. **That
+reasoning conflated two axes**: VS-vs-target-test (genuinely TLAUNCH's job) with
+stock-vs-endless (a property OF a VS match). **Widened to `0 1` WITH A
+CITATION**, not to make a run pass: upstream's own binary toggle
+(`main.js:140,237-239`; `css.js:393`), and the widening is EARNED — A37 proved
+flag-off bit-identical across all 8 goldens and flag-on genuinely different,
+and A27's check reads the delta out of the sim's own checksum stream with the
+LAUNCH records compared field-for-field so it is ATTRIBUTABLE to this field.
+`check-judge-regression.sh` and `check-foh-flows.sh` both GREEN.
+
+### DEVICE LEGS THE DRIVER NOW OWES (all blocked — FunKey unavailable)
+**Reviewed sha re-pins:** `keymap-frozen.txt` -> `452b6e41…255ee` at
+`check-device-foh.sh:239`, `check-device-target.sh:147`,
+`m4-freeze-manifest.txt:438`, `m4-closure-ledger.txt:136`;
+`s1-session.script` -> `bac422f8…79cd2` at `m3-freeze-manifest.txt:52`.
+**Runs to re-take:** `check-device-foh.sh` (dump/frozen `cmp`, KEYMAP1 grammar,
+T12 keymap-swap teeth, T-devswap), `check-device-target.sh` (dump `cmp`),
+`check-device-input.sh` + `judge-s1-coverage.js` (the S1 session now injects
+`m`), `verify_m3.sh` leg 4 and `verify_m4.sh` (blocked on the pins above),
+`check-device-audio.sh` / `check-device-music.sh` (cadence windows measured at
+512, now shipping 2048), `check-device-fullgame.sh` (pins 512, affected NOW).
+**AND THE ONE NOTHING IN THE RIG CAN DO: press the physical L.** The rig injects
+through our own uinput while the buttons come from `fkgpiod`, which the quiesce
+bracket stops — that blindness is now written into `docs/PORTABILITY.md`.

@@ -161,8 +161,18 @@ S musicvol 0 10 options-audio audiomenu.js:13,101-112 masterVolume[1] clamped [0
 # `refused portconfig` when !(p1Type==0 && (p2Type==0||p2Type==1))). If a
 # p1type field ever appears on this line, that refusal has been weakened and
 # this row block is stale.
-# `versus=0` is a fixed literal, not a domain: the FOH launches VS matches
-# only, and the target-test plane uses TLAUNCH instead.
+# `versus` WAS a fixed literal `0` on the reasoning below, and that reasoning
+# conflated two different axes: VS-vs-target-test (which really is TLAUNCH's
+# job) with stock-vs-endless (a property OF a VS match). A27/D28 made the CSS
+# mode ribbon live and A37 made `versusMode` real in the sim, so it is now a
+# genuine 0|1 domain — upstream's own binary toggle, `setVersusMode(1 -
+# versusMode)` (main.js:140,237-239; css.js:393), 0 = stocks, 1 = endless.
+# THE WIDENING IS EARNED, NOT ASSUMED: A37 proved flag-off is bit-identical
+# across all 8 goldens (`SIM CONFORMS`) and flag-on genuinely changes the
+# match (`VERSUS ENDLESS OK`), and A27's check reads the difference out of the
+# sim's OWN checksum stream with the two LAUNCH records compared
+# field-for-field, so the hash delta is ATTRIBUTABLE to this field.
+# The target-test plane still uses TLAUNCH; that half of the note stands.
 L launch p1 0 4 characters.js CHARIDS registry, 5 chars; pipeline/expected.json chars=5
 L launch p2 0 4 characters.js CHARIDS registry, 5 chars; pipeline/expected.json chars=5
 L launch p2type 0 1 foh.c:682-687 launch refusal — port 1 is HMN(0) or CPU(1); N/A never launches
@@ -176,7 +186,7 @@ L launch tapjump1 0 1 gameplaymenu.js:56 `tapJumpOffp1 ^= true`; MENU-SPEC §3.1
 L launch tapjump2 0 1 gameplaymenu.js:56 `tapJumpOffp2 ^= true`; MENU-SPEC §3.1 row 4 col 1
 L launch tapjump3 0 1 gameplaymenu.js:56 `tapJumpOffp3 ^= true`; MENU-SPEC §3.1 row 4 col 2
 L launch tapjump4 0 1 gameplaymenu.js:56 `tapJumpOffp4 ^= true`; MENU-SPEC §3.1 row 4 col 3
-L launch versus 0 0 fixed literal — the FOH launches VS only; target tests use TLAUNCH
+L launch versus 0 1 main.js:140,237-239 setVersusMode(1-versusMode) binary toggle; css.js:393; A27/D28 ribbon + A37 sim (SIM CONFORMS 8/8 flag-off, VERSUS ENDLESS OK flag-on)
 L tlaunch char 0 4 characters.js CHARIDS registry, 5 chars; pipeline/expected.json chars=5
 L tlaunch tstage 0 9 activeStage.js:36-47 targetStageMapping has exactly 10 keys, 0..9 -> targetstage1..10
 

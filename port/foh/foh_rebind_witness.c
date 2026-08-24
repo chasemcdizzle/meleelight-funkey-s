@@ -480,7 +480,7 @@ static void a31_reset_and_removals(void) {
   want(is_identity(), "A on RESET restores the EXACT identity binding");
   want(ctl_style_get() == CTL_STYLE_DEFAULT,
        "A on RESET restores the default style");
-  want(!ctl_mod_on_r_get(),
+  want(ctl_mod_on_r_get(), // D29: the CURRENT default is Mod on R, shield on L
        "A on RESET restores the ratified Mod arrangement");
   // and the screen agrees, row by row, with the fresh label table
   {
@@ -660,7 +660,7 @@ int main(void) {
   // Before ANY leg runs and before any reset: the fresh-install record is
   // what a cold boot really has.
   want(is_identity() && ctl_style_get() == CTL_STYLE_DEFAULT &&
-           !ctl_mod_on_r_get(),
+           ctl_mod_on_r_get(), // D29: shield on L, Mod on R
        "a FRESH PROCESS starts on the identity binding, the default style and "
        "the ratified Mod arrangement");
   a31_rows_reachable();

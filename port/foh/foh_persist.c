@@ -49,7 +49,13 @@ void foh_persist_defaults(FohPersist *p) {
   // zero value — the enum numbers are frozen so MLFKPERSIST2 saves keep
   // their scheme across the v3 bump (ctl_style.h).
   p->ctlStyle = (int)CTL_STYLE_DEFAULT;
-  p->modOnR = 0; // the M3-ratified arrangement: Mod on L, shield on R
+  // D29 (A30(a), owner 2026-08-23): "box is good but L should be shield and
+  // R should be mod / tilt". The Mod shoulder is an ORTHOGONAL cell, not a
+  // scheme (ctl_style.h:69-77), and swapping is a pure RELABELING that leaves
+  // the ratified BOX table untouched. THIS line is the fresh-install default
+  // the player actually gets — ctl_style.c's initializer is overwritten by
+  // foh_persist_load(), so without this D29 is inert.
+  p->modOnR = 1; // D29: shield on L, Mod on R
   // v4 (MENU-SPEC §3/§4): the three options defaults that are NOT zero.
   // phantomThreshold is ON THE CHECKSUM SURFACE — zeroing it silently
   // flips physics, which is exactly the qjs getCookie defect (CLAUDE.md
@@ -365,7 +371,7 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
     v.modOnR = buf[pos + 7] - '0';
     pos += 9;
   } else {
-    v.modOnR = 0;
+    v.modOnR = 1; // D29: a v2/v3 file predates the cell; adopt the new default
   }
   // 50 rec rows, exact canonical order: "rec <c> <s> <hex16>"
   for (int c = 0; c < FOH_PERSIST_CHARS; c++) {
