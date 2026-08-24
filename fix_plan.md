@@ -5071,3 +5071,82 @@ checksum gate is not the only contract over those bytes.**
    upstream's `lostStockQueue.push`, so the HUD sees the 0 before the respawn.
    Our C marks that push render-plane no-op — correct today, and exactly the
    seam endless-mode stock icons will need.
+
+### A31 — DONE 2026-08-23 (D26). All four sub-items, and TWO PRE-EXISTING BUGS FIXED.
+
+**The design call, and why it is better than the sketch it replaced.** D13 had
+sketched a listening mode ("hold-A clear, protected primaries"). Lane M did NOT
+build it, deliberately: **the rows on this screen are PHYSICAL BUTTONS**, so
+listening would have to mean *"now press the button you want to swap with"* —
+backwards. Instead **L/R rebinds by SWAPPING** the selected row's action with
+whoever holds the one it steps onto. That is the idiom every other FOH row
+already uses and what the footer already promised.
+**The structural win: swapping keeps the table a PERMUTATION**, which retires
+THREE of D13's clauses at once — protected primaries, hold-A clear, and
+conflict detection — because **no action can ever be left on no button.**
+Row 0 (d-pad) is selectable and refuses with `deny`.
+
+**Sub-items:** (1) nine action rows bindable, `ctlRow` now spans eleven rows
+(9 actions + style + reset); (2) `mod` row gone from the SCREEN, cell KEPT in
+`ctl_style.c` for the BOX label table, the persisted record and A30(a) —
+swapping shoulders is now a plain rebind; (3) **`rebind: N/A` was NOT
+vestigial** — it was the screen saying out loud that D13's rebinder did not
+exist, deleted because the thing it denied now exists; (4) `RESET TO DEFAULTS`
+= identity binding + default style + ratified Mod, one A press.
+
+**Mechanism, and its safety property.** `ctl_bind_apply()` permutes the polled
+`PlatformInput` in `foh_dev.c`'s new `poll_bound()` — BEFORE the pause edge,
+the system-menu edge, the S1 resolver and the raw-key sidecar. So `s1_input.h`,
+the three chord tables and **every frozen S1 sweep never see the feature**;
+under the identity default it is a struct copy, so **no recorded session and no
+frozen stream moves.** The FOH **menu** loop deliberately keeps the RAW poll:
+**you must always be able to reach this screen and undo a rebind.**
+
+**Per-port** in the model and in `MLFKPERSIST5` (four `bind` rows); **UI on
+port 0 only** — exactly the A33 re-amendment's instruction.
+
+**Persistence: COMPLETE and round-tripping, not partial.** `MLFKPERSIST5` —
+68 lines, 1602 bytes, four permutation-validated `bind` rows. Verified
+host-side: save->load byte-for-byte; non-permutation and out-of-domain rows
+REFUSED; and a **genuine v4 file migrates** (settings + target records +
+identity bindings) and republishes as v5.
+
+### TWO PRE-EXISTING BUGS, FOUND BY BUILDING THE ABOVE
+1. **SETTINGS SILENTLY DID NOT SAVE ON THE PRODUCT BINARY.** `foh_dev.c`'s
+   persist arm named **only** `options-gameplay`, so a Controls or Audio change
+   reached SD **only if the player later B-exited an unrelated screen**.
+   `foh_app.c` already carried the correct three-screen form AND a note
+   explaining why — **the product binary never got it.** This is a real
+   user-facing data-loss bug that no check covered.
+2. **THE PERSIST VERSION GATES WERE ENUMERATED, NOT ORDERED.**
+   `foh_persist.c` gated blocks with `fromVer == 0 || fromVer == 3`, so the v5
+   bump silently dropped the `modonr` line for a v4 file and then **rejected a
+   good save as corrupt.** Caught by the NEW v4-migration leg. All gates are now
+   `>=` on one version number. **Class note: enumerated version gates are a
+   latent bug that only fires on the NEXT bump — grep for others.**
+
+**Check:** `bash port/foh/check-rebind.sh` -> `REBIND TOOTH OK`. Overdraw
+instrument; every screen claim bound to the PLAY PATH through the real
+`foh_tick`. **Five negatives, and the T2/T3 PAIR is the transferable idea:**
+T2 makes the screen ignore the binding (labels lie, buttons right); T3 makes
+`ctl_bind_apply` an identity copy (labels right, buttons lie). **Each must fail
+ALONE, so a half-wired build cannot pass from either side.**
+
+**`check-controls-labels.sh` was updated, NOT weakened; T2 intact.** Two grammar
+pins referenced `const int yRow[2] = {176, 190};` and its `foh_text` line, which
+no longer exist (eleven rows now). The pins follow the lines carrying the SAME
+coordinates (`yStyle = 176`), so the style row is still asserted at x=16/y=176.
+The witness gained nine DOWNs to walk to the style row (it used to open there).
+T1-T4 untouched.
+
+### ⚠ BLOCKER — DEVICE LEG OWED (driver's, not the lane's)
+**`check-device-persist.sh` was UPDATED for v5 but NEVER RUN** (FunKey
+disconnected). Changes: `PERSIST_BYTES` 1510->1602, 64->68 lines, positional
+whitelist gained the four `bind` rows with a permutation check,
+unsupported-version tooth moved v5->v6, shared post-migration expectation gained
+`v5_defaults()`.
+**Mitigation already done:** `verify_persist_file` was extracted and run
+standalone against a real v5 record (pass) and FOUR perturbed copies —
+duplicate slot, wrong port order, dropped row, v4 header — **all four
+rejected.** So the format-sensitive half IS verified; what is owed is the
+DEVICE half: `DEVICE FOH OK` and the reboot round trip.
