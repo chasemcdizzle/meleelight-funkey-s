@@ -5461,3 +5461,45 @@ tests.** Latency (§4) unchanged. **A24/A31/A32 stay as they are.**
 One fetch failed and is flagged rather than papered over: `linux-sunxi.org/V3s`
 -> HTTP 403, wanted only as corroboration for a fact already established three
 independent ways.
+
+## A25b + A3 — **ROOT CAUSE MEASURED ON DEVICE 2026-08-24. L EMITS THE WRONG KEYCODE.**
+
+Owner pressed L then R while the driver captured `/dev/input/event0` (the single
+`fkgpiod` virtual node — `/proc/bus/input/devices` shows exactly one, handlers
+`kbd event0`). Decoded 16-byte `input_event` records:
+```
+KEY_M (code 50) PRESS/REPEAT/RELEASE   <- the physical L SHOULDER
+KEY_N (code 49) PRESS/RELEASE          <- the physical R SHOULDER
+```
+**`port/foh/keymap-frozen.txt` says `map l K k`. The button emits `M`/`m`.**
+R's `map r N n` is CORRECT, which is exactly why R worked and L did not.
+
+**This closes the diagnosis lane I opened.** Everything downstream of the
+keycode was already proven green ON DEVICE by `f07-target-t02` (it injects `K`
+through fk_input -> uinput -> SDL -> `platform_poll` and asserts the frozen
+`p1char 4` wrap), and host-side by running the real translation arm. The fault
+was always the FIRST hop, and it is a one-token pin error.
+
+**`m` IS FREE** — the frozen keymap's twelve rows use
+`u d l r a b x y s k n q`; no `m`. **No collision; the fix is `map l M m`.**
+
+**WHY NO CHECK COULD EVER HAVE CAUGHT IT** (measured earlier by lane I, now
+confirmed): every device check injects through **our OWN uinput node**, while
+the physical buttons come from **`fkgpiod`**, which the rig's own quiesce
+bracket STOPS for the duration of a device run. **The rig is structurally blind
+to physical-button -> keycode for EVERY button.** And the `map l K k` row was
+never measured on this device — its provenance is donor archaeology from
+ssb64 (`docs/research/funkey-envelope.md:77`). Of the twelve letters, `k` was
+the ONE with no independent confirmation, and it is precisely the one that was
+wrong.
+
+### THE FIX IS ONE TOKEN — BUT `keymap-frozen.txt` IS A FROZEN ARTIFACT
+Do NOT drive-by edit it. Per lane I's own analysis, changing that row is a
+**reviewed change with a PAIRED RE-MEASURE**: `foh_dev --dump-keymap` is
+`cmp`'d against the file by `check-device-foh.sh`, and the **keymap-swap teeth
+at `check-device-foh.sh:695` / `:721` and the `T-devswap` device tooth at `:51`
+are all in the blast radius** (the `f07` fks derivation and both `NAV_LINK`s are
+NOT). **A3 rides this same fix** — it is one defect at two call sites, and once
+L arrives it becomes a real shield button in the default NATURAL style
+(`s1_input.h:165-183`, `*shield = (p->l || p->r)`), so the blast radius includes
+the MATCH, not just the menus.
