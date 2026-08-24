@@ -5391,3 +5391,73 @@ UNKNOWN -> now §1.4 flipped, each time by MEASUREMENT beating a plausible
 reading of source. The spike ITSELF nominated this command as the thing that
 would settle §1.4 and told the driver to run it before retiring A24/A31/A32 on
 its authority. **That instruction was correct and it paid.**
+
+## A33 — SCHEMATIC ANSWER 2026-08-24: **ROUTED.** And "USB1" NEVER EXISTED.
+
+Full document: `docs/research/gc-adapter-usb1-routing.md`. Answered entirely
+from PUBLISHED SOURCES — the owner was right that this is open hardware and did
+not need a multimeter.
+
+**THE PREMISE (mine) WAS WRONG. There is no second USB block.**
+`/sys/bus/usb/devices/usb1` is a Linux **BUS NUMBER**, not a port number. The
+V3s has **exactly one USB port**. The EHCI/OHCI at `1c1a000`/`1c1a400` are the
+**HOST-SIDE CONTROLLERS OF THAT SAME PORT**, sharing the same two pins as the
+micro-USB connector. **The host controller's D+/D- ARE J2's D+/D-.**
+**Nothing to solder. No unpopulated footprint. An OTG cable already reaches
+them physically; ONE PHY ROUTING BIT gates them logically.**
+
+**Decisive citations, two sides of the seam, locking together:**
+- **Allwinner V3s Datasheet V1.0** memory map names `0x01C1A000`
+  **`USB OTG_EHCI0/OHCI0`** — the host controllers *of the OTG port* — and the
+  feature list says "**One** USB 2.0 OTG controller with integrated PHY". Pin
+  list: 110 `USB-DM`, 111 `USB-DP`; the pin-description table has only
+  `USB-DP0`/`USB-DM0`; **zero occurrences of `DP1`/`DM1` in the entire
+  document.** (The PDF ships in FunKey's OWN hardware repo,
+  `FunKey-S-Hardware/Datasheets/`.)
+- **FunKey Rev E KiCad netlist** (`FunKey.net`), verbatim: `/USB_P` = `U3`
+  pin 111 + `J2` pin 3; `/USB_N` = `U3` pin 110 + `J2` pin 2. **Three USB nets
+  on the whole board.**
+
+**THE MECHANISM — this is why nothing enumerates today.** `phy-sun4i-usb.c`:
+V3s sets `.phy0_dual_route = true`, and `sun4i_usb_phy0_reroute()` **clears**
+`OTGCTL_ROUTE_MUSB` (`BIT(0)` of `REG_PHY_OTGCTL`) for host, **sets** it for
+peripheral. `dr_mode = "peripheral"` -> `id_det = 1` -> routed to MUSB. **One
+bit. That is the entire blocker.**
+
+### THREE MORE CORRECTIONS — one of them to the DRIVER'S OWN reading
+1. The prior spike's §1.3 "boilerplate ... root hubs that can never enumerate"
+   is **WRONG**. Real controllers, real port (`maxchild 1` **is** J2), signal
+   path merely switched away.
+2. §1.4's *"`dr_mode = "host"` (or `"otg"`)"* — **the parenthetical is wrong.**
+   With no `id-det-gpio`, `"otg"` hits an explicit `/* Fallback to peripheral
+   mode */` and routes to MUSB. **Only the literal `"host"` works.**
+3. **THE DRIVER MIS-READ A LOG LINE 2026-08-24.** I cited
+   `usb_phy_generic ...: supply vcc not found, using dummy regulator` as
+   evidence about the host controllers. **It is MUSB's**, from
+   `drivers/usb/musb/sunxi.c:779`. It says **nothing** about host-side PHY
+   state. Sixth premise falsified by measurement this session — and the third
+   of mine.
+
+**Fork gotcha, recorded for whoever attempts it:** `ehci0`/`ohci0` carry **no
+`phys` phandle**, so EHCI can never init the PHY itself — **MUSB must still
+probe successfully for the reroute to happen. Deleting MUSB would kill host
+mode too.**
+
+### THE TRADEOFF THE OWNER MUST DECIDE (driver inference — VERIFY BEFORE ACTING)
+**`adb` runs over MUSB in gadget mode.** If `dr_mode` becomes literal `"host"`,
+the PHY routes away from MUSB, so **`adb` — and with it every device check,
+every gate leg and the whole verification rig — very likely stops working on
+that image.** Runtime switching is NOT available: it needs ID detection, and
+R4 is deliberately unmounted. **On a ONE-PORT device this reads as
+controller-OR-adb, not both.** LABELLED INFERENCE from the mechanism above,
+not measured — **confirm on a throwaway SD before any real work.**
+
+### STILL OPEN (unchanged, and no rows close on this)
+**VBUS.** The board cannot source it; whether a sunxi host port that never
+asserts VBUS will still enable and enumerate a **self-powered** device is a
+driver-behaviour question no source settles. **That is what a fork actually
+tests.** Latency (§4) unchanged. **A24/A31/A32 stay as they are.**
+
+One fetch failed and is flagged rather than papered over: `linux-sunxi.org/V3s`
+-> HTTP 403, wanted only as corroboration for a fact already established three
+independent ways.
