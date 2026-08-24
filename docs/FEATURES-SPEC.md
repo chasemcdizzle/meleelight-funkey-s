@@ -129,3 +129,120 @@ device to observe the failure at all.
    comment, concluded "not fixed", and was wrong — exercising the behaviour
    took two minutes and was decisive.
 5. **Commit on your own branch only.** The driver merges.
+
+---
+---
+
+# PART 2 — THE REMAINING WORK (spec'd 2026-08-24, owner: *"do everything that's left"*)
+
+Vocabulary is pinned in **`/CONTEXT.md`** — read it first. Every term below in
+`code font` is defined there, and most of them are defined there *because they
+already caused a defect*.
+
+## 6. What is actually left
+
+| # | Ticket | One line |
+|---|---|---|
+| **A42** | X→grab does nothing | `z` is not grab in this engine |
+| **A43** | CSS back-out re-selects falcon | token re-homed from pixels, not `selection plane` |
+| **A40** | Shieldbreaker charge sound never stops | two `play id` counters drift |
+| **A44** | No P3/P4 at the CSS | FOH models 2 ports; the sim already does 4 |
+| **A7** | Credits screen | ~422-line transliteration |
+| **A45** | Target builder | 58.5 KB upstream editor; the plane `+ ADD CODE` refuses |
+| **A14** | Glyph-atlas swap | 41 call sites; unblocks D8 |
+| **D8** | Tag widgets + letter grid | blocked by A14 |
+| **A26** | Hibernate/resume | needs a signal probe on device |
+| **A34** | POWER OFF dead | diagnosis; needs device |
+
+## 7. The through-line: this project's defects live at `seam`s
+
+A42 and A40 are the same *shape*: **both planes' own checks were green, and
+nothing asserted the crossing.** A43 and A29 are the same shape too — the
+`selection plane` and the `token plane` each self-consistent, disagreeing with
+each other.
+
+**So the highest-value work is not any single ticket. It is one instrument that
+crosses the resolver→sim seam** (spec'd as A42's class fix below). It retires a
+whole family, and without it every future remap ships equally broken.
+
+## 8. Tickets, spec'd
+
+### A42 — X must reach a real grab. **Class fix mandatory.**
+**Do not** wire `X` to `z` and call it grab; that is the shipped defect.
+`z` is the alternate smash-attack button (measured: 3 readers, 0 grabs).
+**Reach a real trigger instead** — shield+A, or the analog shoulder. Preferred:
+synthesise what Melee's Z *is* (A + lightshield), which reaches
+`GUARD.c:75`/`KNEEBEND.c:66`.
+**THE DELIVERABLE IS NOT THE BUTTON — IT IS THE SEAM CHECK.** Press a physical
+button → real resolver → **real sim tick** → assert the resulting *action
+state*. Cover every role D33 moved (A=jump, B=attack, Y=special, X=grab), so
+the next remap cannot ship broken. *Fold in* the emitted-vs-renderable vfx
+comparison (39 vs 43, currently a hand-run one-liner) — same instrument rung.
+
+### A43 — re-home the token from the `selection plane`
+Same family as D21. On back-out and re-entry the token must return to the
+**stored character**, never to the nearest cell by pixel position and never to
+the port index. The selection survives — A29 measured that. Tooth: pick a
+non-default character, back out, re-enter, assert both planes agree.
+
+### A40 — one `play id` counter, or a menu play that does not consume one
+Root cause measured: the mixer advances on **every** event, the sim plane only
+on sound plays, and the menu chokepoint calls the mixer directly. Recommended
+shape: `snd_event_menu()` beside `snd_event()`, and point the menu caller at
+it. **Function and caller must land together** (an uncalled static trips
+`-Werror`). Tooth: play N menu sounds, then assert a sim-started voice still
+stops — `stopsUnmatched` must stay 0.
+
+### A44 — widen the FOH to four `port`s
+The sim is already 4-wide (player plane, `tapJumpOff[4]`, goldens, AI). This is
+presentation only: 2 more panels, 2 more token lanes, type/CPU boxes, and every
+CSS check's expectations. `css_ready` already loops 0..3. **Scope check first:**
+4 panels on a 240×240 screen may not fit at the current panel size — if not,
+report the layout options rather than silently shrinking.
+
+### A7 — credits
+Unblocked; owner already delegated the RNG choice to a FOH-local stream (D19's
+reasoning). ~422-line zero-DOM transliteration. A6's audio-options screen is the
+finished template to copy.
+
+### A45 — target builder
+`src/target/targetbuilder.js`, 58.5 KB, in the pinned clone. It is a
+**rewrite**, not a transliteration (jQuery+DOM editor → 240×240 C), exactly as
+the FOH was. It is the plane `+ ADD CODE` currently refuses. **Its own arc.**
+Sequence after A7.
+
+### A14 → D8
+Glyph-atlas swap: `foh_text2` → `gfx_glyphs_load`, 41 call sites. Position-
+neutral (later screens author against the new font either way). **Cheaper than
+long quoted** — there are no committed screenshot bytes to re-freeze; the cost
+is device time to re-run legs. D8's tag widgets + letter grid follow it.
+
+### A26 / A34 — device-blocked
+A26: hibernate kills the app (owner-measured). Next step is a *signal probe* —
+install a handler that logs to tmpfs, hibernate, reopen, read the log. That
+decides handler-vs-checkpoint. A34: POWER OFF is wired at `foh_pause.c:570`;
+diagnose why the arm does not take, comparing against QUIT which works.
+
+## 9. Lanes and order
+
+```
+LANE M (menus/text — SERIAL, §A-par.3)
+  A43 → A44 → A7 → A14 → D8 → A45
+LANE I (input)     A42  ← includes the seam instrument
+LANE A (audio)     A40
+LANE P (platform)  A26, A34   [device-blocked]
+```
+**Frontier now: A42, A43, A40** — three planes, genuinely parallel.
+A44 queues behind A43 (same files). A45 last: it is the largest and it wants
+the credits template to exist first.
+
+## 10. Standing rules for every lane
+
+Inherit §5. Additionally, learned the hard way this session:
+- **A comment is not evidence.** `z` was documented as grab and is not.
+- **A name is not evidence about its plane.** Sounds and vfx read alike.
+- **Verify the premise before building.** Ten filed premises were falsified by
+  running the code; five were the driver's own.
+- **Deviation numbers are DRIVER-ALLOCATED.** Two lanes collided on D29.
+- **The device is the owner's daily driver.** No device runs; name the legs you
+  make owed. Never leave a persistent marker that outlives the test.
