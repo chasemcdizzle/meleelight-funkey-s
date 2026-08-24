@@ -79,7 +79,13 @@ void platform_poll(PlatformInput *in) {
   in->x = k[SDL_SCANCODE_X] != 0;
   in->y = k[SDL_SCANCODE_Y] != 0;
   in->start = k[SDL_SCANCODE_S] != 0;
-  in->l = k[SDL_SCANCODE_K] != 0;
+  // L is M, not K (A25b: the device's L shoulder emits KEY_M — measured
+  // 2026-08-24). This backend is a SECOND, scancode-indexed copy of the
+  // mapping and cannot consume platform_keymap.h's ASCII-keysym table, so
+  // it is kept in step by hand and named as a duplicate here rather than
+  // silently: SDL2 scancodes are a different index space from SDL1.2's
+  // ASCII keysyms, so there is no shared array to point both at.
+  in->l = k[SDL_SCANCODE_M] != 0;
   in->r = k[SDL_SCANCODE_N] != 0;
   in->menu = k[SDL_SCANCODE_Q] != 0;
 }

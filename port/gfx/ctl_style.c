@@ -14,8 +14,27 @@
 static CtlStyle g_style = CTL_STYLE_DEFAULT;
 
 // Owner ruling 2026-07-29: the Mod shoulder is remappable. false keeps
-// the M3-ratified arrangement (Mod on L, shield on R).
-static bool g_modOnR = false;
+// the M3-ratified arrangement (Mod on L, shield on R); true is the
+// SWAPPED one (Mod on R, shield on L).
+//
+// DEFAULT FLIPPED TO true — fix_plan A30(a), DEVIATION D29. Owner,
+// 2026-08-24: "box is good but L should be shield and R should be mod /
+// tilt." This is a pure RELABELING of the two shoulders, not a table
+// edit: the ratified BOX chord table is byte-untouched and ctl_roles()
+// (s1_input.h:173-184) already reads this cell to decide which shoulder
+// carries which role, which .loop/ctl-style-check.sh proved by dumping
+// all 2048 combos under BOTH arrangements. It is a no-op in
+// NATURAL/NORMAL, where both shoulders shield.
+//
+// THIS INITIALIZER IS NOT THE PRODUCT'S EFFECTIVE DEFAULT. Every FOH
+// binary calls foh_persist_load() at boot, which runs
+// foh_persist_defaults() and then ctl_mod_on_r_set(p.modOnR != 0) —
+// so the fresh-install value the player actually gets is
+// port/foh/foh_persist.c:52 (`p->modOnR = 0`), and the v2/v3 migration
+// default at :368. Until the FOH lane flips those two to 1 this flip
+// only reaches processes that never load a persist record. Measured,
+// not assumed: foh_dev.c:1345 and foh_app.c:459 are the two setters.
+static bool g_modOnR = true;
 
 CtlStyle ctl_style_get(void) { return g_style; }
 

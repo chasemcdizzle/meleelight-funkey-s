@@ -8,6 +8,6 @@ map b B b
 map x X x
 map y Y y
 map start S s
-map l K k
+map l K m
 map r N n
 map menu Q q

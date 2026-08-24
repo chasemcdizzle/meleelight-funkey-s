@@ -2,7 +2,10 @@
 # (M3 task 5; played by port/tools/fk_input.c on the FunKey-S).
 #
 # Letter keysyms (CLAUDE.md "Device access" / platform_sdl1.c):
-#   u/d/l/r = d-pad   a/b/x/y = face (y = S1 C-layer)   k = L (Mod)
+#   u/d/l/r = d-pad   a/b/x/y = face (y = S1 C-layer)   m = L (Mod)
+#   (L moved k -> m on 2026-08-24: the physical L shoulder emits KEY_M,
+#    measured off /dev/input/event0 — fix_plan A25b + A3. The session is
+#    UNCHANGED in what it presses; only the keysym that reaches it is.)
 #   n = R (shield)    s START is EXCLUDED on purpose (pause is main.js
 #   browser plane, outside the sim's captured domain; start->s mapping
 #   is proven by the s1_sweep unit harness).
@@ -40,38 +43,38 @@ u l
 s 60
 
 # --- L-walk right (0.6625) ---
-d k
+d m
 d r
 s 300
 u r
-u k
+u m
 s 60
 
 # --- L-walk left (-0.6625) ---
-d k
+d m
 d l
 s 250
 u l
-u k
+u m
 s 60
 
 # --- L u-tilt (0, 0.5375) with A ---
-d k
+d m
 d u
 s 200
 d a
 s 200
 u a
 u u
-u k
+u m
 s 60
 
 # --- L d-tilt (0, -0.5375) ---
-d k
+d m
 d d
 s 250
 u d
-u k
+u m
 s 60
 
 # --- plain up (0, 1.0) — tapJumpOffp1 surface: no tap jump ---
@@ -100,13 +103,13 @@ u y
 s 60
 
 # --- L-diagonal up-right (0.7375, 0.3125) ---
-d k
+d m
 d u
 d r
 s 300
 u u
 u r
-u k
+u m
 s 60
 
 # --- shield alone (r=true rA=1.0) ---
@@ -131,7 +134,7 @@ s 60
 d x
 s 120
 u x
-d k
+d m
 d n
 d d
 d l
@@ -139,7 +142,7 @@ s 300
 u d
 u l
 u n
-u k
+u m
 s 60
 
 # --- SOCD: left+right -> neutral ---
@@ -226,7 +229,7 @@ u n
 s 60
 
 # --- L+R+down-right wavedash chord (0.6375, -0.375) ---
-d k
+d m
 d n
 d d
 d r
@@ -234,4 +237,4 @@ s 250
 u d
 u r
 u n
-u k
+u m
