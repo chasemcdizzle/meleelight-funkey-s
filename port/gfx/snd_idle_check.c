@@ -44,13 +44,18 @@ static void sim_fatal(const char *what) {
   exit(2);
 }
 
+#include "platform.h"  // PLATFORM_AUDIO_SAMPLES_DEFAULT (the real period)
 #include "snd_mixer.h"
 
 // One SDL period at the shipped spec (platform_audio_sdl.h wants
-// 44100/S16LSB/2ch; foh_dev.c:1555 and gfx_app.c:567 default to 512
-// sample frames). Judged at that size and at an odd size, so a
-// block-quantised write bug cannot hide.
-#define IDLE_FRAMES 512
+// 44100/S16LSB/2ch; the period is platform.h's
+// PLATFORM_AUDIO_SAMPLES_DEFAULT — A28 raised it from 512 to 2048 when
+// the 512-frame refill deadline turned out to be shorter than one video
+// frame). Judged at that size and at an odd size, so a block-quantised
+// write bug cannot hide. The size is irrelevant to what this checks —
+// it asserts the fill writes EVERY frame it is handed — but taking the
+// period from the constant itself keeps the case honest for free.
+#define IDLE_FRAMES PLATFORM_AUDIO_SAMPLES_DEFAULT
 #define ODD_FRAMES 173
 #define MAX_FRAMES IDLE_FRAMES
 

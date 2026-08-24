@@ -97,6 +97,12 @@ P99_RENDER_LIMIT_NS=8000000 # PLAN §5 render allowance (8 ms)
 BUDGET_NS=16666667          # 60 fps pacing budget for the live run
 FRAMES_PIN=3600             # the literal gate length; manifest cross-asserted
 AUDIO_SAMPLES=512           # the measured spike config (pinned into the judge)
+# REQUESTED, not inherited (A28, 2026-08-24) — same reason and same
+# registered gap as check-device-audio.sh:123-140: A28 raised the app
+# default (platform.h PLATFORM_AUDIO_SAMPLES_DEFAULT) off 512, so this
+# leg passes --audio-samples explicitly rather than pinning a number it
+# never asked for. Re-pinning to the shipped size needs a device
+# re-measurement of CBS_MIN/CBS_MAX (borrowed from check-device-audio.sh).
 GFXDATA_FROZEN=$GFX/gfxdata-frozen.txt
 GFXDATA_SHA256=5499a3dd5fc374d6ed988faf0bef6fa2e189eb314e892bdd83c7534dc0865c94
 VFXDATA_FROZEN=$GFX/vfxdata-frozen.txt
@@ -1224,7 +1230,7 @@ setsid sh -c 'date +%s > $DTMP/app.start.ts; ./gfx_device \
   --seed $seed --p1 $p1 --p2 $p2 --stage $stage --frames $frames \
   --pace 1 --budget-ns $BUDGET_NS \
   --out $DTMP/g01.mus-out.txt --timing $DTMP/g01.mus-tim.txt \
-  --sndpack $DTMP/sndpack.bin \
+  --sndpack $DTMP/sndpack.bin --audio-samples $AUDIO_SAMPLES \
   --music $DSD/battlefield.pcm --music-volbits $M_VOLBITS \
   --music-start $M_SO,$M_SD --music-loop $M_LO,$M_LD \
   --music-lat $DTMP/g01.mus-lat.txt 2> $DTMP/g01.mus-log.txt & \
