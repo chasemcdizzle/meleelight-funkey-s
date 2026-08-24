@@ -45,7 +45,12 @@ static inline void foh_ctl_labels(CtlStyle style, bool modOnR,
   out[0] = "CONTROL STICK";
   out[1] = "JUMP";
   out[2] = "ATTACK";
-  out[3] = "GRAB (Z)";
+  // A42/D34: NOT "(Z)". Measured — `z` never dispatches GRAB in this engine
+  // (it is an alternate ATTACK + an lCancel trigger); grab is reached by the
+  // A+lightshield chord X now sends. The old "(Z)" label was the last
+  // surviving instance of the claim that misled two agents into shipping a
+  // grab button that did nothing. See CONTEXT.md, entry `z`.
+  out[3] = "GRAB";
   out[4] = "SPECIAL";
   out[5] = boxMod ? (modOnR ? "SHIELD" : "MOD / TILT") : "SHIELD";
   out[6] = boxMod ? (modOnR ? "MOD / TILT" : "SHIELD")

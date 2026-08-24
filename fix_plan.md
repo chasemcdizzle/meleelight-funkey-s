@@ -6528,3 +6528,77 @@ scope-excluded since M4 task 12. **58 KB of jQuery+DOM editor is the single
 largest un-ported surface left**, and it is a REWRITE (like the FOH), not a
 transliteration. Sequence it with A7/credits as the owner said; it wants its
 own arc.
+
+## A42/A43/A40 — ALL THREE LANDED 2026-08-24. `SIM CONFORMS` 8/8 on merged bytes.
+
+### A42 (D34) — X GRABS. **AND THE SEAM INSTRUMENT REPRODUCED THE BUG ON ITS FIRST RUN.**
+**My `z` inventory was SHORT BY THREE.** The lane read every call site rather
+than trusting the brief: besides the 15 SMASH readers, `z` is also
+`action_state_shortcuts.c:522` (checkForAerials) and **`physics.c:983`
+(lCancelUpdate)**, plus the AI plane. **So `z` is an alternate ATTACK button AND
+an L-CANCEL trigger — not merely "smash-alt" as I recorded it.** Still zero
+`GRAB` dispatches.
+
+**The fix is Melee's actual Z chord:** `in.a |= p->x` **and**
+`in.lA = S1_ZGRAB_LA` (49/140, the light-shield level, cited from
+`docs/research/b0xx-mapping.md` §2.2). **Chosen because ONE chord reaches ALL
+FIVE grab arms**, not just GUARD's — `WAIT.c:56`/`DASH.c:72` take their
+`lA>0||rA>0` arm into GUARDON, whose `init->main->interrupt` chain runs **inside
+the same tick** and still sees the `a` edge. **Both bounds are load-bearing:**
+`>0` or no grab arm fires; `<1` or `GUARDON.c:21` **powershields on every
+press**.
+**The alt-attack role is NOT traded away** — every `z` reader is an `a || z`
+form and lCancel's third arm is an `lA` edge, so `a`+`lA` covers all of them
+identically. `z` is dropped rather than kept as a second name for a bit `a`
+already sets.
+
+**THE INSTRUMENT IS THE TICKET, AND IT PROVED ITSELF.** `ctl_seam_witness.c`
+(leg [4] of `check-ctl-input.sh`): physical button -> real
+`s1_input_row_style` -> **real `sim_game_tick`** -> the actionState the engine
+enters. **Run against the UNFIXED tree it reproduced the owner's symptom
+immediately:**
+```
+A -> KNEEBEND   B -> JAB1   Y -> NEUTRALSPECIALGROUND   X -> (WAIT)
+```
+After: `X -> GRAB` in all 3 styles, + X-while-SHIELDING -> GRAB, X-while-DASHING
+-> GRAB, and **X-AIRBORNE -> ATTACKAIRN** (pinning that the alt-attack role
+survived). **Leg [3e] no longer CLAIMS grab — it claims the chord and points at
+leg [4], because a bit assertion claiming an action is precisely what shipped.**
+
+**The vfx leg [5] corrected my hand-count: 41 emitted vs 45 templates, not
+39/43 — my one-liner undercounted BOTH sides.** Difference still empty. It
+matches the CALL, never a bare string, and carries a **BLINDNESS GUARD**: any
+`ml_drawVfx*` call outside `ml_events.{c,h}` that does not pass a string literal
+**fails the leg loudly**, because one variable-named emit site would silently
+make the whole comparison vacuous.
+
+**Pinned S1 expectations moved (D34, none weakened):** the 2048-combo
+invariants (`in.a == (p.b||p.x)`; `in.lA == p.x ? S1_ZGRAB_LA : 0` replacing a
+flat `lA==0`; `in.z` moved INTO the never-set list) and the dump's `z` column ->
+`lA`, **so the live plane stays inside the device-vs-host byte comparison**.
+
+**DRIVER FOLLOW-UP, LANDED:** the lane flagged `foh_ctl_labels.h:48` still
+reading **`"GRAB (Z)"`** — *the last surviving instance of the false claim* — in
+a file it could not touch. No lane owns `port/foh/` now, so the driver corrected
+it **together with the 6 rows of `check-foh-flows.sh`'s pinned 54-row label
+table in ONE change** (leg `[0m]` requires exactly that). `FOH FLOWS OK`.
+
+### A43 (D35) — the back-out leaked the TOKEN GRAB, not the pixels
+Owner's diagnosis was *nearly* right: he guessed the pin released and snapped to
+the nearest character. **The real mechanism is that the GRAB ITSELF leaks across
+the back-out**, so the token stays nominally held. The lane's note is the
+valuable part: **the spec ALREADY documented the overlap** (*"you exit at frame
+30 while still nominally carrying"*) **without noticing its consequence.** The
+behaviour was written down; nobody connected it to a bug.
+
+### A40 — the menu plane must not consume a sim `play id`
+Landed with `snd_playid_check.c` — **the CLASS is instrumented, not the one
+sound**, so puff's `furaLoopID` exposure is covered by the same check.
+
+**VERIFIED ON MERGED BYTES:** `SIM CONFORMS` 8/8 · `CTL INPUT CHECK OK` ·
+`CSS TOKEN REST` · `SND IDLE SILENT` · `REBIND TOOTH OK` · `FOH FLOWS OK`.
+
+**DEVICE LEGS OWED (added):** `check-device-input.sh` legs [4]-[9] — the live S1
+session and the re-cut `judge-s1-coverage.js` pairing, **the leg that witnesses
+the grab fix physically**; `verify_m3.sh` leg (4); `install-play-opk.sh`
+reinstall so the device build carries D34/D35/A40.
