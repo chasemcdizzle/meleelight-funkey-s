@@ -5641,3 +5641,77 @@ than merely unreported. T6's own line reads *"the unclamped copy reaches frame
 teeth and then failed its no-commit fingerprint because this lane committed
 A27 while it ran — the rig's own message calls that case out and says nothing
 above it is invalidated; it was re-run clean rather than argued with.)
+
+### A27 — DONE 2026-08-24 (D28). THE MODE RIBBON REACHES THE SIM, PROVEN BY CHECKSUM.
+
+Owner's ask — *"if you click the 'VS Melee' in the CSS it should change modes"*
+— is live. Stock <-> endless, `setVersusMode(1 - versusMode)` at upstream's own
+site (`css.js:389-394`).
+
+**A23 gave the IDIOM, not the code** — a useful correction to the driver's
+"most of your work may already exist". A23's BACK arm runs **before** the hand
+integrates (`css.js:186`); the ribbon's runs **after** it (`css.js:389`).
+Different positions in the same function. What was reused is the D4 constants
+pattern: `FOH_CSS_MODE_{X0,X1,Y0,Y1,CAP}` build the plate in `css_header` AND
+hit-test it in `step_css`, one source. The arm is 6 lines, placed inside the
+"hand outside the roster band" branch **so a hand carrying a token cannot
+toggle the mode** — upstream's own placement.
+
+**D28 is a GEOMETRIC deviation only:** upstream's `y in (100,160)` maps to
+y 32..51 here — *under* our 26 px header, on the roster row. The BACK wedge
+could use upstream's ratio only because 920/1200x240 = 184 happened to land on
+its drawn extent; this one does not, so **the drawn extent wins, which is what
+D4 says.**
+
+**PROOF IT IS NOT A STUB — the strongest done-check yet.**
+`bash port/foh/check-css-mode.sh` -> `CSS MODE CHECK OK (3 teeth)`. It launches
+a REAL g01 match through `foh_app --bridge verify` and **reads the answer out of
+the sim's own checksum stream**: stock frame-1 = `9f4c6df7…` (**CHECKSUM.md's
+own g01 anchor**, and its LAUNCH record byte-equal to the frozen `f01` one);
+endless frame-1 = `97189d26…`. The two LAUNCH records are compared
+field-for-field **so the hash difference is ATTRIBUTABLE to the mode**, not
+merely coincident with it. **T3 moves the bridge write ONE LINE past
+`sim_setup_match` and the endless match collapses back to 4 stocks** — i.e. it
+tests exactly the ordering constraint lane S warned about.
+
+**Label:** endless carries upstream's own words on two rows (`ENDLESS` /
+`KO FEST!`); **stock keeps `VS. MELEE` under duress, not by preference** —
+every judged CSS shot is taken in stock mode and the device was offline, so
+nothing could be re-frozen. The check proves the stock frame is **byte-identical**
+by cmp against a build whose label is unconditional. **OWNER DECISION AVAILABLE:
+if stock should read `STOCK` or `4-MAN`, that is a re-freeze call, not a code
+change.**
+
+### A39 — REPAIRED 2026-08-24. AND THE CAUSE IS A LESSON, NOT A BUG.
+
+**Where the tooth stopped biting: commit `844b8a6`, "A14: widen the browser
+glyph atlas (43 -> 179 records)", 2026-08-05.** T6 required the unclamped build
+to abort with `glyphs: font 0 has no glyph '-'`. **A14 gave atlas specs 0 and 3
+`MENU_CHARS`, which contains `-`.** Measured: `GLYPH 0 45` occurs **0** times at
+`bdc4781` and **1** from `844b8a6` on. **A change about MENU TEXT silently
+deleted a SIM-HUD tooth's trigger.**
+
+**Is the clamp still necessary? YES — repaired, not retired.** Without it the
+HUD no longer dies; it **silently draws `-1:-0` instead of `00:00` on the finish
+frame of every timed-out match.** The clamp's argument never depended on the
+atlas (upstream never renders that frame — `main.js:1243`'s `playing` guard vs
+`finishGame`'s `playing = false`). **A loud abort became a quiet wrong clock:
+strictly worse to lose.**
+
+**The repair asserts OUTPUT, not a diagnostic string** — the copy must complete,
+reach the same expiry frame, and its `finish-banner.ppm` must DIFFER from arm
+B's. Nothing relaxed.
+
+**⚠ THE STANDING LESSON (class-level, carry it):** **a tooth that asserts a
+DIAGNOSTIC STRING is hostage to any unrelated change that can delete that
+string.** Assert the OUTPUT the clamp protects, never the error text it happens
+to produce today.
+
+**Second pre-existing defect, found by running the rig:** its no-commit
+fingerprint could not run AT ALL in a tree holding an untracked non-executable
+file — `printf "- %s\n"` makes bash read the format as an OPTION. **Every lane
+that adds a new `.c` beside its check hits this.** Fixed with `printf --`.
+
+**`LIVE ARMS OK (sysmenu=4 vsfinish=1 drains=3 teeth=15)`, exit 0 — the first
+green since the tooth broke, which also LIFTS THE MASKING on the other 14
+teeth.** A39 closes.
