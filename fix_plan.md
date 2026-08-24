@@ -5765,3 +5765,34 @@ gain:** `Headphone` and `DAC` both sit near 80% with ~-14 dB. Amp-generated
 noise scales with amp gain while our digital signal does not have to — lowering
 analog gain and raising digital level trades headroom for a lower audible noise
 floor. **Measure before adopting; do not assume the direction.**
+
+### A28 — 2026-08-24, SECOND DISCRIMINATOR: **NOT A PLATFORM TRAIT.**
+
+Owner: *"ssb64 has no audio not sure why... i launched super mario 64 and it's
+fine."* **SM64 opens the same V3s codec on the same device and plays cleanly.**
+(ssb64 was inconclusive — it produced no audio at all, so it never opened the
+device; SM64 is the valid comparator.)
+
+**So the buzz is not "what this hardware does when you open its codec".
+Something about HOW WE OPEN IT differs.** Combined with the first
+discriminator, A28 is now bounded on three sides: our samples are bit-exact
+zero, the mixer routing is clean, and another app drives the same codec without
+buzzing.
+
+**LEADING HYPOTHESIS, and it is the one our instrumentation CANNOT SEE:**
+we open **44100 / S16LSB / 2ch / 512 frames** — an 11.6 ms period. A constant
+train of DMA xruns at that period would be audible exactly as a continuous
+buzz, and **`platform_audio_sdl.h:44-51` documents that our `underruns` counter
+is STRUCTURALLY BLIND to them** ("DMA-XRUN BLINDNESS": an xrun makes the SDL
+write return SOONER, so inter-callback gaps only shrink and the counter stays
+0). **Its green reading has never been evidence about this.**
+
+Second candidate: `docs/research/audio-spike.md:31-34` records the device
+granting **22050 stereo exactly**, while we demand 44100 with an
+exact-spec-or-fail check. Worth reconciling (A35 already registers the
+2x-upsampling observation and the unresolved tension there).
+
+**NEXT MEASUREMENT (driver, needs the game running):** read
+`/proc/asound/card0/pcm0p/sub0/hw_params` and `.../status` while the app holds
+the device — that yields the ACTUAL negotiated rate/format/period AND the
+kernel's own xrun count, which is the number our counter cannot produce.
