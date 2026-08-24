@@ -6288,3 +6288,63 @@ plus `CTL INPUT CHECK OK (8 teeth)`, `REBIND TOOTH OK`, `FOH FLOWS OK`,
 1. **BOX has no C-stick now** (bought grab, kept Mod). One line to reverse.
 2. **NATURAL and CLASSIC now differ by exactly ONE chord row** (Classic's
    dedicated shield-drop diagonal). Candidates for collapsing into one style.
+
+## A42 (P0, owner-reported 2026-08-24) — **X->GRAB DOES NOTHING. `z` IS NOT GRAB IN THIS ENGINE.**
+
+Owner: *"grab with X didn't work, nothing happens."* **He is right, and A41's D33
+was built on a FALSE PREMISE that was sitting in the code as a comment.**
+
+**MEASURED — every reader of `z` in the entire sim:**
+- `port/sim/characters/*/moves/{FORWARDSMASH,UPSMASH,DOWNSMASH}.c`, all of the
+  form `if (i0->a || i0->z)`.
+- **THAT IS THE COMPLETE LIST. `z` DISPATCHES `GRAB` EXACTLY ZERO TIMES.**
+  In this engine **`z` is an ALTERNATE SMASH-ATTACK button, nothing else.**
+
+**THE FOUR REAL GRAB TRIGGERS, measured:**
+| Site | Condition |
+|---|---|
+| `GUARD.c:75` | `i0->a && !i1->a` — **shield + A** |
+| `GUARDON.c:101` | same |
+| `DASH.c:80` | `i0->lA > 0 \|\| i0->rA > 0` — **ANALOG SHOULDER while dashing** |
+| `RUN.c:60-61` | `a` edge **AND** analog shoulder |
+| `KNEEBEND.c:66` | `a` edge **AND** analog shoulder |
+
+**So grab is reached by SHIELD+A or by the ANALOG SHOULDER — never by `z`.**
+
+**HOW THE ERROR PROPAGATED (this is the part worth keeping).** `s1_input.h`
+carried the comment `// Z: grab (and lightshield-grab upstream)`. **That comment
+is TRUE OF REAL MELEE and FALSE OF THIS ENGINE**, and it long predates A41.
+I read it, believed it, briefed the lane with it, and the lane implemented
+`in.z = p->x` faithfully — so D33 wired X to the SMASH-ALT role and called it
+grab. **Nobody checked what the SIM does with `z`. A comment asserting engine
+behaviour is not evidence about engine behaviour** — the same class as A39's
+diagnostic-string tooth and the third time this session a claim in prose beat a
+measurement it never had.
+**And no check caught it** because `check-ctl-input.sh` asserts the RESOLVER's
+output (`in.z` set from `p->x`) — which is correct — while nothing asserted that
+`in.z` REACHES A GRAB. **The check tested the plane it owned and stopped at the
+seam.**
+
+### THE FIX — X must reach a REAL grab trigger, not `z`
+Options, in order of faithfulness:
+1. **X sets the ANALOG SHOULDER (`lA`)** — the dash/run/kneebend grab path, and
+   upstream's own "lightshield-grab". Makes X a genuine grab in motion, but
+   would also make X lightshield, which may be surprising.
+2. **X sets `a` AND shield simultaneously** — synthesises the GUARD path. This
+   is what a real Z-grab does in Melee (Z = A + lightshield).
+3. **Keep `in.z = p->x` for the smash-alt role AND add a grab route.**
+**Recommended: (2)** — it is what Melee's Z button IS, it reaches
+`GUARD.c:75`/`KNEEBEND.c:66` which are the standing/jumpsquat grabs a player
+expects, and it leaves the ratified chord coordinates alone.
+**MUST BE MEASURED, NOT REASONED: build it, then assert an actual `GRAB`
+actionState in the sim** — that is precisely the assertion whose absence let
+D33 ship broken.
+
+### THE CLASS FIX (HARD RULE 8) — the check must cross the seam
+`check-ctl-input.sh` proves the resolver emits bits. **It must also prove those
+bits produce the intended ACTION STATE in the sim.** Add an end-to-end leg:
+press X -> real resolver -> real sim tick -> assert `actionState == "GRAB"`.
+**Every face-button role in D33 deserves the same treatment** (A really jumps,
+B really attacks, Y really specials) — otherwise the next remap can ship
+equally broken. **This is the instrument rung: one leg that crosses the seam
+beats four one-off button fixes.**
