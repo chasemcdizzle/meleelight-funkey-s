@@ -122,7 +122,9 @@ A new device = write one new backend TU (+ audio open params).
   LOUD on the first device run instead of drifting — but until that
   run they are an unvalidated envelope, not a calibrated one.
 - Input: the chord tables map the FunKey's EXACT control set (d-pad +
-  8 buttons, letter keysyms u/d/l/r/a/b/x/y/s/k/n/q). Since fix_plan A4
+  8 buttons, letter keysyms u/d/l/r/a/b/x/y/s/m/n/q — L is 'm', MEASURED
+  off /dev/input/event0 on 2026-08-24 after the inherited 'k' left L dead
+  at every call site; fix_plan A25b + A3). Since fix_plan A4
   there are THREE selectable styles plus an orthogonal Mod-shoulder swap
   (`port/gfx/ctl_style.h` owns the enum + cells; `port/gfx/s1_input.h`
   owns the tables): NATURAL (the default — ssb64-modelled 1:1, full
@@ -139,7 +141,14 @@ A new device = write one new backend TU (+ audio open params).
   consumed by the flow-script generator, compiled into foh_dev
   (`--dump-keymap`), and asserted against the platform backend's poll
   table — a new target re-freezes THIS file (+ its check pins), never
-  scattered per-tool tables.
+  scattered per-tool tables. NEW-TARGET RULE, learned the hard way
+  (A25b): the letter-keysym column is a HARDWARE MEASUREMENT and must
+  be taken from the target's own `/dev/input/event0`, never inherited
+  from a donor port — the device rig CANNOT catch a wrong one, because
+  every device check injects through our own uinput node while the
+  physical buttons come from the firmware's gpio daemon, which the
+  rig's quiesce bracket stops for the run. `port/gfx/check-ctl-input.sh`
+  is the host-side guard on everything downstream of that column.
 - Menu artwork pre-scale + pixel format (`pipeline/stages/assets.js`,
   format IMG1, FORMATS.md §7; iter A9). TWO device-tuned things, both
   re-measure-and-re-freeze on a new target: (1) the per-class target

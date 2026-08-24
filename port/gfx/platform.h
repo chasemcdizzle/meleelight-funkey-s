@@ -16,7 +16,9 @@
 //
 // FunKey buttons arrive as SDL letter keysyms (measured, CLAUDE.md
 // §Commands "Device access"): u/d/l/r d-pad, a/b/x/y face, s START,
-// k/n L/R shoulders, q MENU. The SDL2 host backend maps the same letters
+// m/n L/R shoulders, q MENU (L is 'm', measured off /dev/input/event0 on
+// 2026-08-24 — fix_plan A25b + A3; the old 'k' was ssb64 donor archaeology,
+// provenance in platform_keymap.h). The SDL2 host backend maps the letters
 // (plus arrow keys OR'd onto the d-pad) so one table serves both.
 #ifndef GFX_PLATFORM_H
 #define GFX_PLATFORM_H

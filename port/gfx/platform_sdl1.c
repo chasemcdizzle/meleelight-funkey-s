@@ -18,7 +18,9 @@
 // we additionally verify the surface masks ARE 565 and bail if not).
 //
 // Input: FunKey firmware delivers buttons as LETTER keysyms (measured;
-// CLAUDE.md §Commands "Device access"): u/d/l/r, a/b/x/y, s, k/n, q.
+// CLAUDE.md §Commands "Device access"): u/d/l/r, a/b/x/y, s, m/n, q.
+// (L is 'm', NOT 'k' — measured off /dev/input/event0 on 2026-08-24;
+// fix_plan A25b + A3, provenance in platform_keymap.h.)
 // Polled via SDL_GetKeyState after pumping the event queue.
 #include <SDL.h> // via sdl-config --cflags include path
 #include <dlfcn.h>
@@ -129,10 +131,10 @@ void platform_poll(PlatformInput *in) {
   // letter keysyms are their ASCII codes (asserted at compile time).
   _Static_assert(SDLK_a == 'a' && SDLK_z == 'z',
                  "SDL1.2 letter keysyms must equal ASCII");
-  for (int i = 0; i < PLATFORM_KEYMAP_ROWS; i++) {
-    *platform_keymap_field(in, i) =
-        k[(unsigned char)kPlatformKeymap[i].keysym] != 0;
-  }
+  // The arm itself lives in the header (A25b) so it can be RUN on a host
+  // with no SDL at all — see platform_keymap_translate's note. SDL's Uint8
+  // IS unsigned char, so this is the same array type, not a reinterpret.
+  platform_keymap_translate(in, (const unsigned char *)k);
 }
 
 void platform_quit(void) {
