@@ -1353,7 +1353,12 @@ static const RastCol kPortTint[4] = {{218, 51, 51, 256},
 // (css.js:741) and so does this, which means a cold shot draws exactly the
 // bytes it drew before the bar existed. That guard is the reason A23 costs no
 // re-freeze; do not turn it into a zero-width draw.
-static void css_header(Raster *rz, int bHold) {
+//
+// `versusMode` is the same kind of state (FohState.versusMode, foh.c's mode
+// ribbon arm; A27) and gets the same treatment for the same reason: the STOCK
+// mode — 0, the state every judged CSS shot is taken in — draws the ribbon it
+// always drew, byte for byte, and only the ENDLESS mode paints anything new.
+static void css_header(Raster *rz, int bHold, int versusMode) {
   const RastCol h0 = {150, 156, 172, 256}, h1 = {70, 76, 98, 256};
   rrect_v(rz, 0, 0, RAST_W, 26, 0, h0, h1);
   // the black slab the BACK wedge sits on (css.js draws it as a skewed quad)
@@ -1376,15 +1381,39 @@ static void css_header(Raster *rz, int bHold) {
     foh_text(rz, 86, 10, 1, "VS", tx);
   }
   // the mode ribbon: a chevron-capped plate (css.js flanks its blurb with
-  // two arrow caps), carrying upstream's own label for this mode.
+  // two arrow caps), carrying upstream's own label for this mode. The plate
+  // is built from the FOH_CSS_MODE_* constants foh.c hit-tests it with —
+  // one source for the draw and the click box (D4, foh.h).
   {
     const RastCol pl = {26, 28, 42, 256}, ed = {150, 155, 172, 256};
     const RastCol tx = {236, 238, 246, 256};
-    const float p[12] = {110.0f, 4.0f,  172.0f, 4.0f,  178.0f, 13.0f,
-                         172.0f, 22.0f, 110.0f, 22.0f, 104.0f, 13.0f};
+    const float x0 = (float)FOH_CSS_MODE_X0, x1 = (float)FOH_CSS_MODE_X1;
+    const float y0 = (float)FOH_CSS_MODE_Y0, y1 = (float)FOH_CSS_MODE_Y1;
+    const float cap = (float)FOH_CSS_MODE_CAP, ym = (y0 + y1) * 0.5f;
+    const float p[12] = {x0 + cap, y0, x1 - cap, y0, x1,       ym,
+                         x1 - cap, y1, x0 + cap, y1, x0,       ym};
+    const int w = FOH_CSS_MODE_X1 - FOH_CSS_MODE_X0;
     poly8(rz, p, 6, pl, 256);
     stroke_closed(rz, p, 6, 1.0f, ed, 256);
-    text_in(rz, 104, 74, 10, 1, "VS. MELEE", tx);
+    // THE LABEL SAYS WHICH MODE IS ARMED (A27 / D28). Upstream prints its
+    // own blurb beside this widget — `versusMode ? "An endless KO fest!" :
+    // "4-man survival test!"` (css.js:717-721) — so the words are its, not
+    // ours; what does not survive the rewrite is their WIDTH. This plate is
+    // 74 px, i.e. 12 glyphs of the 5x7 face, against 19 and 20 characters.
+    //   * ENDLESS (1) takes upstream's string across two rows, dropping only
+    //     the article: ENDLESS / KO FEST!.
+    //   * STOCK (0) keeps "VS. MELEE" — the gamemode's own name, which is
+    //     what the header has always read here. "4-MAN" would be a lie on a
+    //     two-port build (D6) and a re-freeze of every judged CSS shot for
+    //     the privilege; keeping it means the DEFAULT state renders exactly
+    //     the bytes it rendered before A27, which check-css-mode.sh proves
+    //     by cmp rather than by assertion.
+    if (versusMode) {
+      text_in(rz, FOH_CSS_MODE_X0, w, 6, 1, "ENDLESS", tx);
+      text_in(rz, FOH_CSS_MODE_X0, w, 14, 1, "KO FEST!", tx);
+    } else {
+      text_in(rz, FOH_CSS_MODE_X0, w, 10, 1, "VS. MELEE", tx);
+    }
   }
   // BACK: gold text behind a red arrow head (css.js:back button)
   {
@@ -1605,7 +1634,7 @@ static void render_css(const FohState *s, Raster *rz) {
     const RastCol b0 = {14, 16, 38, 256}, b1 = {4, 4, 12, 256};
     rrect_v(rz, 0, 0, RAST_W, RAST_H, 0, b0, b1);
   }
-  css_header(rz, s->bHold);
+  css_header(rz, s->bHold, s->versusMode);
 
   // Which widget the hand is over. HOVER, not a row index — every "hot"
   // below is the same point-in-rect test foh.c acts on (D4).

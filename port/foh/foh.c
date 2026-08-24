@@ -720,6 +720,32 @@ static void step_css(FohState *s, const PlatformInput *in,
         }
       }
     }
+
+    // The MODE RIBBON (css.js:389-394; A27, the owner's "if you click the
+    // 'VS Melee' in the CSS it should change modes"). Upstream's own arm,
+    // carried whole: an A RISING EDGE inside the widget's rect plays
+    // menuSelect and calls `setVersusMode(1 - versusMode)` — a BINARY
+    // toggle, not a cycle and not a picker. Nothing about the trigger
+    // deviates (the BACK wedge's D22 hold is a different widget and a
+    // different owner request); what D28 registers is the plate's rect and
+    // its label, because upstream draws neither.
+    //
+    // POSITION IS UPSTREAM'S, not convenience: this sits between the
+    // port-type boxes (css.js:348-357, above) and the CPU-knob grab
+    // (css.js:396-408, below), inside the same "hand outside the roster
+    // band" arm, so a hand carrying a token can no more toggle the mode
+    // here than it can upstream. It reads THIS frame's hand position —
+    // upstream's :389 runs after the hand integrates at :195 — unlike the
+    // BACK counter above, which upstream runs before it.
+    if (s->cssHandY > (double)FOH_CSS_MODE_Y0 &&
+        s->cssHandY < (double)FOH_CSS_MODE_Y1 &&
+        s->cssHandX > (double)FOH_CSS_MODE_X0 &&
+        s->cssHandX < (double)FOH_CSS_MODE_X1) {
+      if (aE) {
+        snd_push(s, "menuSelect");            // css.js:392
+        s->versusMode = 1 - s->versusMode;    // css.js:393
+      }
+    }
   }
 
   // CPU-knob grab (css.js:396-408) — outside the three-way branch, guarded on

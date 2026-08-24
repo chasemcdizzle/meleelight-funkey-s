@@ -104,7 +104,11 @@ const RE_SHOT = new RegExp("^SHOT " + NUM + " ([a-z0-9-]{1,32})$");
 // UNCHANGED by the CSS mechanics arc: the launch plane only supports a human
 // port 0, so foh.c refuses any other port configuration and the record never
 // needs p1type/p1difficulty columns (see judge-foh-trace.js's note).
-const RE_LAUNCH = new RegExp("^LAUNCH " + NUM + " (p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] flashlcancel=[01] walljump=[01] tapjump=[01],[01],[01],[01] versus=0)$");
+// A27 widened `versus` from the literal 0 to [01] — the CSS mode ribbon now
+// writes it (css.js:393). judge-foh-trace.js carries the full argument; the
+// `rest` group is still the whole tail, so the normalized form is unchanged
+// for every trace that does not touch the ribbon.
+const RE_LAUNCH = new RegExp("^LAUNCH " + NUM + " (p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] flashlcancel=[01] walljump=[01] tapjump=[01],[01],[01],[01] versus=[01])$");
 // iter 99 (M4 task 12): the target-mode launch record — same
 // END==launch-tick semantics as LAUNCH in bounded mode.
 const RE_TLAUNCH = new RegExp("^TLAUNCH " + NUM + " (char=[0-4] tstage=[0-9])$");

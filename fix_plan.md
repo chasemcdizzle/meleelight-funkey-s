@@ -5503,3 +5503,141 @@ NOT). **A3 rides this same fix** — it is one defect at two call sites, and onc
 L arrives it becomes a real shield button in the default NATURAL style
 (`s1_input.h:165-183`, `*shield = (p->l || p->r)`), so the blast radius includes
 the MATCH, not just the menus.
+
+### A27 — DONE 2026-08-24 (lane M). THE RIBBON IS LIVE, AND IT REACHES THE SIM.
+
+**Owner symptom closed:** *"there's no way to change between stock mode and
+'endless ko fest'. If you click the 'VS Melee' in the CSS it should change
+modes."* It now does, on upstream's own trigger.
+
+**What A23 had already provided, and what it had not.** A23 built the CSS
+header's *first* hit test (the BACK wedge) and the D4 constants idiom that
+makes a hit region and a drawn extent the same numbers. That idiom is what
+A27 reused; the *plumbing* was not shared, because the BACK wedge's arm runs
+BEFORE the hand integrates (upstream's css.js:186, deliberate) while the
+ribbon's runs AFTER it (css.js:389) — two different positions in the same
+function. So "most of the work already exists" was half true: the pattern
+did, the code did not, and the ribbon's own arm is 6 lines.
+
+**Upstream carried verbatim, trigger and all.** `css.js:389-394` is an A
+RISING EDGE inside a rect that plays `menuSelect` and calls
+`setVersusMode(1 - versusMode)` — binary, no picker, no cycle — sitting
+between the port-type boxes (:348) and the CPU-knob grab (:396) inside the
+same "hand outside the roster band" arm. Ours sits in the same place for the
+same reason: a hand carrying a token cannot toggle the mode here, exactly as
+upstream.
+
+**The RECT is ours, and that is the one deviation (D28).** Upstream's is
+`y > 100 && y < 160 && x > 380 && x < 910` on a 1200x750 canvas, i.e. a band
+BELOW its header, because upstream draws this blurb as loose 1.25x text with
+no plate. This FOH's whole silver header is 26 px, so upstream's ratio maps
+to y 32..51 — under our header, on the roster row. The BACK wedge's ratio
+LANDED on its drawn extent (920/1200 * 240 = 184 = the slab's left edge) and
+was used for that reason; this one does not, so the DRAWN EXTENT wins, which
+is what D4 actually says. `FOH_CSS_MODE_{X0,X1,Y0,Y1,CAP}` now build the
+plate in `css_header` AND hit-test it in `step_css` — one source, so D4 is
+mechanically true rather than a comment in two files.
+
+**The LABEL tells the truth, and costs zero re-freezes.** Upstream's own
+strings are `"An endless KO fest!"` / `"4-man survival test!"`
+(css.js:715-721) — 19 and 20 characters against a 74 px plate that holds 12
+glyphs of the 5x7 face. ENDLESS takes upstream's words over two rows
+(`ENDLESS` / `KO FEST!`, only the article dropped); STOCK keeps `VS. MELEE`,
+the gamemode's own name, because "4-MAN" is a lie on a two-port build (D6)
+and because the default state then renders **the bytes it always rendered**.
+That is the A23 bar's `bHold > 0` argument reused: every judged CSS shot is
+taken in stock mode, so no frozen shot moves — asserted by cmp against a
+build whose label is unconditional, not by assertion.
+
+**THE MODE REACHES THE SIMULATION — this is the half that makes it not a
+stub.** `G.sim.versusMode = foh.versusMode;` immediately BEFORE
+`sim_setup_match` in **both** `foh_app.c` (product) and `foh_dev.c` (rig),
+per lane S's measurement, because `startGame` READS it (main.js:1334) to put
+every player on 1 stock. The LAUNCH line's hardcoded `versus=0` became
+`versus=%d` in both binaries: a launch record that says 0 while launching
+endless is a hardcoded output standing in for a real value.
+
+**Check:** `bash port/foh/check-css-mode.sh` -> `CSS MODE CHECK OK (3 teeth)`.
+It is two checks in one because A27 has two independent failure modes:
+`port/foh/foh_cssmode_witness.c` drives the REAL `foh_tick` and photographs
+the REAL `foh_render` (toggle, toggle back, page-state survival across a
+match round trip, A inert on the neighbouring BACK wedge), and then a leg
+launches a REAL g01 match through `foh_app --bridge verify` and reads the
+answer out of the SIM's own checksum stream. **Three teeth, each failing
+ALONE** (the A31 T2/T3 pair, extended): T1 makes the label ignore the mode,
+T2 makes the hit test write nothing, **T3 moves the bridge line ONE LINE
+past `sim_setup_match`** — the exact mistake lane S warned about — and
+watches the endless match collapse back onto the 4-stock stream.
+
+**Measured, quotable:** the control leg's frame-1 hash is
+`9f4c6df778506d64…`, which is CHECKSUM.md §5's own g01 anchor, and its LAUNCH
+record is byte-equal to the frozen `f01-vs-g01.expect` one. The ribbon leg's
+frame 1 is `97189d261d22d3a4…`. One A press on a menu widget, measured in the
+simulation's checksum.
+
+**Grammar widened, not loosened:** `judge-foh-trace.js` and
+`normalize-foh-trace.js` take `versus=([01])` because the produced domain
+really did widen today. `check-foh-flows.sh`'s `LAUNCH_RE` is UNTOUCHED — it
+reads only the frozen `.expect` files, where 0 is still exactly right, so the
+tightness moved to where the value is genuinely fixed.
+
+### A39 — ANSWERED 2026-08-24 (lane M). REPAIRED, NOT RETIRED.
+
+**WHERE IT STOPPED BITING: commit `844b8a6` — "A14: widen the browser glyph
+atlas to the measured menu domain (43 -> 179 records)", 2026-08-05.** Not
+A37, not A24c, and not anything near them; the driver's bisect only had to
+keep going.
+
+**WHY, mechanically.** T6 removes the HUD expiry clamp and required the copy
+to ABORT with `glyphs: font 0 has no glyph '-'`. The unclamped finish frame
+carries a matchTimer of -0.00004, so the minutes string is `"-1"` and the
+seconds are `"-0.00"` — a '-' reaches `gfx_glyph_text(GFX_FONT_T40, …)`,
+which is **font 0**. A14 gave specs 0 and 3 `MENU_CHARS`, which contains
+`-`; `port/gfx/vfxglyphs-frozen.txt` has carried `GLYPH 0 45` ever since
+(measured: 0 occurrences at `bdc4781`, 1 at HEAD). The crash trigger was
+deleted by a change about MENU TEXT, which had no way to know it was standing
+on this tooth.
+
+**IS THE CLAMP STILL NECESSARY? YES — and its failure mode moved.** Without
+it the HUD no longer dies; it silently DRAWS `-1:-0` on the finish frame of
+every timed-out match instead of `00:00`. The clamp's actual argument never
+depended on the atlas: upstream never renders that frame at all
+(`main.js:1243`'s `playing` guard vs `finishGame`'s `playing = false`), so
+keeping the text inside the domain upstream draws is still the faithful
+answer. A loud abort became a quiet wrong clock — strictly worse to lose.
+
+**THE REPAIR (no assertion relaxed).** T6 now requires the unclamped copy to
+COMPLETE (`expect_ok`), to run the SAME match to the SAME expiry frame
+(`assert_same_finish`, the rig's own helper), and its `finish-banner.ppm` to
+**DIFFER** from ARM B's. That shot is photographed after `gfx_render_frame`
+drew the HUD, and the banner is a centred TIME! at y 106..133 while the timer
+sits at the top — they do not overlap, so the timer's text is in the picture.
+Deleting the clamp is still caught; only the instrument changed. If a future
+change ever re-narrows font 0, the copy dies on the missing-glyph path and
+`expect_ok` fails LOUDLY rather than the tooth quietly changing meaning.
+
+**A SECOND PRE-EXISTING DEFECT, found by running the rig rather than reading
+it.** `check-live-arms.sh`'s no-commit fingerprint could not run at all in a
+tree holding an untracked NON-executable file: it built the mode list with
+`printf "- %s\n" "$f"`, and bash reads a format beginning with `-` as an
+OPTION (`printf: - : invalid option`), so the guard failed CLOSED before any
+evidence existed. Every lane that adds a new `.c` beside its check hits it.
+Fixed with `printf --`. **Class note: any `printf` whose format may begin
+with `-` needs `--`; grep for others before trusting a shell instrument.**
+
+**STANDING LESSON (the transferable half).** A tooth that asserts a
+*diagnostic string* is hostage to every unrelated change that can delete that
+string. T6 asserted an ABORT MESSAGE; a font-coverage commit five weeks
+earlier retired it silently, and nothing was user-visible because nothing was
+broken — only unguarded. The repaired form asserts a DIFFERENCE IN OUTPUT,
+which no third party can quietly satisfy.
+
+**VERDICT, on a quiet tree:** `bash port/foh/check-live-arms.sh` →
+**`LIVE ARMS OK (sysmenu=4 vsfinish=1 drains=3 teeth=15)`**, exit 0 — the
+first green this rig has produced since the tooth broke, which also lifts the
+masking: the other 14 teeth and every arm it tests are now verified rather
+than merely unreported. T6's own line reads *"the unclamped copy reaches frame
+210 and draws a DIFFERENT finish frame"*. (A first run was green on all 15
+teeth and then failed its no-commit fingerprint because this lane committed
+A27 while it ran — the rig's own message calls that case out and says nothing
+above it is invalidated; it was re-run clean rather than argued with.)
