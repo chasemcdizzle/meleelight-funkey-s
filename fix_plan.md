@@ -5402,3 +5402,64 @@ simulation's checksum.
 really did widen today. `check-foh-flows.sh`'s `LAUNCH_RE` is UNTOUCHED — it
 reads only the frozen `.expect` files, where 0 is still exactly right, so the
 tightness moved to where the value is genuinely fixed.
+
+### A39 — ANSWERED 2026-08-24 (lane M). REPAIRED, NOT RETIRED.
+
+**WHERE IT STOPPED BITING: commit `844b8a6` — "A14: widen the browser glyph
+atlas to the measured menu domain (43 -> 179 records)", 2026-08-05.** Not
+A37, not A24c, and not anything near them; the driver's bisect only had to
+keep going.
+
+**WHY, mechanically.** T6 removes the HUD expiry clamp and required the copy
+to ABORT with `glyphs: font 0 has no glyph '-'`. The unclamped finish frame
+carries a matchTimer of -0.00004, so the minutes string is `"-1"` and the
+seconds are `"-0.00"` — a '-' reaches `gfx_glyph_text(GFX_FONT_T40, …)`,
+which is **font 0**. A14 gave specs 0 and 3 `MENU_CHARS`, which contains
+`-`; `port/gfx/vfxglyphs-frozen.txt` has carried `GLYPH 0 45` ever since
+(measured: 0 occurrences at `bdc4781`, 1 at HEAD). The crash trigger was
+deleted by a change about MENU TEXT, which had no way to know it was standing
+on this tooth.
+
+**IS THE CLAMP STILL NECESSARY? YES — and its failure mode moved.** Without
+it the HUD no longer dies; it silently DRAWS `-1:-0` on the finish frame of
+every timed-out match instead of `00:00`. The clamp's actual argument never
+depended on the atlas: upstream never renders that frame at all
+(`main.js:1243`'s `playing` guard vs `finishGame`'s `playing = false`), so
+keeping the text inside the domain upstream draws is still the faithful
+answer. A loud abort became a quiet wrong clock — strictly worse to lose.
+
+**THE REPAIR (no assertion relaxed).** T6 now requires the unclamped copy to
+COMPLETE (`expect_ok`), to run the SAME match to the SAME expiry frame
+(`assert_same_finish`, the rig's own helper), and its `finish-banner.ppm` to
+**DIFFER** from ARM B's. That shot is photographed after `gfx_render_frame`
+drew the HUD, and the banner is a centred TIME! at y 106..133 while the timer
+sits at the top — they do not overlap, so the timer's text is in the picture.
+Deleting the clamp is still caught; only the instrument changed. If a future
+change ever re-narrows font 0, the copy dies on the missing-glyph path and
+`expect_ok` fails LOUDLY rather than the tooth quietly changing meaning.
+
+**A SECOND PRE-EXISTING DEFECT, found by running the rig rather than reading
+it.** `check-live-arms.sh`'s no-commit fingerprint could not run at all in a
+tree holding an untracked NON-executable file: it built the mode list with
+`printf "- %s\n" "$f"`, and bash reads a format beginning with `-` as an
+OPTION (`printf: - : invalid option`), so the guard failed CLOSED before any
+evidence existed. Every lane that adds a new `.c` beside its check hits it.
+Fixed with `printf --`. **Class note: any `printf` whose format may begin
+with `-` needs `--`; grep for others before trusting a shell instrument.**
+
+**STANDING LESSON (the transferable half).** A tooth that asserts a
+*diagnostic string* is hostage to every unrelated change that can delete that
+string. T6 asserted an ABORT MESSAGE; a font-coverage commit five weeks
+earlier retired it silently, and nothing was user-visible because nothing was
+broken — only unguarded. The repaired form asserts a DIFFERENCE IN OUTPUT,
+which no third party can quietly satisfy.
+
+**VERDICT, on a quiet tree:** `bash port/foh/check-live-arms.sh` →
+**`LIVE ARMS OK (sysmenu=4 vsfinish=1 drains=3 teeth=15)`**, exit 0 — the
+first green this rig has produced since the tooth broke, which also lifts the
+masking: the other 14 teeth and every arm it tests are now verified rather
+than merely unreported. T6's own line reads *"the unclamped copy reaches frame
+210 and draws a DIFFERENT finish frame"*. (A first run was green on all 15
+teeth and then failed its no-commit fingerprint because this lane committed
+A27 while it ran — the rig's own message calls that case out and says nothing
+above it is invalidated; it was re-run clean rather than argued with.)

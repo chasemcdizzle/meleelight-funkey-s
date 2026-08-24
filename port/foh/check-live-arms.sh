@@ -490,7 +490,14 @@ tree_fingerprint() {
         hashes="$(printf "%s\n" "$files" | tr "\n" "\0" | xargs -0 shasum -a 256)"
         modes="$(printf "%s\n" "$files" | while IFS= read -r f; do
           [ -n "$f" ] || continue
-          if [ -x "$f" ]; then printf "x %s\n" "$f"; else printf "- %s\n" "$f"; fi
+          # `--` is REQUIRED on the second one: bash reads a format string
+          # that starts with `-` as an option and dies with "invalid option",
+          # so this guard failed CLOSED for any tree holding an untracked
+          # NON-executable file — i.e. for every lane that adds a new .c
+          # alongside its check. Found while running this rig with A27s new
+          # witness in the tree (A39, 2026-08-24); it is a repair of the
+          # instrument, not a relaxation of anything it asserts.
+          if [ -x "$f" ]; then printf "x %s\n" "$f"; else printf -- "- %s\n" "$f"; fi
         done)"
       else
         hashes=""
@@ -2119,13 +2126,41 @@ one_canonical "$BUILD/legT5/err.txt" 'foh_dev foh:' "$FOH_LAUNCHED_RE" \
 echo "   T5: the finish left the process instead of re-entering the FOH"
 teeth=$((teeth + 1))
 
-echo "=== [11b] T6: without the HUD expiry clamp, the finish frame CRASHES"
+echo "=== [11b] T6: without the HUD expiry clamp, the finish frame is CORRUPT"
 # THE HEADLINE FINDING'S OWN TOOTH. The clamp in gfx_render_overlay_timer is a
-# fix for a crash this rig measured, and a fix without a witness is an
-# assertion. The copy below differs from gfx_overlay.c in exactly one
-# expression — the clamp — and must reproduce the ORIGINAL failure: an abort
-# on the finish frame, on the missing-glyph path, with no banner shot written
-# because the process never reaches the block that writes it.
+# fix this rig measured, and a fix without a witness is an assertion. The copy
+# below differs from gfx_overlay.c in exactly one expression — the clamp — and
+# must still be caught.
+#
+# A39 (2026-08-24): THIS TOOTH HAD STOPPED BITING, AND THE REPAIR IS BELOW.
+# It used to require the unclamped copy to ABORT: with `mt = raw` the finish
+# frame's matchTimer is negative (-0.00004 at --match-timer 2), so
+# `Math.floor(mt/60)` is -1 and the minutes string acquires a '-', which font
+# 0 did not have — `glyphs: font 0 has no glyph '-'`, a loud gfx_fatal.
+#   * WHERE IT STOPPED: commit 844b8a6 (A14, 2026-08-05) widened the browser
+#     glyph atlas from 43 to 179 records, and specs 0 and 3 gained MENU_CHARS
+#     — which contains '-'. port/gfx/vfxglyphs-frozen.txt has carried
+#     `GLYPH 0 45` ever since. A14 was about menu text and had no way to know
+#     it was standing on this tooth's trigger.
+#   * SO THE CRASH IS GONE, AND THE CLAMP IS NOT. Without it the HUD now
+#     silently DRAWS "-1:-0" on the finish frame of every timed-out match
+#     instead of "00:00" — a wrong clock rather than a dead process. The
+#     clamp's real argument never depended on the atlas anyway (upstream
+#     never renders this frame at all: main.js:1243's `playing` guard and
+#     finishGame's `playing = false`), so the fix stays and the TOOTH moves
+#     to the consequence that exists today.
+#   * THE NEW OBSERVABLE is the finish-banner shot. It is photographed AFTER
+#     gfx_render_frame drew the HUD and the banner is a centred TIME! at
+#     y 106..133, while the timer sits at the top of the screen — so the two
+#     do not overlap and the timer's text is IN the picture. Same leg, same
+#     args, same expiry frame as ARM B's `fin`, one expression apart: if the
+#     clamp does nothing, the two shots are identical, and that is the
+#     failure this asserts. Deleting the clamp is still caught; what changed
+#     is only which instrument catches it.
+# NOT a loosening: the copy must still reach the finish frame, still run the
+# same match to the same frame (assert_same_finish), and still be PROVEN to
+# render differently. HARD RULE 3 respected — the tooth was repaired, not
+# relaxed.
 perturb "$GFX/gfx_overlay.c" "$BUILD/tooth-noclamp/gfx/gfx_overlay.c" \
   '    const double mt = raw > 0.0 ? raw : 0.0;' \
   '    const double mt = raw; /* T6: expiry clamp removed */' \
@@ -2138,21 +2173,27 @@ bounded_step 1200 "the T6 build" "$BUILD/build-t6.log" \
 OVERLAY_SRC=$GFX/gfx_overlay.c
 run_leg "$BUILD/tooth-noclamp/foh_dev_headless" legT6 "$BUILD/fin.fks" \
   --system-menu --match-timer 2
-[ "$(cat "$BUILD/legT6/timedout.txt")" = 0 ] || fail "T6: the copy hung"
-[ "$(cat "$BUILD/legT6/rc.txt")" != 0 ] \
-  || fail "T6: the unclamped copy exited 0 — the crash the clamp fixes is NOT
-  reproduced, so the clamp is either unnecessary or this leg no longer reaches
-  the finish frame. Either way [B*] proves nothing about it."
-one_canonical "$BUILD/legT6/err.txt" "glyphs: font 0 has no glyph" \
-  "^glyphs: font 0 has no glyph '-'\$" \
-  "T6 missing-glyph diagnostic (the exact path the clamp exists for)"
-one_canonical "$BUILD/legT6/err.txt" 'SIM FATAL frame' \
-  "^SIM FATAL frame $FINF: glyphs: missing glyph\$" \
-  "T6 abort on the EXPIRY frame ($FINF)"
-[ -e "$BUILD/legT6/shots/finish-banner.ppm" ] \
-  && fail "T6: the unclamped copy still wrote a finish-banner shot, so it did
-  not die before the VS-finish block after all"
-echo "   T6: the unclamped copy aborts on frame $FINF with the missing '-' glyph"
+expect_ok legT6  # rc 0 AND not killed at the bound; the copy must COMPLETE now
+# The copy has to have run the SAME match to the SAME expiry frame, and to
+# have produced the finish block's own artifact — otherwise a shot that
+# differs says nothing about the clamp (the assert_same_finish argument at
+# [5], applied for the same reason).
+assert_same_finish legT6 "T6"
+# A '-' in font 0 is what USED to abort here and no longer does (A14, above).
+# If a future change ever removes it again, this copy will die on the
+# missing-glyph path and the leg will fail LOUDLY at expect_ok rather than
+# silently changing meaning — so the old trigger is still covered, from the
+# other side.
+cmp -s "$BUILD/fin/shots/finish-banner.ppm" \
+       "$BUILD/legT6/shots/finish-banner.ppm" \
+  && fail "T6: the unclamped copy rendered the finish frame BYTE-IDENTICALLY
+  to the real build. The clamp is then provably doing nothing on the one
+  frame it exists for, so either the leg stopped reaching a negative
+  matchTimer or the clamp is genuinely redundant and must be RETIRED on the
+  record — never by relaxing this assertion (HARD RULE 3, and A39 is the
+  worked example of what to do instead)."
+echo "   T6: the unclamped copy reaches frame $FINF and draws a DIFFERENT"
+echo "       finish frame (the negative clock the clamp exists to keep off the HUD)"
 teeth=$((teeth + 1))
 
 # --- [12] no-commit guard ----------------------------------------------------
