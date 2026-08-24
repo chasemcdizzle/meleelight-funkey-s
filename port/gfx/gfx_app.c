@@ -82,7 +82,8 @@
 //
 // AUDIO (M3 task 6): --sndpack loads a SNDPACK1 SFX pack (snd_mixer.h)
 // and starts the platform audio seam (44100/S16LSB/2ch, buffer
-// --audio-samples, default 512 — the measured spike config; other
+// --audio-samples, default PLATFORM_AUDIO_SAMPLES_DEFAULT — DERIVED
+// from the frame budget in platform.h, never a guess; other
 // values are the negative-testing / PLAN §7 fallback seam). The sim's
 // sound events reach the mixer through the ml_snd_sink chokepoint
 // (ml_events.h) — the mixer only READS the event plane (no RNG, no sim
@@ -564,7 +565,11 @@ int main(int argc, char **argv) {
   const char *attribPath = 0; // M4 task 8: skip-stall attribution sidecar
   long seed = -1, p1 = -1, p2 = -1, stage = -1, frames = -1, difficulty = 3;
   long shotFrame = -1;
-  long audioSamples = 512; // spike verdict default; flag = testing seam
+  // DERIVED from the frame budget, not guessed — see the derivation at
+  // PLATFORM_AUDIO_SAMPLES_DEFAULT (platform.h). The flag stays the
+  // negative-testing seam (check-device-audio.sh drives a 64-sample
+  // starvation probe through it).
+  long audioSamples = PLATFORM_AUDIO_SAMPLES_DEFAULT;
   bool audioSamplesGiven = false;
   long pace = 1;
   uint64_t budgetNs = 16666667ull; // 60 fps frame budget (default)

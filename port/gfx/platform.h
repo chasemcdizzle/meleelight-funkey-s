@@ -147,6 +147,51 @@ typedef struct {
   int channels;
 } PlatformAudioStats;
 
+// DEFAULT AUDIO PERIOD — DERIVED, NEVER GUESSED (A28, 2026-08-24).
+//
+// SDL's `samples` IS the ALSA period: the app must refill once per
+// period or the DMA starves. The period is therefore a DEADLINE, and
+// both sides of it were already measured in this repo.
+//
+//   docs/research/device-perf.md:34 — worst sim-only p99 = 10.684 ms
+//   against the 16.67 ms frame. That is the SIM ALONE, before render,
+//   present and the audio callback itself.
+//
+//   samples | period @44100 | vs the 16.67 ms frame
+//   --------+---------------+-----------------------------------------
+//     512   |   11.61 ms    | 0.70 frames — SHORTER THAN ONE FRAME.
+//           |               | This was the shipped value and it could
+//           |               | not work: every frame that renders
+//           |               | anything misses the deadline. The owner
+//           |               | heard it as a constant buzz.
+//     1024  |   23.22 ms    | 1.39 frames — first viable power of two
+//     2048  |   46.44 ms    | 2.79 frames — SHIPPED; clean by ear, and
+//           |               | measured 45 ms of audio in hand worst
+//           |               | case (`avail_max` 2096 of buffer 4096)
+//
+// PRINCIPLED MINIMUM: the period must exceed ONE WHOLE FRAME with
+// margin — the refill runs on the game thread, so one long frame must
+// not be able to drain the ring by itself.
+//
+// WHY 2048 AND NOT 1024. On latency alone 1024 is better: SDL 1.2's
+// ALSA backend takes buffer = 2 * period, so 2048 costs ~92.9 ms of
+// audio lag against ~46.4 ms — real in a fighting game. It is not
+// shipped because it is UNVERIFIED. platform_audio_sdl.h requires
+// granted.samples == requested EXACTLY, so a size ALSA will not grant
+// is a hard start failure (sim_fatal) — a game that does not launch.
+// 512 and 2048 are both MEASURED granted on the device; 1024 has never
+// been observed granted (the single attempt read `hw_params: closed`
+// and was cut short by a power cycle). Mechanism says it should be:
+// ALSA period-size constraints are an interval plus at most a step, and
+// any such constraint admitting 512 and 2048 admits 1024 = 2*512. But
+// that is an argument, not a measurement, and the failure mode is total.
+// TO LOWER IT: run a real match on device at 1024 and judge the NUMBER,
+// not the ear — port/gfx/check-alsa-headroom.sh (judge-alsa-headroom.js)
+// reads `avail_max` from /proc/asound/card0/pcm0p/sub0/{status,hw_params}
+// and asserts the worst-case audio in hand exceeds one frame. If that
+// passes at 1024, change this constant and nothing else.
+#define PLATFORM_AUDIO_SAMPLES_DEFAULT 2048
+
 // Open + start the audio device (samples = requested buffer size in
 // sample frames). Returns 0 on success; nonzero = loud failure (caller
 // bails — audio must never silently run degraded).

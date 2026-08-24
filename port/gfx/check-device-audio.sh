@@ -122,6 +122,21 @@ WALL_MAX_MS=66000
 AUDIO_RATE=44100            # the measured spike verdict (PLAN §7);
 AUDIO_SAMPLES=512           # pinned into the judge's grammar — a
 AUDIO_CHANNELS=2            # renegotiated device cannot even parse
+# ...and now REQUESTED, not inherited (A28, 2026-08-24). This leg used to
+# pin 512 while passing no --audio-samples, i.e. it pinned a number it
+# did not ask for and trusted the app default to keep supplying it. A28
+# changed that default (platform.h PLATFORM_AUDIO_SAMPLES_DEFAULT: 512 is
+# a shorter refill deadline than one 16.67 ms frame and cannot work), so
+# the pin and the run would have silently parted company. The flag on the
+# device invocation below makes this leg mean what it says.
+# GAP, REGISTERED (needs the device, which this lane did not have): the
+# cadence pins below — AUDIO_SAMPLES, CBS_MIN/CBS_MAX — are measured at
+# 512, so this leg no longer exercises the size the app SHIPS. Re-pinning
+# it to the shipped default needs a device re-measurement of the callback
+# window (period 46.44 ms instead of 11.61 ms => ~1/4 the callbacks); the
+# arithmetic is in the CBS comment below. Until then the shipped size is
+# guarded host-side by port/gfx/check-alsa-headroom.sh, whose [4/4] case
+# fails if PLATFORM_AUDIO_SAMPLES_DEFAULT ever drops under one frame again.
 SND_COUNT_PIN=180           # SND1 sfx map size (pipeline/expected.json)
 # Pack identity (measured-then-frozen, iter 57): sha256 of the SNDPACK1
 # built from the pinned pipeline audio artifacts (ffmpeg 8.1.1 triple
@@ -1053,7 +1068,7 @@ setsid sh -c './gfx_device \
   --anim-dir $DTMP \
   --seed $seed --p1 $p1 --p2 $p2 --stage $stage --frames $frames \
   --pace 1 --budget-ns $BUDGET_NS \
-  --sndpack $DSD/sndpack.bin \
+  --sndpack $DSD/sndpack.bin --audio-samples $AUDIO_SAMPLES \
   --out $DTMP/g01.dev-out.$at.txt --timing $DTMP/g01.dev-tim.$at.txt \
   2> $DTMP/g01.dev-log.$at.txt & \
   echo \$! > $DTMP/gfx.pid.$DM_NONCE; \
