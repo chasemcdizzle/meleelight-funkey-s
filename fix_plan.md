@@ -6367,6 +6367,80 @@ expects, and it leaves the ratified chord coordinates alone.
 actionState in the sim** — that is precisely the assertion whose absence let
 D33 ship broken.
 
+### LANDED 2026-08-24 (lane I, DEVIATION D34) — and the brief's own `z`
+### inventory was ALSO short, which is the point
+**Measured first, as instructed, and "that is the COMPLETE list" was not.**
+The full reader set of `MlInput.z` in this tree is `{FORWARD,UP,DOWN}SMASH.c`
+(`i0->a || i0->z`) **plus** `action_state_shortcuts.c:522` checkForAerials
+(`(a edge) || (z edge)`) **plus** `physics.c:983` lCancelUpdate (`z` edge,
+beside the analog triggers) — plus the AI plane. The CONCLUSION held (zero
+`GRAB` dispatches; `z` is an alternate ATTACK button and an L-cancel
+trigger), but the inventory did not. *A second-hand measurement is a
+citation, not a measurement* — and this ticket exists because a citation was
+believed once already.
+
+**THE FIX (option 2, chosen and justified):** X emits `a` + `lA =
+S1_ZGRAB_LA` (49/140 — the b0xx-mapping.md §2.2 light-shield level), i.e.
+Melee's Z chord. It reaches ALL FIVE grab arms rather than only GUARD's,
+because `WAIT.c:56` and `DASH.c:72` take their `lA>0||rA>0` arm into GUARDON,
+whose `init -> main -> interrupt` chain runs inside the SAME tick and still
+sees the `a` edge. Bounds are load-bearing: `> 0` or no grab arm fires;
+`< 1` or `GUARDON.c:21` powershields on every press.
+**Nothing was traded away:** every old `z` reader is an `a || z` form and
+lCancel's third arm is an `lA` edge, so X keeps its alternate-attack and
+L-cancel roles by construction; `z` is dropped rather than kept as a second
+name for a bit `a` already sets.
+
+**THE DELIVERABLE — `port/gfx/ctl_seam_witness.c`, leg [4] of
+`check-ctl-input.sh`.** Physical button -> real `s1_input_row_style` -> REAL
+`sim_game_tick` -> the actionState the engine enters.
+**IT REPRODUCED THE OWNER'S BUG ON ITS FIRST RUN, BEFORE ANY FIX:**
+```
+PROBE style=0 A -> KNEEBEND     PROBE style=0 Y -> NEUTRALSPECIALGROUND
+PROBE style=0 B -> JAB1         PROBE style=0 X -> (WAIT)   <-- the shipped bug
+```
+After the fix: `X -> GRAB` in all three styles, plus X-while-SHIELDING ->
+GRAB, X-while-DASHING -> GRAB, and X-AIRBORNE -> ATTACKAIRN (the leg that
+pins the alternate-attack role was not traded away).
+Teeth **t6-nograb** (zero the light shield -> X reaches no state) and
+**t9-seamscramble** (swap SPECIAL/JUMP: every bit still live, but A no longer
+reaches KNEEBEND and Y no longer reaches NEUTRALSPECIALGROUND) bite on that
+witness; **t10-powershield** holds the `< 1` bound.
+
+**Leg [5]** commits the emitted-vs-renderable vfx comparison — 41 emitted
+names vs 45 templates, difference EMPTY — matched on the CALL
+(`ml_drawVfx*("<name>"`), never a bare string, with a blindness guard: every
+`ml_drawVfx*` call outside `ml_events.{c,h}` must pass a string LITERAL or
+the extraction is vacuous and the leg fails loudly. Tooth **T11** removes one
+real template from a COPY and requires the comparison to notice.
+(41/45, not the hand-run 39/43 — the hand grep undercounted both sides.)
+
+**Runs:** `check-ctl-input.sh` -> `CTL INPUT CHECK OK (11 teeth)` (~44 s) ·
+`port/sim/check-sim.sh` -> `SIM CONFORMS` 8/8 · `port/foh/check-rebind.sh` ->
+`REBIND TOOTH OK` · `s1_sweep` host-side -> verdict line byte-unchanged.
+
+**PINNED EXPECTATIONS THAT MOVED (behaviour legitimately changed, D34):**
+`s1_sweep.c`'s 2048-combo invariants (`in.a == (p.b || p.x)`; `in.lA ==
+p.x ? S1_ZGRAB_LA : 0` replacing a flat `lA == 0`; `in.z` moved INTO the
+never-set list) and its dump's `z` column, which becomes the `lA` column so
+the live plane stays inside the device-vs-host byte comparison;
+`judge-s1-coverage.js`'s grab signature and K_X sidecar pairing. None was
+weakened — each still pins one exact value, and the two new ones pin a value
+that was previously unpinnable because it did not exist.
+
+**OWED, DEVICE (not run — owner's daily driver):**
+1. `port/gfx/check-device-input.sh` — its host `s1_sweep` leg is updated and
+   green host-side, but legs [4]-[9] (the live S1 session and
+   `judge-s1-coverage.js`'s re-cut pairing) need the device. **This is the leg
+   that witnesses the fix physically.**
+2. `verify_m3.sh` leg (4) — the live S1 three-way replay.
+3. `install-play-opk.sh` — reinstall so the device play build carries D34.
+
+**OWED, `port/foh` (NOT this lane's files):** `foh_ctl_labels.h:48` still
+reads `"GRAB (Z)"`. That `(Z)` is the last surviving instance of the false
+claim. It is pinned by `check-foh-flows.sh` leg [0m]'s 54-row label table, so
+the label and its pin must move in ONE commit.
+
 ### THE CLASS FIX (HARD RULE 8) — the check must cross the seam
 `check-ctl-input.sh` proves the resolver emits bits. **It must also prove those
 bits produce the intended ACTION STATE in the sim.** Add an end-to-end leg:

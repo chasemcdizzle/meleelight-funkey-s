@@ -13,7 +13,8 @@
 //      script runs it twice and cmp's the dumps (byte stability).
 //   3. Asserts EVERY emitted coordinate sits on the 1/80 Melee grid
 //      (meleeRound(v) bit-== v) and the S1 invariants: y/l and the
-//      d-pad booleans never set, lA == 0, rA ∈ {0,1} tied to r,
+//      d-pad booleans never set, z never set, lA ∈ {0, S1_ZGRAB_LA} tied
+//      to physical X (D34), rA ∈ {0,1} tied to r,
 //      ls* == deaden(raw*), the D33 button plane (A jump, B attack,
 //      Y special, X grab) in BOTH the BOX and CLASSIC rows, BOX's cs
 //      plane dead, CLASSIC's C-layer freezing its left stick, and
@@ -213,17 +214,26 @@ int main(void) {
     // single-style form it replaces.
     const MlInput inC = s1_input_row_style(&p, CTL_STYLE_NORMAL, false);
     // invariants
-    if (in.y || in.l || in.du || in.dl || in.dr || in.dd) inv_bad++;
-    if (!deq(in.lA, 0.0)) inv_bad++;
+    if (in.y || in.l || in.z || in.du || in.dl || in.dr || in.dd) inv_bad++;
+    // lA is the LIGHT SHIELD half of X's Z chord (DEVIATION D34) and is
+    // zero on every other combo. It was pinned flat at 0 until 2026-08-24,
+    // when `in.z = p->x` turned out to reach no grab arm in this engine at
+    // all — see s1_input.h's S1_ZGRAB_LA and port/gfx/ctl_seam_witness.c,
+    // which proves the resulting chord actually enters GRAB.
+    if (!deq(in.lA, p.x ? S1_ZGRAB_LA : 0.0)) inv_bad++;
     if (p.r ? (!in.r || !deq(in.rA, 1.0)) : (in.r || !deq(in.rA, 0.0)))
       inv_bad++;
-    // BUTTON PLANE (DEVIATION D33, owner re-ratification 2026-08-24):
-    // A jump, B attack, Y special, X GRAB — in every style, so this is
-    // pinned over all 2048 combos rather than as another pinned chord.
-    if (in.x != p.a || in.a != p.b || in.b != p.y || in.z != p.x ||
+    // BUTTON PLANE (DEVIATION D33, owner re-ratification 2026-08-24;
+    // X re-cut by D34): A jump, B attack, Y special, X GRAB — in every
+    // style, so this is pinned over all 2048 combos rather than as
+    // another pinned chord. X shares `a` with B because grab here is
+    // A + light shield, which is what Melee's Z button IS; `z` is gone
+    // because in THIS engine it is an alternate attack button that
+    // dispatches GRAB zero times.
+    if (in.x != p.a || in.a != (p.b || p.x) || in.b != p.y ||
         in.s != p.start)
       inv_bad++;
-    if (inC.x != p.a || inC.a != p.b || inC.b != p.y || inC.z != p.x ||
+    if (inC.x != p.a || inC.a != (p.b || p.x) || inC.b != p.y ||
         inC.s != p.start)
       inv_bad++;
     if (!deq(in.lsX, deaden(in.rawX, ml_deadzoneConst())) ||
@@ -251,8 +261,9 @@ int main(void) {
            (int)p.l, (int)p.r, (int)p.a, (int)p.b, (int)p.x, (int)p.start,
            r.row, dbits(in.lsX), dbits(in.lsY), dbits(in.csX),
            dbits(in.csY), dbits(in.rawX), dbits(in.rawY), dbits(in.rawcsX),
-           dbits(in.rawcsY), (int)in.a, (int)in.b, (int)in.x, (int)in.z,
-           (int)in.s, (int)in.r, (int)deq(in.rA, 1.0));
+           dbits(in.rawcsY), (int)in.a, (int)in.b, (int)in.x,
+           (int)deq(in.lA, S1_ZGRAB_LA), (int)in.s, (int)in.r,
+           (int)deq(in.rA, 1.0));
   }
   if (grid_bad) {
     printf("FAIL grid: %d coordinates off the 1/80 grid\n", grid_bad);
