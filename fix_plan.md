@@ -5796,3 +5796,65 @@ exact-spec-or-fail check. Worth reconciling (A35 already registers the
 `/proc/asound/card0/pcm0p/sub0/hw_params` and `.../status` while the app holds
 the device — that yields the ACTUAL negotiated rate/format/period AND the
 kernel's own xrun count, which is the number our counter cannot produce.
+
+### A28 — LIVE CODEC STATE MEASURED 2026-08-24 (game held the device)
+
+```
+hw_params:  access MMAP_INTERLEAVED · format S16_LE · channels 2
+            rate 44100 (granted EXACTLY as requested)
+            period_size 512 · buffer_size 1024      <- TWO PERIODS. THE MINIMUM.
+sw_params:  start_threshold 1 · stop_threshold 1024
+            silence_threshold 0 · silence_size 0    <- NO SILENCE-FILL ON UNDERRUN
+status:     state RUNNING throughout · avail 144..448 · avail_max 768 then 560
+```
+
+**THE STRUCTURAL FINDING: `buffer_size == 2 x period_size`.** SDL asked for 512
+frames and ALSA gave a 1024-frame buffer — the tightest double-buffer
+possible, ~23 ms total. Sampled over 12 s the queue ran down to ~256 frames
+(**5.8 ms of audio in hand**). SM64, which is clean on this same codec, will
+almost certainly be running 4-8 periods.
+
+**HONEST NEGATIVE RESULTS — do not let the hypothesis outrun them:** state was
+`RUNNING` on every sample, never `XRUN`; `dmesg` shows no underrun complaints.
+**So a constant xrun train is NOT yet demonstrated**, only a very tight buffer.
+The xrun hypothesis remains the leading one but is **not proven**, and our own
+counter cannot help (documented blind, `platform_audio_sdl.h:44-51`).
+
+**A mechanism that fits ALL the evidence, including the negatives:**
+`silence_size 0` means **ALSA does NOT write silence on underrun** — the DMA
+re-plays whatever is already in the buffer. A short repeated fragment at an
+11.6 ms period is ~86 Hz — audible as a continuous buzz — and brief enough
+recoveries may never leave the stream in `XRUN` long enough for a sampled read
+to catch it. **UNPROVEN, but it explains silence-in, buzz-out with no visible
+xrun.**
+
+**CHEAPEST DECISIVE TEST: raise the buffer and listen.** `--audio-samples 1024`
+or `2048` (`foh_dev.c:1555,1701`) gives a 2048/4096-frame buffer (46/93 ms).
+The PLAY launcher does not pass the flag, so this needs either a `foh-args`
+evidence run or a launcher change. **If the buzz vanishes, it is buffer-related
+and the fix is a bigger request; if it survives, the cause is elsewhere and the
+2-period finding is a real but separate defect.**
+
+## A26 — ANSWERED 2026-08-24 BY THE OWNER. **HIBERNATE KILLS THE APP.**
+
+Owner: *"hibernating when meleelight was running and then opening the funkey
+again it starts at the home screen."*
+
+**That settles the three-worlds question the row posed: it is NOT world 1.**
+The kernel does not suspend-and-resume the process transparently — the app is
+gone and the frontend is back. So A26 is world 2 (signalled, then killed) or
+world 3 (killed outright, no signal), and **resume requires SAVING AND
+RESTORING STATE**, not merely surviving a clock jump.
+
+**NEXT, AND IT DECIDES THE WHOLE SHAPE:** determine whether the app receives a
+SIGNAL before dying. If it does (SIGTERM/SIGUSR/SIGHUP), a handler can write a
+resume record through `foh_persist` — cheap and reliable. If it does not, only
+periodic checkpointing can work, and that has a frame-budget cost that must be
+measured before it is designed. **Test: install a handler that logs to tmpfs,
+hibernate, reopen, read the log.**
+
+**Scope recommendation stands** (and the owner has not ruled on it):
+**menu-level resume first** — restoring to the menu is cheap and is probably
+all worlds 2/3 justify. **Mid-match resume is a separate, later row**: the sim
+state is the whole player/physics plane and snapshotting it is a new
+serialization surface with its own correctness bar.
