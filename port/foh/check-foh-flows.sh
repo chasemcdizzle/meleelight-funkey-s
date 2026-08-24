@@ -206,7 +206,7 @@ b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wr
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-e709c03b2631ad0ab66a3f010c86905d9d1d5c81550d0143d7ca0799b95db878 port/foh/judge-foh-trace.js
+cba429049d339b653943a7310c0295b78e520f4b35c2995e1d16629c4cec07cd port/foh/judge-foh-trace.js
 2cf5c5a532207372b70c4cee57412c7ac65643ac4f4066c745d9eb7fe4aa0e9b port/goldens-m4/wrap-target.js
 415335239fcc04df97eba07298a1fa521602d5ea45b087aa8d7d40bd740c122a port/goldens-m4/verify-target-stream.js
 6b1b6b5be3700c51dfae8c0c4cb1f012e5b61239394ae4146c2e5e19cc4fcc47 port/goldens-m4/validate-target-manifest.js
@@ -285,7 +285,7 @@ FLOW_BRIDGE=(verify verify state none verify tverify tverify)
 FLOW_SHOTS=("startup title menu-top css sss" \
             "css-cpu sss-ystory" \
             "options-audio options-gameplay options-edited" \
-            "menu-controls controls-controller controls-keyboard" \
+            "controls-keyboard" \
             "css-p2 sss-pstadium" \
             "menu-targettest tss-t01" \
             "tss-addcode tss-t02")
@@ -1079,7 +1079,11 @@ for k in 0 1 2 3 4 5 6; do
   [ "$ndistinct" = "$nfiles" ] || fail "flow $id: shots not pairwise distinct ($ndistinct unique of $nfiles) — a stuck screen machine renders duplicates"
   echo "    -> flow $id OK (trace frozen-match, x2 stable, shots $nfiles)"
 done
-[ "$total_shots" = 19 ] || fail "shot total $total_shots != pinned 19"
+# 17 since DEVIATION D27 (was 19): the collapsed CONTROLS route makes f04's
+# `menu-controls` and `controls-controller` shots unshootable, because those
+# two screens are no longer reachable by navigation — the FLOW_SHOTS pin above
+# carries the same measurement per flow, and this is its total.
+[ "$total_shots" = 17 ] || fail "shot total $total_shots != pinned 17"
 [ "$states" = 4 ] || fail "BRIDGE-STATE witness total $states != pinned 4"
 [ "$tstates" = 2 ] || fail "TBRIDGE-STATE witness total $tstates != pinned 2"
 

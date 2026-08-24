@@ -5011,6 +5011,68 @@ where it goes.
 **Remaining leg:** `DEVICE FOH OK` has NOT been run (no device in-lane). That is
 the outstanding half of this row's done-check.
 
+### A24 second half — DONE 2026-08-23 (D27). The chooser is collapsed, behind one digit.
+
+Owner, same session: *"collapse now - make easily revertable though please."*
+Built on the `FOH_NETPLAY` precedent because that flag already has exactly the
+properties the owner asked for: **`#define FOH_CTL_CHOOSER 0` (`foh.h`), and
+flipping that ONE digit restores the pre-D27 route whole.** Nothing is deleted
+— `FOH_MENU_CONTROLS`, `FOH_CTRL_PAD`, `render_ctrl_pad`, the chooser labels,
+its A ternary and its B-back edge all still compile at either value.
+
+**REVERTIBILITY IS TESTED, NOT ASSERTED.** `check-controls-labels.sh` now
+builds `foh_controls_witness.c` at **both** values and asserts both routes:
+CFG-0 (the tree as committed) and CFG-1 (derived by rewriting that digit in a
+COPY of `foh.h`). **T2 SURVIVES UNCHANGED AND NOW RUNS TWICE** — the chooser's
+A ternary is compiled at either flag value, so the flag-0 witness SEATS the
+unreachable page directly (the `foh_snd_witness.c` `battle-B` idiom) and
+exercises the same line the flag-1 build navigates to. New **T5** is T2's twin
+for the collapsed arm: point the D27 dispatch back at the chooser and only the
+collapsed route may fail.
+
+**MEASURED, and worth carrying: a quoted `#include` cannot be shadowed by
+`-I`.** The obvious way to build CFG-1 — put a modified `foh.h` on the include
+path — silently does nothing, because `#include "foh.h"` resolves from the
+INCLUDING FILE'S directory first. That leg would then have "passed" against the
+shipped configuration: a false green in the exact shape this file exists to
+refuse. So the whole `port/foh` half of the build is copied beside the derived
+header (every copy `cmp`-proved byte-identical to its original), and the leg
+additionally reads the CONFIGURATION'S OWN assertion line out of the output —
+the flag-1 line must be present and the flag-0 line absent. A verdict alone
+does not say which build produced it.
+
+**CONSUMERS, found by grep and NOT trusting the handed-down list (the A24/D25
+lesson held):** `foh.c`'s Options row-2 arm and `step_ctrl`'s B (routing);
+`foh_snd_witness.c`'s `options-A-controls` case, which **moves sides in that
+table** — the collapsed row is a `changeGamemode` LEAVE, so it emits ONE
+`menuForward`, not the menuMODE change's two sounds; `judge-foh-trace.js`,
+which gains a **second build profile** parsed live out of the header exactly as
+it parses `FOH_NETPLAY`, six chooser edges moving to `ctl` and two collapsed
+ones added as `noctl`; `judge-domains.authored.txt` (28 E rows, count re-pinned)
+and `check-judge-regression.sh` (profile alternation, `liveProf`, the evaluated
+region's second binding, a second header pin, a re-freeze log entry);
+`flows/f04-nav.{flow,expect}` (10 transitions, one shot); the `FLOW_SHOTS`
+inventories in `check-foh-flows.sh` / `check-device-foh.sh`; and the
+`judge-foh-trace.js` producer sha pinned in four device/host checks.
+**NOT touched, and measured why:** `foh_app.c` / `foh_dev.c`'s save-on-exit arms
+key on `from == "controls-keyboard" && cause == "b"` — the collapse moves the
+`to`, so both are unchanged and the Controls screen still persists on exit.
+
+**A33's renderer line was FALSE and is corrected in the same change.**
+`foh_render.c` said `THE FUNKEY-S HAS NO GAMEPAD PORT`. The port is physically
+there; what is missing is HOST MODE in the shipped OS
+(`CONFIG_USB_MUSB_GADGET=y`, no `HOST`/`DUAL_ROLE`, `dr_mode = "peripheral"`,
+floating ID pin — `docs/research/gc-adapter.md` §1.4/§2, where the earlier power
+kill is retracted in place). It now reads `FUNKEY-OS SHIPS NO USB HOST MODE` —
+same 32 characters, so no geometry moved.
+
+**BLOCKER for the driver, not for this lane:** `judge-foh-trace.js` changed, so
+its `reviewed-go` row in `port/sim/device/m4-freeze-manifest.txt` (and the
+`CLOSURE` row in `m4-closure-ledger.txt`) no longer matches the tree. Those are
+arc/review status and were deliberately NOT touched here.
+
+**Remaining leg:** `DEVICE FOH OK` has NOT been run (no device in-lane).
+
 ### A37 — DONE 2026-08-23 (lane S). `versusMode` IS REAL. A27 IS UNBLOCKED.
 
 **THE TICKET'S STATED HAZARD WAS BACKWARDS.** A37's row (written by the driver

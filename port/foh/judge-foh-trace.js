@@ -71,6 +71,28 @@ if (M_NET === null) {
 }
 const NETPLAY = M_NET[1] === "1";
 
+// THE SECOND BUILD PROFILE — `FOH_CTL_CHOOSER` (DEVIATION D27, owner ruling
+// 2026-08-23). Same kind of switch, same treatment, for the same reason: at
+// 0 the Controls chooser is unreachable and the Options `CONTROLS` row opens
+// the HANDHELD screen directly; at 1 upstream's menuMode-3 page is back.
+// Registering both graphs at once would accept a `menu-options>
+// menu-controls>a` the shipped build can never emit — the false green
+// review-r1 blocked for FOH_NETPLAY. Parsed LIVE, and EXACTLY ONE
+// definition or die, for the identical fail-closed reasons spelled out
+// above.
+const CTL_DEFS =
+    HDR.match(/^[ \t]*#[ \t]*define[ \t]+FOH_CTL_CHOOSER\b.*$/mg) || [];
+if (CTL_DEFS.length !== 1) {
+  die("foh.h carries " + CTL_DEFS.length + " FOH_CTL_CHOOSER definitions, " +
+      "want exactly 1 (the build profile must be unambiguous)");
+}
+const M_CTL = /^#define FOH_CTL_CHOOSER ([01])$/.exec(CTL_DEFS[0]);
+if (M_CTL === null) {
+  die("the FOH_CTL_CHOOSER definition is not exactly '#define " +
+      "FOH_CTL_CHOOSER [01]': '" + CTL_DEFS[0] + "'");
+}
+const CHOOSER = M_CTL[1] === "1";
+
 // The pinned faithful edge set (foh.h flow graph; upstream citations
 // there). ANY other (from,to,cause) triple is corruption.
 const EDGES = new Set([
@@ -78,21 +100,13 @@ const EDGES = new Set([
   "title>menu-top>start",
   "menu-top>menu-options>a",
   "menu-options>options-gameplay>a",
-  "menu-options>menu-controls>a",
   "menu-options>menu-top>b",
-  "menu-controls>menu-options>b",
   "options-gameplay>menu-options>b",
   "css>sss>start",
   // MENU-SPEC §4 — the audio options screen (gameMode 10, menu.js:130 in,
   // audiomenu.js:26 out with menuMode/menuSelected untouched).
   "menu-options>options-audio>a",
   "options-audio>menu-options>b",
-  // MENU-SPEC §9 — the CONTROLS page's two destinations finally go
-  // somewhere (menu.js:155-157 / :159-161). B returns to the chooser.
-  "menu-controls>controls-controller>a",
-  "menu-controls>controls-keyboard>a",
-  "controls-controller>menu-controls>b",
-  "controls-keyboard>menu-controls>b",
   "sss>css>b",
   "sss>match>launch",
   // iter 99 (M4 task 12) — the target-test screen (upstream citations
@@ -111,6 +125,22 @@ for (const e of NETPLAY
          // Local VS action itself and the CSS's B-hold returns to the page
          // the player actually came from.
          : ["menu-top>css>a", "css>menu-top>bhold"]) {
+  EDGES.add(e);
+}
+// The CONTROLS profile (DEVIATION D27, foh.h's FOH_CTL_CHOOSER). MENU-SPEC
+// §9 — the CONTROLS page's two destinations (menu.js:155-157 / :159-161).
+// At CHOOSER 1 the Options row opens the chooser and both destinations B
+// back to it; at 0 the chooser is skipped in BOTH directions and the
+// controller destination has no edge at all, because nothing on this device
+// can reach it (A33: no USB host mode in the shipped OS image).
+for (const e of CHOOSER
+         ? ["menu-options>menu-controls>a", "menu-controls>menu-options>b",
+            "menu-controls>controls-controller>a",
+            "menu-controls>controls-keyboard>a",
+            "controls-controller>menu-controls>b",
+            "controls-keyboard>menu-controls>b"]
+         : ["menu-options>controls-keyboard>a",
+            "controls-keyboard>menu-options>b"]) {
   EDGES.add(e);
 }
 // Registered refusal tokens, each bound to the screen that emits it

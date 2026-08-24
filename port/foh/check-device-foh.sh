@@ -234,7 +234,7 @@ b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wr
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-e709c03b2631ad0ab66a3f010c86905d9d1d5c81550d0143d7ca0799b95db878 port/foh/judge-foh-trace.js
+cba429049d339b653943a7310c0295b78e520f4b35c2995e1d16629c4cec07cd port/foh/judge-foh-trace.js
 4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js
 2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e port/foh/keymap-frozen.txt
 a1353a71a66bb05bc28d547eee9385cfa8da7baf784f9e038bd31834cabb9cb8 port/foh/normalize-foh-trace.js
@@ -416,7 +416,7 @@ done <<< "$PRODUCER_PINS"
 # (the sibling's pin line sits inside its PRODUCER_PINS quoted block, so
 # it may carry the block's closing quote — match the exact sha+path pair
 # and require EXACTLY one occurrence)
-c="$(grep -cF "e709c03b2631ad0ab66a3f010c86905d9d1d5c81550d0143d7ca0799b95db878 port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
+c="$(grep -cF "cba429049d339b653943a7310c0295b78e520f4b35c2995e1d16629c4cec07cd port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
 [ "$c" = 1 ] || fail "twin pin — check-foh-flows.sh does not carry the same judge-foh-trace.js sha exactly once (count $c; paired change rule)"
 rig_pin_assert_once "$GFX/check-device-music.sh" SNDPACK_SHA256 "$SNDPACK_SHA256" || exit 1
 rig_pin_assert_once "$GFX/check-device-music.sh" MUSIC_BF_SHA256 "$MUSIC_BF_SHA256" || exit 1
@@ -483,7 +483,7 @@ FLOW_SEED=("$seed" "$m01seed" "$seed" "" "$g03seed")
 FLOW_SHOTS=("startup title menu-top css sss" \
             "css-cpu sss-ystory" \
             "options-audio options-gameplay options-edited" \
-            "menu-controls controls-controller controls-keyboard" \
+            "controls-keyboard" \
             "css-p2 sss-pstadium")
 FLOW_LAUNCH=(1 1 1 0 1)
 globbed="$(ls "$FLOWS"/*.flow | sed 's|.*/||; s|\.flow$||' | sort | tr '\n' ' ' | sed 's/ $//')"

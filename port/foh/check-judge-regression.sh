@@ -155,6 +155,20 @@ done
 #   launches=2 under wantLaunch=0 whenever the "more than one LAUNCH" rule was
 #   absent; the new form accepts only 0. Leg [0n]'s authored probes re-ran
 #   green against the tightened judge, which is the witness that matters here.
+#   DEVIATION D27 (owner ruling 2026-08-23) — the Controls chooser collapsed
+#   behind foh.h's FOH_CTL_CHOOSER, so judge-foh-trace.js gained a SECOND
+#   build-profile parse and moved six chooser edges out of the unconditional
+#   EDGES set into a `ctl`/`noctl` block beside the netplay one. This is
+#   NEITHER a widening nor a tightening of the accepted string set at a fixed
+#   profile: it PARTITIONS it. At the pinned profile (0/0) the live edge set
+#   loses the six chooser edges and gains exactly two collapsed ones, which is
+#   strictly what the machine can now emit — leg [0n] proves that by comparing
+#   the live set against the authored authority row for row, and the authored
+#   file carries the citation for each of the two new rows. Lines that moved,
+#   MEASURED: judge-foh-trace.js's EDGES, DECISION_REGION and FILE — three,
+#   and no others. Its ENFORCE_REGION did NOT move, which is the claim that
+#   matters most here: the judging LOOP is byte-identical, so this change
+#   moved a table and not the enforcement of it.
 echo "  [0g] frozen judge/normalizer decision tables"
 FROZEN="$FOH/judge-grammar.frozen.txt"
 [ -f "$FROZEN" ] || fail "missing $FROZEN (the frozen decision-table pin)"
@@ -168,6 +182,13 @@ FROZEN="$FOH/judge-grammar.frozen.txt"
 netdef="$(grep -E '^[[:space:]]*#[[:space:]]*define[[:space:]]+FOH_NETPLAY' "$FOH/foh.h" || true)"
 [ "$netdef" = "#define FOH_NETPLAY 0" ] \
   || grammar_die "foh.h gives the judge's build profile as '$netdef', pinned '#define FOH_NETPLAY 0' — the tables below were frozen under profile 0, and a different (or duplicated, or reformatted) profile swaps EDGES/REFUSED entries in and out without moving a single hash."
+# ...and the SECOND axis, DEVIATION D27 (foh.h's FOH_CTL_CHOOSER). Identical
+# reasoning: the judge reads it out of the same header and swaps six chooser
+# edges for two collapsed ones, which the source-text dump below cannot see
+# because it carries both blocks verbatim.
+ctldef="$(grep -E '^[[:space:]]*#[[:space:]]*define[[:space:]]+FOH_CTL_CHOOSER' "$FOH/foh.h" || true)"
+[ "$ctldef" = "#define FOH_CTL_CHOOSER 0" ] \
+  || grammar_die "foh.h gives the judge's controls profile as '$ctldef', pinned '#define FOH_CTL_CHOOSER 0' — the tables below were frozen under profile 0, and a different (or duplicated, or reformatted) profile swaps EDGES entries in and out without moving a single hash."
 DUMPER_SHA=5ccd56ba377d51b8fc140e6821e20ad59d58efd9821a4f6513cfa852ec3ddfc2
 dsha="$(shasum -a 256 "$FOH/dump-judge-grammar.js" | cut -d' ' -f1)"
 [ "$dsha" = "$DUMPER_SHA" ] || grammar_die "dump-judge-grammar.js is $dsha, pinned $DUMPER_SHA — the extractor that produces every hash below changed. A poisoned/edited dumper can make the frozen tables match while the real grammar widens, so re-pin DUMPER_SHA in this script in the SAME change and say why."
@@ -310,9 +331,9 @@ for (const raw of fs.readFileSync(AUTH, "utf8").split("\n")) {
   } else if ((m = /^L (launch|tlaunch) ([a-z0-9]+) (-?[0-9]+) (-?[0-9]+) (\S.*)$/.exec(ln))) {
     L.push({ line: m[1], f: m[2], lo: +m[3], hi: +m[4], cite: m[5] });
     if (+m[3] > +m[4]) die("authored L row '" + m[2] + "' has lo > hi");
-  } else if ((m = /^E (any|net|nonet) ([a-z-]+) ([a-z-]+) ([a-z]+) (\S.*)$/.exec(ln))) {
+  } else if ((m = /^E (any|net|nonet|ctl|noctl) ([a-z-]+) ([a-z-]+) ([a-z]+) (\S.*)$/.exec(ln))) {
     E.push({ prof: m[1], from: m[2], to: m[3], cause: m[4], cite: m[5] });
-  } else if ((m = /^R (any|net|nonet) ([a-z0-9]+) ([a-z,-]+) (\S.*)$/.exec(ln))) {
+  } else if ((m = /^R (any|net|nonet|ctl|noctl) ([a-z0-9]+) ([a-z,-]+) (\S.*)$/.exec(ln))) {
     R.push({ prof: m[1], tok: m[2], scr: m[3].split(","), cite: m[4] });
   } else if ((m = /^N ([a-z]+) (\S+) (\S.*)$/.exec(ln))) {
     N.push({ rule: m[1], val: m[2], cite: m[3] });
@@ -322,7 +343,7 @@ for (const raw of fs.readFileSync(AUTH, "utf8").split("\n")) {
     die("unparseable authored row: '" + ln + "'");
   }
 }
-const WANT = { S: 17, L: 16, E: 26, R: 8, N: 2, X: 20 };
+const WANT = { S: 17, L: 16, E: 28, R: 8, N: 2, X: 20 };
 for (const [k, arr] of [["S", S], ["L", L], ["E", E], ["R", R], ["N", N], ["X", X]]) {
   if (arr.length !== WANT[k])
     die("the authored table has " + arr.length + " " + k + " rows, want " +
@@ -338,7 +359,18 @@ if (NET_DEFS.length !== 1)
 const M_NET = /^#define FOH_NETPLAY ([01])$/.exec(NET_DEFS[0]);
 if (!M_NET) die("the FOH_NETPLAY definition is not exactly '#define FOH_NETPLAY [01]'");
 const NETPLAY = M_NET[1] === "1";
-const liveProf = p => p === "any" || p === (NETPLAY ? "net" : "nonet");
+// DEVIATION D27's switch, parsed the same way and for the same reason.
+const CTL_DEFS = HDR.match(/^[ \t]*#[ \t]*define[ \t]+FOH_CTL_CHOOSER\b.*$/mg) || [];
+if (CTL_DEFS.length !== 1)
+  die("foh.h carries " + CTL_DEFS.length + " FOH_CTL_CHOOSER definitions, want exactly 1");
+const M_CTL = /^#define FOH_CTL_CHOOSER ([01])$/.exec(CTL_DEFS[0]);
+if (!M_CTL) die("the FOH_CTL_CHOOSER definition is not exactly '#define FOH_CTL_CHOOSER [01]'");
+const CHOOSER = M_CTL[1] === "1";
+// A row is live if its profile is `any` or the value the HEADER selects on
+// either axis. The two axes are independent: a `ctl` row is live in a
+// netplay build and a `nonet` one in a chooser build.
+const liveProf = p => p === "any" || p === (NETPLAY ? "net" : "nonet") ||
+                      p === (CHOOSER ? "ctl" : "noctl");
 
 const jsrc = fs.readFileSync(JUDGE, "utf8");
 const nsrc = fs.readFileSync(NORM, "utf8");
@@ -477,8 +509,8 @@ const eEnd = jsrc.indexOf("\n}\n", rMark);
 if (eEnd < 0) die("the judge's netplay REFUSED block has no closing brace");
 let live;
 try {
-  live = new Function("NETPLAY",
-    jsrc.slice(eStart, eEnd + 3) + "\nreturn { EDGES: EDGES, REFUSED: REFUSED };")(NETPLAY);
+  live = new Function("NETPLAY", "CHOOSER",
+    jsrc.slice(eStart, eEnd + 3) + "\nreturn { EDGES: EDGES, REFUSED: REFUSED };")(NETPLAY, CHOOSER);
 } catch (e) { die("the judge's EDGES/REFUSED region did not evaluate: " + e.message); }
 if (!(live.EDGES instanceof Set)) die("the judge's EDGES did not evaluate to a Set");
 if (!(live.REFUSED instanceof Map)) die("the judge's REFUSED did not evaluate to a Map");
@@ -489,7 +521,8 @@ const liveEdges = [...live.EDGES].slice().sort();
 if (authEdges.join("\n") !== liveEdges.join("\n")) {
   const extra = liveEdges.filter(x => authEdges.indexOf(x) === -1);
   const missing = authEdges.filter(x => liveEdges.indexOf(x) === -1);
-  die("EDGE SET DISAGREEMENT at FOH_NETPLAY=" + (NETPLAY ? "1" : "0") + ".\n" +
+  die("EDGE SET DISAGREEMENT at FOH_NETPLAY=" + (NETPLAY ? "1" : "0") +
+      " FOH_CTL_CHOOSER=" + (CHOOSER ? "1" : "0") + ".\n" +
       "  in the judge but NOT authored: " + (extra.join(" ") || "(none)") + "\n" +
       "  authored but NOT in the judge: " + (missing.join(" ") || "(none)") + "\n" +
       "An unauthored edge is a new path through the FOH. Add the row with the upstream (or registered-deviation) citation that makes it legal, in the SAME change.");
@@ -501,7 +534,8 @@ const liveRef = [...live.REFUSED.entries()]
 if (authRef.join("\n") !== liveRef.join("\n")) {
   const extra = liveRef.filter(x => authRef.indexOf(x) === -1);
   const missing = authRef.filter(x => liveRef.indexOf(x) === -1);
-  die("REFUSAL MAP DISAGREEMENT at FOH_NETPLAY=" + (NETPLAY ? "1" : "0") + ".\n" +
+  die("REFUSAL MAP DISAGREEMENT at FOH_NETPLAY=" + (NETPLAY ? "1" : "0") +
+      " FOH_CTL_CHOOSER=" + (CHOOSER ? "1" : "0") + ".\n" +
       "  in the judge but NOT authored: " + (extra.join(" ") || "(none)") + "\n" +
       "  authored but NOT in the judge: " + (missing.join(" ") || "(none)") + "\n" +
       "A refusal token is a promise that a visible affordance does nothing, bound to the screen that may emit it. Cite it.");

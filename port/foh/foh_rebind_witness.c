@@ -175,9 +175,15 @@ static void goto_handheld(FohState *s) {
   PRESS(s, a);
   PRESS_N(s, down, 2);
   PRESS(s, a);
+#if FOH_CTL_CHOOSER
+  // The chooser sits between the CONTROLS row and this screen only while
+  // DEVIATION D27's switch is on (foh.h). At its shipped 0 the row opens the
+  // HANDHELD screen DIRECTLY, so a second A here would land on the d-pad row
+  // instead of navigating.
   PRESS(s, a);
+#endif
   want(s->screen == FOH_CTRL_KEY,
-       "real gestures reach the HANDHELD screen (Options > CONTROLS > row 0)");
+       "real gestures reach the HANDHELD screen (Options > CONTROLS)");
 }
 
 // --- screen readers ----------------------------------------------------------

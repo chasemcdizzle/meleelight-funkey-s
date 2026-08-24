@@ -42,7 +42,19 @@
 //   [A4]    the STYLE row on the HANDHELD screen reads CLASSIC / BOX / NATURAL
 //           across the real L/R cycle, and never the old ambiguous "NORMAL";
 //   [D25-5] the explanation-bar width pin still names the widest blurb, so the
-//           new HANDHELD blurb did not silently outgrow the panel.
+//           new HANDHELD blurb did not silently outgrow the panel;
+//   [D27-1] THE ROUTE, at whichever value of foh.h's FOH_CTL_CHOOSER this
+//           file is compiled with. At 0 (the shipped build, owner ruling
+//           2026-08-23 "collapse now - make easily revertable though
+//           please") A on the Options CONTROLS row opens the HANDHELD screen
+//           DIRECTLY and its B returns to Options ON THE CONTROLS ROW; at 1
+//           the pre-D27 chooser sits between them and B walks back through
+//           it. ONE `#define` decides which, and check-controls-labels.sh
+//           builds this witness BOTH ways, so the restorable path cannot rot;
+//   [D27-2] the chooser page is WHOLE at either value — every claim in
+//           [D25-2/3/4] is asserted at 0 too, with the page seated directly
+//           because navigation no longer reaches it. That is what makes
+//           "nothing was deleted" a measurement instead of a promise.
 //
 // THE INSTRUMENT is foh_legibility_witness.c's, verbatim in method: a rendered
 // string is asserted by OVERDRAWING the claimed string, at the claimed place,
@@ -252,23 +264,48 @@ static void d25_options_row(void) {
                    "options page");
 }
 
+// Put the machine ON the chooser page with the cursor on `row`.
+//
+// At FOH_CTL_CHOOSER 1 that is a NAVIGATION — A on the Options CONTROLS row,
+// through the real foh_tick, exactly as a player reaches it.
+// At 0 (DEVIATION D27) the page is UNREACHABLE, so it is SEATED directly.
+// That is deliberate and it is the foh_snd_witness.c `battle-B` idiom: the
+// chooser's arms are compiled unconditionally at either flag value, and the
+// owner asked for a collapse that is EASILY REVERTIBLE — a restorable page
+// nobody exercises is restorable in name only. Everything below this seat is
+// therefore identical in both builds, T2 (the routing half-swap trap) included.
+static void seat_chooser(FohState *s, int row) {
+  goto_options(s);
+  PRESS_N(s, down, 2);
+#if FOH_CTL_CHOOSER
+  PRESS(s, a);
+  want(s->screen == FOH_MENU_CONTROLS, "A on the Controls row opens the chooser");
+  want(s->menuSelected == 0, "the chooser opens on row 0 (menu.js:139-141)");
+  if (row != 0) {
+    PRESS(s, down);
+    want(s->menuSelected == row, "DOWN moves the chooser cursor to row 1");
+  }
+#else
+  want(s->screen == FOH_MENU_OPTIONS,
+       "D27: the Options page is as far as NAVIGATION reaches the chooser");
+  s->screen = FOH_MENU_CONTROLS;
+  s->menuSelected = row;
+#endif
+}
+
 // --- [D25-2/3/4] the chooser: labels BOUND to destinations ------------------
 // Each row is proved twice over: what it SAYS, and where pressing A on it
 // GOES. The second half is the one a label-only check would miss, and it is
 // where the index-selection trap lives.
 static void d25_chooser(void) {
   FohState s;
-  goto_options(&s);
-  PRESS_N(&s, down, 2);
-  PRESS(&s, a);
-  want(s.screen == FOH_MENU_CONTROLS, "A on the Controls row opens the chooser");
-  want(s.menuSelected == 0, "the chooser opens on row 0 (menu.js:139-141)");
+  seat_chooser(&s, 0);
 
   // Both rows in ONE frame: row 0 is the selected one (black), row 1 is not.
   assert_row_label(&s, 0, true, "HANDHELD", "CONTROLLER", "controls chooser");
   assert_row_label(&s, 1, false, "CONTROLLER", "HANDHELD", "controls chooser");
 
-  // ROW 0 -> the HANDHELD screen. The whole ticket is this pairing.
+  // ROW 0 -> the HANDHELD screen. The whole A24 ticket is this pairing.
   PRESS(&s, a);
   want(s.screen == FOH_CTRL_KEY,
        "A on row 0 lands on FOH_CTRL_KEY (upstream gameMode 12 — IDENTITY "
@@ -278,24 +315,59 @@ static void d25_chooser(void) {
        "judge grammar and the frozen flow expects key on it)");
   assert_header(&s, "HANDHELD", "CONTROLLER", "row 0's destination");
 
-  PRESS(&s, b);
-  want(s.screen == FOH_MENU_CONTROLS, "B returns to the chooser");
-  want(s.menuSelected == 0, "and lands back on the row it left from");
-
-  // ROW 1 -> the CONTROLLER screen, still reachable (the submenu is NOT
-  // collapsed: the A33 hardware question is open and the branch may go live).
-  PRESS(&s, down);
-  want(s.menuSelected == 1, "DOWN moves the chooser cursor to row 1");
+  // ROW 1 -> the CONTROLLER screen. It is UNREACHABLE by navigation at
+  // FOH_CTL_CHOOSER 0 (D27 — A33 measured that the shipped OS image compiles
+  // no USB host mode), and it is still WHOLE: this is what proves the collapse
+  // deleted nothing.
+  seat_chooser(&s, 1);
   PRESS(&s, a);
   want(s.screen == FOH_CTRL_PAD,
-       "A on row 1 lands on FOH_CTRL_PAD (upstream gameMode 14 — still "
-       "REACHABLE, the collapse is out of scope)");
+       "A on row 1 lands on FOH_CTRL_PAD (upstream gameMode 14 — the arm is "
+       "compiled at either flag value)");
   want(strcmp(foh_screen_token(s.screen), "controls-controller") == 0,
        "IDENTITY: row 1's screen token is still \"controls-controller\"");
   assert_header(&s, "CONTROLLER", "HANDHELD", "row 1's destination");
+}
 
+// --- [D27] the route the OWNER actually walks -------------------------------
+// The collapse is a ROUTING claim in both directions, so both are pressed
+// through the real foh_tick: what A on the Options CONTROLS row opens, and
+// where B from that screen comes back to (and onto which row).
+static void d27_route(void) {
+  FohState s;
+  goto_options(&s);
+  PRESS_N(&s, down, 2);
+  want(s.menuSelected == 2, "two DOWNs land on the CONTROLS row (index 2)");
+  PRESS(&s, a);
+#if FOH_CTL_CHOOSER
+  want(s.screen == FOH_MENU_CONTROLS,
+       "FOH_CTL_CHOOSER 1: the CONTROLS row opens the CHOOSER (the pre-D27 "
+       "route, restored whole by the flag)");
+  PRESS(&s, a);
+  want(s.screen == FOH_CTRL_KEY, "and row 0 opens the HANDHELD screen");
   PRESS(&s, b);
-  want(s.screen == FOH_MENU_CONTROLS, "B returns to the chooser from row 1 too");
+  want(s.screen == FOH_MENU_CONTROLS, "B returns to the chooser");
+  want(s.menuSelected == 0, "and lands back on the row it left from");
+  PRESS(&s, b);
+  want(s.screen == FOH_MENU_OPTIONS, "a second B returns to the Options page");
+  want(s.menuSelected == 0,
+       "with upstream's cursor reset to AUDIOOPTIONS (menu.js:170)");
+#else
+  want(s.screen == FOH_CTRL_KEY,
+       "D27: the CONTROLS row opens the HANDHELD screen DIRECTLY — no chooser "
+       "step (owner ruling 2026-08-23; changeGamemode(12), menu.js:159-161)");
+  want(strcmp(foh_screen_token(s.screen), "controls-keyboard") == 0,
+       "IDENTITY: the collapsed route's screen token is still "
+       "\"controls-keyboard\" — routing moved, identity did not");
+  assert_header(&s, "HANDHELD", "CONTROLLER",
+                "the collapsed CONTROLS row's destination");
+  PRESS(&s, b);
+  want(s.screen == FOH_MENU_OPTIONS,
+       "B from the HANDHELD screen returns to the Options page in ONE press");
+  want(s.menuSelected == 2,
+       "and lands on the CONTROLS row that opened it (nothing on the way in "
+       "touched menuSelected, because there is no chooser cursor to seat)");
+#endif
 }
 
 // --- [A4] the control-style row ---------------------------------------------
@@ -327,7 +399,9 @@ static void a4_style_names(void) {
   goto_options(&s);
   PRESS_N(&s, down, 2);
   PRESS(&s, a);
-  PRESS(&s, a);
+#if FOH_CTL_CHOOSER
+  PRESS(&s, a);  // D27 off: the chooser sits between the row and the screen
+#endif
   want(s.screen == FOH_CTRL_KEY, "the HANDHELD screen is where the styles live");
   want(s.ctlRow == 0, "its cursor opens on the FIRST row (A31 row layout)");
   PRESS_N(&s, down, CTL_STYLE_ROW);
@@ -388,6 +462,7 @@ static void d25_blurb_width(void) {
 int main(void) {
   d25_options_row();
   d25_chooser();
+  d27_route();
   a4_style_names();
   d25_blurb_width();
   if (g_fails) {
