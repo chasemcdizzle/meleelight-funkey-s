@@ -22,7 +22,17 @@
 //   [2] the SSOT — the compiled table re-emitted in the KEYMAP1 form
 //       foh_dev's --dump-keymap uses, byte-compared against the frozen
 //       port/foh/keymap-frozen.txt.
-//   [3] OWNER-VISIBLE BEHAVIOUR, through the real functions:
+//   [3] OWNER-VISIBLE BEHAVIOUR, through the real functions. Legs [3d]
+//       and [3e] were added on 2026-08-24 for the owner's control
+//       RE-RATIFICATION (DEVIATIONS D31/D32/D33) — L-only shielding,
+//       the C-layer moving onto the freed R shoulder, and the face
+//       plane becoming A=jump B=attack Y=special X=GRAB in every style,
+//       BOX included. They are deliberately ORTHOGONAL to
+//       port/foh/check-rebind.sh: that check proves the REBINDER
+//       permutes physical buttons before this layer, while these prove
+//       what the layer emits under the IDENTITY binding. Neither can
+//       stand in for the other — a permutation of a wrong table is
+//       still wrong.
 //       (a) L SHIELDS in the fresh-install style — s1_input_row_style()
 //           with only l held must emit r=true, rA=1.0 (A3);
 //       (b) L CHAR-STEPS in target-select — the real foh_tick() on the
@@ -183,13 +193,114 @@ static void leg_shield(void) {
   want(held.r && held.rA == 1.0,
        "[3a] L alone shields in the fresh-install style (r=true, rA=1.0)");
 
-  // And R still does, so the fix added a shield button rather than
-  // moving one.
+  // ...and R does NOT, since DEVIATION D31 (owner 2026-08-24: "L-only
+  // shielding is totally fine. I want it in fact."). This is the arm
+  // that FREES R for the C-layer, which frees Y for SPECIAL, which is
+  // what buys the pad a real grab button — so if R quietly starts
+  // shielding again the whole D31/D32/D33 chain is broken at its root.
   memset(&p, 0, sizeof p);
   p.r = true;
   MlInput rHeld = s1_input_row_style(&p, ctl_style_get(), ctl_mod_on_r_get());
-  want(rHeld.r && rHeld.rA == 1.0, "[3a] R still shields too");
-  printf("  [3a] OK: L shields in style %s\n", ctl_style_name((int)ctl_style_get()));
+  want(!rHeld.r && rHeld.rA == 0.0,
+       "[3a] R does NOT shield in the fresh-install style (D31: L-only)");
+  printf("  [3a] OK: L-only shielding in style %s\n",
+         ctl_style_name((int)ctl_style_get()));
+}
+
+// --- [3d] R is the C-LAYER on the non-BOX styles (D32) ----------------------
+// Owner-visible claim: hold R and the d-pad drives the C-STICK while the
+// left stick FREEZES. Asserted through the product resolver, per style,
+// on the coordinates the ratified BOX table emits — because CLASSIC's
+// and NATURAL's C-layer rows are that table's rows, unedited.
+static void leg_clayer(void) {
+  const CtlStyle styles[2] = {CTL_STYLE_NATURAL, CTL_STYLE_NORMAL};
+  for (int k = 0; k < 2; k++) {
+    const CtlStyle st = styles[k];
+    PlatformInput p;
+    memset(&p, 0, sizeof p);
+    p.r = true;
+    p.right = true;
+    MlInput in = s1_input_row_style(&p, st, ctl_mod_on_r_get());
+    want(in.csX == 1.0 && in.csY == 0.0 && in.lsX == 0.0 && in.lsY == 0.0,
+         "[3d] held R + RIGHT drives the C-stick and freezes the left one");
+    want(!in.r && in.rA == 0.0,
+         "[3d] and holding the C-layer shoulder does NOT shield (D31)");
+
+    // The diagonal, because it is the row a wrong table would get wrong.
+    memset(&p, 0, sizeof p);
+    p.r = true;
+    p.down = true;
+    p.left = true;
+    in = s1_input_row_style(&p, st, ctl_mod_on_r_get());
+    want(in.csX == -0.7 && in.csY == -0.7 && in.lsX == 0.0 && in.lsY == 0.0,
+         "[3d] held R + down-left drives cs (-0.7,-0.7), left stick frozen");
+
+    // Without R the SAME d-pad is the plain left stick — so the layer is
+    // a modifier, not a permanent rerouting.
+    memset(&p, 0, sizeof p);
+    p.down = true;
+    p.left = true;
+    in = s1_input_row_style(&p, st, ctl_mod_on_r_get());
+    want(in.lsX == -0.7 && in.lsY == -0.7 && in.csX == 0.0 && in.csY == 0.0,
+         "[3d] and WITHOUT R the same d-pad is the plain left stick");
+  }
+  // BOX is the exception, and it is the arithmetic that makes it one: it
+  // spends R on Mod (D30), so it has no button left to hold a C-stick.
+  PlatformInput b;
+  memset(&b, 0, sizeof b);
+  b.r = true;
+  b.right = true;
+  const MlInput inBox = s1_input_row_style(&b, CTL_STYLE_BOX, true);
+  want(inBox.csX == 0.0 && inBox.csY == 0.0,
+       "[3d] BOX has NO C-layer — R is its Mod shoulder (D30/D32)");
+  printf("  [3d] OK: R drives the C-stick on NATURAL/CLASSIC, not on BOX\n");
+}
+
+// --- [3e] the FACE plane, every style, BOX included (D33) -------------------
+// The re-ratification in the owner's own words: "X->grab, A->jump,
+// Y->special, B->attack" and, of BOX, "wtf you can't grab on box?? we
+// want to be able to". One press at a time, so a leg that fires cannot
+// be satisfied by a neighbouring bit.
+static void leg_face(void) {
+  for (int st = 0; st < CTL_STYLE_COUNT; st++) {
+    const CtlStyle style = (CtlStyle)st;
+    const bool mr = ctl_mod_on_r_get();
+    PlatformInput p;
+    MlInput in;
+
+    memset(&p, 0, sizeof p);
+    p.a = true;
+    in = s1_input_row_style(&p, style, mr);
+    want(in.x && !in.a && !in.b && !in.z, "[3e] physical A is JUMP (in.x)");
+
+    memset(&p, 0, sizeof p);
+    p.b = true;
+    in = s1_input_row_style(&p, style, mr);
+    want(in.a && !in.b && !in.x && !in.z, "[3e] physical B is ATTACK (in.a)");
+
+    memset(&p, 0, sizeof p);
+    p.y = true;
+    in = s1_input_row_style(&p, style, mr);
+    want(in.b && !in.a && !in.x && !in.z,
+         "[3e] physical Y is SPECIAL (in.b)");
+
+    memset(&p, 0, sizeof p);
+    p.x = true;
+    in = s1_input_row_style(&p, style, mr);
+    want(in.z && !in.a && !in.b && !in.x,
+         "[3e] physical X is GRAB (in.z) — in EVERY style, BOX included");
+  }
+  // Said once more, unconditionally, about the style the owner asked
+  // about by name: BOX grabs.
+  {
+    PlatformInput p;
+    memset(&p, 0, sizeof p);
+    p.x = true;
+    const MlInput in = s1_input_row_style(&p, CTL_STYLE_BOX, true);
+    want(in.z, "[3e] BOX GRABS (owner: \"wtf you can't grab on box??\")");
+  }
+  printf("  [3e] OK: A=jump B=attack Y=special X=grab in all %d styles\n",
+         (int)CTL_STYLE_COUNT);
 }
 
 // --- [3b] L char-steps in target-select (A25b) ------------------------------
@@ -273,6 +384,8 @@ int main(int argc, char **argv) {
   }
   leg_arm();
   leg_ssot(argv[1]);
+  leg_clayer();
+  leg_face();
   leg_shield();
   leg_tss();
   leg_mod();

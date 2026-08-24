@@ -25,14 +25,17 @@
 
 #define FOH_CTL_LABEL_ROWS 9
 
-// Follows ctl_roles() + s1_input_row_style() in port/gfx/s1_input.h:160-185,
-// :280-284:
-//   X / Y : C-layer styles (BOX, NORMAL) spend X on jump and Y on the C-stick
-//           layer; NATURAL spends X on grab (Z) and Y on jump.
-//   L / R : only BOX carries Mod, on the shoulder modOnR names; NORMAL and
-//           NATURAL shield on BOTH shoulders.
+// Follows ctl_roles() + s1_input_row_style() in port/gfx/s1_input.h.
+// Since the 2026-08-24 owner re-ratification (DEVIATIONS D31/D32/D33)
+// the FACE rows are STYLE-INDEPENDENT — A jump, B attack, X grab, Y
+// special, in every style, BOX included. Only the shoulders differ:
+//   L : shield in every style, EXCEPT the BOX arrangement that puts Mod
+//       there (modOnR == false).
+//   R : Mod in BOX (on the shoulder modOnR names); the C-layer hold in
+//       NATURAL and NORMAL. BOX is the one style with no C-layer — six
+//       gameplay buttons cannot carry seven roles (ctl_style.h).
 static inline bool foh_ctl_has_clayer(CtlStyle style) {
-  return style == CTL_STYLE_BOX || style == CTL_STYLE_NORMAL;
+  return style != CTL_STYLE_BOX;
 }
 
 static inline void foh_ctl_labels(CtlStyle style, bool modOnR,
@@ -40,12 +43,13 @@ static inline void foh_ctl_labels(CtlStyle style, bool modOnR,
   const bool clayer = foh_ctl_has_clayer(style);
   const bool boxMod = (style == CTL_STYLE_BOX);
   out[0] = "CONTROL STICK";
-  out[1] = "ATTACK";
-  out[2] = "SPECIAL";
-  out[3] = clayer ? "JUMP" : "GRAB (Z)";
-  out[4] = clayer ? "C-STICK (HOLD)" : "JUMP";
+  out[1] = "JUMP";
+  out[2] = "ATTACK";
+  out[3] = "GRAB (Z)";
+  out[4] = "SPECIAL";
   out[5] = boxMod ? (modOnR ? "SHIELD" : "MOD / TILT") : "SHIELD";
-  out[6] = boxMod ? (modOnR ? "MOD / TILT" : "SHIELD") : "SHIELD";
+  out[6] = boxMod ? (modOnR ? "MOD / TILT" : "SHIELD")
+                  : (clayer ? "C-STICK (HOLD)" : "SHIELD");
   out[7] = "PAUSE";
   out[8] = "PAUSE MENU";
 }

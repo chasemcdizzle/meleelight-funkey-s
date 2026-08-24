@@ -158,7 +158,7 @@ for (let f = 0; f < FRAMES; f++) {
 }
 // bit layout — PAIRED with gfx_app.c's rawKeys producer
 const K_UP = 1, K_DOWN = 2, K_LEFT = 4, K_RIGHT = 8;
-const K_A = 16, K_B = 32, K_X = 64, K_START = 256;
+const K_A = 16, K_B = 32, K_X = 64, K_Y = 128, K_START = 256;
 
 function checkRow(f, s, e) {
   if (typeof e !== "object" || e === null || Array.isArray(e)) {
@@ -181,9 +181,21 @@ function checkRow(f, s, e) {
 }
 
 // --- coverage signatures (pre-registered; s1-session.script plan) -----------
-// review-51 L1: the clayer-diag signature ALSO requires the left stick
-// neutral (a glue regression emitting correct cs alongside stale
-// nonzero ls must not satisfy it).
+// review-51 L1: a cs signature ALSO requires the left stick neutral (a
+// glue regression emitting correct cs alongside stale nonzero ls must
+// not satisfy it).
+//
+// RE-PINNED 2026-08-24 for the owner's control re-ratification. The
+// producer (gfx_app.c) is BOX-pinned by design, and DEVIATION D32 took
+// the C-layer OFF the BOX style — six gameplay buttons cannot carry
+// seven roles once grab is real — so the five cs signatures below are
+// GONE FROM THIS RIG, not weakened away: the cs plane is pinned
+// bit-exactly, on the style that still has one, by s1_sweep.c checks
+// 11-13 (which this same check runs, host-side, in step [3/9]). What
+// the session's ex-C-layer chords now produce is PLAIN stick, and two
+// of those were never pinned before, so they are pinned here; and the
+// BUTTON plane gains its fourth role, GRAB, which is the whole point of
+// the re-ratification. The script's PRESSES are byte-unchanged.
 const SIGS = [
   ["dash-right lsX=1",            (i) => i.lsX === 1 && i.lsY === 0 && !i.y],
   ["dash-left lsX=-1",            (i) => i.lsX === -1 && i.lsY === 0],
@@ -201,15 +213,13 @@ const SIGS = [
   ["shield-drop-left (-0.7,-0.6875)", (i) => i.lsX === -0.7 && i.lsY === -0.6875 && i.r],
   ["spotdodge (0,-1)+shield",     (i) => i.lsX === 0 && i.lsY === -1 && i.r],
   ["shield r/rA=1",               (i) => i.r === true && i.rA === 1],
-  ["clayer-right csX=1 ls neutral", (i) => i.csX === 1 && i.lsX === 0 && i.lsY === 0],
-  ["clayer-left csX=-1",          (i) => i.csX === -1 && i.lsX === 0 && i.lsY === 0],
-  ["clayer-up csY=1",             (i) => i.csY === 1 && i.lsX === 0 && i.lsY === 0],
-  ["clayer-down csY=-1",          (i) => i.csY === -1 && i.lsX === 0 && i.lsY === 0],
-  ["clayer-diag (-0.7,-0.7) ls neutral", (i) => i.csX === -0.7 && i.csY === -0.7 &&
-                                                i.lsX === 0 && i.lsY === 0],
-  ["attack a",                    (i) => i.a === true],
-  ["special b",                   (i) => i.b === true],
-  ["jump x",                      (i) => i.x === true],
+  ["plain-down lsY=-1 no shield", (i) => i.lsX === 0 && i.lsY === -1 && !i.r],
+  ["plain-diag (-0.7,-0.7)",      (i) => i.lsX === -0.7 && i.lsY === -0.7 && !i.r],
+  // the D33 button plane, one signature per face role
+  ["jump (physical A) -> i.x",    (i) => i.x === true],
+  ["attack (physical B) -> i.a",  (i) => i.a === true],
+  ["special (physical Y) -> i.b", (i) => i.b === true],
+  ["grab (physical X) -> i.z",    (i) => i.z === true],
 ];
 const counts = new Array(SIGS.length).fill(0);
 
@@ -231,17 +241,25 @@ for (let f = 0; f < trace.length; f++) {
   if (p1Neutral) neutralSlot1++;
   else die("frame " + f + " slot 1 is not the neutral human row");
   const i = frame[0];
-  // S1 invariants
-  if (i.y || i.z || i.l || i.du || i.dl || i.dr || i.dd) invBad++;
+  // S1 invariants. i.z left the list with D33 — it is now the GRAB bit,
+  // asserted against its physical source in the sidecar pairing below —
+  // and the cs plane is dead on BOX since D32, so it is pinned to zero.
+  if (i.y || i.l || i.du || i.dl || i.dr || i.dd) invBad++;
+  if (i.csX !== 0 || i.csY !== 0) invBad++;
   if (i.lA !== 0) invBad++;
   if (i.r ? i.rA !== 1 : i.rA !== 0) invBad++;
   if (i.lsX !== i.rawX || i.lsY !== i.rawY ||
       i.csX !== i.rawcsX || i.csY !== i.rawcsY) invBad++;
-  // sidecar pairing fidelity: a/b/x/start are copied verbatim from the
-  // pin into the S1 row — the bits and bools must agree frame-by-frame
+  // sidecar pairing fidelity: the four face buttons and START reach the
+  // S1 row through the D33 mapping — A jump, B attack, Y special, X grab
+  // — and the bits and bools must agree frame-by-frame. This is the
+  // rig's PHYSICAL witness for the re-ratified plane: the signatures
+  // above prove each role fires, this proves it fires from the right
+  // button on every single frame.
   const k = rawKeys[f];
-  if (((k & K_A) !== 0) !== i.a || ((k & K_B) !== 0) !== i.b ||
-      ((k & K_X) !== 0) !== i.x || ((k & K_START) !== 0) !== i.s) {
+  if (((k & K_A) !== 0) !== i.x || ((k & K_B) !== 0) !== i.a ||
+      ((k & K_Y) !== 0) !== i.b || ((k & K_X) !== 0) !== i.z ||
+      ((k & K_START) !== 0) !== i.s) {
     die("frame " + f + " raw-key sidecar a/b/x/start bits disagree with " +
         "the recorded row — sidecar is not this session's recording");
   }

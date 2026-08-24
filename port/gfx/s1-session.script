@@ -2,7 +2,14 @@
 # (M3 task 5; played by port/tools/fk_input.c on the FunKey-S).
 #
 # Letter keysyms (CLAUDE.md "Device access" / platform_sdl1.c):
-#   u/d/l/r = d-pad   a/b/x/y = face (y = S1 C-layer)   m = L (Mod)
+#   u/d/l/r = d-pad   a/b/x/y = face   m = L (Mod)
+#   FACE ROLES (re-ratified 2026-08-24, DEVIATIONS D31/D32/D33): a =
+#   JUMP, b = ATTACK, y = SPECIAL, x = GRAB (Z). The PRESSES below are
+#   byte-unchanged from the pre-D33 session — only what they mean
+#   changed, and the coverage judge was re-pinned in the same commit.
+#   BOX (which is what gfx_app.c drives) no longer has a C-layer at
+#   all: it spends R on Mod, so the sections once labelled "C-layer"
+#   now hold SPECIAL while the d-pad drives the plain left stick.
 #   (L moved k -> m on 2026-08-24: the physical L shoulder emits KEY_M,
 #    measured off /dev/input/event0 — fix_plan A25b + A3. The session is
 #    UNCHANGED in what it presses; only the keysym that reaches it is.)
@@ -18,11 +25,11 @@
 # recorded trace is judged on VALUES, never frame indices.
 #
 # Coverage plan (the judge asserts every signature below appears):
-# dash +-1.0 both signs, plain up/down, plain diagonal, R+up-diagonal,
-# L-walk both signs, L-u/d-tilt, L-diagonal, L+R wavedash diag both
-# signs, shield (r/rA=1), shield drop both signs, spotdodge, SOCD both
-# pairs, C-layer cardinals (x and y axes, both signs on x) + diagonal,
-# a/b/x button presses.
+# dash +-1.0 both signs, plain up/down, plain diagonal (both signs),
+# R+up-diagonal, L-walk both signs, L-u/d-tilt, L-diagonal, L+R wavedash
+# diag both signs, shield (r/rA=1), shield drop both signs, spotdodge,
+# SOCD both pairs, and all four face roles: a->jump, b->attack,
+# y->special, x->grab.
 
 # clear boot margin + the starting window
 s 2500
@@ -33,7 +40,7 @@ s 300
 u r
 s 60
 
-# --- dash left, then f-smash left (cardinal -1.0 + A) ---
+# --- dash left, then jump (a) while dashing (cardinal -1.0) ---
 d l
 s 250
 d a
@@ -58,7 +65,7 @@ u l
 u m
 s 60
 
-# --- L u-tilt (0, 0.5375) with A ---
+# --- L u-tilt (0, 0.5375) with jump (a) ---
 d m
 d u
 s 200
@@ -91,7 +98,7 @@ u u
 u r
 s 60
 
-# --- jump then C-layer down (aerial c-stick) ---
+# --- grab (x), then special (y) + plain down (0,-1.0) ---
 d x
 s 120
 u x
@@ -130,7 +137,7 @@ u d
 u n
 s 60
 
-# --- jump, then L+R+down-left wavedash chord (-0.6375, -0.375) ---
+# --- grab (x), then L+R+down-left wavedash chord (-0.6375, -0.375) ---
 d x
 s 120
 u x
@@ -161,7 +168,7 @@ u u
 u d
 s 60
 
-# --- C-layer cardinals: right (csX 1.0), up (csY 1.0) ---
+# --- special (y) held over plain right, then plain up ---
 d y
 d r
 s 250
@@ -172,7 +179,7 @@ u u
 u y
 s 60
 
-# --- C-layer diagonal down-left (-0.7, -0.7) ---
+# --- special (y) held over plain diagonal down-left (-0.7,-0.7) ---
 d y
 d d
 d l
@@ -182,13 +189,13 @@ u l
 u y
 s 60
 
-# --- neutral special (B) ---
+# --- neutral attack (b) ---
 d b
 s 250
 u b
 s 60
 
-# --- side special right (B + right) ---
+# --- f-tilt/f-smash right (b + right) ---
 d r
 d b
 s 250
@@ -196,7 +203,7 @@ u b
 u r
 s 60
 
-# --- second pass: dash left / shield drop left / C-layer left ---
+# --- second pass: dash left / shield drop left / special+left ---
 d l
 s 250
 u l

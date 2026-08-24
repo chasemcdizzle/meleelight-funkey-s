@@ -3,15 +3,21 @@
 // Host-side harness over the S1 layer (s1_input.h) — no sim, no SDL:
 //   1. Asserts the 15 pinned PLAN §6 chord→coordinate checks (the
 //      iter-51 pre-registered enumeration, AGENT-LOG) with BIT-EXACT
-//      double equality against independently written literals.
+//      double equality against independently written literals. Checks
+//      11-13 (the C-layer plane) run under CLASSIC since DEVIATION
+//      D32 — the BOX style has no C-layer button left to hold; the
+//      COORDINATES are unchanged.
 //   2. Exhaustively dumps all 2^11 button combos (d-pad U/D/L/R +
 //      Y/L/R + a/b/x/start) as canonical lines (booleans 0/1, doubles
 //      as 16-hex-digit big-endian IEEE-754 bit patterns) — the check
 //      script runs it twice and cmp's the dumps (byte stability).
 //   3. Asserts EVERY emitted coordinate sits on the 1/80 Melee grid
-//      (meleeRound(v) bit-== v) and the S1 invariants: y/z/l and the
+//      (meleeRound(v) bit-== v) and the S1 invariants: y/l and the
 //      d-pad booleans never set, lA == 0, rA ∈ {0,1} tied to r,
-//      ls* == deaden(raw*), C-layer rows keep the left stick neutral.
+//      ls* == deaden(raw*), the D33 button plane (A jump, B attack,
+//      Y special, X grab) in BOTH the BOX and CLASSIC rows, BOX's cs
+//      plane dead, CLASSIC's C-layer freezing its left stick, and
+//      CLASSIC shielding from L ONLY (D31).
 //
 // Exit 0 + final line "S1 SWEEP OK ..." only if everything holds.
 #include <inttypes.h>
@@ -40,9 +46,9 @@ static PlatformInput combo(unsigned m) {
   p.down = (m >> 1) & 1;
   p.left = (m >> 2) & 1;
   p.right = (m >> 3) & 1;
-  p.y = (m >> 4) & 1; // C-layer
-  p.l = (m >> 5) & 1; // Mod
-  p.r = (m >> 6) & 1; // shield
+  p.y = (m >> 4) & 1; // SPECIAL (D33; was the BOX C-layer hold)
+  p.l = (m >> 5) & 1; // Mod (BOX, modOnR=false)
+  p.r = (m >> 6) & 1; // shield (BOX, modOnR=false) / C-layer in NORMAL
   p.a = (m >> 7) & 1;
   p.b = (m >> 8) & 1;
   p.x = (m >> 9) & 1;
@@ -80,9 +86,15 @@ static void expect_ls(const char *name, PlatformInput p, double ex,
   }
 }
 
+// The C-layer moved OFF the BOX style entirely (DEVIATION D32: BOX spends
+// its shoulders on Mod + shield, so it has no button left to hold a
+// C-stick). These six pinned checks therefore run under CLASSIC
+// (CTL_STYLE_NORMAL), whose C-layer IS the ratified BOX one, row for row
+// and magnitude for magnitude — the coordinates below are UNCHANGED from
+// the pre-D32 pins; only the style and the holding button (Y -> R) moved.
 static void expect_cs(const char *name, PlatformInput p, double ex,
                       double ey) {
-  const MlInput in = s1_input_row(&p);
+  const MlInput in = s1_input_row_style(&p, CTL_STYLE_NORMAL, false);
   // C-layer: the LEFT STICK MUST BE NEUTRAL while cs is driven.
   if (!deq(in.csX, ex) || !deq(in.csY, ey) || !deq(in.lsX, 0.0) ||
       !deq(in.lsY, 0.0) || !deq(in.rawX, 0.0) || !deq(in.rawY, 0.0)) {
@@ -147,20 +159,20 @@ int main(void) {
   // 10. R + straight down -> (0, -1.0) (spotdodge)
   expect_ls("10 R+down (spotdodge)", pad((Pad){.down = true, .r = true}),
             0.0, -1.0);
-  // 11. Y-layer + horizontal -> csX +-1.0, left stick neutral
-  expect_cs("11 clayer right", pad((Pad){.right = true, .y = true}), 1.0,
+  // 11. R C-layer + horizontal -> csX +-1.0, left stick neutral (CLASSIC)
+  expect_cs("11 clayer right", pad((Pad){.right = true, .r = true}), 1.0,
             0.0);
-  expect_cs("11 clayer left", pad((Pad){.left = true, .y = true}), -1.0,
+  expect_cs("11 clayer left", pad((Pad){.left = true, .r = true}), -1.0,
             0.0);
-  // 12. Y-layer + vertical -> csY +-1.0
-  expect_cs("12 clayer up", pad((Pad){.up = true, .y = true}), 0.0, 1.0);
-  expect_cs("12 clayer down", pad((Pad){.down = true, .y = true}), 0.0,
+  // 12. R C-layer + vertical -> csY +-1.0 (CLASSIC)
+  expect_cs("12 clayer up", pad((Pad){.up = true, .r = true}), 0.0, 1.0);
+  expect_cs("12 clayer down", pad((Pad){.down = true, .r = true}), 0.0,
             -1.0);
-  // 13. Y-layer + diagonal -> (+-0.7, +-0.7) on cs
+  // 13. R C-layer + diagonal -> (+-0.7, +-0.7) on cs (CLASSIC)
   expect_cs("13 clayer diag up-right",
-            pad((Pad){.up = true, .right = true, .y = true}), 0.7, 0.7);
+            pad((Pad){.up = true, .right = true, .r = true}), 0.7, 0.7);
   expect_cs("13 clayer diag down-left",
-            pad((Pad){.down = true, .left = true, .y = true}), -0.7, -0.7);
+            pad((Pad){.down = true, .left = true, .r = true}), -0.7, -0.7);
   // 14. SOCD: opposite cardinals -> neutral axis
   expect_ls("14 SOCD left+right", pad((Pad){.left = true, .right = true}),
             0.0, 0.0);
@@ -194,20 +206,37 @@ int main(void) {
     const PlatformInput p = combo(m);
     const S1Resolved r = s1_resolve(&p);
     const MlInput in = s1_input_row(&p);
+    // CLASSIC's row for the SAME combo. BOX has no C-layer any more
+    // (D32), so the "C-layer freezes the left stick" invariant would be
+    // vacuous on the BOX row alone; it is swept here on the style that
+    // has one, over all 2048 combos, which is strictly more than the
+    // single-style form it replaces.
+    const MlInput inC = s1_input_row_style(&p, CTL_STYLE_NORMAL, false);
     // invariants
-    if (in.y || in.z || in.l || in.du || in.dl || in.dr || in.dd)
-      inv_bad++;
+    if (in.y || in.l || in.du || in.dl || in.dr || in.dd) inv_bad++;
     if (!deq(in.lA, 0.0)) inv_bad++;
     if (p.r ? (!in.r || !deq(in.rA, 1.0)) : (in.r || !deq(in.rA, 0.0)))
       inv_bad++;
-    if (in.a != p.a || in.b != p.b || in.x != p.x || in.s != p.start)
+    // BUTTON PLANE (DEVIATION D33, owner re-ratification 2026-08-24):
+    // A jump, B attack, Y special, X GRAB — in every style, so this is
+    // pinned over all 2048 combos rather than as another pinned chord.
+    if (in.x != p.a || in.a != p.b || in.b != p.y || in.z != p.x ||
+        in.s != p.start)
+      inv_bad++;
+    if (inC.x != p.a || inC.a != p.b || inC.b != p.y || inC.z != p.x ||
+        inC.s != p.start)
       inv_bad++;
     if (!deq(in.lsX, deaden(in.rawX, ml_deadzoneConst())) ||
         !deq(in.lsY, deaden(in.rawY, ml_deadzoneConst())) ||
         !deq(in.csX, deaden(in.rawcsX, ml_deadzoneConst())) ||
         !deq(in.csY, deaden(in.rawcsY, ml_deadzoneConst())))
       inv_bad++;
-    if (p.y && (!deq(in.lsX, 0.0) || !deq(in.lsY, 0.0))) inv_bad++;
+    // BOX: no C-layer at all, so cs is dead on every combo (D32).
+    if (!deq(in.csX, 0.0) || !deq(in.csY, 0.0)) inv_bad++;
+    // CLASSIC: holding R drives cs and FREEZES the left stick.
+    if (p.r && (!deq(inC.lsX, 0.0) || !deq(inC.lsY, 0.0))) inv_bad++;
+    // CLASSIC: L is the ONLY shield (D31) — R must never raise it.
+    if (inC.r != p.l || !deq(inC.rA, p.l ? 1.0 : 0.0)) inv_bad++;
     // 1/80 grid: every emitted coordinate quantizes to itself
     const double v[8] = {in.lsX, in.lsY, in.csX, in.csY,
                          in.rawX, in.rawY, in.rawcsX, in.rawcsY};
@@ -217,13 +246,13 @@ int main(void) {
     printf("C %04u %d%d%d%d%d%d%d%d%d%d%d %s "
            "%016" PRIx64 " %016" PRIx64 " %016" PRIx64 " %016" PRIx64 " "
            "%016" PRIx64 " %016" PRIx64 " %016" PRIx64 " %016" PRIx64 " "
-           "%d%d%d%d%d%d\n",
+           "%d%d%d%d%d%d%d\n",
            m, (int)p.up, (int)p.down, (int)p.left, (int)p.right, (int)p.y,
            (int)p.l, (int)p.r, (int)p.a, (int)p.b, (int)p.x, (int)p.start,
            r.row, dbits(in.lsX), dbits(in.lsY), dbits(in.csX),
            dbits(in.csY), dbits(in.rawX), dbits(in.rawY), dbits(in.rawcsX),
-           dbits(in.rawcsY), (int)in.a, (int)in.b, (int)in.x, (int)in.s,
-           (int)in.r, (int)deq(in.rA, 1.0));
+           dbits(in.rawcsY), (int)in.a, (int)in.b, (int)in.x, (int)in.z,
+           (int)in.s, (int)in.r, (int)deq(in.rA, 1.0));
   }
   if (grid_bad) {
     printf("FAIL grid: %d coordinates off the 1/80 grid\n", grid_bad);

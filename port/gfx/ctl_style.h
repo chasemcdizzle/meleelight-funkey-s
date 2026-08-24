@@ -7,27 +7,45 @@
 // TU has zero dependencies and can be linked anywhere — including the
 // FOH, which needs the setters for the Controls screen.
 //
+// THE FACE PLANE IS NOW COMMON TO ALL THREE (owner re-ratification
+// 2026-08-24; DEVIATION D33): A=JUMP, B=ATTACK, Y=SPECIAL, X=GRAB (Z),
+// Start=pause, MENU=pause menu. The owner ratified it in these words:
+// "X->grab, A->jump, Y->special, B->attack" and, of BOX, "wtf you can't
+// grab on box?? we want to be able to". Only the two SHOULDERS still
+// tell the styles apart, and THE PAD ARITHMETIC is why: 8 buttons, minus
+// pause and pause-menu, leaves SIX for gameplay, while the roles wanted
+// number SEVEN (attack, special, jump, grab, shield, Mod, C-layer). One
+// role has to go per style, and which one it is IS the style.
+//
 // THE THREE STYLES
 //   CTL_STYLE_NATURAL (the DEFAULT) — modelled on Chase's ssb64 port
 //     (~/code_projects/ssb64-funkey-s/port/gfx/gfx_present_sdl1.c:173-184,
-//     read verbatim): direct 1:1, no modifiers, no chords, no C-layer.
-//     A=attack, B=special, X=Z (grab), Y=JUMP, L and R both shield,
-//     Start=pause, d-pad = the stick at FULL deflection.
-//     ONE DOCUMENTED DEVIATION from ssb64, forced by a finding already
-//     measured in THIS project: ssb64 maps Y to C-up and takes jump from
-//     tap-up, but a digital d-pad at full deflection tap-jumps on every
-//     upward DI — which is why tap jump is FORCED OFF for the FunKey
-//     player (prototypes/control-mapping/funkeyMapping.js header). With
-//     tap jump off and all seven buttons spent, ssb64's mapping would
-//     leave Natural with NO jump at all, so Natural spends Y on a real
-//     jump button and gives up the single reachable C-direction instead.
-//     Up-smash / up-tilt stay reachable via d-pad + A (see below).
-//   CTL_STYLE_NORMAL — full-deflection stick, both shoulders shield, but
-//     keeps the Y C-layer and the shield-drop row.
-//   CTL_STYLE_BOX — the Chase-ratified S1 "One-Mod + C-layer" table,
-//     byte-for-byte (PLAN §6; HayBox Melee20Button / B0XX lineage per
-//     docs/research/b0xx-mapping.md). Mod + shield on the shoulders,
-//     Y(hold) = C-stick layer.
+//     read verbatim): direct 1:1, no Mod band, d-pad = the stick at FULL
+//     deflection. L shields (D31 — owner: "L-only shielding is totally
+//     fine. I want it in fact."), R holds the C-layer (D32).
+//     TWO DOCUMENTED DEVIATIONS from ssb64. (a) ssb64 shields on BOTH
+//     shoulders; here L-only shielding is what frees R, which is what
+//     frees Y, which is what buys the pad a real grab button — the three
+//     changes are one chain and none of them stands alone. (b) ssb64
+//     maps Y to C-up and takes jump from tap-up, but a digital d-pad at
+//     full deflection tap-jumps on every upward DI — which is why tap
+//     jump is FORCED OFF for the FunKey player
+//     (prototypes/control-mapping/funkeyMapping.js header), so tap-up
+//     cannot be the jump. Jump is a real button (A).
+//     Up-smash / up-tilt stay reachable via d-pad + attack (see below).
+//   CTL_STYLE_NORMAL ("Classic") — Natural's shoulders exactly (L
+//     shields, R holds the C-layer) plus a DEDICATED shield-drop
+//     diagonal row. After D31/D32 that row is the ONLY thing that
+//     separates it from Natural; whether the two should be collapsed is
+//     an owner call, deliberately not taken here.
+//   CTL_STYLE_BOX — the Chase-ratified S1 coordinate table, byte-for-byte
+//     (PLAN §6; HayBox Melee20Button / B0XX lineage per
+//     docs/research/b0xx-mapping.md). Mod + shield on the shoulders
+//     (Mod-on-R by default since D30, owner: "R should be mod / tilt").
+//     It is therefore the style that PAYS FOR MOD WITH THE C-LAYER: with
+//     both shoulders spent and all four face buttons spent by D33, there
+//     is no seventh button left to hold a C-stick. The C-layer rows stay
+//     in the table, byte-exact and unreachable, against a future ruling.
 //
 // WHY NATURAL STILL GETS SMASHES *AND* TILTS — MEASURED, not assumed
 // (asserted by .loop/ctl_smash_check.c against the real sim functions):
@@ -43,7 +61,9 @@
 // What Natural genuinely LOSES (documented, not papered over): no WALK
 // (that needs a sustained intermediate magnitude; full deflection always
 // dashes), 8 directions at magnitude 1 only (no partial DI angles, no
-// angled f-tilts), and no C-stick. BOX remains the full-surface scheme.
+// angled f-tilts), and — until D32 — no C-stick. BOX keeps the widest
+// COORDINATE surface (the Mod band is its alone); the C-stick is now
+// Natural's and Classic's alone.
 // Natural DOES keep platform shield-drop — I had this wrong and the
 // review caught it. The arms are read IN ORDER in BOTH shield states:
 // GUARD.c:79-99 and GUARDON.c:105-127 (fresh shielding enters GUARDON).
@@ -63,7 +83,8 @@
 // THE MOD SHOULDER is a SEPARATE setting, not a scheme (owner 2026-07-29:
 // "the ability to remap the mod to R and L is shield, and you can switch
 // that"). It is orthogonal: it applies to BOX independently of the style
-// choice, and is a no-op in NATURAL/NORMAL where both shoulders shield.
+// choice, and is a no-op in NATURAL/NORMAL, whose shoulders are L=shield
+// and R=C-layer whichever way the cell points (D31/D32).
 // Swapping is a pure RELABELING of the two shoulders — the ratified BOX
 // table is untouched, which .loop/ctl-style-check.sh proves by dumping
 // all 2048 combos under BOTH arrangements and cmp-ing both against the
@@ -97,8 +118,8 @@
 // is assigned explicitly in foh_persist_defaults() instead of relying on
 // memset-to-zero.
 typedef enum {
-  CTL_STYLE_NORMAL = 0,  // full-deflection stick, both shoulders shield, C-layer
-  CTL_STYLE_BOX = 1,     // ratified S1: Mod + shield on the shoulders, Y C-layer
+  CTL_STYLE_NORMAL = 0,  // "Classic": L shields, R = C-layer, shield-drop row
+  CTL_STYLE_BOX = 1,     // ratified S1 table: Mod + shield on the shoulders
   CTL_STYLE_NATURAL = 2, // ssb64-modelled 1:1, no modifiers (the DEFAULT)
   CTL_STYLE_COUNT = 3
 } CtlStyle;
