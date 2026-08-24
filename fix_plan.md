@@ -6602,3 +6602,71 @@ sound**, so puff's `furaLoopID` exposure is covered by the same check.
 session and the re-cut `judge-s1-coverage.js` pairing, **the leg that witnesses
 the grab fix physically**; `verify_m3.sh` leg (4); `install-play-opk.sh`
 reinstall so the device build carries D34/D35/A40.
+
+## A44 — LANE CORRECTLY REFUSED TO SHIP HALF. And the blocker is NARROWER than reported.
+
+**The lane's judgement was right and is the model for this class.** It found two
+of its own brief's constraints **mutually exclusive** — *"NO stubs; a port that
+can be switched on but cannot actually play is a stub"* vs *"do not touch
+`port/sim/**`"* — **named the contradiction instead of silently picking one**,
+and committed the measurement with **zero behavioural change**. A FOH-only
+widening would have shipped exactly the stub the brief forbade: toggle P3, press
+START, receive `deny` + `ev_refused(s,"portconfig")`.
+
+### THE LAYOUT WORRY WAS UNFOUNDED — IT ALREADY FITS, AT ZERO COST
+I told it to measure whether 4 panels fit on 240x240 and to report options
+rather than shrink anything. **Measured: `FOH_CSS_PANEL_{X0,PITCH,W}` =
+`{1,60,58}` (`foh.h:272-275`), so ports 0..3 land at x = 1/61/121/181 and port 3
+spans 181..238 — inside the screen.** Better: **`render_css` ALREADY loops
+`k = 0..3`** (`foh_render.c:1713`), `css_panel` is fully port-parameterised,
+`kPortTint` has 4 entries, the ghost letter is `('1' + port)`, the N/A watermark
+arm exists, the CPU rail fits at every k, and **`css_ready` already counts all
+four** (`foh.c:770`). **No narrower panels, no 2x2 grid, no options to choose.
+The presentation half is essentially free.**
+
+### THE REAL BLOCKER: `sim_setup_match` IS 2-SLOT BY CONSTRUCTION
+`port/sim/sim/sim_boot.c:381` — the `i < 2` loop writes the per-slot plane while
+the `i = 2..3` loop **hard-pins** `playerType = -1`, `playerPresent = false`,
+`currentPlayers = -1`. It is the **only** launch entry point (6 callers,
+measured). `foh.c:844-856` already carried this as a registered limitation —
+*"delete this arm when `sim_setup_match` carries BOTH ports' type and level"* —
+and **A44 re-measures that "both" as four.**
+
+### ⚠ DRIVER CORRECTION — THE ORACLE IS **NOT** THE BLOCKER
+The lane reported *"no 4-port oracle... `oracle/meleelight-harness.patch:76-92`
+is 2-slot by construction"* and concluded a 4-port match is unverifiable.
+**MEASURED, AND THAT IS WRONG.** The patch reads:
+```js
+export function harnessSetupMatch (cfg){
+  for (var i = 0; i < 4; i++) {          // <-- FOUR
+    var pc = cfg.players[i];
+    if (pc) { playerType[i] = pc.type; ... characterSelections[i] = pc.character; ...
+```
+**The browser harness is ALREADY 4-PORT.** What is 2-port is
+`oracle/harness/run.js:152-157`, which hands it `[p1, p2, null, null]` — **a
+CALLER passing two, not a harness accepting two.**
+**So a 4-port golden IS recordable**, and the HARD RULE 3 problem the lane
+feared (writing `oracle/`) may be avoidable entirely: `port/goldens-m4/` exists
+precisely as the M4-era golden machinery that REUSES `oracle/harness/run.js`
+**by path** without writing `oracle/`. **The open question is narrower: can a
+4-port trace be driven without editing `run.js`** (which IS under `oracle/`), or
+does it need a `port/goldens-m4/`-side driver. **That is a small measurement,
+not a ratification.**
+**Twelfth premise corrected this session — and the first one where a LANE's
+premise was wrong rather than mine.** The lesson is symmetric: it read the patch
+hunk's *context* and inferred; the loop bound was two lines away.
+
+### THE PATH — sim + oracle lane FIRST, then a short menus follow-up
+1. **Widen `sim_setup_match` to a 4-port config with a 2-port-compatible
+   wrapper**, so `sim_main.c`/`gfx_app.c`/`gfx_replay.c` and **every existing
+   golden stay byte-unchanged** (`SIM CONFORMS` 8/8 is the bar, D20/A37
+   pattern).
+2. **Record a 4-port golden** via `port/goldens-m4/` — resolve the `run.js`
+   question above first.
+3. **Then lane M's half is short and well-understood**, against the site
+   inventory the lane measured and committed (selection plane, token plane,
+   type/CPU plane, bridge/frozen, and the `MLFKPERSIST5 -> v6` bump) — that
+   inventory is the ticket's real deliverable and it is now on disk.
+
+**No D-numbers consumed (D37/D38 free). No device legs owed — no compiled byte
+changed. The four CSS checks were run twice, before and after, all green.**
