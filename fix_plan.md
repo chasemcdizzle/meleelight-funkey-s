@@ -5325,3 +5325,80 @@ whether the clamp is still needed (fix the tooth) or genuinely redundant
 (retire it with evidence). **Do NOT "fix" this by loosening T6** — HARD RULE 3.
 A tooth that cannot bite must be repaired or retired on the record, never
 relaxed.
+
+### A27 — DONE 2026-08-24 (lane M). THE RIBBON IS LIVE, AND IT REACHES THE SIM.
+
+**Owner symptom closed:** *"there's no way to change between stock mode and
+'endless ko fest'. If you click the 'VS Melee' in the CSS it should change
+modes."* It now does, on upstream's own trigger.
+
+**What A23 had already provided, and what it had not.** A23 built the CSS
+header's *first* hit test (the BACK wedge) and the D4 constants idiom that
+makes a hit region and a drawn extent the same numbers. That idiom is what
+A27 reused; the *plumbing* was not shared, because the BACK wedge's arm runs
+BEFORE the hand integrates (upstream's css.js:186, deliberate) while the
+ribbon's runs AFTER it (css.js:389) — two different positions in the same
+function. So "most of the work already exists" was half true: the pattern
+did, the code did not, and the ribbon's own arm is 6 lines.
+
+**Upstream carried verbatim, trigger and all.** `css.js:389-394` is an A
+RISING EDGE inside a rect that plays `menuSelect` and calls
+`setVersusMode(1 - versusMode)` — binary, no picker, no cycle — sitting
+between the port-type boxes (:348) and the CPU-knob grab (:396) inside the
+same "hand outside the roster band" arm. Ours sits in the same place for the
+same reason: a hand carrying a token cannot toggle the mode here, exactly as
+upstream.
+
+**The RECT is ours, and that is the one deviation (D28).** Upstream's is
+`y > 100 && y < 160 && x > 380 && x < 910` on a 1200x750 canvas, i.e. a band
+BELOW its header, because upstream draws this blurb as loose 1.25x text with
+no plate. This FOH's whole silver header is 26 px, so upstream's ratio maps
+to y 32..51 — under our header, on the roster row. The BACK wedge's ratio
+LANDED on its drawn extent (920/1200 * 240 = 184 = the slab's left edge) and
+was used for that reason; this one does not, so the DRAWN EXTENT wins, which
+is what D4 actually says. `FOH_CSS_MODE_{X0,X1,Y0,Y1,CAP}` now build the
+plate in `css_header` AND hit-test it in `step_css` — one source, so D4 is
+mechanically true rather than a comment in two files.
+
+**The LABEL tells the truth, and costs zero re-freezes.** Upstream's own
+strings are `"An endless KO fest!"` / `"4-man survival test!"`
+(css.js:715-721) — 19 and 20 characters against a 74 px plate that holds 12
+glyphs of the 5x7 face. ENDLESS takes upstream's words over two rows
+(`ENDLESS` / `KO FEST!`, only the article dropped); STOCK keeps `VS. MELEE`,
+the gamemode's own name, because "4-MAN" is a lie on a two-port build (D6)
+and because the default state then renders **the bytes it always rendered**.
+That is the A23 bar's `bHold > 0` argument reused: every judged CSS shot is
+taken in stock mode, so no frozen shot moves — asserted by cmp against a
+build whose label is unconditional, not by assertion.
+
+**THE MODE REACHES THE SIMULATION — this is the half that makes it not a
+stub.** `G.sim.versusMode = foh.versusMode;` immediately BEFORE
+`sim_setup_match` in **both** `foh_app.c` (product) and `foh_dev.c` (rig),
+per lane S's measurement, because `startGame` READS it (main.js:1334) to put
+every player on 1 stock. The LAUNCH line's hardcoded `versus=0` became
+`versus=%d` in both binaries: a launch record that says 0 while launching
+endless is a hardcoded output standing in for a real value.
+
+**Check:** `bash port/foh/check-css-mode.sh` -> `CSS MODE CHECK OK (3 teeth)`.
+It is two checks in one because A27 has two independent failure modes:
+`port/foh/foh_cssmode_witness.c` drives the REAL `foh_tick` and photographs
+the REAL `foh_render` (toggle, toggle back, page-state survival across a
+match round trip, A inert on the neighbouring BACK wedge), and then a leg
+launches a REAL g01 match through `foh_app --bridge verify` and reads the
+answer out of the SIM's own checksum stream. **Three teeth, each failing
+ALONE** (the A31 T2/T3 pair, extended): T1 makes the label ignore the mode,
+T2 makes the hit test write nothing, **T3 moves the bridge line ONE LINE
+past `sim_setup_match`** — the exact mistake lane S warned about — and
+watches the endless match collapse back onto the 4-stock stream.
+
+**Measured, quotable:** the control leg's frame-1 hash is
+`9f4c6df778506d64…`, which is CHECKSUM.md §5's own g01 anchor, and its LAUNCH
+record is byte-equal to the frozen `f01-vs-g01.expect` one. The ribbon leg's
+frame 1 is `97189d261d22d3a4…`. One A press on a menu widget, measured in the
+simulation's checksum.
+
+**Grammar widened, not loosened:** `judge-foh-trace.js` and
+`normalize-foh-trace.js` take `versus=([01])` because the produced domain
+really did widen today. `check-foh-flows.sh`'s `LAUNCH_RE` is UNTOUCHED — it
+reads only the frozen `.expect` files, where 0 is still exactly right, so the
+tightness moved to where the value is genuinely fixed.

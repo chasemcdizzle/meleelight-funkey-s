@@ -543,12 +543,12 @@ int main(int argc, char **argv) {
                       "LAUNCH %ld p1=%d p2=%d p2type=%d difficulty=%d "
                       "stage=%d turbo=%d lcancel=%d flashlcancel=%d "
                       "walljump=%d tapjump=%d,%d,%d,%d "
-                      "versus=0\n",
+                      "versus=%d\n",
                       f, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
                       foh.stageSel, foh.turbo, foh.lCancelType,
                       foh.flashOnLCancel, foh.everyCharWallJump,
                       foh.tapJumpOff[0], foh.tapJumpOff[1],
-                      foh.tapJumpOff[2], foh.tapJumpOff[3]);
+                      foh.tapJumpOff[2], foh.tapJumpOff[3], foh.versusMode);
         }
         if (w < 0) sim_fatal("--flow-out write failed");
       }
@@ -706,6 +706,15 @@ int main(int argc, char **argv) {
   G.rngStateAtReset = G.rng.a;
 
   // THE BRIDGE POINT: every parameter below comes from the FOH state.
+  //
+  // versusMode goes BEFORE the setup and not with the gameSettings below,
+  // and the difference is load-bearing: it is upstream PAGE state that
+  // startGame READS (main.js:1334's `if (versusMode) stocks = 1`), so a
+  // write after sim_setup_match would leave a 4-stock endless match — the
+  // mode's whole point silently dropped. sim_boot.c says the same thing at
+  // the other end, and check-css-mode.sh's T3 is the tooth that bites when
+  // this line moves down.
+  G.sim.versusMode = foh.versusMode;
   sim_setup_match(&G, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
                   foh.stageSel);
   // FOH gameSettings applied AFTER setup (which writes the defaults) —

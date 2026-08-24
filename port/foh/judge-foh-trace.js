@@ -199,8 +199,15 @@ const RE_SHOT = /^SHOT (0|[1-9][0-9]*) ([a-z0-9-]{1,32})$/;
 // types[0]=0), so foh.c REFUSES a launch whose port configuration is anything
 // but (p1 HMN, p2 HMN|CPU) — the record can therefore never need the columns,
 // and the device app's independent copy of this format stays valid.
+// A27: `versus` was the literal 0 until the mode ribbon became clickable,
+// because the field could not be anything else. It is now the CSS ribbon's
+// binary versusMode (css.js:393), so the domain widens to [01]. The frozen
+// port/foh/flows/*.expect files still carry the exact byte 0 and are still
+// cmp'd byte-for-byte by check-foh-flows.sh, whose own LAUNCH_RE reads only
+// those frozen files and therefore still pins 0 exactly — the tightness
+// moved to where the value really is fixed rather than being given up.
 const RE_LAUNCH =
-    /^LAUNCH (0|[1-9][0-9]*) p1=([0-4]) p2=([0-4]) p2type=([01]) difficulty=([1-4]) stage=([0-5]) turbo=([01]) lcancel=([012]) flashlcancel=([01]) walljump=([01]) tapjump=([01]),([01]),([01]),([01]) versus=0$/;
+    /^LAUNCH (0|[1-9][0-9]*) p1=([0-4]) p2=([0-4]) p2type=([01]) difficulty=([1-4]) stage=([0-5]) turbo=([01]) lcancel=([012]) flashlcancel=([01]) walljump=([01]) tapjump=([01]),([01]),([01]),([01]) versus=([01])$/;
 // iter 99 (M4 task 12): the target-mode launch record (foh.h TLAUNCH
 // note; char domain 0-4, tstage domain 0-9 == targetStageMapping).
 // iter 101 (review-99 L1): frame field is a CANONICAL decimal in the

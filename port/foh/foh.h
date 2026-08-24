@@ -233,24 +233,21 @@
 //
 // D4 EXCEPTIONS, registered rather than glossed — this build does NOT satisfy
 // the invariant everywhere, and pretending otherwise would be the lie:
-//   (a) DRAWN, NOT YET HIT-TESTABLE: the header's mode ribbon
-//       (foh_render.c css_header, upstream css.js:390-395). The BACK wedge
-//       LEFT this list with A23 — it is hit-tested at FOH_CSS_BACK_X0 below.
-//       The ribbon stays, and NOT for want of a rect: its action is
-//       `setVersusMode(1 - versusMode)`, and versusMode is SIM-VISIBLE, not
-//       cosmetic. Upstream reads it at physics.js:980 (a KO at 0 stocks
-//       refills to 1), actionStateShortcuts.js:155 (isFinalDeath is never
-//       final), main.js:1079 (no matchTimer tick) and :1334 (every player
-//       starts on 1 stock), and render.js:397 (no clock drawn). Our sim
-//       carries the READ sites — port/sim/physics.c:1308,
-//       action_state_shortcuts.c:148 — but sim_boot.c:423 pins the value to
-//       0 and sim_tick.c:380 has the `!versusMode` matchTimer arm commented
-//       out as unreachable, so nothing a ribbon wrote could be observed. A
-//       ribbon that toggled its own label and nothing else would be a stub
-//       (HARD RULE 2), so it stays drawn and inert until the LAUNCH line
-//       carries versusMode. Registered: MENU-SPEC §2.9 item 18 + §13.1 item
-//       7, and fix_plan A27 (BLOCKED — those three edits are outside
-//       port/foh/ and land in check-sim.sh's frozen TU list).
+//   (a) THE LIST IS EMPTY ON THE DRAWN-BUT-DEAD SIDE. It held two widgets:
+//       the BACK wedge (left with A23, hit-tested at FOH_CSS_BACK_X0) and
+//       the header's MODE RIBBON, which leaves with A27 — it is hit-tested
+//       at FOH_CSS_MODE_* below, at exactly the extent css_header draws.
+//       What had blocked it was never a rect: its action is
+//       `setVersusMode(1 - versusMode)` and versusMode is SIM-VISIBLE, not
+//       cosmetic (upstream reads it at physics.js:980 — a KO at 0 stocks
+//       refills to 1 — actionStateShortcuts.js:155 (isFinalDeath is never
+//       final), main.js:1079 (no matchTimer tick), :1334 (every player
+//       starts on 1 stock) and render.js:397 (no clock drawn)), so a ribbon
+//       that toggled its own label and nothing else would have been a stub
+//       (HARD RULE 2). A37 made the sim plane real — sim_boot.c's page-state
+//       init, its stocks arm, and sim_tick.c's `versusMode == 0` conjunct —
+//       and the FOH now carries the value from the ribbon to `G.sim` at the
+//       launch bridge. Registered: MENU-SPEC DEVIATION D28.
 //   (b) HIT-TESTABLE, NOT ALWAYS DRAWN: your OWN token stays grabbable while
 //       your port is N/A, because upstream's grab guard is
 //       `playerType[j] == 1 || i == j` (css.js:300) while its token DRAW is
@@ -297,6 +294,30 @@
 // 204 + 30*1.2 = 240, flush with the right edge again. The 1 px left lean
 // (203 on the top edge) is upstream's own 1015-vs-1020 skew, which follows
 // the slab's lean the same way ours does.
+// The MODE RIBBON's plate — the chevron-capped widget between the VS badge
+// and the BACK wedge (foh_render.c's css_header) and, since A27, upstream's
+// `setVersusMode(1 - versusMode)` click target (css.js:389-394). These four
+// numbers ARE the plate: css_header builds its hexagon from them and foh.c
+// hit-tests the same box, which is what D4 asks for.
+//
+// WHY NOT UPSTREAM'S RATIO, the way FOH_CSS_BACK_X0 is. Upstream's rect is
+// `y > 100 && y < 160 && x > 380 && x < 910` (css.js:389) on a 1200x750
+// canvas — i.e. a band BELOW its header, because upstream draws this blurb
+// as loose 1.25x-scaled text at (390,117) with no plate at all (css.js:715-
+// 721). This FOH is a REWRITE (foh_font.c header): the whole silver header
+// is 26 px tall here, so upstream's proportional band (y 32..51) would land
+// under our header, on the roster row, hit-testing pixels the ribbon does
+// not own. The BACK wedge's ratio landed on its drawn extent to the pixel
+// and was therefore used; this one does not, so the DRAWN EXTENT wins —
+// that is the rule D4 states, and the ratio was only ever evidence for it.
+// Bounds are strict, as upstream's are.
+#define FOH_CSS_MODE_X0 104
+#define FOH_CSS_MODE_X1 178
+#define FOH_CSS_MODE_Y0 4
+#define FOH_CSS_MODE_Y1 22
+// The chevron caps' inset: the plate's flat top/bottom run from X0+INSET to
+// X1-INSET and the two points sit at the vertical middle.
+#define FOH_CSS_MODE_CAP 6
 #define FOH_CSS_BACK_BAR_X0 204.0f
 #define FOH_CSS_BACK_BAR_LEAN 203.0f
 #define FOH_CSS_BACK_BAR_PER_FRAME 1.2f
@@ -544,6 +565,14 @@ typedef struct {
   int p1Difficulty;
   int difficulty;
   int bHold;          // consecutive B frames in CSS (30 = back)
+  // versusMode (main.js:140), 0 stock | 1 endless — written ONLY by the CSS
+  // mode ribbon's `setVersusMode(1 - versusMode)` (css.js:393; A27). It is
+  // PAGE state upstream, not match state: startGame never resets it, so it
+  // lives here beside the other page-scoped CSS fields, is initialised once
+  // by foh_init's memset (upstream's own `= 0`), survives a match and the
+  // MEX_CSS re-entry, and is NOT persisted to SD — upstream keeps no cookie
+  // for it, so a power cycle is the page reload that clears it.
+  int versusMode;
   // sss
   int sssCursor; // 0..5 == oracle stage ids; 6 = the refusing RANDOM slot
   // target-select (upstream targetselect.js; header notes): cursor

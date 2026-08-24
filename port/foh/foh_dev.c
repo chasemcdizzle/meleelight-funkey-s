@@ -2278,11 +2278,11 @@ foh_phase:;
         } else {
           tr_line("LAUNCH %ld p1=%d p2=%d p2type=%d difficulty=%d stage=%d "
                   "turbo=%d lcancel=%d flashlcancel=%d walljump=%d "
-                  "tapjump=%d,%d,%d,%d versus=0",
+                  "tapjump=%d,%d,%d,%d versus=%d",
                   t, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
                   foh.stageSel, foh.turbo, foh.lCancelType, foh.flashOnLCancel,
                   foh.everyCharWallJump, foh.tapJumpOff[0], foh.tapJumpOff[1],
-                  foh.tapJumpOff[2], foh.tapJumpOff[3]);
+                  foh.tapJumpOff[2], foh.tapJumpOff[3], foh.versusMode);
         }
       }
     }
@@ -3106,6 +3106,10 @@ foh_phase:;
     }
 
     // THE BRIDGE POINT: every parameter from the FOH state.
+    // versusMode BEFORE the setup, never with the gameSettings below —
+    // startGame reads it (main.js:1334); foh_app.c carries the same line and
+    // the same reason.
+    G.sim.versusMode = foh.versusMode;
     sim_setup_match(&G, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
                     foh.stageSel);
     G.sim.turbo = foh.turbo != 0;
