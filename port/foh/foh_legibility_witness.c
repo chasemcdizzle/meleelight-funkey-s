@@ -258,32 +258,81 @@ static void a32(void) {
 }
 
 // --- [A25a] the target-select highlight -------------------------------------
-// Slot k's OUTER rect, laid out exactly as render_tss lays it out.
+// Slot k's OUTER rect. A25(c): READ from foh_tss_slots() — the table render_tss
+// draws from and foh.c hit-tests against — instead of the hand copy that stood
+// here. Two of check-legibility.sh's grammar pins existed only to keep that
+// copy honest and are retired with it; sharing the table gives the same
+// guarantee structurally, which is what D4 wanted all along.
 static void slot_rect(int k, int *x0, int *y0, int *x1, int *y1) {
-  if (k == 10) {  // "+ ADD CODE": x 70, y 142, 100x17
-    *x0 = 70 - 2; *y0 = 142 - 2; *x1 = 70 + 100 + 2; *y1 = 142 + 17 + 1;
-  } else {        // the 2x5 grid: x = 8 + col*124, y = 30 + row*22, 100x19
-    const int x = 8 + (k / 5) * 124, y = 30 + (k % 5) * 22;
-    *x0 = x - 2; *y0 = y - 2; *x1 = x + 100 + 2; *y1 = y + 19 + 2;
-  }
+  FohHandRect r[FOH_TSS_SLOTS];
+  foh_tss_slots(r);
+  *x0 = r[k].x - 2;
+  *y0 = r[k].y - 2;
+  *x1 = r[k].x + r[k].w + 2;
+  // D24's measured asymmetry: the "+ ADD CODE" ring grows 1 px on the bottom,
+  // not 2, because the info panel's 50%-black face starts on the row below it.
+  *y1 = r[k].y + r[k].h + (k == 10 ? 1 : 2);
 }
 
-// Drive the REAL cursor to slot k from wherever it is. foh.c's grid arms:
-// UP walks up a column (and 10 -> 4), DOWN walks down it (4 -> 10, 9 -> 10),
-// LEFT/RIGHT swap columns. Six UPs plus a LEFT is therefore a reset to slot
-// 0 from any of the eleven positions, and the assertion below is what proves
-// the walk arrived rather than a frame count.
-static bool goto_slot(FohState *s, int k) {
-  PRESS_N(s, up, 6);
-  PRESS(s, left);
-  if (s->tssCursor != 0) return false;
-  if (k == 10) {
-    PRESS_N(s, down, 5);
-  } else {
-    PRESS_N(s, right, k / 5);
-    PRESS_N(s, down, k % 5);
+// Drive the REAL cursor to slot k from wherever it is.
+//
+// DEVIATION D29 (A25c) replaced the d-pad index cursor with the free hand, so
+// this is a WALK now, not a press count: hold a direction until the machine
+// reports the hand has arrived, which is the same feedback discipline the old
+// version used for its arrival assertion.
+//
+// Then the hand is PARKED. That is not tidiness — it is what keeps the "quiet
+// unless selected" assertions below measurable: the hand is DRAWN now, and a
+// 24x32 sprite sitting on the slot it selected would put pixels inside a
+// neighbouring slot's rect and read as noise. Parking puts the sprite at the
+// SAME pixel in every frame this witness compares, and D29's STICKY selection
+// is what allows it — the park hovers no slot, so the selection stays where the
+// walk left it.
+//
+// The ROUTE matters as much as the spot, and this cost a measured failure:
+// sticky selection means any slot the hand CROSSES on the way out re-selects,
+// so a straight run to a screen corner walks the selection off the slot under
+// test. The clean exit is the vertical gutter between the two columns (x 120:
+// column 0 ends at 108, column 1 starts at 132, and "+ ADD CODE" — the only
+// slot that spans it — sits BELOW every grid row), then UP to the clamp. Park
+// = (120, 0); the sprite's hot spot is (10,7), so it covers x 110..133,
+// y -7..24, and the topmost slot rect starts at y 28.
+static void hold(FohState *s, size_t off, int n) {
+  PlatformInput in;
+  memset(&in, 0, sizeof in);
+  *(bool *)((char *)&in + off) = true;
+  for (int i = 0; i < n; i++) foh_tick(s, &in);
+  memset(&in, 0, sizeof in);
+  foh_tick(s, &in);
+}
+#define HOLD(s, field, n) hold((s), offsetof(PlatformInput, field), (n))
+
+static void walk_axis_to(FohState *s, int axis, double aim) {
+  for (int i = 0; i < 4000; i++) {
+    const double cur = axis == 0 ? s->tssHandX : s->tssHandY;
+    const double d = aim - cur;
+    if (d > -2.0 && d < 2.0) break;
+    PlatformInput in;
+    memset(&in, 0, sizeof in);
+    if (axis == 0) { if (d > 0) in.right = true; else in.left = true; }
+    else { if (d > 0) in.down = true; else in.up = true; }
+    foh_tick(s, &in);
   }
-  return s->tssCursor == k;
+  PlatformInput idle;
+  memset(&idle, 0, sizeof idle);
+  foh_tick(s, &idle);
+}
+
+static bool goto_slot(FohState *s, int k) {
+  FohHandRect r[FOH_TSS_SLOTS];
+  foh_tss_slots(r);
+  walk_axis_to(s, 0, r[k].x + r[k].w / 2.0);
+  walk_axis_to(s, 1, r[k].y + r[k].h / 2.0);
+  if (s->tssCursor != k) return false;
+  // out through the inter-column gutter, then up to the clamp
+  walk_axis_to(s, 0, (r[0].x + r[0].w + r[5].x) / 2.0);
+  HOLD(s, up, 80);
+  return s->tssCursor == k && s->tssHandY == 0.0;
 }
 
 static void a25a(void) {

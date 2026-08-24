@@ -180,12 +180,22 @@
 // exactly what upstream shows, targetselect.js:47/:133-140). The
 // `targettest` refusal RETIRED in iter 99 — target-select is real.
 //
-// TARGET-SELECT REWRITE DELTAS (iter 99, task 12): the upstream
+// TARGET-SELECT REWRITE DELTAS (iter 99, task 12; the cursor half
+// SUPERSEDED by DEVIATION D29, A25(c) — see below): the upstream
 // pointer-drag slot picker (targetselect.js:45-57, 250x50 boxes at
-// col = floor(j/5), row = j%5) becomes a d-pad GRID CURSOR over the 10
+// col = floor(j/5), row = j%5) became a d-pad GRID CURSOR over the 10
 // authored slots (2 cols x 5 rows, same col/row mapping) with the
-// addcode slot below (D from a bottom row enters it, U returns —
-// the SSS RANDOM-slot pattern); char select keeps the upstream SHOULDER
+// addcode slot below (D from a bottom row entered it, U returned —
+// the SSS RANDOM-slot pattern). **D29 REVERSES EXACTLY THAT**, at the
+// owner's request after playing it: the 11 slots are hit-tested by the
+// FREE HAND CURSOR the CSS already had — extracted to foh_hand.{c,h}
+// rather than copied — so upstream's pointer is back on this one
+// screen while the SSS keeps its grid. The slot geometry, the col/row
+// mapping and the addcode slot's position are unchanged; only what
+// moves the selection is. Consequence, stated where it will be read:
+// TSS and SSS now differ in interaction model. Full argument and the
+// sticky-selection rule at FohState.tssCursor / tssHandX below.
+// Char select keeps the upstream SHOULDER
 // arms verbatim (targetselect.js:60-74: L = char-1 WRAP, R = char+1
 // WRAP — the du/dd d-pad arms are the same actions and the d-pad drives
 // the grid here) writing characterSelections[0] == p1Char (setCS on the
@@ -219,6 +229,7 @@
 
 #include "../gfx/platform.h"
 #include "../gfx/raster.h"
+#include "foh_hand.h" // the shared free hand cursor (A25c / DEVIATION D29)
 
 // --- CSS layout + hit geometry (MENU-SPEC DEVIATION D4) ----------------------
 // D4: "the semantic widget table in each section is normative; the rectangle
@@ -361,16 +372,46 @@ static inline int foh_css_panel_x(int k) {
   return FOH_CSS_PANEL_X0 + FOH_CSS_PANEL_PITCH * k;
 }
 
-// DEVIATION D3 — cursor speed as a fraction of the screen, plus the one
-// calibration knob in this whole spec. Upstream moves the CSS hand 12
-// px/frame on a 1200x750 canvas (css.js:195-196) = 1.00% of width and 1.60%
-// of height per frame; at 240x240 that is 2.40 / 3.84 px/frame, which keeps
-// upstream's feel exactly (full-width traversal stays 100 frames, full-height
-// 62.5). Hardware feel cannot be judged from source, so the owner tunes ONE
-// number here rather than us guessing a curve.
-#define FOH_CURSOR_SPEED 1.0
-#define FOH_CURSOR_VX (2.40 * FOH_CURSOR_SPEED)
-#define FOH_CURSOR_VY (3.84 * FOH_CURSOR_SPEED)
+// DEVIATION D3 — cursor speed, the one calibration knob in this whole spec —
+// moved to port/foh/foh_hand.h with the cursor itself (A25c), which foh.h
+// includes above, so FOH_CURSOR_SPEED / _VX / _VY still resolve here.
+
+// The five roster cells as a hit table, for foh_hand_hit. ONE definition, two
+// callers — foh.c's drop/hover arm and foh_render.c's `hot` flag — which is
+// what D4 asks for and what the CSS previously had in two hand-kept copies
+// (foh.c's `css_cell_at` plus its enclosing y guard, and foh_render.c's
+// `overCells &&` line). The extents are exactly those two tests' extents.
+void foh_css_cells(FohHandRect out[5]);
+
+// --- TSS layout + hit geometry (A25c; same D4 contract as the CSS above) -----
+// The eleven target-select slots. Ten are upstream's own 2-col x 5-row
+// authored layout (targetselect.js:196-203, col = floor(j/5), row = j%5)
+// re-pitched for 240x240; the eleventh is the refusing "+ ADD CODE" slot,
+// which upstream puts at the head of its CUSTOM column (:206) and which the
+// rewrite drops below the grid.
+//
+// These numbers WERE literals inside render_tss, which was safe only while the
+// cursor was an INDEX and nothing hit-tested them. A25(c) makes the hand test
+// exactly what the renderer draws, so they move here and both sides read them
+// through foh_tss_slots() — the CSS cells' arrangement, one screen later.
+#define FOH_TSS_SLOT_X0 8
+#define FOH_TSS_SLOT_Y0 30
+#define FOH_TSS_SLOT_COL_PITCH 124
+#define FOH_TSS_SLOT_ROW_PITCH 22
+#define FOH_TSS_SLOT_W 100
+#define FOH_TSS_SLOT_H 19
+#define FOH_TSS_ADD_X 70
+#define FOH_TSS_ADD_Y 142
+#define FOH_TSS_ADD_W 100
+#define FOH_TSS_ADD_H 17
+// 0..9 == the tstage ids, 10 == "+ ADD CODE". Index IS FohState.tssCursor.
+#define FOH_TSS_SLOTS 11
+void foh_tss_slots(FohHandRect out[FOH_TSS_SLOTS]);
+// Where the hand is parked when target-select is entered: the centre of slot
+// 0, so the screen opens hovering tstage 0 exactly as the index cursor's
+// `tssCursor = 0` opened it (menu.js:77-84's targetPointerPos reset).
+#define FOH_TSS_HOME_X (FOH_TSS_SLOT_X0 + FOH_TSS_SLOT_W / 2.0)
+#define FOH_TSS_HOME_Y (FOH_TSS_SLOT_Y0 + FOH_TSS_SLOT_H / 2.0)
 
 // --- C5: the netplay switch (owner ruling 2026-07-28, fix_plan C5) ----------
 // "HIDE Spectate / P2P / Server; VS MELEE goes straight to local VS.
@@ -579,7 +620,36 @@ typedef struct {
   // 0..9 == tstage ids (targetStageMapping order), 10 = the refusing
   // addcode slot; the char plane is the SHARED p1Char
   // (characterSelections[0] — setCS writes the same array upstream)
+  //
+  // DEVIATION D29 (A25c, owner-requested): tssCursor is still the SELECTION —
+  // what a launch launches and what the renderer rings — but it is no longer
+  // STEPPED by the d-pad. The hand below is, and the slot it lands in writes
+  // this. The selection is STICKY, which is the CSS's own rule and not a
+  // convenience: hovering a cell there SELECTS it (css.js:222-226) and leaving
+  // the band does not un-select, so `targetRecords[p1Char][tssCursor]` always
+  // has a slot to read and A always has a target to launch. The `!=` guard
+  // that fires menuSelect once per change is the same guard, for the same
+  // reason.
   int tssCursor;
+  // The free hand on target-select (A25c / D29). Doubles, integrated by
+  // foh_hand_step from the d-pad, clamped to the screen — the CSS hand's
+  // model exactly, minus handType (there is no grab gesture here).
+  //
+  // WHAT D29 REVERSES, stated plainly because it is the cost of the owner's
+  // ask: the header's rewrite deltas record that upstream's target-select and
+  // stage-select POINTERS were deliberately rewritten INTO index cursors for a
+  // device with no mouse, and the SSS keeps that rewrite. So after A25(c) the
+  // two sibling screens differ in interaction model: TSS is a free cursor
+  // again, SSS is a 3x2 grid. The owner asked for the cursor here after
+  // playing it; either the SSS follows in a later arc or the inconsistency is
+  // accepted, and that choice is his, not this file's.
+  //
+  // Unlike the CSS hand (module scope upstream, set ONCE at boot, MENU-SPEC
+  // §2.2 property 4), this one is RE-HOMED on every entry to the screen, at
+  // FOH_TSS_HOME_{X,Y}. That is upstream's behaviour, not a deviation:
+  // menu.js:77-84 resets targetPointerPos when it opens target-select, which
+  // is the same reset the index cursor's `tssCursor = 0` was carrying.
+  double tssHandX, tssHandY;
   // options-gameplay. The row list is upstream's, VERBATIM and complete
   // (MENU-SPEC §3.1; gameplaymenu.js:11-12 `menuVOptions = 4` is a MAX
   // INDEX, so FIVE rows, and `menuHOptions = [0,0,0,0,3]` gives the last
