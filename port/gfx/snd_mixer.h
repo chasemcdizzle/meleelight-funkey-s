@@ -34,6 +34,27 @@
 // and the mixer's voice id agree with no back-channel because both
 // count the same event stream.
 //
+// ⚠ THAT LAST CLAUSE IS A LOAD-BEARING PRECONDITION, NOT A FACT, AND IT
+// IS CURRENTLY VIOLATED (A40, measured 2026-08-24). `m->playCount` is
+// advanced by EVERY snd_event() play, whoever calls it; ml_events.c's
+// counter is advanced only by ml_sound_play(). The two agree ONLY while
+// snd_event() is reached exclusively through the ml_snd_sink chokepoint.
+// foh_dev.c:842-847 (`foh_snd`, the MENU-plane SFX chokepoint) calls
+// snd_event() directly, so every menu click, cursor move and CSS/SSS
+// confirm the player makes before the match advances the mixer's ids and
+// NOT the sim's. From then on the sim's stored play ids (marth's
+// player.shieldBreakerID, FURAFURA's furaLoopID) name voices that do not
+// exist, every id-routed stop lands in `stopsUnmatched`, and the looping
+// shieldbreakercharge voice plays to the end of the match — the reported
+// A40 symptom, reproduced with menuPlays=3: simId 1002 vs voiceId 1004,
+// stops=1 matched=0 unmatched=1.
+// THE FIX BELONGS AT THE CALLER, not here: the menu plane needs a play
+// that does not advance the id counter, because upstream has ONE counter
+// and this port has two. Note that the two mixer-fidelity rigs cannot
+// see this by construction — snd_render.c and snd_reference.js drive the
+// mixer from a SIM event stream only, so the two planes never share a
+// counter there.
+//
 // THREADING: mix state is mutated by the main thread (snd_event) and
 // read/advanced by the audio callback (snd_mix_fill). The caller MUST
 // bracket snd_event with platform_audio_lock()/unlock(); on the
