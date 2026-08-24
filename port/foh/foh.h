@@ -162,6 +162,38 @@
 // character is set by putting P2 on CPU, taking its token, and (if a
 // human P2 is wanted) toggling the type back — every step upstream-legal.
 //
+// A44 MEASURED 2026-08-24 (lane M) — what D6 actually costs, and what it
+// does NOT. The owner asked why P3/P4 cannot be turned on here. Three
+// facts, all measured this session, because the obvious guesses are wrong:
+//   (a) THE LAYOUT IS NOT THE OBSTACLE — it already fits, at zero cost.
+//       FOH_CSS_PANEL_{X0,PITCH,W} = {1,60,58} put ports 0..3 at x =
+//       1/61/121/181, so port 3 spans 181..238 inside the 240 px screen;
+//       foh_render.c's render_css ALREADY loops k=0..3 and css_panel is
+//       already fully port-parameterised (kPortTint has four entries, the
+//       ghost letter is 'P'+(char)('1'+port), the N/A watermark arm
+//       exists). All four panels are on screen today. Nothing needs to
+//       shrink, move, or become a 2x2 grid.
+//   (b) css_ready already counts all four ports (foh.c) — the ready rule
+//       is upstream's and is not 2-port.
+//   (c) THE OBSTACLE IS THE LAUNCH PLANE, AND IT IS ONE FUNCTION.
+//       sim_setup_match (port/sim/sim/sim_boot.c:381) takes exactly
+//       (p1, p2, p2type, difficulty, stageId): its i<2 loop writes
+//       playerType/playerPresent/currentPlayers/characterSelections/
+//       cpuDifficulty/slotIsAi, and its i=2..3 loop HARD-PINS
+//       playerType=-1, playerPresent=false, currentPlayers=-1. It mirrors
+//       oracle/meleelight-harness.patch:76-92, which is 2-slot BY
+//       CONSTRUCTION. So a FOH-only widening would let a player switch P3
+//       on and then get the `portconfig` refusal at START — a port that
+//       can be turned on but cannot play, which is worse than this N/A
+//       panel, not better.
+//   AND THERE IS NO 4-PORT ORACLE. Every frozen golden is 2-player and
+//   `oracle/` is read-only outside M0 (HARD RULE 3), so a 3-/4-port match
+//   cannot be checksum-verified against the browser today. That, not the
+//   pixels, is why D6 stands. Widening it means widening sim_setup_match
+//   (a 2-port-compatible wrapper keeps sim_main.c/gfx_app.c/gfx_replay.c
+//   and every golden byte-unchanged) plus a 4-slot harness path — sim and
+//   oracle work, not menu work.
+//
 // Menu entries whose screens are excluded/deferred stay VISIBLE with
 // their faithful labels (menu.js:19-24) and selecting one emits a
 // structural `refused` event — loud and frozen in the flow traces,

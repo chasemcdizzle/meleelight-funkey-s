@@ -852,7 +852,15 @@ static void step_css(FohState *s, const PlatformInput *in,
     // port to N/A and pressing START on the SAME frame reaches here with a
     // configuration the ready rule would have rejected. Both refuse loudly
     // instead of launching something else; delete this arm when
-    // sim_setup_match carries both ports' type and level.
+    // sim_setup_match carries EVERY port's type and level.
+    //
+    // A44 (2026-08-24) re-measured the "both ports" this used to say and
+    // it is FOUR: sim_setup_match (port/sim/sim/sim_boot.c:381) also pins
+    // slots 2 and 3 to playerType=-1 / playerPresent=false /
+    // currentPlayers=-1, so this one guard is what gates the CPU-P1 arm
+    // AND the whole P3/P4 ask. The CSS's own planes and its panel layout
+    // are already 4-wide (foh.h's D6 note carries the measurement); this
+    // is the only thing in the way, and it is not in this file.
     if (!(s->p1Type == 0 && (s->p2Type == 0 || s->p2Type == 1))) {
       snd_push(s, "deny");
       ev_refused(s, "portconfig");
