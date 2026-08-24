@@ -271,24 +271,33 @@ static void leg_face(void) {
     memset(&p, 0, sizeof p);
     p.a = true;
     in = s1_input_row_style(&p, style, mr);
-    want(in.x && !in.a && !in.b && !in.z, "[3e] physical A is JUMP (in.x)");
+    want(in.x && !in.a && !in.b && in.lA == 0,
+         "[3e] physical A is JUMP (in.x)");
 
     memset(&p, 0, sizeof p);
     p.b = true;
     in = s1_input_row_style(&p, style, mr);
-    want(in.a && !in.b && !in.x && !in.z, "[3e] physical B is ATTACK (in.a)");
+    want(in.a && !in.b && !in.x && in.lA == 0,
+         "[3e] physical B is ATTACK (in.a)");
 
     memset(&p, 0, sizeof p);
     p.y = true;
     in = s1_input_row_style(&p, style, mr);
-    want(in.b && !in.a && !in.x && !in.z,
+    want(in.b && !in.a && !in.x && in.lA == 0,
          "[3e] physical Y is SPECIAL (in.b)");
 
+    // X is GRAB — but grab in this engine is not a BUTTON, it is a
+    // DISPATCHED ACTION STATE (/CONTEXT.md "Grab (how it is reached)").
+    // All this leg may honestly claim is that X emits the A + LIGHT
+    // SHIELD chord D34 synthesises. That the chord REACHES a GRAB is
+    // leg [4]'s job, in ctl_seam_witness.c, through a real sim tick.
+    // This leg deliberately does NOT claim to prove grab: the shipped
+    // defect WAS a bit assertion claiming exactly that.
     memset(&p, 0, sizeof p);
     p.x = true;
     in = s1_input_row_style(&p, style, mr);
-    want(in.z && !in.a && !in.b && !in.x,
-         "[3e] physical X is GRAB (in.z) — in EVERY style, BOX included");
+    want(in.a && in.lA > 0 && in.lA < 1 && !in.b && !in.x && !in.z,
+         "[3e] physical X emits the Z chord: A + light shield, never in.z");
   }
   // Said once more, unconditionally, about the style the owner asked
   // about by name: BOX grabs.
@@ -297,7 +306,8 @@ static void leg_face(void) {
     memset(&p, 0, sizeof p);
     p.x = true;
     const MlInput in = s1_input_row_style(&p, CTL_STYLE_BOX, true);
-    want(in.z, "[3e] BOX GRABS (owner: \"wtf you can't grab on box??\")");
+    want(in.a && in.lA > 0,
+         "[3e] BOX GRABS (owner: \"wtf you can't grab on box??\")");
   }
   printf("  [3e] OK: A=jump B=attack Y=special X=grab in all %d styles\n",
          (int)CTL_STYLE_COUNT);

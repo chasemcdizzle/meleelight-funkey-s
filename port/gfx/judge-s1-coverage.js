@@ -21,7 +21,8 @@
 //   3. SLOT-1 rows are all-neutral (the live app injects a neutral
 //      human row for P2 every frame).
 //   4. S1 INVARIANTS on every slot-0 row: y/z/l/du/dl/dr/dd never true,
-//      lA === 0, rA === 1 exactly when r else 0, ls*/cs* === their raw
+//      lA === 0 unless physical X (D34), rA === 1 exactly when r else 0,
+//      ls*/cs* === their raw
 //      twins (every S1 table value clears the 0.28 deadzone).
 //   5. RAW-KEY SIDECAR (the SOCD live witness, review-51 M4): exactly
 //      <frames> lines each EXACTLY 4 lowercase hex digits (gfx_app.c's
@@ -219,7 +220,13 @@ const SIGS = [
   ["jump (physical A) -> i.x",    (i) => i.x === true],
   ["attack (physical B) -> i.a",  (i) => i.a === true],
   ["special (physical Y) -> i.b", (i) => i.b === true],
-  ["grab (physical X) -> i.z",    (i) => i.z === true],
+  // Grab in this engine is not a button (see /CONTEXT.md "Grab (how it
+  // is reached)"): physical X emits the A + LIGHT SHIELD chord that
+  // Melee's Z button is, and that chord is what the grab arms read.
+  // DEVIATION D34 — it replaces `i.z === true`, which was a bit that
+  // reached no grab arm anywhere in the sim.
+  ["grab (physical X) -> i.a + light shield",
+                                  (i) => i.a === true && i.lA > 0 && i.lA < 1],
 ];
 const counts = new Array(SIGS.length).fill(0);
 
@@ -241,24 +248,29 @@ for (let f = 0; f < trace.length; f++) {
   if (p1Neutral) neutralSlot1++;
   else die("frame " + f + " slot 1 is not the neutral human row");
   const i = frame[0];
-  // S1 invariants. i.z left the list with D33 — it is now the GRAB bit,
-  // asserted against its physical source in the sidecar pairing below —
-  // and the cs plane is dead on BOX since D32, so it is pinned to zero.
-  if (i.y || i.l || i.du || i.dl || i.dr || i.dd) invBad++;
+  // S1 invariants. i.lA left the flat-zero list with D34 — it is now the
+  // light-shield half of the X grab chord, asserted against its physical
+  // source in the sidecar pairing below — and the cs plane is dead on
+  // BOX since D32, so it is pinned to zero. i.z is back on the list and
+  // is now dead on EVERY style: it is an alternate attack button in this
+  // engine, never a grab, and nothing emits it.
+  if (i.y || i.l || i.z || i.du || i.dl || i.dr || i.dd) invBad++;
   if (i.csX !== 0 || i.csY !== 0) invBad++;
-  if (i.lA !== 0) invBad++;
+  if (i.lA !== 0 && !(i.lA > 0 && i.lA < 1)) invBad++;
   if (i.r ? i.rA !== 1 : i.rA !== 0) invBad++;
   if (i.lsX !== i.rawX || i.lsY !== i.rawY ||
       i.csX !== i.rawcsX || i.csY !== i.rawcsY) invBad++;
   // sidecar pairing fidelity: the four face buttons and START reach the
-  // S1 row through the D33 mapping — A jump, B attack, Y special, X grab
-  // — and the bits and bools must agree frame-by-frame. This is the
+  // S1 row through the D33/D34 mapping — A jump, B attack, Y special,
+  // X grab (as `a` + the light-shield analog) — and the bits and bools
+  // must agree frame-by-frame. This is the
   // rig's PHYSICAL witness for the re-ratified plane: the signatures
   // above prove each role fires, this proves it fires from the right
   // button on every single frame.
   const k = rawKeys[f];
-  if (((k & K_A) !== 0) !== i.x || ((k & K_B) !== 0) !== i.a ||
-      ((k & K_Y) !== 0) !== i.b || ((k & K_X) !== 0) !== i.z ||
+  if (((k & K_A) !== 0) !== i.x ||
+      ((k & K_B) !== 0 || (k & K_X) !== 0) !== i.a ||
+      ((k & K_Y) !== 0) !== i.b || ((k & K_X) !== 0) !== (i.lA > 0) ||
       ((k & K_START) !== 0) !== i.s) {
     die("frame " + f + " raw-key sidecar a/b/x/start bits disagree with " +
         "the recorded row — sidecar is not this session's recording");

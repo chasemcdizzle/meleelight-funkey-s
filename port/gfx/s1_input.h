@@ -292,12 +292,25 @@ static inline S1Resolved s1_resolve(const PlatformInput *p) {
   return s1_resolve_style(p, CTL_STYLE_BOX, false);
 }
 
+// The analog level physical X presses into the LEFT trigger to synthesise
+// Melee's Z button (DEVIATION D34, fix_plan A42). 49/140 counts is the
+// B0XX/HayBox LIGHT SHIELD level, cited verbatim from
+// docs/research/b0xx-mapping.md §2.2 ("light shield (analog trigger ≈
+// 49/140 counts) ... Mod X turns L into an analog 'Z-light' press").
+// Two bounds make it load-bearing, both measured against sim code read
+// this session, not chosen for taste:
+//   > 0  — DASH.c:72/80, RUN.c:60 and KNEEBEND.c:66 gate their grab arms
+//          on `lA > 0 || rA > 0`. A zero here reaches no grab at all.
+//   < 1  — GUARDON.c:21 arms powerShieldActive on `max(lA,rA) === 1`.
+//          A 1.0 here would powershield on every single grab press.
+#define S1_ZGRAB_LA (49.0 / 140.0)
+
 // The pollInputs-seam row: a complete 22-field FINAL Melee-unit Input.
 // Mirrors the prototype funkeyPoll assembly exactly: ls/cs deadened
 // (0.28 — a structural no-op for every nonzero table value, kept for
 // parity), raw* carry the pre-deaden quantized values, digital shield
-// r=true rA=1.0. l/du/dl/dr/dd are never set by ANY style; y/z are never
-// set by BOX/NORMAL and ARE set by NATURAL (jump / grab — see below).
+// r=true rA=1.0. du/dl/dr/dd and z are never set by ANY style; l/lA carry
+// the X-grab synthesis below.
 static inline MlInput s1_input_row_style(const PlatformInput *p,
                                          CtlStyle style, bool modOnR) {
   const S1Resolved r = s1_resolve_style(p, style, modOnR);
@@ -309,10 +322,38 @@ static inline MlInput s1_input_row_style(const PlatformInput *p,
   // SHOULDERS still differ by style (ctl_roles above). in.y is left
   // unset: Melee treats X and Y alike, so one jump field is enough and
   // a second would only be a second name for the same bit.
-  in.a = p->b; // ATTACK
-  in.b = p->y; // SPECIAL
-  in.x = p->a; // JUMP
-  in.z = p->x; // GRAB (Z — and lightshield-grab upstream)
+  //
+  // X = GRAB is DEVIATION D34, and it replaces a defect. D33 shipped
+  // `in.z = p->x` under the comment "Z: grab (and lightshield-grab
+  // upstream)". That sentence is TRUE OF REAL MELEE AND FALSE OF THIS
+  // ENGINE, and the owner found it the only way left: he pressed X and
+  // nothing happened. MEASURED over the whole sim this session, every
+  // reader of MlInput.z is {FORWARD,UP,DOWN}SMASH.c's `i0->a || i0->z`,
+  // action_state_shortcuts.c:522's checkForAerials `(a edge)||(z edge)`,
+  // and physics.c:983's lCancelUpdate — so `z` is an ALTERNATE ATTACK
+  // button and an L-cancel trigger. It dispatches GRAB exactly ZERO
+  // times. The five real grab arms are GUARD.c:75 / GUARDON.c:101
+  // (`a` edge while shielding), DASH.c:80, RUN.c:60 and KNEEBEND.c:66
+  // (`a` edge + `lA>0||rA>0`).
+  //
+  // So X synthesises WHAT MELEE'S Z ACTUALLY IS: A + a light shield.
+  // That single chord reaches every one of those arms, because WAIT.c:54
+  // and DASH.c:72 both take their `lA>0||rA>0` arm INTO GUARDON, whose
+  // init->main->interrupt chain runs inside the SAME tick and still sees
+  // the `a` edge (GUARDON.c:28 / :64). Standing, shielding, dashing,
+  // running and in jumpsquat all grab. Airborne, checkForAerials' arm
+  // fires first, so X is an aerial — which is also what Z does.
+  //
+  // NOTHING IS TRADED AWAY. Every old `z` reader listed above is an
+  // `a || z` or a `(a edge) || (z edge)`, so `in.a` covers them
+  // identically, and lCancelUpdate's `lA` edge covers its third arm — X
+  // keeps its alternate-attack and L-cancel roles by construction. `z`
+  // is therefore dropped rather than kept as a second name for a bit
+  // `a` already sets, and the comment that misled two agents goes with
+  // it. port/gfx/ctl_seam_witness.c is what proves this paragraph.
+  in.a = p->b || p->x; // ATTACK (and the A half of X's Z synthesis)
+  in.b = p->y;         // SPECIAL
+  in.x = p->a;         // JUMP
   in.s = p->start;
   in.lsX = deaden(r.lsX, ml_deadzoneConst());
   in.lsY = deaden(r.lsY, ml_deadzoneConst());
@@ -326,6 +367,12 @@ static inline MlInput s1_input_row_style(const PlatformInput *p,
     in.r = true;
     in.rA = 1.0;
   }
+  // The LIGHT SHIELD half of X's Z synthesis (D34). It goes on the LEFT
+  // trigger so it composes rather than fights: a player holding the
+  // shield shoulder (r/rA=1.0) and pressing X still shields at full
+  // strength, because every consumer reads max(lA,rA)
+  // (action_state_shortcuts.c:299/324).
+  if (p->x) in.lA = S1_ZGRAB_LA;
   return in;
 }
 

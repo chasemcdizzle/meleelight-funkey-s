@@ -22194,3 +22194,49 @@ synthetic trace from scratch" into "flip one token in an existing one", and the
 same measurement then explained exactly which characters the rule can serve.
 
 **NEXT.** A marth wall-contact trace (the last piece of #16). Then A7 credits.
+
+## lane I — 2026-08-24 — A42 / DEVIATION D34: X grabs for real, and the ZOOM-OUT is that the check stopped at the seam
+
+**The defect.** Owner: *"grab with X didn't work, nothing happens."* A41's D33
+wired physical X to `in.z` on the strength of a SOURCE COMMENT in
+`s1_input.h` — `// Z: grab (and lightshield-grab upstream)` — which is true
+of real Melee and false of this engine.
+
+**Measured, not recalled.** Every reader of `MlInput.z` in this tree:
+`{FORWARD,UP,DOWN}SMASH.c` (`i0->a || i0->z`), `action_state_shortcuts.c:522`
+checkForAerials, `physics.c:983` lCancelUpdate — plus the AI plane. **Zero
+`GRAB` dispatches.** `z` is an alternate ATTACK button and an L-cancel
+trigger. (The briefing named only the three SMASH files and called it the
+complete list; it was short by three. Both the brief and the source comment
+were CITED claims presented as MEASURED ones — the exact grade-mixing
+`/CONTEXT.md` "Measured / Cited / Assumed" names.)
+
+**The fix.** X emits Melee's Z CHORD — `a` + a light shield on `lA`
+(`S1_ZGRAB_LA = 49/140`, cited from `docs/research/b0xx-mapping.md` §2.2).
+That single chord reaches all five real grab arms, not just GUARD's, because
+`WAIT.c:56` / `DASH.c:72` route a standing or dashing press into GUARDON,
+whose `init -> main -> interrupt` chain runs inside the SAME tick and still
+sees the `a` edge. Nothing is traded away: every `z` reader is an `a || z`
+form and lCancel's third arm is an `lA` edge, so X keeps its alternate-attack
+and L-cancel roles by construction and `z` is dropped rather than kept as a
+second name for a bit `a` already sets.
+
+**ZOOM-OUT (HARD RULE 8) — the CLASS, and it is not "one wrong button".**
+The class is: **a check that owns one plane asserts its own output and stops
+at the seam.** `check-ctl-input.sh` asserted `in.z` was set from `p->x`, which
+was TRUE, and shipped a completely dead feature green. A40 (the play-id
+drift) is the same shape one plane over, and so is A43. So the fix is an
+INSTRUMENT, not a one-off: `port/gfx/ctl_seam_witness.c` drives physical
+button -> real resolver -> **REAL `sim_game_tick`** -> the actionState the
+engine actually enters, for every role D33 moved. **It reproduced the owner's
+symptom on its first run, before any fix — `X -> (WAIT)`, nothing happens —
+which is the proof it would have caught the shipped bug.** The same rung
+carries leg [5], the emitted-vs-renderable vfx comparison that was a hand-run
+one-liner (41 emitted names vs 45 templates, difference empty), matched on
+the CALL rather than the string, with a guard that fails loudly if any emit
+site stops passing a literal.
+
+**The rule this leaves behind:** a bit assertion may never CLAIM an action.
+Leg [3e] now says X "emits the Z chord" and points at leg [4] for the grab;
+the shipped defect was precisely a bit assertion claiming an action it had
+never observed.
