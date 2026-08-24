@@ -5289,3 +5289,39 @@ is unreachable — a revert would otherwise resurrect a false claim.
    `989892f`. Driver is re-verifying independently. **STATE.md's own standing
    hazard applies: a stale red masks everything downstream of it.** If confirmed
    pre-existing it needs its own row, not a footnote.
+
+### A39 (P1, NEW 2026-08-23) — `check-live-arms.sh` T6 IS VACUOUS. A TOOTH STOPPED BITING.
+
+**Status: RED, and CONFIRMED PRE-EXISTING BY BISECT.** Lane M reported it while
+doing A24c; the driver hypothesised **A37** (which changed `matchTimer`
+behaviour, and T6 strips a `matchTimer` expiry clamp — a plausible suspect) and
+**BISECTED. THE HYPOTHESIS WAS WRONG.**
+- At `HEAD` (76eb3b3): `LIVE ARMS FAIL: T6: the unclamped copy exited 0`
+- At `d717106` (**the commit immediately BEFORE A37 landed**), with deps copied
+  in so the run is valid: **identical failure, identical output lines 55-56.**
+**A37 is exonerated. So is A24c. The lane's "pre-existing" claim was correct.**
+(Driver's first probe was INCONCLUSIVE — a bare worktree lacks `node_modules`
+and died at the sim-data dump, a different error. It was re-run properly rather
+than read as confirmation.)
+
+**WHAT IS ACTUALLY BROKEN — read this carefully, it is NOT a crash.**
+T6 (`port/foh/check-live-arms.sh:2122-2143`) is a **TOOTH**: it rebuilds a copy
+with the HUD expiry clamp REMOVED (`const double mt = raw;`) and **requires
+that copy to CRASH**. It is exiting **0** instead.
+So the product is presumably fine — the clamp is still in place. **What has been
+lost is the PROOF that the clamp is necessary.** Either (a) something else now
+prevents the crash so the clamp is no longer load-bearing, or (b) the test's
+crash-trigger conditions no longer occur. **Both mean the same thing: someone
+could delete that clamp today and no check would object.**
+
+**This is a COVERAGE HOLE, not a functional defect** — which is exactly why it
+survived: nothing user-visible points at it. It is also a live instance of
+STATE.md's standing hazard (*a stale red masks everything downstream of it*),
+because `check-live-arms.sh` cannot go green for ANY reason while T6 is
+vacuous, so it currently masks every other arm it tests.
+
+**NEXT STEP:** bisect further back to find where T6 stopped biting, then decide
+whether the clamp is still needed (fix the tooth) or genuinely redundant
+(retire it with evidence). **Do NOT "fix" this by loosening T6** — HARD RULE 3.
+A tooth that cannot bite must be repaired or retired on the record, never
+relaxed.
