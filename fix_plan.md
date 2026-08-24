@@ -6196,3 +6196,95 @@ Staged the new header.
 
 `FOH FLOWS OK`, `HAND CHECK OK`, `LEGIBILITY`, `CSS MODE`, `JUDGE REGRESSION`,
 `REBIND`, `CTL INPUT`, `ALSA HEADROOM`, `SND IDLE` — all green on merged bytes.
+
+## A41 — CONTROL-SCHEME RE-RATIFICATION, DONE 2026-08-24 (D31/D32/D33)
+
+**Owner ratification, verbatim:** *"L-only shielding is totally fine. I want it
+in fact. i also want to be able to edit controls as I explained. as for box, if
+it needs a custom menu, that's fine. do it. wtf you can't grab on box?? we want
+to be able to"* — plus the earlier X->grab/A->jump/Y->special/B->attack and
+"R should be mod / tilt" (shipped as D30).
+
+**THE DRIVER OWES A CORRECTION FIRST.** I told the owner *"BOX never emits
+`in.z` at all"* and let it read as **"you cannot grab on box."** **That is
+FALSE.** `GUARD.c:75-78` / `GUARDON.c:101-104` dispatch `GRAB` on a fresh A
+press while shielding, and that arm is **sim-side and STYLE-INDEPENDENT** — so
+shield+A grabbed on BOX all along. What BOX lacked was a **DEDICATED** grab
+button. **Tenth premise corrected this session; fifth of mine, and this one
+reached the owner and shaped a ratification.**
+
+- **D31 — L-ONLY SHIELDING (Natural/Classic).** `*shield = (p->l || p->r)` ->
+  `*shield = p->l`. BOX untouched (already splits its shoulders). **This is the
+  unlock**: it frees R, which frees Y, which makes D33 possible.
+- **D32 — the C-LAYER MOVES FROM Y TO THE FREED R SHOULDER.**
+- **D33 — the FACE PLANE, STYLE-INDEPENDENT, BOX INCLUDED.** The style branch
+  in the button plane is DELETED: `in.x = p->a` (jump), `in.a = p->b` (attack),
+  `in.b = p->y` (special), **`in.z = p->x` (GRAB — on every style, BOX
+  included)**.
+
+### SHOULD NATURAL GET A C-LAYER? YES — AND THE REASONING CORRECTS MINE
+I flagged that a C-layer might contradict Natural's "no modifiers, 1:1"
+identity. **Measured: that was never why Natural lacked a C-stick.**
+`ctl_style.h`'s own text says Natural "gives up the single reachable
+C-direction" because **all seven buttons were spent** once tap-jump was forced
+off. D31 frees R, so the pressure is gone. **Decisive: without D32, D31 makes
+Natural STRICTLY WORSE** — two shields became one and R would do nothing. **A
+dead shoulder on the DEFAULT style is worse than a modifier.** Its 3 new rows
+re-emit 1.0/1.0/0.7 already present in its own table; **no coordinate was
+invented.**
+
+### THE ARITHMETIC NOBODY HAD WRITTEN DOWN — AND THE 4th DECISION IT FORCES
+**8 buttons − START(pause) − MENU(pause menu) = 6 gameplay buttons for 7 roles**
+(attack, special, jump, grab, shield, Mod, C-layer). **Once grab is real, every
+style must drop one.** Natural/Classic have no Mod -> 6 fit exactly. **BOX spent
+R on Mod (D30, the owner's own ruling yesterday) -> the C-LAYER is what goes.**
+My brief's "Y freed by (2)" does NOT hold on BOX, and the lane did not paper
+over it: **BOX's 3 clayer rows are kept BYTE-EXACT AND UNREACHABLE** so a future
+ruling costs no re-derivation.
+**OWNER DECISION AVAILABLE: BOX now has no C-stick. It bought grab and kept Mod.
+Reversible in one line if he would rather drop Mod.** No third option exists —
+that is arithmetic, not preference.
+
+### AND THE "OWNER SELF-CONFLICT" I RECORDED WAS NOT ONE
+A30(b) recorded the owner asking for R=mod AND R=C-stick as a contradiction.
+**It is not:** those rulings are about **DIFFERENT STYLES**, and `ctl_roles` is
+**per-style**. R = Mod on BOX; R = C-layer on Natural/Classic. **I filed a
+conflict that the code's own structure already resolved.**
+What A30(b) *did* prove: **the A31 rebinder CANNOT do this** — `ctl_bind_apply`
+permutes PHYSICAL buttons *before* the resolver, so it can never conjure an
+`in.z` no style emits. **Grab on BOX was a table change or nothing.**
+
+### PINNED S1 EXPECTATIONS THAT MOVED — 12 GROUPS, NONE WEAKENED
+Highlights: `s1_sweep.c` checks 11-13 re-aimed BOX->CLASSIC (BOX has no cs
+plane now; coordinates and the `ls neutral` tooth byte-identical); the
+2048-combo button invariant now asserts the D33 form **on BOX *and* CLASSIC**
+plus `in.z == p.x` — **strictly stronger, two styles where it was one**; the
+sweep dump grew a 7th column for the live `in.z`; `judge-s1-coverage.js`
+signatures went 24 -> 22 with **4 face-role sigs including GRAB**; its sidecar
+pairing re-mapped to the D33 plane. **`s1-session.script`'s PRESSES are
+byte-unchanged** (only comments moved), and `check-device-input.sh`'s exact
+`S1 SWEEP OK (15 pinned chord checks, 2048 combos …)` line is **unchanged** —
+no device script edited.
+
+**VERIFIED ON MERGED BYTES BY THE DRIVER:** `SIM CONFORMS` **8/8** (the safety
+net — the input plane feeds the sim and did NOT reach the checksum surface),
+plus `CTL INPUT CHECK OK (8 teeth)`, `REBIND TOOTH OK`, `FOH FLOWS OK`,
+`CONTROLS LABELS OK`, `HAND CHECK OK`. New teeth **t4-bothshields**,
+**t5-clayeronY**, **t6-nograb**, **t7-facescramble**, each failing alone.
+
+### DEVICE LEGS OWED (device unavailable; highest-risk first)
+1. **`check-device-input.sh` + `judge-s1-coverage.js`** — the judge and the live
+   session are **the only edits the lane could not execute**. Syntax-checked and
+   every signature traced to a press >= 5 frames, but **only the device proves
+   it.**
+2. `verify_m3.sh` leg (4) — the live S1 three-way replay.
+3. `verify_m4.sh` leg (2) — menu flows through the real input path (Controls
+   shots are A==B/non-blank/distinct, NOT pixel-frozen, so **no re-freeze
+   owed**).
+4. `install-play-opk.sh` — reinstall so the device play build carries the new
+   plane.
+
+### TWO OWNER CALLS, NEITHER BLOCKING
+1. **BOX has no C-stick now** (bought grab, kept Mod). One line to reverse.
+2. **NATURAL and CLASSIC now differ by exactly ONE chord row** (Classic's
+   dedicated shield-drop diagonal). Candidates for collapsing into one style.
