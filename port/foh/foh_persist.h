@@ -30,11 +30,12 @@
 //     truth (medal DISPLAY = the registered iter-99 pipeline-extension
 //     deferral).
 //
-// FILE FORMAT `MLFKPERSIST4` (versioned + checksummed; exactly 64 LF
+// FILE FORMAT `MLFKPERSIST5` (versioned + checksummed; exactly 68 LF
 // lines, deterministic bytes — twin checks cmp host vs device). v2
-// added the `ctlstyle` line, v3 the `modonr` line (fix_plan A4), and v4
+// added the `ctlstyle` line, v3 the `modonr` line (fix_plan A4), v4
 // the seven options lines below (MENU-SPEC §3/§4 — the completed
-// gameplay + audio screens).
+// gameplay + audio screens), and v5 the four `bind` rows (fix_plan A31 /
+// DEVIATION D26 — the Controls screen's real rebinder).
 //
 // WHY v4 AND NOT v2-WITH-MORE-LINES (cross-lane collision, resolved at
 // the iter-13x merge — read this before renumbering anything): the menus
@@ -49,12 +50,16 @@
 // Older files on disk are MIGRATED, never discarded (review-ctl r1/r2):
 // the checksum is verified like any other and every setting plus all 50
 // target records are carried forward, emitting
-// `foh_persist: migrated from=<1|2|3>` and then `loaded`. Resetting a
+// `foh_persist: migrated from=<1|2|3|4>` and then `loaded`. Resetting a
 // VALID older file would destroy every target-test personal best on the
-// owner's device. Both older formats are strict PREFIXES of v3, so one
-// parse serves all three and the migration only fills what is absent:
+// owner's device. Every older format is a strict PREFIX of the
+// next, so one parse serves them all and the migration only fills what
+// is absent:
 //   from v2 — ctlStyle carries over UNCHANGED (the CtlStyle enum numbers
 //     are frozen for exactly this reason), modOnR takes the ratified 0.
+//   from v4 — no `bind` rows, so every port takes the IDENTITY binding:
+//     a v4 file was written by a build with no rebinder at all, so the
+//     identity is precisely the mapping that device already had.
 //   from v1 — no style line at all, so ctlStyle becomes BOX: a v1 file
 //     can only have come from a build whose sole mapping was the
 //     ratified S1 == BOX, so the upgrade preserves the controls that
@@ -62,9 +67,9 @@
 // NATURAL is the default for a FRESH/reset install only, and an upgrade
 // never silently moves a binding. Each version is validated against ITS
 // OWN grammar: a v2 file's ctlstyle domain is the historical {0,1}, not
-// the current {0,1,2} (review-ctl n1). Any version >= 5 (a FUTURE format
+// the current {0,1,2} (review-ctl n1). Any version >= 6 (a FUTURE format
 // this build cannot know) takes RESET_VERSION:
-//   MLFKPERSIST4
+//   MLFKPERSIST5
 //   turbo [01]
 //   lcancel [0-2]
 //   tapjump [01] [01] [01] [01]
@@ -78,11 +83,13 @@
 //   phantom <hex16>
 //   soundslevel <hex16>
 //   musiclevel <hex16>
+//   bind <port> <8 slot digits>   x4, port-major (port 0..3, in order);
+//                                 each row a PERMUTATION of 0..7
 //   SUM <sha256-lowercase-hex of ALL preceding bytes>
-// The v4 block is APPENDED after the 50 rec rows on purpose: it keeps
-// every older version a strict PREFIX of v4 through the rec block, so the
-// one shared parser still serves v1/v2/v3 and their rec-row line indices
-// are unchanged. Migration fills the v4 block with the authored defaults
+// The v4 and v5 blocks are APPENDED after the 50 rec rows on purpose: it
+// keeps every older version a strict PREFIX through the rec block, so the
+// one shared parser still serves v1/v2/v3/v4 and their rec-row line
+// indices are unchanged. Migration fills the v4 block with the authored defaults
 // (flash/walljump/blastzone/dustless 0, phantom 0.01, soundslevel 0.5,
 // musiclevel 0.3) — the same values a fresh install gets, because no
 // older file ever carried an opinion about them.
@@ -92,7 +99,7 @@
 // (the matchTimer cap, targetplay.js:282).
 //
 // LOAD (foh_persist_load): strict anchored line-by-line parse. Missing
-// file / UNSUPPORTED version (>= 5; v1, v2 and v3 migrate, see above) / ANY
+// file / UNSUPPORTED version (>= 6; v1..v4 migrate, see above) / ANY
 // grammar, order, domain, checksum,
 // truncation, or size deviation = LOUD reset-to-defaults — one exact
 // stderr line per boot (two on a migrating boot — the `migrated`
@@ -121,7 +128,7 @@
 // by check-device-persist.sh; committed device checks' summary parsers
 // are needle-anywhere and unaffected):
 //   foh_persist: loaded
-//   foh_persist: migrated from=<1|2|3>  (review-ctl r1/r2 + the
+//   foh_persist: migrated from=<1|2|3|4>  (review-ctl r1/r2 + the
 //                2026-07-29 v3 bump and the v4 bump: a VALID older file
 //                was carried forward — settings + all 50 records
 //                preserved; from=1 also sets ctlStyle to BOX, the only
@@ -143,6 +150,7 @@
 
 #include <stdbool.h>
 
+#include "../gfx/ctl_style.h" // CTL_BIND_PORTS / CTL_BTN_COUNT (A31)
 #include "foh.h"
 
 #define FOH_PERSIST_CHARS 5
@@ -192,6 +200,23 @@ typedef struct {
   // raw (:24-25) — the +/-0.1 steps are unrounded upstream, so the stored
   // double carries their dust verbatim.
   double masterVolume[2];
+  // --- v5 (fix_plan A31; DEVIATION D26) ---------------------------------
+  // The Controls screen's button bindings: bind[port][phys] = the LOGICAL
+  // button that physical button `phys` drives (ctl_style.h owns the
+  // contract and the CtlBtn wire numbers). Always a PERMUTATION of
+  // 0..CTL_BTN_COUNT-1 per port; the loader REFUSES anything else rather
+  // than installing a table with an action missing from it.
+  //
+  // PER-PORT IN THE FORMAT even though only port 0 has a UI: the port
+  // dimension is the expensive half to retrofit, and the A33 spike has not
+  // closed on whether a second physical controller is possible. Ports 1..3
+  // are the identity today and nothing writes them.
+  //
+  // Same chokepoint rules as ctlStyle — the cells live in ctl_style.c, a
+  // different TU, so the DRIVERS move them, not foh_persist_apply/collect:
+  //   load:        for (k) ctl_bind_set_row(k, p.bind[k]);
+  //   before save: for (k, i) p.bind[k][i] = ctl_bind_get(k, i);
+  int bind[CTL_BIND_PORTS][CTL_BTN_COUNT];
 } FohPersist;
 
 typedef enum {

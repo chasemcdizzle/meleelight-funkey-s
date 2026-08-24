@@ -18,6 +18,9 @@
 #include "../gfx/ctl_style.h" // CTL_STYLE_COUNT (enum only — no link dep)
 #include "../sim/ml_ser.h" // ml_sha256_hex (oracle/qjs/sha256.c by path)
 
+// The CURRENT format version. One number: the header literal is built from
+// it and every block gate below compares against it.
+#define FP_VERSION 5
 #define FP_FILE "mlfk-persist.dat"
 #define FP_TMP "mlfk-persist.tmp"
 #define FP_DEFAULT_DIR "/mnt/mlfk-data"
@@ -60,6 +63,13 @@ void foh_persist_defaults(FohPersist *p) {
       p->targetRecords[c][s] = -1.0; // targetplay.js:40
     }
   }
+  // v5 (fix_plan A31): the IDENTITY binding on every port. Not left to the
+  // memset for the same reason ctlStyle is not — zero is a legal SLOT
+  // value, so a memset would put action 0 on all eight buttons, which is
+  // not a permutation at all.
+  for (int k = 0; k < CTL_BIND_PORTS; k++) {
+    for (int i = 0; i < (int)CTL_BTN_COUNT; i++) p->bind[k][i] = i;
+  }
 }
 
 // --- canonical serialization (deterministic bytes; twin-cmp'd) --------------
@@ -90,7 +100,7 @@ static double fp_double(uint64_t b) {
 static size_t fp_serialize(const FohPersist *p, char *buf, size_t cap) {
   size_t n = 0;
   int w = snprintf(buf + n, cap - n,
-                   "MLFKPERSIST4\nturbo %d\nlcancel %d\n"
+                   "MLFKPERSIST5\nturbo %d\nlcancel %d\n"
                    "tapjump %d %d %d %d\nctlstyle %d\nmodonr %d\n",
                    p->turbo, p->lCancelType, p->tapJumpOff[0],
                    p->tapJumpOff[1], p->tapJumpOff[2], p->tapJumpOff[3],
@@ -122,6 +132,17 @@ static size_t fp_serialize(const FohPersist *p, char *buf, size_t cap) {
                (unsigned long long)fp_bits(p->masterVolume[1]));
   if (w < 0 || (size_t)w >= cap - n) gfx_fatal("foh_persist: serialize overflow");
   n += (size_t)w;
+  // v5 BLOCK (fix_plan A31) — appended after the v4 block for the same
+  // prefix reason. One row per port, port-major, eight single-digit slots.
+  for (int k = 0; k < CTL_BIND_PORTS; k++) {
+    w = snprintf(buf + n, cap - n, "bind %d %d %d %d %d %d %d %d %d\n", k,
+                 p->bind[k][0], p->bind[k][1], p->bind[k][2], p->bind[k][3],
+                 p->bind[k][4], p->bind[k][5], p->bind[k][6], p->bind[k][7]);
+    if (w < 0 || (size_t)w >= cap - n) {
+      gfx_fatal("foh_persist: serialize overflow");
+    }
+    n += (size_t)w;
+  }
   char hex[65];
   ml_sha256_hex(buf, n, hex);
   w = snprintf(buf + n, cap - n, "SUM %s\n", hex);
@@ -219,8 +240,15 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
     while (e < sumStart && buf[e] != '\n') e++;
     if (e >= sumStart) return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "header");
     const size_t len = e - pos;
-    if (len == 12 && memcmp(buf + pos, "MLFKPERSIST4", 12) == 0) {
+    if (len == 12 && memcmp(buf + pos, "MLFKPERSIST5", 12) == 0) {
       // current version
+    } else if (len == 12 && memcmp(buf + pos, "MLFKPERSIST4", 12) == 0) {
+      // MIGRATION. v4 is v5 minus the four appended `bind` rows (fix_plan
+      // A31). A v4 file was written by a build that had no rebinder, so the
+      // identity binding foh_persist_defaults() already put in *p IS the
+      // mapping that device had — carrying it forward changes nothing the
+      // player can feel, which is the whole migration rule.
+      fromVer = 4;
     } else if (len == 12 && memcmp(buf + pos, "MLFKPERSIST3", 12) == 0) {
       // MIGRATION. v3 is v4 minus the seven appended options lines
       // (MENU-SPEC §3/§4). Nothing older ever carried an opinion about
@@ -261,6 +289,15 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
     }
     pos = e + 1;
   }
+  // The EFFECTIVE version of the file being parsed: `fromVer` is 0 for the
+  // current format and the source version for a migration, which is awkward
+  // to gate on. A31 measured why it matters: every block below used to name
+  // its versions by ENUMERATION (`fromVer == 0 || fromVer == 3`), so the v5
+  // bump silently dropped the `modonr` line for a v4 file — the parser fell a
+  // line out of step and a perfectly good save was rejected as corrupt. Every
+  // gate is now a >= comparison on this one number, which is total over any
+  // future bump instead of needing one more disjunct each time.
+  const int ver = fromVer ? fromVer : FP_VERSION;
   // line 2: "turbo [01]"
   if (sumStart - pos < 8 || memcmp(buf + pos, "turbo ", 6) != 0 ||
       (buf[pos + 6] != '0' && buf[pos + 6] != '1') || buf[pos + 7] != '\n') {
@@ -295,7 +332,7 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
   // '0' + COUNT would accept ':' and friends the moment the enum grows
   // past 10 (review-ctl r1). The static assert keeps the single-digit
   // encoding honest if CtlStyle ever widens.
-  if (fromVer != 1) {
+  if (ver >= 2) {
     _Static_assert((int)CTL_STYLE_COUNT <= 10,
                    "ctlstyle is a single decimal digit; widen the line "
                    "format (and bump MLFKPERSIST) before growing CtlStyle");
@@ -304,7 +341,7 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
     // accepting a resealed v2 file that says `ctlstyle 2` would install a
     // state no v2 writer could ever have produced. FP_V2_STYLES is a
     // FROZEN historical constant — it does not track CTL_STYLE_COUNT.
-    const int styleMax = (fromVer == 2) ? FP_V2_STYLES : (int)CTL_STYLE_COUNT;
+    const int styleMax = (ver == 2) ? FP_V2_STYLES : (int)CTL_STYLE_COUNT;
     const char d = (sumStart - pos >= 11) ? buf[pos + 9] : 0;
     if (sumStart - pos < 11 || memcmp(buf + pos, "ctlstyle ", 9) != 0 ||
         d < '0' || d > '9' || (d - '0') >= styleMax ||
@@ -319,7 +356,7 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
   // line 6: "modonr [01]" (owner ruling 2026-07-29). ABSENT in v1 and
   // v2 — both migrate to the M3-RATIFIED arrangement (Mod on L), never
   // to a swapped one, so an upgrade cannot silently move a binding.
-  if (fromVer == 0 || fromVer == 3) {
+  if (ver >= 3) {
     if (sumStart - pos < 9 || memcmp(buf + pos, "modonr ", 7) != 0 ||
         (buf[pos + 7] != '0' && buf[pos + 7] != '1') ||
         buf[pos + 8] != '\n') {
@@ -359,12 +396,12 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
       pos += 25;
     }
   }
-  // v4 BLOCK (MENU-SPEC §3/§4) — present only in v4 files. Every older
-  // version stops after the rec rows, and none of them ever carried an
+  // v4 BLOCK (MENU-SPEC §3/§4) — present in v4 AND v5 files. Every version
+  // older than 4 stops after the rec rows, and none of them ever carried an
   // opinion about these seven keys, so a MIGRATED file simply keeps what
   // foh_persist_defaults(&v) above already put there: exactly the
   // fresh-install value. No older save loses anything.
-  if (fromVer == 0) {
+  if (ver >= 4) {
 
   // --- the v4 block, same anchored discipline as the header lines --------
   {
@@ -410,11 +447,49 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
     }
   }
   }
+  // v5 BLOCK (fix_plan A31) — present only in v5 files. A v4-or-older file
+  // keeps the identity binding foh_persist_defaults(&v) installed.
+  if (ver >= 5) {
+    for (int k = 0; k < CTL_BIND_PORTS; k++) {
+      // "bind <port> <8 digits>" — fixed width, anchored, same discipline
+      // as every other line: 5 + 1 + 8*2 + 1 = 23 bytes.
+      if (sumStart - pos < 23 || memcmp(buf + pos, "bind ", 5) != 0 ||
+          buf[pos + 5] < '0' || buf[pos + 5] > '3' || buf[pos + 22] != '\n') {
+        return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "grammar");
+      }
+      // port-major progression, asserted BY POSITION like the rec rows
+      if (buf[pos + 5] != (char)('0' + k)) {
+        return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "order");
+      }
+      int slots[CTL_BTN_COUNT];
+      for (int i = 0; i < (int)CTL_BTN_COUNT; i++) {
+        const char sep = buf[pos + 6 + 2 * (size_t)i];
+        const char d = buf[pos + 7 + 2 * (size_t)i];
+        if (sep != ' ' || d < '0' || d > '7') {
+          return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "grammar");
+        }
+        slots[i] = d - '0';
+      }
+      // DOMAIN: the row must be a PERMUTATION. A duplicate slot would
+      // silently delete an action from the player's controller — the same
+      // class as the qjs Number("")-zeroing defect, so it is corruption,
+      // never something to repair quietly.
+      bool seen[CTL_BTN_COUNT] = {false};
+      for (int i = 0; i < (int)CTL_BTN_COUNT; i++) {
+        if (seen[slots[i]]) {
+          return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "domain");
+        }
+        seen[slots[i]] = true;
+        v.bind[k][i] = slots[i];
+      }
+      pos += 23;
+    }
+  }
   // nothing may sit between the last content line and the SUM line
   if (pos != sumStart) return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "grammar");
   *p = v;
   // A migrated older file is LOADED, not reset — but it says so loudly,
-  // so an upgrade is never silent. The next save republishes it as v4.
+  // so an upgrade is never silent. The next save republishes it as v5.
   if (fromVer) fprintf(stderr, "foh_persist: migrated from=%d\n", fromVer);
   fprintf(stderr, "foh_persist: loaded\n");
   return FOH_PERSIST_LOADED;

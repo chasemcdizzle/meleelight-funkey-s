@@ -1973,9 +1973,11 @@ static void render_ctrl_pad(Raster *rz) {
 // Y(hold)=C-stick layer, A=attack, B=special, X=jump, Start=pause"), but it is
 // now one of three (ctl_style.h) and the screen follows whichever is live;
 // MENU opens the pause menu in every style (foh_dev.c). The BUTTON column is
-// hardware and never varies. This is a READ-ONLY view of the mapping: DEVIATION D13's rebinder (listening mode, hold-A
-// clear, protected primaries) is registered as remaining, and the screen
-// says so rather than offering a control that does nothing.
+// hardware and never varies. Since A31 (DEVIATION D26) this is no longer a
+// READ-ONLY view: every button row is a cursor row and L/R rebinds it. What
+// D13 sketched as "listening mode, hold-A clear, protected primaries" is
+// deliberately NOT what shipped — see foh.c's step_ctrl note for why a
+// permutation on an L/R row needs none of those three parts.
 // foh_font.c's face 1 is UPPERCASE-ONLY (49 glyphs) and an unknown glyph is
 // a hard gfx_fatal, so any string that comes from outside this file — e.g.
 // ctl_style.h's display names — is folded before it reaches foh_text.
@@ -1991,8 +1993,8 @@ static void render_ctrl_key(const FohState *s, Raster *rz) {
   // stays 12: the rename is the paint, the identity is the wire format that
   // the judge grammar and every frozen flow expect key on.
   header(rz, "HANDHELD");
-  static const char *const kBtn[9] = {"D-PAD", "A", "B", "X", "Y", "L",
-                                      "R", "START", "MENU"};
+  static const char *const kBtn[FOH_CTL_ACTION_ROWS] = {
+      "D-PAD", "A", "B", "X", "Y", "L", "R", "START", "MENU"};
   // review-r14 MAJOR: these labels used to be the BOX table, hard-coded,
   // while the FRESH-INSTALL style is NATURAL — so the screen described a
   // mapping the buttons did not have. They are now DERIVED from the same two
@@ -2015,17 +2017,30 @@ static void render_ctrl_key(const FohState *s, Raster *rz) {
   const char *kAct[FOH_CTL_LABEL_ROWS];
   foh_ctl_labels(style, modOnR, kAct);
   foh_text(rz, 12, 30, 1, "ACTIVE MAPPING", kAccent);
-  for (int i = 0; i < 9; i++) {
+  // A31 (DEVIATION D26): the two settable rows became ELEVEN. The nine
+  // action rows are now cursor rows too — that was the owner's whole
+  // complaint — and the Mod-shoulder row is gone from the screen (its cell
+  // survives in ctl_style.c; see foh.c's step_ctrl note).
+  const int yStyle = 176, yReset = 190;
+  for (int i = 0; i < FOH_CTL_ACTION_ROWS; i++) {
     const int y = 44 + i * 14;
-    foh_text(rz, 16, y, 1, kBtn[i], kText);
-    foh_text(rz, 96, y, 1, kAct[i], kDim);
+    const bool cur = s->ctlRow == i;
+    foh_text(rz, 16, y, 1, kBtn[i], cur ? kAccent : kText);
+    // THE REBOUND LABEL. Row i is a PHYSICAL button; what it does is the
+    // label of the LOGICAL button it is bound to (ctl_style.h). Row 0 is
+    // the d-pad, which drives the control stick and is not one of the eight
+    // bindable buttons, so it always reads its own label. Under the
+    // identity binding this loop is exactly what it was before A31 —
+    // kAct[i] — which is why the frozen label table (check-foh-flows.sh
+    // leg [0m]) is untouched and still pins all three styles.
+    const int act = (i == 0) ? 0 : ctl_bind_get(0, i - 1) + 1;
+    foh_text(rz, 96, y, 1, kAct[act], cur ? kAccent : kDim);
   }
-  // C30(c): the two SETTABLE rows. Drawn from the same cells foh.c's
-  // step_ctrl writes and the input path reads (ctl_style.h), so there is no
-  // second copy that can drift out of sync with what the buttons actually do.
+  // C30(c): the style row. Drawn from the same cell foh.c's step_ctrl
+  // writes and the input path reads (ctl_style.h), so there is no second
+  // copy that can drift out of sync with what the buttons actually do.
   {
     char buf[40];
-    const int yRow[2] = {176, 190};
     // UPPERCASE at the RENDER site, not in ctl_style.c: foh_font.c's face 1
     // carries no lowercase glyphs at all (49 glyphs: A-Z 0-9 and a short
     // punctuation set), and a missing glyph is a FATAL, not a blank — the
@@ -2033,16 +2048,23 @@ static void render_ctrl_key(const FohState *s, Raster *rz) {
     // for any consumer with a real font; only this screen folds them.
     snprintf(buf, sizeof buf, "STYLE: %s", ctl_style_name((int)ctl_style_get()));
     foh_upper(buf);
-    foh_text(rz, 16, yRow[0], 1, buf,
-             s->ctlRow == 0 ? kAccent : kDim);
-    snprintf(buf, sizeof buf, "%s", ctl_mod_shoulder_name(ctl_mod_on_r_get()));
-    foh_upper(buf);
-    foh_text(rz, 16, yRow[1], 1, buf,
-             s->ctlRow == 1 ? kAccent : kDim);
-    // the cursor caret, so the selected row reads at a glance at 240x240
-    foh_text(rz, 6, yRow[s->ctlRow], 1, ">", kAccent);
+    foh_text(rz, 16, yStyle, 1, buf,
+             s->ctlRow == FOH_CTL_ROW_STYLE ? kAccent : kDim);
   }
-  text_center(rz, 204, 1, "L/R: CHANGE   REBIND: N/A", kDim);
+  foh_text(rz, 16, yReset, 1, "RESET TO DEFAULTS",
+           s->ctlRow == FOH_CTL_ROW_RESET ? kAccent : kDim);
+  // the cursor caret, so the selected row reads at a glance at 240x240
+  {
+    const int yCur = s->ctlRow < FOH_CTL_ACTION_ROWS
+                         ? 44 + s->ctlRow * 14
+                         : (s->ctlRow == FOH_CTL_ROW_STYLE ? yStyle : yReset);
+    foh_text(rz, 6, yCur, 1, ">", kAccent);
+  }
+  // A31 sub-item 3, answered rather than deleted blind: `REBIND: N/A` was
+  // this screen saying out loud that DEVIATION D13's rebinder did not exist
+  // — the honest caption for a read-only view of the mapping. It exists
+  // now, so the caption names the control that does it.
+  text_center(rz, 204, 1, "L/R: CHANGE   A: RESET", kDim);
   text_center(rz, 216, 1, "B: BACK", kDim);
 }
 

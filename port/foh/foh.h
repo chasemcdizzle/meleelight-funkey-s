@@ -408,6 +408,15 @@ typedef struct {
 
 #define FOH_EV_CAP 8
 
+// Controls > HANDHELD screen row layout (A31). Rows 0..8 are the nine
+// ACTION rows foh_ctl_labels.h names; row 0 is the d-pad (not bindable),
+// rows 1..8 are physical buttons CTL_BTN_A..CTL_BTN_MENU, so the button
+// index of row r is (r - 1).
+#define FOH_CTL_ACTION_ROWS 9
+#define FOH_CTL_ROW_STYLE 9
+#define FOH_CTL_ROW_RESET 10
+#define FOH_CTL_ROWS 11
+
 typedef struct {
   FohScreen screen;
   // startup (upstream menus/startup.js): timer to 370
@@ -541,11 +550,30 @@ typedef struct {
   // persisted (:24-25) — carried verbatim.
   double masterVolume[2];
   int audioRow;
-  // C30(c): the Controls>Keyboard screen's cursor over its TWO settable
-  // rows (0 = control style, 1 = Mod shoulder). The VALUES do not live
-  // here — they live in port/gfx/ctl_style.c's two process cells, which
-  // the sim-side input path reads; this is only which row the cursor is
-  // on. Same module lifetime as audioRow: not reset on entry, so a second
+  // C30(c), rewritten by A31 (DEVIATION D26): the Controls > HANDHELD
+  // screen's cursor. It used to cover TWO rows (control style, Mod
+  // shoulder) — which is exactly the owner's 2026-08-23 complaint, since
+  // the nine rows that say what the buttons DO were unreachable. It now
+  // covers all of them:
+  //
+  //   0        the d-pad row. Drives the control STICK, not a button —
+  //            selectable so navigation is uniform, but NOT bindable
+  //            (L/R on it denies).
+  //   1 .. 8   the eight physical buttons, in CtlBtn order
+  //            (A B X Y L R START MENU). L/R REBINDS the selected row.
+  //   9        control style (L/R cycles the three CtlStyle values).
+  //   10       RESET TO DEFAULTS (A activates).
+  //
+  // The Mod-shoulder row is GONE from the screen (owner: "get rid of mod
+  // altogether as an option here") — the cell itself survives in
+  // ctl_style.c because the BOX label table still reads it and the
+  // persisted record still carries it; what a player wanted it for (L and
+  // R the other way round) is now a plain rebind of those two rows.
+  //
+  // The VALUES do not live here — style and Mod live in ctl_style.c's
+  // process cells and the bindings in its per-port table, all of which the
+  // sim-side input path reads; this is only which row the cursor is on.
+  // Same module lifetime as audioRow: not reset on entry, so a second
   // visit opens on the row you left.
   int ctlRow;
   // target-test records DISPLAY plane (task 13): seconds, -1 = none

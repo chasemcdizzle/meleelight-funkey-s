@@ -83,6 +83,13 @@
 
 #include <stdbool.h>
 
+// A31's binding plane needs the button struct. platform.h is the thin
+// seam header — declarations only, stdbool/stdint only — so including it
+// costs this TU nothing at link time and does not drag the sim or SDL
+// planes in. The "no dependencies" claim above is about LINKING, and it
+// still holds.
+#include "platform.h"
+
 // PERSISTED VALUES — do not renumber. NORMAL/BOX keep the numbers they
 // had in MLFKPERSIST2 so existing saves survive the v3 bump with their
 // scheme UNCHANGED (foh_persist.h); NATURAL was appended rather than
@@ -122,5 +129,78 @@ void ctl_mod_on_r_set(bool onR);
 
 // Display name for the Controls screen row ("Mod: L" / "Mod: R").
 const char *ctl_mod_shoulder_name(bool onR);
+
+// --- BUTTON BINDINGS (fix_plan A31; DEVIATION D26, MENU-SPEC §12.1) -----
+//
+// The Controls screen used to be READ-ONLY about the eight physical
+// buttons: it named what each one did and offered no way to change it
+// (owner, 2026-08-23: "you should be able to rebind any of the active
+// mappings ... currently you can't even go to any of those rows").
+//
+// THE WHOLE REBINDER IS A PERMUTATION OF THE POLLED BUTTON STRUCT, applied
+// BEFORE s1_input.h ever sees it. Nothing downstream — the three chord
+// tables, ctl_roles(), the label table, the frozen S1 sweeps — knows the
+// feature exists, because a rebind never changes what a LOGICAL button
+// does; it changes which PHYSICAL button drives it. The identity binding
+// (the fresh-install default) makes ctl_bind_apply() a plain struct copy,
+// so every pre-A31 recorded session and every frozen stream is untouched
+// by construction.
+//
+// IT IS A PERMUTATION AND NOT A FREE MAP ON PURPOSE. A free map lets the
+// player leave PAUSE or PAUSE MENU on no button at all and strand himself
+// inside a match with no way out — the "protected primaries" problem the
+// D13 rebinder sketch raised. Swapping instead makes every action reachable
+// at every moment, with no protection rules to get wrong.
+//
+// The enum is a FROZEN WIRE FORMAT (FohPersist.bind stores these values
+// verbatim, MLFKPERSIST5) — never renumber it. Order is the Controls
+// screen's row order, minus the d-pad (which drives the control STICK, not
+// a button, and is not bindable).
+typedef enum {
+  CTL_BTN_A = 0,
+  CTL_BTN_B = 1,
+  CTL_BTN_X = 2,
+  CTL_BTN_Y = 3,
+  CTL_BTN_L = 4,
+  CTL_BTN_R = 5,
+  CTL_BTN_START = 6,
+  CTL_BTN_MENU = 7,
+  CTL_BTN_COUNT = 8
+} CtlBtn;
+
+// PER-PORT FROM THE START (fix_plan A31 + the A33 re-amendment): the model
+// carries the port dimension and the persisted format carries one row per
+// port, so a second physical controller — if the A33 spike's rung 1 ever
+// says yes — is a UI change and not a format change. The Controls screen
+// edits port 0 ONLY; nothing else writes ports 1..3 today.
+#define CTL_BIND_PORTS 4
+
+// The LOGICAL button that physical button `phys` currently drives.
+// Out-of-domain arguments return `phys` unchanged (identity), never a
+// wild read.
+int ctl_bind_get(int port, int phys);
+
+// THE REBIND PRIMITIVE. Give physical button `phys` the action of the next
+// (dir > 0) or previous (dir < 0) logical button in enum order, swapping
+// with whichever physical button held it. Returns false (and changes
+// nothing) on an out-of-domain argument. Cycling one row eight times
+// returns the whole table to where it started.
+bool ctl_bind_cycle(int port, int phys, int dir);
+
+// Restore the identity binding on one port ("reset to defaults").
+void ctl_bind_reset(int port);
+
+// Install a whole row, e.g. from the persisted record. REFUSES anything
+// that is not a permutation of 0..CTL_BTN_COUNT-1 and leaves the port
+// untouched — a corrupt table would otherwise silently delete an action.
+bool ctl_bind_set_row(int port, const int *slots);
+
+// Display name of a LOGICAL button, for the Controls screen's caption.
+const char *ctl_btn_name(int btn);
+
+// Rewrite `phys` into `out` under port `port`'s binding: the d-pad and the
+// quit latch are carried verbatim, the eight button bits are permuted.
+// SAFE WHEN out == phys (the product path remaps in place).
+void ctl_bind_apply(int port, const PlatformInput *phys, PlatformInput *out);
 
 #endif // GFX_CTL_STYLE_H
