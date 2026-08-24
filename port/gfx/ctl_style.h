@@ -124,7 +124,7 @@ const char *ctl_style_name(int style);
 // --- Mod shoulder (orthogonal to style; BOX-only effect) ---------------
 // false = the M3-ratified arrangement: Mod on L, shield on R.
 // true  = swapped: Mod on R, shield on L. THE DEFAULT since 2026-08-24
-//         (fix_plan A30(a), DEVIATION D29) — owner: "L should be shield
+//         (fix_plan A30(a), DEVIATION D30) — owner: "L should be shield
 //         and R should be mod / tilt". Pure relabeling; the ratified BOX
 //         table is untouched. NOTE the product's effective fresh-install
 //         value is foh_persist_defaults()' modOnR, not ctl_style.c's

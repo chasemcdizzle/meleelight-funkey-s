@@ -2049,12 +2049,28 @@ c="$(count_x "$B/t16.out" "shot inventory")"
 [ "$c" = 1 ] || fail "T16 — inventory death message class missing"
 echo "    T16 OK: a planted dotfile dies in the production judge_shot_inventory"
 teeth=$((teeth + 1))
-# T17 (iter 99): tstage variant — an injected grid DOWN in a COPY of
-# the f06 flow moves the cursor to slot 1: TLAUNCH must carry tstage=1
-# and the trace must diverge from the frozen f06 expectation.
+# T17 (iter 99): tstage variant — an injected DOWN in a COPY of the f06
+# flow moves the selection to slot 1: TLAUNCH must carry tstage=1 and the
+# trace must diverge from the frozen f06 expectation.
+#
+# REPAIRED 2026-08-24 (D29 / A25c). This tooth used to inject a ONE-FRAME
+# DOWN TAP, which was exactly right for the EDGE-driven grid cursor D29
+# retired — and is a no-op for the LEVEL-driven free hand, which moves
+# FOH_CURSOR_VY = 3.84 px per held frame. A 1-frame tap moves the hand
+# 39.5 -> 43.34, still inside slot 0's rect (y 30..49), so tstage stayed 0,
+# the trace matched the frozen expectation, and the tooth SILENTLY STOPPED
+# BITING. That is the A39 class verbatim: a tooth is hostage to the
+# mechanism it asserts, and D29 replaced the mechanism.
+#
+# The tooth's INTENT is unchanged and still correct — "moving the cursor
+# must change which target launches" — so it is REPAIRED, NOT RETIRED
+# (HARD RULE 3). The gesture is re-expressed in the idiom f07 already
+# uses: a HELD run. 6 held frames (397..402) move the hand 39.5 -> 62.54,
+# inside slot 1's rect, measured against foh_tss_slots' geometry exactly
+# as f07-target-t02.flow's own header records it.
 mkdir -p "$B/t17"
 mkvariant "$FLOWS/f06-target-t01.flow" "$B/t17/f06-target-t01.flow" insert-after \
-  "I 396 -" "I 397 D" "I 398 -"
+  "I 396 -" "I 397 D" "I 403 -"
 run_variant "$B/t17/f06-target-t01.flow" "$B/t17.trace.txt"
 rc=0; cmp -s "$B/t17.trace.txt" "$FLOWS/f06-target-t01.expect" || rc=$?
 [ "$rc" = 1 ] || fail "T17 — tstage-variant trace cmp rc $rc, want exactly 1"
@@ -2363,13 +2379,17 @@ snd_link "$B/st28/w" "$B/foh_snd_witness.o" "$B/st28/foh.o"
 snd_tooth st28 "$B/st28/w" "'menuSelect,menuSelect'" 2 \
   "T28 OK: a simultaneous up+down that runs BOTH arms dies (two sounds, cancelled cursor)"
 # T29/T30 perturb snd_mixer.h, which the witness includes as
-# "../gfx/snd_mixer.h" — so they need a foh/ + gfx/ MIRROR (the 5 files the
+# "../gfx/snd_mixer.h" — so they need a foh/ + gfx/ MIRROR (the files the
 # witness's include chain reaches; a new include breaks the build loudly).
+# It did exactly that on 2026-08-24: D29/A25c made foh.h include foh_hand.h,
+# and this mirror failed with `fatal error: 'foh_hand.h' file not found`.
+# Working as designed — the list is deliberately explicit so a widened
+# include chain cannot be absorbed silently.
 snd_mirror() { # <dir> <sed-expr> <must-vanish>
   local d="$1"
   rm -rf "$d"; mkdir -p "$d/foh" "$d/gfx"
   cp "$FOH/foh_snd_witness.c" "$d/foh/"
-  cp "$FOH/foh.h" "$d/foh/"
+  cp "$FOH/foh.h" "$FOH/foh_hand.h" "$d/foh/"
   cp "$GFX/platform.h" "$GFX/raster.h" "$d/gfx/"
   sed "$2" "$GFX/snd_mixer.h" > "$d/gfx/snd_mixer.h"
   [ "$(count_x "$d/gfx/snd_mixer.h" "$3")" = 0 ] || fail "$d — the snd_mixer perturb did not take"

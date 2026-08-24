@@ -28,7 +28,7 @@
 //       (b) L CHAR-STEPS in target-select — the real foh_tick() on the
 //           real FOH_TSS screen must wrap p1Char 0 -> 4 (A25b);
 //       (c) the Mod shoulder default is the SWAPPED one, and BOX really
-//           reads it: L shields and R mods (A30(a) / D29).
+//           reads it: L shields and R mods (A30(a) / D30).
 //
 // Every leg is an assertion against a value produced by tree code. The
 // check script's teeth are perturbed COPY builds, so each leg has to be
@@ -229,7 +229,7 @@ static void leg_tss(void) {
   printf("  [3b] OK: L char-steps in target-select, driven from keysym 'm'\n");
 }
 
-// --- [3c] the Mod shoulder default (A30(a) / D29) ---------------------------
+// --- [3c] the Mod shoulder default (A30(a) / D30) ---------------------------
 static void leg_mod(void) {
   want(ctl_mod_on_r_get(),
        "[3c] the Mod shoulder cell defaults to R (owner 2026-08-24)");

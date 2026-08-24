@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # port/gfx/check-ctl-input.sh — the L-SHOULDER check (fix_plan A25b + A3
-# + A30(a) / DEVIATION D29). HOST ONLY: it needs no FunKey, which is the
+# + A30(a) / DEVIATION D30). HOST ONLY: it needs no FunKey, which is the
 # point — the defect it locks down is one the device rig is structurally
 # blind to (every device check injects through our OWN uinput node, while
 # the physical buttons come from fkgpiod, which the rig's quiesce bracket

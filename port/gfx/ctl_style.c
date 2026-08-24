@@ -17,7 +17,7 @@ static CtlStyle g_style = CTL_STYLE_DEFAULT;
 // the M3-ratified arrangement (Mod on L, shield on R); true is the
 // SWAPPED one (Mod on R, shield on L).
 //
-// DEFAULT FLIPPED TO true — fix_plan A30(a), DEVIATION D29. Owner,
+// DEFAULT FLIPPED TO true — fix_plan A30(a), DEVIATION D30. Owner,
 // 2026-08-24: "box is good but L should be shield and R should be mod /
 // tilt." This is a pure RELABELING of the two shoulders, not a table
 // edit: the ratified BOX chord table is byte-untouched and ctl_roles()

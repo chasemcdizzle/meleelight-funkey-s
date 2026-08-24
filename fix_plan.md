@@ -6128,3 +6128,71 @@ T12 keymap-swap teeth, T-devswap), `check-device-target.sh` (dump `cmp`),
 **AND THE ONE NOTHING IN THE RIG CAN DO: press the physical L.** The rig injects
 through our own uinput while the buttons come from `fkgpiod`, which the quiesce
 bracket stops — that blindness is now written into `docs/PORTABILITY.md`.
+
+## A25c — DONE 2026-08-24 (D29). And the driver's spec was WRONG TWICE.
+
+`port/foh/foh_hand.h` holds the ONE definition of the cursor's motion
+(`foh_hand_step` — D1's full-deflection d-pad, D3's rescaled step, the clamp)
+and the ONE hit predicate (`foh_hand_hit`), **whose strict comparisons ARE the
+CSS's old `css_cell_at` gutter rule, so D4 now holds on BOTH screens by
+construction.** Header-only ON PURPOSE: every `port/foh/` check and every
+device rig carries an explicit TU list, so a new `.c` would mean editing all of
+them including device ones nobody can run today.
+**It retired THREE hand-kept copies of the slot geometry** (`foh.c`'s y-guard,
+`foh_render.c`'s `overCells` line, `foh_legibility_witness.c`'s `slot_rect`)
+rather than adding a fourth — the renderer and the hit test now read the same
+tables.
+
+**PROOF THE CSS IS UNCHANGED — the right answer to "is green enough?": NO.**
+The lane said so explicitly: the existing CSS checks drive SCRIPTED gestures,
+while what moved was a clamp, an integration order and a hit predicate —
+properties of EVERY reachable (position, gesture) pair. So `check-hand.sh` leg
+[4] is a DIFFERENTIAL: one driver built against the working tree AND against
+the **pinned** pre-A25c commit `0e4375e` (pinned, not `HEAD` — `HEAD` becomes
+this change the moment it lands and the leg would compare a build against
+itself), both fed the same **60,000-frame** pseudorandom stream, dumping hand
+bits, machine plane, sound queue, both token positions and a frame hash.
+**Byte-identical**, with the sweep's own coverage asserted so it cannot pass by
+sitting still.
+
+**TWO DRIVER PREMISES FALSIFIED BY MEASUREMENT (8th and 9th this session):**
+1. **`foh_look_canonical` must NOT pin the hand.** My spec said to pin it
+   "exactly as it pins `tssTimer`". It pins **TICK-driven** look counters; the
+   hand is **navigation-driven**, like `menuColours` and `cssHandX/Y`, neither
+   of which it touches. **Pinning would destroy the shot's meaning.**
+2. **`f06` needed no re-cut and `f07`'s frozen `.expect` is BYTE-UNCHANGED.**
+   The hand re-homes at slot 0's centre on entry exactly as `tssCursor = 0`
+   did.
+
+`tssCursor` SURVIVES as the selection value — now WRITTEN by the hand and
+**STICKY**, which is the CSS's own hover-selects rule and is load-bearing: a
+non-sticky cursor leaves the gutter with no launch target and
+`targetRecords[p1Char][tssCursor]` with no index.
+
+### DRIVER FOLLOW-UPS (all mine, all landed this turn)
+**D-NUMBER COLLISION: two lanes both claimed D29.** Renumbered A30(a) ->
+**D30** across 9 sites in 6 files; A25c keeps D29 (it had 8 in-code references
+to A30(a)'s 4). **Class note: parallel lanes cannot self-assign deviation
+numbers — the driver must allocate them, or check at merge.**
+
+**T17 WAS THE A39 CLASS, VERBATIM — AND IT WAS ALREADY RED BEFORE MY
+RENUMBER** (verified by stashing and re-running, rather than assuming).
+`check-foh-flows.sh` T17 injected a **ONE-FRAME DOWN TAP** to prove the
+cursor is load-bearing. That was exactly right for the EDGE-driven grid cursor
+D29 retired, and is a **no-op for the LEVEL-driven hand** (3.84 px/frame: a
+1-frame tap moves 39.5 -> 43.34, still inside slot 0's y 30..49). **So the
+tooth silently stopped biting.** REPAIRED, NOT RETIRED: the intent — "moving
+the cursor changes which target launches" — is unchanged, re-expressed as a
+**6-frame HELD run** (39.5 -> 62.54, inside slot 1), measured against
+`foh_tss_slots` exactly as f07's own header records. **This is the SECOND tooth
+this session disarmed by a mechanism change; the standing lesson generalises
+from "diagnostic strings" to ANY tooth asserting a mechanism.**
+
+**The snd_mirror caught its own widened include chain** — `foh.h` now includes
+`foh_hand.h` and T29 died with `fatal error: 'foh_hand.h' file not found`.
+**Working as designed**: its comment says "a new include breaks the build
+loudly", and the explicit file list is what made it loud instead of silent.
+Staged the new header.
+
+`FOH FLOWS OK`, `HAND CHECK OK`, `LEGIBILITY`, `CSS MODE`, `JUDGE REGRESSION`,
+`REBIND`, `CTL INPUT`, `ALSA HEADROOM`, `SND IDLE` — all green on merged bytes.
