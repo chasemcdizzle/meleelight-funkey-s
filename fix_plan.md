@@ -5325,3 +5325,69 @@ whether the clamp is still needed (fix the tooth) or genuinely redundant
 (retire it with evidence). **Do NOT "fix" this by loosening T6** — HARD RULE 3.
 A tooth that cannot bite must be repaired or retired on the record, never
 relaxed.
+
+## A33 — RUNG 1 RUN 2026-08-24. **§1.4 FLIPPED. THE HOST CONTROLLERS ARE LIVE.**
+
+Device reconnected; rung 1 executed. **The spike's §1.4 guess — that
+`&ehci0`/`&ohci0` were "inherited sunxi board-template boilerplate" — IS
+WRONG.** Measured on the device:
+
+```
+/sys/bus/usb/devices/usb1   product "EHCI Host Controller"
+                            driver ehci-platform, maxchild 1, speed 480
+                            at /platform/soc/1c1a000.usb/
+/sys/bus/usb/devices/usb2   product "Generic Platform OHCI controller"
+                            driver ohci-platform, maxchild 1, speed 12
+                            at /platform/soc/1c1a400.usb/
+```
+And the kernel log shows both **PROBED AND STARTED**, not merely declared:
+```
+ehci-platform 1c1a000.usb: EHCI Host Controller
+ehci-platform 1c1a000.usb: new USB bus registered, assigned bus number 1
+ehci-platform 1c1a000.usb: USB 2.0 started, EHCI 1.00
+hub 1-0:1.0: USB hub found
+ohci-platform 1c1a400.usb: ... assigned bus number 2
+hub 2-0:1.0: USB hub found
+usb_phy_generic ...: supply vcc not found, using dummy regulator
+```
+
+**THE CONSEQUENCE IS LARGE AND IT CHANGES THE WHOLE TICKET.** These are
+**two live, bound USB HOST controllers with a root hub each, running RIGHT NOW
+on the shipped image.** No fork, no reflash, no four line-edits. The spike's
+entire NO-GO/UNKNOWN chain was reasoning about **MUSB at `1c19000`** — the OTG
+block behind the micro-USB connector, confirmed `b_peripheral` this session
+(which is exactly why `adb` works). **EHCI/OHCI at `1c1a000`/`1c1a400` are a
+DIFFERENT HARDWARE BLOCK (V3s "USB1") and it is already in host mode.**
+
+**WHAT IS NOW THE ONLY OPEN QUESTION — and it is PHYSICAL, not software:**
+are USB1's D+/D- routed to anything reachable on the FunKey-S board? The
+micro-USB is wired to MUSB (proven: adb). USB1's pins would have to surface as
+pads, a test point, or an internal header. **That is a board question, settled
+with a multimeter or a teardown photo, NOT from source.** Also note
+`usb_phy_generic: supply vcc not found, using dummy regulator` — consistent
+with the earlier finding that nothing can drive VBUS outward, which the
+adapter's self-powered grey leg makes survivable.
+
+**REVISED LADDER (replaces §7's):**
+- ~~Rung 1~~ **DONE — and it flipped the answer.**
+- **Rung 2 (now the decisive one):** attach a USB device through an OTG cable
+  with the grey/power leg fed from a charger, and watch `dmesg` + `ls
+  /sys/bus/usb/devices/`. If it enumerates on **bus 1 or 2**, host support
+  exists today and A33 goes **GO with zero OS work**. If it enumerates nowhere,
+  the micro-USB is MUSB-only and USB1 has no reachable connector.
+- **Rung 3 (the fork) is now a FALLBACK, not the main path** — only needed if
+  rung 2 shows USB1 is unreachable AND we want the OTG port converted.
+- **The `adb`-over-peripheral risk shrinks accordingly:** using USB1 would not
+  touch MUSB at all, so the verification rig is not endangered. That risk was
+  the single largest cost in the fork plan and it may be avoidable entirely.
+
+**A24 IS UNAFFECTED EITHER WAY** — the collapse sits behind `FOH_CTL_CHOOSER`
+and reverts with one digit. But the REASON recorded against it ("no controller
+can ever exist") is now **twice-retracted and materially weaker**; if rung 2
+enumerates, the chooser should come back.
+
+**METHOD NOTE — third correction to this one spike.** NO-GO -> retraction ->
+UNKNOWN -> now §1.4 flipped, each time by MEASUREMENT beating a plausible
+reading of source. The spike ITSELF nominated this command as the thing that
+would settle §1.4 and told the driver to run it before retiring A24/A31/A32 on
+its authority. **That instruction was correct and it paid.**
