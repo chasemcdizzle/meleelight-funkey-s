@@ -5715,3 +5715,53 @@ that adds a new `.c` beside its check hits this.** Fixed with `printf --`.
 **`LIVE ARMS OK (sysmenu=4 vsfinish=1 drains=3 teeth=15)`, exit 0 — the first
 green since the tooth broke, which also LIFTS THE MASKING on the other 14
 teeth.** A39 closes.
+
+## A28 — DISCRIMINATOR RUN 2026-08-24. **THE BUZZ IS OURS. IT IS ANALOG, NOT DIGITAL.**
+
+Owner ran the cheapest discriminator: `sndpack.bin` moved aside so
+`mlfk-foh.sh` omits `--sndpack` and `platform_audio_start` is **never reached**
+(`foh_dev.c:1928-1935`). Owner's verdict, verbatim: **"no buzz"**. File
+restored immediately.
+
+**So the chain is now pinned at both ends:**
+- Audio device NEVER OPENED -> **silent** (owner, this session)
+- Audio device OPEN -> **buzzes continuously**, before any sound plays
+- The samples we feed it are **bit-exact zero** — proven by
+  `check-snd-idle.sh` (7 idle states, poisoned buffer, `SND IDLE SILENT`)
+
+**Therefore the noise enters AFTER the sample stream. It is analog, introduced
+by the act of opening the device.** Hypothesis 1 of the A28 row (the codec/amp
+being energised by `SDL_OpenAudio` and staying energised for the process
+lifetime) is the surviving one.
+
+**MIXER ROUTING IS CLEAN — the classic cause is RULED OUT.** Measured on
+device (`amixer`, V3s internal codec, card 0 `V3s_Audio_Codec`):
+```
+Headphone         49/63  [-14.00dB]  [on]
+Headphone Source  'DAC'                      <- NOT a mic/line path
+Mic1              [off]  Capture [off]       <- muted both ways
+Mixer             Capture [off]              <- no loopback
+Mixer Reversed    Capture [off]
+DAC               51/63  [-13.92dB]  [on]
+```
+An unmuted mic routed into the output mixer — the usual suspect for exactly
+this symptom — **is not what is happening.** `Mic1 Boost` sits at 33 dB but
+`Mic1` is off, so it is inert.
+
+`/proc/asound/pcm` is a single device (`CDC PCM Codec-0`), `hw_params` reads
+`closed` at idle — confirming nothing holds the codec open when the game is not
+running.
+
+### NEXT — THE OURS-vs-PLATFORM DISCRIMINATOR (owner action, 30 s)
+**Launch a DIFFERENT audio app and listen** — `ssb64.opk` is already installed
+at `/mnt/Applications/`. If ssb64 buzzes too, the buzz is a **platform trait of
+opening the V3s codec on this hardware** and A28 closes as
+NOT-OUR-DEFECT (with a possible mitigation, below). If ssb64 is clean, the
+difference is in HOW WE OPEN IT — rate, format, period size — and that is
+fixable.
+
+**If it proves to be a platform trait, the mitigation to evaluate is analog
+gain:** `Headphone` and `DAC` both sit near 80% with ~-14 dB. Amp-generated
+noise scales with amp gain while our digital signal does not have to — lowering
+analog gain and raising digital level trades headroom for a lower audible noise
+floor. **Measure before adopting; do not assume the direction.**
