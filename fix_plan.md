@@ -6670,3 +6670,87 @@ hunk's *context* and inferred; the loop bound was two lines away.
 
 **No D-numbers consumed (D37/D38 free). No device legs owed — no compiled byte
 changed. The four CSS checks were run twice, before and after, all green.**
+
+## A45 — DESIGN SPIKE DONE 2026-08-24. **THREE OF MY FRAMINGS WERE WRONG.**
+
+Full design: `docs/research/target-builder-design.md` (548 lines). The lane read
+**all 1606 lines** of `targetbuilder.js` plus `encode.js`, `targetselect.js`,
+`targetplay.js`, `getConnected.js`, and where it claims MEASURED it **executed
+upstream's own code** — babel-transpiled out of the read-only clone into
+scratch, never modified, never transcribed.
+
+### THE SHARE CODE (the highest-value answer, and a TRAP)
+`src/stages/encode.js` — **`createStageCode` / `parseStageCode`.**
+**NOT `createTargetCode`, WHICH IS DEAD:** zero callers, and it reads
+`stageTemp.box` and `stageTemp.startingPoint.x`, **neither of which that object
+has.** *"Anyone grepping for 'target code' ports the wrong 33 lines."*
+Format: 14 `&`-separated fields (`~` records, `,` numbers), **whole-stage not
+target-layout** — targets are field 11. **Round-trips EXACTLY from the second
+emission on** (`c1 === c2`, measured): the first encode is lossy via
+`toFixed(2)`, every later one exact. **The code is the canonical form.**
+**It parses WITHOUT `strtod`** (banned since iter 38 — the SDK's musl strtod
+mis-rounds subnormals): the alphabet is `-?\d+\.\d\d`, so integer hundredths
+÷ 100.0 is bit-exact, ~20 lines. **Emitting** needs `toFixed(2)`, which we lack
+(`ml_fmt.c` is `String(x)`) — ~60 lines on Ryu, **with `fmt_diff` as a ready
+oracle.**
+
+### THREE MEASURED UPSTREAM BUGS (carry-or-fix decisions, not assumptions)
+1. **`encode.js:39` `if (i !== 5)`** tests the **surface index** where it meant
+   the **type index** -> the 6th surface of EVERY type silently loses its damage
+   type. **Seven fire walls in, six out.**
+2. **`encode.js:244`**: a decoded stage returns `polygonMap = [null,…]`, so
+   re-editing an imported stage lets you drag a polygon's outline away from its
+   collision surfaces.
+3. **`targetselect.js:164-166` CLOBBERS**: adding A then B then C leaves
+   `["B","C","C"]`. **Every added code destroys the previous one**, on both the
+   add and the boot-reload path. **NEEDS AN OWNER RULING — there is no oracle
+   for this plane**, so faithfulness and usability genuinely conflict.
+
+### THREE FRAMING CORRECTIONS — ALL MINE
+1. **IT IS NOT A DOM EDITOR.** **Exactly 9 of 1606 lines touch the DOM**, all in
+   the save/share overlay. Tool selection is ALREADY on the shoulders; the
+   crosshair is ALREADY `lsX/lsY`. **`foh_hand.h` (D29) supplies the motion
+   nearly as-is.** I sized this as "a jQuery+DOM editor → a rewrite like the
+   FOH". Wrong: the interaction model is already gamepad-shaped.
+2. **THE BLOCKER IS THE SIM, NOT `foh.c`.** `tp_setup_target` /
+   `tp_stage_from_ttab1` / `gfx_target_init` all take an **integer id into the
+   generated TTAB1 table**, so nothing can load a custom stage. But `MlStageX`
+   is a plain runtime struct — **the fix is ONE new filler function**, small,
+   and in a different plane than the ticket's lane.
+3. **`+ ADD CODE` IS THE LAST PIECE WORTH BUILDING, NOT THE FIRST.** Its whole
+   job is accepting a ~1 KB paste on a device with no keyboard.
+   **Recommendation: one `.mlstage` file per slot on SD**, published through
+   `foh_persist.c`'s existing atomic rename — **better than upstream's paste box
+   AND it deletes the D8/A14 dependency entirely.**
+
+### TWO FINDINGS THAT MOVE THE ESTIMATE
+- **Every geometry primitive is ALREADY PORTED and replay-verified** —
+  `intersectsAny`, `distanceToLine`, `distanceToPolygon`, `lineDistanceToLines`,
+  `manhattanDist`, `extremePoint`. **Only `getConnected`'s 89 lines are
+  missing.**
+- **THE DAMAGE PLANE HAS NEVER EXECUTED**: `damageType` exists on **zero**
+  authored stages, so `dealWithDamagingStageCollision`'s five call sites are
+  **covered by no golden.** The DAMAGE tool makes them live and **owes its own
+  recording.**
+- `undo()` has **zero callers** and `undoList` only ever receives `"target"`.
+  **Do not port it.**
+
+### TICKET BREAKDOWN (8-11 iterations, ~8-10x A7)
+**T1 codec + value model** · T2 custom stages PLAY · T3 TSS custom slots +
+verbs · T4 editor core (targets only) · T5 Platform+Wall · T6 Ledge+Damage ·
+T7 Polygon · T8 Scale+DrawMode · T9 on-screen code UI (blocked by D8->A14,
+**probably unwanted** given correction 3).
+**SMALLEST USEFUL FIRST: T1** — the codec alone. No UI, no lane-M file, fully
+mechanical proof (differential against upstream's executed `encode.js`), and
+every later ticket depends on the value model it defines.
+**SMALLEST PLAYER-VISIBLE: T2** — custom stages playable with NO EDITOR AT ALL:
+drop a code file on the SD card.
+**T1/T2/T5-T8 are `port/sim/` + `port/gfx/` only and can run BESIDE the lane-M
+chain**; only T3 and half of T4 need `foh.c`.
+
+### COULD NOT DETERMINE (named, with how to settle each)
+ANIM1 rendering outside a match (cosmetic; the doc names the two-file read);
+`sizeof(MlSim)` headroom for raising `ML_MAX_TARGETS 10` / `ML_MAX_SURFACES 64`
+against a player authoring 20 targets / 120 polygons (host-measurable);
+legibility at 240x150 (**owner playtest, not source**); whether the built
+browser page truly reloads >1 custom stage (the LOGIC is measured broken).
