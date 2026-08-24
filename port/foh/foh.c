@@ -251,6 +251,7 @@ static void step_menu(FohState *s, const PlatformInput *in,
           snd_push(s, "menuForward"); // menu.js:70
           ev_trans(s, sc, FOH_OPT_GAMEPLAY, "a"); // menu.js:135
         } else if (s->menuSelected == 2) {
+#if FOH_CTL_CHOOSER
           s->menuSelected = 0;
           snd_push(s, "menuForward"); // menu.js:70
           // menu.js:67/:233/:236 — the LOCAL boolean `menuMove` (it shadows
@@ -259,6 +260,24 @@ static void step_menu(FohState *s, const PlatformInput *in,
           // changeGamemode leaves (and VSMODE->MPMENU, :73-75) do NOT.
           snd_push(s, "menuSelect"); // menu.js:236 (menuMove at :141)
           ev_trans(s, sc, FOH_MENU_CONTROLS, "a"); // menu.js:138-141
+#else
+          // DEVIATION D27 (MENU-SPEC §12.1, owner ruling 2026-08-23; the
+          // switch and its whole rationale live at foh.h's FOH_CTL_CHOOSER).
+          // The chooser is collapsed, so this row IS the changeGamemode(12)
+          // leave that upstream's chooser row 1 was (menu.js:159-161) — and
+          // it therefore takes that arm's SOUND SHAPE, not this arm's:
+          // upstream's second `menuSelect` is emitted by the local `menuMove`
+          // boolean, which ONLY a menuMODE change sets (menu.js:141 vs :159).
+          // No menuMode change happens here any more, so it is ONE
+          // menuForward — the same single sound every other changeGamemode
+          // leave in this switch emits, and foh_snd_witness.c asserts it.
+          // menuSelected is deliberately NOT reset: with no chooser to open a
+          // cursor on, leaving it alone is what makes step_ctrl's B land back
+          // on the CONTROLS row that opened the screen (step_ctrl says so in
+          // its own note).
+          snd_push(s, "menuForward"); // menu.js:70
+          ev_trans(s, sc, FOH_CTRL_KEY, "a"); // changeGamemode(12), :159-161
+#endif
         } else {
           snd_push(s, "deny");
           ev_refused(s, "credits"); // conventions scope exclusion
@@ -1185,7 +1204,19 @@ static void step_ctrl(FohState *s, const PlatformInput *in,
     // row that opened the screen (upstream's page-3 rows are unchanged by
     // either destination).
     snd_push(s, "menuBack");
+#if FOH_CTL_CHOOSER
     ev_trans(s, s->screen, FOH_MENU_CONTROLS, "b");
+#else
+    // DEVIATION D27 (foh.h's FOH_CTL_CHOOSER): with the chooser collapsed the
+    // page this screen was opened FROM is the Options page, so that is where
+    // B returns. The invariant above carries over unchanged and is what makes
+    // it land on the CONTROLS row: nothing on the way in touched
+    // menuSelected, so it is still 2. ONE menuBack, exactly as before and at
+    // either flag value: the second `menuSelect` of a menuMODE change is
+    // emitted in menu.js by the local `menuMove` boolean, and this arm is
+    // keyboardmenu.js's, which never sets it.
+    ev_trans(s, s->screen, FOH_MENU_OPTIONS, "b");
+#endif
   }
 }
 

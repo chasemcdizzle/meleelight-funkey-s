@@ -1534,11 +1534,22 @@ today. The row order is not a paint change: the page is index-selected, so
 `foh.c`'s step_menu ternary swapped with the labels. Everything identity-shaped
 stayed put — `FOH_CTRL_KEY` / `FOH_CTRL_PAD`, the screen tokens, and upstream's
 gameModes 12 / 14 — because the judge grammar, the save-on-exit arm and the
-frozen flow expects all key on those. The CONTROLLER row is still reachable and
-still shows §9.2's honest no-controller state: collapsing the submenu is a
-separate decision, and it is NOT taken here. Proved both ways by
+frozen flow expects all key on those. Proved both ways by
 `port/foh/check-controls-labels.sh`, whose T2 reverts the routing ternary
 alone — labels untouched — and must fail.
+
+**DEVIATION D27 — the chooser is COLLAPSED (owner ruling, same day).** D25
+left the CONTROLLER row reachable and said "collapsing the submenu is a
+separate decision". That decision was then taken: *"collapse now - make
+easily revertable though please."* At the shipped `FOH_CTL_CHOOSER 0`
+(`port/foh/foh.h`) the Options `CONTROLS` row runs `changeGamemode(12)`
+directly and this whole page is unreachable, because A33 measured that the
+CONTROLLER side can never exist on the shipped FunKey-OS image (no USB host
+mode compiled; `docs/research/gc-adapter.md` §1.4/§2 — the port itself is
+physically present, and §9.2's screen no longer claims otherwise). At
+`FOH_CTL_CHOOSER 1` everything above returns exactly as written, which is
+what "revertable" is required to mean: `check-controls-labels.sh` builds its
+witness at BOTH values, T2 included.
 
 ### 9.2 Destination 1: Controller calibration — OUT OF SCOPE
 
@@ -1997,6 +2008,19 @@ state; each entry points at the section that carries the evidence):
 > registers all four of its edges. It does NOT make the three rows work:
 > they still refuse, and a future netplay arc owns that.
 
+>
+> Closed by owner ruling the same way (2026-08-23, DEVIATION D27): the
+> CONTROLS chooser is COLLAPSED behind `FOH_CTL_CHOOSER` in `port/foh/foh.h`
+> and the Options `CONTROLS` row runs `menu.js:159-161`'s `changeGamemode(12)`
+> directly. Nothing was deleted — flipping that one digit restores the chooser
+> page and the D25 route whole, and the judge registers all six of its edges
+> under the `ctl` profile. The reason it is a collapse and not a greying is
+> A33: the shipped FunKey-OS image compiles no USB host mode, so the
+> CONTROLLER side of a two-way choice can never exist, and a chooser whose
+> purpose IS the choice has no job left. `port/foh/check-controls-labels.sh`
+> builds its witness at BOTH flag values, so the restorable path is exercised
+> rather than merely promised.
+
 ### 12.1 Deviation register
 
 | # | Deviation | Section |
@@ -2027,6 +2051,7 @@ state; each entry points at the section that carries the evidence):
 | D24 | **A25(a), owner-reported P1 (2026-08-23):** the SELECTED target-select slot gets a 2 px border and a body lifted off black (`{52,22,32}`), where upstream's entire selection signal is a ONE-PIXEL stroke that goes grey `rgb(166,166,166)` -> flashing pink (`targetselect.js:270-279`). Owner: *"the highlighting around test 1 or + ADD CODE you selected is not really visible to the eye."* Measured, he is right — on our rects that stroke is 242 changed pixels around a 100x19 black body on a busy brown gradient, at 240x240. The deviation stays inside upstream's OWN idiom, which `foh_render.c:2049-2050` records: the BORDER carries the state and the LABEL is never brightened on hover — so the label keeps `:201`'s grey in both states and only the border and body move. All ELEVEN slots get it, the "+ ADD CODE" slot included (the owner named both); its ring grows 1 px on three sides only, because the info panel's 50%-black face starts on the row below it. `check-legibility.sh` floors every slot at 600 changed pixels, which no one-pixel border on these rects can reach, and its T2 restores the one-pixel border and must fail | §7 |
 | D25 | **A24 + A4, owner-reported P2 (2026-08-23):** the Controls chooser is relabelled and REORDERED. Owner: *"controls option in the menu says 'Keyboard Controls'. Clicking it takes you to a menu that says 'Controller' and 'Keyboard', so it shouldn't say 'Keyboard controls' — just Controls. Then, in the submenu, 'Keyboard' actually isn't a keyboard, it's the funkey s controls. So we need to change the name there. Also make funkey controls the first option (controller is first currently, and it shouldn't be, because we can't even use a controller on the funkey s)."* Three renames, all PAINT plus ONE routing swap: the Options row 2 label becomes `CONTROLS` (upstream `Keyboard Controls`, `menu.js:21` — the row opens a CHOOSER, so upstream named it after one of its own two destinations); the chooser's second entry becomes `HANDHELD` (upstream `Keyboard`, `menu.js:23` — there is no keyboard on this device, and `HANDHELD` is a CATEGORY name parallel to `CONTROLLER`, deliberately shorter than it so no width pin moves); and `HANDHELD` becomes row **0**, `CONTROLLER` row 1. **The order half is NOT paint.** The chooser is INDEX-selected (`foh.c` step_menu's ternary), so the labels and the routing move together or the first row lies about where it goes — `check-controls-labels.sh`'s T2 reverts the ternary ALONE, leaves the labels in place, and must fail. **IDENTITY DOES NOT MOVE:** `FOH_CTRL_KEY`/`FOH_CTRL_PAD`, the screen tokens `controls-keyboard`/`controls-controller` and upstream gameModes 12 / 14 are all unchanged — the judge grammar, `foh_app.c`'s save-on-exit arm and every frozen flow expect key on those. The CONTROLLER branch stays REACHABLE (collapsing the submenu is out of scope here: the owner's collapse decision was taken on evidence the driver later retracted, and A24 was HELD for the renames only). `f04-nav`'s two Controls shots keep their names and swap frames. **A4 (same ticket, already shipped as C31):** the style formerly displayed `Normal` reads `CLASSIC` — `ctl_style_name` only; `CTL_STYLE_NORMAL` is still enum 0 because `FohPersist.ctlStyle` stores it verbatim. Asserted here for the first time rather than remembered | §9.1, §9.3 |
 | D26 | **A31, owner-reported P1 (2026-08-23):** the Controls > HANDHELD screen gains a REAL rebinder, and it is not the shape D13 sketched. Owner: *"you should be able to rebind any of the 'active mappings'. currently you can't even go to any of those rows, you can only change between 'style:' and 'mod'. changing 'mod' changes the controls. we don't want that. get rid of 'mod' altogether as an option here... what is 'rebind: N/A'? why do we even have that section? also, can we have a 'reset to defaults' button please."* The cursor covered TWO rows and the nine ACTION rows were display-only; it now covers **eleven** — the nine action rows (row 0 the d-pad, rows 1-8 the physical buttons), the style row, and a new **RESET TO DEFAULTS** row that upstream does not have at all. **L/R rebinds by SWAPPING** the selected row's action with whichever button holds the one it steps onto, so the table is always a permutation: no action can be lost, which retires D13's *protected primaries*, its *hold-A clear* and its *no conflict detection* clauses in one stroke. The **mod row is removed from the SCREEN, not the model** (the cell still backs the BOX label table and the persisted record; swapping the shoulders is now a plain rebind). **`rebind: N/A` is deleted** — it was the honest caption of a read-only view of D13's unbuilt rebinder, and the thing it denied now exists. The mechanism is ONE permutation applied at the poll seam (`ctl_bind_apply` in `foh_dev.c`'s `poll_bound`), so `s1_input.h`, the three chord tables and every frozen S1 sweep never see the feature; under the fresh-install IDENTITY binding it is a struct copy, so no recorded session or frozen stream moves. The FOH menu loop keeps the RAW poll on purpose — a player who moved A elsewhere must still be able to reach this screen. Bindings are PER-PORT in the model and in `MLFKPERSIST5` (four `bind` rows, each validated as a permutation) with the UI editing port 0 only, per the A33 re-amendment. Proved by `port/foh/check-rebind.sh`, whose T2/T3 pair makes the screen and the buttons lie in turn and requires each to fail alone | §9.3 |
+| D27 | **A24 second half, owner ruling 2026-08-23:** the Controls chooser is COLLAPSED — the Options row `CONTROLS` opens the HANDHELD screen directly and its B returns to Options on the row that opened it. Owner: *"collapse now - make easily revertable though please."* The chooser (upstream menuMode 3, `menu.js:138-141`) exists only to make a two-way choice, and **A33 measured that one side can never exist on this hardware's shipped OS**: `CONFIG_USB_MUSB_GADGET=y` with no `HOST`/`DUAL_ROLE` (mutually exclusive Kconfig in 4.14, so host code is not compiled), `dr_mode = "peripheral"` in the DTS, a floating USB ID pin — undoing that means rebuilding and reflashing FunKey-OS, and this project ships an OPK. (A33's earlier POWER kill is RETRACTED: `docs/research/gc-adapter.md` §2. The port is physically there; the renderer line that claimed otherwise is corrected in the same change to `FUNKEY-OS SHIPS NO USB HOST MODE`.) **Collapse, not grey, and the distinction is A10's:** greying suits a page that KEEPS live entries beside the dead ones; a two-entry chooser whose purpose IS the choice has no job left once one side dies. **NOTHING IS DELETED and the revert is ONE DIGIT** — `#define FOH_CTL_CHOOSER` (`port/foh/foh.h`), the `FOH_NETPLAY` precedent exactly: `FOH_MENU_CONTROLS`, `FOH_CTRL_PAD`, `render_ctrl_pad`, the chooser's labels, its A ternary, its B-back edge and all six judge-registered transitions still exist and still compile, and at 1 the D25 route comes back whole. IDENTITY DOES NOT MOVE: the tokens `controls-keyboard`/`controls-controller` and gameModes 12 / 14 are untouched, so `foh_app.c`'s save-on-exit arm (`from == controls-keyboard`, `cause == b`) is unchanged. The judge carries it as a SECOND build profile (`ctl`/`noctl` rows, parsed live out of the header like `FOH_NETPLAY`), so flipping the digit without re-freezing `f04-nav` fails mechanically. `check-controls-labels.sh` builds its witness at **both** values — T2, the half-swap trap, bites in both, and T5 is its twin for the collapsed arm | §9.1, §12.1 |
 
 ---
 

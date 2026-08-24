@@ -7,22 +7,27 @@ FLOW1
 # target-select leg; portconfig in the check's own T19 flow. RETIRED as
 # emissions this arc: `audio` (a real screen now, MENU-SPEC §4) and
 # `controller`/`keyboard` (real destinations, §9) — this flow now ENTERS
-# the two destinations instead of being refused by them. UNREACHABLE
+# the HANDHELD destination instead of being refused by it (the CONTROLLER
+# one is unreachable at FOH_CTL_CHOOSER 0, see below). UNREACHABLE
 # while FOH_NETPLAY is 0 (owner ruling C5): spectate/p2p/server, whose
 # page `VS. Melee` no longer opens.
 #
-# ROW ORDER (DEVIATION D25, owner-requested 2026-08-23): the Controls
-# chooser is HANDHELD (controls-keyboard, gameMode 12) at row 0 and
-# CONTROLLER (controls-controller, gameMode 14) at row 1. This flow enters
-# row 0 FIRST, so the A at frame 425 is the HANDHELD entry and the A at 445
-# — after one DOWN — is the CONTROLLER one. Both shots keep their names;
-# only which frame carries which moved.
+# THE CONTROLS LEG (DEVIATION D27, owner ruling 2026-08-23; the switch is
+# foh.h's FOH_CTL_CHOOSER and this flow is frozen at 0). The chooser is
+# COLLAPSED: A on the Options CONTROLS row lands on the HANDHELD screen
+# (controls-keyboard, gameMode 12) directly, and its B returns to Options
+# with the cursor still on the row that opened it — which is why ONE DOWN,
+# not three, now reaches CREDITS at frame 475. The chooser page
+# (menu-controls) and the CONTROLLER destination (controls-controller,
+# gameMode 14) are UNREACHABLE at that flag, exactly as menu-battle is at
+# FOH_NETPLAY 0, so this flow can no longer shoot them and does not pretend
+# to. D25's labels and row order are untouched by the collapse; they are
+# asserted by port/foh/check-controls-labels.sh, at BOTH flag values.
 #
-# EDGES. Every B-back edge of the live graph fires: controls-controller
-# -> menu-controls, controls-keyboard -> menu-controls, menu-controls ->
-# menu-options, menu-options -> menu-top, plus the CSS hold-B-30 back
-# edge (css.js:186-191), which under C5 lands on menu-top with the cursor
-# on VS. Melee. The css -> sss (START, css.js:446-451) and sss -> css (B,
+# EDGES. Every B-back edge of the live graph fires: controls-keyboard ->
+# menu-options, menu-options -> menu-top, plus the CSS hold-B-30 back edge
+# (css.js:186-191), which under C5 lands on menu-top with the cursor on
+# VS. Melee. The css -> sss (START, css.js:446-451) and sss -> css (B,
 # stageselect.js:79) pair is traversed before it. The U-wrap witness is
 # the three UPs from OPTIONS(3) back to VS. MELEE(0).
 I 1 -
@@ -44,25 +49,9 @@ I 410 D
 I 413 -
 I 415 A
 I 416 -
-SHOT 420 menu-controls
-I 425 A
+SHOT 420 controls-keyboard
+I 425 B
 I 426 -
-SHOT 430 controls-keyboard
-I 435 B
-I 436 -
-I 440 D
-I 443 -
-I 445 A
-I 446 -
-SHOT 450 controls-controller
-I 455 B
-I 456 -
-I 460 B
-I 461 -
-I 465 D
-I 468 -
-I 470 D
-I 473 -
 I 475 D
 I 478 -
 I 480 A

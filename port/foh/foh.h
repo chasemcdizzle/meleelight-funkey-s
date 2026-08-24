@@ -21,17 +21,23 @@
 //   menu-options      gameMode 1 mm 1    A on "Options" (menu.js:92-97)
 //   menu-controls     gameMode 1 mm 3    A on "Keyboard Controls"
 //                                        (menu.js:138-141) — drawn "CONTROLS"
-//                                        (DEVIATION D25)
+//                                        (DEVIATION D25) — UNREACHABLE at
+//                                        FOH_CTL_CHOOSER 0 (DEVIATION D27,
+//                                        flag below)
 //   options-audio     gameMode 10        A on "Audio" (menu.js:130)
 //   controls-controller gameMode 14      A on "Controller" (menu.js:155-157)
-//                                        — D25: now the SECOND row
+//                                        — D25: now the SECOND row —
+//                                        UNREACHABLE at FOH_CTL_CHOOSER 0
+//                                        (D27: no USB host mode on this OS)
 //   controls-keyboard gameMode 12        A on "Keyboard" (menu.js:159-161)
 //                                        — D25: now the FIRST row, drawn
 //                                        "HANDHELD" (it is this device's own
 //                                        buttons, not a keyboard). The TOKENS
 //                                        and gameModes above are identity and
 //                                        do not move; only the row order and
-//                                        the painted labels did.
+//                                        the painted labels did. At
+//                                        FOH_CTL_CHOOSER 0 the Options row
+//                                        opens THIS screen directly (D27).
 //   css               gameMode 2         A on "Local VS" (menu.js:105);
 //                                        at FOH_NETPLAY 0 that same action
 //                                        runs from "VS. Melee" directly
@@ -370,6 +376,50 @@ static inline int foh_css_panel_x(int k) {
 // everything else §11.1 lists; flipping this one restores the page and its
 // four judge-registered edges, and nothing more.
 #define FOH_NETPLAY 0
+
+// --- D27: the controls-chooser switch (owner ruling 2026-08-23, fix_plan A24)
+// "collapse now - make easily revertable though please."
+//
+// The Controls submenu (`HANDHELD` / `CONTROLLER`, upstream menuMode 3) exists
+// ONLY to make a two-way choice, and A33 measured that one side can never
+// exist on the shipped FunKey-OS image: `CONFIG_USB_MUSB_GADGET=y` with no
+// HOST/DUAL_ROLE (mutually exclusive Kconfig in 4.14, so host code is not
+// compiled), `dr_mode = "peripheral"` in the DTS and a deliberately floating
+// USB ID pin. The PORT is physically there — the "no gamepad port" framing is
+// retracted (docs/research/gc-adapter.md §1.4/§2) — but nothing this project
+// ships can drive it, because undoing that means rebuilding and reflashing
+// FunKey-OS and this project ships an OPK. A chooser whose purpose IS the
+// choice has no job left once one side dies, so the owner chose to collapse
+// rather than grey it (the A10 distinction: greying suits a page that KEEPS
+// live entries beside the dead ones).
+//
+// FOH_CTL_CHOOSER 0 (the shipped build): Options row 2 `CONTROLS` runs
+// changeGamemode(12) DIRECTLY (menu.js:159-161) and lands on the HANDHELD
+// screen; B from that screen returns to Options with the cursor still on the
+// row that opened it. FOH_MENU_CONTROLS, FOH_CTRL_PAD and render_ctrl_pad
+// become unreachable — exactly as FOH_MENU_BATTLE already is at
+// FOH_NETPLAY 0. NOTHING IS DELETED: the chooser screen, its labels
+// (foh_render.c kMenuText[3]), its A ternary, its B-back edge, the controller
+// destination and all six judge-registered transitions still exist and still
+// compile.
+// FOH_CTL_CHOOSER 1: the pre-D27 routing comes back whole — `CONTROLS` opens
+// the chooser with the cursor on row 0 (menu.js:138-141: the cursor reset and
+// the second `menuSelect` that a menuMODE change emits) and both destinations
+// return to it. That is the D25 build, unchanged.
+//
+// REVERTING IS THIS ONE DIGIT. Everything downstream keys off it: the judge's
+// build profile (judge-foh-trace.js parses this header exactly the way it
+// already parses FOH_NETPLAY), the authored edge authority (`ctl` / `noctl`
+// rows in judge-domains.authored.txt) and the sound witness's Options-row
+// case. port/foh/check-controls-labels.sh builds the witness at BOTH values
+// and asserts BOTH routings, so the flag-on path cannot rot unnoticed.
+// SCOPE, stated exactly: this flag covers the CONTROLS CHOOSER ONLY. The
+// screen tokens, the upstream gameMode identities (12 / 14) and the D25
+// labels and row order are untouched by it — D25 is paint, D27 is
+// reachability. THE FROZEN FLOWS ARE FROZEN AT 0 (f04-nav), like every other
+// artifact frozen under a profile: flipping this digit without re-freezing
+// them fails mechanically in the judge instead of passing quietly.
+#define FOH_CTL_CHOOSER 0
 
 typedef enum {
   FOH_STARTUP = 0,

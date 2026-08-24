@@ -1963,7 +1963,20 @@ static void render_ctrl_pad(Raster *rz) {
     foh_text2(rz, 117, 68, 2, 0, "!", warn);
     text_center(rz, 110, 1, "ERROR: NO CONTROLLER DETECTED", warn);
   }
-  text_center(rz, 134, 1, "THE FUNKEY-S HAS NO GAMEPAD PORT", kDim);
+  // A33, CORRECTED 2026-08-23. This line used to read "THE FUNKEY-S HAS NO
+  // GAMEPAD PORT", which is FALSE and was measured false in the same spike
+  // that killed the feature: the USB port is physically there
+  // (docs/research/gc-adapter.md §1.4/§2 — the earlier power-budget kill is
+  // retracted in place). What is missing is HOST MODE in the shipped OS:
+  // CONFIG_USB_MUSB_GADGET=y with no HOST/DUAL_ROLE (mutually exclusive
+  // Kconfig in 4.14, so host code is not compiled), `dr_mode = "peripheral"`
+  // in the DTS and a floating ID pin. Enabling it means rebuilding and
+  // reflashing FunKey-OS; this project ships an OPK. Same width as the line
+  // it replaces (32 chars), so no geometry moved, and it still reads as one
+  // sentence with the line below it. D27 makes this screen unreachable at
+  // FOH_CTL_CHOOSER 0 — the line is corrected anyway, because a flag-on
+  // build must not paint a claim we have measured to be untrue.
+  text_center(rz, 134, 1, "FUNKEY-OS SHIPS NO USB HOST MODE", kDim);
   text_center(rz, 148, 1, "AND NO CALIBRATION TO RUN.", kDim);
   text_center(rz, 205, 1, "B: BACK", kDim);
 }

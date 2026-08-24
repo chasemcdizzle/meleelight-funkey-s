@@ -61,7 +61,7 @@
 #
 # ---------------------------------------------------------------------------
 # FORMAT. One row per line, first token = row type. Comments `#`, blanks
-# ignored. Counts are pinned in leg [0n]: 17 S, 16 L, 26 E, 8 R, 2 N, 20 X.
+# ignored. Counts are pinned in leg [0n]: 17 S, 16 L, 28 E, 8 R, 2 N, 20 X.
 #
 #   S <field> <lo> <hi> <screen[,screen...]> <citation...>
 #       an `S <frame> <field> <value>` field. lo/hi INCLUSIVE. `screen` list
@@ -71,7 +71,8 @@
 #       a numeric field of the `LAUNCH` / `TLAUNCH` line. lo/hi INCLUSIVE.
 #   E <profile> <from> <to> <cause> <citation...>
 #       a legal screen transition. profile: `any` | `net` (FOH_NETPLAY 1
-#       only) | `nonet` (FOH_NETPLAY 0 only).
+#       only) | `nonet` (FOH_NETPLAY 0 only) | `ctl` (FOH_CTL_CHOOSER 1
+#       only) | `noctl` (FOH_CTL_CHOOSER 0 only).
 #   R <profile> <token> <screen[,screen...]> <citation...>
 #       a registered refusal token, bound to the screens that may emit it.
 #   N <rule> <value> <citation...>
@@ -183,23 +184,18 @@ L tlaunch tstage 0 9 activeStage.js:36-47 targetStageMapping has exactly 10 keys
 # === E — the legal screen transitions ======================================
 # The judge's EDGES set. An UNAUTHORED edge is a new path through the FOH,
 # so it takes a citation like any other claim. Profile `net`/`nonet` rows are
-# the FOH_NETPLAY-dependent blocks; exactly one block is live in a build and
+# the FOH_NETPLAY-dependent blocks and `ctl`/`noctl` the FOH_CTL_CHOOSER ones
+# (DEVIATION D27); exactly one block of each pair is live in a build and
 # leg [0n] checks the one the header selects.
 E any startup title timer startup.js:49-50 — startUpTimer reaches 370
 E any title menu-top start main.js:385 changeGamemode(1) on START
 E any menu-top menu-options a menu.js:92-98 OPTIONS submenu
 E any menu-options options-gameplay a menu.js:135 changeGamemode(11)
-E any menu-options menu-controls a menu.js:138-141 CONTROLS chooser
 E any menu-options menu-top b menu.js:164-191 menuBack, cursor restored to 3
-E any menu-controls menu-options b menu.js:164-191 menuBack, cursor restored to 0
 E any options-gameplay menu-options b gameplaymenu.js:25-36 back arm, cursor 1
 E any css sss start css.js:446-451 START while readyToFight -> changeGamemode(6)
 E any menu-options options-audio a menu.js:130 changeGamemode(10)
 E any options-audio menu-options b audiomenu.js:20-26 changeGamemode(1), menuMode/menuSelected untouched
-E any menu-controls controls-controller a menu.js:155-157 changeGamemode(14)
-E any menu-controls controls-keyboard a menu.js:159-161 changeGamemode(12)
-E any controls-controller menu-controls b MENU-SPEC §9.2 DEVIATION D15 — added B exit (upstream gameMode 14 runs no control fn, main.js:947-949)
-E any controls-keyboard menu-controls b MENU-SPEC §9.3 keyboard rebinder back arm (DEVIATION D13 scope)
 E any sss css b stageselect.js:77-79 B -> menuBack + changeGamemode(2)
 E any sss match launch stageselect.js:80-88 A confirm -> startGame; main.js:1320-1370
 E any menu-top target-select a menu.js:77-84 TARGETTEST -> changeGamemode(7)
@@ -211,6 +207,14 @@ E net menu-battle menu-top b menu.js:164-191 menuBack
 E net css menu-battle bhold css.js:186-191 B held 30 frames returns to the page entered from
 E nonet menu-top css a menu.js:105 Local VS action run directly (owner ruling C5, 2026-07-28)
 E nonet css menu-top bhold css.js:186-191 B held 30 frames returns to the page entered from
+E ctl menu-options menu-controls a menu.js:138-141 CONTROLS chooser (chooser build only)
+E ctl menu-controls menu-options b menu.js:164-191 menuBack, cursor restored to 0
+E ctl menu-controls controls-controller a menu.js:155-157 changeGamemode(14)
+E ctl menu-controls controls-keyboard a menu.js:159-161 changeGamemode(12)
+E ctl controls-controller menu-controls b MENU-SPEC §9.2 DEVIATION D15 — added B exit (upstream gameMode 14 runs no control fn, main.js:947-949)
+E ctl controls-keyboard menu-controls b MENU-SPEC §9.3 keyboard rebinder back arm (DEVIATION D13 scope)
+E noctl menu-options controls-keyboard a MENU-SPEC §12.1 DEVIATION D27 — the collapsed CONTROLS row IS menu.js:159-161's changeGamemode(12) (owner ruling, 2026-08-23)
+E noctl controls-keyboard menu-options b MENU-SPEC §12.1 DEVIATION D27 — the D13-scope back arm returns to the page it was opened from, which is now Options
 
 
 # === R — the registered refusal tokens =====================================

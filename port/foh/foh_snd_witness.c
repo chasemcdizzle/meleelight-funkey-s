@@ -138,17 +138,31 @@ typedef struct {
   int wantSel;         // menuSelected after the tick (-1 = don't care)
 } SndCase;
 
-// EVERY row is a citation, not a guess. The five doubles are foh.c's five
+// EVERY row is a citation, not a guess. The doubles are foh.c's
 // `snd_push(s, "menuSelect")` sites inside the A/B arms of step_menu
 // (menu.js:67/:97/:141/:169/:174/:179 set the local `menuMove` boolean,
 // menu.js:236 plays the second sound); the singles are the changeGamemode
-// leaves, which do NOT set it.
+// leaves, which do NOT set it. There are FIVE doubles at FOH_CTL_CHOOSER 1
+// and FOUR at 0, because D27's collapse turns the Options `CONTROLS` row
+// from a menuMODE change into a changeGamemode leave — the one row below
+// that the flag rewrites.
 static const SndCase kCases[] = {
     // --- the FIVE menuMove=true arms: menuForward/menuBack THEN menuSelect
     {"top-A-options", FOH_MENU_TOP, 3, "a", "menuForward,menuSelect",
      "menu-options", -1},
+#if FOH_CTL_CHOOSER
     {"options-A-controls", FOH_MENU_OPTIONS, 2, "a", "menuForward,menuSelect",
      "menu-controls", -1},
+#else
+    // DEVIATION D27 (foh.h's FOH_CTL_CHOOSER): with the chooser collapsed
+    // this row is a changeGamemode(12) LEAVE, so it MOVES SIDES in this
+    // table — from the five menuMove=true arms to the single-sound ones. The
+    // cursor claim is the other half of the collapse: menuSelected is left
+    // ALONE (the chooser it used to reset the cursor for is gone), which is
+    // what puts B back on the CONTROLS row.
+    {"options-A-controls", FOH_MENU_OPTIONS, 2, "a", "menuForward",
+     "controls-keyboard", 2},
+#endif
     {"controls-B", FOH_MENU_CONTROLS, 0, "b", "menuBack,menuSelect",
      "menu-options", 0},
     {"options-B", FOH_MENU_OPTIONS, 0, "b", "menuBack,menuSelect", "menu-top",
@@ -171,6 +185,11 @@ static const SndCase kCases[] = {
     // are HANDHELD first, CONTROLLER second, so the ROW INDEXES below are the
     // swapped ones. The sounds are unchanged (both are changeGamemode leaves,
     // one menuForward each); what moved is which index reaches which screen.
+    // D27 makes the chooser UNREACHABLE by navigation at FOH_CTL_CHOOSER 0
+    // (foh.h), but its arms are compiled unconditionally, so these two and
+    // `controls-B` above are driven DIRECTLY here at either flag value — the
+    // `battle-B` treatment, for the same reason: it costs nothing and keeps
+    // the restorable path honest.
     {"controls-A-handheld", FOH_MENU_CONTROLS, 0, "a", "menuForward",
      "controls-keyboard", -1},
     {"controls-A-pad", FOH_MENU_CONTROLS, 1, "a", "menuForward",
