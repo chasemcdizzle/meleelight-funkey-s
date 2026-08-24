@@ -5858,3 +5858,97 @@ hibernate, reopen, read the log.**
 all worlds 2/3 justify. **Mid-match resume is a separate, later row**: the sim
 state is the whole player/physics plane and snapshotting it is a new
 serialization surface with its own correctness bar.
+
+## A28 — **ROOT CAUSE CONFIRMED 2026-08-24: BUFFER STARVATION.** And it was DERIVABLE.
+
+Owner listened at `--audio-samples 2048` (period 2048 / buffer 4096, negotiated
+and verified in `hw_params`): **"seems clean to me"**. At the shipped 512 the
+same build buzzes. **A28's cause is settled.**
+
+### THE SIZE WAS NEVER A GUESS — WE ALREADY HAD THE NUMBER
+Owner asked whether we really have to guess. **No.** The requirement is a
+deadline, and both sides of it were already measured in this repo:
+
+- **SDL's `samples` IS the ALSA period.** The app must refill the buffer once
+  per period or the DMA starves.
+- **512 frames @ 44100 Hz = 11.61 ms.**
+- **`docs/research/device-perf.md:34` — worst sim-only p99 = 10.684 ms (g08),
+  "6.0 ms of the 16.67 ms frame" remaining.** That is the SIM ALONE, before
+  render, present and the audio callback itself.
+
+**So the shipped refill deadline (11.61 ms) is SHORTER THAN ONE FRAME BUDGET
+(16.67 ms), and barely above the sim's p99 on its own.** Any frame that runs
+long — which is every frame that renders anything — misses the deadline.
+**It was structurally guaranteed to starve, and the proof needed no new
+measurement.**
+
+**Principled minimum: the period must exceed ONE WHOLE FRAME, with margin.**
+| samples | period | vs 16.67 ms frame |
+|---|---|---|
+| 512 (shipped) | 11.61 ms | **0.70 frames — cannot work** |
+| **1024** | 23.22 ms | 1.39 frames — first viable power of two |
+| 2048 (tested clean) | 46.44 ms | 2.79 frames |
+
+**Latency cost is real and is why this matters:** 2048 buys ~93 ms of buffer
+(~5.6 frames of audio lag) in a fighting game. **1024 is the principled
+choice** — but it is a PREDICTION and must be VERIFIED, not adopted.
+
+### THE VERIFICATION INSTRUMENT ALREADY EXISTS (do not eyeball it)
+`/proc/asound/card0/pcm0p/sub0/status` exposes **`avail_max`** — the high-water
+mark of FREE space. **`avail_max` approaching `buffer_size` IS starvation**, and
+it is a number, not an opinion. Measured this session:
+- 512/1024: `avail_max` 768 -> only **5.8 ms of audio in hand** at worst
+- 2048/4096: `avail_max` 2096 -> **45 ms in hand** at worst
+
+**Turn this into a permanent check** (HARD RULE 8: instrument > one-off): run a
+real MATCH (not the title screen — the title does not load the renderer) at the
+candidate size and assert `avail_max` stays below a fraction of `buffer_size`.
+That converts "does it sound OK to a human" into a gate. **The existing
+`underruns` counter cannot do this and never could** — `platform_audio_sdl.h:44-51`
+documents it blind to xruns by construction.
+
+**OPEN:** the 1024 retest showed `hw_params: closed` — audio may have FAILED the
+exact-spec check at that size (`platform_audio_sdl.h:120-150` demands
+`granted.samples == requested`). **Unresolved — the device was power-cycled
+mid-test.** If ALSA will not grant exactly 1024, that is a hard constraint and
+2048 becomes the floor. **Re-test; do not assume either way.**
+
+### ⚠ HARNESS DEFECT — MINE, AND IT COST THE OWNER HIS DEVICE
+The test parked the frontend with `/mnt/disable_frontend`, **which lives on the
+SD CARD and therefore SURVIVES A POWER CYCLE.** The owner's device powered off
+mid-test and came back hanging at the splash screen with no frontend. Recovered
+(marker removed, loop mount cleared, rebooted, `gmenu2x` running, all data
+intact) — but **the fixture outlived the test, which is the defect.**
+**BINDING FOR ANY FUTURE DEVICE TEST: remove the persistent marker BEFORE
+launching the test binary, never after.** A crash at any instant must then
+leave a bootable device. Cheap, and it makes the whole class impossible.
+
+## A40 (P1, NEW 2026-08-24, owner-reported) — Marth shieldbreaker charge sound never stops
+
+**Symptom:** *"when I do shieldbreaker with marth (neutral special) even if I do
+a really quick one it plays the whole prolonged charging sound instead of just
+the charging sound for as long as I'm charging for."*
+
+**THE PLUMBING EXISTS — so this is a DIAGNOSIS row, not a build.** Measured:
+- Upstream's own seam is `player.shieldBreakerID = sounds.shieldbreakercharge.play()`
+  with `.stop(id)` as the `"shieldbreakercharge.stop"` token — recorded in the
+  M2 task-11 marth cluster, replayed via `mv_howl_play_id`.
+- **The mixer implements ID-ROUTED STOP** (`port/gfx/snd_mixer.h:25-30`):
+  a `.stop`-suffixed token without an id deactivates ALL voices of the base
+  name; **stops carrying a play id (`snd_event_stop_id`, fed by
+  `ml_snd_stop_id_sink`) are ID-ROUTED — "exactly howler 2.0.12 stop(id)".**
+
+**AND THE DIAGNOSTIC COUNTER ALREADY EXISTS:** `snd_mixer.h:328-334` keeps
+`stops`, **`stopsMatched` and `stopsUnmatched`**, with the invariant
+`stopsMatched + stopsUnmatched == stops`. **So the first question is answerable
+by reading a number, not by guessing:**
+1. Is a stop event emitted at all when the charge ends? (`stops` increments?)
+2. If yes, does it MATCH a live voice? (**`stopsUnmatched` incrementing means
+   the id is wrong or the voice already retired** — a very different bug from
+   no-stop-at-all.)
+3. Only if both are clean, look at whether the sim emits the stop at the right
+   frame vs upstream's release arm.
+
+**Do not "fix" this by truncating the sample or adding a timeout** — the
+id-routed stop is upstream's actual mechanism and it is already built. Find
+which of the three links is broken.
