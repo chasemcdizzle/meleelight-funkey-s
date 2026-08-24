@@ -6348,3 +6348,82 @@ press X -> real resolver -> real sim tick -> assert `actionState == "GRAB"`.
 B really attacks, Y really specials) — otherwise the next remap can ship
 equally broken. **This is the instrument rung: one leg that crosses the seam
 beats four one-off button fixes.**
+
+## OWNER PLAYTEST 2026-08-24 (post-install) — A43/A44/A45 + the VFX answer
+
+### VFX — **NOTHING IS MISSING. Falcon's neutral B is CORRECT.** (no ticket)
+Owner: *"captain falcon's neutral B doesn't show effects when it's charging up,
+is it supposed to? any other animations effects we are missing? if so, how are
+we missing them? how can we fix that systematically?"*
+
+**Answer 1 — it is faithful.** Upstream's own
+`characters/falcon/moves/NEUTRALSPECIALGROUND.js` fires its only two `drawVfx`
+calls at **`timer === 50`** (`falconpunch`) and **`timer >= 52 && < 57`**
+(`firefoxtail`) — i.e. **at the PUNCH, not during the wind-up. Upstream draws
+NO charge effects either.** Our C matches call-for-call (2 emits, same timers).
+What fires at `timer === 52` and reads like an effect is
+`ml_sound_play("falconpunchbird")` — **the bird is a SOUND, not a visual.**
+*(Driver near-miss worth recording: I briefly read that as a missing renderer
+template and almost reported a false gap. Grepping a name found it in a
+`ml_sound_play` call. Same lesson as A42, one hour later — a name is not
+evidence about the plane it lives in.)*
+
+**Answer 2 — the SYSTEMATIC check, run:** every vfx name the sim can emit vs
+every template the renderer can draw:
+```
+ml_drawVfx*("<name>"  across port/sim/   -> 39 distinct names
+TPL <name>            in vfxdata-frozen  -> 43 templates
+EMITTED BUT NOT RENDERABLE               -> NONE
+```
+**The renderer is a strict superset of what the sim emits, so no effect can be
+silently dropped for want of a template.** (4 templates are unused — upstream
+data we carry verbatim.)
+**REGISTERED AS A GAP IN THE RIG, NOT A DEFECT:** that comparison is a
+one-liner and is **not** a committed check. It should become one — it is
+exactly the seam-crossing instrument A42 shows we lack. Folded into A42's class
+fix rather than given its own row.
+
+### A43 (P1, owner-reported) — CSS back-out loses the character selection
+Owner: *"if you go to the CSS back button while selected as any other character
+except falcon, and then come back in, you are selected as falcon... I think the
+reason it picks falcon is because when you go to the back button it lets go of
+the p1 pin and goes to the 'nearest' character. it should go back to your last
+selected character (which we keep track of right?)"*
+
+**His diagnosis is almost certainly right and it is the D21 FAMILY.** A29/D21
+fixed the endGame token snap (it indexed the roster by PORT). **This is the
+same bug on the BACK-OUT path**: the token is released near the BACK wedge, and
+falcon is the LAST cell (id 4) — i.e. the nearest cell to the top-right corner
+where BACK lives. **So "nearest cell" is being resolved from the token's
+PIXEL POSITION rather than from the stored selection.**
+**And yes, we do keep track:** `p1Char`/`p2Char` (the SELECTION plane) survive —
+A29 measured exactly that. **The fix is the same shape as D21: on re-entry,
+re-home the token on the STORED character, not on wherever it physically sits.**
+Start at `css_back()` (`foh.c`) and the CSS entry arm; check
+`foh_css_token_pos`'s rest slots — D21 fixed slot 2 (endGame) and this is a
+different rest path.
+
+### A44 (P2, owner-reported) — no P3/P4 at the CSS
+Owner: *"why can't I turn on player 3 and 4 at the CSS?"*
+**MEASURED: the FOH models only TWO PORTS.** `foh.h:599` is `int cssChar[2]`
+and the type plane is `p1Type`/`p2Type` (`:602`) — there is no p3/p4 anywhere
+in the FOH state. **Upstream supports four** (`playerType` is a 4-array, and the
+sim's whole player plane is `[4]` — the sim is ALREADY 4-port: goldens field 4
+slots, `tapJumpOff[4]`, the AI drives slots).
+**So this is a FOH-side widening, not an engine limitation** — the expensive
+half is already done. Scope: 2 more panels on a 240x240 screen, 2 more token
+lanes, the type/CPU boxes, `css_ready`'s participant count (already loops 0..3),
+persistence, and every CSS check's expectations. **Non-trivial but bounded, and
+the sim needs nothing.**
+
+### A45 (P2, owner-reported, big-ticket) — TARGET BUILDER
+Owner: *"we need target builder to be implemented (if it exists in the source
+code we're basing our port on)"*
+**IT EXISTS: `src/target/targetbuilder.js`, 58.5 KB** in the pinned upstream
+clone (beside `targetplay.js`, 8.6 KB, which we DID port).
+**This is the plane the `+ ADD CODE` slot currently REFUSES** — `foh.c`'s
+addcode arm emits `deny` + `ev_refused(s, "addcode")`, registered as
+scope-excluded since M4 task 12. **58 KB of jQuery+DOM editor is the single
+largest un-ported surface left**, and it is a REWRITE (like the FOH), not a
+transliteration. Sequence it with A7/credits as the owner said; it wants its
+own arc.
