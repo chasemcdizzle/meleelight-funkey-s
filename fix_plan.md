@@ -5952,3 +5952,84 @@ by reading a number, not by guessing:**
 **Do not "fix" this by truncating the sample or adding a timeout** — the
 id-routed stop is upstream's actual mechanism and it is already built. Find
 which of the three links is broken.
+
+## A28 — **FIXED 2026-08-24.** Buffer default 512 -> 2048, with the derivation IN THE CODE.
+
+`PLATFORM_AUDIO_SAMPLES_DEFAULT = 2048` at `port/gfx/platform.h:193`, consumed
+by `gfx_app.c:571` and (driver one-liner, same day) `foh_dev.c`'s
+`audioSamples` default — **which is the line the PLAY PATH actually reads, so
+until it landed the buzz persisted in the OPK.** The definition site carries the
+full derivation and the 512/1024/2048 frame-multiple table, so **nobody has to
+guess this number again.**
+
+**1024 was ESCALATED, not silently decided — and the reasoning is worth
+keeping.** The mechanism argues 1024 *should* be granted (ALSA period-size
+constraints are an interval plus at most a step, and any constraint admitting
+both 512 and 2048 admits 2x512). **But that is an argument, not a measurement,
+and the failure mode is TOTAL:** `platform_audio_sdl.h:120-150` demands exact
+granting, so a refused size is `sim_fatal` and **the game does not launch at
+all**. 512 and 2048 are both MEASURED-granted; 1024 never has been. **2048
+ships as the safe floor; lowering it is a ONE-CONSTANT edit once the new
+instrument reads green at 1024 on device.**
+
+**THE INSTRUMENT (HARD RULE 8 discharged):**
+`bash port/gfx/check-alsa-headroom.sh` -> `ALSA HEADROOM CHECK OK cases=12
+default=2048`. `inHand = buffer_size - avail_max`, judged against the same
+16.67 ms frame the period is derived from. **Its first two cases are the REAL
+DEVICE MEASUREMENTS from this session** — 512/1024 (5.80 ms) **rejected**,
+2048/4096 (45.35 ms) accepted — plus both sides of the bar, a
+lucky-run-but-short-period rejection, and five "evidence that isn't evidence"
+rejections (`closed`, missing/garbled `avail_max`, avail_max > buffer, buffer <
+period). **Case [4/4] reads the constant out of `platform.h` and judges it, so a
+future regression to 512 fails ON THE HOST.** A device leg later just `cat`s the
+two proc files into the same judge.
+
+**`mlfk-foh.sh` was correctly NOT touched** — it is **sha256-pinned in
+`m4-freeze-manifest.txt`**, so adding a launcher flag would have broken the M4
+gate. Fixing the code default was the right seam.
+
+**Two device checks were silently wrong and are fixed:**
+`check-device-audio.sh` and `check-device-music.sh` both PINNED
+`AUDIO_SAMPLES=512` into their judge grammar **while passing no
+`--audio-samples`** — pinning a number they never requested. They now request
+it. **Registered gap: their cadence windows were measured at 512, so re-pinning
+to the shipped size needs a device re-measurement.** `check-device-fullgame.sh`
+also pins 512 but drives `foh_device`, so it is affected NOW that the one-liner
+landed — **re-check it; it is freeze-pinned, so that is an arc, not an edit.**
+
+## A40 — **ROOT-CAUSED 2026-08-24: LINK 2. TWO PLAY-ID COUNTERS WHERE UPSTREAM HAS ONE.**
+
+Measured by running the real `snd_mixer.h` against the real `ml_events.c`
+through `foh_dev.c`'s exact wiring, firing marth NSG's own calls
+(`NEUTRALSPECIALGROUND.c:99-101` then `:67`):
+```
+menuPlays=0   simId=1001  voiceId=1001   stops=1 matched=1 unmatched=0
+menuPlays=3   simId=1001  voiceId=1004   stops=1 matched=0 unmatched=1   <- voice still sounding
+```
+**The stop IS emitted (link 1 fine). It does NOT match (link 2 broken).
+`voiceId` runs ahead of `simId` by EXACTLY the number of menu SFX played.**
+
+**Cause:** `snd_mixer.h:626/653` advances `m->playCount` on **every**
+`snd_event()`, while `ml_events.c:143` advances its counter **only** on
+`ml_sound_play()`. `foh_dev.c:842-847` (`foh_snd` — the MENU-plane SFX
+chokepoint) calls `snd_event()` directly, **so every title/CSS/SSS click skews
+the mixer's ids.** `player.shieldBreakerID` then names a voice that does not
+exist, the id-routed stop no-ops, and the **LOOPING** charge sample runs to the
+end of the match. **`furaLoopID` has the same exposure.**
+
+The header's claim that both planes "count the same event stream" was **a
+PRECONDITION stated as a FACT**; `snd_mixer.h:36-55` now states it as a
+precondition and names the violator.
+
+**WHY IT SHIPPED — both fidelity rigs are blind to it BY CONSTRUCTION:**
+`snd_render.c` and `snd_reference.js` drive the mixer from a **sim event stream
+only**, so the two planes never share a counter there. A second instance of
+this session's recurring class: *the check could not see the defect it appeared
+to cover.*
+
+### ⚠ A40 FIX IS OWED — `port/foh/**`, deliberately not edited (parallel lane)
+Cleanest shape, per lane A: **add `snd_event_menu()` beside `snd_event()` in
+`snd_mixer.h`** (identical, minus `playCount++`/id assignment) and point
+`foh_dev.c:845` at it. Lane A did not add the function alone because an
+uncalled `static` trips `-Werror=unused-function` in TUs that compile the header
+standalone — **function and caller must land in the SAME change.**

@@ -1582,7 +1582,12 @@ int main(int argc, char **argv) {
   // tracked separately, so `-1` is a parse error rather than "absent".
   uint32_t seed = 0;
   bool seedGiven = false;
-  long audioSamples = 512;
+  // A28 (owner-reported buzz, root-caused 2026-08-24): 512 frames @ 44100 is
+  // an 11.61 ms refill deadline — SHORTER THAN ONE 16.67 ms FRAME, so the ALSA
+  // buffer starved continuously and the DMA re-played stale audio. The
+  // derivation and the 512/1024/2048 table live at the definition site
+  // (port/gfx/platform.h); judged by port/gfx/check-alsa-headroom.sh.
+  long audioSamples = PLATFORM_AUDIO_SAMPLES_DEFAULT;
   bool audioSamplesGiven = false;
   long pace = 1;
   uint64_t budgetNs = 16666667ull;
