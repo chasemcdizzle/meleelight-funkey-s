@@ -1095,10 +1095,30 @@ static void step_opt_audio(FohState *s, const PlatformInput *in,
 //
 // DEVIATION, and it is a knowing one: upstream's keyboardmenu.js is a 56-item
 // REBINDER (D13) that we did not build, so this screen is already ours rather
-// than a port. Two settable rows on it is a rewrite of a rewritten screen, not
+// than a port. Settable rows on it are a rewrite of a rewritten screen, not
 // a drift from a faithful one. The rows follow the audio screen's idiom
 // exactly (up/down picks the row, left/right cycles the value, every accepted
 // step clicks) so the whole FOH stays one interaction model.
+//
+// A31 (DEVIATION D26, owner 2026-08-23) made the NINE ACTION ROWS settable
+// too, which is what the owner asked for and what D13 always owed: "you
+// should be able to rebind any of the active mappings ... currently you
+// can't even go to any of those rows".
+//
+// L/R REBINDS, rather than an A-to-listen mode. That is the whole reason
+// this is cheap AND consistent: the screen's rows are PHYSICAL BUTTONS, so
+// a listening mode would have to mean "press the button you want to swap
+// with", which reads backwards; L/R "cycle the value on this row" is the
+// idiom every other FOH row already uses, and it is what the screen's own
+// footer has always promised. Each step swaps the two rows' actions
+// (ctl_style.h: the table is a PERMUTATION), so no action can be lost and
+// no "protected primaries" rule is needed to keep PAUSE reachable.
+//
+// The Mod-shoulder row is GONE (owner: "get rid of mod altogether as an
+// option here"). The CELL stays — the BOX label table reads it, the
+// persisted record carries it, and A30(a) wants it — but nothing on this
+// screen writes it any more except the reset row, which restores its
+// ratified default. Swapping L and R is now an ordinary rebind.
 //
 // The VALUES are written straight through to ctl_style.c's process cells,
 // not mirrored into FohState: they are read by the sim-side input path in a
@@ -1111,25 +1131,50 @@ static void step_ctrl(FohState *s, const PlatformInput *in,
     const bool dE = in->down && !pv->down;
     const bool lE = in->left && !pv->left;
     const bool rE = in->right && !pv->right;
+    const bool aE = in->a && !pv->a;
     // One else-if chain, up before down, exactly like every other screen
     // (menu.js:164-242's shape): a simultaneous up+down runs UP ONLY.
     if (uE || dE) {
-      (void)uE; // two rows only, so up and down land on the same other row
-      s->ctlRow ^= 1;
+      s->ctlRow = (s->ctlRow + (uE ? FOH_CTL_ROWS - 1 : 1)) % FOH_CTL_ROWS;
       snd_push(s, "menuSelect");
       return;
     }
+    // A is the RESET row's activator and nothing else's. Every other row on
+    // this screen is an L/R row, so A there is a refusal, not a silence —
+    // the same `deny` every other refusing FOH arm emits.
+    if (aE) {
+      if (s->ctlRow == FOH_CTL_ROW_RESET) {
+        // "reset to defaults" (owner 2026-08-23) = everything THIS SCREEN
+        // owns, restored to the fresh-install record: the identity binding,
+        // the ratified default style, the ratified Mod arrangement. It does
+        // NOT touch gameplay/audio settings — they are other screens' rows.
+        ctl_bind_reset(0);
+        ctl_style_set((int)CTL_STYLE_DEFAULT);
+        ctl_mod_on_r_set(false);
+        snd_push(s, "menuSelect");
+      } else {
+        snd_push(s, "deny");
+      }
+      return;
+    }
     if (rE || lE) {
-      if (s->ctlRow == 0) {
+      if (s->ctlRow == FOH_CTL_ROW_STYLE) {
         // cycle the three styles, wrapping (CTL_STYLE_COUNT is the domain;
         // the enum VALUES are a frozen wire format — never renumber them,
         // FohPersist.ctlStyle stores them verbatim).
         const int n = (int)CTL_STYLE_COUNT;
         int v = (int)ctl_style_get() + (rE ? 1 : n - 1);
         ctl_style_set(((v % n) + n) % n);
+      } else if (s->ctlRow >= 1 && s->ctlRow < FOH_CTL_ACTION_ROWS) {
+        // THE REBIND. Row r holds physical button (r - 1); the cycle hands
+        // it the next/previous logical action and swaps with whoever had it.
+        ctl_bind_cycle(0, s->ctlRow - 1, rE ? 1 : -1);
       } else {
-        // the Mod shoulder is a two-state swap, so either direction flips it
-        ctl_mod_on_r_set(!ctl_mod_on_r_get());
+        // row 0 is the d-pad — it drives the control STICK, which is not one
+        // of the eight bindable buttons — and the reset row has no value to
+        // cycle. Both refuse out loud rather than eating the press.
+        snd_push(s, "deny");
+        return;
       }
       snd_push(s, "menuSelect");
       return;

@@ -145,8 +145,14 @@ pin '    {"HANDHELD", "CONTROLLER"},' \
 pin '  header(rz, "HANDHELD");' 'the row-0 destination`s header'
 pin '  header(rz, "CONTROLLER");' 'the row-1 destination`s header'
 # the control-style row (A4)
-pin '    const int yRow[2] = {176, 190};' 'the two settable rows` y table'
-pin '    foh_text(rz, 16, yRow[0], 1, buf,' \
+# A31 rewrote this screen: the two settable rows became eleven (nine action
+# rows + style + reset), so the old `yRow[2]` table is gone. What the witness
+# hand-copies is unchanged in SUBSTANCE — the STYLE row is still x=16, y=176 —
+# so the pin follows the line that now carries those coordinates. NOT a
+# weakening: it is still one exact full-line match on the coordinate source,
+# and the witness still overdraws the style row at those exact coordinates.
+pin '  const int yStyle = 176, yReset = 190;' 'the two settable rows` y table'
+pin '    foh_text(rz, 16, yStyle, 1, buf,' \
     'the STYLE row`s x, y, face and buffer'
 # the explanation bar — the witness re-measures the width claim, so its
 # geometry has to be the geometry that claim serves

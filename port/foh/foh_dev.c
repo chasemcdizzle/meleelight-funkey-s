@@ -1295,6 +1295,26 @@ static void tdev_vs_banner_text(Raster *rz, int timeUp) {
 // duck (main.js:853/856), and this port never applies that duck — the pause
 // overlay freezes the whole loop instead — so there is nothing to undo. If a
 // duck is ever added, this line has to come with it.
+// --- A31: the rebinder's ONE integration point on the play path -----------
+//
+// Every MATCH-loop poll goes through here instead of platform_poll, so the
+// whole binary downstream of it — the pause edge detector, the FunKey system
+// menu edge, the S1 chord resolver, the raw-key sidecar — reads ONE input
+// plane: the LOGICAL one. Remapping at the seam rather than at the chord
+// table is what keeps the feature invisible to s1_input.h, to the three
+// frozen chord tables and to every pinned S1 sweep: under the fresh-install
+// identity binding this is a plain struct copy.
+//
+// It is deliberately NOT used by the FOH menu loop (:2151/:2173). Menu
+// navigation must stay on the physical buttons — a player who has moved A
+// somewhere else still has to be able to reach this screen and move it back.
+// Port 0: the Controls screen edits port 0 only (ctl_style.h), and slot 0 is
+// the only human port this device can have (fix_plan A32/A33).
+static void poll_bound(PlatformInput *in) {
+  platform_poll(in);
+  ctl_bind_apply(0, in, in); // in-place is documented safe (ctl_style.c)
+}
+
 // foh_persist_save chokepoint. The control plane lives in ctl_style.c, not
 // in FohState, so foh_persist_collect cannot reach it (foh_persist.h:125
 // assigns these two stamps to the FOH). Every save goes through here so a
@@ -1303,6 +1323,12 @@ static void tdev_vs_banner_text(Raster *rz, int timeUp) {
 static void tdev_persist_save(void) {
   g_persist.ctlStyle = (int)ctl_style_get();
   g_persist.modOnR = ctl_mod_on_r_get() ? 1 : 0;
+  // A31: the binding table lives in the same TU and follows the same rule.
+  for (int k = 0; k < CTL_BIND_PORTS; k++) {
+    for (int i = 0; i < (int)CTL_BTN_COUNT; i++) {
+      g_persist.bind[k][i] = ctl_bind_get(k, i);
+    }
+  }
   foh_persist_save(&g_persist);
 }
 // ...and its mirror. A save STAMPS the control plane out of ctl_style.c, so a
@@ -1317,6 +1343,10 @@ static void tdev_persist_load(void) {
   // lands on the default rather than an unrepresentable style.
   ctl_style_set(g_persist.ctlStyle);
   ctl_mod_on_r_set(g_persist.modOnR != 0);
+  // A31: ctl_bind_set_row REFUSES a row that is not a permutation, so a
+  // corrupt/older record leaves the identity binding in place rather than a
+  // table with an action missing from it.
+  for (int k = 0; k < CTL_BIND_PORTS; k++) ctl_bind_set_row(k, g_persist.bind[k]);
 }
 static void tdev_end_game(GameState *g, FohState *f) {
   art_resetAArticles(&g->arts);     // resetAArticles() (:1376)
@@ -2203,7 +2233,16 @@ foh_phase:;
         // sits on the SD inside the paced loop; the product path's SD
         // save here mirrors upstream's cookie write at the same UI
         // moment (registered, PORTABILITY row).
-        if (strcmp(ev->from, "options-gameplay") == 0 &&
+        // A31, MEASURED while wiring the rebinder: this arm named ONLY
+        // options-gameplay, so on the PRODUCT binary a Controls-screen or
+        // audio change was written to SD only if the player later happened
+        // to B-exit an unrelated screen — i.e. it silently vanished on
+        // restart. foh_app.c already carries the three-screen form and says
+        // exactly that in its own note; the product path never got it.
+        // Same class, one condition, both drivers now agree.
+        if ((strcmp(ev->from, "options-gameplay") == 0 ||
+             strcmp(ev->from, "options-audio") == 0 ||
+             strcmp(ev->from, "controls-keyboard") == 0) &&
             strcmp(ev->cause, "b") == 0) {
           foh_persist_collect(&g_persist, &foh);
           tdev_persist_save();
@@ -2592,10 +2631,10 @@ foh_phase:;
         size_t recMark = 0;        // rec.len before this frame's row
         PlatformInput pin, prevPause;
         memset(&prevPause, 0, sizeof prevPause);
-        if (foh_pause_hook) platform_poll(&prevPause); // VS arm's note
+        if (foh_pause_hook) poll_bound(&prevPause); // VS arm's note
         uint64_t tStart = now_ns(); // NOT const: the overlay shifts it
         for (long f = 0; f < loopMax; f++) {
-          platform_poll(&pin); // live: THE input; tverify: backend pump
+          poll_bound(&pin); // live: THE input; tverify: backend pump
           // A12: MENU opens the same overlay here. START does NOT — in
           // target mode it is upstream's own endGame quit (main.js:1013
           // -1015) via tp_endgame_hook, which is faithful and already
@@ -2620,7 +2659,7 @@ foh_phase:;
               break;
             }
             tStart += pausedNs;
-            platform_poll(&pin);
+            poll_bound(&pin);
           }
           prevPause = pin;
           const uint64_t deadline = tStart + (uint64_t)(f + 1) * budgetNs;
@@ -3165,7 +3204,7 @@ foh_phase:;
       // ONLY when the hook is installed (review-a11-1 M): an evidence
       // bridge must not gain even one extra backend event pump.
       memset(&prevPause, 0, sizeof prevPause);
-      if (foh_pause_hook) platform_poll(&prevPause);
+      if (foh_pause_hook) poll_bound(&prevPause);
       // NOT const: the overlay freezes wall clock, and every deadline below
       // is derived from tStart. Without the shift, resuming would leave the
       // whole rest of the match "late" and the catch-up arm would skip
@@ -3176,7 +3215,7 @@ foh_phase:;
         // below: the instrument can consume pacing slack but can never
         // inflate a number judge-render-timing.js computes.
         if (attrib) attrib_sample(&attrib[f]);
-        platform_poll(&pin);
+        poll_bound(&pin);
         // A11/A12: START opens the modal pause overlay. MENU does NOT — since
         // A12b it opens the FunKey SYSTEM menu, dispatched by the arm just
         // below on its own button (review-mexit-r5 Low corrects this note,
@@ -3198,7 +3237,7 @@ foh_phase:;
             break;
           }
           tStart += pausedNs;
-          platform_poll(&pin);
+          poll_bound(&pin);
           sysOpened = true;
         }
         if (!sysOpened && foh_pause_hook && pin.start && !prevPause.start) {
@@ -3215,7 +3254,7 @@ foh_phase:;
             vsRan = f; // rows 0..f-1 are recorded; frame f never ticked
             break;
           }
-          platform_poll(&pin); // post-overlay state, not the stale edge
+          poll_bound(&pin); // post-overlay state, not the stale edge
         }
         prevPause = pin;
         const uint64_t deadline = tStart + (uint64_t)(f + 1) * budgetNs;

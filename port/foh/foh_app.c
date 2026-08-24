@@ -457,6 +457,10 @@ int main(int argc, char **argv) {
   // would edit a setting that resets on every boot.
   ctl_style_set(g_persist.ctlStyle);
   ctl_mod_on_r_set(g_persist.modOnR != 0);
+  // A31: ctl_bind_set_row REFUSES a row that is not a permutation, so a
+  // corrupt/older record leaves the identity binding in place rather than a
+  // table with an action missing from it.
+  for (int k = 0; k < CTL_BIND_PORTS; k++) ctl_bind_set_row(k, g_persist.bind[k]);
   foh_render_warm(&g_rz); // cold caches off the frame budget (foh_render.c)
   long transitions = 0;
   long launchFrame = 0;
@@ -510,6 +514,13 @@ int main(int argc, char **argv) {
           // C30(c): the twin of the load-side calls above (foh_persist.h).
           g_persist.ctlStyle = (int)ctl_style_get();
           g_persist.modOnR = ctl_mod_on_r_get() ? 1 : 0;
+          // A31: the binding table lives in the same TU and follows the
+          // same rule.
+          for (int k = 0; k < CTL_BIND_PORTS; k++) {
+            for (int i = 0; i < (int)CTL_BTN_COUNT; i++) {
+              g_persist.bind[k][i] = ctl_bind_get(k, i);
+            }
+          }
           foh_persist_save(&g_persist);
         }
       } else if (ev->kind == FOH_EV_SEL) {

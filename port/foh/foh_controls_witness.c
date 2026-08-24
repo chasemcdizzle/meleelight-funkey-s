@@ -83,8 +83,13 @@ static const RastCol kBarSelTx = {0, 0, 0, 256};     // `selTx`, selected label
 #define FOH_BAR_PITCH 31  // #define FOH_BAR_PITCH
 #define HDR_Y 6           // header(): text_center(rz, 6, 2, title, kAccent)
 #define HDR_SCALE 2
-#define CTL_STYLE_ROW_X 16   // render_ctrl_key's `foh_text(rz, 16, yRow[0], ...`
-#define CTL_STYLE_ROW_Y 176  // yRow[2] = {176, 190}
+#define CTL_STYLE_ROW_X 16   // render_ctrl_key's `foh_text(rz, 16, yStyle, ...`
+#define CTL_STYLE_ROW_Y 176  // `const int yStyle = 176, yReset = 190;`
+// A31 made the nine ACTION rows cursor rows, so the style row is no longer
+// row 0: the cursor opens on the d-pad row and the screen is walked down to
+// the style row exactly as a player would. foh.h owns the row layout; this
+// is the only number this file needs from it.
+#define CTL_STYLE_ROW FOH_CTL_ROW_STYLE
 // The explanation bar's pinned width claim (foh_render.c's comment at the bar):
 // the longest blurb is 230 px at face-2 scale 1, so the bar runs 4..236.
 #define BLURB_MAX_PX 230
@@ -324,7 +329,10 @@ static void a4_style_names(void) {
   PRESS(&s, a);
   PRESS(&s, a);
   want(s.screen == FOH_CTRL_KEY, "the HANDHELD screen is where the styles live");
-  want(s.ctlRow == 0, "its cursor opens on the STYLE row");
+  want(s.ctlRow == 0, "its cursor opens on the FIRST row (A31 row layout)");
+  PRESS_N(&s, down, CTL_STYLE_ROW);
+  want(s.ctlRow == CTL_STYLE_ROW,
+       "nine DOWNs walk the cursor from the d-pad row to the STYLE row");
 
   want(ctl_style_get() == CTL_STYLE_DEFAULT &&
            CTL_STYLE_DEFAULT == CTL_STYLE_NATURAL,

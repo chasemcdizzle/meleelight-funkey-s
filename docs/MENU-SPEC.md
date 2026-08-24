@@ -1702,6 +1702,69 @@ row.
 > plus the honest no-controller state (§9.2) is 90% of the owner's
 > complaint at 10% of the cost.
 
+**DEVIATION D26 — the rebinder that SHIPPED is a PERMUTATION on L/R, not
+D13's listening mode (owner-requested, 2026-08-23; fix_plan A31).** The
+sketch above went unbuilt for a year and the owner filed the consequence:
+*"you should be able to rebind any of the 'active mappings'. currently you
+can't even go to any of those rows, you can only change between 'style:' and
+'mod'. changing 'mod' changes the controls. we don't want that. get rid of
+'mod' altogether as an option here ... what is 'rebind: N/A'? why do we even
+have that section? also, can we have a 'reset to defaults' button please."*
+What shipped answers all four, and it is smaller than D13's sketch in every
+dimension:
+
+- **The rows on this screen are PHYSICAL BUTTONS**, not actions, because
+  that is what the screen has always been ("what do my buttons do"). So a
+  listening mode would have to mean *"press the button you want to swap
+  with"*, which reads backwards. Instead **up/down picks the row and L/R
+  cycles which action that row performs** — the audio screen's idiom, the
+  one every other FOH row already uses, and the one this screen's own footer
+  had promised since it was written. No new interaction model, and the
+  caption `L/R: CHANGE   REBIND: N/A` becomes `L/R: CHANGE   A: RESET`.
+- **Each step SWAPS**, so the table is always a permutation of the eight
+  buttons. That is what retires D13's *"protected primaries"* clause
+  outright: no action can be left on no button, so PAUSE and PAUSE MENU are
+  reachable at every moment with no protection rule to get wrong. It also
+  retires the *"no conflict detection"* clause — a permutation cannot have
+  a conflict — and D13's **hold-A clear** gesture, since there is nothing
+  to clear to.
+- **`RESET TO DEFAULTS` is a real row**, which upstream does NOT have
+  (`keyboardmenu.js` has no restore action anywhere) and which D13 copied
+  that absence from. Owner-requested; it restores the identity binding, the
+  default style and the ratified Mod arrangement in one press.
+- **The `mod` row is REMOVED FROM THE SCREEN, not from the model.** The
+  cell survives in `port/gfx/ctl_style.c` — the BOX label table reads it,
+  the persisted record carries it, A30(a) wants it — but nothing on this
+  screen writes it except the reset row. What a player wanted it for
+  (Mod and shield the other way round) is now an ordinary rebind of the L
+  and R rows, which is the owner's point.
+- **The d-pad row is selectable and NOT bindable.** It drives the control
+  STICK, not one of the eight buttons; L/R on it emits `deny`.
+- **`rebind: N/A` was not vestigial** — it was this screen saying out loud
+  that D13's rebinder did not exist, which was the honest caption for a
+  read-only view. It is deleted because the thing it denied now exists.
+- **The mechanism is ONE PERMUTATION APPLIED AT THE POLL SEAM.**
+  `ctl_bind_apply()` rewrites the polled `PlatformInput` before anything
+  reads it, so `s1_input.h`, the three chord tables, `ctl_roles()` and every
+  frozen S1 sweep are untouched by the feature — a rebind never changes what
+  a LOGICAL button does, only which physical one drives it. Under the
+  fresh-install identity binding it is a struct copy, so every recorded
+  session and frozen stream is unaffected by construction. The FOH MENU loop
+  deliberately keeps the raw poll: a player who has moved A elsewhere must
+  still be able to reach this screen and move it back.
+- **The binding table is PER-PORT in the model and in the format**
+  (`MLFKPERSIST5`, four `bind` rows), while the UI edits port 0 only. The
+  port dimension is the expensive half to retrofit and the A33 spike has not
+  closed on whether a second physical controller is possible, so it is
+  carried now and exposed later.
+
+Proved by `port/foh/check-rebind.sh`, whose T2 and T3 are the pair that
+matters: T2 makes the SCREEN ignore the binding (labels lie, buttons are
+right) and T3 makes `ctl_bind_apply` an identity copy (labels are right,
+buttons lie). Each must fail, and each must fail ONLY on its own half — so a
+build in which the screen and the buttons disagree cannot pass in either
+direction.
+
 ### 9.4 `keytest.js` — not a screen
 
 256-entry keycode→label array (`keytest.js:1-260`), imported only by
@@ -1963,6 +2026,7 @@ state; each entry points at the section that carries the evidence):
 | D23 | **A32, owner-reported P2 (2026-08-23):** the gameplay screen's per-player row is relabelled `TAP JUMP` and its value is INVERTED ON DISPLAY, so `ON` means tap jump works. Upstream's row is the double negative `"Tapjump off"` with the value `"On"` when the feature is DISABLED (`gameplaymenu.js:182`, `:242`), and it is genuinely unreadable: the owner read it as "L-cancel is off for P2/P3/P4" and filed a defaults bug against a screen whose defaults were correct. (What he actually saw was correct too — P1 has tap jump disabled because a digital d-pad at full deflection tap-jumps on every upward DI, `port/gfx/ctl_style.h:14-23`, and P1 is the only human port on this device today.) The deviation is CONFINED TO THE PIXELS: `FohState.tapJumpOff` keeps upstream's polarity and `foh_persist`/`foh_app`/`foh_dev` hand that same bit to the sim unchanged, so no checksum can see this. Proven both ways by `check-legibility.sh` — the witness asserts the rendered STRING against the state, and its T1 puts the double negative back and must fail | §3.1 |
 | D24 | **A25(a), owner-reported P1 (2026-08-23):** the SELECTED target-select slot gets a 2 px border and a body lifted off black (`{52,22,32}`), where upstream's entire selection signal is a ONE-PIXEL stroke that goes grey `rgb(166,166,166)` -> flashing pink (`targetselect.js:270-279`). Owner: *"the highlighting around test 1 or + ADD CODE you selected is not really visible to the eye."* Measured, he is right — on our rects that stroke is 242 changed pixels around a 100x19 black body on a busy brown gradient, at 240x240. The deviation stays inside upstream's OWN idiom, which `foh_render.c:2049-2050` records: the BORDER carries the state and the LABEL is never brightened on hover — so the label keeps `:201`'s grey in both states and only the border and body move. All ELEVEN slots get it, the "+ ADD CODE" slot included (the owner named both); its ring grows 1 px on three sides only, because the info panel's 50%-black face starts on the row below it. `check-legibility.sh` floors every slot at 600 changed pixels, which no one-pixel border on these rects can reach, and its T2 restores the one-pixel border and must fail | §7 |
 | D25 | **A24 + A4, owner-reported P2 (2026-08-23):** the Controls chooser is relabelled and REORDERED. Owner: *"controls option in the menu says 'Keyboard Controls'. Clicking it takes you to a menu that says 'Controller' and 'Keyboard', so it shouldn't say 'Keyboard controls' — just Controls. Then, in the submenu, 'Keyboard' actually isn't a keyboard, it's the funkey s controls. So we need to change the name there. Also make funkey controls the first option (controller is first currently, and it shouldn't be, because we can't even use a controller on the funkey s)."* Three renames, all PAINT plus ONE routing swap: the Options row 2 label becomes `CONTROLS` (upstream `Keyboard Controls`, `menu.js:21` — the row opens a CHOOSER, so upstream named it after one of its own two destinations); the chooser's second entry becomes `HANDHELD` (upstream `Keyboard`, `menu.js:23` — there is no keyboard on this device, and `HANDHELD` is a CATEGORY name parallel to `CONTROLLER`, deliberately shorter than it so no width pin moves); and `HANDHELD` becomes row **0**, `CONTROLLER` row 1. **The order half is NOT paint.** The chooser is INDEX-selected (`foh.c` step_menu's ternary), so the labels and the routing move together or the first row lies about where it goes — `check-controls-labels.sh`'s T2 reverts the ternary ALONE, leaves the labels in place, and must fail. **IDENTITY DOES NOT MOVE:** `FOH_CTRL_KEY`/`FOH_CTRL_PAD`, the screen tokens `controls-keyboard`/`controls-controller` and upstream gameModes 12 / 14 are all unchanged — the judge grammar, `foh_app.c`'s save-on-exit arm and every frozen flow expect key on those. The CONTROLLER branch stays REACHABLE (collapsing the submenu is out of scope here: the owner's collapse decision was taken on evidence the driver later retracted, and A24 was HELD for the renames only). `f04-nav`'s two Controls shots keep their names and swap frames. **A4 (same ticket, already shipped as C31):** the style formerly displayed `Normal` reads `CLASSIC` — `ctl_style_name` only; `CTL_STYLE_NORMAL` is still enum 0 because `FohPersist.ctlStyle` stores it verbatim. Asserted here for the first time rather than remembered | §9.1, §9.3 |
+| D26 | **A31, owner-reported P1 (2026-08-23):** the Controls > HANDHELD screen gains a REAL rebinder, and it is not the shape D13 sketched. Owner: *"you should be able to rebind any of the 'active mappings'. currently you can't even go to any of those rows, you can only change between 'style:' and 'mod'. changing 'mod' changes the controls. we don't want that. get rid of 'mod' altogether as an option here... what is 'rebind: N/A'? why do we even have that section? also, can we have a 'reset to defaults' button please."* The cursor covered TWO rows and the nine ACTION rows were display-only; it now covers **eleven** — the nine action rows (row 0 the d-pad, rows 1-8 the physical buttons), the style row, and a new **RESET TO DEFAULTS** row that upstream does not have at all. **L/R rebinds by SWAPPING** the selected row's action with whichever button holds the one it steps onto, so the table is always a permutation: no action can be lost, which retires D13's *protected primaries*, its *hold-A clear* and its *no conflict detection* clauses in one stroke. The **mod row is removed from the SCREEN, not the model** (the cell still backs the BOX label table and the persisted record; swapping the shoulders is now a plain rebind). **`rebind: N/A` is deleted** — it was the honest caption of a read-only view of D13's unbuilt rebinder, and the thing it denied now exists. The mechanism is ONE permutation applied at the poll seam (`ctl_bind_apply` in `foh_dev.c`'s `poll_bound`), so `s1_input.h`, the three chord tables and every frozen S1 sweep never see the feature; under the fresh-install IDENTITY binding it is a struct copy, so no recorded session or frozen stream moves. The FOH menu loop keeps the RAW poll on purpose — a player who moved A elsewhere must still be able to reach this screen. Bindings are PER-PORT in the model and in `MLFKPERSIST5` (four `bind` rows, each validated as a permutation) with the UI editing port 0 only, per the A33 re-amendment. Proved by `port/foh/check-rebind.sh`, whose T2/T3 pair makes the screen and the buttons lie in turn and requires each to fail alone | §9.3 |
 
 ---
 

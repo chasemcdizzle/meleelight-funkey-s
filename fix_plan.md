@@ -4187,6 +4187,72 @@ for editing the ratified BOX defaults gets much weaker.
 
 ---
 
+### A31 DONE 2026-08-23 (DEVIATION D26) — Controls screen: real rebinding, and three things that should not be there
+
+> **DONE, lane M, one commit on `lane/m-a31`.** All four sub-items shipped.
+> Task check: `bash port/foh/check-rebind.sh` -> `REBIND TOOTH OK`, exit 0
+> (host-only; 5 orthogonal negatives). `check-controls-labels.sh` stays
+> green with two pins re-synced (the `yRow[2]` line it pinned no longer
+> exists — the screen has eleven rows now — so the pins follow the lines
+> that carry the same coordinates; T1-T4 untouched). Ledger row: MENU-SPEC
+> §9.3 D26, which also records which parts of D13's sketch this
+> DELIBERATELY does not build (listening mode, hold-A clear, protected
+> primaries) and why a permutation makes each unnecessary.
+>
+> **What shipped, against the four sub-items:**
+> 1. **All nine action rows are selectable and bindable.** `FohState.ctlRow`
+>    covers ELEVEN rows (`foh.h`: 9 action rows + style + reset). L/R on a
+>    button row SWAPS its action with the button that held the next one, so
+>    the table is always a permutation. Row 0 (d-pad) is selectable and
+>    refuses with `deny` — it drives the control stick, not a button.
+> 2. **The `mod` row is gone from the screen.** The CELL survives
+>    (`ctl_style.c`, the BOX label table, the persisted record) exactly as
+>    the ticket said. Swapping the shoulders is now a plain rebind.
+> 3. **`rebind: N/A` answered, then deleted.** It was NOT vestigial: it was
+>    the screen saying out loud that D13's rebinder did not exist. The
+>    caption now reads `L/R: CHANGE   A: RESET`.
+> 4. **`RESET TO DEFAULTS` is row 10** — identity binding + default style +
+>    ratified Mod arrangement in one A press.
+>
+> **The mechanism, in one line:** `ctl_bind_apply()` permutes the polled
+> `PlatformInput` at `foh_dev.c`'s new `poll_bound()`, BEFORE the pause
+> edge, the system-menu edge, the S1 chord resolver or the raw-key sidecar
+> read it — so `s1_input.h`, the three chord tables and every frozen S1
+> sweep never see the feature, and the fresh-install identity binding makes
+> it a struct copy. The FOH MENU loop keeps the raw `platform_poll` on
+> purpose (a player who moved A elsewhere must still reach this screen).
+>
+> **Per-port: carried in the model AND the format, exposed in the UI for
+> port 0 only** — the A33 re-amendment's instruction exactly.
+> `MLFKPERSIST5` gains four `bind` rows (one per port, each validated as a
+> permutation), so a second controller would be a UI change and not another
+> format bump.
+>
+> **TWO BUGS FOUND AND FIXED WHILE WIRING IT** (both pre-existing, both the
+> same "the feature does not survive" class the rebinder would have joined):
+> * `foh_dev.c`'s persist arm named ONLY `options-gameplay`, so on the
+>   PRODUCT binary a Controls or audio change reached SD only if the player
+>   later B-exited an unrelated screen. `foh_app.c` already carried the
+>   three-screen form and says so in its own note; the product path never
+>   got it. Both drivers now agree.
+> * `foh_persist.c`'s block gates named their versions by ENUMERATION
+>   (`fromVer == 0 || fromVer == 3`), so the v5 bump silently dropped the
+>   `modonr` line for a v4 file and rejected a perfectly good save as
+>   corrupt. MEASURED by the new check's v4-migration leg. Every gate is now
+>   a `>=` on one effective-version number, which is total over any future
+>   bump.
+>
+> **Device leg outstanding (driver):** `port/foh/check-device-persist.sh`
+> was updated for v5 — `PERSIST_BYTES` 1510 -> 1602, 64 -> 68 lines, the
+> positional whitelist gained the four `bind` rows with a permutation
+> check, the unsupported-version tooth moved v5 -> v6, and the shared
+> post-migration expectation gained `v5_defaults`. The FunKey was
+> disconnected, so it was NOT RUN. Its `verify_persist_file` was extracted
+> and run standalone against a real v5 record (pass) and against four
+> perturbed copies (duplicate slot / wrong port order / dropped row / v4
+> header — all four rejected), so the format-sensitive half is verified;
+> the device legs are not.
+
 ### A31 (P1) — Controls screen: real rebinding, and three things that should not be there
 
 **Symptom (owner):** *"you should be able to rebind any of the 'active
