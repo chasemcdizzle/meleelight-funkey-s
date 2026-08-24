@@ -839,10 +839,16 @@ static void app_snd_stop_sink(const char *token, int hasId, double id) {
 }
 
 // menu-plane SFX chokepoint (FohState.snd tokens; foh.c citations).
+// snd_event_menu, NOT snd_event (A40, snd_mixer.h header note): the sim
+// plane mints play ids off ml_events.c's counter, which only
+// ml_sound_play() advances. A menu click that consumed a mixer play id
+// desynced the two, and from then on every sim-stored id (marth's
+// player.shieldBreakerID, FURAFURA's furaLoopID) named a voice that did
+// not exist — so the looping shieldbreakercharge never stopped.
 static void foh_snd(const char *name) {
   if (!g_have_audio) return;
   platform_audio_lock();
-  snd_event(&g_mix, name);
+  snd_event_menu(&g_mix, name);
   platform_audio_unlock();
 }
 

@@ -34,26 +34,32 @@
 // and the mixer's voice id agree with no back-channel because both
 // count the same event stream.
 //
-// ⚠ THAT LAST CLAUSE IS A LOAD-BEARING PRECONDITION, NOT A FACT, AND IT
-// IS CURRENTLY VIOLATED (A40, measured 2026-08-24). `m->playCount` is
-// advanced by EVERY snd_event() play, whoever calls it; ml_events.c's
-// counter is advanced only by ml_sound_play(). The two agree ONLY while
-// snd_event() is reached exclusively through the ml_snd_sink chokepoint.
-// foh_dev.c:842-847 (`foh_snd`, the MENU-plane SFX chokepoint) calls
-// snd_event() directly, so every menu click, cursor move and CSS/SSS
-// confirm the player makes before the match advances the mixer's ids and
-// NOT the sim's. From then on the sim's stored play ids (marth's
-// player.shieldBreakerID, FURAFURA's furaLoopID) name voices that do not
-// exist, every id-routed stop lands in `stopsUnmatched`, and the looping
-// shieldbreakercharge voice plays to the end of the match — the reported
-// A40 symptom, reproduced with menuPlays=3: simId 1002 vs voiceId 1004,
-// stops=1 matched=0 unmatched=1.
-// THE FIX BELONGS AT THE CALLER, not here: the menu plane needs a play
-// that does not advance the id counter, because upstream has ONE counter
-// and this port has two. Note that the two mixer-fidelity rigs cannot
-// see this by construction — snd_render.c and snd_reference.js drive the
-// mixer from a SIM event stream only, so the two planes never share a
-// counter there.
+// ⚠ THAT LAST CLAUSE IS A LOAD-BEARING PRECONDITION, NOT A FACT (A40,
+// measured 2026-08-24, FIXED the same day). `m->playCount` is advanced
+// by EVERY snd_event() play, whoever calls it; ml_events.c's counter is
+// advanced only by ml_sound_play(). The two agree ONLY while every play
+// that advances one advances the other — and the MENU plane starts
+// sounds the sim knows nothing about. foh_dev.c's `foh_snd` (the
+// menu-plane SFX chokepoint) called snd_event() directly, so every menu
+// click, cursor move and CSS/SSS confirm the player made before the
+// match advanced the mixer's ids and NOT the sim's: with menuPlays=3 the
+// sim's stored id 1001 named voice id 1004, marth's
+// player.shieldBreakerID matched no voice, the id-routed stop landed in
+// `stopsUnmatched` (stops=1 matched=0 unmatched=1), and the LOOPING
+// shieldbreakercharge voice played to the end of the match — the
+// reported A40 symptom. FURAFURA's furaLoopID had the identical
+// exposure.
+// THE FIX (A40): `snd_event_menu()` below — a play that does NOT consume
+// a play id. Its voice carries id 0, which the sim plane can never mint
+// (ml_howl_play_id starts at 1001), so a menu voice is unreachable by
+// id-routing and stoppable only by a bare `<name>.stop`, while the two
+// counters stay in lockstep with no back-channel. The menu plane calls
+// snd_event_menu(); the sim sink keeps snd_event(). Judged by
+// port/gfx/check-snd-playid.sh (which drives the REAL ml_events.c
+// through foh_dev.c's exact wiring and asserts the voice goes silent).
+// Note that the two mixer-fidelity rigs cannot see this class by
+// construction — snd_render.c and snd_reference.js drive the mixer from
+// a SIM event stream only, so the two planes never share a counter there.
 //
 // THREADING: mix state is mutated by the main thread (snd_event) and
 // read/advanced by the audio callback (snd_mix_fill). The caller MUST
@@ -628,11 +634,18 @@ static void snd_event_stop_id(SndMixer *m, const char *token, int hasId,
   else m->stopsUnmatched++;
 }
 
-// One sound event from the sim's queue (ml_snd_sink contract: play
-// names verbatim; stop sites arrive as "<name>.stop"). Caller holds
-// platform_audio_lock(). A bare stop token (no id available — the
-// legacy/undefined arm) stops all voices of the base name.
-static void snd_event(SndMixer *m, const char *name) {
+// One sound event (ml_snd_sink contract: play names verbatim; stop
+// sites arrive as "<name>.stop"). Caller holds platform_audio_lock().
+// A bare stop token (no id available — the legacy/undefined arm) stops
+// all voices of the base name.
+//
+// consumeId (A40, header note): true for the SIM plane, whose
+// ml_sound_play() advances ml_events.c's twin counter in the same
+// breath, so voice id == the id ml_howl_play_id() hands the sim. FALSE
+// for the MENU plane, which starts sounds the sim never sees: it takes
+// a voice and leaves the counter alone (voice id 0 — never mintable by
+// the sim, so never id-routable).
+static void snd_event_gen(SndMixer *m, const char *name, bool consumeId) {
   const size_t n = strlen(name);
   if (n > 5 && strcmp(name + n - 5, ".stop") == 0) {
     snd_event_stop_id(m, name, 0, 0);
@@ -644,7 +657,9 @@ static void snd_event(SndMixer *m, const char *name) {
     sim_fatal("snd: play event for a name not in the pack (SND1 map and "
               "sim sound plane disagree)");
   }
-  m->playCount++; // howler-parallel global id counter (header note)
+  if (consumeId) {
+    m->playCount++; // howler-parallel global id counter (header note)
+  }
   // ID-UNIQUENESS BOUND (iter 86, review-84 L, registered): play ids
   // travel through the sim's JS number plane as doubles, and
   // snd_event_stop_id compares via (double)id — beyond 2^53 that
@@ -652,7 +667,7 @@ static void snd_event(SndMixer *m, const char *name) {
   // mis-match. Unreachable by construction (2^53 play events at 60 fps
   // is ~4.8 million years of nonstop play), so this is a cheap
   // fail-loud assert, never a live arm.
-  if (m->playCount + 1000ull > (1ull << 53)) {
+  if (consumeId && m->playCount + 1000ull > (1ull << 53)) {
     sim_fatal("snd: play-id counter reached the 2^53 double-uniqueness "
               "bound (id routing would stop being exact)");
   }
@@ -671,7 +686,7 @@ static void snd_event(SndMixer *m, const char *name) {
   m->voice[slot].e = e;
   m->voice[slot].phase = 0;
   m->voice[slot].seq = ++m->seqCounter;
-  m->voice[slot].id = 1000ull + m->playCount;
+  m->voice[slot].id = consumeId ? 1000ull + m->playCount : 0ull;
   m->voice[slot].busQ12 = m->sfxBusQ12; // howler Sound.init snapshot
   m->starts++;
   uint64_t live = 0;
@@ -679,6 +694,22 @@ static void snd_event(SndMixer *m, const char *name) {
     if (m->voice[v].e) live++;
   }
   if (live > m->maxVoices) m->maxVoices = live;
+}
+
+// SIM plane: every play here is paired with an ml_sound_play() that
+// advanced ml_events.c's counter, so the ids stay in lockstep.
+static void snd_event(SndMixer *m, const char *name) {
+  snd_event_gen(m, name, true);
+}
+
+// MENU plane (A40): a play the sim never issued must not consume a play
+// id, or every sim-stored id from then on names the wrong voice. Same
+// allocation, stealing and bus snapshot; no counter, no id.
+// `static inline` on purpose: a header-level `static` that some TU does
+// not call trips -Werror=unused-function (snd_idle_check.c compiles this
+// header standalone), and inline is exempt.
+static inline void snd_event_menu(SndMixer *m, const char *name) {
+  snd_event_gen(m, name, false);
 }
 
 // The audio-callback fill (PlatformAudioFill shape): `frames` stereo

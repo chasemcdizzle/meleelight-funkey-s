@@ -6027,12 +6027,39 @@ only**, so the two planes never share a counter there. A second instance of
 this session's recurring class: *the check could not see the defect it appeared
 to cover.*
 
-### ⚠ A40 FIX IS OWED — `port/foh/**`, deliberately not edited (parallel lane)
-Cleanest shape, per lane A: **add `snd_event_menu()` beside `snd_event()` in
-`snd_mixer.h`** (identical, minus `playCount++`/id assignment) and point
-`foh_dev.c:845` at it. Lane A did not add the function alone because an
-uncalled `static` trips `-Werror=unused-function` in TUs that compile the header
-standalone — **function and caller must land in the SAME change.**
+### A40 — **FIXED 2026-08-24 (lane A). `snd_event_menu()` + the one caller.**
+`snd_mixer.h`: `snd_event_gen(m, name, consumeId)` carries the body;
+`snd_event()` (SIM plane) passes true, the new `snd_event_menu()` passes false —
+no `playCount++`, voice id 0, an id `ml_howl_play_id` can never mint (its ids
+start at 1001), so a menu voice is unreachable by id-routing and stoppable only
+by a bare `<name>.stop`. `foh_dev.c`'s `foh_snd` calls it. **`static inline`, so
+the uncalled-static `-Werror=unused-function` problem does not arise at all** and
+`snd_idle_check.c` needed no `(void)` line. Allocation, stealing, `starts`,
+`steals` and the bus snapshot are untouched, so `check-device-foh.sh`'s voice
+starts/stops expectations are unchanged by construction.
+
+**GATE: `bash port/gfx/check-snd-playid.sh` → `SND PLAYID OK cases=7
+menuplays=22 stops=7`, exit 0.** It links the REAL `port/sim/ml_events.c` and
+compiles the REAL `snd_mixer.h` through foh_dev.c's exact wiring, and asserts
+the OWNER-VISIBLE outcome — `stopsUnmatched == 0` **and the mixer emits
+bit-exact silence** after the sim's id-routed stop — over 7 cases at
+menuPlays 0/1/3/11/0/5/2, covering **both** id holders (marth
+`shieldbreakercharge`, puff `furaloop`). Measured: `simId == voiceId` at every
+case (1001..1007) across 22 menu plays; pre-fix the same run gives
+`simId=1002 voiceId=1003 unmatched=1` at the first menuPlays>0 case.
+**Two orthogonal teeth, both required to fail, on DIFFERENT assertions:**
+`--tooth-legacy` (menu plane back on `snd_event`, i.e. the defect) bites the id
+assertion at case 2 while case 1 (menuPlays=0) still passes — so it proves the
+MENU PLAY is what breaks routing; `--tooth-deaf` (a stop sink that bookkeeps a
+perfectly MATCHED stop and silences nothing) bites only the audible assertion,
+which is the half a counter check is structurally blind to. The script also
+asserts `foh_dev.c` still calls `snd_event_menu`, so re-pointing the caller
+cannot pass by leaving the checker's own copy of the wiring correct.
+
+**Owed (device):** nothing new is device-specific, but the fix is in the play
+path, so the standing device audio legs (`check-device-foh.sh`,
+`check-device-audio.sh`) are owed a re-run on the next device window — expected
+NO-OP (counters they pin are untouched).
 
 ## LANE I + DRIVER RE-PIN PASS — 2026-08-24
 
