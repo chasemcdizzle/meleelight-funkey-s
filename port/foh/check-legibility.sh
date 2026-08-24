@@ -124,23 +124,34 @@ pin '    const int x = 22 + k * 52;' 'the per-port cell x pitch'
 pin '    const int y = ys[4] + 16;' 'the per-port cell y'
 pin '    foh_text(rz, x + 16, y, 1, tapJumpOn ? "ON" : "OFF",' \
     'the D23 value call — its x offset, its two strings and its polarity'
-# the target-select slot geometry (A25a)
-pin '    const int x = 8 + col * 124, y = 30 + row * 22;' \
-    'the TSS grid origin and pitch'
-pin '    const int x = 70, y = 142, w = 100, h = 17;' \
-    'the "+ ADD CODE" slot rect'
-pin '    rrect(rz, x - 1, y - 1, 102, 21, 0, sel ? hot : idle);' \
-    'the inner border rect — 102*21 minus the 100*19 body is the 242-pixel
-  ceiling the witness threshold is set above'
-pin '    fill_rect(rz, x, y, 100, 19, sel ? slotSel : slotBg);' \
+# the target-select slot geometry (A25a; A25c/D29 moved its SOURCE)
+# The two pins that stood here — `const int x = 8 + col * 124, y = 30 + row *
+# 22;` and `const int x = 70, y = 142, w = 100, h = 17;` — guarded a HAND COPY
+# of those literals in the witness. A25(c) deleted the copy: render_tss and
+# foh.c now both read foh_tss_slots() (port/foh/foh.c, from foh.h's FOH_TSS_*),
+# and so does the witness. There is nothing left to keep in sync, so the pins
+# are retired rather than re-pointed at a line that no longer carries the
+# meaning. What still needs pinning is the SHAPE the 242-pixel ceiling argument
+# depends on, which is unchanged and is pinned below.
+pin '    rrect(rz, x - 1, y - 1, slot[k].w + 2, slot[k].h + 2, 0, sel ? hot : idle);' \
+    'the inner border rect — (w+2)*(h+2) minus the w*h body is the 242-pixel
+  ceiling the witness threshold is set above (w,h = 100,19 from foh.h)'
+pin '    fill_rect(rz, x, y, slot[k].w, slot[k].h, sel ? slotSel : slotBg);' \
     'the D24 body lift on the grid slots'
 pin '    fill_rect(rz, x, y, w, h, sel ? slotSel : slotBg);' \
     'the D24 body lift on the "+ ADD CODE" slot'
+# A25c: the hand IS the cursor here now, and the witness parks it at the clamp
+# so every compared frame draws the sprite at one pixel. If that draw moved or
+# gained a second sprite, the "quiet unless selected" assertions would start
+# measuring the hand instead of the highlight.
+pin '  draw_hand(rz, s->tssHandX, s->tssHandY, 0);' \
+    'the target-select hand draw — the witness parks the hand out of every
+  slot rect and relies on this being the only sprite on the screen'
 # the look pin the witness relies on for a COLD flash in every frame it takes
 pin '  s->tssTimer = 0;' \
     'foh_look_canonical`s tssTimer pin — without it the two frames the witness
   compares could differ by the 8-frame hover flash instead of the selection'
-echo "   14 hand-copied lines still read exactly as the witness assumes"
+echo "   13 hand-copied lines still read exactly as the witness assumes"
 
 # --- [2] renderer art (pipeline 'assets' stage, this check's own dir) --------
 # foh_render hard-fails without menu.img1. Built into this check's OWN dir;
@@ -251,10 +262,10 @@ echo "   T1: the double negative reproduces the owner's misreading and fails (rc
 # nothing else.
 echo "=== [5] T2: the pre-A25a one-pixel highlight must fail the witness"
 perturb_build t2-onepixel \
-  '    if (sel) rrect(rz, x - 2, y - 2, 104, 23, 0, hot);  // D24' \
-  '    if (sel && 0) rrect(rz, x - 2, y - 2, 104, 23, 0, hot);  // T2' \
-  '    fill_rect(rz, x, y, 100, 19, sel ? slotSel : slotBg);' \
-  '    (void)slotSel; fill_rect(rz, x, y, 100, 19, slotBg); // T2' \
+  '    if (sel) rrect(rz, x - 2, y - 2, slot[k].w + 4, slot[k].h + 4, 0, hot);' \
+  '    if (sel && 0) rrect(rz, x - 2, y - 2, slot[k].w + 4, slot[k].h + 4, 0, hot); // T2' \
+  '    fill_rect(rz, x, y, slot[k].w, slot[k].h, sel ? slotSel : slotBg);' \
+  '    (void)slotSel; fill_rect(rz, x, y, slot[k].w, slot[k].h, slotBg); // T2' \
   '    if (sel) rrect(rz, x - 2, y - 2, w + 4, h + 3, 0, hot);' \
   '    if (sel && 0) rrect(rz, x - 2, y - 2, w + 4, h + 3, 0, hot); // T2' \
   '    fill_rect(rz, x, y, w, h, sel ? slotSel : slotBg);' \

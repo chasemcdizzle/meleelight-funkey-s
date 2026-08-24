@@ -1338,6 +1338,20 @@ static void row_label(Raster *rz, int y, int row, int curRow,
 static int css_cell_x(int k) { return foh_css_cell_x(k); }
 static int css_panel_x(int k) { return foh_css_panel_x(k); }
 
+// The hand sprite at a free cursor's position (css.js:1135-1143 picks it from
+// handType). Upstream draws a 101x133 sprite at (x-40, y-30), i.e. the logical
+// hot spot sits 39.6% across and 22.6% down the sprite, at the pointed
+// fingertip — on this 24x32 asset that is (10, 7).
+//
+// Shared by the CSS and, since A25(c), by target-select, which passes type 0:
+// there is no grab gesture on that screen, so the pointing hand is the only
+// sprite it can be in (and `hand_point` is what the owner asked for by name).
+static void draw_hand(Raster *rz, double x, double y, int type) {
+  static const char *const kHand[3] = {"hand_point", "hand_open", "hand_grab"};
+  const int px = (int)(x + 0.5) - 10, py = (int)(y + 0.5) - 7;
+  blit_img(rz, art(kHand[type]), px, py, 1);
+}
+
 // The per-port tints (spec §3.3; upstream's own port colours).
 static const RastCol kPortTint[4] = {{218, 51, 51, 256},
                                      {51, 53, 218, 256},
@@ -1641,14 +1655,15 @@ static void render_css(const FohState *s, Raster *rz) {
   const double hx = s->cssHandX, hy = s->cssHandY;
   const int inBand =
       hy < (double)FOH_CSS_BAND_BOT && hy > (double)FOH_CSS_BAND_TOP;
-  const int overCells = hy > (double)CSS_CELL_Y &&
-                        hy < (double)(CSS_CELL_Y + CSS_CELL_H);
 
-  // the five character cells + the two port tokens
-  for (int k = 0; k < 5; k++) {
-    const int hot = overCells && hx > (double)css_cell_x(k) &&
-                    hx < (double)(css_cell_x(k) + CSS_CELL_W);
-    css_cell(rz, k, hot);
+  // the five character cells + the two port tokens. A25(c): the cell hover was
+  // a hand-kept second copy of foh.c's drop test; both now call the SAME table
+  // and the SAME predicate, which is what D4 has always asked for.
+  {
+    FohHandRect cells[5];
+    foh_css_cells(cells);
+    const int hotCell = foh_hand_hit(cells, 5, hx, hy);
+    for (int k = 0; k < 5; k++) css_cell(rz, k, k == hotCell);
   }
   // Tokens, carried-on-top: the carried one rides the hand, so it must draw
   // over the resting one when they overlap. A port with no type has no token
@@ -1716,16 +1731,7 @@ static void render_css(const FohState *s, Raster *rz) {
               hotCpu);
   }
 
-  // The hand cursor at its own position (css.js:1135-1143 picks the sprite
-  // from handType). Upstream draws a 101x133 sprite at (x-40, y-30), i.e. the
-  // logical hot spot sits 39.6% across and 22.6% down the sprite, at the
-  // pointed fingertip — on this 24x32 asset that is (10, 7).
-  {
-    static const char *const kHand[3] = {"hand_point", "hand_open",
-                                         "hand_grab"};
-    const int px = (int)(hx + 0.5) - 10, py = (int)(hy + 0.5) - 7;
-    blit_img(rz, art(kHand[foh_css_hand_type(s)]), px, py, 1);
-  }
+  draw_hand(rz, hx, hy, foh_css_hand_type(s));
 
   {
     // The hint names the gestures that exist. There is no value stepper on
@@ -2180,14 +2186,17 @@ static void render_tss(const FohState *s, Raster *rz) {
   // CONSTANT: upstream never brightens a label on hover, only its border.
   const RastCol slotTx = {153, 153, 153, 256};
   // 2x5 grid of authored target stages (ids 0..9 == tstage ids), upstream's
-  // own col = floor(j/5) / row = j%5 mapping.
+  // own col = floor(j/5) / row = j%5 mapping. A25(c): the rects come from
+  // foh_tss_slots(), the same table the hand is hit-tested against, so the
+  // drawn extent and the hit region cannot drift apart (D4).
+  FohHandRect slot[FOH_TSS_SLOTS];
+  foh_tss_slots(slot);
   for (int k = 0; k < 10; k++) {
-    const int col = k / 5, row = k % 5;
-    const int x = 8 + col * 124, y = 30 + row * 22;
+    const int x = slot[k].x, y = slot[k].y;
     const int sel = k == s->tssCursor;
-    if (sel) rrect(rz, x - 2, y - 2, 104, 23, 0, hot);  // D24
-    rrect(rz, x - 1, y - 1, 102, 21, 0, sel ? hot : idle);
-    fill_rect(rz, x, y, 100, 19, sel ? slotSel : slotBg);
+    if (sel) rrect(rz, x - 2, y - 2, slot[k].w + 4, slot[k].h + 4, 0, hot);
+    rrect(rz, x - 1, y - 1, slot[k].w + 2, slot[k].h + 2, 0, sel ? hot : idle);
+    fill_rect(rz, x, y, slot[k].w, slot[k].h, sel ? slotSel : slotBg);
     char label[10] = "TARGET ";
     if (k == 9) { label[7] = '1'; label[8] = '0'; label[9] = 0; }
     else { label[7] = (char)('1' + k); label[8] = 0; }
@@ -2195,9 +2204,11 @@ static void render_tss(const FohState *s, Raster *rz) {
   }
   // the refusing "+ Add Code" slot (builder plane; foh.h note). Upstream
   // puts it at the head of the CUSTOM column (:206, i == 10 -> x = 635);
-  // the d-pad cursor makes it the row below the grid here (rewrite delta).
+  // the rewrite puts it in the row below the grid — slot 10 of the same
+  // shared table, so the hand hovers exactly the box drawn here.
   {
-    const int x = 70, y = 142, w = 100, h = 17;
+    const int x = slot[10].x, y = slot[10].y;
+    const int w = slot[10].w, h = slot[10].h;
     const int sel = s->tssCursor == 10;
     // D24, with one measured asymmetry: the ring grows 1 px on the top and
     // both sides but NOT the bottom, because the info panel below starts at
@@ -2283,6 +2294,9 @@ static void render_tss(const FohState *s, Raster *rz) {
     text_in(rz, x, w, y + 38, 2, line, kAccent);
   }
   text_center(rz, 228, 1, "A: GO   B: BACK", kDim);
+  // The hand LAST, over everything, as the CSS draws it (A25c / D29). Type 0 —
+  // handPoint — is the only sprite this screen has a meaning for.
+  draw_hand(rz, s->tssHandX, s->tssHandY, 0);
 }
 
 static void render_tmatch(Raster *rz) {

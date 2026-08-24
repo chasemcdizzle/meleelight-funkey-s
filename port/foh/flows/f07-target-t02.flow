@@ -2,14 +2,33 @@ FLOW1
 # f07: the TARGET-TEST path -> t02 params (falcon / tstage 1), plus the
 # back edge and the addcode refusal:
 #   - enter target-select, B back to menu-top (targetselect.js:76-81;
-#     menuSelected stays TARGETTEST), A re-enter (cursor reset);
+#     menuSelected stays TARGETTEST), A re-enter (the hand re-homes on
+#     slot 0);
 #   - ONE shoulder-L press wraps marth -> falcon (targetselect.js:62-66
 #     — the wrap witness);
-#   - grid DOWN x5 walks slot 0 -> 4 -> the addcode slot (10); A there
-#     is the registered refusal (builder plane, foh.h); U returns to
-#     slot 4, U x3 up to slot 1 (tstage 1);
+#   - the FREE HAND (DEVIATION D29, A25c) walks down the left column to
+#     the addcode slot; A there is the registered refusal (builder
+#     plane, foh.h); the hand walks back UP to slot 1 (tstage 1);
 #   - A -> TLAUNCH char=4 tstage=1; the driver replays the frozen t02
 #     trace through the launch seam (both streams judged).
+#
+# RE-CUT FOR D29 (A25c). The pre-D29 walk was five 3-frame DOWN taps and
+# four 3-frame UP taps, because the cursor was an INDEX and one rising
+# edge was one slot. The hand is LEVEL driven and moves FOH_CURSOR_VY =
+# 3.84 px a frame, so the same journey is now two held runs. Nothing
+# else moved: every event frame, every SHOT frame and every SHOT name is
+# where it was, and flows/f07-target-t02.expect is BYTE-UNCHANGED.
+#
+# The two runs, measured against foh_tss_slots' rects (foh.h):
+#   - the hand homes at slot 0's centre (58.0, 39.5);
+#   - DOWN+RIGHT for 6 frames (401..406) -> (72.4, 62.54). The RIGHT is
+#     not decoration: the addcode slot spans x 70..170 while the left
+#     column spans x 8..108, so x = 58 would pass BELOW addcode and hit
+#     nothing. 72.4 is inside both, which is why one run does both;
+#   - DOWN for 22 more frames (407..428) -> (72.4, 147.02), inside
+#     addcode's y 142..159. Crossing slots 1..4 on the way is what makes
+#     this still the "walks 0 -> 4 -> addcode" gesture the old taps were;
+#   - UP for 22 frames (438..459) -> back to (72.4, 62.54), slot 1.
 I 1 -
 I 375 S
 I 376 -
@@ -22,28 +41,14 @@ I 391 -
 I 395 A
 I 396 -
 I 400 K
-I 401 -
-I 405 D
-I 408 -
-I 410 D
-I 413 -
-I 415 D
-I 418 -
-I 420 D
-I 423 -
-I 425 D
-I 428 -
+I 401 DR
+I 407 D
+I 429 -
 SHOT 430 tss-addcode
 I 435 A
 I 436 -
-I 440 U
-I 443 -
-I 445 U
-I 448 -
-I 450 U
-I 453 -
-I 455 U
-I 458 -
+I 438 U
+I 460 -
 SHOT 460 tss-t02
 I 465 A
 I 466 -

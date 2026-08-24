@@ -73,6 +73,12 @@ void foh_init(FohState *s) {
   // never re-initialised on CSS entry (MENU-SPEC §2.2 property 4).
   s->cssHandX = 140.0 * RAST_W / 1200.0;
   s->cssHandY = 700.0 * RAST_H / 750.0;
+  // The TSS hand (D29) is re-homed on every entry to that screen, so this is
+  // only the cold value — but memset's (0,0) would leave a boot-time state
+  // whose hand hovers nothing while tssCursor reads 0, and nothing in the FOH
+  // should ever be internally inconsistent just because it is unreachable.
+  s->tssHandX = FOH_TSS_HOME_X;
+  s->tssHandY = FOH_TSS_HOME_Y;
   // gameSettings defaults (settings.js:44-56): all zero — memset did it,
   // EXCEPT phantomThreshold, whose authored default is 0.01 (settings.js:50)
   // and which is on the checksum surface. Zeroing it is the exact qjs
@@ -199,6 +205,11 @@ static void step_menu(FohState *s, const PlatformInput *in,
           // inside the paced FOH loop risks the skips==0 gate;
           // upstream switches here, menu.js:82-83).
           s->tssCursor = 0;
+          // D29: the hand IS the cursor now, so targetPointerPos's reset is a
+          // position, not an index. Home is slot 0's centre, so the screen
+          // opens hovering tstage 0 exactly as `tssCursor = 0` opened it.
+          s->tssHandX = FOH_TSS_HOME_X;
+          s->tssHandY = FOH_TSS_HOME_Y;
           snd_push(s, "menuForward"); // menu.js:70
           ev_trans(s, sc, FOH_TSS, "a"); // changeGamemode(7), menu.js:84
         } else if (s->menuSelected == 2) {
@@ -437,15 +448,39 @@ static int css_level_at(int k, double x) {
   return (int)((x - css_rail_x0(k)) * 3.0 / (double)FOH_CSS_RAIL_LEN + 0.5) + 1;
 }
 
-// Which character cell the hand is over, or -1. Contiguous upstream; here the
-// cells are drawn with a 2 px gutter, and D4 forbids a hit region where
-// nothing is drawn, so the gutter is genuinely no cell.
-static int css_cell_at(double x) {
+// The five character cells as a hit table (foh.h). Contiguous upstream; here
+// the cells are drawn with a 2 px gutter, and D4 forbids a hit region where
+// nothing is drawn, so the gutter is genuinely no cell — which is
+// foh_hand_hit's strict rule, and why that rule lives in the shared unit.
+//
+// A25(c): this REPLACES `css_cell_at(x)` and the y guard that used to wrap its
+// only call site. The two together tested exactly this rect (x strictly inside
+// the cell, y strictly inside FOH_CSS_CELL_Y + FOH_CSS_CELL_H), and every cell
+// shares the same y, so folding them into one point-in-rect sweep is an
+// identity — proven bit for bit by check-hand.sh's differential, not asserted.
+void foh_css_cells(FohHandRect out[5]) {
   for (int c = 0; c < 5; c++) {
-    const double x0 = (double)foh_css_cell_x(c);
-    if (x > x0 && x < x0 + (double)FOH_CSS_CELL_W) return c;
+    out[c].x = foh_css_cell_x(c);
+    out[c].y = FOH_CSS_CELL_Y;
+    out[c].w = FOH_CSS_CELL_W;
+    out[c].h = FOH_CSS_CELL_H;
   }
-  return -1;
+}
+
+// The eleven target-select slots (foh.h): upstream's 2x5 authored grid in its
+// own col = floor(j/5) / row = j%5 order, then the refusing "+ ADD CODE" slot.
+// render_tss draws from this same table.
+void foh_tss_slots(FohHandRect out[FOH_TSS_SLOTS]) {
+  for (int k = 0; k < 10; k++) {
+    out[k].x = FOH_TSS_SLOT_X0 + (k / 5) * FOH_TSS_SLOT_COL_PITCH;
+    out[k].y = FOH_TSS_SLOT_Y0 + (k % 5) * FOH_TSS_SLOT_ROW_PITCH;
+    out[k].w = FOH_TSS_SLOT_W;
+    out[k].h = FOH_TSS_SLOT_H;
+  }
+  out[10].x = FOH_TSS_ADD_X;
+  out[10].y = FOH_TSS_ADD_Y;
+  out[10].w = FOH_TSS_ADD_W;
+  out[10].h = FOH_TSS_ADD_H;
 }
 
 static int *css_char_of(FohState *s, int k) {
@@ -557,23 +592,12 @@ static void step_css(FohState *s, const PlatformInput *in,
     s->bHold = 0;
   }
 
-  // Hand motion, unconditional every frame (css.js:195-206). DEVIATION D1:
-  // the d-pad supplies lsX/lsY at full deflection only; DEVIATION D3 rescales
-  // the 12 px/frame step. Position stays in DOUBLES and is clamped to the
-  // screen, so the cursor is always recoverable (MENU-SPEC §2.2 property 3).
-  {
-    const double lsX = (in->right ? 1.0 : 0.0) - (in->left ? 1.0 : 0.0);
-    const double lsY = (in->up ? 1.0 : 0.0) - (in->down ? 1.0 : 0.0);
-    s->cssHandX += lsX * FOH_CURSOR_VX;
-    s->cssHandY += -lsY * FOH_CURSOR_VY;
-    // Clamped to the LOGICAL canvas, exactly as upstream clamps to 1200/750
-    // (its canvas dimensions, not its last pixel index). Rounding to a pixel
-    // happens only at draw time.
-    if (s->cssHandX > (double)RAST_W) s->cssHandX = (double)RAST_W;
-    else if (s->cssHandX < 0.0) s->cssHandX = 0.0;
-    if (s->cssHandY > (double)RAST_H) s->cssHandY = (double)RAST_H;
-    else if (s->cssHandY < 0.0) s->cssHandY = 0.0;
-  }
+  // Hand motion, unconditional every frame (css.js:195-206). The body moved to
+  // foh_hand_step (A25c) so target-select can run the same one; the deviations
+  // it carries (D1 full-deflection d-pad, D3 the rescaled step) and the clamp
+  // to the LOGICAL canvas are documented there, unchanged.
+  foh_hand_step(&s->cssHandX, &s->cssHandY, in->up, in->down, in->left,
+                in->right, (double)RAST_W, (double)RAST_H);
 
   if (s->cssHandY < (double)FOH_CSS_BAND_BOT &&
       s->cssHandY > (double)FOH_CSS_BAND_TOP) {
@@ -590,9 +614,10 @@ static void step_css(FohState *s, const PlatformInput *in,
       // --- carrying (css.js:216-296) ---
       s->cssHandType = 2; // css.js:217
       const int k = s->cssCarry;
-      if (s->cssHandY > (double)FOH_CSS_CELL_Y &&
-          s->cssHandY < (double)(FOH_CSS_CELL_Y + FOH_CSS_CELL_H)) {
-        const int c = css_cell_at(s->cssHandX);
+      {
+        FohHandRect cells[5];
+        foh_css_cells(cells);
+        const int c = foh_hand_hit(cells, 5, s->cssHandX, s->cssHandY);
         if (c >= 0) {
           int *ch = css_char_of(s, k);
           if (*ch != c) {
@@ -878,6 +903,31 @@ static void step_tss(FohState *s, const PlatformInput *in,
     ev_trans(s, FOH_TSS, FOH_MENU_TOP, "b");
     return;
   }
+  // The FREE HAND (DEVIATION D29, A25c), integrated and hit-tested HERE —
+  // before the launch arm, not after it, which is the whole owner-visible
+  // point: A launches the slot the hand is over THIS frame. It is also the
+  // CSS's own order (css.js:195-206 integrates, then every widget arm reads
+  // the new position) and upstream's on this screen, where the pointer moves
+  // and the click is tested against where it now is.
+  //
+  // The selection is STICKY: a hand in a gutter, or below the grid, leaves
+  // tssCursor where it was. See the argument at FohState.tssCursor.
+  {
+    const int before = s->tssCursor;
+    foh_hand_step(&s->tssHandX, &s->tssHandY, in->up, in->down, in->left,
+                  in->right, (double)RAST_W, (double)RAST_H);
+    FohHandRect slots[FOH_TSS_SLOTS];
+    foh_tss_slots(slots);
+    const int hit =
+        foh_hand_hit(slots, FOH_TSS_SLOTS, s->tssHandX, s->tssHandY);
+    if (hit >= 0) s->tssCursor = hit;
+    if (s->tssCursor != before) {
+      // targetselect.js:51 changes the slot's class on hover; the `!=` guard
+      // is the CSS drop arm's, so the sound fires once per CHANGE rather than
+      // on every frame the hand sits in a slot.
+      snd_push(s, "menuSelect");
+    }
+  }
   // char select — the upstream SHOULDER arms VERBATIM (targetselect.js:
   // 60-74: input.l = char-1 WRAP, input.r = char+1 WRAP; setCS writes
   // characterSelections[0] == p1Char, the SAME array the CSS edits).
@@ -909,29 +959,9 @@ static void step_tss(FohState *s, const PlatformInput *in,
     ev_launch(s);
     return;
   }
-  // grid cursor (rewrite delta, foh.h): authored slots 0..9 at
-  // col = cursor/5 (upstream floor(j/5)), row = cursor%5; the addcode
-  // slot (10) below — D from a bottom row enters it, U returns to the
-  // left column's bottom tile (the SSS RANDOM-slot pattern); CLAMP.
-  const bool uE = in->up && !pv->up;
-  const bool dE = in->down && !pv->down;
-  const bool lE = in->left && !pv->left;
-  const bool rE = in->right && !pv->right;
-  const int before = s->tssCursor;
-  if (s->tssCursor == 10) {
-    if (uE) s->tssCursor = 4;
-  } else {
-    if (lE && s->tssCursor >= 5) s->tssCursor -= 5;
-    if (rE && s->tssCursor < 5) s->tssCursor += 5;
-    if (uE && s->tssCursor % 5 > 0) s->tssCursor -= 1;
-    if (dE) {
-      if (s->tssCursor % 5 < 4) s->tssCursor += 1;
-      else s->tssCursor = 10;
-    }
-  }
-  if (s->tssCursor != before) {
-    snd_push(s, "menuSelect"); // targetselect.js:51 change class
-  }
+  // D29 retired the d-pad GRID CURSOR that stood here (rewrite delta, foh.h):
+  // the hand above is what moves the selection now, and `pv` is used only by
+  // the button edges this function still reads.
 }
 
 // menuVOptions / menuHOptions (gameplaymenu.js:11-12). BOTH are MAX
