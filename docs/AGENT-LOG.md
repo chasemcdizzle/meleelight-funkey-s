@@ -22194,3 +22194,102 @@ synthetic trace from scratch" into "flip one token in an existing one", and the
 same measurement then explained exactly which characters the rule can serve.
 
 **NEXT.** A marth wall-contact trace (the last piece of #16). Then A7 credits.
+
+## lane M — 2026-08-24 — A43: the CSS did not "re-home the token from pixels". It LEAKED the grab across the back-out, and D22's wedge decided the answer was always falcon (DEVIATION D35)
+
+**FILED PREMISE, and it was wrong in the mechanism while right in the
+symptom.** Owner: *"if you go to the CSS back button while selected as any
+other character except for falcon, and then come back in to the game, you are
+selected as falcon... I think the reason it picks falcon is because when you go
+to the back button it lets go of the p1 pin and goes to the 'nearest'
+character."* The ticket carried that diagnosis forward as "the token is being
+re-homed from its PIXEL POSITION rather than the stored selection", i.e. the
+D21 bug on a second rest path.
+
+**MEASURED FIRST, by driving the real `foh_tick`, and the premise does not
+survive contact.** `foh_css_token_pos` has three rest slots and ALL THREE
+already compute from `cssChar[k]` — that is exactly what D21 established. No
+slot reads a pixel. A probe that picked fox (2) and backed out through the
+wedge came back reading fox in both planes, every time. **The reported failure
+needed a gesture nobody had written down:**
+
+```
+pick fox by A-drop            p1Char=2 cssChar=2 rest=0 carry=-1 token->cell 2
+hold B in the roster band     scr=MENU_TOP                       carry=0   <<<
+re-enter the CSS              scr=CSS                            carry=0   <<<
+walk right toward BACK        p1Char=3 cssChar=3 (falco)
+walk right to the x clamp     p1Char=4 cssChar=4 (FALCON)
+```
+
+**The root cause is a LEAK with a geometry amplifier, and every link is
+upstream's except the last.** One B press inside the roster band BOTH retrieves
+your token (`css.js:209-215`) and arms the 30-frame back counter — upstream's
+own deliberate overlap, which MENU-SPEC §2.11 had already written down as *"you
+exit at frame 30 while still nominally carrying"* and nobody had followed to
+its consequence. Nothing releases it on the way out: upstream clears its grab
+in exactly two arms (the A-drop `css.js:228-232`, the leave-band drop
+`css.js:341-347`) and `css.js:186-194`'s `changeGamemode(1)` is neither;
+`changeGamemode` case 2 is `drawCSSInit()` alone (`main.js:571`) and
+`menu.js:106`'s re-entry adds only `positionPlayersInCSS()`, which moves the
+four SIM players and no token. So re-entry finds the token still glued to the
+hand, and the hover arm re-selects LIVE from wherever the hand goes
+(`css.js:222-226`, the one site that writes BOTH planes). **D22 put the BACK
+wedge at x > 184 / y < 26 — directly above roster cell 4 — so the walk to BACK
+drags the carried token across FALCON and commits it.** That is the whole "it
+picks the nearest character": falcon is not nearest by any rule in the code, it
+is simply the cell the wedge sits over. Upstream's wedge is an instant A-click
+on a 1200 px canvas whose roster ends ~300 px short of the hand's clamp, so the
+identical leak never drags a token over the last cell there.
+
+**FIX — `css_back()` (`port/foh/foh.c`), DEVIATION D35, ~4 lines:** release any
+carried token and re-home BOTH ports' tokens on rest slot 0, `cell_x(cssChar[k])`.
+The SELECTION plane is not touched, deliberately — the hover already committed a
+choice, and clearing it here would trade a wrong display for a silently
+discarded pick, which is the exact trap D21's block warns about. Scope is D21's
+exactly: where a token is DRAWN and hit-tested.
+
+**TOOTH:** `bash port/foh/check-css-backsel.sh` -> `CSS BACK SELECT CHECK OK`,
+exit 0 (host-only, data-free, ~4 s). The witness drives the owner's literal
+gesture through the real `foh_tick` — no field hand-poked — picking FOX,
+chosen because it is neither the default (marth 0), nor the port index (0), nor
+the bug's output (falcon 4), nor the cell quirk Q1 would shift it to (falco 3),
+so no assertion can pass by accident. **Two negative tests, each deleting one
+of D35's two statements:** T1 (no release) must LOSE the pick to falcon; T2 (no
+re-home) must leave every plane clean and only mis-draw the pin. The
+orthogonality claim is asserted in the direction that is actually true — T1's
+failure set necessarily includes token-cell failures, because a carried token
+is drawn on the hand; what matters is that T2 CANNOT reproduce T1's, and that
+is what the check greps. **My first draft asserted the reverse and the check
+caught me**: a tooth that demands a perturbation touch exactly one observable
+is asserting a property of the code it is testing, not of itself.
+
+**ZOOM OUT (HARD RULE 8).** This is the THIRD defect in the
+selection-plane/token-plane family (A29/D21, then this, with §2.11's own text as
+the near-miss in between), and the class is not "tokens get re-homed wrongly".
+**It is that CSS grab state is a MODE that survives a screen transition, and
+nothing asserts what modes a screen may be entered in.** `cssCarry` is the only
+one today, but the shape generalises: `cssCpuCarry` has the same lifetime, and
+A44 is about to multiply every one of them by two more ports. The
+class-level instrument, if the driver wants it, is an entry invariant on
+`FOH_CSS` — a screen states which of its modes are legal at entry and the
+machine asserts it — rather than a release added to each exit as it is found.
+**I did not build it:** there is exactly one leaking exit today (`css_back` —
+measured: the launch path can't leak because `css_ready` refuses while carrying,
+and the match-exit path already clears it at `foh_dev.c:1369`), so an invariant
+framework would be one implementation of a one-instance interface. Registered
+here as the thing to build when A44 makes it a real family, per the
+instrument > class fix > registered one-off hierarchy.
+
+**Second, cheaper lesson.** The ticket's stated start point ("`foh_css_token_pos`'s
+rest slots — establish which slot this path uses") was the right file and the
+wrong question: the answer was "all three slots are already correct". The
+repro cost ten minutes and falsified the premise before a line was edited,
+which is the eleventh premise this session to die that way. **The gesture that
+reproduces a bug is data the reporter has and the code does not** — B-as-back
+being B-as-grab is not visible from any static reading of `css_back`.
+
+**DEVICE LEGS OWED** (device unavailable — owner's daily driver): the change is
+host-side FOH logic and moved ZERO judged host shots (`check-foh-flows.sh`:
+7 flows / 17 shots byte-identical), so no re-freeze is expected, but
+`check-device-foh.sh`, `check-device-persist.sh` and `verify_m4.sh` leg [2]
+(menu flows through the real input path) have not been run against it.

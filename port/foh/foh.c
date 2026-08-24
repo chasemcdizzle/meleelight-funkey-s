@@ -514,6 +514,49 @@ static bool css_ready(const FohState *s) {
 // we return to menu-battle with its cursor where the VS entry left it.
 // The sound is emitted at the counter site, not here (see step_css).
 static void css_back(FohState *s) {
+  // DEVIATION D35 (A43, owner-reported P1). Leaving the CSS RELEASES every
+  // token and re-homes it on the character its port actually chose — the
+  // A-drop rest slot, `foh_css_cell_x(cssChar[k])`. It is D21's rule (a token
+  // is re-homed from the SELECTION plane, never from where it physically
+  // sits) applied to the second rest path.
+  //
+  // MEASURED, and the reported symptom is a CHAIN, not a redraw. Upstream's
+  // grab is module state that survives a gamemode change: `tokenGrabbed[]` /
+  // `whichTokenGrabbed[]` (css.js:67-68) are cleared by exactly two arms —
+  // the A-drop (css.js:228-232 and siblings) and the leave-band drop
+  // (css.js:341-347) — and the back-out at css.js:186-194 calls
+  // `changeGamemode(1)` without touching either. `changeGamemode` case 2 is
+  // `drawCSSInit()` alone (main.js:571) and menu.js:105-106's re-entry adds
+  // only `positionPlayersInCSS()`, which positions the four SIM players
+  // (main.js:528-535) and no token. So upstream re-enters its CSS with the
+  // token still glued to the hand, and this port carried that verbatim.
+  //
+  // Here that chain has somewhere to go that upstream's has not. One B press
+  // in the roster band BOTH grabs your token (css.js:209-215) and arms the
+  // 30-frame back counter — upstream's own deliberate overlap, MENU-SPEC
+  // §2.11 — so "press B to go back" leaves the CSS carrying. On re-entry the
+  // token still rides the hand, and the hover arm re-selects LIVE from the
+  // hand's position (css.js:222-226, the one site that writes both planes).
+  // D22 puts the BACK wedge at x > 184, y < 26 — directly above roster cell 4
+  // — so the next walk to BACK drags the carried token across falcon and
+  // COMMITS it. Both planes then genuinely read falcon, which is the owner's
+  // "you come back in and you are selected as falcon", and why it is always
+  // falcon: cell 4 is the last cell, the one the BACK wedge sits over.
+  // Upstream's wedge is an instant A-click (D22) on a 1200 px canvas whose
+  // roster ends 300 px short of the hand's clamp, so the same leak never
+  // drags a token over the last cell there.
+  //
+  // The SELECTION PLANE IS NOT TOUCHED by this arm, deliberately: the hover
+  // already committed a choice and discarding it here would trade a wrong
+  // display for a silently dropped pick. Only where the tokens are DRAWN and
+  // hit-tested moves — the same scope D21 has. The rest slot is written for
+  // both ports, not just the carried one, so re-entry always shows the
+  // selection rather than whichever of Q1's two formulas last applied.
+  if (s->cssCarry >= 0) {
+    s->cssCarry = -1; // D35: release the grab that upstream leaks across
+    ev_sel(s, "carry", -1);
+  }
+  for (int k = 0; k < 2; k++) s->cssTokenRest[k] = 0; // D35: re-home on cssChar
   s->menuSelected = 0; // LOCALVS
 #if FOH_NETPLAY
   ev_trans(s, FOH_CSS, FOH_MENU_BATTLE, "bhold");
