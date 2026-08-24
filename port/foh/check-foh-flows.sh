@@ -473,16 +473,23 @@ lblexpr="$(sed -n '/^static inline bool foh_ctl_has_clayer(CtlStyle style) {$/,/
 [ "$s1expr" = "$lblexpr" ] \
   || fail "[0m] the two C-layer predicates disagree: $S1H says '$s1expr' but $LBLH says '$lblexpr' — they are the SAME truth table and must move together (or be collapsed onto one predicate once s1_input.h is free)"
 # and the renderer must not grow a THIRD copy behind the header's back.
-c="$(grep -c 'CTL_STYLE_BOX ||' port/foh/foh_render.c)" || true
+# (the pattern is the predicate's own SHAPE — it moved from
+# `CTL_STYLE_BOX || ...` to `!= CTL_STYLE_BOX` with D32, and the guard moved
+# with it. foh_render.c names CTL_STYLE_BOX nowhere at all, measured.)
+c="$(grep -c 'CTL_STYLE_BOX' port/foh/foh_render.c)" || true
 [ "$c" = 0 ] \
   || fail "[0m] port/foh/foh_render.c restates the C-layer predicate ($c site(s)) — it must call foh_ctl_labels() so there is exactly one copy to pin"
 # (b) COMPILE the label table and pin all 3 styles x Mod-on-L/R. The expected
-# table is AUTHORED here from the mapping rules (s1_input.h:160-185,:280-284),
-# never dumped from the code under test:
-#   X / Y : C-layer styles (BOX, NORMAL) spend X on jump and Y on the C-stick
-#           layer; NATURAL spends X on grab (Z) and Y on jump.
-#   L / R : only BOX carries Mod, on the shoulder modOnR names; NORMAL and
-#           NATURAL shield on BOTH shoulders.
+# table is AUTHORED here from the mapping rules (s1_input.h ctl_roles +
+# s1_input_row_style), never dumped from the code under test. Re-authored
+# 2026-08-24 for the owner's control re-ratification (DEVIATIONS D31/D32/D33 —
+# "X->grab, A->jump, Y->special, B->attack", L-only shielding, grab on BOX):
+#   A / B / X / Y : STYLE-INDEPENDENT now — jump / attack / grab (Z) / special
+#           in every style, BOX included.
+#   L / R : L shields everywhere except the BOX arrangement that puts Mod on it;
+#           R is Mod in BOX (on the shoulder modOnR names) and the C-layer hold
+#           in NORMAL and NATURAL. BOX has NO C-layer: with a Mod shoulder and
+#           four spent face buttons there is no seventh gameplay button left.
 cat > "$B/ctl_labels_probe.c" <<'PROBE'
 #include "foh_ctl_labels.h"
 #include <stdio.h>
@@ -506,57 +513,57 @@ cc -O0 -ffp-contract=off -Wall -Wextra -Werror -I port/foh -o "$B/ctl_labels_pro
   || fail "[0m] the label probe exited nonzero"
 cat > "$B/ctl_labels.want" <<'WANT'
 NORMAL mod=0 0 CONTROL STICK
-NORMAL mod=0 1 ATTACK
-NORMAL mod=0 2 SPECIAL
-NORMAL mod=0 3 JUMP
-NORMAL mod=0 4 C-STICK (HOLD)
+NORMAL mod=0 1 JUMP
+NORMAL mod=0 2 ATTACK
+NORMAL mod=0 3 GRAB (Z)
+NORMAL mod=0 4 SPECIAL
 NORMAL mod=0 5 SHIELD
-NORMAL mod=0 6 SHIELD
+NORMAL mod=0 6 C-STICK (HOLD)
 NORMAL mod=0 7 PAUSE
 NORMAL mod=0 8 PAUSE MENU
 NORMAL mod=1 0 CONTROL STICK
-NORMAL mod=1 1 ATTACK
-NORMAL mod=1 2 SPECIAL
-NORMAL mod=1 3 JUMP
-NORMAL mod=1 4 C-STICK (HOLD)
+NORMAL mod=1 1 JUMP
+NORMAL mod=1 2 ATTACK
+NORMAL mod=1 3 GRAB (Z)
+NORMAL mod=1 4 SPECIAL
 NORMAL mod=1 5 SHIELD
-NORMAL mod=1 6 SHIELD
+NORMAL mod=1 6 C-STICK (HOLD)
 NORMAL mod=1 7 PAUSE
 NORMAL mod=1 8 PAUSE MENU
 BOX mod=0 0 CONTROL STICK
-BOX mod=0 1 ATTACK
-BOX mod=0 2 SPECIAL
-BOX mod=0 3 JUMP
-BOX mod=0 4 C-STICK (HOLD)
+BOX mod=0 1 JUMP
+BOX mod=0 2 ATTACK
+BOX mod=0 3 GRAB (Z)
+BOX mod=0 4 SPECIAL
 BOX mod=0 5 MOD / TILT
 BOX mod=0 6 SHIELD
 BOX mod=0 7 PAUSE
 BOX mod=0 8 PAUSE MENU
 BOX mod=1 0 CONTROL STICK
-BOX mod=1 1 ATTACK
-BOX mod=1 2 SPECIAL
-BOX mod=1 3 JUMP
-BOX mod=1 4 C-STICK (HOLD)
+BOX mod=1 1 JUMP
+BOX mod=1 2 ATTACK
+BOX mod=1 3 GRAB (Z)
+BOX mod=1 4 SPECIAL
 BOX mod=1 5 SHIELD
 BOX mod=1 6 MOD / TILT
 BOX mod=1 7 PAUSE
 BOX mod=1 8 PAUSE MENU
 NATURAL mod=0 0 CONTROL STICK
-NATURAL mod=0 1 ATTACK
-NATURAL mod=0 2 SPECIAL
+NATURAL mod=0 1 JUMP
+NATURAL mod=0 2 ATTACK
 NATURAL mod=0 3 GRAB (Z)
-NATURAL mod=0 4 JUMP
+NATURAL mod=0 4 SPECIAL
 NATURAL mod=0 5 SHIELD
-NATURAL mod=0 6 SHIELD
+NATURAL mod=0 6 C-STICK (HOLD)
 NATURAL mod=0 7 PAUSE
 NATURAL mod=0 8 PAUSE MENU
 NATURAL mod=1 0 CONTROL STICK
-NATURAL mod=1 1 ATTACK
-NATURAL mod=1 2 SPECIAL
+NATURAL mod=1 1 JUMP
+NATURAL mod=1 2 ATTACK
 NATURAL mod=1 3 GRAB (Z)
-NATURAL mod=1 4 JUMP
+NATURAL mod=1 4 SPECIAL
 NATURAL mod=1 5 SHIELD
-NATURAL mod=1 6 SHIELD
+NATURAL mod=1 6 C-STICK (HOLD)
 NATURAL mod=1 7 PAUSE
 NATURAL mod=1 8 PAUSE MENU
 WANT

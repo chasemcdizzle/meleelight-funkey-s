@@ -7,9 +7,10 @@
 # stops for the duration of a run).
 #
 # Leg [1] builds port/gfx/ctl_input_witness.c against the REAL tree and
-# runs its five assertions (the device translation arm, the KEYMAP1 SSOT,
-# L-shields, L-char-steps-in-target-select, the Mod-shoulder default).
-# Leg [2] rebuilds the witness five more times against PERTURBED COPIES of
+# runs its assertions (the device translation arm, the KEYMAP1 SSOT,
+# L-only shielding, the R C-layer, the D33 face plane INCLUDING grab on
+# BOX, L-char-steps-in-target-select, the Mod-shoulder default).
+# Leg [2] rebuilds the witness eight more times against PERTURBED COPIES of
 # the tree — one file changed per copy — and requires each to FAIL. The
 # teeth are orthogonal by construction: each perturbs a different file and
 # each fails a different assertion, so no single leg can be carrying the
@@ -112,14 +113,36 @@ tooth t3-modonl port/gfx/ctl_style.c \
   "reverting the Mod shoulder to L is caught"
 
 # T4 — L's SHIELD claim is about the real role resolver, not a comment.
-tooth t4-noshieldl port/gfx/s1_input.h \
-  "s!\\*shield = \\(p->l \\|\\| p->r\\);!*shield = p->r;!" \
-  "dropping L from the shield expression is caught"
+# Re-cut for DEVIATION D31: the expression is L-ONLY now, so the tooth
+# RESTORES the pre-D31 both-shoulders form. That is the exact regression
+# that would silently un-free R and take the C-layer down with it.
+tooth t4-bothshields port/gfx/s1_input.h \
+  "s!\\*shield = p->l;!*shield = (p->l || p->r);!" \
+  "letting R shield again (the pre-D31 form) is caught"
 
-# T5 — and the target-select step is the real foh_tick arm.
-tooth t5-nostep port/foh/foh.c \
+# T5 — the C-layer really moved to the shoulder (D32). Put it back on Y:
+# the styles that have a C-layer keep one, so nothing crashes, but R stops
+# driving cs and leg [3d] dies.
+tooth t5-clayeronY port/gfx/s1_input.h \
+  "s!\\*clayer = ctl_style_has_clayer\\(style\\) \\? p->r : false;!*clayer = ctl_style_has_clayer(style) ? p->y : false;!" \
+  "moving the C-layer back onto Y is caught"
+
+# T6 — BOX GRABS (D33), which is the ruling the owner stated in so many
+# words. Take the grab bit away and leg [3e] must die.
+tooth t6-nograb port/gfx/s1_input.h \
+  "s!  in.z = p->x; // GRAB!  in.z = false; // GRAB!" \
+  "a pad that cannot grab is caught"
+
+# T7 — and the face plane is not just SOME permutation: swap jump and
+# attack, which compiles and emits four live bits, and [3e] still bites.
+tooth t7-facescramble port/gfx/s1_input.h \
+  "s!  in.a = p->b; // ATTACK\n  in.b = p->y; // SPECIAL\n  in.x = p->a; // JUMP!  in.a = p->a; // ATTACK\n  in.b = p->y; // SPECIAL\n  in.x = p->b; // JUMP!" \
+  "scrambling jump/attack across the face plane is caught"
+
+# T8 — and the target-select step is the real foh_tick arm.
+tooth t8-nostep port/foh/foh.c \
   "s!s->p1Char = s->p1Char == 0 \\? 4 : s->p1Char - 1;!s->p1Char = s->p1Char;!" \
   "a dead L arm in target-select is caught"
 
-[ "$teeth" = 5 ] || fail "expected 5 teeth, ran $teeth"
+[ "$teeth" = 8 ] || fail "expected 8 teeth, ran $teeth"
 echo "CTL INPUT CHECK OK ($teeth teeth)"

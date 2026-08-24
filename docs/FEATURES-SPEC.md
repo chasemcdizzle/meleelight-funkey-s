@@ -81,9 +81,15 @@ LANE R   R-1  A33   GC adapter spike                      [FRONTIER]
 
 ### Cross-lane dependencies (the ones that actually bite)
 
-- **A30b (M-7) is owner-ratified but edits the byte-for-byte ratified BOX
-  table** pinned by `s1_sweep.c` + 15 S1 checks. It must land AFTER A31
-  (M-6), because arbitrary rebinding may make most of it unnecessary.
+- **A30b (M-7) — LANDED as A41 (DEVIATIONS D31/D32/D33, 2026-08-24).** It
+  did edit the byte-for-byte ratified BOX table's SURROUNDINGS, under an
+  explicit owner re-ratification, and it landed after A31 (M-6) as this
+  row required — the rebinder did NOT make it unnecessary, and the reason
+  is worth keeping: `ctl_bind_apply` PERMUTES physical buttons before the
+  style resolver, so it can never conjure an `in.z` that no style emits.
+  Grab on BOX was a table change or nothing. The BOX chord ROWS are still
+  byte-untouched; what moved is the button plane and the C-layer's holding
+  button, and the 15 pinned S1 checks moved with them, deliberately.
 - **A31's per-player question is gated on A33.** Design the binding table
   per-port; ship the UI editing port 0 only until R-1 says whether a second
   physical controller is real.

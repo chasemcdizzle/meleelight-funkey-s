@@ -1,20 +1,27 @@
 // port/gfx/s1_input.h — the S1 "One-Mod + C-layer" input layer (M3
 // task 5; PLAN §6 verbatim, issues #6/#9, prototype
 // prototypes/control-mapping/funkeyMapping.js — the verified resolver
-// this header owns THREE styles since fix_plan A4 (ctl_style.h):
-//   CTL_STYLE_BOX     = S1 verbatim — Mod on one shoulder, shield on the
-//                       other (SWAPPABLE since 2026-07-29),
-//                       Y(hold)=C-stick layer, A=attack, B=special,
-//                       X=jump, Start=pause. Chase-ratified 2026-07-17;
-//                       the TABLE is NOT to be changed.
-//   CTL_STYLE_NORMAL  = the same table minus the Mod family, with L
-//                       joining R as a second shield button (A3).
+// this header owns THREE styles since fix_plan A4 (ctl_style.h)).
+//
+// The FACE PLANE is the same in all three since the 2026-08-24 owner
+// re-ratification (DEVIATIONS D31/D32/D33): A=jump, B=attack, Y=special,
+// X=grab(Z), Start=pause. Only the SHOULDERS tell the styles apart:
+//   CTL_STYLE_BOX     = S1's coordinate table verbatim — Mod on one
+//                       shoulder, shield on the other (SWAPPABLE since
+//                       2026-07-29; Mod-on-R by default since D30).
+//                       Chase-ratified 2026-07-17; the TABLE is NOT to
+//                       be changed. It is the ONE style with no C-layer:
+//                       six gameplay buttons cannot hold seven roles.
+//   CTL_STYLE_NORMAL  = the same table minus the Mod family: L shields,
+//                       R holds the C-layer, plus a dedicated
+//                       shield-drop diagonal row (A3 + D31/D32).
 //   CTL_STYLE_NATURAL = the ssb64-modelled 1:1 scheme and the DEFAULT —
-//                       full deflection, no modifiers, no C-layer,
-//                       X=Z(grab), Y=jump, both shoulders shield.
+//                       full deflection, no Mod band; L shields, R holds
+//                       the C-layer (D31/D32).
 // The pre-A4 entry points s1_resolve()/s1_input_row() stay pinned to
-// (BOX, Mod-on-L), so callers that predate the selector are
-// bit-identical.)
+// (BOX, Mod-on-L), so callers that predate the selector still resolve
+// the same STICK coordinates; their BUTTON plane moved with D33, which
+// is the ratified change, not a regression.
 //
 // DATA-DRIVEN chord table (a table, not code branches): priority-ordered
 // rows matched on {C-layer, Mod, shield, d-pad class, dy sign}; each row
@@ -30,8 +37,8 @@
 //   - tapJumpOffp1 = true is the CALLER's duty (the --tapjump-off-p1
 //     flag on the live app AND on every replay of a recorded session —
 //     this header only synthesizes rows).
-//   - left stick NEUTRAL while the Y C-layer is held (drift freezes —
-//     documented S1 sacrifice).
+//   - left stick NEUTRAL while the C-layer shoulder is held (drift
+//     freezes — documented S1 sacrifice).
 //   - SOCD = neutral (moot on the physical cross d-pad; real on the
 //     SDL2 host keyboard).
 //   - digital shield emits r=true, rA=1.0 (single-stage trigger; no
@@ -54,9 +61,10 @@
 typedef enum { S1_PAD_H = 0, S1_PAD_V = 1, S1_PAD_DIAG = 2 } S1Pad;
 
 typedef struct {
-  bool clayer;    // row requires the Y C-layer held (emits onto cs)
-  int mod;        // L requirement: 1 held, 0 not held, -1 any
-  int shield;     // R requirement: 1 held, 0 not held, -1 any
+  bool clayer;    // row requires the C-layer shoulder held (emits onto cs)
+  int mod;        // Mod-ROLE requirement: 1 held, 0 not held, -1 any
+  int shield;     // shield-ROLE requirement: 1 held, 0 not held, -1 any
+                  // (which SHOULDER carries each role is ctl_roles' job)
   S1Pad pad;      // d-pad class this row serves
   int dySign;     // required sign of dy (-1/+1), 0 = any
   double magX;    // |x| magnitude emitted (sign = dx)
@@ -73,7 +81,13 @@ typedef struct {
 // -Wunused-const-variable under -Werror.
 static inline const S1ChordRow *s1_chord_table(int *count) {
   static const S1ChordRow T[] = {
-      // --- Y C-layer: d-pad drives the C-stick, left stick neutral ----
+      // --- C-layer: d-pad drives the C-stick, left stick neutral.
+      //     UNREACHABLE ON BOX since 2026-08-24 (DEVIATION D32/D33):
+      //     BOX spends R on Mod and Y on SPECIAL, so ctl_roles never
+      //     hands this style clayer=true. The ROWS ARE KEPT BYTE-EXACT
+      //     ON PURPOSE — the ratified S1 table stays the ratified S1
+      //     table, and if a future ruling ever buys BOX a C-layer
+      //     button back, the coordinates are already here, unedited.
       {true, -1, -1, S1_PAD_H, 0, 1.0, 0.0, "clayer-horizontal"},
       {true, -1, -1, S1_PAD_V, 0, 0.0, 1.0, "clayer-vertical"},
       {true, -1, -1, S1_PAD_DIAG, 0, 0.7000, 0.7000, "clayer-diagonal"},
@@ -100,21 +114,21 @@ static inline const S1ChordRow *s1_chord_table(int *count) {
 // the Mod family (rows "L+R-diagonal-wavedash", "L-diagonal-23deg",
 // "L-horizontal-walk", "L-vertical-tilt") REMOVED and the surviving
 // rows' mod requirement relaxed to "any", because in this style L is
-// not Mod at all: it is a second shield button (see ctl_roles below, and
-// fix_plan A3). Every magnitude here already appears in the
+// not Mod at all: it is THE shield button, R holding the C-layer instead
+// (see ctl_roles below; fix_plan A3 + DEVIATIONS D31/D32). Every magnitude here already appears in the
 // ratified box table — 1.0 cardinals, 0.7000 diagonals, and the 0.6875
 // shield-drop y. NO new coordinate was invented for this style.
 // Same first-match-wins order: clayer > shield-drop diagonal > plain
 // diagonal > horizontal > vertical.
 static inline const S1ChordRow *ctl_normal_chord_table(int *count) {
   static const S1ChordRow T[] = {
-      // --- Y C-layer: identical to box (the only C-stick this device
-      //     can offer; removing it would remove functionality) --------
+      // --- C-layer (held R since D32): identical to box (the only
+      //     C-stick this device can offer) -----------------------------
       {true, -1, -1, S1_PAD_H, 0, 1.0, 0.0, "clayer-horizontal"},
       {true, -1, -1, S1_PAD_V, 0, 0.0, 1.0, "clayer-vertical"},
       {true, -1, -1, S1_PAD_DIAG, 0, 0.7000, 0.7000, "clayer-diagonal"},
       // --- shield + down-diagonal = shield drop (and a legal wavedash
-      //     angle). Reached by EITHER shoulder in this style. ----------
+      //     angle). L is the shield shoulder in this style (D31). -------
       {false, -1, 1, S1_PAD_DIAG, -1, 0.7000, 0.6875, "shield-down-diagonal-shield-drop"},
       {false, -1, -1, S1_PAD_DIAG, 0, 0.7000, 0.7000, "plain-diagonal"},
       // --- plain full-range stick: no Mod band in this style ---------
@@ -126,17 +140,24 @@ static inline const S1ChordRow *ctl_normal_chord_table(int *count) {
   return T;
 }
 
-// The NATURAL coordinate table (owner ruling 2026-07-29) — the ssb64
-// scheme's stick plane: FULL deflection, nothing else. No Mod family and
-// no C-layer rows. There is no DEDICATED shield-drop row either, but the
-// drop is still reachable: GUARD's PASS arm needs lsY < -0.65 while its
-// spotdodge arm needs a STRICT lsY < -0.7, so the plain -0.7 diagonal
-// lands in the [-0.70,-0.65) drop band (GUARD.c:79-99; review-ctl n1
-// corrected an earlier claim that this was lost). Both shoulders shield,
-// so no row inspects mod OR shield. Every magnitude here already appears
-// in the ratified BOX table: 1.0 cardinals, 0.7000 diagonals.
+// The NATURAL coordinate table (owner ruling 2026-07-29; C-layer rows
+// added 2026-08-24, DEVIATION D32) — the ssb64 scheme's stick plane:
+// FULL deflection, nothing else. No Mod family. There is no DEDICATED
+// shield-drop row either, but the drop is still reachable: GUARD's PASS
+// arm needs lsY < -0.65 while its spotdodge arm needs a STRICT
+// lsY < -0.7, so the plain -0.7 diagonal lands in the [-0.70,-0.65) drop
+// band (GUARD.c:79-99; review-ctl n1 corrected an earlier claim that
+// this was lost). No row inspects mod OR shield: Natural has no Mod, and
+// its single shield shoulder (L, D31) is not a table dimension here.
+// Every magnitude already appears in the ratified BOX table AND in this
+// table's own plain rows: 1.0 cardinals, 0.7000 diagonals — the C-layer
+// rows invent NO coordinate, they re-emit the same three onto cs.
 static inline const S1ChordRow *ctl_natural_chord_table(int *count) {
   static const S1ChordRow T[] = {
+      // --- C-layer (held R, D32) — d-pad drives the C-stick ----------
+      {true, -1, -1, S1_PAD_H, 0, 1.0, 0.0, "natural-clayer-horizontal"},
+      {true, -1, -1, S1_PAD_V, 0, 0.0, 1.0, "natural-clayer-vertical"},
+      {true, -1, -1, S1_PAD_DIAG, 0, 0.7000, 0.7000, "natural-clayer-diagonal"},
       {false, -1, -1, S1_PAD_DIAG, 0, 0.7000, 0.7000, "natural-diagonal"},
       {false, -1, -1, S1_PAD_H, 0, 1.0, 0.0, "natural-horizontal"},
       {false, -1, -1, S1_PAD_V, 0, 0.0, 1.0, "natural-vertical"},
@@ -157,10 +178,18 @@ static inline const S1ChordRow *ctl_style_table(CtlStyle style, int *count) {
   }
 }
 
-// Does this style drive the C-stick from a held Y? BOX/NORMAL yes;
-// NATURAL spends Y on jump instead (ctl_style.h).
+// Does this style drive the C-stick from a held SHOULDER (R)? NATURAL
+// and CLASSIC yes; BOX spends R on Mod instead (DEVIATION D32).
+//
+// THE ARITHMETIC, because it is what forces this. The pad has 8 buttons;
+// START is pause and MENU is the pause menu, so SIX reach gameplay. The
+// roles wanted are seven — attack, special, jump, grab, shield, Mod,
+// C-layer — so no style can carry them all. Once grab is a real button
+// (D33, owner re-ratification) the styles that have no Mod fit exactly
+// six roles in six buttons and keep the C-layer; BOX, which spends a
+// shoulder on Mod (D30, owner), is the one that cannot.
 static inline bool ctl_style_has_clayer(CtlStyle style) {
-  return style == CTL_STYLE_BOX || style == CTL_STYLE_NORMAL;
+  return style != CTL_STYLE_BOX;
 }
 
 // The ROLE resolution, in ONE place (fix_plan A3 + the 2026-07-29
@@ -168,18 +197,24 @@ static inline bool ctl_style_has_clayer(CtlStyle style) {
 // shoulder carries Mod in BOX, and is a no-op in NATURAL/NORMAL where
 // both shoulders shield.
 //   BOX     : Mod on one shoulder, shield on the other (swappable).
-//   NORMAL  : no Mod; L and R BOTH shield (so L shields + air-dodges).
-//   NATURAL : no Mod, no C-layer; L and R BOTH shield.
+//   NORMAL  : no Mod; L shields (D31), R holds the C-layer (D32).
+//   NATURAL : no Mod; L shields (D31), R holds the C-layer (D32).
+//
+// L-ONLY SHIELDING (DEVIATION D31, owner 2026-08-24: "L-only shielding
+// is totally fine. I want it in fact.") is what FREES R on the non-BOX
+// styles, and R carrying the C-layer (D32) is what frees Y for SPECIAL
+// (D33). The three changes are one chain, in that order. BOX is
+// untouched by D31 — it has always split the two shoulders.
 static inline void ctl_roles(CtlStyle style, bool modOnR,
                              const PlatformInput *p, bool *clayer,
                              bool *mod, bool *shield) {
-  *clayer = ctl_style_has_clayer(style) ? p->y : false;
+  *clayer = ctl_style_has_clayer(style) ? p->r : false;
   if (style == CTL_STYLE_BOX) {
     *mod = modOnR ? p->r : p->l;
     *shield = modOnR ? p->l : p->r;
   } else {
     *mod = false;
-    *shield = (p->l || p->r);
+    *shield = p->l;
   }
 }
 
@@ -267,22 +302,18 @@ static inline MlInput s1_input_row_style(const PlatformInput *p,
                                          CtlStyle style, bool modOnR) {
   const S1Resolved r = s1_resolve_style(p, style, modOnR);
   MlInput in = nullInput();
-  in.a = p->a;
-  in.b = p->b;
+  // BUTTON plane — STYLE-INDEPENDENT since the 2026-08-24 owner
+  // re-ratification (DEVIATION D33: "X->grab, A->jump, Y->special,
+  // B->attack", and "wtf you can't grab on box?? we want to be able
+  // to"). Every style now emits the same four face roles; only the
+  // SHOULDERS still differ by style (ctl_roles above). in.y is left
+  // unset: Melee treats X and Y alike, so one jump field is enough and
+  // a second would only be a second name for the same bit.
+  in.a = p->b; // ATTACK
+  in.b = p->y; // SPECIAL
+  in.x = p->a; // JUMP
+  in.z = p->x; // GRAB (Z — and lightshield-grab upstream)
   in.s = p->start;
-  // BUTTON plane, style-aware (owner ruling 2026-07-29). BOX/NORMAL keep
-  // the ratified assignment: X = jump, Y = the C-layer modifier (read by
-  // ctl_roles, not emitted), and z/y are never set. NATURAL follows the
-  // ssb64 port instead — X = Z (grab), Y = JUMP — the one deviation from
-  // ssb64 being that Y is jump rather than C-up, because tap jump is
-  // forced off on this device and ssb64's layout would otherwise leave
-  // Natural with no jump at all (ctl_style.h).
-  if (ctl_style_has_clayer(style)) {
-    in.x = p->x;
-  } else {
-    in.z = p->x; // Z: grab (and lightshield-grab upstream)
-    in.y = p->y; // the second jump button; Melee treats X and Y alike
-  }
   in.lsX = deaden(r.lsX, ml_deadzoneConst());
   in.lsY = deaden(r.lsY, ml_deadzoneConst());
   in.csX = deaden(r.csX, ml_deadzoneConst());
@@ -320,12 +351,16 @@ static inline MlInput s1_input_row(const PlatformInput *p) {
 //      port/gfx/gfx_app.c's live arm stays on s1_input_row() BY DESIGN — it
 //      is not an unfinished site. That binary is the EVIDENCE rig, the
 //      producer judge-s1-coverage.js reads, and that judge is BOX-only by
-//      construction: its 24 pre-registered chord signatures plus its
-//      `if (i.y || i.z ...) invBad++` invariant both assume the BOX table
-//      (Natural emits y/z and has no C-layer). Style-switching that producer
-//      would require weakening a pinned judge, which HARD RULE 3 forbids, so
-//      the styles are proven host-side by .loop/ctl-style-check.sh instead.
-//      Do NOT "finish" gfx_app.c.
+//      construction: its pre-registered chord signatures are the Mod family
+//      (walk, tilt, 23deg diagonal, wavedash), which ONLY the BOX table
+//      emits. Style-switching that producer would trade the whole Mod
+//      family for one C-layer plane — a net coverage LOSS — so the styles
+//      are proven host-side by .loop/ctl-style-check.sh and by
+//      port/gfx/check-ctl-input.sh instead. Do NOT "finish" gfx_app.c.
+//      (Its C-layer signatures moved OUT of that judge on 2026-08-24: BOX
+//      no longer has a C-layer at all — DEVIATION D32 — so the cs plane is
+//      pinned bit-exactly host-side by s1_sweep.c's checks 11-13, which now
+//      run under CLASSIC. Full accounting: MENU-SPEC DEVIATION D32.)
 //   3. NOT DONE — the Controls SCREEN itself. This is the remaining C30(c)
 //      work and it belongs to the menus lane, not to this header. The play
 //      path CONSUMES the cells (ctl_style_get / ctl_mod_on_r_get above), but

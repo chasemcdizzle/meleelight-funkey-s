@@ -2047,11 +2047,12 @@ static void render_ctrl_key(const FohState *s, Raster *rz) {
   // while the FRESH-INSTALL style is NATURAL — so the screen described a
   // mapping the buttons did not have. They are now DERIVED from the same two
   // cells the input path reads (ctl_style_get / ctl_mod_on_r_get), following
-  // ctl_roles() + s1_input_row_style() in port/gfx/s1_input.h:160-185,:280-284:
-  //   X / Y   : C-layer styles (BOX, NORMAL) spend X on jump and Y on the
-  //             C-stick layer; NATURAL spends X on grab (Z) and Y on jump.
-  //   L / R   : only BOX carries Mod, on the shoulder modOnR names; NORMAL
-  //             and NATURAL shield on BOTH shoulders.
+  // ctl_roles() + s1_input_row_style() in port/gfx/s1_input.h (re-ratified
+  // 2026-08-24, DEVIATIONS D31/D32/D33):
+  //   A/B/X/Y : STYLE-INDEPENDENT — jump / attack / grab (Z) / special, in
+  //             every style, BOX included.
+  //   L / R   : L shields except in the BOX arrangement that puts Mod there;
+  //             R is Mod in BOX, and the C-layer hold in NORMAL/NATURAL.
   // There is no second copy of the truth table here — every arm below cites
   // the predicate that decides it, so a style change cannot drift the screen.
   const CtlStyle style = ctl_style_get();

@@ -128,15 +128,22 @@ A new device = write one new backend TU (+ audio open params).
   there are THREE selectable styles plus an orthogonal Mod-shoulder swap
   (`port/gfx/ctl_style.h` owns the enum + cells; `port/gfx/s1_input.h`
   owns the tables): NATURAL (the default — ssb64-modelled 1:1, full
-  deflection, X=Z, Y=jump, both shoulders shield, no C-layer), NORMAL,
-  and BOX (the Chase-ratified S1 table, PLAN §6). A device with real
+  deflection), NORMAL/"Classic", and BOX (the Chase-ratified S1 table,
+  PLAN §6). Since the owner's 2026-08-24 re-ratification (A41,
+  DEVIATIONS D31/D32/D33) the FACE plane is COMMON to all three —
+  A=jump, B=attack, Y=special, X=grab(Z) — and only the two SHOULDERS
+  differ: L shields everywhere except BOX's Mod-on-L arrangement, and R
+  is BOX's Mod / the C-layer hold elsewhere. **A PORT WITH MORE BUTTONS
+  SHOULD REVISIT THIS FIRST:** the split is forced purely by the FunKey's
+  button COUNT — 8 buttons, minus pause and pause-menu, is 6 for seven
+  wanted roles, which is why BOX pays for Mod with its C-layer. A device with real
   analog or more buttons gets NEW tables (data-driven by design); the S1
   semantics (SOCD, tap-jump-off, digital shield) are Chase-ratified for
   THIS hardware, and the BOX table must not be changed without his
   sign-off. NOTE the tap-jump-off coupling is load-bearing for NATURAL:
   a digital d-pad at full deflection would tap-jump on every upward DI,
-  which is why NATURAL spends Y on a jump button rather than ssb64's
-  C-up. A target with a real analog stick can revisit that. The logical-button → letter-keysym mapping itself is the
+  which is why jump is a real button (A) rather than ssb64's tap-up.
+  A target with a real analog stick can revisit that. The logical-button → letter-keysym mapping itself is the
   frozen SSOT `port/foh/keymap-frozen.txt` (iter 95): ONE file
   consumed by the flow-script generator, compiled into foh_dev
   (`--dump-keymap`), and asserted against the platform backend's poll

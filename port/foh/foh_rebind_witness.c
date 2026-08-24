@@ -331,38 +331,39 @@ static void a31_rows_reachable(void) {
 static void a31_rebind_drives(void) {
   FohState s;
   goto_handheld(&s);
-  // Fresh install is NATURAL (ctl_style.h), whose label column is
-  // foh_ctl_labels' NATURAL one: row 1 = A = ATTACK, row 2 = B = SPECIAL.
+  // Fresh install is NATURAL (ctl_style.h). Since the 2026-08-24 owner
+  // re-ratification (DEVIATION D33) the FACE column is the same in every
+  // style: row 1 = A = JUMP (in.x), row 2 = B = ATTACK (in.a).
   want(ctl_style_get() == CTL_STYLE_NATURAL,
        "the screen opens on the ratified default style (NATURAL)");
   want(is_identity(), "the screen opens on the IDENTITY binding");
-  assert_action_row(&s, 1, "A", "ATTACK", "before the rebind");
-  assert_action_row(&s, 2, "B", "SPECIAL", "before the rebind");
+  assert_action_row(&s, 1, "A", "JUMP", "before the rebind");
+  assert_action_row(&s, 2, "B", "ATTACK", "before the rebind");
   {
     const MlInput ia = DRIVE(a), ib = DRIVE(b);
-    want(ia.a && !ia.b, "before the rebind, physical A drives ATTACK");
-    want(ib.b && !ib.a, "before the rebind, physical B drives SPECIAL");
+    want(ia.x && !ia.a, "before the rebind, physical A drives JUMP");
+    want(ib.a && !ib.x, "before the rebind, physical B drives ATTACK");
   }
   // ONE press of RIGHT on the A row — the owner's gesture.
   PRESS(&s, down);
   want(s.ctlRow == 1, "the cursor is on the A row");
   PRESS(&s, right);
-  assert_action_row(&s, 1, "A", "SPECIAL", "after one RIGHT on the A row");
-  assert_action_row(&s, 2, "B", "ATTACK", "the swap partner moved with it");
+  assert_action_row(&s, 1, "A", "ATTACK", "after one RIGHT on the A row");
+  assert_action_row(&s, 2, "B", "JUMP", "the swap partner moved with it");
   {
     const MlInput ia = DRIVE(a), ib = DRIVE(b);
-    want(ia.b && !ia.a,
-         "AND THE BUTTON FOLLOWS: physical A now drives SPECIAL through the "
+    want(ia.a && !ia.x,
+         "AND THE BUTTON FOLLOWS: physical A now drives ATTACK through the "
          "product chain (ctl_bind_apply -> s1_input_row_style)");
-    want(ib.a && !ib.b, "physical B now drives ATTACK");
+    want(ib.x && !ib.a, "physical B now drives JUMP");
   }
   want(is_permutation(0), "the table is still a permutation after the rebind");
   // LEFT is the exact inverse.
   PRESS(&s, left);
-  assert_action_row(&s, 1, "A", "ATTACK", "LEFT undoes it");
+  assert_action_row(&s, 1, "A", "JUMP", "LEFT undoes it");
   {
     const MlInput ia = DRIVE(a);
-    want(ia.a && !ia.b, "and physical A drives ATTACK again");
+    want(ia.x && !ia.a, "and physical A drives JUMP again");
   }
   // [A31-3] a NON-sim action: put PAUSE (the START slot) on the R shoulder.
   // CtlBtn order is A B X Y L R START MENU, so ONE RIGHT on the R row (5) is
@@ -374,7 +375,8 @@ static void a31_rebind_drives(void) {
            ctl_bind_get(0, CTL_BTN_START) == CTL_BTN_R,
        "one RIGHT swaps the R and START slots");
   assert_action_row(&s, 6, "R", "PAUSE", "the R row now says PAUSE");
-  assert_action_row(&s, 7, "START", "SHIELD", "and START took R's shield");
+  assert_action_row(&s, 7, "START", "C-STICK (HOLD)",
+                    "and START took R's C-layer (D32)");
   {
     const PlatformInput br = DRIVE_RAW(r);
     want(br.start && !br.r,
@@ -493,7 +495,7 @@ static void a31_reset_and_removals(void) {
   // and the play path agrees too
   {
     const MlInput ia = DRIVE(a);
-    want(ia.a && !ia.b, "after RESET physical A drives ATTACK again");
+    want(ia.x && !ia.a, "after RESET physical A drives JUMP again");
   }
 }
 
