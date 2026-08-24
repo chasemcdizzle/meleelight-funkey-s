@@ -5212,3 +5212,80 @@ standalone against a real v5 record (pass) and FOUR perturbed copies —
 duplicate slot, wrong port order, dropped row, v4 header — **all four
 rejected.** So the format-sensitive half IS verified; what is owed is the
 DEVICE half: `DEVICE FOH OK` and the reboot round trip.
+
+### A24c — DONE 2026-08-23 (D27). The chooser is collapsed BEHIND A ONE-DIGIT FLAG.
+
+Owner: *"collapse for now - make it easily revertable though please."*
+
+**`#define FOH_CTL_CHOOSER 0`** — `port/foh/foh.h:422`, sited immediately after
+`FOH_NETPLAY` with a rationale block in C5's own style. **THE ENTIRE REVERT IS
+CHANGING THAT ONE DIGIT TO `1`.** Everything keys off it: `foh.c`'s two routing
+arms, `foh_snd_witness.c`'s Options-row case, `foh_rebind_witness.c`'s
+navigation, the judge's second build profile, and the witness's own assertions.
+**Nothing deleted** — `FOH_MENU_CONTROLS`, `FOH_CTRL_PAD`, `render_ctrl_pad`,
+`kMenuText[3]`, the chooser's A ternary and its B-back edge all still compile at
+either value.
+
+**BOTH CONFIGURATIONS ARE TESTED — that is what makes the revert real.**
+`check-controls-labels.sh` now runs 10 legs: CFG-0 asserts the collapsed route
+end to end; **CFG-1 is derived by rewriting that one digit in a copy of
+`foh.h`** and asserts the chooser route. The CFG-1 leg additionally reads the
+configuration's OWN assertion line out of the output (flag-1 line present,
+flag-0 absent) — **because a verdict alone does not say which build produced
+it.**
+
+**T2 SURVIVES AND NOW BITES TWICE** (leg [5] at CFG-0, leg [8b] at CFG-1), and
+not by luck: the chooser's A ternary compiles at either flag value, so the
+flag-0 witness SEATS the unreachable page directly (the `foh_snd_witness.c`
+`battle-B` idiom) and exercises the same line the flag-1 build navigates to.
+**Consequence worth naming: every D25 label claim stays live at flag 0, so
+"nothing was deleted" is a MEASUREMENT, not a promise.** New T5 is T2's twin
+for the collapsed arm.
+
+**MEASURED GOTCHA — A FALSE-GREEN CLASS, CARRY THIS:** a quoted
+`#include "foh.h"` resolves **from the including file's own directory BEFORE
+any `-I`**. So shadowing a header via include path SILENTLY DOES NOTHING, and
+the CFG-1 leg would have "passed" while actually testing the shipped
+configuration — a false green in a test whose whole job is to prove the other
+configuration works. Fixed by copying the whole `port/foh` half of the build
+beside the derived header, every copy `cmp`-proved byte-identical.
+
+**Consumers found by grepping, including one NOT on the driver's list** (third
+time this session a handed-down site table proved incomplete):
+`foh_rebind_witness.c:168`'s `goto_handheld` pressed A twice.
+`foh_snd_witness.c:150` **moves sides in the sound table** — the collapsed row
+is a `changeGamemode` leave, so ONE `menuForward`, not the menuMode change's
+two. `judge-foh-trace.js` gained a second build profile parsed live out of the
+header exactly as `FOH_NETPLAY` is (6 chooser edges -> `ctl`, 2 collapsed ->
+`noctl`). `f04-nav` down to 10 transitions; shot total **19 -> 17**, re-pinned
+in both inventories.
+
+**Judge re-freeze integrity signal:** `judge-grammar.frozen.txt` moved its
+`EDGES` / `DECISION_REGION` / `FILE` entries **but `ENFORCE_REGION` did NOT** —
+i.e. the judging loop itself is byte-identical. That is the right shape for a
+re-freeze: the data moved, the judge did not.
+
+**Gamepad-port line corrected** (`foh_render.c:1979`): "THE FUNKEY-S HAS NO
+GAMEPAD PORT" -> **"FUNKEY-OS SHIPS NO USB HOST MODE"**, same 32 chars so no
+geometry moved, with A33 cited at the site. Fixed precisely BECAUSE the screen
+is unreachable — a revert would otherwise resurrect a false claim.
+
+**Green:** `CONTROLS LABELS OK` · `FOH FLOWS OK (flows=7 shots=17)` ·
+`JUDGE REGRESSION OK` · `REBIND TOOTH OK` · `LEGIBILITY CHECK OK` ·
+`MEXIT REENTRY OK`. Re-verified `CONTROLS LABELS OK` on the merged bytes.
+
+### THREE OWED ITEMS FROM A24c — DRIVER'S, RECORDED SO THEY DO NOT ROT
+1. **THE M4 FREEZE MANIFEST NOW HAS A STALE PIN.** `judge-foh-trace.js`
+   changed, so its `reviewed-go` row in `port/sim/device/m4-freeze-manifest.txt`
+   and the `CLOSURE` row in `m4-closure-ledger.txt` **no longer match the
+   tree.** The lane correctly did NOT touch them (arc/review status is
+   driver/owner territory). **M4 is owner-deferred, so this is not urgent — but
+   it is now ONE MORE ROW to re-close when M4 resumes, on top of the 8.** Do not
+   let it be discovered as a surprise then.
+2. **`DEVICE FOH OK` not run** (device disconnected) — the outstanding leg for
+   A24, A24c and A31 alike.
+3. **`check-live-arms.sh` FAILS at T6** ("the unclamped copy exited 0"). The
+   lane measured it as **PRE-EXISTING** by running it in a clean worktree at
+   `989892f`. Driver is re-verifying independently. **STATE.md's own standing
+   hazard applies: a stale red masks everything downstream of it.** If confirmed
+   pre-existing it needs its own row, not a footnote.
