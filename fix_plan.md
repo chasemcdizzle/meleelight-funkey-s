@@ -7408,3 +7408,61 @@ stops restating a number it does not compute.** `JUDGE REGRESSION OK`.
   refusal's ground is **verification, not capability** — now written down in
   three places. If the owner wants CPU on P3/P4 in play, that is a ratification
   about accepting an unreplayable configuration.
+
+## OWNER RULINGS 2026-08-24 (round 4) — CPU on P3/P4, real persistence, puff walljump
+
+**1. ENABLE CPU ON PORTS 3/4 (owner: *"yeah enable the CPu please"*).**
+The driver's earlier refusal was **wrong in its stated ground**: `AIBRIDGE1` is
+the RECORDED stream used to REPLAY a CPU golden deterministically — **it is not
+what makes the AI run.** The play path links the LIVE `ai.c`
+(`ml_sim_runai_live`; `AI LIVE CONFORMS` passes), so a CPU on port 3 should
+simply work in play. **The refusal's real ground was VERIFICATION, not
+capability**, and the driver flattened that into "refused at the sim level" —
+then decided a scope question that belonged to the owner. Recorded as a driver
+error, not a technical finding.
+**ACCEPTED CONSEQUENCE, to be written at the site, not hidden:** 3/4-player CPU
+matches are **playable but NOT checksum-verified**, because no golden can
+currently replay more than one CPU slot.
+
+**2. A48 (P2, NEW) — widen the AI bridge to more than one CPU slot.**
+Owner: *"b file as a ticket please."* `AIBRIDGE1` holds one recorded stream for
+one CPU slot (`port/sim/ai_bridge.h`). Widening it would let a multi-CPU match
+be recorded as a golden and replayed bit-exactly, closing the verification gap
+ruling 1 accepts. **May not be possible** — establish that first. Prerequisite
+for a 4-port CPU golden.
+
+**3. A49 (P1, NEW) — the CSS selection must PERSIST, and the pin must return to
+the CHARACTER.** Owner: *"i want to MAKE it persistent... right now it just puts
+the cursor back where it was when you left. I want it to be last character...
+whenever the pin is let go of (going off) it should go back to the character you
+had selected."*
+**MEASURED: `FohPersist` stores NO character or port-type state at all**
+(gameSettings, ctlStyle, modOnR, targetRecords, bind, volumes, tapJumpOff) — so
+**picks have NEVER survived a restart, for ANY port including P1/P2.** This is
+therefore a NEW feature, not a regression, and it covers all four ports.
+**TWO OBSERVABLES, and they are distinct:**
+   (a) the `selection plane` survives an app restart (a persist bump), and
+   (b) **releasing the pin returns it to the SELECTED CHARACTER** — not to
+       where it was dropped, not to the nearest cell.
+**(b) IS THE D21/D35 FAMILY, THIRD INSTANCE.** Both prior bugs were the token
+being re-homed from something other than the selection. **Read those two blocks
+before touching this**, and re-home from `selChar[k]` only.
+
+**4. PUFF WALLJUMP — OPTION 1 RATIFIED.** Owner: *"option1 please for puff wall
+jump. falling seems like it would be the best?"* — i.e. **reuse an EXISTING puff
+ECB rather than authoring new geometry**, with FALL as his suggested source.
+**This keeps every number traceable to the executed-data pipeline**, which is
+the property HARD RULE 5 protects; authoring 40 frames of invented collision
+geometry would have been the project's first unverifiable engine data.
+**The source state is a MEASUREMENT, not a guess** — FALL is the owner's
+hypothesis and a good one, but the implementer must compare candidate puff
+states against what marth's WALLJUMP ECB actually does and justify the pick.
+**Second gap, stated: puff has NO WALLJUMP ANIMATION either** (measured: 0
+occurrences in `anim_1_puff.bin` vs 1 for marth), so puff would walljump with no
+walljump pose unless an existing animation is reused too.
+
+### DRIVER NOTE — a stale comment of the same class that cost the grab button
+`port/foh/foh_persist.h:195` still reads `everyCharWallJump ... // DEAD, no sim
+readers`. **D20 made it live** (`port/sim/physics.c:400`). Same class as
+`s1_input.h`'s "Z: grab" comment, which was true of real Melee, false of this
+engine, and shipped a dead button. **A comment is not evidence.**
