@@ -1,0 +1,268 @@
+{
+  "counts": {
+    "wellformed": 3892,
+    "edge": 108,
+    "hostile": 42,
+    "lossyFirstEmission": 16916,
+    "sixthSurfaceRecords": 13191
+  },
+  "sha256": {
+    "codes-wellformed.txt": "761b976fb3e5d1712939448b48a5f879ec78eb1aa6d9edd8a8d6ee390a73e4c4",
+    "codes-edge.txt": "c6abda0aa8436b19953b8d788664ee6c0184dadf0a514fc983ac5fda945707da",
+    "codes-hostile.txt": "8316c8e86621dcf950a47df5e2fc31a2d9bc82e4e0ebd7f18beda750194cecb6"
+  },
+  "hostile": [
+    {
+      "label": "empty",
+      "upstream": "null",
+      "port": "reject",
+      "agree": true
+    },
+    {
+      "label": "shorter-than-14",
+      "upstream": "null",
+      "port": "reject",
+      "agree": true
+    },
+    {
+      "label": "exactly-14-junk",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "only-separators",
+      "upstream": "null",
+      "port": "reject",
+      "agree": true
+    },
+    {
+      "label": "no-starting-point",
+      "upstream": "null",
+      "port": "reject",
+      "agree": true
+    },
+    {
+      "label": "starting-point-one-number",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "three-decimals",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "exponent-form",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "nan-token",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "no-fraction-digits",
+      "upstream": "stage",
+      "port": "stage",
+      "agree": true
+    },
+    {
+      "label": "trailing-dot",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "plus-sign",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "leading-space",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "negative-zero-coord",
+      "upstream": "stage",
+      "port": "stage",
+      "agree": true
+    },
+    {
+      "label": "tiny-negative-coord",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "scale-zero",
+      "upstream": "stage",
+      "port": "stage",
+      "agree": true
+    },
+    {
+      "label": "scale-absent",
+      "upstream": "stage",
+      "port": "stage",
+      "agree": true
+    },
+    {
+      "label": "fields-truncated-to-12",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "extra-fields",
+      "upstream": "stage",
+      "port": "stage",
+      "agree": true
+    },
+    {
+      "label": "surface-four-tokens",
+      "upstream": "stage",
+      "port": "stage",
+      "agree": true
+    },
+    {
+      "label": "surface-six-tokens",
+      "upstream": "stage",
+      "port": "stage",
+      "agree": true
+    },
+    {
+      "label": "surface-damage-out-of-range",
+      "upstream": "stage",
+      "port": "stage",
+      "agree": true
+    },
+    {
+      "label": "surface-three-tokens",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "polygon-odd-token-count",
+      "upstream": "stage",
+      "port": "stage",
+      "agree": true
+    },
+    {
+      "label": "polygon-empty-record",
+      "upstream": "stage",
+      "port": "stage",
+      "agree": true
+    },
+    {
+      "label": "ledge-index-out-of-range",
+      "upstream": "null",
+      "port": "reject",
+      "agree": true
+    },
+    {
+      "label": "ledge-index-negative",
+      "upstream": "null",
+      "port": "reject",
+      "agree": true
+    },
+    {
+      "label": "ledge-index-nan",
+      "upstream": "null",
+      "port": "reject",
+      "agree": true
+    },
+    {
+      "label": "ledge-no-ground",
+      "upstream": "null",
+      "port": "reject",
+      "agree": true
+    },
+    {
+      "label": "ledge-side-out-of-range",
+      "upstream": "stage",
+      "port": "stage",
+      "agree": true
+    },
+    {
+      "label": "ledge-index-with-decimals",
+      "upstream": "stage",
+      "port": "stage",
+      "agree": true
+    },
+    {
+      "label": "ledge-two-tokens",
+      "upstream": "stage",
+      "port": "stage",
+      "agree": true
+    },
+    {
+      "label": "blastzone-three-numbers",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "blastzone-absent",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "over-cap-surfaces",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "over-cap-targets",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "over-cap-polygons",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "over-cap-polygon-points",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "over-cap-ledges",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "over-cap-starting-points",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "huge-coordinate",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    },
+    {
+      "label": "coordinate-past-2p53-hundredths",
+      "upstream": "stage",
+      "port": "reject",
+      "agree": false
+    }
+  ]
+}
