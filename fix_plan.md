@@ -7326,3 +7326,85 @@ device OFF and `/tmp` is wiped.**
   confirmation still nice-to-have, not blocking:** launch, close the lid,
   reopen — to confirm the lid really routes through `powerdown schedule` as
   `fkgpiod`'s table says.
+
+## A44 MENUS HALF — DONE 2026-08-24 (D40/D41). **P3/P4 ARE LIVE. D6 IS RETIRED.**
+
+**The ticket's premise was falsified in the GOOD direction.** A44's first lane
+refused because `sim_setup_match` pinned slots 2/3 absent; **A46 removed that**,
+so **DEVIATION D6 is RETIRED, NOT WEAKENED** — its own text named the condition
+for its deletion (3/4-player conformance proven) and **`q01` met it.**
+
+**Planes widened BY PORT, never by index** — selection `selChar[4]`, type
+`portType[4]`, token `[FOH_CSS_PORTS]`. **Both use an ANONYMOUS UNION over the
+old `p1Char..p4Char` names**, for two reasons worth keeping: a parallel lane's
+witness reads `s.p1Char` and could not be touched, **and two hand-synced copies
+is exactly CONTEXT.md's costliest defect class. Overlaid storage CANNOT
+drift.** The CPU slider and difficulty were **deliberately left 2-wide** — no
+CPU on 2/3 means no knob, and widening them would be dead width.
+
+**PERSISTENCE: NO BUMP NEEDED — my brief was wrong.** I specified an
+`MLFKPERSIST6`. Measured: `FohPersist` carries **no CSS character or type state
+at all** (gameSettings, ctlStyle, modOnR, targetRecords, bind — and
+`tapJumpOff[4]`/`bind[4]` are already 4-wide). **There was nothing to migrate.**
+
+**Three deviations, each earned:**
+- **D40(a)** — the one hand may grab ANY port's token. Upstream's
+  `playerType[j]==1 || i==j` guard defends one human's hand from another's;
+  **with one input device it defended nobody and removed the only route to
+  giving a HUMAN port a character.** Without it P3 would be switchable-on and
+  **permanently marth — the stub HARD RULE 2 forbids.**
+- **D40(b)** — ports 2/3 cycle `N/A -> HMN -> N/A`. **CPU honestly absent**, and
+  **asserted on the LAUNCH PLANE too, not merely missing from the widget.**
+- **D41** — tokens go 2x2. **Four r=9 tokens span 78 px of a 44 px cell**, so
+  the clamp would have parked port 0's token a cell LEFT of its own pick —
+  **D21's defect re-created.** Discs are now tangent, so no point lies in two
+  tokens and the grab loop's j-order cannot silently decide.
+
+**LAUNCH grammar APPENDED, never renumbered** — and it caught a latent bug:
+**`p2type` had to widen to admit `-1`**, because with ports 2/3 live *P1+P3 with
+P2 off* is legal and `p2type=[01]` **was about to reject a launch the machine
+performs.** Nine consumers updated with citations; **nothing loosened** —
+`p3type/p4type` are `(-1|0)`, **tighter than `p2type`.** Probe count 1293 ->
+1569, **accounted per plane, all up, none removed.**
+
+### ⚠ A COVERAGE TRADE THE LANE FLAGGED FOR REVIEW — DRIVER REVIEWED IT, IT HOLDS
+`check-hand.sh` leg [4]'s A25(c) purity differential compares the working tree
+against a **PINNED PRE-EXTRACTION COMMIT**. D40 falsifies that comparison under
+an A press: **34,150 of 60,000 frames diverge, first at frame 6001 where the
+working tree carries PORT 3's TOKEN — machine state the base build HAS NO FIELD
+FOR.** So requiring byte equality there would be **asserting something false
+about the base build**, not catching a regression.
+**Driver's review — three things make this a legitimate trade, not a loss:**
+1. **The comparison stays TOTAL on the shared plane** — hand doubles, D3 clamp,
+   the cell-hit predicate (hover selects with no button), selection plane, sound
+   queue, event counts and ink plane, byte-for-byte over all 60,000 frames.
+2. **The A-gated claim MOVED, it did not vanish** — `check-css-p34.sh` drives
+   grab, drop and the type tabs through the real `foh_tick` on all four ports
+   with its own negatives. **Verified present.**
+3. **It guarded its own narrowing against going vacuous**: the two working-tree
+   sweeps must DIFFER or `--no-a` is being ignored. **That is the
+   vacuous-tooth class this session hit FIVE times, pre-empted by the lane
+   itself.**
+
+**Driver follow-up landed:** the lane flagged a **pre-existing** stale literal —
+`check-judge-regression.sh` printed *"agree with all 69 authored rows"* while
+live rows were 80 before its change. **It correctly refused to guess what "69"
+counted** (the sentence names a SUBSET of planes, so the all-rows count is not
+the right number either). **Applied the C13 precedent instead — the prose now
+stops restating a number it does not compute.** `JUDGE REGRESSION OK`.
+
+**All green on merged bytes:** `CSS P34 (3 teeth)` · `HAND` · `FOH FLOWS` ·
+`JUDGE REGRESSION` · `CREDITS` · `SIM CONFORMS` 8/8.
+
+### OWED
+- **Device legs:** `check-device-foh.sh`, `check-device-persist.sh`,
+  `check-device-fullgame.sh` (reads `f01-vs-g01.bstate.expect`, whose bytes
+  moved), `verify_m3.sh`/`verify_m4.sh`, and an `install-play-opk.sh` reinstall.
+- **Stale `m4-freeze-manifest.txt` rows** (driver-only, batched, NOT touched):
+  `judge-foh-trace.js`, `normalize-foh-trace.js`, `check-device-foh.sh`,
+  `riglib.sh`, and all 8 `flows/f0{1,2,3,5}*.{expect,bstate.expect}`.
+- **DECISION AVAILABLE, not a blocker:** the play path links live `ai.c`, so a
+  **CPU port 2 might run in PLAY even though AIBRIDGE1 cannot REPLAY it.** The
+  refusal's ground is **verification, not capability** — now written down in
+  three places. If the owner wants CPU on P3/P4 in play, that is a ratification
+  about accepting an unreplayable configuration.

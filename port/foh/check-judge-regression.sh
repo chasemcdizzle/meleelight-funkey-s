@@ -1931,7 +1931,7 @@ nprobe="$(node "$B/dom/gen.js" "$AUTHDOM" "$FOH/judge-foh-trace.js" \
   "$FOH/normalize-foh-trace.js" "$FOH/foh.h" "$B/dom" "$FOH/flows" \
   2> "$B/dom/gen.err")" \
   || { cat "$B/dom/gen.err" >&2; fail "a live decision surface disagrees with the authored authority $AUTHDOM (detail above)"; }
-echo "      semantic: SVAL_DOM/SFIELD_SCREENS, EDGES, REFUSED, the normalizer's RE_S domains and the LAUNCH/TLAUNCH classes of BOTH programs agree with all 69 authored rows"
+echo "      semantic: SVAL_DOM/SFIELD_SCREENS, EDGES, REFUSED, the normalizer's RE_S domains and the LAUNCH/TLAUNCH classes of BOTH programs agree with every authored row"
 : > "$B/dom/ran.txt"
 pacc=0; prej=0; pnorm=0
 while IFS="$(printf '\t')" read -r pnm ppath pflow plaunch pexp pjn pnn ptgt; do
