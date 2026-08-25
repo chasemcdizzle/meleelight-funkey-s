@@ -8020,3 +8020,79 @@ must fail to deliver the signal; [7] the device whitelist leg above.
   `dump-sim-data.js` requires playwright. Pre-existing environment gap, not this
   change. `check-rebind.sh` and `check-css-p34.sh` — the two host checks that do
   touch the persist file — are GREEN.
+
+## A26 — DONE 2026-08-25 (D53). **HIBERNATE RESUMES.** `MLFKPERSIST7`.
+
+Owner: *"closing screen and opening it doesn't come back to the game though. i
+want it to, is it possible?"* — **yes, and lane P's earlier measurement meant
+this started from a known mechanism instead of a probe.**
+
+**ROUTE: background + `wait` + forward, handled in C.** `mlfk-foh.sh`'s **live
+branch only** backgrounds `foh_device`, `wait`s, and forwards SIGUSR1; the C
+handler sets a `volatile sig_atomic_t` and three main loops poll it.
+**Both alternatives were rejected on measurement, not taste:**
+- **`exec` rejected** — it takes the launcher's `copyback` trap and its `RC=`
+  write to `opk.rc` with it, **and device rigs parse both.**
+- **Handler-side save rejected** — this process runs an SDL audio callback and a
+  music reader thread; **a process-directed signal lands on whichever has it
+  unblocked, and stdio/fsync are not async-signal-safe.**
+**A worry it was about to insure against, falsified for free:**
+`check-device-foh.sh:2173` **already runs `foh_device --input poll` on this
+device in exactly this shape** (`… & wait $!`, whole thing `</dev/null`),
+green — so no dup-fd belt was needed.
+**Two measured launcher defects avoided:** the foreground form **never even
+INSTALLS the trap before blocking** (it dies of the signal), and
+`wait "$APP" || rc=$?` **reports a clean exit as `RC=138`.**
+
+### THE 100 ms BUDGET — MEASURED, NOT ASSUMED
+| | |
+|---|---|
+| 20 real `foh_persist_save()` calls on `/mnt` (vfat, no journal, 2 fsyncs) | min **8.1 ms**, median ~12.2, **max 49.6** |
+| end-to-end SIGUSR1 -> app exit, real idiom, x4 | **20 / 30 / 30 / 60 ms** |
+**Worst 60 of 100 ms.** It deliberately did **NOT** build the `powerdown handle`
+cancel dance: **the save publishes by `rename()`, so an overrun costs the RESUME
+and never the SETTINGS — whereas owning the shutdown risks a device that fails
+to power off.** That is the right risk to take.
+
+**WHAT IS RESTORED:** `foh_persist_resume_target()` is **both the driver's map
+AND the file's domain**, so *a screen the driver would refuse cannot be written
+or loaded.* Identity for the ten stable screens; **non-identity where the
+literal screen would be worse than nothing** — MATCH->CSS, TMATCH->TSS
+(mid-match is out of scope), **SSS->CSS (it launches with port types the CSS
+arms, which are not persisted)**, CREDITS->MENU_OPTIONS (its reticle is set by
+the entering transition), MENU_BATTLE->MENU_TOP. One-shot, consumed at boot.
+**Corrupt/absent:** a checksum-valid file naming a non-target screen ->
+`reset cause=corrupt detail=domain`, **nothing applied**; a v6 file ->
+`migrated from=6`, **settings and all 50 records kept**, boots cold.
+
+**Check:** `HIBERNATE OK` — real SIGUSR1 to a real paced run, and **resume is
+judged from the TRANSITION TRACE** (cold walks `startup title timer`, resumed
+walks none of it), **not from a log line.** Four teeth, all biting.
+
+### ⚠ A49 LEFT **THREE** STALE FIXTURES — AND ONE WAS A LIVE DEVICE-CHECK DEFECT
+**`check-device-persist.sh:733` recomputed its SUM over `head -n 67` while a v6
+body is 68 lines — so FROM A49 UNTIL NOW THAT WHITELIST WOULD HAVE REJECTED
+EVERY GENUINE FILE.** Its T-H3 fixture had the same miss, and **both
+`foh_rebind_witness.c` and `foh_p34_witness.c` stripped `sel` but not the new
+row** when synthesising old files.
+**This is the SECOND time A49's fallout surfaced through another lane** (A14's
+lane found the `check-rebind` v4 fixture). **My verification of A49 caught none
+of the three.** The pattern is now unmistakable: **a version bump invalidates
+every synthetic-old-file constructor in the tree, and they live in checks the
+bump does not touch.**
+**Fixed, and fixed as a CLASS:** the SUM recompute now **derives from the SUM's
+own line index**, so the next bump cannot repeat it. **And because that
+whitelist lives in a DEVICE check — which is exactly how it went unnoticed —
+leg [7] extracts it and runs it ON THE HOST** against the real v7 file, proven
+non-vacuous by reverting the off-by-one and watching it fail.
+
+### OWED
+- **Stale manifest row: `port/gfx/opk/mlfk-foh.sh`** (the launcher legitimately
+  changed). Driver-only, batched §A-par.5. **Not touched.**
+- **Device legs:** `check-device-persist.sh` on hardware for the v7 bump + the
+  three A49 fixes; **and the owner's own lid test** (launch, close, reopen ->
+  CSS). *The device dropped off USB mid-lane.*
+- **KNOWN CEILING, registered in-code:** if the lid closes while a **modal
+  overlay** (`foh_pause.c`) is open, its loop does not poll the flag, so nothing
+  notices until it returns — after the power is gone. **Degrades to pre-A26
+  behaviour, never to a wrong screen.**
