@@ -7633,3 +7633,89 @@ fires.
    comment insert made it execute fragments and exit 1 **after a fully green
    `SIM CONFORMS`**. **Signature: a green sub-result followed by a nonsense
    failure.**
+
+## A49 — DONE 2026-08-25 (D45/D46). CPU ON P3/P4 · `MLFKPERSIST6` · THE PIN RETURNS TO THE PICK.
+
+### Ticket 1 — the CPU refusal was expressed at SEVEN sites, six of them consequences of the first
+`foh.c`'s `togglePort` had `const int wrapAt = j < 2 ? 2 : 1;` — **one ternary
+that six other sites had been written to agree with.** Now one cycle for all
+four ports. The launch guard's `cpuTooHigh` clause is **deleted** (the guard is
+now two conditions: port 0 HMN, >= 2 participants); the knob-grab loop is
+`FOH_CSS_PORTS`, **which is upstream's own `s < 4`** (`css.js:397`); and the
+CPU-level plane went from **two scalars** (`p1Difficulty` + `difficulty`) to
+`cpuDifficulty[FOH_CSS_PORTS]` under the same anonymous-union overlay `selChar`
+uses — **upstream's `[3,3,3,3]`** (`main.js:109`).
+**Note the shape of the smallest fix:** `k == 0 ? "p1difficulty" : "difficulty"`
+became a per-port table, **because a ternary has room for two answers and there
+are four ports.** That is the 2-vs-4 defect class in one line.
+
+**The knob now DOES something for ports 2/3, and it is witnessed on the launch
+plane:** `LAUNCH`/`BRIDGE-STATE` gained `p3difficulty`/`p4difficulty` —
+appended, nothing renumbered — **because otherwise a P3-CPU-at-1 and a
+P3-CPU-at-4 match emit BYTE-IDENTICAL launch records.** `foh_launch_witness.c`'s
+verdict table went **launch 11 -> 26, refuse 70 -> 55.**
+
+**The accepted consequence is WRITTEN AT FOUR SITES, not filed away:** a 3/4-
+player match with a CPU on port 2 or 3 is **playable but NOT checksum-verified**
+(live `ai.c` plays it; AIBRIDGE1 replays one CPU slot — **A48**). It sits at the
+launch guard, the witness verdict table, the authored-domain LAUNCH header and
+MENU-SPEC §2.7. **Deliberately NOT expressed as a narrower judge domain — "a
+domain row that lies about what the screen can emit is how a judge goes
+vacuous."**
+
+### Ticket 2(a) — `MLFKPERSIST6`, and it is PROVED BY ROUND TRIP, not inspection
+One appended `sel <c> <c> <c> <c>` row after v5's `bind` block; 68 -> 69 lines;
+**v1..v5 all migrate.** Leg [9] saves, reloads, asserts every v1..v5 plane
+survived, **then BUILDS A GENUINE v5 FILE OUT OF THE v6 BYTES** — splice out
+`sel`, restamp the header, recompute the SHA-256 seal — **and requires migration
+rather than reset.**
+
+### The design question — persist port TYPES? **NO, and it is ASSERTED, not prose**
+Three independent reasons: restoring types would **boot the CSS already READY TO
+FIGHT off another session's configuration**; upstream's fresh state is
+`playerType = [-1,-1,-1,-1]` with `addPlayer` arming port 0
+(`main.js:107,:495`), **so not persisting is also the FAITHFUL answer**; and
+since ticket 1 it would make the **unverified CPU configuration a device's
+DEFAULT BOOT STATE.** Leg [9](iv) asserts the boot state.
+
+### Ticket 2(b) — **THE INSTRUMENT HAD BEEN ASSERTING THE BUG SINCE A43**
+`foh_css_token_pos` now states **ONE rule for all three rest paths**: a resting
+token is drawn on the cell of `cssChar[k]` — the token plane the hover arm
+writes **in the same statement** as `selChar[k]`. At boot,
+`foh_persist_apply` sets `cssChar[k] = p->selChar[k]` — **re-homed from the
+selection, never a pixel, a nearest cell, or a port index.** D41's clamp retired
+with the old formula.
+**And the tell was already in the tree:** `foh_cssbacksel_witness.c` leg [B] had
+carried *"and that slot really does draw the token off the pick … the defect's
+precondition, reproduced"* **since A43.** The instrument had been describing the
+owner's bug for two days. **That was the ticket.**
+
+### TWO MORE DISARMS FOUND AND NAMED — sixth and seventh this session
+1. **`check-css-backsel.sh` T2 went VACUOUS** — D46 subsumed D35's display half,
+   so deleting D35's rest re-home **moves no pixel.** Moved onto the line that
+   now carries the outcome; leg [B]'s expectation **flipped from asserting the
+   defect to asserting the fix.**
+2. **`check-hand.sh`'s "6 distinct roster pairs" floor fell to 5** — D46 changed
+   where released tokens rest, so every later grab starts from a different
+   pixel. **Re-stated as what it is FOR, and strictly stronger: all five roster
+   cells must be selected, exhaustive.**
+
+**Green:** `CSS P34 CHECK OK (6 teeth — 3 -> 6, each in a DIFFERENT function)` ·
+`CSS TOKEN REST` · `CSS BACK SELECT` · `CSS BACK` · `HAND` · `FOH FLOWS` ·
+`JUDGE REGRESSION` · `CSS MODE` · `MEXIT REENTRY`. Re-verified by the driver on
+merged bytes.
+
+### DRIVER FOLLOW-UPS
+- **`foh_persist.h:195`'s "DEAD, no sim readers" comment is CORRECTED** — it was
+  stale by TWO deviations (D20 gave it a sim reader, D47 widened it). **Two
+  separate lanes flagged it and neither could touch the file**; `port/foh` was
+  free after this merge. Same class as the `z`-is-grab comment.
+- **`check-live-arms.sh` re-run on a clean tree** — the lane's run 1 passed every
+  leg and tooth and tripped only the closing tree-quietness guard, **because it
+  committed mid-flight; the check's own text names that as cause (b), "not a rig
+  failure".** *(The driver nearly repeated it: the comment fix above was
+  uncommitted when the re-run started. Committed first.)*
+- **Device legs owed** (unchanged list, plus): `check-device-persist.sh`'s
+  grammar was **updated to v6 host-side — 1602 -> 1614 bytes, 69 lines,
+  positional `sel` row, `v6_defaults()`, version tooth moved v6 -> v7 — and is
+  UNRUN.**
