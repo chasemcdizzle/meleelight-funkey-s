@@ -670,7 +670,7 @@ echo "    [1p] OK: every file assigning phantomThreshold is pinned (${pt_want% }
 echo "=== [2] build foh_app"
 CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror
   -I"$TABLES" -Iport/ryu -Iport/sim -Ioracle/qjs)
-rm -f "$B/raster.o" "$B/platform_headless.o" "$B/foh.o" "$B/foh_font.o" "$B/gfx_glyphs.o" "$B/ctl_style.o" \
+rm -f "$B/raster.o" "$B/platform_headless.o" "$B/foh.o" "$B/foh_font.o" "$B/ctl_style.o" \
       "$B/foh_render.o" "$B/foh_persist.o" "$B/foh_app.o" "$B/img1.o" \
       "$B/foh_app"
 cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$B/raster.o"
@@ -679,8 +679,6 @@ cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/img1.c" -o "$B/img1.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/platform_headless.c" -o "$B/platform_headless.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh.c" -o "$B/foh.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_font.c" -o "$B/foh_font.o"
-# A14: the menu display face now draws from the VFXGLYPHS1 atlas.
-cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/gfx_glyphs.c" -o "$B/gfx_glyphs.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_render.c" -o "$B/foh_render.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_persist.c" -o "$B/foh_persist.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_app.c" -o "$B/foh_app.o"
@@ -693,7 +691,7 @@ cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/ctl_style.c" -o "$B/ctl_style.o"
 # SAME bodies the app links -- a second copy of this list would drift, and the
 # witness would then be witnessing code the app does not run.
 FOH_LINK_OBJS=(
-  "$B/foh.o" "$B/foh_font.o" "$B/gfx_glyphs.o" "$B/foh_render.o" "$B/foh_persist.o"
+  "$B/foh.o" "$B/foh_font.o" "$B/foh_render.o" "$B/foh_persist.o"
   "$B/ctl_style.o" "$B/raster.o" "$B/img1.o" "$B/platform_headless.o"
 )
 FOH_LINK_SRCS=(
@@ -798,7 +796,7 @@ phantom_verdict_ok() { # <out-file>
 # out, because both define main().
 phantom_link() { # <out-binary> <persist-object> <witness-object>
   cc -O2 "${CFLAGS_COMMON[@]}" -o "$1" \
-    "$B/foh.o" "$B/foh_font.o" "$B/gfx_glyphs.o" "$B/foh_render.o" "$2" \
+    "$B/foh.o" "$B/foh_font.o" "$B/foh_render.o" "$2" \
     "$B/ctl_style.o" "$B/raster.o" "$B/img1.o" "$B/platform_headless.o" \
     "$3" "${FOH_LINK_SRCS[@]}"
 }
@@ -2156,7 +2154,7 @@ rm -f "$B/gfx_target.o" "$B/foh_banner_witness.o" "$B/foh_banner_witness"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/gfx_target.c" -o "$B/gfx_target.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_banner_witness.c" -o "$B/foh_banner_witness.o"
 cc -O2 -Wl,-dead_strip -o "$B/foh_banner_witness" \
-  "$B/foh_banner_witness.o" "$B/gfx_target.o" "$B/raster.o" "$B/foh_font.o" "$B/gfx_glyphs.o"
+  "$B/foh_banner_witness.o" "$B/gfx_target.o" "$B/raster.o" "$B/foh_font.o"
 made "$B/foh_banner_witness"
 rm -rf "$B/banner-shots"; mkdir -p "$B/banner-shots"
 if ! "$B/foh_banner_witness" --shot-dir "$B/banner-shots" > "$B/banner.out" 2>&1; then
@@ -2183,7 +2181,7 @@ sed -i.bak 's/"COMPLETE!"/"COMPLETE?"/' "$B/gt-banner-tooth.c"; rm -f "$B/gt-ban
 grep -q '"COMPLETE?"' "$B/gt-banner-tooth.c" || fail "banner tooth — the missing-glyph perturb did not take"
 cc -O2 "${CFLAGS_COMMON[@]}" -Iport/gfx -c "$B/gt-banner-tooth.c" -o "$B/gt-banner-tooth.o"
 cc -O2 -Wl,-dead_strip -o "$B/foh_banner_witness_tooth" \
-  "$B/foh_banner_witness.o" "$B/gt-banner-tooth.o" "$B/raster.o" "$B/foh_font.o" "$B/gfx_glyphs.o"
+  "$B/foh_banner_witness.o" "$B/gt-banner-tooth.o" "$B/raster.o" "$B/foh_font.o"
 rc=0
 "$B/foh_banner_witness_tooth" > "$B/banner-tooth.out" 2>&1 || rc=$?
 # EXACT measured missing-glyph class: rc 3 (foh_font gfx_fatal via the
@@ -2337,7 +2335,7 @@ cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_snd_witness.c" -o "$B/foh_snd_witness.
 # never called, and the 24-case pin below is untouched.
 snd_link() { # <out-binary> <witness.o> <foh.o>
   cc -O2 -ffp-contract=off -Wl,-dead_strip -o "$1" "$2" "$3" \
-    "$B/foh_render.o" "$B/foh_font.o" "$B/gfx_glyphs.o" "$B/raster.o" "$B/img1.o" \
+    "$B/foh_render.o" "$B/foh_font.o" "$B/raster.o" "$B/img1.o" \
     "$B/ctl_style.o" port/fdlibm/fdlibm.c -lm
 }
 snd_link "$B/foh_snd_witness" "$B/foh_snd_witness.o" "$B/foh.o"

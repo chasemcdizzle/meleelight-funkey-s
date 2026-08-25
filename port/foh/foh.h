@@ -1097,27 +1097,10 @@ void foh_text(Raster *rz, int x, int y, int scale, const char *s,
               RastCol col);
 int foh_text_width(const char *s, int scale);
 
-// foh_font.c: the menu display face. A14 (second half) swapped the BODY of
-// these two off the self-authored 6x9 bitmap face and onto the browser's own
-// Arial, via the VFXGLYPHS1 atlas — italic draws font 3 ("italic 700 70px
-// Arial", upstream's own menu weight), upright draws font 0 ("900 40px"),
-// and `scale` became an integer upscale of the atlas mask. Advances are now
-// PER-GLYPH device px, not fixed 7 px cells, so the width MUST be asked for
-// with the same `italic` the draw will use: the two faces differ by 1.75x,
-// and a string centred on the wrong one lands visibly off. That extra
-// argument is the ONE call-site change A14 could not avoid; every DRAW call
-// site is byte-untouched.
+// foh_font.c: the self-authored 6x9 heavy display face; italic != 0 shears
+// it (synthetic oblique). Advance 7 px per glyph at scale 1.
 void foh_text2(Raster *rz, int x, int y, int scale, int italic,
                const char *s, RastCol col);
-int foh_text2_width(const char *s, int scale, int italic);
-
-// foh_font.c: the RETIRED 6x9 hand-authored face, kept until
-// check-live-arms.sh's kGlyphs2 mask decoder is rewritten against the atlas
-// (see the note above its table). Nothing in the renderer calls these; they
-// exist so the table they read has a compiled consumer rather than becoming
-// a warning-suppressed orphan. Delete both with that decoder.
-void foh_text2_face2(Raster *rz, int x, int y, int scale, int italic,
-                     const char *s, RastCol col);
-int foh_text2_face2_width(const char *s, int scale);
+int foh_text2_width(const char *s, int scale);
 
 #endif // FOH_FOH_H

@@ -101,19 +101,22 @@ void gfx_overlay_allow_timer_expiry(int on);
 void gfx_render_player_pass(Gfx *g, const GameState *st, int i);
 void gfx_render_articles_pass(Gfx *g, const GameState *st);
 
-// --- glyph atlas (gfx_glyphs.c; VFXGLYPHS1) -------------------------------
-// The atlas, its font ids and its raster-plane entry points moved to
-// gfx_glyphs.h (A14 second half — the FOH menus draw from it now, and menu
-// witnesses must not inherit this header's pipeline-generated dependencies).
-// Included here so every existing HUD caller of gfx_glyph_text /
-// gfx_glyph_text_width / GFX_FONT_* keeps compiling unchanged.
-#include "gfx_glyphs.h"
+// --- glyph atlas (gfx_overlay.c; VFXGLYPHS1) ------------------------------
+// Fonts, in the exact upstream draw forms (renderOverlay/start.js):
+typedef enum {
+  GFX_FONT_T40 = 0, // "900 40px Arial", strokeText lineWidth 2 (timer MM:SS)
+  GFX_FONT_T25 = 1, // "900 25px Arial", lineWidth 2 (timer centiseconds)
+  GFX_FONT_P53 = 2, // "900 53px Arial" under scale(0.8,1), lw 2 (percents)
+  GFX_FONT_C70 = 3, // "italic 700 70px Arial", lw 10 (Ready countdown)
+  GFX_FONT_COUNT = 4
+} GfxFontId;
 
 // Draw text at a device-space pen (x = left edge of the first glyph's
 // advance box, y = baseline). strokeFirst mirrors the upstream call order
 // (timer/percents: fill then stroke; countdown: stroke then fill).
 void gfx_glyph_text(Gfx *g, int fontId, const char *s, double penX,
                     double penY, RastCol fill, RastCol stroke, int strokeFirst);
+double gfx_glyph_text_width(int fontId, const char *s); // device px
 
 // Blit a composite banner sprite ("ready" / "go") anchored at the
 // upstream fillText anchor (canvas px 240,420 / 240,470 -> device).

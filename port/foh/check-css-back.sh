@@ -152,7 +152,7 @@ echo "   $DATA/assets/menu.img1 built"
 echo "=== [3] CSS back witness (real gestures + real frames through foh_tick)"
 CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror -Iport/ryu -Iport/sim
                -Ioracle/qjs)
-CB_SRCS=("$FOH/foh_cssback_witness.c" "$FOH/foh_font.c" "$GFX/gfx_glyphs.c" "$GFX/raster.c"
+CB_SRCS=("$FOH/foh_cssback_witness.c" "$FOH/foh_font.c" "$GFX/raster.c"
          "$GFX/img1.c" "$GFX/ctl_style.c" port/fdlibm/fdlibm.c)
 CB_OK='^CSS BACK OK$'
 mkdir -p "$BUILD/real"

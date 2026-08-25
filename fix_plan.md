@@ -7863,3 +7863,57 @@ source-tree path arguably belongs behind an explicit opt-in, so a host run
 without `--glyphs` fails the same way a device run does.
 **REGISTERED AS OWED, not fixed here** — narrowing that fallback changes how
 every host check resolves the atlas and wants its own ticket.
+
+## A14 REVERTED 2026-08-25 — OWNER RULING. **The approach was wrong, not the execution.**
+
+Owner, after seeing it on the device: *"ok the glyphs look bad lol. maybe we
+should undo the glyph stuff?"* -> *"ok revert please."*
+
+**WHY IT LOOKS BAD, and it is inherent to the approach rather than a defect in
+the lane's work.** The atlas is **browser-rendered Arial at 40 px / 70 px,
+area-averaged down to a NINE-PIXEL cell**, and D49 then made the FOH blit
+**BINARY** — no antialiasing at all. **Downsampling a 70 px antialiased glyph
+to 9 px and hard-thresholding it produces mush.** The retired 5x7/6x9 faces were
+**hand-drawn for exactly that size, every pixel deliberate.**
+**So fidelity-to-the-browser and legibility-at-240x240 are in genuine conflict
+at this size, and the hand-drawn face wins.** That is a finding about the
+TARGET, not about the code — the lane executed the design it was given, and the
+design (decided 2026-08-05, "do not re-litigate") was wrong on a premise nobody
+could test without a device.
+
+**D49's binary blit made it worse, and for a good reason** — it existed to keep
+the overdraw instrument honest (AA overdraw is never idempotent). **Both halves
+of that trade were correct in isolation and wrong together.**
+
+### WHAT THE REVERT KEPT — the rebind fix is NOT part of A14
+`1454313` carried BOTH the A14 record AND the fix for **A49's** stale v4 fixture
+(the `sel`-strip + the v5->v6 pins). **That fix is independent and was kept**:
+verified after the revert that `check-rebind.sh` and `foh_rebind_witness.c`
+still say `MLFKPERSIST6` and still carry the `strippedSel` assertion.
+**Reverting a merge that shares a commit with unrelated work is exactly where a
+good fix gets silently undone.**
+
+Also reverted: `b0403f2`'s `foh_dev.c` hook (the FOH-boot `gfx_glyphs_load`),
+which existed ONLY to fix the crash A14 introduced. **Its fix_plan record is
+kept deliberately** — the *lesson* outlives the code:
+**a fallback that only ever fires in the test environment is a blind spot**, and
+that candidate list still wants narrowing whenever the atlas returns.
+
+**Green after revert:** `check-legibility` · `check-rebind` · `check-foh-flows`
+· `check-controls-labels` · `check-credits` · `check-css-p34` · `check-hand` ·
+`check-judge-regression`.
+
+### WHAT SURVIVES FOR A FUTURE ATTEMPT
+The atlas, its capture, `gfx_glyphs.c`'s parser and the measured advance-width
+table are all still in history at `bd68779`/`b1624fa`. **If larger text is ever
+wanted — a title face, a credits face — the atlas is the right source and the
+work is done.** What does not work is **replacing 9 px hand-drawn menu text with
+downsampled 70 px Arial.**
+
+### ⚠ DRIVER TESTING ERROR, RECORDED
+My first "verified on the device" for the A14 crash fix **set `MLFK_DATA_DIR` in
+the test command — one of the very fallbacks the bug depends on.** The test
+therefore proved nothing, and I reported it as verification. **Re-tested with
+the environment cleared, it did pass** — but the first result was worthless and
+I presented it as decisive. **Same class I have flagged in others repeatedly:
+the check environment silently supplied what the real one could not.**

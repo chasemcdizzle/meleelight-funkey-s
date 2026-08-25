@@ -53,8 +53,7 @@ CFLAGS=(-O2 -ffp-contract=off -Wall -Wextra -Werror
 # a re-implementation of it.
 srcs_for() { # $1 = tree root (the real tree, or a perturbed copy)
   echo "$1/$GFX/ctl_input_witness.c $1/$GFX/ctl_style.c $1/$FOH/foh.c \
-$1/$FOH/foh_render.c $1/$FOH/foh_font.c $1/$GFX/gfx_glyphs.c \
-$1/$GFX/raster.c $1/$GFX/img1.c \
+$1/$FOH/foh_render.c $1/$FOH/foh_font.c $1/$GFX/raster.c $1/$GFX/img1.c \
 $ROOT/oracle/qjs/sha256.c $ROOT/port/sim/ml_ser.c $ROOT/port/sim/ml_fmt.c \
 $ROOT/port/fdlibm/fdlibm.c"
 }

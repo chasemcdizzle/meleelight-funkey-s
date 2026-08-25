@@ -1453,7 +1453,7 @@ cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/foh_dev_headless" \
   "$GFX/ctl_style.c" "$GFX/img1.c" \
   "$GFX/platform_headless.c" \
   "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_target.c" \
-  "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_glyphs.c" "$GFX/gfx_bg.c" \
+  "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
   port/sim/target/target_play.c "$TABLES/ml_targets.c" \
   "${SIM_TUS[@]}" \
   port/sim/characters/{shared,fox,falco,falcon,marth,puff}/moves/*.c \

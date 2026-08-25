@@ -189,7 +189,7 @@ CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror -Iport/ryu -Iport/sim
                -Ioracle/qjs)
 CFLAGS_COPY=(-Iport/foh -Iport/gfx)
 REAL_SRCS=("$FOH/foh_rebind_witness.c" "$FOH/foh_render.c" "$FOH/foh.c"
-           "$FOH/foh_font.c" "$GFX/gfx_glyphs.c" "$FOH/foh_persist.c" "$GFX/raster.c" "$GFX/img1.c"
+           "$FOH/foh_font.c" "$FOH/foh_persist.c" "$GFX/raster.c" "$GFX/img1.c"
            "$GFX/ctl_style.c" oracle/qjs/sha256.c port/sim/ml_ser.c
            port/sim/ml_fmt.c port/fdlibm/fdlibm.c)
 OK_RE='^REBIND OK$'

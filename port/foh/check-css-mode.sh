@@ -194,7 +194,7 @@ echo "   data planes built under $DATA"
 echo "=== [3] CSS mode witness (real gestures + real frames through foh_tick)"
 CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror -I"$DATA" -Iport/ryu
                -Iport/sim -Ioracle/qjs)
-WIT_SRCS=("$FOH/foh_cssmode_witness.c" "$FOH/foh_font.c" "$GFX/gfx_glyphs.c" "$GFX/raster.c"
+WIT_SRCS=("$FOH/foh_cssmode_witness.c" "$FOH/foh_font.c" "$GFX/raster.c"
           "$GFX/img1.c" "$GFX/ctl_style.c" port/fdlibm/fdlibm.c)
 WIT_OK='^CSS MODE OK$'
 mkdir -p "$BUILD/real"
@@ -347,8 +347,7 @@ build_foh_app() { # <foh_app.c source> <out>
   cc -O2 "${CFLAGS_COMMON[@]}" -Iport/foh -o "$2" \
     "$BUILD/objs/raster.o" "$BUILD/objs/img1.o" \
     "$BUILD/objs/platform_headless.o" "$BUILD/objs/foh.o" \
-    "$BUILD/objs/foh_font.o" "$BUILD/objs/gfx_glyphs.o" \
-    "$BUILD/objs/foh_render.o" \
+    "$BUILD/objs/foh_font.o" "$BUILD/objs/foh_render.o" \
     "$BUILD/objs/foh_persist.o" "$BUILD/objs/ctl_style.o" \
     "$1" \
     "$SIM/sim_boot.c" "$SIM/sim_tick.c" "$SIM/sim_ser.c" \
@@ -381,7 +380,7 @@ build_foh_app() { # <foh_app.c source> <out>
 mkdir -p "$BUILD/objs"
 cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$BUILD/objs/raster.o"
 for tu in "$GFX/img1.c" "$GFX/platform_headless.c" "$GFX/ctl_style.c" \
-          "$FOH/foh.c" "$FOH/foh_font.c" "$GFX/gfx_glyphs.c" "$FOH/foh_render.c" \
+          "$FOH/foh.c" "$FOH/foh_font.c" "$FOH/foh_render.c" \
           "$FOH/foh_persist.c"; do
   cc -O2 "${CFLAGS_COMMON[@]}" -c "$tu" -o "$BUILD/objs/$(basename "${tu%.c}").o"
 done

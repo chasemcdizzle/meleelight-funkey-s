@@ -132,7 +132,7 @@ CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror
 # through foh_persist.c, so the file format is exercised rather than
 # modelled. ml_ser.c/sha256.c are its SHA-256 seal, ml_fmt.c is ml_ser.c's
 # own dependency; none of them is optional and none is a stub.
-W_SRCS=("$FOH/foh_render.c" "$FOH/foh_font.c" "$GFX/gfx_glyphs.c" "$FOH/foh_persist.c"
+W_SRCS=("$FOH/foh_render.c" "$FOH/foh_font.c" "$FOH/foh_persist.c"
         "$GFX/raster.c" "$GFX/img1.c" "$GFX/ctl_style.c"
         port/sim/ml_ser.c port/sim/ml_fmt.c oracle/qjs/sha256.c
         port/fdlibm/fdlibm.c)

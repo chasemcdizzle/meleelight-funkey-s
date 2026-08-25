@@ -228,7 +228,7 @@ CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror -Iport/ryu -Iport/sim
 # includes ("foh.h", "../gfx/ctl_style.h", "ctl_style.h") need both roots.
 CFLAGS_COPY=(-Iport/foh -Iport/gfx)
 REAL_SRCS=("$FOH/foh_controls_witness.c" "$FOH/foh_render.c" "$FOH/foh.c"
-           "$FOH/foh_font.c" "$GFX/gfx_glyphs.c" "$GFX/raster.c" "$GFX/img1.c" "$GFX/ctl_style.c"
+           "$FOH/foh_font.c" "$GFX/raster.c" "$GFX/img1.c" "$GFX/ctl_style.c"
            port/fdlibm/fdlibm.c)
 CTL_OK='^CONTROLS OK$'
 

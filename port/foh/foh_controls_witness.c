@@ -220,14 +220,14 @@ static void assert_row_label(const FohState *s, int k, bool selected,
   const int y = FOH_BAR_TOP + FOH_BAR_PITCH * k + 6;
   char buf[240];
 
-  const int wx = 123 - FOH_BAR_STEP * k - foh_text2_width(wantStr, 1, 1) / 2;
+  const int wx = 123 - FOH_BAR_STEP * k - foh_text2_width(wantStr, 1) / 2;
   const int same = overdraw2(&g_a, wx, y, wantStr, col);
   snprintf(buf, sizeof buf,
            "%s: row %d on screen reads \"%s\" (%d px differ from that string "
            "drawn over it)", ctx, k, wantStr, same);
   want(same == 0, buf);
 
-  const int nx = 123 - FOH_BAR_STEP * k - foh_text2_width(notStr, 1, 1) / 2;
+  const int nx = 123 - FOH_BAR_STEP * k - foh_text2_width(notStr, 1) / 2;
   const int diff = overdraw2(&g_a, nx, y, notStr, col);
   snprintf(buf, sizeof buf,
            "TOOTH: %s: row %d does NOT read \"%s\" (%d px would change)", ctx,
@@ -445,7 +445,7 @@ static void d25_blurb_width(void) {
   int widest = 0;
   const char *who = "";
   for (int i = 0; i < n; i++) {
-    const int w = foh_text2_width(kAll[i], 1, 0);
+    const int w = foh_text2_width(kAll[i], 1);
     if (w > widest) { widest = w; who = kAll[i]; }
   }
   char buf[240];

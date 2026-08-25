@@ -820,7 +820,7 @@ made "$GFXDATA" "$VFXDATA" "$GLYPHS" "$FLOW" "$TFLOW" "$FOH/foh_font.c"
 
 # Every source this rig builds a perturbed copy of, plus the font table its
 # pixel expectations are derived from, pinned before the first build.
-src_pin_snapshot "$FOH/foh_dev.c" "$FOH/foh_pause.c" "$GFX/gfx_overlay.c" "$GFX/gfx_glyphs.c" \
+src_pin_snapshot "$FOH/foh_dev.c" "$FOH/foh_pause.c" "$GFX/gfx_overlay.c" \
   "$FOH/foh_font.c" "$DEVFOH"
 
 # --- [1a] the AUDIO plane ----------------------------------------------------

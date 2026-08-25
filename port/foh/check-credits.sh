@@ -262,7 +262,7 @@ echo "   $DATA/assets/menu.img1 built"
 # --- [4] the witness against the REAL tree ----------------------------------
 CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror -Iport/ryu -Iport/sim
                -Ioracle/qjs)
-CRED_SRCS=("$FOH/foh_credits_witness.c" "$FOH/foh.c" "$FOH/foh_font.c" "$GFX/gfx_glyphs.c"
+CRED_SRCS=("$FOH/foh_credits_witness.c" "$FOH/foh.c" "$FOH/foh_font.c"
            "$GFX/raster.c" "$GFX/img1.c" "$GFX/ctl_style.c" port/fdlibm/fdlibm.c)
 CRED_OK='^CREDITS OK$'
 

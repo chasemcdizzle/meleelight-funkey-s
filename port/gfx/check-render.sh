@@ -401,20 +401,18 @@ TABLES_SNAP=$(tables_digest | shasum -a 256 | cut -d' ' -f1) || {
 CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror
   -I"$TABLES" -Iport/ryu -Iport/sim -Ioracle/qjs)
 rm -f "$BUILD/raster.o" "$BUILD/anim1.o" "$BUILD/gfx_render.o" \
-      "$BUILD/gfx_vfx.o" "$BUILD/gfx_overlay.o" "$BUILD/gfx_glyphs.o" "$BUILD/gfx_bg.o" \
+      "$BUILD/gfx_vfx.o" "$BUILD/gfx_overlay.o" "$BUILD/gfx_bg.o" \
       "$BUILD/gfx_replay.o" "$BUILD/gfx_replay"
 cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$BUILD/raster.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/anim1.c" -o "$BUILD/anim1.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/gfx_render.c" -o "$BUILD/gfx_render.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/gfx_vfx.c" -o "$BUILD/gfx_vfx.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/gfx_overlay.c" -o "$BUILD/gfx_overlay.o"
-# A14: the glyph atlas is its own TU now (gfx_glyphs.h).
-cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/gfx_glyphs.c" -o "$BUILD/gfx_glyphs.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/gfx_bg.c" -o "$BUILD/gfx_bg.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -c "$GFX/gfx_replay.c" -o "$BUILD/gfx_replay.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/gfx_replay" \
   "$BUILD/raster.o" "$BUILD/anim1.o" "$BUILD/gfx_render.o" \
-  "$BUILD/gfx_vfx.o" "$BUILD/gfx_overlay.o" "$BUILD/gfx_glyphs.o" "$BUILD/gfx_bg.o" \
+  "$BUILD/gfx_vfx.o" "$BUILD/gfx_overlay.o" "$BUILD/gfx_bg.o" \
   "$BUILD/gfx_replay.o" \
   port/sim/sim/sim_boot.c port/sim/sim/sim_tick.c port/sim/sim/sim_ser.c \
   port/sim/sim/sim_data.c \
