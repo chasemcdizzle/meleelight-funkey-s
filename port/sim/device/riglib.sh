@@ -1882,6 +1882,16 @@ rig_arm_build() {
         "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" \
         oracle/qjs/sha256.c port/fdlibm/fdlibm.c \
         $($SDLCFG --libs) -lm
+      # A45 T3/T4 — the target builder engine and the custom-stage plane.
+      # foh_tbuild.c is the FOH-side editor (behind the foh_tbuild_ops pointer
+      # seam so no OTHER build had to change); custom_stage.c + stage_code.c
+      # are A45 T1/T2, which foh_dev.c now calls directly to play a custom
+      # slot.
+      # NOTE: this comment lives ABOVE the command deliberately. A `#` line
+      # placed INSIDE a backslash-continued argument list TRUNCATES it — the
+      # shell ends the command at the comment and every TU after it silently
+      # leaves the link. That shipped a build failing with `undefined
+      # reference to platform_present` on 2026-08-25.
       # foh_device (M4 task 10): the SDL1.2 FOH app — the same sim +
       # render TU set as gfx_device with the FOH machine TUs and
       # foh_dev.c as the driver (gfx_app.c stays byte-untouched).
@@ -1894,11 +1904,6 @@ rig_arm_build() {
         port/foh/foh_dev.c port/foh/foh.c port/foh/foh_font.c \
         port/foh/foh_render.c port/foh/foh_persist.c \
         port/foh/foh_pause.c \
-        # A45 T3/T4 — the target builder engine and the custom-stage
-        # plane. foh_tbuild.c is the FOH-side editor (behind the
-        # foh_tbuild_ops pointer seam so no OTHER build had to change);
-        # custom_stage.c + stage_code.c are A45 T1/T2, which foh_dev.c
-        # now calls directly to play a custom slot.
         port/foh/foh_tbuild.c \
         port/sim/stage_code.c port/sim/target/custom_stage.c \
         port/gfx/ctl_style.c \

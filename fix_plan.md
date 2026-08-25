@@ -8279,3 +8279,43 @@ version clobbered identical bytes.** (Sixth vacuous-tooth catch this session.)
   dropped.** Save-then-play from Target Test is the same journey through one
   launch path instead of two. **If in-place testing is wanted, it is a real
   ticket, not a line.**
+
+### ⚠ SHELL GOTCHA — A COMMENT INSIDE A BACKSLASH-CONTINUED ARG LIST TRUNCATES IT
+
+The target-builder lane added its three TUs to `riglib.sh`'s ARM `foh_device`
+link list **with an explanatory comment placed INSIDE the continuation**:
+```sh
+port/foh/foh_pause.c \
+# A45 T3/T4 — the target builder engine ...
+port/foh/foh_tbuild.c \
+```
+**The shell ENDS THE COMMAND at the comment**, so every TU after it silently
+left the link. The build failed with
+`undefined reference to platform_present` / `sim_fatal` **from `foh_pause.c`** —
+a file that was still on the line, pointing at symbols in files that were not.
+**The error names a victim, not the cause**, which is what makes this one
+expensive to read.
+**It compiled and checked green on the HOST**, because the host check lists are
+separate — **only the ARM/OPK build has this list.** So it survived every
+host gate and died at install.
+
+**FIXED:** comment moved ABOVE the command, where a comment is legal, with a
+note at the site saying why. **`bash -n` does NOT catch this** — the truncated
+form is syntactically valid.
+
+**NEW ENTRY FOR THE GOTCHA SET** (beside "editing a shell script while it
+executes" and "committing while a check fingerprints the tree"): **never put a
+`#` line inside a `\`-continued argument list.** Its failure mode is a SILENTLY
+SHORTER command, and the diagnostic points somewhere else entirely.
+
+**Verified after the fix:** OPK built, installed (sha matches host), and the
+real launcher runs on device with the environment cleared — **RUNNING, 0
+`SIM FATAL`**, test instance cleaned up, frontend restored.
+
+### CREDITS CONFIRMED ON HARDWARE BY THE OWNER (2026-08-25)
+*"i tested the credits screen and it works properly."* **A7's outstanding device
+leg — "the credits screen has NEVER rendered on the FunKey-S" — is now
+DISCHARGED by owner observation.** The warp field, the scrolling names, the
+reticle and the laser all read correctly at 240x240, which the lane could only
+guess at. **The remaining A7 device legs (the judge-sha re-pins) are unaffected
+and still owed.**
