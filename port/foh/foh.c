@@ -2,12 +2,21 @@
 // graph + selection semantics per the foh.h header table (every edge
 // cited there from the upstream primary source); rewritten navigation
 // (d-pad edges, row cursors) per the pre-registered deltas (AGENT-LOG
-// iter 88). No RNG, no wall clock, no I/O — a pure (state, input) ->
-// state step, so flow traces and screenshots are byte-stable by
-// construction.
+// iter 88). No wall clock, no I/O — a pure (state, input) -> state step,
+// so flow traces and screenshots are byte-stable by construction.
+//
+// "NO RNG" WAS TRUE UNTIL A7, AND THE AMENDMENT IS NARROW. The credits
+// screen (MENU-SPEC §8) is a shooting gallery whose star field and name
+// placement upstream draws from Math.random. That is still not the seeded
+// stream: DEVIATION D38 gives the credits a generator of its own, seeded
+// from a compile-time constant and living in FohState, so the step stays a
+// pure function of (state, input) and two runs of the same flow still
+// render the same bytes. `foh_rand` below is the ONLY generator in this
+// file and `credRng` the only state it touches.
 #include "foh.h"
 
 #include "../gfx/ctl_style.h" // C30(c): the Controls screen's two cells
+#include "../fdlibm/fdlibm.h" // A7: the credits star field's spawn angle
 
 #include <string.h>
 
@@ -19,6 +28,164 @@ static const int kMenuCount[FOH_SCREEN_COUNT] = {
     [FOH_MENU_BATTLE] = 4,
     [FOH_MENU_CONTROLS] = 2,
 };
+
+// --- A7: the credits (upstream menus/credits.js; MENU-SPEC §8) -------------
+//
+// THE FOURTEEN CREDITS, VERBATIM (credits.js:115-132).
+//
+// These are other people's attribution and the bytes below are not typed by
+// hand: they were lifted out of the pinned clone by a regex over
+// `new ScrollingText(...)`, and port/foh/check-credits.sh re-runs that
+// extraction against `$MELEELIGHT_CLONE` on every run and requires this table
+// to match row for row, in order — name, role, blurb and yPos. A dropped or
+// mis-spelled contributor therefore fails a check rather than shipping.
+//
+// Mixed case is upstream's; face 1 is uppercase-only (foh_font.c), so the
+// renderer uppercases at the DRAW site (the foh_render.c:foh_upper precedent),
+// leaving the authored strings here untouched.
+const FohCredit foh_credits[FOH_CRED_NAMES] = {
+    {"Schmoo", "Creator, Main Developer", "Made the game.", 800},
+    {"Tatatat0", "Programmer", "Created the AI and credits.", 1100},
+    {"bites", "Animation Assistant, Level Design",
+     "Helped develop animation process & designed target stages.", 1400},
+    {"shf", "Programmer, Mathematician",
+     "Input conversion and environmental collision.", 1700},
+    {"Nehgromancer", "Programmer", "Refactoring and networking.", 2000},
+    {"BonesMalones", "Programmer", "Refactoring and optimization.", 2300},
+    {"TJohnW", "Programmer", "Refactoring and code quality.", 2400},
+    {"WwwWario", "Support", "Helping users troubleshoot and being a homie!",
+     2700},
+    {"Mrjhrock2010", "Support",
+     "Helping people out and trash talking in netplay.", 3000},
+    {"zircon", "Musician", "Smash Superstars (Menu Theme)", 3300},
+    {"Buoy", "Musician",
+     "Rush of the Rainforest (YStory Theme) & Target Blitz (Target Theme)",
+     3600},
+    {"Tom Mauritzon", "Musician", "Mega Helix (PStadium Theme)", 3900},
+    {"Rozen", "Musician", "Kumite (Battlefield Theme)", 4200},
+    {"Zack Parrish", "Musician", "Sunny Side Up (Dreamland Theme)", 4500},
+};
+
+// DEVIATION D38 — THE FOH-LOCAL RANDOM STREAM (owner-delegated, driver
+// ruling; MENU-SPEC §8/§12.1).
+//
+// credits.js calls Math.random in three places: the star constructor and its
+// respawn (:252-255, :321-323), a name's starting x (:42) and its wobble
+// amplitude and direction (:49,:51). In the browser those draws come off the
+// SEEDED stream — the same fact that makes the SSS RANDOM slot a registered
+// refusal (foh.h) — and the sim's stream carries a 465-draw boot pin whose
+// position the launched match's checksums depend on. Sharing it would move
+// every golden by however many stars a player watched.
+//
+// So the credits get their own generator. It is mulberry32 (the same
+// ALGORITHM the sim uses, no shared state and no shared header), seeded from
+// a compile-time constant, and its whole state is `FohState.credRng` — which
+// means the screen is still a pure function of (state, input): the same flow
+// replays to the same pixels, twice, forever, and the sim's stream never sees
+// a draw. What this deliberately does NOT do is invent an authored table of
+// star positions: those are values upstream DRAWS, and drawing them from a
+// different generator is a smaller departure than writing them down.
+#define FOH_CRED_SEED 0xC0FFEE13u // arbitrary, fixed; 13 = upstream's gameMode
+
+static double foh_rand(FohState *s) {
+  // mulberry32, the sim's ml_rng.h body restated over the FOH's own state
+  // (a cross-TU include from port/sim into the menu machine would make the
+  // two planes look connected, which is the exact thing D38 separates).
+  uint32_t z = (s->credRng += 0x6D2B79F5u);
+  z = (z ^ (z >> 15)) * (z | 1u);
+  z ^= z + (z ^ (z >> 7)) * (z | 61u);
+  return (double)((z ^ (z >> 14)) >> 0) / 4294967296.0;
+}
+
+// D4's scale, the audio screen's note: upstream's 1200x750 canvas onto
+// 240x240. Named so the conversions read as conversions.
+#define CRED_CX(x) ((double)(x) / 5.0)
+#define CRED_CY(y) ((double)(y) * 0.32)
+// The warp field's origin. Upstream radiates from its CANVAS centre
+// (600,375); ours radiates from the 240x240 centre and scales every radial
+// constant by 1/5. Using D4's y scale on a radius would draw the field as an
+// ellipse, and using 1/5 on the y ORIGIN would leave the bottom 90 px
+// starless — the field is round in upstream's own space and is kept round.
+#define CRED_STAR_CX 120.0
+#define CRED_STAR_CY 120.0
+
+// cStar's constructor / respawn (credits.js:251-258 / :320-326). `fresh`
+// picks the constructor's life (a random age, so the initial hundred are
+// scattered) over the respawn's (:322, which starts them at the centre).
+static void cred_star_spawn(FohState *s, FohCredStar *st, bool fresh) {
+  const double vel = (4.0 + foh_rand(s) * 4.0) / 5.0; // :253 / :321, /5 = D4
+  const double life = fresh ? (foh_rand(s) * 100.0 + 10.0 * (vel * 5.0 - 4.0))
+                            : (10.0 * (vel * 5.0 - 4.0)); // :254 / :322
+  const double angle = 6.283185307179586 * foh_rand(s); // twoPi (:8), :255
+  // JS Math.round: ties toward +Infinity. Every value here is positive, so
+  // floor(x + 0.5) is that function on this domain.
+  st->life = (int)(life + 0.5);
+  st->dx = vel * fd_cos(angle);
+  st->dy = vel * fd_sin(angle);
+  st->x = CRED_STAR_CX + st->dx * (double)st->life; // :256 / :324
+  st->y = CRED_STAR_CY + st->dy * (double)st->life;
+}
+
+// The reset block, `initc` (credits.js:112-138). NOT the stars.
+static void cred_reset(FohState *s) {
+  s->credScrollPos = 0; // :113
+  s->credHitTimer = 0;  // :114 lastHit = [0, 0, false]
+  s->credHitIdx = 0;
+  s->credHitCleared = false;
+  for (int i = 0; i < FOH_CRED_NAMES; i++) {
+    // ScrollingText's constructor, in constructor order so the draw sequence
+    // is upstream's (credits.js:41-51).
+    s->credNameX[i] =
+        (int)(foh_rand(s) * (double)(1200 / 2)) + 1200 / 4; // :42
+    s->credNameY[i] = foh_credits[i].y0;                    // :43
+    s->credNameShot[i] = false;                             // :48
+    s->credNameXMax[i] = (int)(foh_rand(s) * 150.0) + 50;   // :49
+    s->credNameXVal[i] = 0;                                 // :50
+    // UPSTREAM QUIRK, carried: `Math.floor(Math.random() + 1)` is ALWAYS 1,
+    // because Math.random() is in [0,1) (:51). The draw still happens — it
+    // is a position in the stream — and the value is still 1. The wobble
+    // does reverse later, in scrollY (:85-91).
+    s->credNameXDir[i] = (int)(foh_rand(s) + 1.0);
+    s->credNameRender[i] = false; // :52
+  }
+  s->credScore = 0;        // :134
+  s->credShootBuf = false; // :135
+  s->credCursorAngle = 0;  // :136
+  for (int n = 0; n < FOH_CRED_SHOTS; n++) s->credShot[n].live = false;
+  s->credInit = false; // :137
+}
+
+// D4's contract: the rect the renderer blits the name into IS the rect the
+// laser hit-tests. Upstream gets that for free — its size() (:53-58) is
+// `20 px * Text.length`, the exact advance of the monospaced 36 px Consolas
+// it draws with. Face 1's advance is 6 px, so the port's box is
+// foh_text_width of the UPPERCASED name, which is what appears on screen.
+void foh_credits_name_rects(const FohState *s, FohHandRect out[FOH_CRED_NAMES]) {
+  for (int i = 0; i < FOH_CRED_NAMES; i++) {
+    char up[32];
+    int n = 0;
+    for (const char *p = foh_credits[i].name; *p && n < (int)sizeof up - 1; p++) {
+      up[n++] = (*p >= 'a' && *p <= 'z') ? (char)(*p - 'a' + 'A') : *p;
+    }
+    up[n] = 0;
+    const int w = foh_text_width(up, 1);
+    int x = (int)CRED_CX(s->credNameX[i]);
+    // 240 px LAYOUT ADAPTATION (not a behaviour change): upstream's x range
+    // is [300,900) canvas px and its longest name is 13 * 20 = 260 px, so a
+    // name always fits its 1200 px canvas. Face 1 is proportionally wider
+    // (6/240 vs 20/1200), so the same fraction can run off a 240 px screen;
+    // the draw x is pulled back to keep the whole name visible. The hit box
+    // moves with it, because they are the same rect.
+    if (x + w > RAST_W) x = RAST_W - w;
+    if (x < 0) x = 0;
+    out[i].x = x;
+    out[i].w = w;
+    // size()[1] is [yPos-23, yPos] (:55): the glyph run's top and baseline.
+    // 23 canvas px * D4's 0.32 = 7.36, and face 1 is exactly 7 px tall.
+    out[i].y = (int)CRED_CY(s->credNameY[i]) - 7;
+    out[i].h = 7;
+  }
+}
 
 const char *foh_screen_token(FohScreen sc) {
   switch (sc) {
@@ -34,6 +201,7 @@ const char *foh_screen_token(FohScreen sc) {
     case FOH_OPT_AUDIO: return "options-audio";
     case FOH_CTRL_PAD: return "controls-controller";
     case FOH_CTRL_KEY: return "controls-keyboard";
+    case FOH_CREDITS: return "credits";
     case FOH_MATCH: return "match";
     case FOH_TSS: return "target-select";
     case FOH_TMATCH: return "target-match";
@@ -87,6 +255,23 @@ void foh_init(FohState *s) {
   // masterVolume = [0.5, 0.3] (audiomenu.js:13) — sounds, music.
   s->masterVolume[0] = 0.5;
   s->masterVolume[1] = 0.3;
+  // --- credits module load (menus/credits.js top level) -------------------
+  // `initc = true` (:11), so the FIRST tick on the screen runs the reset
+  // block; the star field is built ONCE here, exactly where upstream builds
+  // it (:262-265, module load), which is why it keeps drifting between
+  // visits. The RNG (DEVIATION D38) is seeded before the first draw.
+  s->credRng = FOH_CRED_SEED;
+  s->credInit = true;
+  for (int n = 0; n < FOH_CRED_STARS; n++) {
+    cred_star_spawn(s, &s->credStar[n], true);
+  }
+  // cPlayerXPos/cPlayerYPos = canvas centre (:23-24). D12 makes the reticle
+  // relative, so this is where it STARTS; step_menu re-homes it on every
+  // entry, because upstream's absolute map re-centres it whenever the stick
+  // is neutral and losing that would be a behaviour change D12 never asked
+  // for.
+  s->credX = RAST_W / 2.0;
+  s->credY = RAST_H / 2.0;
   // targetRecords fresh state is -1, NOT 0 (targetplay.js:40) — 0 would
   // read as a valid 0-second record (task 13).
   for (int c = 0; c < 5; c++) {
@@ -290,8 +475,24 @@ static void step_menu(FohState *s, const PlatformInput *in,
           ev_trans(s, sc, FOH_CTRL_KEY, "a"); // changeGamemode(12), :159-161
 #endif
         } else {
-          snd_push(s, "deny");
-          ev_refused(s, "credits"); // conventions scope exclusion
+          // A7 (MENU-SPEC §8). Upstream: `setCreditsPlayer(i);
+          // changeGamemode(13)` (menu.js:145-149), inside the ONE
+          // menuForward at :70 — no `menuMove = true`, so it is a SINGLE
+          // sound, like every other changeGamemode leave in this switch.
+          // menuSelected is NOT touched, which is what puts the cursor back
+          // on the CREDITS row when the screen exits (credits.js:226-246
+          // changes only the gameMode).
+          //
+          // creditsPlayer has no port here — the FOH has one input device
+          // (foh.h's ONE-HAND note), so the polled port is always 0.
+          snd_push(s, "menuForward"); // menu.js:70
+          // D12's reticle is relative, so entering has to put it somewhere.
+          // Upstream's absolute map parks it dead centre whenever the stick
+          // is neutral (credits.js:169-173), and that is the observable
+          // being preserved. The tssHandX re-home above is the precedent.
+          s->credX = RAST_W / 2.0;
+          s->credY = RAST_H / 2.0;
+          ev_trans(s, sc, FOH_CREDITS, "a"); // changeGamemode(13), :147
         }
         break;
       case FOH_MENU_CONTROLS:
@@ -1184,6 +1385,227 @@ static void step_opt_audio(FohState *s, const PlatformInput *in,
   }
 }
 
+// --- CREDITS (upstream menus/credits.js; MENU-SPEC §8; punch-list A7) ------
+//
+// A TRANSLITERATION of `credits(p, input)` (credits.js:102-247), in upstream's
+// own statement order, PLUS the two motion loops that upstream puts in
+// `drawCredits` (:318-357). Those two are folded in at the bottom of this
+// function on purpose: upstream runs its logic on a fixed timer and its
+// drawing on requestAnimationFrame, so the star and laser motion is tied to
+// the RENDER rate there (and is skipped outright in its 30 fps mode,
+// main.js:1163). This port renders as a PURE FUNCTION of FohState — that is
+// what makes every shot byte-stable — so anything that moves has to move in
+// the tick. One tick = one logic pass then one draw pass, which is the frame
+// upstream is trying to have.
+//
+// TWO EXITS, both to gameMode 1 (:224-246), and gameMode 1 is the MENU with
+// menuMode and menuSelected untouched — so both land back on Options with the
+// cursor still on CREDITS. Upstream additionally pokes `input[p][1].b = true`
+// (:233,:241) so the same B press cannot read as a fresh edge on the menu the
+// next frame; foh_tick already stores the whole input as `prev` at the end of
+// every tick, so a held B is recorded and no edge appears. Same observable,
+// no poke needed.
+//
+// QUIRK Q6 (MENU-SPEC §8.4), carried verbatim: `cScrollingPos` advances by a
+// flat +2 at :143 REGARDLESS of the START/L/R fast-forward, which only speeds
+// the names up (:145-153). Holding fast-forward therefore runs the names off
+// the top well before the mode ends, and the mode still ends at frame 2500.
+static void step_credits(FohState *s, const PlatformInput *in,
+                         const PlatformInput *pv) {
+  const bool aE = in->a && !pv->a;
+  const bool bE = in->b && !pv->b;
+  const bool xE = in->x && !pv->x;
+  const bool yE = in->y && !pv->y;
+
+  // :104-111 — X cycles the laser colour forward, Y back, wrapping in both
+  // directions across the four `laserColors` (:32-37; the colours themselves
+  // live in the renderer).
+  if (xE) s->credLaser = (s->credLaser == 3) ? 0 : s->credLaser + 1;
+  if (yE) s->credLaser = (s->credLaser == 0) ? 3 : s->credLaser - 1;
+
+  if (s->credInit) cred_reset(s); // :112-138
+
+  if (s->credCursorAngle >= 360.0) s->credCursorAngle = 0.0; // :140-142
+  s->credScrollPos -= -2;                                    // :143, Q6
+
+  // :145-153 — START **or** either shoulder, held (level, not edge).
+  int yDif;
+  if (in->start || in->l || in->r) {
+    s->credCursorAngle += 4.5;
+    yDif = -3; // Math.round(cScrollingSpeed * 1.5)
+  } else {
+    s->credCursorAngle += 3.0;
+    yDif = -2; // Math.round(cScrollingSpeed)
+  }
+
+  for (int i = 0; i < FOH_CRED_NAMES; i++) {
+    // scrollY (:84-93): the wobble reverses at +/-xMax, then one px of
+    // sideways drift and the scroll step.
+    if (s->credNameXVal[i] == s->credNameXMax[i] && s->credNameXDir[i] == 1) {
+      s->credNameXDir[i] = 0;
+    } else if (s->credNameXVal[i] == -1 * s->credNameXMax[i] &&
+               s->credNameXDir[i] == 0) {
+      s->credNameXDir[i] = 1;
+    }
+    s->credNameX[i] += -1 + (2 * s->credNameXDir[i]);
+    s->credNameXVal[i] += -1 + (2 * s->credNameXDir[i]);
+    s->credNameY[i] += yDif;
+    // checkIfShouldRender(cYSize) (:59-66) — size()[1] is [yPos-23, yPos].
+    s->credNameRender[i] =
+        (s->credNameY[i] - 23 < 750) && (s->credNameY[i] > 0);
+  }
+
+  // :158-166 — the info panel's 600-frame dwell, then it clears.
+  if (s->credHitTimer > 0) s->credHitTimer -= 1;
+  else if (!s->credHitCleared) s->credHitCleared = true;
+
+  // :168-186 replaced by DEVIATION D12 (MENU-SPEC §8.3). Upstream maps the
+  // UNDEADENED stick absolutely onto the canvas, which a d-pad reduces to
+  // nine reachable positions and makes the screen unplayable (it always ends
+  // on `failure`). This is the CSS/target-select cursor instead — the same
+  // shared body, the same clamp to the logical canvas — and it is the only
+  // credits semantic that changes.
+  foh_hand_step(&s->credX, &s->credY, in->up, in->down, in->left, in->right,
+                (double)RAST_W, (double)RAST_H);
+
+  // :188-203 — fire. One A edge inside the cooldown is REMEMBERED (a
+  // one-frame-deep buffer) and fires the instant the cooldown expires.
+  if (s->credCool == 0) {
+    if (aE || s->credShootBuf) {
+      snd_push(s, "foxlaserfire"); // :192
+      // The twin lasers: same target, one from each bottom corner
+      // (:193-194 — position (0,0) and (1200,0) in the y-flipped laser
+      // space, i.e. the two bottom corners of the canvas).
+      for (int type = 0; type < 2; type++) {
+        int slot = -1;
+        for (int n = 0; n < FOH_CRED_SHOTS; n++) {
+          if (!s->credShot[n].live) { slot = n; break; }
+        }
+        // Unreachable by construction (the bound is derived at
+        // FOH_CRED_SHOTS); loud rather than a silently dropped laser.
+        if (slot < 0) gfx_fatal("foh: credits shot table overflowed");
+        FohCredShot *sh = &s->credShot[slot];
+        const double px = (type == 0) ? 0.0 : (double)RAST_W;
+        const double py = 0.0;
+        const double tx = s->credX;                    // :193 target.x
+        const double ty = (double)RAST_H - s->credY;   // :267's 750 - y
+        const double dx = tx - px, dy = ty - py;
+        // sx/sy are `distance * cos(angle)` and `distance * sin(angle)` for
+        // upstream's angle (:271-274), in closed form. With
+        // angle = atan(dy/dx), cos(angle) = |dx|/hyp and
+        // sin(angle) = dy*sgn(dx)/hyp, so distance*cos == dx*sgn(dx) and
+        // distance*sin == dy*sgn(dx) — no transcendental, and no rounding
+        // difference either, because atan's own range (-pi/2, pi/2) is what
+        // makes the identity exact. dx == 0 gives JS atan(+/-Infinity) =
+        // +/-pi/2, which is the sgn = +1 branch, so it needs no case of its
+        // own. `type` adds pi (:272-274), i.e. negates both.
+        const double sgn = (dx < 0.0) ? -1.0 : 1.0;
+        sh->sx = (type ? -1.0 : 1.0) * dx * sgn;
+        sh->sy = (type ? -1.0 : 1.0) * dy * sgn;
+        // ONE non-reproduction, stated: with the reticle exactly on the
+        // corner a laser starts from, upstream's 0/0 makes angle and
+        // distance NaN and the bolt vanishes into NaN coordinates. Here the
+        // same case gives a zero step, so the bolt sits on the corner for
+        // its 25 frames. Feeding NaN to the rasteriser is not faithfulness.
+        // :267 — the target pair, kept in the y-FLIPPED laser space exactly
+        // as upstream stores it, and un-flipped again at the hit test
+        // (:211's `750 - target.y`).
+        sh->tx = tx;
+        sh->ty = ty;
+        sh->x = sh->lx = sh->l2x = px; // :268-270
+        sh->y = sh->ly = sh->l2y = py;
+        sh->vel = 0.3; // :266
+        sh->life = 0;
+        sh->live = true;
+      }
+      s->credCool = 8; // :196
+      s->credShootBuf = false;
+    }
+  } else {
+    if (aE) s->credShootBuf = true; // :199-201
+    s->credCool -= 1;
+  }
+
+  // :205-222 — a bolt lands on frame 15 of its life and is tested against the
+  // names WHERE THEY ARE NOW. The inner loop keeps the LAST match rather than
+  // breaking (:210-214), and the twin bolts land together: the first marks
+  // the name shot, the second finds `isShot` already true and scores nothing
+  // (checkIfShot, :72-83).
+  FohHandRect rect[FOH_CRED_NAMES];
+  foh_credits_name_rects(s, rect);
+  for (int n = 0; n < FOH_CRED_SHOTS; n++) {
+    if (!s->credShot[n].live || s->credShot[n].life != 15) continue;
+    int made = -1;
+    // The bolt's aim point, back in screen coordinates: upstream stores the
+    // target y-flipped and un-flips it here (:211's `750 - target.y`).
+    const double px = s->credShot[n].tx;
+    const double py = (double)RAST_H - s->credShot[n].ty;
+    for (int i = 0; i < FOH_CRED_NAMES; i++) {
+      if (s->credNameShot[i]) continue;
+      // isHovering (:67-73) — INCLUSIVE on all four sides, which is why this
+      // is not foh_hand_hit (that one is strict, for the CSS's gutters).
+      if (px >= (double)rect[i].x && px <= (double)(rect[i].x + rect[i].w) &&
+          py >= (double)rect[i].y && py <= (double)(rect[i].y + rect[i].h)) {
+        made = i;
+      }
+    }
+    if (made >= 0) {
+      s->credNameShot[made] = true;
+      snd_push(s, "targetBreak"); // :216
+      s->credHitCleared = false;  // :217
+      s->credHitTimer = 600;      // :218
+      s->credHitIdx = made;       // :219
+      s->credScore += 1;          // :220
+    }
+  }
+
+  // :224-246 — the two exits. The timer is checked FIRST, so a B pressed on
+  // the very last frame still ends on complete/failure.
+  if (s->credScrollPos >= 5000) { // cScrollingMax (:25)
+    snd_push(s, s->credScore == FOH_CRED_NAMES ? "complete" : "failure");
+    s->credInit = true;
+    for (int n = 0; n < FOH_CRED_SHOTS; n++) s->credShot[n].live = false;
+    s->credHitTimer = 0;
+    s->credHitIdx = 0;
+    s->credHitCleared = false;
+    ev_trans(s, FOH_CREDITS, FOH_MENU_OPTIONS, "timer"); // changeGamemode(1)
+    return;
+  }
+  if (bE) {
+    s->credInit = true;
+    snd_push(s, "menuBack"); // :236
+    for (int n = 0; n < FOH_CRED_SHOTS; n++) s->credShot[n].live = false;
+    s->credHitTimer = 0;
+    s->credHitIdx = 0;
+    s->credHitCleared = false;
+    ev_trans(s, FOH_CREDITS, FOH_MENU_OPTIONS, "b"); // changeGamemode(1)
+    return;
+  }
+
+  // --- the draw pass's motion (credits.js:318-357), see the header note ---
+  for (int n = 0; n < FOH_CRED_STARS; n++) {
+    FohCredStar *st = &s->credStar[n];
+    st->life++;                                          // :319
+    if (st->life == 200) cred_star_spawn(s, st, false);  // :320-326
+    st->x += st->dx;                                     // :327
+    st->y += st->dy;                                     // :328
+  }
+  for (int n = 0; n < FOH_CRED_SHOTS; n++) {
+    FohCredShot *sh = &s->credShot[n];
+    if (!sh->live) continue;
+    sh->life++;      // :335
+    sh->vel *= 0.77; // :336 — a decaying fraction of the whole distance, so
+                     // the bolt converges on the reticle and stops
+    sh->l2x = sh->lx; // :337
+    sh->l2y = sh->ly;
+    sh->lx = sh->x; // :338
+    sh->ly = sh->y;
+    sh->x += sh->vel * sh->sx; // :339
+    sh->y += sh->vel * sh->sy; // :340
+    if (sh->life == 25) sh->live = false; // :341-342
+  }
+}
+
 // --- CONTROLS DESTINATIONS (MENU-SPEC §9) -----------------------------------
 // Page 3's two rows finally go somewhere. Neither destination is a port of
 // its upstream module, and both say so on screen:
@@ -1367,6 +1789,9 @@ void foh_tick(FohState *s, const PlatformInput *in) {
     case FOH_CTRL_PAD:
     case FOH_CTRL_KEY:
       step_ctrl(s, in, &pv);
+      break;
+    case FOH_CREDITS:
+      step_credits(s, in, &pv);
       break;
     case FOH_TSS:
       step_tss(s, in, &pv);

@@ -531,6 +531,8 @@ typedef enum {
                   // no-controller state, see the note in foh.c
   FOH_CTRL_KEY,   // upstream gameMode 12 (keyboardmenu.js) — §9.3 D13
                   // reduced form, see the note in foh.c
+  FOH_CREDITS,    // upstream gameMode 13 (menus/credits.js) — MENU-SPEC §8,
+                  // punch-list A7; the shooting gallery, see foh.c
   FOH_MATCH,
   FOH_TSS,    // target-select (upstream gameMode 7, targetselect.js)
   FOH_TMATCH, // target-match (terminal; the driver owns the target sim)
@@ -560,6 +562,76 @@ typedef struct {
 #define FOH_CTL_ROW_STYLE 9
 #define FOH_CTL_ROW_RESET 10
 #define FOH_CTL_ROWS 11
+
+// --- CREDITS (upstream menus/credits.js, 422 lines; MENU-SPEC §8; A7) ------
+//
+// WHAT THE SCREEN IS. Not a roll — a Star Fox shooting gallery. Fourteen
+// contributor names scroll up over a 100-star warp field and you shoot them
+// with a twin-laser reticle; hitting one prints that person's ROLE and what
+// they DID in a panel at the bottom. It ends on a 2500-frame timer (or B),
+// playing `complete` if all fourteen were hit and `failure` otherwise.
+//
+// THE NAMES ARE OTHER PEOPLE'S ATTRIBUTION. `foh_credits` below carries
+// credits.js:115-132 VERBATIM — spelling, order, roles and blurbs. They were
+// extracted from the pinned clone's bytes by a regex over the source rather
+// than retyped (the project's "JS-reference extraction" rule: a transcription
+// bug in a credit is the worst defect this screen can carry), and
+// port/foh/check-credits.sh re-extracts them from the clone at check time and
+// requires the C table to agree row for row.
+//
+// COORDINATE SPACES, stated once because the file uses BOTH:
+//   * the NAME PLANE keeps upstream's canvas units verbatim — `y0` below is
+//     the ScrollingText yPos literal, the scroll runs at upstream's -2/-3 px
+//     per frame, and the exit timer is upstream's cScrollingMax of 5000.
+//     Those numbers ARE the content schedule; scaling them would hide it.
+//     They convert to raster pixels only at draw/hit time (x/5, y*0.32 —
+//     DEVIATION D4's scale, the audio screen's note).
+//   * the RETICLE, the STARS and the LASERS live in RASTER pixels, because
+//     each is a circle or a straight run and D4's y scale (0.32) differs from
+//     its x scale (0.2): carrying them in canvas units would draw the warp
+//     field and the reticle as ellipses. Every one of their constants is
+//     upstream's divided by 5, cited at the site.
+#define FOH_CRED_NAMES 14
+#define FOH_CRED_STARS 100
+// Shot slots. Upstream's cShots is unbounded, but the domain is not: a fire
+// pushes TWO shots and arms an 8-frame cooldown (credits.js:186,196), and a
+// shot dies at life 25 (:341), so at most ceil(25/8)+1 = 4 fires * 2 = 8 can
+// ever be live. 16 is that bound doubled; foh.c traps on overflow rather than
+// dropping a laser silently.
+#define FOH_CRED_SHOTS 16
+
+// One ScrollingText's authored content (credits.js:41-45,115-132).
+typedef struct {
+  const char *name;     // .Text
+  const char *position; // .position — the ROLE
+  const char *info;     // .information — what they did
+  int y0;               // the yPos literal the constructor is called with
+} FohCredit;
+extern const FohCredit foh_credits[FOH_CRED_NAMES];
+
+// cStar (credits.js:251-258). `dx`/`dy` are `vel*cos(angle)` and
+// `vel*sin(angle)` evaluated ONCE at spawn — upstream recomputes both every
+// frame from a constant angle (:327-328), so the values are identical and the
+// device does not pay 200 transcendentals per frame for them.
+typedef struct {
+  double x, y; // raster pixels
+  double dx, dy;
+  int life;
+} FohCredStar;
+
+// cShot (credits.js:265-278). Positions are in upstream's Y-FLIPPED laser
+// space (`RAST_H - y` at draw time, :347-348). `sx`/`sy` are
+// `distance*cos(angle)` and `distance*sin(angle)`, fixed at fire time.
+typedef struct {
+  double x, y;     // position
+  double lx, ly;   // lastPosition
+  double l2x, l2y; // lastPosition2
+  double tx, ty;   // target — the reticle at FIRE time, y-flipped (:267)
+  double vel;
+  double sx, sy;
+  int life;
+  bool live;
+} FohCredShot;
 
 typedef struct {
   FohScreen screen;
@@ -757,6 +829,47 @@ typedef struct {
   // Same module lifetime as audioRow: not reset on entry, so a second
   // visit opens on the row you left.
   int ctlRow;
+  // --- credits (upstream menus/credits.js; MENU-SPEC §8; A7) -------------
+  // MODULE lifetime, exactly like upstream's file-scope `let`s: nothing here
+  // is reset by entering the screen except through `credInit`, which is the
+  // port of `initc` (credits.js:11) and does upstream's own reset block
+  // (:112-138). The star field is deliberately NOT in that block — upstream
+  // builds it once at module load (:262-265) and never rebuilds it, so the
+  // warp keeps drifting across visits.
+  bool credInit;         // initc (:11)
+  int credScrollPos;     // cScrollingPos (:26) — the exit timer, +2/frame
+  int credScore;         // cScore (:15)
+  int credCool;          // shoot_cooldown (:10)
+  bool credShootBuf;     // cShootBuffer (:27) — the one-frame-deep buffer
+  int credLaser;         // currentLaserColor (:31), 0..3
+  double credCursorAngle;// cCursorAngle (:21), DEGREES (:403 divides by 180)
+  int credHitTimer;      // lastHit[0] (:29) — 600 frames of info panel
+  int credHitIdx;        // lastHit[1]
+  bool credHitCleared;   // lastHit[2]
+  // The reticle. DEVIATION D12 (MENU-SPEC §8.3): upstream maps rawX/rawY
+  // ABSOLUTELY onto the canvas (:169-186), which a d-pad reduces to nine
+  // reachable positions; this integrates the d-pad through the SHARED free
+  // cursor (foh_hand_step) and clamps, like the CSS and target-select.
+  // Raster pixels, doubles, rounded only at draw time.
+  double credX, credY;
+  // The fourteen ScrollingTexts, in upstream canvas units (see the note at
+  // FOH_CRED_NAMES). xPos (:42), yPos (:43), xVal (:50), xMax (:49),
+  // xDirection (:51), isShot (:48), canRender (:52).
+  int credNameX[FOH_CRED_NAMES];
+  int credNameY[FOH_CRED_NAMES];
+  int credNameXVal[FOH_CRED_NAMES];
+  int credNameXMax[FOH_CRED_NAMES];
+  int credNameXDir[FOH_CRED_NAMES];
+  bool credNameShot[FOH_CRED_NAMES];
+  bool credNameRender[FOH_CRED_NAMES];
+  FohCredStar credStar[FOH_CRED_STARS];
+  FohCredShot credShot[FOH_CRED_SHOTS];
+  // DEVIATION D38 — the FOH-LOCAL random stream. Full argument at its
+  // definition in foh.c; in one line, upstream's Math.random IS the seeded
+  // oracle stream (the same fact that makes the SSS RANDOM slot a registered
+  // refusal above), so the credits' star/name draws get their own generator
+  // that the sim's stream never sees.
+  uint32_t credRng;
   // target-test records DISPLAY plane (task 13): seconds, -1 = none
   // (upstream fresh state, targetplay.js:40). foh_init sets -1; the
   // drivers overwrite from the foh_persist chokepoint at boot
@@ -826,6 +939,15 @@ double foh_css_knob_y(void);
 // Port k's type (-1/0/1) and CPU level (1..4); k >= 2 is D6's pinned N/A.
 int foh_css_port_type(const FohState *s, int k);
 int foh_css_port_diff(const FohState *s, int k);
+
+// foh.c: where credit `k`'s name is DRAWN, in raster pixels — the same D4
+// contract as foh_css_cells/foh_tss_slots. `credits.js:53-58`'s size() is the
+// hit box AND the drawn glyph run upstream (a monospaced 20 px/char face), so
+// the port's box is its own rendered width: the renderer blits at this rect
+// and the shot test hit-tests it, from one definition. `w` is
+// foh_text_width(uppercased name), `h` is face 1's 7 px (upstream's 23 canvas
+// px * D4's 0.32 = 7.36).
+void foh_credits_name_rects(const FohState *s, FohHandRect out[FOH_CRED_NAMES]);
 
 // foh_render.c: draw the current screen into rz (full-frame clear+draw;
 // deterministic — no RNG, no clock).

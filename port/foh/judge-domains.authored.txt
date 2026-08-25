@@ -206,6 +206,9 @@ E any options-gameplay menu-options b gameplaymenu.js:25-36 back arm, cursor 1
 E any css sss start css.js:446-451 START while readyToFight -> changeGamemode(6)
 E any menu-options options-audio a menu.js:130 changeGamemode(10)
 E any options-audio menu-options b audiomenu.js:20-26 changeGamemode(1), menuMode/menuSelected untouched
+E any menu-options credits a menu.js:145-149 CREDITS row -> setCreditsPlayer(i) + changeGamemode(13); MENU-SPEC §8 (A7)
+E any credits menu-options b credits.js:236-245 B -> menuBack + changeGamemode(1) with menuMode/menuSelected untouched, so the cursor is still on the CREDITS row
+E any credits menu-options timer credits.js:226-235 cScrollingPos >= cScrollingMax (5000 at +2 per frame, :25/:143 — 2500 frames) plays complete/failure and changeGamemode(1). The credits are the ONLY screen with TWO out edges: MENU-SPEC §8.4 records both exits, and Quirk Q6 is that this timer advances regardless of the START/L/R fast-forward, so it cannot be reached early
 E any sss css b stageselect.js:77-79 B -> menuBack + changeGamemode(2)
 E any sss match launch stageselect.js:80-88 A confirm -> startGame; main.js:1320-1370
 E any menu-top target-select a menu.js:77-84 TARGETTEST -> changeGamemode(7)
@@ -230,11 +233,13 @@ E noctl controls-keyboard menu-options b MENU-SPEC §12.1 DEVIATION D27 — the 
 # === R — the registered refusal tokens =====================================
 # A refusal token is a promise that a visible affordance does NOTHING. Each
 # is bound to the screen that may emit it: a globally registered token would
-# pass on any screen (review-r1 BLOCKER). `audio`, `controller` and
-# `keyboard` are absent BY CONSTRUCTION — they are real screens in every
-# build now (MENU-SPEC §4/§9), so a trace refusing them is corruption.
+# pass on any screen (review-r1 BLOCKER). `audio`, `controller`, `keyboard`
+# and — since A7 — `credits` are absent BY CONSTRUCTION: they are real
+# screens in every build now (MENU-SPEC §4/§8/§9), so a trace refusing them
+# is corruption. The `credits` row was deleted rather than retired in place,
+# because a refusal registration is a PROMISE THAT AN AFFORDANCE DOES
+# NOTHING, and that promise is now false.
 R any targetbuilder menu-top MENU-SPEC §11 — target builder is out of scope
-R any credits menu-options MENU-SPEC §8 — the last unbuilt screen
 R any random sss MENU-SPEC §6.5 first paragraph + §6.6 gap row 6 — the refusal is a REGISTERED EXCLUSION (register: foh.h:69-76) because upstream's confirm arm draws from the seeded stream (stageselect.js:83). D11 is NOT the authority for it: D11 is the PENDING deviation that DELETES this refusal (§12 roadmap row 8), so citing it here would have said the opposite of what it says
 R any addcode target-select MENU-SPEC §11 — share-code/builder plane out of scope
 R any portconfig css MENU-SPEC §2.7 DEVIATION D17 — the CSS may reach a port config the LAUNCH plane cannot honour (togglePort has no port-0 case, main.js:510-526; sim.h:98-100 has no P1 type and sim_boot.c:374-383 pins types[0]=0). The refusal itself is foh.c:671-685, cited as the SITE, never as its own authority

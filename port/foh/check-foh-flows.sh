@@ -206,7 +206,7 @@ b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wr
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-8658ae0b23d2d853605f5495fe0fa02b02b645b70aee47944bdb5503a34e10e4 port/foh/judge-foh-trace.js
+594f1925628259bf702f12b21d7991e9be0dcf3d3e9fa0a8de1cca311259b9db port/foh/judge-foh-trace.js
 2cf5c5a532207372b70c4cee57412c7ac65643ac4f4066c745d9eb7fe4aa0e9b port/goldens-m4/wrap-target.js
 415335239fcc04df97eba07298a1fa521602d5ea45b087aa8d7d40bd740c122a port/goldens-m4/verify-target-stream.js
 6b1b6b5be3700c51dfae8c0c4cb1f012e5b61239394ae4146c2e5e19cc4fcc47 port/goldens-m4/validate-target-manifest.js
@@ -2324,10 +2324,19 @@ cc -O2 "${CFLAGS_COMMON[@]}" -c "$FOH/foh_snd_witness.c" -o "$B/foh_snd_witness.
 # Links the SAME [2] objects the app links (foh.o is the machine under test;
 # foh_render.o carries foh_anim_tick, which foh_tick calls — stubbing it would
 # be a fake, so the real TU is linked and -dead_strip drops the draw code).
+# A7: foh.o now REFERENCES fd_cos/fd_sin — the credits star field's spawn
+# angle (credits.js:255) goes through port/fdlibm and never the platform libm,
+# because the M3 class fix measured the device's static musl math to have been
+# built with unsafe-FP optimizations (CLAUDE.md, "armv7 correctness rung").
+# foh_render.o already carried that reference for the reticle spokes and
+# -dead_strip dropped it with the draw code; a reference from foh_tick cannot
+# be stripped, so the vendored TU joins the line. NOTHING ELSE CHANGES: no
+# case in this witness reaches the credits screen, so the symbol is linked and
+# never called, and the 24-case pin below is untouched.
 snd_link() { # <out-binary> <witness.o> <foh.o>
-  cc -O2 -Wl,-dead_strip -o "$1" "$2" "$3" \
+  cc -O2 -ffp-contract=off -Wl,-dead_strip -o "$1" "$2" "$3" \
     "$B/foh_render.o" "$B/foh_font.o" "$B/raster.o" "$B/img1.o" \
-    "$B/ctl_style.o" -lm
+    "$B/ctl_style.o" port/fdlibm/fdlibm.c -lm
 }
 snd_link "$B/foh_snd_witness" "$B/foh_snd_witness.o" "$B/foh.o"
 made "$B/foh_snd_witness"

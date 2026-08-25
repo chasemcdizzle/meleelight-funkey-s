@@ -1422,9 +1422,19 @@ for a player who has earned them. The pipeline extension stays registered
 
 ## §8. Credits (gameMode 13)
 
-The owner reports "credits doesn't work". Measured: it is not implemented
-at all in our port (`foh.c:197-200` emits `deny` + `refused credits`), and
-upstream's version has a real dependency problem on this hardware.
+The owner reports "credits doesn't work". Measured at audit time: it was not
+implemented at all (the Options CREDITS row emitted `deny` + `refused
+credits`), and upstream's version has a real dependency problem on this
+hardware.
+
+**BUILT 2026-08-24 (punch-list A7).** The screen is a transliteration of
+`credits.js` living in `foh.c`'s `step_credits` and `foh_render.c`'s
+`render_credits`, with DEVIATION **D12** (the relative reticle, §8.3) and
+DEVIATION **D38** (the FOH-LOCAL random stream, §12.1) as its only two
+departures. Quirk Q6 is carried verbatim. The refusal token `credits` is
+RETIRED from the judge the way `audio` and `keyboard` were — a refusal
+registration promises that an affordance does nothing, and this one now
+opens a screen. Proved by `port/foh/check-credits.sh` -> `CREDITS CHECK OK`.
 
 ### 8.1 What it is
 
@@ -1503,13 +1513,16 @@ Carried verbatim.
 
 | # | Behaviour | Our port | Gap |
 |---|---|---|---|
-| 1 | Screen exists at all | absent, `refused credits` | **MISSING** |
-| 2 | 14 scrolling names, shootable | — | **MISSING** |
-| 3 | Reticle | — | **MISSING** (D12 changes the drive) |
-| 4 | A fires, 8-frame cooldown + 1-deep buffer | — | **MISSING** |
-| 5 | X/Y laser colour | — | **MISSING** |
-| 6 | START/L/R fast-forward | — | **MISSING** |
-| 7 | B exits; 2500-frame auto-exit | — | **MISSING** |
+| 1 | Screen exists at all | `FOH_CREDITS`, `step_credits` / `render_credits` | **MATCHES** |
+| 2 | 14 scrolling names, shootable | `foh_credits[]`, extracted from the clone and re-checked against it every run | **MATCHES** |
+| 3 | Reticle | ring r 7 + 4 rotating spokes, red while hovering an unshot name | **DIFFERS** (registered: D12 drives it relatively) |
+| 4 | A fires, 8-frame cooldown + 1-deep buffer | verbatim, incl. the twin bottom-corner bolts and the life-15 hit frame | **MATCHES** |
+| 5 | X/Y laser colour | verbatim, 4 colours, wrapping both ways | **MATCHES** |
+| 6 | START/L/R fast-forward | verbatim (`yDif` -2 -> -3, spin 3 -> 4.5) | **MATCHES** |
+| 7 | B exits; 2500-frame auto-exit | verbatim, both to Options with the cursor still on CREDITS; `complete`/`failure` by score | **MATCHES** |
+| 8 | Star field | 100 stars, upstream's spawn/respawn arithmetic; **no motion trails** — upstream smears them by painting `rgba(0,0,0,0.4)` over the PREVIOUS frame (`:316`) and this renderer is a pure function of state | **DIFFERS** (structural: shot byte-stability depends on the purity) |
+| 9 | Star/laser motion runs in the DRAW loop | folded into the tick — upstream's draw loop is a separate rAF that its own 30 fps mode skips entirely (`main.js:1163`) | **DIFFERS** (structural, same reason) |
+| 10 | Panel layout | name and role STACKED full width, not side by side; the blurb word-wraps to 2 lines | **DIFFERS** (240 px layout adaptation; no authored word is altered) |
 
 ---
 
@@ -1983,7 +1996,7 @@ are in the §12.1 register.
 | Audio options | 0 | 0 | **4** (whole screen) | 0 |
 | Main menu + submenus | 4 | 3 | 0 | 0 |
 | SSS | 3 | 5 | 0 | 1 |
-| Credits | 0 | 0 | **7** (whole screen) | 0 |
+| Credits | 7 | 3 | 0 | 0 |  <!-- A7 2026-08-24: was 0/0/7-whole-screen -->
 | Controls family | 3 | 1 | 1 | 0 |
 | Splash / title | 4 | 2 | 1 | 0 |
 | Target select | — | — | — | UNVERIFIED |
@@ -2005,7 +2018,7 @@ state; each entry points at the section that carries the evidence):
 | Battle submenu | HIDDEN by owner ruling C5, nothing deleted | §11.1 |
 | CSS | the CSS-mechanics arc landed items 1-4 (cursor, token model, port types, ready/launch); the §2 tables and the CSS row above still describe the PRE-arc port and have not been re-audited | §2 |
 | Target select | LOOK measured and re-authored; semantics still UNVERIFIED | §7.1 |
-| Credits | still absent — **the last wholly unbuilt screen** | §8 |
+| Credits | BUILT 2026-08-24 (A7). D12 + D38 are its only behavioural departures; the three DIFFERS rows in the §8.5 table are structural (no motion trails, draw-loop motion folded into the tick) or 240 px layout. Never rendered ON the device — that is Chase's acceptance playthrough | §8 |
 | SSS, splash/title | untouched since the audit | §6, §10 |
 >
 > Closed by owner ruling C5 rather than by measurement: the battle submenu
@@ -2071,6 +2084,8 @@ state; each entry points at the section that carries the evidence):
 
 | D34 | **A42, owner-reported defect 2026-08-24 — X GRABS FOR REAL:** physical **X emits Melee's Z CHORD, `a` + a LIGHT SHIELD on `lA`** (`S1_ZGRAB_LA = 49.0/140.0`, the B0XX/HayBox light-shield level cited from `docs/research/b0xx-mapping.md` §2.2), replacing D33's `in.z = p->x`. Owner: *"grab with X didn't work, nothing happens."* **D33's premise was a SOURCE COMMENT, and the comment was true of real Melee and false of this engine.** MEASURED over the whole sim: every reader of `MlInput.z` is `{FORWARD,UP,DOWN}SMASH.c`'s `i0->a || i0->z`, `action_state_shortcuts.c:522` (checkForAerials), and `physics.c:983` (lCancelUpdate) — so **`z` is an ALTERNATE ATTACK button and an L-cancel trigger, and it dispatches `GRAB` exactly ZERO times.** The five real grab arms are `GUARD.c:75` / `GUARDON.c:101` (`a` edge while shielding) and `DASH.c:80` / `RUN.c:60` / `KNEEBEND.c:66` (`a` edge **+** `lA > 0 || rA > 0`), so the chord was chosen to reach ALL of them: `WAIT.c:56` and `DASH.c:72` take their analog-shoulder arm into GUARDON, whose `init -> main -> interrupt` chain runs inside the SAME tick and still sees the `a` edge. **The bounds are load-bearing, not taste:** `> 0` or no grab arm fires at all; `< 1` or `GUARDON.c:21` powershields on every grab press. **NOTHING IS TRADED AWAY** — every `z` reader is an `a || z` or a `(a edge) || (z edge)`, and lCancel's third arm is an `lA` edge, so X keeps its alternate-attack and L-cancel roles by construction and `z` is dropped rather than kept as a second name for a bit `a` already sets. **What moved that was pinned:** `s1_sweep.c`'s 2048-combo invariants (`in.a == (p.b || p.x)`, `in.lA == p.x ? S1_ZGRAB_LA : 0`, `in.z` now never set) and its dump's `z` column, which becomes the `lA` column; and `judge-s1-coverage.js`'s grab signature and K_X sidecar pairing. **THE REAL DELIVERABLE IS THE CHECK, not the button:** `check-ctl-input.sh` gains leg **[4]**, `port/gfx/ctl_seam_witness.c`, which drives physical button -> real resolver -> **REAL `sim_game_tick`** -> the actionState the engine actually enters, for every role D33 moved (A->KNEEBEND, B->JAB1, Y->NEUTRALSPECIALGROUND, X->GRAB in all three styles, plus X while shielding, while dashing, and airborne->ATTACKAIRN) — because D33 shipped a dead feature past a GREEN bit assertion, and only an assertion on the ACTION could have caught it. Teeth **t6-nograb** and **t9-seamscramble** run against that witness; **t10-powershield** holds the upper bound. Leg **[5]** commits the emitted-vs-renderable vfx comparison (41 emitted names, 45 templates, difference empty) with tooth **T11**. **STILL OWED:** `foh_ctl_labels.h:48` reads `"GRAB (Z)"` and should lose the `(Z)`; it is `port/foh`'s to change (it is pinned by `check-foh-flows.sh` leg [0m]'s 54-row label table, which must move in the same commit) | §9.3, §12.1 |
 
+| D38 | **A7, driver-allocated 2026-08-24 — THE CREDITS DRAW FROM A FOH-LOCAL RANDOM STREAM.** `credits.js` calls `Math.random` in three places: the star constructor and its respawn (`:252-255`, `:321-323`), a scrolling name's starting x (`:42`) and its wobble amplitude and direction (`:49`, `:51`). **In the browser those draws come off the SEEDED stream** — the same measured fact that makes the SSS RANDOM slot a registered refusal (`foh.h`, AGENT-LOG iter 93) — and the sim's stream carries a 465-draw boot pin whose POSITION every golden's checksums depend on. Sharing it would move every frozen stream by however many stars a player happened to watch, so the credits get a generator of their own: mulberry32 (the same ALGORITHM `port/sim/ml_rng.h` uses, with **no shared state and no shared header** — a cross-TU include would make the two planes look connected, which is the thing this separates), seeded from a compile-time constant, its entire state the single `FohState.credRng` field. **The FOH stays a pure function of (state, input)**, so the same flow still replays to the same pixels and `foh_app.c`'s "the FOH machine consumes no RNG" contract is amended in exactly one place rather than broken. **WHAT THIS DELIBERATELY IS NOT:** an authored table of star positions or an index hash. Those are values upstream DRAWS, and inventing them would be the deviation class *"we wrote down what upstream rolled"* landing in the one subsystem whose contract is no invented values; drawing them from a different generator is the smaller departure. Nothing observable outside the credits screen depends on it — no checksum, no flow edge, no launch record — and no committed flow lingers on the screen long enough for a star to matter | §8, §12.1 |
+
 ---
 
 ## §13. Recommended implementation order (QUARANTINED — historical)
@@ -2103,7 +2118,7 @@ owner-visible value per unit of work, with dependencies respected.
 | 7 | **CSS secondary widgets** — palette cycle on X/Y (0..6), mode ribbon toggling `versusMode`, clickable BACK chevron, random/clear name tags (§2.9, D8). | **S** | All are cursor + A once (1) lands. `versusMode` is sim-visible, so it needs the LAUNCH line extended — see §13.1. |
 | 8 | **SSS free cursor** — clamped pointer (D10), sticky hover, persistent position/selection, RANDOM resolving off-chain (D11) (§6). | **M** | Same paradigm as the CSS, so it reuses (1) wholesale; sequenced after the CSS because the CSS is what the owner played. |
 | 9 | **Controls chooser destinations** — `Controller` shows upstream's `"Error: no controller detected"` and returns on B (§9.2). | **S** | Converts a `deny` beep into the honest upstream state. Answers most of "controls can't select controller/keyboard" for near-zero cost. |
-| 10 | **Credits** (§8) with the relative reticle (D12). | **L** | A whole minigame: 14 `ScrollingText` objects, starfield, twin lasers with deferred hit resolution at `life == 15`, score HUD, dual exit. Real work, low frequency of use. |
+| 10 | ~~**Credits** (§8) with the relative reticle (D12).~~ **LANDED 2026-08-24 (A7)**, plus DEVIATION D38. | **L** | A whole minigame: 14 `ScrollingText` objects, starfield, twin lasers with deferred hit resolution at `life == 15`, score HUD, dual exit. Real work, low frequency of use. |
 | 11 | **Keyboard rebinder** reduced to 12 physical buttons (§9.3, D13). | **L** | Largest and least load-bearing — nobody remaps a 12-button handheld mid-session. Ship last or never; items 1–9 close the owner's report without it. |
 
 ### 13.1 Cross-cutting consequences to plan for

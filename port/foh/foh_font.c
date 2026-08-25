@@ -67,12 +67,21 @@ static const FohGlyph kGlyphs[] = {
     {',', {0x00, 0x00, 0x00, 0x00, 0x0C, 0x04, 0x08}},
     {'(', {0x02, 0x04, 0x08, 0x08, 0x08, 0x04, 0x02}},
     {')', {0x08, 0x04, 0x02, 0x02, 0x02, 0x04, 0x08}},
+    // A7 (credits): two of the fourteen authored blurbs contain '&'
+    // (credits.js:117-118 and :125-126), and those strings are OTHER
+    // PEOPLE'S ATTRIBUTION — substituting "AND" would edit a credit, and
+    // face 2 is too wide to set a 67-character blurb inside upstream's
+    // information bar at 240 px. See the note below for why this is not the
+    // widening that note forbids.
+    {'&', {0x0C, 0x12, 0x12, 0x0C, 0x1A, 0x12, 0x0D}},
 };
-// NOTE (A1 restyle): face 1's coverage is deliberately NOT widened. The
-// finish-banner tooth in check-foh-flows.sh proves the missing-glyph
-// gfx_fatal by rendering "COMPLETE?" through this face — adding '?' here
-// would silently defuse it. Menu strings that need '?' or '&' render in
-// face 2 below, which has its own guard.
+// NOTE (A1 restyle): face 1's coverage is deliberately NOT widened for
+// convenience. The finish-banner tooth in check-foh-flows.sh proves the
+// missing-glyph gfx_fatal by rendering "COMPLETE?" through this face —
+// adding '?' here would silently defuse it, so '?' stays out and menu
+// strings that need it render in face 2 below, which has its own guard.
+// A7 added '&' above and that does NOT touch the tooth: it is a different
+// character, and "COMPLETE?" still dies here.
 
 // --- FACE 2: the heavy 6x9 display face (A1 restyle Phase 0) --------------
 // Upstream's menus set "700 35px Arial" for the bar/explanation text and

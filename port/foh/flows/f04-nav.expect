@@ -6,12 +6,13 @@ T 400 menu-top menu-options a
 T 415 menu-options controls-keyboard a
 SHOT 420 controls-keyboard
 T 425 controls-keyboard menu-options b
-S 480 refused credits
-T 485 menu-options menu-top b
+T 480 menu-options credits a
+T 483 credits menu-options b
+T 487 menu-options menu-top b
 T 505 menu-top css a
 S 700 p2type 0
 T 710 css sss start
 S 740 refused random
 T 750 sss css b
 T 789 css menu-top bhold
-END 810 transitions=10
+END 810 transitions=12
