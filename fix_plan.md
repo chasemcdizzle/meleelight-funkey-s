@@ -7148,3 +7148,80 @@ it could not reach from its own lane.
 2. `check-device-foh.sh` / `check-device-persist.sh` judge-sha pins updated
    host-side but the checks were **not run**.
 3. The four `m4-freeze-manifest.txt` rows above, in the batched pass.
+
+## A45-T2 — DONE 2026-08-24 (D42/D43). **CUSTOM STAGES PLAY. NO EDITOR NEEDED.**
+
+Path: `.mlstage` file -> `mlk_slot_load` (validates) -> `tp_setup_target_custom`
+-> `tp_setup_target_core`; renderer via `gfx_target_init_custom`.
+
+**THE SPIKE'S §5.2 WAS RIGHT and the lane verified it before building:**
+`MlStageX` is a plain runtime struct and T1 had already modelled `MlkStage.s` as
+the sim's OWN `Stage`, so the filler is **~20 lines**.
+
+**IT TOOK THE CLASS FIX OVER THE ARM, and the reasoning is the transferable
+part.** An `if (custom)` inside `tp_setup_target` would have left
+`startTargetGame` **translated once and BRANCHED twice**. Instead
+`tp_setup_target_core(...)` is the ONE translation and both entries route
+through it, so **authored and custom stages differ in WHERE THEIR GEOMETRY CAME
+FROM AND NOTHING ELSE — which is exactly what makes the done-check a
+DIFFERENTIAL rather than a self-consistency test.** Same move in gfx:
+`gfx_target_init_custom` materialises a runtime `ml_tstage_t` row, so **all ten
+draw functions are byte-unchanged.**
+
+**`.mlstage` contract:** three LF lines — `MLSTAGE1` / the share code /
+`SUM <64 hex>` (sha256 over preceding bytes, **reusing `foh_persist.c:154`'s
+idiom rather than inventing a second one**). Ten fixed slots
+`custom<0..9>.mlstage`. **Validate on read, always:** bounded read, strict
+anchored grammar, **SUM verified BEFORE parsing**, then `mlk_parse` +
+`mlk_stage_playable`; every refusal names its rule.
+**T2 has NO WRITER, deliberately** — files arrive by SD card. When T3/T4 needs
+one it must **generalise `foh_persist_save`'s existing atomic publish
+(`:506-551`), not grow a second write path.** Stated at the site, in
+PORTABILITY and here rather than built, since `port/foh/` is a parallel lane.
+
+**The four open questions, answered:**
+- **`getConnected` NOT needed — and structurally, not luckily:** `connected` is
+  not one of the grammar's 14 fields, so a decoded stage never had one to
+  recompute. T7's problem.
+- **The DAMAGE plane did NOT go live** — refused at load, naming T6 as owing the
+  golden. **Subtlety worth keeping:** props with a **null** damageType are inert
+  (physics tests truthiness) and are **exactly what upstream BUG 1 emits for
+  every sixth surface** — so refusing those would reject codes the browser plays
+  fine. Only a real type string refuses.
+- **R2: REFUSE, DON'T RAISE.** Raising `ML_MAX_TARGETS` 10->20 breaks the
+  `_Static_assert` tying it to **upstream's own 10-element `targetDestroyed`
+  literal**, and no authored stage exceeds 9. The **builder** (T4) should refuse
+  the 11th where the message is useful. **Owner's call; the safe half ships.**
+- **D43 (the owner's clobber ruling) is fixed IN THE VALUE MODEL** — ten slots
+  by index, no append, no length cursor. **Both clobber sites are structurally
+  ABSENT, so the reload half is fixed too** — patching only the add path would
+  have missed it, which is what the ruling brief warned about.
+
+**Gates:** `CUSTOM STAGE PLAYS` · `SIM CONFORMS` 8/8 · `STAGECODE MATCH` ·
+`TARGET SIM CONFORMS` (the refactor's regression). `oracle/`, `port/foh/` and
+the freeze manifest byte-untouched.
+
+**THE DIFFERENTIAL:** for t01/t02, re-express the AUTHORED stage as a code, play
+it from a file, `cmp` the full outputs against the authored run, and judge BOTH
+with the unchanged `verify-stream.js` / `verify-target-stream.js` against the
+frozen goldens. **Both: `authored == custom, both == frozen, 2 targets
+destroyed`.** Sound because the lane measured first that **all 210 numbers
+across the 10 authored stages are exact at `toFixed(2)`.**
+
+**FIFTH VACUOUS-TOOTH CATCH THIS SESSION:** the play tooth shifts every
+collision surface 1.00 unit and requires the stream to move — **its first
+version did not bite**, because it shifted ground surface 0, which on t01 is a
+ledge at y=88 **the fox never touches.** Fifth razor-thin-nudge no-op measured;
+recorded at the site.
+
+### DEVICE-SCRIPT FINDING (driver, 2026-08-24) — relayed to lane P
+`/usr/local/sbin/frontend` exposes **`frontend set gmenu2x|retrofe|none`** —
+**an OFFICIAL verb for what the rig has been hand-rolling** as a raw
+`/mnt/disable_frontend` write. And its `init_frontend()` loop confirms the
+failure mode exactly: each pass does
+`if [ -f "$DISABLE_FRONTEND_FILE" -o -f "$REBOOTING_FILE" ]; then ... sleep 5`.
+**So the owner's device was never broken — it was doing what it had been told,
+forever.** `/tmp` is tmpfs while `/mnt` is the SD card, which is the whole
+reason the marker outlived the test. Two sibling files have the same
+outlive-the-test property and are worth a grep: `/mnt/last_opk`,
+`/run/rebooting`.
