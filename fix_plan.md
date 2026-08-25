@@ -7719,3 +7719,96 @@ merged bytes.
   grammar was **updated to v6 host-side — 1602 -> 1614 bytes, 69 lines,
   positional `sel` row, `v6_defaults()`, version tooth moved v6 -> v7 — and is
   UNRUN.**
+
+## A14 SECOND HALF — DONE 2026-08-25 (D48/D49). THE MENUS DRAW FROM THE BROWSER ATLAS.
+
+**The MEASURE-FIRST step delivered and it earned itself twice.** Cap ascent read
+from the atlas via `'H'`: font 0 = 6, font 3 = 11, **and font 0's ink cell is
+EXACTLY 9 device px — precisely the retired 6x9 face's cell at scale 1.**
+Every screen shifts: **upright text shrinks uniformly 0.67-0.88**; italic text
+(menu bars, mode titles, CSS header) **moves in BOTH directions** because font 3
+has only one size. **Nothing over budget** — tightest is `TARGET BUILDER` at
+123.7 px in ~128 px of bar.
+**Two things the measurement caught that guessing would not:** font 3 at `up=2`
+would set mode titles **24 px tall in an 18 px budget**, so `up=1` is the only
+integer that fits; and font 3's `'M'` declares a 19-row box with **SEVEN BLANK
+ROWS ON TOP**, so `max(-dy)` is not a usable ascent — hence reading `'H'`.
+
+**The seam is an EXTRACTION, confirmed** — parser, pool, grammar and every loud
+failure moved **byte-unchanged**; `gfx_glyph_text`/`gfx_sprite_blit` are
+one-line delegations; **no coordinate conversion anywhere**, which was the named
+failure mode.
+**One FORCED deviation from the brief's letter, and it is measured not taste:**
+the atlas is a **new TU** rather than staying in `gfx_overlay.c`, because
+`gfx_overlay.c -> gfx_vfx.h -> gfx.h -> sim.h -> ml_stages.h` — **linking it
+into a menu witness would have made `check-legibility.sh` depend on
+`node pipeline/run.js`.** Measured: `cc -Iport/sim port/gfx/gfx_overlay.c` fails
+with `'ml_stages.h' file not found`.
+
+**D49 — binary coverage, and it protected the instrument instead of the run.**
+Atlas masks are antialiased, and **source-over at partial alpha is not
+idempotent**, so overdrawing AA text ALWAYS changes pixels —
+`check-controls-labels.sh` reported 388-474 px of "difference" on labels it was
+looking straight at. **Rather than weaken the overdraw instrument, the lane made
+the FOH blit binary** (the HUD keeps its AA). **That is the right way round:
+the instrument is load-bearing across five checks; the AA was not.**
+
+**`foh_text` DELIBERATELY NOT SWAPPED, though the brief named it** — and the
+reason is the best catch in the ticket: **`check-foh-flows.sh`'s banner tooth
+requires `'?'` to be ABSENT from face 1, and atlas font 0 HAS it. The swap would
+have SILENTLY DEFUSED THE TOOTH.** `decode-pb-glyphs.js` also reads device shots
+through `kGlyphs[]`, and `check-device-foh.sh`'s `VSF_BANNER_*` are face-1
+metrics. **The tooth is confirmed still biting in the passing run.**
+
+**Face 2 retained as a LOUD fallback**, entry points renamed
+`foh_text2_face2*` "so nothing reaches the retired face by habit". Missing glyph
+is `gfx_fatal` on both paths. **6x9 face NOT deleted.**
+
+### ⚠ A REGRESSION I FAILED TO CATCH — A49 BROKE `check-rebind.sh`, AND MY VERIFICATION MISSED IT
+The lane reported `check-rebind` failing and called it pre-existing. **It was
+right, and the driver verified it at HEAD before merging anything: 4 assertions
+failed, all v4-migration.** **I merged A49 having run five CSS checks and NOT
+this one — the single check most coupled to persistence, since bindings live in
+the persist file. A49's own lane did not run it either.** *A check list assembled
+from the files a change touches will miss the checks that read what it WROTE.*
+
+**Diagnosed rather than assumed, because "stale test" and "real data loss" look
+identical from the failure text.** The witness **synthesises a v4 file out of the
+CURRENT one** by stripping rows a v4 never had. A49 appended `sel`; the
+constructor stripped only `bind`. **So the fixture was a v4 header over v6
+content and the loader rightly refused it.** **A real v4 file from a real old
+device never had either row and still migrates — no data-loss bug.**
+**Fixed by strengthening, not relaxing:** the constructor now strips `sel` too,
+the republish assertions move v5 -> v6 in **both** the witness and the check's
+own grammar pin, **and a NEW assertion was added** — the fixture must have
+dropped exactly one `sel` row, so **the next version bump fails HERE, loudly,
+instead of silently producing a malformed fixture again.** `REBIND TOOTH OK`.
+
+### OWED
+- **`check-live-arms.sh` IS KNOWINGLY BROKEN BY THIS CHANGE** — it derives the
+  system overlay's expected "VOLUME" bitmap by parsing `kGlyphs2[]` out of
+  `foh_font.c`, **a face the renderer no longer draws.** Needs an atlas-based
+  decoder. **The lane did NOT write one — unverifiable without a device, and
+  "shipping untested decoder JS is worse than naming it."** The 6x9 table stays
+  until that lands. *(Note it was settled GREEN on a quiet tree immediately
+  before this merge — `LIVE ARMS OK`, 15 teeth — so the break is attributable
+  to A14 alone.)*
+- **All 15 menu shots + device twins need re-freezing** — glyphs legitimately
+  moved.
+- Unrun after link-list edits: `check-device-{foh,persist,audio,music,render,fullgame,target}.sh`,
+  `riglib.sh`, `check-render.sh`, `check-mixer-fidelity.sh`, `check-ctl-input.sh`,
+  `check-mexit-reentry.sh`.
+- **Stale `m4-freeze-manifest.txt` rows** (driver-only, batched, NOT edited):
+  `riglib.sh`, `check-device-fullgame.sh`, `check-device-target.sh`,
+  `check-device-foh.sh`.
+
+### ⚠ FOR THE OWNER'S ACCEPTANCE PLAYTHROUGH — D48's real cost
+**The size hierarchy COLLAPSED: mode titles and menu-bar labels now render at
+the SAME height, where upstream sets its title larger.** Restoring the step
+needs **a second italic capture in the atlas — a DATA-plane change, not a
+renderer one.** `foh_text2` is the one function where the metrics move.
+
+*(Lane note, recorded because it explains a non-linear diff: it truncated
+`gfx_overlay.c` and `foh_font.c` to zero mid-session with a bad Python heredoc
+(`b'''` parsed as a bytes literal), recovered both from git and re-applied. The
+final files are verified by the green run.)*
