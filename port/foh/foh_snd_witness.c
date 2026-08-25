@@ -194,9 +194,22 @@ static const SndCase kCases[] = {
      "controls-keyboard", -1},
     {"controls-A-pad", FOH_MENU_CONTROLS, 1, "a", "menuForward",
      "controls-controller", -1},
+    // A7 (MENU-SPEC §8): the CREDITS row used to REFUSE and now opens a real
+    // screen, so it MOVES SIDES in this table exactly as D27's Controls row
+    // did — from the `deny` block below to the single-sound changeGamemode
+    // leaves. Upstream is menu.js:145-149, inside the one menuForward at :70
+    // and with no `menuMove = true`, so it is ONE sound; menuSelected is left
+    // alone (credits.js:226-246 changes only the gameMode), which is what
+    // puts the cursor back on CREDITS when the screen exits.
+    {"options-A-credits", FOH_MENU_OPTIONS, 3, "a", "menuForward", "credits",
+     3},
+    // The credits screen's OWN sound arms (B -> menuBack, A -> foxlaserfire,
+    // the hit -> targetBreak, the timer -> complete/failure) are asserted by
+    // port/foh/check-credits.sh's witness rather than added here: this
+    // table's length is pinned by check-foh-flows.sh's exact verdict line
+    // (`cases=24`), which A7 does not get to move.
     // --- refusals: `deny`, exactly once, and the screen does NOT move
     {"top-A-targetbuilder", FOH_MENU_TOP, 2, "a", "deny", "menu-top", 2},
-    {"options-A-credits", FOH_MENU_OPTIONS, 3, "a", "deny", "menu-options", 3},
     // --- cursor arms: ONE menuSelect (menu.js:236 via the up/down arms)
     {"top-up", FOH_MENU_TOP, 0, "up", "menuSelect", "menu-top", 3},
     {"top-down", FOH_MENU_TOP, 0, "down", "menuSelect", "menu-top", 1},

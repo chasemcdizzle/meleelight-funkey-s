@@ -343,7 +343,13 @@ for (const raw of fs.readFileSync(AUTH, "utf8").split("\n")) {
     die("unparseable authored row: '" + ln + "'");
   }
 }
-const WANT = { S: 17, L: 16, E: 28, R: 8, N: 2, X: 20 };
+// A7 (MENU-SPEC §8) re-pins E 28 -> 31 and R 8 -> 7 in the same change: the
+// credits screen gained THREE edges (menu-options>credits>a and BOTH of its
+// exits, `b` and `timer` — it is the only screen with two out edges) and LOST
+// its refusal, because `refused credits` was a promise that the row did
+// nothing and the row now opens a screen. All four rows carry their own
+// upstream citation in judge-domains.authored.txt.
+const WANT = { S: 17, L: 16, E: 31, R: 7, N: 2, X: 20 };
 for (const [k, arr] of [["S", S], ["L", L], ["E", E], ["R", R], ["N", N], ["X", X]]) {
   if (arr.length !== WANT[k])
     die("the authored table has " + arr.length + " " + k + " rows, want " +
@@ -1962,8 +1968,18 @@ done < "$B/dom/probes.tsv"
 #   asserted equal, so a `{1,33}` in one copy fails as a disagreement rather
 #   than as a silently widened domain. 1291 -> 1295, +4. Strictly MORE
 #   coverage: no probe removed.
-[ "$nprobe" = "1295" ] \
-  || fail "leg [0n] generated $nprobe behavioral probes, want 1295. The probe set is a FUNCTION of the authored table (S rows x every reachable screen x boundary, S rows x the fixed value universe, unauthored-edge and refusal-binding probes, and the frame-anchor form through both programs, every authored L field x the fixed launch-value universe through both programs, every DELIMITER POSITION of every parser FORM SIGNATURE perturbed (spaces doubled/tabbed/deleted; a k=v token's '=' and the ',' inside its value doubled/deleted/space-prefixed) plus 3 anchor probes per form through both programs, and one corrupt trace per authored TRACE-INTEGRITY row). A different count means the authored table or the reachable-screen set changed shape — re-pin here in the SAME change and say why."
+#   A7 (MENU-SPEC §8) — the credits screen. 1295 -> 1293, and the DIRECTION is
+#   the point: the refusal plane emits exactly TWO probes per authored R row
+#   (`r-<tok>-ok` on the bound screen, `r-<tok>-bad` on an unbound one, the
+#   loop at :835-854), and `refused credits` stopped being a claim about this
+#   build the moment the row opened a screen — so its two probes went with it.
+#   The three new EDGE rows add none: the edge plane probes a SYNTHESISED
+#   off-graph triple, not one probe per authored edge, so a new legal edge
+#   widens what the judge ACCEPTS (proved by (a3), which evaluates the live
+#   EDGES set against all 31 authored rows) without adding a probe here. No
+#   surviving probe was removed or weakened.
+[ "$nprobe" = "1293" ] \
+  || fail "leg [0n] generated $nprobe behavioral probes, want 1293. The probe set is a FUNCTION of the authored table (S rows x every reachable screen x boundary, S rows x the fixed value universe, unauthored-edge and refusal-binding probes, and the frame-anchor form through both programs, every authored L field x the fixed launch-value universe through both programs, every DELIMITER POSITION of every parser FORM SIGNATURE perturbed (spaces doubled/tabbed/deleted; a k=v token's '=' and the ',' inside its value doubled/deleted/space-prefixed) plus 3 anchor probes per form through both programs, and one corrupt trace per authored TRACE-INTEGRITY row). A different count means the authored table or the reachable-screen set changed shape — re-pin here in the SAME change and say why."
 # EVERY GENERATED PROBE WAS ACTUALLY RUN AND JUDGED (Tier A+ round-5 MINOR-1).
 # Without this, a probe could be generated, counted into the pin, and then
 # skipped by the dispatch loop -- the count would still look right.

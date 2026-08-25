@@ -114,6 +114,16 @@ const EDGES = new Set([
   "menu-top>target-select>a",
   "target-select>menu-top>b",
   "target-select>target-match>launch",
+  // A7 (MENU-SPEC §8) — the credits screen (gameMode 13). IN: menu.js:145-149
+  // `setCreditsPlayer(i); changeGamemode(13)`. OUT: BOTH of credits.js's
+  // exits go to gameMode 1 with menuMode/menuSelected untouched, so both land
+  // back on Options with the cursor still on CREDITS — `b` is the manual exit
+  // (:236-245) and `timer` is the unconditional 2500-frame one (:226-235,
+  // cScrollingPos >= cScrollingMax), which is why the screen has two OUT
+  // edges where every other screen has one.
+  "menu-options>credits>a",
+  "credits>menu-options>b",
+  "credits>menu-options>timer",
 ]);
 // PROFILE-DEPENDENT edges. Exactly one of these two blocks is legal in any
 // given build, and which one is decided by the header above — never by
@@ -145,13 +155,13 @@ for (const e of CHOOSER
 }
 // Registered refusal tokens, each bound to the screen that emits it
 // (review-r1 BLOCKER: a token registered globally passed on ANY screen).
-// `audio`, `controller` and `keyboard` are GONE, not merely unused: they
-// are real screens now in every build (MENU-SPEC §4/§9), so a trace
-// carrying them is corruption, not history. The netplay three are legal
-// only in the FOH_NETPLAY 1 build, where their page exists.
+// `audio`, `controller`, `keyboard` and — since A7 — `credits` are GONE, not
+// merely unused: they are real screens now in every build (MENU-SPEC
+// §4/§8/§9), so a trace carrying them is corruption, not history. The
+// netplay three are legal only in the FOH_NETPLAY 1 build, where their page
+// exists.
 const REFUSED = new Map([
   ["targetbuilder", ["menu-top"]],   // conventions scope exclusion
-  ["credits", ["menu-options"]],     // MENU-SPEC §8, the last unbuilt screen
   // iter 93 (M4 task 10): the SSS RANDOM slot — visible but refusing
   // (registered exclusion; upstream's arm draws from the SEEDED stream,
   // stageselect.js:80-84 — measured, AGENT-LOG iter 93).

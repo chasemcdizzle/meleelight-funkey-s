@@ -2117,6 +2117,205 @@ static void render_ctrl_key(const FohState *s, Raster *rz) {
   text_center(rz, 216, 1, "B: BACK", kDim);
 }
 
+// --- CREDITS (upstream menus/credits.js drawCredits :314-422 +
+// drawCreditsInfo :285-311; MENU-SPEC §8; punch-list A7) ---------------------
+//
+// The screen has no title bar, because upstream's has none: it is the warp
+// field edge to edge, with the score box and the info panel drawn over it.
+//
+// ONE THING UPSTREAM HAS THAT THIS CANNOT: TRAILS. Its per-frame background
+// is `rgba(0,0,0,0.4)` painted OVER the previous frame (:316-317), so stars
+// and laser bolts smear. This renderer is a pure function of FohState and
+// clears the frame — that property is what makes every captured shot
+// byte-stable x2, and every FOH check leans on it — so each frame draws only
+// what the state says is there. Nothing is invented to fake the smear.
+//
+// D4 SCALE: x/5, y*0.32, the audio screen's note. Which quantities are in
+// canvas units and which in raster pixels is settled in foh.h's FOH_CRED_*
+// block; every literal below says which one it came from.
+
+// laserColors (credits.js:32-37), in order — X cycles forward, Y back.
+static const RastCol kCredLaser[4] = {{255, 15, 5, 256},
+                                      {15, 5, 255, 256},
+                                      {5, 255, 15, 256},
+                                      {255, 85, 3, 256}};
+// The info panel's own palette (drawCreditsInfo :288-290).
+static const RastCol kCredFace = {0, 0, 0, 179};       // "rgba(0,0,0,0.7)"
+static const RastCol kCredEdge = {255, 255, 255, 179}; // white 0.7
+static const RastCol kCredWhite = {255, 255, 255, 256};
+static const RastCol kCredShotName = {227, 89, 89, 256}; // :365
+static const RastCol kCredRing = {255, 255, 255, 179};   // :372
+static const RastCol kCredRingHot = {204, 0, 0, 179};    // :377
+
+// A 1 px frame: upstream's `lineWidth = 2` on a 1200 px canvas is 0.4 px
+// here, and `lineW8` refuses a translucent stroke by design.
+static void cred_box(Raster *rz, int x, int y, int w, int h) {
+  fill_rect(rz, x, y, w, h, kCredFace);
+  fill_rect(rz, x, y, w, 1, kCredEdge);
+  fill_rect(rz, x, y + h - 1, w, 1, kCredEdge);
+  fill_rect(rz, x, y, 1, h, kCredEdge);
+  fill_rect(rz, x + w - 1, y, 1, h, kCredEdge);
+}
+
+// Face 1 holds 40 columns across 240 px (advance 6). Upstream sets the blurb
+// as one centred run of 25 px Consolas across a 1000 px bar; at this size the
+// longest of the fourteen (67 characters) needs two lines, so it is
+// word-wrapped. That is a 240 px LAYOUT adaptation of the same authored
+// string — no word dropped, shortened or reordered, and check-credits.sh
+// asserts the wrapped lines rejoin to the authored blurb exactly.
+#define CRED_INFO_COLS 40
+#define CRED_INFO_LINES 2
+static int cred_wrap(const char *s,
+                     char out[CRED_INFO_LINES][CRED_INFO_COLS + 1]) {
+  int n = 0, len = 0;
+  out[0][0] = 0;
+  for (const char *p = s; *p;) {
+    const char *e = p;
+    while (*e && *e != ' ') e++;
+    const int wlen = (int)(e - p);
+    if (wlen > CRED_INFO_COLS) {
+      gfx_fatal("foh_render: a credits blurb has an unbreakable word");
+    }
+    if (len > 0 && len + 1 + wlen > CRED_INFO_COLS) {
+      if (n + 1 >= CRED_INFO_LINES) {
+        // Unreachable for the authored fourteen (MEASURED: two lines, the
+        // longest 39 columns) and asserted by check-credits.sh, so this is a
+        // tripwire for an edited blurb, never a live arm.
+        gfx_fatal("foh_render: a credits blurb does not fit two lines");
+      }
+      n++;
+      len = 0;
+      out[n][0] = 0;
+    }
+    if (len > 0) out[n][len++] = ' ';
+    for (int k = 0; k < wlen; k++) out[n][len++] = p[k];
+    out[n][len] = 0;
+    p = e;
+    while (*p == ' ') p++;
+  }
+  return n + 1;
+}
+
+// Uppercase a credit string for face 1 (the foh_upper contract above) and
+// centre it on `cx`.
+static void cred_text_center(Raster *rz, int cx, int y, const char *s,
+                             RastCol col) {
+  char buf[80];
+  snprintf(buf, sizeof buf, "%s", s);
+  foh_upper(buf);
+  foh_text(rz, cx - foh_text_width(buf, 1) / 2, y, 1, buf, col);
+}
+
+static void render_credits(const FohState *s, Raster *rz) {
+  // --- the warp field (:318-332). Upstream's 3x3 star is 0.6 px at D4's x
+  // scale, so it is one pixel; the grey ramp `min(255, life*3)` is verbatim.
+  for (int n = 0; n < FOH_CRED_STARS; n++) {
+    const FohCredStar *st = &s->credStar[n];
+    int c = st->life * 3; // :329
+    if (c > 255) c = 255;
+    if (c < 0) c = 0;
+    const RastCol col = {(uint8_t)c, (uint8_t)c, (uint8_t)c, 256};
+    fill_rect(rz, iround((float)st->x), iround((float)st->y), 1, 1, col);
+  }
+
+  // --- the laser bolts (:334-352). Drawn from lastPosition2 to position in
+  // upstream's y-flipped space, in the selected laser colour, with a stroke
+  // that thins as the bolt ages (`max(1, 20 - life)`, /5 for D4).
+  for (int n = 0; n < FOH_CRED_SHOTS; n++) {
+    const FohCredShot *sh = &s->credShot[n];
+    if (!sh->live) continue;
+    float lw = (float)(20 - sh->life) / 5.0f; // :344
+    if (lw < 1.0f) lw = 1.0f;
+    lineW8(rz, (float)sh->l2x, (float)((double)RAST_H - sh->l2y), (float)sh->x,
+           (float)((double)RAST_H - sh->y), lw, kCredLaser[s->credLaser],
+           256); // :347-348
+  }
+
+  // --- the names (:359-371). `canRender` gates the draw upstream and gates
+  // it here; a name that has been shot turns red and stays on screen.
+  FohHandRect rect[FOH_CRED_NAMES];
+  foh_credits_name_rects(s, rect);
+  for (int i = 0; i < FOH_CRED_NAMES; i++) {
+    if (!s->credNameRender[i]) continue;
+    char buf[32];
+    snprintf(buf, sizeof buf, "%s", foh_credits[i].name);
+    foh_upper(buf);
+    foh_text(rz, rect[i].x, rect[i].y, 1, buf,
+             s->credNameShot[i] ? kCredShotName : kCredWhite);
+  }
+
+  // --- the reticle (:372-421). Upstream's ring is r 35 / stroke 9 on a
+  // 1200 px canvas = r 7 / stroke 2 here, and the four spokes run from r 10
+  // to r 35 = 2 to 7 (cRectSpace / cRectLength + cRectSpace, :19-20). The
+  // spokes are 1 px rather than 2: a thick stroke must be opaque (lineW8's
+  // own guard) and this one is deliberately the 0.7-alpha white upstream
+  // paints it.
+  //
+  // The ring goes red while it sits on an unshot name — upstream scans every
+  // name and only ever ASSIGNS red (:373-381), never back, so any hover
+  // reddens it. Same predicate as the shot test, off the same rect table.
+  RastCol ring = kCredRing;
+  for (int i = 0; i < FOH_CRED_NAMES; i++) {
+    if (s->credNameShot[i]) continue;
+    if (s->credX >= (double)rect[i].x &&
+        s->credX <= (double)(rect[i].x + rect[i].w) &&
+        s->credY >= (double)rect[i].y &&
+        s->credY <= (double)(rect[i].y + rect[i].h)) {
+      ring = kCredRingHot;
+    }
+  }
+  {
+    const float cx = (float)s->credX, cy = (float)s->credY;
+    ring8(rz, cx, cy, 7.0f, 2.0f, ring, ring.a256);
+    // cDefaultAngles (:20) plus the running cursor angle in radians (:403).
+    static const double kBase[4] = {0.0, 0.5 * 3.141592653589793,
+                                    3.141592653589793,
+                                    1.5 * 3.141592653589793};
+    const double rad = (s->credCursorAngle / 180.0) * 3.141592653589793;
+    for (int i = 0; i < 4; i++) {
+      const float c = (float)fd_cos(kBase[i] + rad);
+      const float sn = (float)fd_sin(kBase[i] + rad);
+      line8(rz, cx + c * 2.0f, cy + sn * 2.0f, cx + c * 7.0f, cy + sn * 7.0f,
+            ring, ring.a256); // :406-413
+    }
+  }
+  // The `initc === true` reticle (:382-395, a cross with gaps) is NOT drawn:
+  // upstream can show it because its draw loop is independent of its tick, so
+  // one frame lands between changeGamemode(13) and the first credits() call.
+  // Here the tick always runs first and clears `credInit`, so that arm is
+  // unreachable by construction rather than omitted.
+
+  // --- the info panel (drawCreditsInfo :285-311). The BOXES are always on
+  // screen (upstream paints them into the persistent `ui` layer on entry and
+  // repaints on every hit); the TEXT appears only while a hit's 600-frame
+  // dwell is running.
+  //
+  // 240 px LAYOUT adaptation: upstream sets the name and the role SIDE BY
+  // SIDE, in a 330 px and a 670 px box. At face 1's advance the longest role
+  // ("Animation Assistant, Level Design") is 197 px, so the two boxes are
+  // stacked full width instead — same two fields, same order, same band of
+  // the screen (upstream's 560..700 of 750 is 179..224 of 240).
+  cred_box(rz, 20, 179, 200, 11); // :293-296 name box
+  cred_box(rz, 20, 190, 200, 11); // :294-296 role box
+  cred_box(rz, 20, 205, 200, 19); // :291-292 information bar
+  cred_box(rz, 200, 16, 30, 16);  // :297-298 score box
+  if (!s->credHitCleared) {       // :301
+    const FohCredit *c = &foh_credits[s->credHitIdx];
+    cred_text_center(rz, 120, 181, c->name, kCredWhite);     // :303
+    cred_text_center(rz, 120, 192, c->position, kCredWhite); // :305
+    char line[CRED_INFO_LINES][CRED_INFO_COLS + 1];
+    const int nl = cred_wrap(c->info, line); // :307
+    for (int k = 0; k < nl; k++) {
+      cred_text_center(rz, 120, 206 + k * 9, line[k], kCredWhite);
+    }
+  }
+  {
+    char sc[16]; // `cScore + " Hit"` (:310), uppercased for face 1
+    snprintf(sc, sizeof sc, "%d HIT", s->credScore);
+    cred_text_center(rz, 215, 20, sc, kCredWhite);
+  }
+}
+
 static void render_match(Raster *rz) {
   // The FOH machine is terminal here; the driver owns the sim/renderer.
   text_center(rz, 110, 2, "LAUNCHING", kText);
@@ -2343,6 +2542,7 @@ void foh_render(const FohState *s, Raster *rz) {
     case FOH_OPT_AUDIO: render_opt_audio(s, rz); break;
     case FOH_CTRL_PAD: render_ctrl_pad(rz); break;
     case FOH_CTRL_KEY: render_ctrl_key(s, rz); break;
+    case FOH_CREDITS: render_credits(s, rz); break;
     case FOH_MATCH: render_match(rz); break;
     case FOH_TSS: render_tss(s, rz); break;
     case FOH_TMATCH: render_tmatch(rz); break;

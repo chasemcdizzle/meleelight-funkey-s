@@ -1,9 +1,9 @@
 FLOW1
 # f04: navigation + refusal + destination coverage (no launch).
 #
-# REFUSALS. Three of the five still-emitted tokens fire here:
-# targetbuilder (menu-top), credits (menu-options) and random (sss —
-# iter 93, the registered seeded-draw exclusion). addcode fires in f07's
+# REFUSALS. Two of the four still-emitted tokens fire here:
+# targetbuilder (menu-top) and random (sss — iter 93, the registered
+# seeded-draw exclusion). addcode fires in f07's
 # target-select leg; portconfig in the check's own T19 flow. RETIRED as
 # emissions this arc: `audio` (a real screen now, MENU-SPEC §4) and
 # `controller`/`keyboard` (real destinations, §9) — this flow now ENTERS
@@ -11,6 +11,16 @@ FLOW1
 # one is unreachable at FOH_CTL_CHOOSER 0, see below). UNREACHABLE
 # while FOH_NETPLAY is 0 (owner ruling C5): spectate/p2p/server, whose
 # page `VS. Melee` no longer opens.
+#
+# A7 (MENU-SPEC §8) RETIRES `credits` THE SAME WAY, and this flow follows
+# the precedent the paragraph above set for `audio`: the CREDITS row is a
+# real destination now (gameMode 13, menu.js:145-149), so the leg at 480
+# ENTERS it and leaves by its own B (credits.js:236-245), which lands back
+# on Options with the cursor still on CREDITS. The menu-level B that follows
+# it still reaches menu-top from row 3. No SHOT is taken
+# there: the shot inventory is pinned per flow in check-foh-flows.sh and
+# A7 does not move it. The screen's PIXELS are asserted by
+# port/foh/check-credits.sh instead, which is where its own gestures live.
 #
 # THE CONTROLS LEG (DEVIATION D27, owner ruling 2026-08-23; the switch is
 # foh.h's FOH_CTL_CHOOSER and this flow is frozen at 0). The chooser is
@@ -56,8 +66,19 @@ I 475 D
 I 478 -
 I 480 A
 I 481 -
-I 485 B
-I 486 -
+# A7: 480 enters the credits (gameMode 13) and 483 leaves by its own B.
+# Three frames on the screen is deliberate — long enough for one full tick
+# of its machine, short enough that the 2500-frame timer exit (Quirk Q6)
+# stays out of this flow entirely. The menu-level B that follows moved from
+# 485 to 487 for a DEVICE reason, not a machine one: flow-to-fkscript.js
+# refuses two presses of the same keysym less than three flow frames apart
+# (the injector would emit a down edge with no release between), and the
+# credits exit is also a B. It still lands on menu-top from row 3, because
+# credits.js leaves menuMode/menuSelected alone.
+I 483 B
+I 484 -
+I 487 B
+I 488 -
 I 490 U
 I 493 -
 I 495 U

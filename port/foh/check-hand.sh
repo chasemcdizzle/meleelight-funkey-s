@@ -157,10 +157,20 @@ pin "$FOH/foh_hand.h" \
   'static inline int foh_hand_hit(const FohHandRect *rects, int n, double x,' \
   'the ONE definition of the hit predicate'
 n="$(grep -cF 'foh_hand_step(' "$FOH/foh.c")" || true
-[ "$n" = 2 ] || grammar_die "foh.c calls foh_hand_step $n times (want exactly 2
-  — the CSS hand and the target-select hand). A third caller is fine in
-  principle but must be reviewed here; ZERO or ONE means a screen grew its own
-  copy of the motion back, which is the thing A25(c) exists to prevent."
+# A7 (MENU-SPEC §8) re-pinned this 2 -> 3, and it is the review this line asks
+# for. The third caller is `step_credits`: MENU-SPEC's DEVIATION D12 says the
+# credits reticle is driven as a RELATIVE cursor, "exactly like the CSS
+# (css.js:195-206)", because upstream's absolute rawX/rawY map gives a d-pad
+# nine reachable positions and makes the screen unplayable. A screen whose
+# spec says "the CSS cursor" and then reimplements it is the exact regression
+# A25(c) exists to prevent, so calling the shared body IS the compliant
+# outcome — the count going UP is the good direction, and ZERO or ONE still
+# means a screen grew its own copy back.
+[ "$n" = 3 ] || grammar_die "foh.c calls foh_hand_step $n times (want exactly 3
+  — the CSS hand, the target-select hand and the credits reticle). A fourth
+  caller is fine in principle but must be reviewed here; a DROP means a screen
+  grew its own copy of the motion back, which is the thing A25(c) exists to
+  prevent."
 for f in "$FOH/foh.c" "$FOH/foh_render.c"; do
   n="$(grep -c 'lsX \* FOH_CURSOR_VX' "$f")" || true
   [ "$n" = 0 ] || grammar_die "$f has $n inline copies of the hand integration
