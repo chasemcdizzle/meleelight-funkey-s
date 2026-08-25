@@ -484,6 +484,12 @@ void foh_css_cells(FohHandRect out[5]);
 #define FOH_TSS_ADD_H 17
 // 0..9 == the tstage ids, 10 == "+ ADD CODE". Index IS FohState.tssCursor.
 #define FOH_TSS_SLOTS 11
+// A45 T3/T4 — the ten CUSTOM slots. Upstream's own hard limit
+// (targetselect.js:102, :817) and A45 T2's MLK_MAX_SLOTS, restated here
+// because foh.h cannot include foh_tbuild.h (that header includes THIS one).
+// foh_tbuild.c _Static_asserts the two are equal, and check-tbuild.sh
+// re-asserts it against the sim's MLK_MAX_SLOTS, so neither copy can drift.
+#define FOH_TB_SLOT_CACHE 10
 void foh_tss_slots(FohHandRect out[FOH_TSS_SLOTS]);
 // Where the hand is parked when target-select is entered: the centre of slot
 // 0, so the screen opens hovering tstage 0 exactly as the index cursor's
@@ -582,6 +588,13 @@ typedef enum {
   FOH_MATCH,
   FOH_TSS,    // target-select (upstream gameMode 7, targetselect.js)
   FOH_TMATCH, // target-match (terminal; the driver owns the target sim)
+  // A45 T4 — the TARGET BUILDER (upstream gameMode 4, targetbuilder.js).
+  // Entered from menu-top row 2 (menu.js:87-90 `setEditingStage(-1);
+  // setTargetBuilder(i); changeGamemode(4)`), left by its pause-menu Quit
+  // (:832-835 changeGamemode(1)) or by B (DEVIATION D50). The engine lives
+  // in port/foh/foh_tbuild.c behind a pointer seam — see foh_tbuild.h for
+  // why, and for what a build without that TU draws instead.
+  FOH_TBUILD,
   FOH_SCREEN_COUNT
 } FohScreen;
 
@@ -862,6 +875,51 @@ typedef struct {
   // menu.js:77-84 resets targetPointerPos when it opens target-select, which
   // is the same reset the index cursor's `tssCursor = 0` was carrying.
   double tssHandX, tssHandY;
+  // --- A45 T3: the CUSTOM page of target-select -----------------------------
+  // 0 = the ten AUTHORED stages (tstage ids 0..9), 1 = the ten CUSTOM slots
+  // (upstream's "Custom N", targetselect.js:288-294). Upstream draws both
+  // families side by side in FOUR columns of a 1200 px canvas; at 240 px the
+  // grid is two columns of five (foh_tss_slots), so the same ten rects carry
+  // whichever family is on show and slot 10 — which used to be the refusing
+  // "+ ADD CODE" — flips between them.
+  //
+  // It is VIEW state, and it emits nothing: like tssCursor and the hand
+  // position, it changes what a launch would launch without being a
+  // transition or a selection. What IS observable is the launch itself —
+  // FohState.tssStage carries MLK_PLAYING_BASE + slot (10..19) on this page,
+  // which is A45 T2's own id space (custom_stage.h), so the TLAUNCH record
+  // names the custom slot the player chose.
+  int tssPage;
+  // Slot presence for the custom page, refreshed on every entry to the
+  // screen and after every page flip through foh_tbuild_ops->slots(). Cached
+  // rather than rescanned per frame because each scan opens ten files.
+  // BY INDEX — D43: an absent or corrupt slot stays in ITS OWN place with
+  // its reason, and nothing ever shifts up to fill a hole.
+  bool tssSlotPresent[FOH_TB_SLOT_CACHE];
+  const char *tssSlotReason[FOH_TB_SLOT_CACHE];
+  // --- A45 T4: the TARGET BUILDER's view state ------------------------------
+  // The DOCUMENT is not here: sizeof(MlkStage) is 45,344 bytes against this
+  // struct's 7,224, and it is module state in foh_tbuild.c exactly as
+  // upstream's `stageTemp` is module state in targetbuilder.js:53-72. What
+  // lives here is what the machine and the renderer both read. Semantics and
+  // upstream citations: port/foh/foh_tbuild.h.
+  int tbTool;                 // 0 TARGET, 1 MOVE, 2 DELETE (:36 order)
+  int tbGrid;                 // index into gridSizes (:80); 4 == free
+  int tbSlot;                 // editingStage (:57); -1 == never saved
+  double tbUnX, tbUnY;        // unGriddedCrossHairPos (:24), WORLD units
+  double tbX, tbY;            // crossHairPos (:21), grid-snapped
+  bool tbPaused;              // builderPaused (:75)
+  bool tbHoldA;               // holdingA (:37)
+  int tbPauseRow;             // builderPauseSelected (:76)
+  int tbPane, tbPaneRow;      // the slot list a pause row opened
+  int tbHover, tbGrab;        // hoverItem (:73) / grabbedItem (:72)
+  int tbToolTimer;            // toolInfoTimer (:35), 120 frames
+  // THE VISIBLE REFUSAL. Every "no" this screen says puts a string here and
+  // the renderer draws it. The ticket exists because a refusal was a `deny`
+  // the owner could not hear, so a sound alone is not an answer anywhere in
+  // the builder. Static strings only — never a pointer into a buffer.
+  const char *tbMsg;
+  int tbMsgTimer;
   // options-gameplay. The row list is upstream's, VERBATIM and complete
   // (MENU-SPEC §3.1; gameplaymenu.js:11-12 `menuVOptions = 4` is a MAX
   // INDEX, so FIVE rows, and `menuHOptions = [0,0,0,0,3]` gives the last
@@ -1093,6 +1151,15 @@ void foh_look_canonical(FohState *s);
 void foh_render_warm(Raster *rz);
 
 // foh_font.c: self-authored 5x7 font (scale = integer pixel multiplier).
+// A45 T3 — re-read the ten custom slots into FohState's cache. Called on
+// entry to target-select and on every page flip (foh.c). Safe with the
+// builder engine unlinked: every slot then reports absent, with the reason
+// "unavailable in this build".
+void foh_tss_refresh_slots(FohState *s);
+// A45 T4 — the sound queue's push, reachable from foh_tbuild.c. A wrapper
+// over foh.c's static snd_push, so the overflow guard keeps ONE body.
+void foh_snd_push(FohState *s, const char *name);
+
 void foh_text(Raster *rz, int x, int y, int scale, const char *s,
               RastCol col);
 int foh_text_width(const char *s, int scale);

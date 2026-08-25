@@ -1,7 +1,8 @@
 FOHTRACE1 flow=f04-nav
 T 370 startup title timer
 T 375 title menu-top start
-S 390 refused targetbuilder
+T 390 menu-top target-builder a
+T 393 target-builder menu-top b
 T 400 menu-top menu-options a
 T 415 menu-options controls-keyboard a
 SHOT 420 controls-keyboard
@@ -15,4 +16,4 @@ T 710 css sss start
 S 740 refused random
 T 750 sss css b
 T 789 css menu-top bhold
-END 810 transitions=12
+END 810 transitions=14

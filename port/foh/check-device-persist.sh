@@ -462,6 +462,7 @@ cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$BUILD/raster.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/foh_dev_headless" \
   "$BUILD/raster.o" "$FOH/foh_dev.c" "$FOH/foh.c" "$FOH/foh_font.c" \
   "$FOH/foh_render.c" "$FOH/foh_persist.c" "$FOH/foh_pause.c" \
+  "$FOH/foh_tbuild.c" port/sim/stage_code.c "$TGT/custom_stage.c" \
   "$GFX/ctl_style.c" "$GFX/img1.c" \
   "$GFX/platform_headless.c" \
   "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_target.c" \

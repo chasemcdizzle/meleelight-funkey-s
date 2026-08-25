@@ -154,6 +154,7 @@
 #define FOH_FOH_PERSIST_H
 
 #include <stdbool.h>
+#include <stddef.h> // size_t (foh_persist_publish)
 
 #include "../gfx/ctl_style.h" // CTL_BIND_PORTS / CTL_BTN_COUNT (A31)
 #include "foh.h"
@@ -288,6 +289,32 @@ FohPersistStatus foh_persist_load(FohPersist *p);
 
 // Atomic save (tmp + fsync + rename). Loud death on any failure.
 void foh_persist_save(const FohPersist *p);
+
+// THE ONE PUBLISH (A45 T4). Writes `n` bytes to <persist dir>/<name>
+// atomically: <name>.tmp -> fwrite -> fflush -> fsync -> fclose -> rename ->
+// fsync(dir). EVERY rc is checked, and free space is checked with statvfs
+// BEFORE the temp file is opened, because /mnt is vfat (no journal) mounted
+// errors=remount-ro — a full or erroring filesystem starts refusing writes
+// part-way through a session, and the one failure a player must never get is
+// a silent one.
+//
+// Returns true on publish. On false NOTHING was published (the temp file is
+// removed) and *why — when non-NULL — points at a STATIC string naming the
+// step that failed, suitable for putting on screen verbatim.
+//
+// On SUCCESS *why is NULL, except in the one reviewed case where the rename
+// landed but the directory entry could not be proven durable, where it is the
+// sentinel FOH_PUBLISH_NODIRSYNC (compare by POINTER — it is that exact
+// object, not a message to string-match). That is foh_persist_save's existing
+// `saved-nodirsync` arm, kept distinguishable rather than folded into `saved`.
+//
+// SINGLE WRITE PATH, BY CONTRACT. `port/sim/target/custom_stage.h` states it
+// for the .mlstage plane: a second file-writing path in this tree is a defect,
+// not an option. Every new producer of a file on this device calls THIS.
+extern const char foh_publish_nodirsync[];
+#define FOH_PUBLISH_NODIRSYNC foh_publish_nodirsync
+bool foh_persist_publish(const char *name, const char *buf, size_t n,
+                         const char **why);
 
 // Machine glue (single definition site — no per-driver field lists):
 // apply pushes settings + records into the FOH machine state AND BINDS

@@ -168,7 +168,8 @@
 #include "../sim/sim/sim.h"
 #include "foh.h"
 #include "foh_pause.h"   // A11/A12: the in-match pause overlay (live only)
-#include "foh_persist.h" // M4 task 13: the ONE persistence chokepoint
+#include "foh_persist.h"
+#include "../sim/target/custom_stage.h" // A45 T3: custom target slots
 #include "foh_launch.h"  // A44: the ONE FohState -> 4-port match config
 
 #define ML_BOOT_DRAWS 465 // the qjs boot pin (oracle/qjs/replay.sh)
@@ -821,6 +822,11 @@ static uint16_t pin_bits(const PlatformInput *p) {
 // --- audio wiring (gfx_app.c shape) --------------------------------------------
 
 static Gfx g_gfx;   // big (framebuffer + anim tables); static, not stack
+// A45 T3: the parsed CUSTOM target stage, when one is being played.
+// sizeof(MlkStage) is 45,344 bytes, so it is static like g_gfx and for
+// the same reason; it is parsed ONCE and both the renderer and the sim
+// read that one copy, so the two planes cannot disagree about the stage.
+static MlkStage g_tdevCustom;
 static Raster g_rz; // the FOH raster (foh_app.c precedent)
 static SndMixer g_mix;
 static bool g_have_audio;
@@ -2517,7 +2523,28 @@ foh_phase:;
         // gfx_app.c class; tp_setup_target consumes the real draw)
         MlRng peek = G.rng;
         const int backgroundType = (int)js_round(ml_rng_next(&peek));
-        gfx_target_init(&g_gfx, foh.tssStage, backgroundType);
+        // A45 T3: tssStage >= MLK_PLAYING_BASE is a CUSTOM slot, not a TTAB1
+        // id (custom_stage.h). The stage is parsed once here and handed to
+        // BOTH planes; mlk_slot_load has already run every validation
+        // (grammar, SUM, mlk_parse, mlk_stage_playable), so a slot that
+        // reaches this point is playable by construction. Target-select only
+        // offers slots its own scan accepted, and check-tbuild.sh leg [4]
+        // proves that scan and mlk_slot_load agree file for file — so this
+        // arm should never see a refusal. It still checks, and dies naming
+        // the rule, because "should never" is not a guarantee on a vfat card
+        // the player can edit with the power off.
+        if (foh.tssStage >= MLK_PLAYING_BASE) {
+          const char *why = 0;
+          if (!mlk_slot_load(foh_persist_dir(), foh.tssStage - MLK_PLAYING_BASE,
+                             &g_tdevCustom, &why)) {
+            fprintf(stderr, "foh_dev: custom slot %d refused: %s\n",
+                    foh.tssStage - MLK_PLAYING_BASE, why ? why : "?");
+            return 1;
+          }
+          gfx_target_init_custom(&g_gfx, &g_tdevCustom, backgroundType);
+        } else {
+          gfx_target_init(&g_gfx, foh.tssStage, backgroundType);
+        }
         g_gfx.legibility = legible ? 1 : 0;
         gfx_vfx_install(&g_gfx); // BEFORE setup (boot entrance/start vfx)
       }
@@ -2527,7 +2554,24 @@ foh_phase:;
       // never press START, so a START there is a genuine domain break).
       if (tgtLive) tp_endgame_hook = tdev_endgame_hook;
       // THE BRIDGE POINT: char + tstage from the FOH state, never CLI.
-      tp_setup_target(&G, foh.p1Char, foh.tssStage);
+      // A45 T3: a custom slot routes through tp_setup_target_custom, which
+      // shares tp_setup_target_core with the authored entry — so the two
+      // differ in WHERE THE GEOMETRY CAME FROM and nothing else (A45 T2's
+      // class fix, kept).
+      if (foh.tssStage >= MLK_PLAYING_BASE) {
+        if (!brTVerify && !tgtLive) {
+          // The evidence bridges never carry a custom stage: their goldens
+          // are authored. Reaching here means the FOH handed a custom id to
+          // a path with no renderer to show it, which is a wiring bug.
+          fprintf(stderr, "foh_dev: a custom target slot reached a non-live "
+                          "bridge path (tstage %d)\n", foh.tssStage);
+          return 1;
+        }
+        tp_setup_target_custom(&G, foh.p1Char,
+                               foh.tssStage - MLK_PLAYING_BASE, &g_tdevCustom);
+      } else {
+        tp_setup_target(&G, foh.p1Char, foh.tssStage);
+      }
       // tp_setup_target installs the harness cookie-domain gameSettings
       // DEFAULTS (target_play.c:319-325 zeroes lCancelType/turbo and all
       // four tapJumpOff slots). On the PLAY path those are the player's

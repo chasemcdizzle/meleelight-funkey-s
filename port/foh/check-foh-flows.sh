@@ -206,7 +206,7 @@ b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wr
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-2cf26a5b8b7065c17ffa934d8a027d3bba3a8ea50b121cdd6d8bd8e9155b8668 port/foh/judge-foh-trace.js
+8fda41757516dc6331ca0836cf729f865ec388c22fa28e015f9c68528c97f83b port/foh/judge-foh-trace.js
 2cf5c5a532207372b70c4cee57412c7ac65643ac4f4066c745d9eb7fe4aa0e9b port/goldens-m4/wrap-target.js
 415335239fcc04df97eba07298a1fa521602d5ea45b087aa8d7d40bd740c122a port/goldens-m4/verify-target-stream.js
 6b1b6b5be3700c51dfae8c0c4cb1f012e5b61239394ae4146c2e5e19cc4fcc47 port/goldens-m4/validate-target-manifest.js
@@ -288,7 +288,7 @@ FLOW_SHOTS=("startup title menu-top css sss" \
             "controls-keyboard" \
             "css-p2 sss-pstadium" \
             "menu-targettest tss-t01" \
-            "tss-addcode tss-t02")
+            "tss-custompage tss-t02")
 [ "${#FLOW_IDS[@]}" = 7 ] || fail "flow inventory — pinned array length off"
 [ "${#FLOW_BRIDGE[@]}" = 7 ] || fail "flow bridge array length off"
 [ "${#FLOW_SHOTS[@]}" = 7 ] || fail "flow shots array length off"
@@ -431,7 +431,14 @@ echo "    simdata byte-identical across two fresh dumps"
 # on every flows check, against a PINNED pre-arc commit (not HEAD, which would
 # self-destruct the moment this lane merges).
 echo "=== [0j] judge-path old-vs-new regression"
-JUDGEREG_OK='JUDGE REGRESSION OK (corpus=7 pairs=24 identical=4 moved=10 rejects=5 negs=26 reaccept=5 norms=3 normmoved=4 normrej=5 tables=26)'
+# A45 T3/T4 re-pins this: identical 4->2, moved 10->12, reaccept 5->6. The
+# delta is ONE cause — retiring the `addcode` refusal token (target-select
+# slot 10 flips the authored/custom page now) moves the BASELINE f07 pair
+# from 'identical' to 'moved', at both launch flags, and a moved flow is
+# also re-accepted at its correct flag. Nothing else in the corpus changed
+# shape; check-judge-regression.sh's own MOVED table carries the pinned
+# diagnostics and its DIAG_SHA log carries the byte proof.
+JUDGEREG_OK='JUDGE REGRESSION OK (corpus=7 pairs=24 identical=2 moved=12 rejects=5 negs=26 reaccept=6 norms=3 normmoved=4 normrej=5 tables=26)'
 rc=0
 bash "$FOH/check-judge-regression.sh" > "$B/judgereg.out" 2>&1 || rc=$?
 relay_lines < "$B/judgereg.out"

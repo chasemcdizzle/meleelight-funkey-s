@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h> // foh_persist_publish's free-space check
 #include <unistd.h>
 
 #include "../gfx/ctl_style.h" // CTL_STYLE_COUNT (enum only — no link dep)
@@ -554,29 +555,88 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
 
 // --- atomic save ------------------------------------------------------------
 
-void foh_persist_save(const FohPersist *p) {
-  static char buf[FP_CAP];
-  const size_t n = fp_serialize(p, buf, sizeof buf);
+// The success-with-a-caveat sentinel. Its ADDRESS is the signal (the header
+// says compare by pointer), so it must be one object with external linkage —
+// a string literal would be free to be a different object per TU.
+const char foh_publish_nodirsync[] = "published, dir entry not proven durable";
+
+// THE ONE PUBLISH (generalised for A45 T4; the body is the pre-T4
+// foh_persist_save's, moved rather than rewritten).
+//
+// WHY IT MOVED. `port/sim/target/custom_stage.h` made this binding when T2
+// deliberately shipped no writer: *"the correct move is to generalise
+// foh_persist_save's existing publish (foh_persist.c:506-551 — tmp write,
+// fsync file, rename, fsync dir, every rc checked, loud on failure) into
+// `foh_persist_publish(name, buf, n)` and call it, NOT to grow a second
+// file-writing path. /mnt is vfat with no journal and is mounted
+// errors=remount-ro, so an unchecked write rc is a silent data loss."*
+// Every rc check, the tmp/fsync/rename/dir-fsync ORDER and the FAT-class
+// EINVAL/ENOTSUP tolerance below are the reviewed lines, unchanged.
+//
+// ONE MECHANISM, TWO POLICIES. It REPORTS instead of dying, and each caller
+// picks: foh_persist_save keeps its loud death (a settings file that cannot
+// be written is a broken device), while the target builder puts the reason
+// ON SCREEN so the player can free space and retry. Dying mid-edit would
+// destroy the stage he is holding, which is the opposite of a save button.
+//
+// FREE SPACE IS CHECKED BEFORE THE FIRST BYTE IS OPENED. `errors=remount-ro`
+// means a full or erroring vfat starts refusing writes part-way through a
+// session, and a half-written tmp that never renames is the GOOD outcome.
+// statvfs costs nothing and turns "it just didn't save" into a named rule.
+//
+// The scratch file is per-NAME (`<name>.tmp`), not the shared FP_TMP, so two
+// publishes can never race over one path.
+bool foh_persist_publish(const char *name, const char *buf, size_t n,
+                         const char **why) {
+#define PUB_FAIL(msg)                                                          \
+  do {                                                                         \
+    if (why) *why = (msg);                                                     \
+    return false;                                                              \
+  } while (0)
   const char *dir = foh_persist_dir();
   if (mkdir(dir, 0755) != 0 && errno != EEXIST) {
-    gfx_fatal("foh_persist: save failed — cannot create the persist dir");
+    PUB_FAIL("cannot create the persist dir");
   }
   char tmp[512], fin[512];
-  if (snprintf(tmp, sizeof tmp, "%s/%s", dir, FP_TMP) >= (int)sizeof tmp ||
-      snprintf(fin, sizeof fin, "%s/%s", dir, FP_FILE) >= (int)sizeof fin) {
-    gfx_fatal("foh_persist: dir path overflow");
+  if (snprintf(tmp, sizeof tmp, "%s/%s.tmp", dir, name) >= (int)sizeof tmp ||
+      snprintf(fin, sizeof fin, "%s/%s", dir, name) >= (int)sizeof fin) {
+    PUB_FAIL("path too long");
+  }
+  // FREE SPACE FIRST. The payload plus a 64 KB margin: vfat allocates in
+  // clusters and the directory entry costs blocks of its own, so "exactly n
+  // bytes free" cannot be relied on to land a rename.
+  {
+    struct statvfs vfs;
+    if (statvfs(dir, &vfs) != 0) PUB_FAIL("cannot stat the persist filesystem");
+    const unsigned long long avail =
+        (unsigned long long)vfs.f_bavail * (unsigned long long)vfs.f_frsize;
+    if (avail < (unsigned long long)n + 65536ull) PUB_FAIL("disk full");
   }
   FILE *f = fopen(tmp, "wb");
-  if (!f) gfx_fatal("foh_persist: save failed — cannot open mlfk-persist.tmp");
+  if (!f) PUB_FAIL("cannot open the temp file");
   if (fwrite(buf, 1, n, f) != n) {
-    gfx_fatal("foh_persist: save failed — tmp write");
+    fclose(f);
+    remove(tmp);
+    PUB_FAIL("temp write failed");
   }
-  if (fflush(f) != 0) gfx_fatal("foh_persist: save failed — tmp flush");
-  if (fsync(fileno(f)) != 0) gfx_fatal("foh_persist: save failed — tmp fsync");
-  if (fclose(f) != 0) gfx_fatal("foh_persist: save failed — tmp close");
+  if (fflush(f) != 0) {
+    fclose(f);
+    remove(tmp);
+    PUB_FAIL("temp flush failed");
+  }
+  if (fsync(fileno(f)) != 0) {
+    fclose(f);
+    remove(tmp);
+    PUB_FAIL("temp fsync failed");
+  }
+  if (fclose(f) != 0) {
+    remove(tmp);
+    PUB_FAIL("temp close failed");
+  }
   // the ONLY publish: atomic rename over the real file
   if (rename(tmp, fin) != 0) {
-    gfx_fatal("foh_persist: save failed — rename publish");
+    remove(tmp);
+    PUB_FAIL("rename publish failed");
   }
   // directory durability, best-effort for the FAT class (EINVAL/
   // ENOTSUP tolerated; a real I/O error is still loud). review-100 M3:
@@ -587,18 +647,38 @@ void foh_persist_save(const FohPersist *p) {
   // reviewed FAT class) is unchanged and keeps the plain `saved`; real
   // durability is proven end-to-end by the reboot round-trip leg, not
   // by an fsync rc.
-  bool dirDurable = true;
   const int dfd = open(dir, O_RDONLY);
-  if (dfd >= 0) {
-    if (fsync(dfd) != 0 && errno != EINVAL && errno != ENOTSUP) {
-      gfx_fatal("foh_persist: save failed — dir fsync");
-    }
-    close(dfd);
-  } else {
-    dirDurable = false;
+  if (dfd < 0) {
+    // published, but the directory entry was not proven durable
+    if (why) *why = FOH_PUBLISH_NODIRSYNC;
+    return true;
   }
-  fprintf(stderr, dirDurable ? "foh_persist: saved\n"
-                             : "foh_persist: saved-nodirsync\n");
+  if (fsync(dfd) != 0 && errno != EINVAL && errno != ENOTSUP) {
+    close(dfd);
+    PUB_FAIL("dir fsync failed");
+  }
+  close(dfd);
+  if (why) *why = 0;
+  return true;
+#undef PUB_FAIL
+}
+
+void foh_persist_save(const FohPersist *p) {
+  static char buf[FP_CAP];
+  const size_t n = fp_serialize(p, buf, sizeof buf);
+  const char *why = 0;
+  if (!foh_persist_publish(FP_FILE, buf, n, &why)) {
+    // UNCHANGED POLICY for the settings file: any failure is loud death.
+    // The message is assembled here rather than passed as a format, because
+    // gfx_fatal takes one string (raster.h:114).
+    static char msg[256];
+    snprintf(msg, sizeof msg, "foh_persist: save failed — %s",
+             why ? why : "unknown");
+    gfx_fatal(msg);
+  }
+  fprintf(stderr, why == FOH_PUBLISH_NODIRSYNC
+                      ? "foh_persist: saved-nodirsync\n"
+                      : "foh_persist: saved\n");
 }
 
 // --- machine glue (single definition site) ----------------------------------

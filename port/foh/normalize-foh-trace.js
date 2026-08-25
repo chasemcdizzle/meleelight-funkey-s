@@ -119,7 +119,13 @@ const RE_SHOT = new RegExp("^SHOT " + NUM + " ([a-z0-9-]{1,32})$");
 const RE_LAUNCH = new RegExp("^LAUNCH " + NUM + " (p1=[0-4] p2=[0-4] p2type=(?:-1|[01]) difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] flashlcancel=[01] walljump=[01] tapjump=[01],[01],[01],[01] versus=[01] p3=[0-4] p4=[0-4] p3type=(?:-1|[01]) p4type=(?:-1|[01]) p3difficulty=[1-4] p4difficulty=[1-4])$");
 // iter 99 (M4 task 12): the target-mode launch record — same
 // END==launch-tick semantics as LAUNCH in bounded mode.
-const RE_TLAUNCH = new RegExp("^TLAUNCH " + NUM + " (char=[0-4] tstage=[0-9])$");
+// A45 T3 widened tstage to 0-19: 0..9 authored, 10..19 the CUSTOM slots
+// (MLK_PLAYING_BASE + slot, port/sim/target/custom_stage.h). Kept in step
+// with judge-foh-trace.js's RE_TLAUNCH by hand and by the frozen-grammar
+// table, which hashes BOTH — a widening on one side alone re-freezes to a
+// different digest and fails.
+const RE_TLAUNCH = new RegExp(
+    "^TLAUNCH " + NUM + " (char=[0-4] tstage=(?:[0-9]|10|11|12|13|14|15|16|17|18|19))$");
 const RE_END = new RegExp("^END " + NUM + " (transitions=" + NUM + ")$");
 
 // strict parse -> {hdr, lines:[{kind, tick, rest}]}

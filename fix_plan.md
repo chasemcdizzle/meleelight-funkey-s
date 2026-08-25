@@ -7226,6 +7226,101 @@ reason the marker outlived the test. Two sibling files have the same
 outlive-the-test property and are worth a grep: `/mnt/last_opk`,
 `/run/rebooting`.
 
+## A45-T3 + A45-T4 — DONE 2026-08-25 (D50/D51/D52). **THE TARGET BUILDER OPENS.**
+
+The owner clicked TARGET BUILDER and reported *"nothing happened"*. He was
+right: `menu-top` row 2 played `deny` and emitted `refused targetbuilder`.
+That row now opens a real editor, and a stage saved in it PLAYS from Target
+Test. The whole journey — enter, place, move, delete, save to a slot, play
+that slot — is driven through the real `foh_tick` by
+`port/foh/check-tbuild.sh` -> `TBUILD CHECK OK` (76 assertions, 6 teeth).
+
+**SCOPE, SO THE OMISSIONS ARE NOT READ AS STUBS.** Upstream's builder has TEN
+tools; this ships THREE — TARGET (`targetbuilder.js:560-571`), MOVE
+(`:572-618`), DELETE (`:619-738`). Polygon/Platform/Wall/Ledge/Damage/Scale/
+Draw Mode are the spike's T5-T8 and are ABSENT, not stubbed: the tool cycle
+has three entries, not ten with seven that beep. Upstream's `Test stage`
+pause row is not ported either — SAVE then play it from Target Test is the
+same journey through one launch path instead of two.
+
+**THE ONE STRUCTURAL DECISION: A POINTER SEAM, AND IT WAS FORCED BY
+MEASUREMENT.** The editor's document is an `MlkStage` and its save is T1's
+`mlk_encode`, so it needs `stage_code.c` linked. MEASURED: **SIXTEEN scripts
+compile `port/foh/foh.c`**, four of them device rigs that cannot be run from
+here. So the engine is `port/foh/foh_tbuild.c` behind
+`const FohTbuildOps *foh_tbuild_ops` — this project's own `tp_custom_setup` /
+`ml_sim_runai_live` shape — and **every existing check kept its exact TU list
+and its exact bytes.** A build without the TU still REACHES the screen and
+draws `TARGET BUILDER UNAVAILABLE IN THIS BUILD`, so even the degenerate case
+refuses in words rather than being a button that does nothing.
+
+**WRITING: ONE PATH, GENERALISED, NOT A SECOND ONE.** `custom_stage.h` made it
+binding and it was followed literally — `foh_persist_save`'s atomic publish is
+now `foh_persist_publish(name, buf, n, &why)` (tmp -> fsync -> rename ->
+fsync(dir), every rc checked). It **REPORTS instead of dying**, and the two
+callers pick: settings keep the loud death, the builder puts the reason ON
+SCREEN, because killing the app mid-edit destroys the stage the player is
+holding. **statvfs free-space check added before the first byte is opened** —
+`/mnt` is journal-less vfat mounted `errors=remount-ro`, so a full card starts
+failing writes silently mid-session.
+
+**THE DIFFERENTIAL FOUND A CRASH PATH, WHICH IS WHY IT EXISTS.** port/foh
+cannot even INCLUDE `custom_stage.h` (it drags the GENERATED `ml_stages.h`),
+so the builder has its OWN reader and leg [4] runs it against the sim's
+UNMODIFIED `mlk_slot_load` over ten corpus files (good, bad SUM, stale SUM,
+truncated, bad magic, split code line, trailing junk, a **re-SUMmed stage
+carrying a DAMAGE digit**, empty, absent). The damage entry disagreed: the FOH
+accepted what `mlk_stage_playable` refuses — and the FOH is what decides which
+custom slots target-select draws as PLAYABLE, so that slot would have shown as
+present, launched on A, and died inside the sim. `foh_tbuild.c` now mirrors
+all three sim playability rules AT THE READ. **Tooth T3 is the leg that keeps
+it: removing the mirror leaves the witness fully green and ONLY the
+differential notices.**
+
+**D43 IS PRESERVED WHOLE.** Ten slots by index, no append, no length cursor,
+no shift. Deleting slot 3 removes slot 3's file and touches nothing else —
+upstream shifts every higher cookie down (`targetselect.js:83-97`), which
+makes "Custom 4" mean a different stage than it did a second ago. The witness
+proves it BYTE-WISE, and it only bites because the document is CHANGED between
+the two saves (a clobber of identical bytes is invisible — measured, the first
+version of that tooth did not bite).
+
+**R2: STILL REFUSE, DON'T RAISE** — the builder refuses the 11th target where
+the message is useful, exactly as T2 said it should. `ML_MAX_TARGETS` untouched.
+
+**JUDGE.** +1 screen (`target-builder`), +2 edges, **-2 refusal tokens**
+(`targetbuilder`, `addcode` now name real destinations, the way A7 retired
+`audio`), and `TLAUNCH tstage` 0-9 -> **0-19** = `MLK_PLAYING_BASE + slot`,
+upstream's own numbering at `targetselect.js:140-146`. Three mechanical
+findings worth carrying: (1) leg [0n]'s expected-verdict predicate hardcoded
+`/^-?[0-9]$/` and so **forbade `tstage=10` no matter what the authored
+authority said** — a generator bug asserting a bound nobody wrote, fixed to
+canonical-decimal-plus-range so `00` still refuses; (2) the authority's
+value-spec expander only takes class-or-literal legs, so the domain is spelled
+`([0-9]|10|...|19)` rather than the tighter `1[0-9]`, and the FORM must stay a
+regex LITERAL or the frame-anchor scan cannot see it; (3) the `DIAG_SHA`
+re-pin has **three** deltas and only two were predictable — `neg
+form-sref-leadingzero` was NOT edited but moved, because it seds f04-nav's
+FIRST `S ... refused` line and that line is now `random` at 16 instead of
+`targetbuilder` at 4. The re-pin log carries a command that reproduces the old
+hash byte-for-byte.
+
+**Checks green:** `TBUILD CHECK OK` · `JUDGE REGRESSION OK` · `HAND CHECK OK`
+(leg [7] RETARGETED, not weakened: slot 10 flips the page now, and the leg
+asserts that AND the unchanged "launches nothing") · `LEGIBILITY CHECK OK` ·
+`CREDITS CHECK OK` · `CSS P34/BACK/BACKSEL/TOKEN-REST OK` · `CONTROLS LABELS
+OK`. `port/sim/**` and `port/gfx/**` BYTE-UNTOUCHED; the freeze manifest
+untouched.
+
+**DEVICE LEGS OWED (not run — the owner is playing on the device):**
+`check-device-foh.sh`, `check-device-persist.sh`, `check-device-fullgame.sh`,
+`check-live-arms.sh` and the OPK install. All five gained the same three TUs
+(`foh_tbuild.c`, `stage_code.c`, `custom_stage.c`) so `foh_device` links the
+engine; `foh_dev.c` gained the custom-slot launch arm. Host-syntax-checked,
+NOT device-run. **`check-foh-flows.sh` is owed too** — f04-nav and
+f07-target-t02 were re-cut for the two retired refusals and its judge pin and
+shot inventory were updated.
+
 ## LANE P — 2026-08-24. **A34 CLOSED, A26 ANSWERED, D44 CRASH-SAFETY LANDED.**
 ## And it corrected the driver TWICE.
 

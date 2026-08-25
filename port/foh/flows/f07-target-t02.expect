@@ -5,9 +5,8 @@ T 385 menu-top target-select a
 T 390 target-select menu-top b
 T 395 menu-top target-select a
 S 400 p1char 4
-SHOT 430 tss-addcode
-S 435 refused addcode
-SHOT 460 tss-t02
+SHOT 437 tss-custompage
+SHOT 463 tss-t02
 T 465 target-select target-match launch
 TLAUNCH 465 char=4 tstage=1
 END 470 transitions=6

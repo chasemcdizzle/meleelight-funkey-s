@@ -1894,6 +1894,13 @@ rig_arm_build() {
         port/foh/foh_dev.c port/foh/foh.c port/foh/foh_font.c \
         port/foh/foh_render.c port/foh/foh_persist.c \
         port/foh/foh_pause.c \
+        # A45 T3/T4 — the target builder engine and the custom-stage
+        # plane. foh_tbuild.c is the FOH-side editor (behind the
+        # foh_tbuild_ops pointer seam so no OTHER build had to change);
+        # custom_stage.c + stage_code.c are A45 T1/T2, which foh_dev.c
+        # now calls directly to play a custom slot.
+        port/foh/foh_tbuild.c \
+        port/sim/stage_code.c port/sim/target/custom_stage.c \
         port/gfx/ctl_style.c \
         port/gfx/img1.c \
         port/sim/target/target_play.c \
