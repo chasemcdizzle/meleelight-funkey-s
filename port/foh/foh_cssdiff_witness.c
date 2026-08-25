@@ -111,6 +111,24 @@ static Raster g_rz;
 int main(int argc, char **argv) {
   long frames = 60000;
   if (argc > 1) frames = strtol(argv[1], NULL, 10);
+  // `--no-a` suppresses the A button for the whole sweep. A44 added it for
+  // check-hand.sh leg [4]'s CROSS-BUILD differential and for nothing else.
+  //
+  // WHY. Leg [4] replays this sweep against a pre-A25(c) build and requires
+  // byte equality, which is only a true statement about surfaces BOTH builds
+  // have. DEVIATION D40 gave the single hand the right to grab any port's
+  // token and gave ports 2/3 live type tabs, so an A press can now reach
+  // machine state the pinned base has no field for (measured: 34,150 of
+  // 60,000 dumped frames diverge, first at frame 6001 where the new build
+  // carries PORT 3's token — `c=3` — a port that does not exist over there).
+  // Every one of those arms is inside an `if (aE)`, so with no A edge the
+  // two builds are comparable again and the leg keeps its full dump.
+  // The A-PRESSING sweep is still run — on the working tree, where leg [4]
+  // measures its own coverage floors from it — and the cross-build claim for
+  // the A-gated arms moved to port/foh/check-css-p34.sh, which drives grab,
+  // drop and the type tabs on all four ports through the real foh_tick.
+  bool noA = false;
+  if (argc > 2 && strcmp(argv[2], "--no-a") == 0) noA = true;
 
   FohState s;
   foh_init(&s);
@@ -158,6 +176,7 @@ int main(int argc, char **argv) {
       *field(&in, k) = held[k];
     }
     in.start = false;              // never launch (see the header)
+    if (noA) in.a = false;         // the cross-build sweep (see main's head)
     if (s.bHold >= 25) {           // never arm the 30-frame back-out
       in.b = false;
       in.a = false;

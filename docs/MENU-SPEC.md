@@ -416,12 +416,44 @@ never launch. A future netplay ARC restores the 4-cycle verbatim. Note it
 is not gated on `FOH_NETPLAY`: that flag covers the battle page only and
 this cycle is DEVIATION D5, unconditional at either flag value (§11.1).
 
-**DEVIATION D6 — ports 3 and 4 stay N/A.** Their panels render (upstream
-draws all four, `css.js:881-882`) but their type boxes do not toggle.
-Justification: every frozen golden and the whole `check-sim.sh` conformance
-surface is 2-player; a 3- or 4-participant launch is unverified against the
-oracle. This is a *launch-plane* limitation, not a menu-plane one — when
-3/4-player conformance is proven, delete this deviation and nothing else.
+**~~DEVIATION D6 — ports 3 and 4 stay N/A.~~ RETIRED 2026-08-24 (A44).**
+It said their panels render but their type boxes do not toggle, because a
+3-/4-participant launch was unverified against the oracle. **A46 verified
+one** — `sim_setup_match_ports` is upstream's own four-port
+`harnessSetupMatch` loop and the four-port golden `q01` replays
+`STREAM MATCH 3600/3600 frames exact` through the UNCHANGED
+`verify-stream.js`. The condition D6 named for its own deletion was met, so
+it is deleted. What replaces it is **DEVIATION D40**, which is narrower: the
+ports are live, and what remains restricted is the CPU type on ports 2/3 and
+the token-ownership guard. See D40 in §12.1.
+
+**DEVIATION D40 — one hand owns every token; ports 2/3 offer HMN or N/A.**
+(a) Upstream's grab guard is `playerType[j] == 1 || i == j` (`css.js:300`) —
+hand *i* takes its own token or any CPU port's, never another human's,
+because upstream has FOUR hands and each human works its own. This device
+has ONE input device and therefore one hand (§2.1's port model), so that
+guard protects nobody here and instead removes the only way to give a HUMAN
+port a character. For P2 that was survivable through the CPU detour §2.7
+describes; for P3/P4 it is not, because (b) leaves them no CPU state to
+route through — a port that can be switched on and never given a character
+is the stub HARD RULE 2 forbids. (b) Ports 2/3 cycle N/A -> HMN -> N/A. CPU
+is not offered because the sim can replay exactly ONE AI slot (AIBRIDGE1 is
+one recorded stream for one CPU slot), so a CPU P3 would boot a match no
+golden could verify. **An absent state beats a state that denies at START.**
+Consequence, stated because a player will see it: a HMN port with no
+physical controller stands still — already true of P2 today, and closed by
+a second controller (the A33 spike), not by this screen.
+
+**DEVIATION D41 — the token 2x2.** Four tokens on one 44 px cell need
+upstream's own 2x2 stack (`css.js`, and the note this port's constant block
+has always carried) rather than the single row two ports read as. `r` 9 ->
+7, column and row pitch 20 -> 14, `DX` 12 -> 15, `y` `CELL_Y+11` ->
+`CELL_Y+9`; the four inequalities that fix them are at `FOH_CSS_TOKEN_R` in
+`port/foh/foh.h`. The shape did not change — the numbers did — and the
+alternative was measured: four r=9 tokens in a row span 78 px of a 44 px
+cell, and the clamp would have parked port 0's token a whole cell LEFT of
+the character it chose, re-creating D21's defect in the one configuration
+A44 exists to add.
 
 **DEVIATION D17 — a CPU in port 1 cannot LAUNCH.** The menu plane is
 faithful and unchanged: `togglePort` has no port-0 special case
@@ -443,6 +475,15 @@ D6's ports-3/4 wording. Closing it means giving `sim_setup_match` both
 ports' type and level and re-proving conformance — a sim-surface change,
 outside the menus lane. Until then the refusal is LOUD (`deny` + a
 `refused portconfig` trace event), never silent.
+**A44 amendment (2026-08-24):** the *quoted mechanism* above is stale —
+`sim_setup_match_ports` (A46) does take every port's type, so the sim could
+represent a CPU port 0. **D17 itself stands, on a different and narrower
+ground:** port 0 is the port the physical controller drives and a CPU there
+has no input source on the launch path, so it would still boot a match the
+LAUNCH record misdescribes. The launch guard now spells three conditions —
+port 0 HMN, no CPU above port 1 (D40(b)), at least two participants — and
+`port/foh/foh_launch_witness.c` judges all 81 cells of the four-port type
+grid against an authored verdict table.
 
 ### 2.8 CPU-level widget
 
@@ -1898,7 +1939,7 @@ in scope.
 | 4 | **Netplay: Spectate, P2P, Server** (`menu.js:108-121`) | Requires the `streamclient` stack, a server, and `inServerMode`. Owner ruling: **hide behind a named flag.** See §11.1. Note P2P is *already* dead upstream — its body is commented out (`menu.js:114-116`) — so P2P specifically is faithful when it does nothing. |
 | 5 | **CSS free-text name tags** | jQuery HTML `<input>` overlay (`css.js:438`) committed by `keys[13]`. No DOM, no keyboard. Random-tag and clear-tag survive — D8. |
 | 6 | **CSS NET port type** | Consequence of #4: a reachable NET state could never launch. D5. |
-| 7 | **3- and 4-participant launches** | Menu-plane support is specified (four port panels exist); the *launch* is gated because every frozen golden and the whole `check-sim.sh` surface is 2-player. D6 — a launch-plane limit, deleted when 3/4-player conformance is proven. |
+| 7 | ~~**3- and 4-participant launches**~~ **LANDED 2026-08-24 (A44)**, on A46's `sim_setup_match_ports` + the four-port golden `q01`; DEVIATIONS D40 and D41 | Was gated because every frozen golden was 2-player. A46 recorded a 4-port one, so D6 was deleted rather than weakened. What remains restricted is narrower and registered: no CPU on ports 2/3 (one AI replay slot), and port 0 must be HMN (D17's amended ground). |
 | 8 | **`keytest.js` as a screen** | It is a lookup table, not a screen — no gamemode, nothing reaches it (§9.4). |
 | 9 | **`blastzoneWrapping`, `dustLessPerfectWavedash` UI rows** | Upstream has no row for them (their label entries are `""`, `css.js:85`/`:87`) and **zero code reads them**. They are persisted at their defaults and never shown — §3.2. |
 | 10 | **Target select semantics** | RENDER measured only in PART (`drawTSSInit` whole, `drawTSS` `:244`-~`:420` of `:244-540`; the tail `:421-540` unread) and the look re-authored from it; `tssControls` (`:43-173`) NOT measured, so the screen stands as **UNVERIFIED** as a whole rather than being declared a gap — §7.1. |
@@ -2051,7 +2092,7 @@ state; each entry points at the section that carries the evidence):
 | D3 | Cursor speed as a fraction of screen + `FOH_CURSOR_SPEED` knob | §1.2 |
 | D4 | Hit regions are our layout's drawn rects, not upstream pixel coords | §1.2 |
 | D5 | CSS port-type cycle drops NET (3-cycle); NOT gated on `FOH_NETPLAY` — unconditional until a future netplay arc | §2.7, §11.1 |
-| D6 | Ports 3–4 stay N/A until 3/4-player conformance is proven | §2.7 |
+| ~~D6~~ | ~~Ports 3–4 stay N/A until 3/4-player conformance is proven~~ **RETIRED 2026-08-24 (A44)** — A46 proved it with the four-port golden `q01`; superseded by D40 | §2.7 |
 | D7 | CPU knob is grab-drag at the §1.2 cursor speed | §2.8 |
 | D8 | Name tags: keep random + clear, cut free-text entry | §2.9 |
 | D9 | Do not reproduce the malformed diagonal guards / 60 Hz left-repeat | §3.4 |
@@ -2086,6 +2127,8 @@ state; each entry points at the section that carries the evidence):
 
 | D39 | **A45 T1, 2026-08-24 — the share-code parser accepts a STRICT SUBSET of upstream's input language.** `parseStageCode` reads every number with `parseFloat` / `parseInt`, which coerce arbitrary junk into a stage full of NaNs rather than refusing it: measured this session by executing upstream's own transpiled `encode.js`, the fourteen-character input `"aaaaaaaaaaaaaa"` returns a *stage*, not `null`. `mlk_parse` (`port/sim/stage_code.c`) instead requires every coordinate token to match the alphabet `createStageCode` can emit — `-?\d+(\.\d{1,2})?`, with |hundredths| <= 2^53 — and rejects anything else, which is upstream's OWN "Invalid code" path (`targetselect.js:158-162`) reached on more inputs. **The reason is the iter-38 ban, not taste:** the SDK's static musl `strtod` mis-rounds subnormals and drops `-0`, so decimal parsing on this device is forbidden; integer hundredths / 100.0 is correctly rounded and needs no libc. **On every code `createStageCode` can emit the two agree BYTE FOR BYTE** — 3892 well-formed plus 108 non-fixed-point codes, `cmp`-exact against upstream's executed encoder — and the port additionally refuses loudly rather than truncating when a code exceeds a sim cap (`ML_MAX_SURFACES` and friends; design risk R2, owner ruling owed before A45 T2). Every divergent input is enumerated with both sides' verdicts in `port/sim/calib/expected-stage-code.json` (21 of 42 hostile rows), so the deviation is reviewable rather than asserted. Proved by `port/sim/check-stage-code.sh` -> `STAGECODE MATCH` | §7 |
 | D38 | **A7, driver-allocated 2026-08-24 — THE CREDITS DRAW FROM A FOH-LOCAL RANDOM STREAM.** `credits.js` calls `Math.random` in three places: the star constructor and its respawn (`:252-255`, `:321-323`), a scrolling name's starting x (`:42`) and its wobble amplitude and direction (`:49`, `:51`). **In the browser those draws come off the SEEDED stream** — the same measured fact that makes the SSS RANDOM slot a registered refusal (`foh.h`, AGENT-LOG iter 93) — and the sim's stream carries a 465-draw boot pin whose POSITION every golden's checksums depend on. Sharing it would move every frozen stream by however many stars a player happened to watch, so the credits get a generator of their own: mulberry32 (the same ALGORITHM `port/sim/ml_rng.h` uses, with **no shared state and no shared header** — a cross-TU include would make the two planes look connected, which is the thing this separates), seeded from a compile-time constant, its entire state the single `FohState.credRng` field. **The FOH stays a pure function of (state, input)**, so the same flow still replays to the same pixels and `foh_app.c`'s "the FOH machine consumes no RNG" contract is amended in exactly one place rather than broken. **WHAT THIS DELIBERATELY IS NOT:** an authored table of star positions or an index hash. Those are values upstream DRAWS, and inventing them would be the deviation class *"we wrote down what upstream rolled"* landing in the one subsystem whose contract is no invented values; drawing them from a different generator is the smaller departure. Nothing observable outside the credits screen depends on it — no checksum, no flow edge, no launch record — and no committed flow lingers on the screen long enough for a star to matter | §8, §12.1 |
+| D40 | **A44, owner-reported P2 (2026-08-24):** ONE HAND OWNS EVERY TOKEN, and ports 2/3 offer HMN or N/A. Owner: *"why can't I turn on player 3 and 4 at the CSS?"* **The obstacle was never the pixels** — A44's predecessor measured that `FOH_CSS_PANEL_{X0,PITCH,W}` = `{1,60,58}` already puts four panels on the 240 px screen, that `render_css` already loops `k = 0..3`, and that `css_ready` already counts all four ports. It was `sim_setup_match`, which pinned slots 2/3 absent by construction, and **A46 removed it**: `sim_setup_match_ports` is upstream's own four-port `harnessSetupMatch` loop, witnessed by the four-port golden `q01` (`STREAM MATCH 3600/3600 frames exact` through the UNCHANGED `verify-stream.js`). So DEVIATION D6 is RETIRED and this narrower pair replaces it. **(a) THE OWNERSHIP GUARD GOES.** Upstream's `playerType[j] == 1 \|\| i == j` (`css.js:300`) stops one human's hand taking another human's token, which is right where every human has a hand. Here there is one input device and one hand, so the guard protects nobody and instead removes the only way to give a HUMAN port a character. P2 could route around it through the CPU detour (§2.7); P3/P4 cannot, because (b) leaves them no CPU state — a port you can switch on and never give a character to is precisely the stub HARD RULE 2 forbids. Upstream's OTHER asymmetry is carried unchanged and widened with it: a port's token stays grabbable while nothing is drawn for it (§2.4's D4 exception (b)), which is upstream's own mismatch between this guard and its token draw. **(b) NO CPU ON PORTS 2/3.** Their cycle is N/A -> HMN -> N/A. AIBRIDGE1 is one recorded stream for one CPU slot, so a CPU P3 has no C-side replay and could not be checksum-verified — **an honest missing state beats a toggle that denies at START**, and the refusal is asserted on the LAUNCH plane too, not merely absent from the widget. **THE LAUNCH GUARD IS NOW THREE CONDITIONS**, each naming what is still unreal rather than a shape the screen dislikes: port 0 must be HMN (D17, on its amended ground), no CPU above port 1 (this deviation), and at least two PARTICIPATING ports — the third counts ports rather than testing two named ones, which is what makes P1 + P3 with P2 off a legal match, as it is upstream. **Persistence is untouched:** `FohPersist` carries no CSS character or type state at all (measured — it holds gameSettings, `ctlStyle`, `modOnR`, `targetRecords` and `bind`), so widening the screen needs no `MLFKPERSIST6`. Proved by `port/foh/check-css-p34.sh` -> `CSS P34 CHECK OK`, whose witness drives the real gestures and whose three teeth restore the ownership guard, write the selection plane by ROSTER INDEX instead of by PORT (the D21/D35 family), and collapse the launch config onto port 0; and by `port/foh/foh_launch_witness.c`, which judges all 81 cells of the four-port type grid against an authored verdict table | §2.4, §2.7, §12.1 |
+| D41 | **A44, 2026-08-24 — THE TOKEN 2x2.** Four tokens do not fit one 44 px cell as a row: at `r` = 9 and pitch 20 they span 78 px, and `foh_css_token_pos`'s clamp would then park port 0's token a whole cell LEFT of the character it chose — **re-creating DEVIATION D21's defect** (the token is the only roster-level indicator on this screen) in the one configuration A44 exists to add. They move to upstream's own 2x2 instead, which is the layout this port's constant block has always said upstream draws: `r` 9 -> 7, column and row pitch 20 -> 14, `DX` 12 -> 15, `y` `CELL_Y+11` -> `CELL_Y+9`. The four inequalities those satisfy are written at `FOH_CSS_TOKEN_R` in `port/foh/foh.h` and each is load-bearing: the block is 28x28 inside 44x30, the discs are TANGENT so no point lies inside two tokens (which is what keeps the grab hit test unambiguous now that D40(a) makes all four grabbable), the A-drop slot needs no clamp at all, and the lower row spans 34..62 so it never bleeds into the READY TO FIGHT ribbon the renderer draws after it. **The shape did not change; the numbers did.** Consequence for the checks, handled rather than absorbed: `check-hand.sh`'s extraction differential masks exactly two dump columns (the token pixels and the framebuffer hash) and asserts the mask is LIVE — if the geometry is ever reverted, the unmasked comparison stops differing and the leg says so | §2.6 |
 
 ---
 
@@ -2124,12 +2167,18 @@ owner-visible value per unit of work, with dependencies respected.
 
 ### 13.1 Cross-cutting consequences to plan for
 
-1. **The `LAUNCH` trace line grows.** It currently carries
-   `p1= p2= p2type= difficulty= stage= turbo= lcancel= tapjump= versus=`
-   (`foh_app.c:577-586`). Items 3, 5 and 7 add `p1type`, `flashlcancel`,
-   `walljump`, `palette[4]` and make `versus` live. Every frozen
-   `port/foh/flows/*.expect` that pins a LAUNCH line must be re-frozen in
-   the same change — that is a deliberate, reviewed re-freeze, not drift.
+1. **The `LAUNCH` trace line grows.** It carries
+   `p1= p2= p2type= difficulty= stage= turbo= lcancel= flashlcancel=
+   walljump= tapjump= versus= p3= p4= p3type= p4type=`. **A44 appended the
+   last four** (item 7's 3-/4-participant launches) and widened `p2type` to
+   admit `-1`, because with ports 2/3 live a match can be P1 + P3 with P2
+   absent. Remaining items add `p1type` and `palette[4]`. **Appended, never
+   renumbered:** every field up to `versus=` keeps its name, position and
+   domain, so a frozen line gains a fixed suffix and nothing else. Every
+   frozen `port/foh/flows/*.expect` that pins a LAUNCH line is re-frozen in
+   the same change — a deliberate, reviewed re-freeze, not drift — and the
+   twin `BRIDGE-STATE` line grew the same four columns, read back out of the
+   `GameState` so the crossing itself is judged.
 2. **`FohPersist` grows.** It currently holds
    `{turbo, lCancelType, tapJumpOff[4], targetRecords[5][10]}`
    (`foh_persist.h:88-93`). Item 5 adds `flashOnLCancel`,

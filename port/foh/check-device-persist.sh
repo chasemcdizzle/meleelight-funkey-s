@@ -403,7 +403,7 @@ echo "   device state clean; sha tool self-tested"
 
 # --- [1] twin pin + data planes -----------------------------------------------
 echo "== [1/10] judge twin pin + data planes =="
-JUDGE_SHA=594f1925628259bf702f12b21d7991e9be0dcf3d3e9fa0a8de1cca311259b9db
+JUDGE_SHA=5a19f1322ad0914b88f9ab99c8d65b6487fe8df3c47be31b8a02105f58ed8b17
 have="$(rig_host_sha256 "$FOH/judge-foh-trace.js")" || exit 1
 [ "$have" = "$JUDGE_SHA" ] || fail "judge-foh-trace.js sha $have != pinned $JUDGE_SHA (reviewed pin update in the same commit)"
 c="$(grep -cF "$JUDGE_SHA port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true

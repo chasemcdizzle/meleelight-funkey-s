@@ -128,7 +128,12 @@ mkdir -p "$BUILD"
 echo "=== [1] grammar pins (D35's two statements, one per negative test)"
 made "$FOH/foh.c" "$FOH/foh_cssbacksel_witness.c"
 D35_CARRY='    s->cssCarry = -1; // D35: release the grab that upstream leaks across'
-D35_REST='  for (int k = 0; k < 2; k++) s->cssTokenRest[k] = 0; // D35: re-home on cssChar'
+# A44 re-pins the BOUND, not the statement: the loop was `k < 2` when the FOH
+# had two ports and is `k < FOH_CSS_PORTS` now that it has four. Pinning the
+# old literal would have pinned a bound that no longer exists; pinning the
+# constant keeps the pin asserting D35's actual claim — that leaving the CSS
+# re-homes EVERY port's token on the character that port selected.
+D35_REST='  for (int k = 0; k < FOH_CSS_PORTS; k++) s->cssTokenRest[k] = 0;'
 n="$(grep -cxF "$D35_CARRY" "$FOH/foh.c")" || true
 [ "$n" = 1 ] || grammar_die "foh.c has $n D35 carry-release lines (want exactly
   1) — T1 cannot target the release unambiguously"

@@ -206,7 +206,7 @@ b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wr
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-594f1925628259bf702f12b21d7991e9be0dcf3d3e9fa0a8de1cca311259b9db port/foh/judge-foh-trace.js
+5a19f1322ad0914b88f9ab99c8d65b6487fe8df3c47be31b8a02105f58ed8b17 port/foh/judge-foh-trace.js
 2cf5c5a532207372b70c4cee57412c7ac65643ac4f4066c745d9eb7fe4aa0e9b port/goldens-m4/wrap-target.js
 415335239fcc04df97eba07298a1fa521602d5ea45b087aa8d7d40bd740c122a port/goldens-m4/verify-target-stream.js
 6b1b6b5be3700c51dfae8c0c4cb1f012e5b61239394ae4146c2e5e19cc4fcc47 port/goldens-m4/validate-target-manifest.js
@@ -329,7 +329,7 @@ done
 # and appear as S events, but never on this line — foh.c refuses to launch any
 # port configuration the launch plane cannot honour (sim_setup_match pins a
 # human port 0), so the record's shape is provably the same one.
-LAUNCH_RE='^LAUNCH [0-9]+ p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] flashlcancel=[01] walljump=[01] tapjump=[01],[01],[01],[01] versus=0$'
+LAUNCH_RE='^LAUNCH [0-9]+ p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] flashlcancel=[01] walljump=[01] tapjump=[01],[01],[01],[01] versus=0 p3=[0-4] p4=[0-4] p3type=(-1|0) p4type=(-1|0)$'
 for exf in "$FLOWS/f01-vs-g01.expect" "$FLOWS/f02-cpu-m01.expect" \
            "$FLOWS/f05-vs-g03.expect"; do
   c="$(count_e "$exf" "$LAUNCH_RE")"
@@ -1065,7 +1065,7 @@ for k in 0 1 2 3 4 5 6; do
     cmp "$B/$id/bstate.txt" "$FLOWS/$id.bstate.expect" || fail "flow $id: TBRIDGE-STATE differs from the frozen witness"
     tstates=$((tstates + 1))
   elif [ "$mode" != "none" ]; then
-    c="$(count_e "$B/$id/bstate.txt" '^BRIDGE-STATE p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] tapjump=[01],[01],[01],[01] phantom=[0-9a-f]{16}$')"
+    c="$(count_e "$B/$id/bstate.txt" '^BRIDGE-STATE p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] tapjump=[01],[01],[01],[01] phantom=[0-9a-f]{16} p3=[0-4] p4=[0-4] p3type=(-1|0) p4type=(-1|0)$')"
     [ "$c" = 1 ] || grammar_die "flow $id: bstate grammar count $c/1"
     cmp "$B/$id/bstate.txt" "$FLOWS/$id.bstate.expect" || fail "flow $id: BRIDGE-STATE differs from the frozen witness"
     states=$((states + 1))
@@ -1383,7 +1383,7 @@ fresh_persist # defaults domain (task 13; the wit leg saves lcancel=1)
 made "$WIT/trace.txt" "$WIT/stream.txt" "$WIT/bstate.txt"
 { node "$FOH/judge-foh-trace.js" "$WIT/trace.txt" wit-g01 1; } 2>&1 | relay_lines
 # LAUNCH line EXACT: g01 cross-bound params + lcancel=1 (nothing else).
-witlaunch="LAUNCH 830 p1=$G01_P1 p2=$G01_P2 p2type=0 difficulty=3 stage=$G01_STAGE turbo=0 lcancel=1 flashlcancel=0 walljump=0 tapjump=0,0,0,0 versus=0"
+witlaunch="LAUNCH 830 p1=$G01_P1 p2=$G01_P2 p2type=0 difficulty=3 stage=$G01_STAGE turbo=0 lcancel=1 flashlcancel=0 walljump=0 tapjump=0,0,0,0 versus=0 p3=0 p4=0 p3type=-1 p4type=-1"
 c="$(count_xl "$WIT/trace.txt" "$witlaunch")"
 [ "$c" = 1 ] || fail "witness — LAUNCH line != g01-params-plus-lcancel=1 (count $c/1)"
 # The settings-edit line itself (the control derivation below deletes
@@ -1468,7 +1468,7 @@ sed -e '/^S 415 lcancel 1$/d' \
   "$WIT/trace.txt" > "$CTRL/trace-want.txt"
 made "$CTRL/trace-want.txt"
 cmp "$CTRL/trace.txt" "$CTRL/trace-want.txt" || fail "control — trace != witness-trace-minus-the-lcancel-edit (the treatment and control did NOT share the options path)"
-ctrllaunch="LAUNCH 830 p1=$G01_P1 p2=$G01_P2 p2type=0 difficulty=3 stage=$G01_STAGE turbo=0 lcancel=0 flashlcancel=0 walljump=0 tapjump=0,0,0,0 versus=0"
+ctrllaunch="LAUNCH 830 p1=$G01_P1 p2=$G01_P2 p2type=0 difficulty=3 stage=$G01_STAGE turbo=0 lcancel=0 flashlcancel=0 walljump=0 tapjump=0,0,0,0 versus=0 p3=0 p4=0 p3type=-1 p4type=-1"
 c="$(count_xl "$CTRL/trace.txt" "$ctrllaunch")"
 [ "$c" = 1 ] || fail "control — LAUNCH line != g01-params-with-lcancel=0 (count $c/1)"
 # Pure-defaults GameState: byte-equal to the FROZEN f01 witness.
@@ -2446,7 +2446,7 @@ snd_tooth st30 "$B/st30/w" "want 4096 (sfx default == unity)" 16 \
 # with the reason the configuration owes a launch or a refusal) — nothing
 # is computed from the predicate under test.
 echo "=== [5d] CSS launch-guard grid witness (B1)"
-LAUNCH_OK_LINE='LAUNCH GUARD WITNESS OK (cells=9 launch=2 refuse=7)'
+LAUNCH_OK_LINE='LAUNCH GUARD WITNESS OK (cells=81 launch=11 refuse=70)'
 LAUNCH_OK_NEEDLE='LAUNCH GUARD WITNESS OK'
 # WHOLE-OUTPUT whitelist, same rule as [5c]: success output is EXACTLY
 # this one line, byte-compared.
@@ -2468,7 +2468,7 @@ fi
 relay_lines < "$B/launchwit.out"
 launch_verdict_ok "$B/launchwit.out" || fail "launch-guard witness — success output is not the exact anchored line '$LAUNCH_OK_LINE' (permissive-parse guard, PROCESS §3) — see relayed output above"
 launchwit=1
-echo "    [5d] OK: all 9 (p1Type,p2Type) cells judged against the authored grid — 2 launch (HMN vs HMN, HMN vs CPU), 7 refuse with 'deny' + 'refused portconfig' and NO screen movement"
+echo "    [5d] OK: all 81 (p1Type,p2Type,p3Type,p4Type) cells judged against the authored grid — 11 launch (every two-port-or-more configuration with a human port 0 and no CPU above port 1, including P1+P3 with P2 off), 70 refuse with 'deny' + 'refused portconfig' and NO screen movement"
 
 # --- [5d] TEETH. Both on COPIES of foh.c; the committed sources are never
 # touched. Same whole-output treatment as [5c]'s teeth.
@@ -2486,27 +2486,37 @@ launch_tooth() { # <id> <binary> <want-needle> <want-failures> <label>
   echo "    $label"
   teeth=$((teeth + 1))
 }
-# T35: the guard NARROWED — the CPU-P2 disjunct dropped, so HMN vs CPU (the
-# configuration the difficulty widget exists for) starts refusing. This is
-# the regression no flow can see.
+# T35: the guard WIDENED. A44 re-authored this tooth, because the two-port
+# guard it used to narrow no longer exists. It drops the arm that refuses a
+# CPU above port 1. DEVIATION D40(b) keeps CPU off ports 2/3's type CYCLE, so
+# no gesture can reach that state — the arm exists because the sim can replay
+# exactly ONE AI slot (fix_plan A46's OPEN/OWED), and a CPU P3 that got past
+# here would boot a match no golden could verify. Dropping it flips the 15
+# grid cells where port 0 is HMN, two ports participate and port 2 or port 3
+# is CPU; each fails on all three of sound, event and screen, so 45.
 rm -rf "$B/st35w"; mkdir -p "$B/st35w"
-# `@` delimiter on purpose: the guard itself contains `||`.
-sed 's@    if (!(s->p1Type == 0 && (s->p2Type == 0 || s->p2Type == 1))) {@    if (!(s->p1Type == 0 \&\& (s->p2Type == 0))) {@' \
+# `@` delimiter on purpose: the perturbed line sits inside a `||` chain.
+sed 's@        if (j >= 2 && s->portType\[j\] == 1) cpuTooHigh = true;@        (void)0; // T35@' \
   "$FOH/foh.c" > "$B/st35w/foh.c"
-[ "$(count_x "$B/st35w/foh.c" 's->p2Type == 1')" = 0 ] || fail "T35 — the narrowed-guard perturb did not take"
+[ "$(count_x "$B/st35w/foh.c" 'cpuTooHigh = true')" = 0 ] || fail "T35 — the widened-guard perturb did not take"
+[ "$(count_x "$B/st35w/foh.c" '// T35')" = 1 ] || fail "T35 — the perturb did not land exactly once"
 cc -O2 "${CFLAGS_COMMON[@]}" -I"$FOH" -c "$B/st35w/foh.c" -o "$B/st35w/foh.o"
 snd_link "$B/st35w/w" "$B/foh_launch_witness.o" "$B/st35w/foh.o"
-launch_tooth st35w "$B/st35w/w" "(p1=0,p2=1)" 3 \
-  "T35 OK: narrowing the guard so HMN vs CPU refuses dies on the authored grid row"
+launch_tooth st35w "$B/st35w/w" "(p1=0,p2=0,p3=1,p4=-1)" 45 \
+  "T35 OK: a guard that stops refusing a CPU on port 2/3 dies on the authored grid"
 # T36: the refusal's EVENT dropped — it still denies audibly, so a
 # sound-only witness would stay green, but the structural trace would lose
 # every refusal record.
 rm -rf "$B/st36w"; mkdir -p "$B/st36w"
-sed 's@^      ev_refused(s, "portconfig");$@@' "$FOH/foh.c" > "$B/st36w/foh.c"
+sed 's@^        ev_refused(s, "portconfig");$@@' "$FOH/foh.c" > "$B/st36w/foh.c"
 [ "$(count_x "$B/st36w/foh.c" 'ev_refused(s, "portconfig")')" = 0 ] || fail "T36 — the dropped-refusal-event perturb did not take"
 cc -O2 "${CFLAGS_COMMON[@]}" -I"$FOH" -c "$B/st36w/foh.c" -o "$B/st36w/foh.o"
 snd_link "$B/st36w/w" "$B/foh_launch_witness.o" "$B/st36w/foh.o"
-launch_tooth st36w "$B/st36w/w" "want exactly 1" 9 \
+# 72, not 70: the 70 refusing cells each lose their event, and the two SHAPE
+# pins fire too — a cell whose event count is wrong is skipped before it is
+# counted, so nRefuse comes out 0 and both the total and the refuse pin
+# disagree. Measured, and the pin is the reason the count is stated at all.
+launch_tooth st36w "$B/st36w/w" "want exactly 1" 72 \
   "T36 OK: a refusal that stops emitting its structural event dies, though the deny sound still plays"
 
 # T31: the MUSIC BUS NEVER LEAVES UNITY — the r10 BLOCKER's observable shape.

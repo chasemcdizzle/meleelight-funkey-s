@@ -1319,10 +1319,13 @@ static void row_label(Raster *rz, int y, int row, int curRow,
 // of the screen less the gaps, so a port panel is one portrait wide.
 //
 // SCOPE (foh.h): the machine gives ONE hand to port 0 (one input device) and
-// two toggleable ports. Ports 3/4 render as upstream's N-A panels — that is
-// what upstream shows for an unjoined port, not a placeholder (DEVIATION D6).
-// NET is not drawn because the network arm is scope-excluded (DEVIATION D5),
-// so a NET tab would name an unreachable state.
+// — since A44 — FOUR toggleable ports. A port sitting at N/A renders as
+// upstream's N-A panel, which is what upstream shows for an unjoined port;
+// DEVIATION D6 used to say ports 3/4 could only ever be that, and it is
+// retired. NET is not drawn because the network arm is scope-excluded
+// (DEVIATION D5), so a NET tab would name an unreachable state; CPU is not
+// drawn above port 1 for the same kind of reason (DEVIATION D40(b)) — the
+// type simply never gets there.
 //
 // EVERY rectangle on this screen is a FOH_CSS_* constant in foh.h, shared
 // verbatim with foh.c's hit tests: DEVIATION D4 requires the hit region and
@@ -1417,9 +1420,10 @@ static void css_header(Raster *rz, int bHold, int versusMode) {
     //   * ENDLESS (1) takes upstream's string across two rows, dropping only
     //     the article: ENDLESS / KO FEST!.
     //   * STOCK (0) keeps "VS. MELEE" — the gamemode's own name, which is
-    //     what the header has always read here. "4-MAN" would be a lie on a
-    //     two-port build (D6) and a re-freeze of every judged CSS shot for
-    //     the privilege; keeping it means the DEFAULT state renders exactly
+    //     what the header has always read here. "4-MAN" was a lie on the
+    //     two-port build A27 shipped against, and would cost a re-freeze of
+    //     every judged CSS shot for the privilege even now that A44 makes it
+    //     reachable; keeping it means the DEFAULT state renders exactly
     //     the bytes it rendered before A27, which check-css-mode.sh proves
     //     by cmp rather than by assertion.
     if (versusMode) {
@@ -1437,8 +1441,9 @@ static void css_header(Raster *rz, int bHold, int versusMode) {
     foh_text(rz, 210, 10, 1, "BACK", gold);
     // The hold bar (css.js:735-746), the owner's "little red bar that fills
     // below the back button". Upstream takes `bestHold` = max over its four
-    // ports; this device has ONE hand and one port that can hold (D6), so the
-    // max over a one-element set is the element. Upstream's quad is
+    // ports; this device has ONE hand, so however many ports exist there is
+    // one bHold counter and the max over a one-element set is the element
+    // (A44 widened the ports, not the hands). Upstream's quad is
     // (1020,125) (abb,125) (abb,119) (1015,119) with abb = 1020 + 6*bestHold,
     // i.e. a left-to-right fill along the bottom lip of the wedge, leaning 5
     // px left on its top edge; FOH_CSS_BACK_BAR_* carry that shape at
@@ -1670,10 +1675,12 @@ static void render_css(const FohState *s, Raster *rz) {
   // — upstream guards both of its token passes on `playerType[i] > -1`
   // (css.js:1018 and css.js:1077). NOTE this does NOT make D4 true in both
   // directions: your OWN token stays grabbable at N/A while undrawn, because
-  // upstream's grab guard is `playerType[j] == 1 || i == j` (css.js:300).
+  // upstream's grab guard is `playerType[j] == 1 || i == j` (css.js:300),
+  // widened to every port by DEVIATION D40 without widening this draw.
   // That asymmetry is upstream's and is carried — foh.h D4 exception (b).
+  // A44: all four ports, in D41's 2x2 (foh_css_token_pos owns the geometry).
   for (int pass = 0; pass < 2; pass++) {
-    for (int k = 0; k < 2; k++) {
+    for (int k = 0; k < FOH_CSS_PORTS; k++) {
       if (foh_css_port_type(s, k) < 0) continue;
       if ((s->cssCarry == k) != pass) continue;
       double tx, ty;
@@ -1709,16 +1716,20 @@ static void render_css(const FohState *s, Raster *rz) {
     foh_text2(rz, (RAST_W - w) / 2, 68, 2, 1, "READY TO FIGHT", lit);
   }
 
-  // the four port panels (ports 3/4 pinned N/A by D6 — upstream's N-A panel)
-  for (int k = 0; k < 4; k++) {
+  // the four port panels — every one of them live since A44/D40 (an N/A
+  // port still draws upstream's N-A panel; that is its type, not a pin)
+  for (int k = 0; k < FOH_CSS_PORTS; k++) {
     const int type = foh_css_port_type(s, k);
     const int px = css_panel_x(k);
-    const int hotTab = k < 2 && !inBand && hy > (double)CSS_PANEL_Y &&
+    const int hotTab = !inBand && hy > (double)CSS_PANEL_Y &&
                        hy < (double)(CSS_PANEL_Y + CSS_TAB_H) &&
                        hx > (double)px && hx < (double)(px + FOH_CSS_TAB_W);
     const int diff = foh_css_port_diff(s, k);
     // The knob is drawn at the CONTINUOUS slider position the machine holds,
     // which is also what foh.c hit-tests (D4) — not re-derived from the level.
+    // The `k < 2` is cssSliderX's width, and it is SAFE rather than merely
+    // in-bounds: css_panel draws and hot-tests the rail iff type == 1, and
+    // D40(b) makes type == 1 unreachable above port 1.
     const double kx = k < 2 ? foh_css_knob_x(s, k) : 0.0;
     const double ky = foh_css_knob_y();
     const int hotCpu = type == 1 && (s->cssCpuCarry == k ||
@@ -1726,8 +1737,10 @@ static void render_css(const FohState *s, Raster *rz) {
                                       hy <= ky + FOH_CSS_KNOB_R &&
                                       hx >= kx - FOH_CSS_KNOB_R &&
                                       hx <= kx + FOH_CSS_KNOB_R));
-    css_panel(rz, k, type, k == 0 ? s->p1Char : s->p2Char,
-              k < 2 ? s->cssChar[k] : 0, diff, kx, hotTab,
+    // Two DIFFERENT planes, per port and never per index (CONTEXT.md): the
+    // portrait reads the SELECTION (selChar, css.js:889) and the name plate
+    // reads the CSS's own chosenChar (cssChar, css.js:986).
+    css_panel(rz, k, type, s->selChar[k], s->cssChar[k], diff, kx, hotTab,
               hotCpu);
   }
 

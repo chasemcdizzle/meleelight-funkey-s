@@ -16,5 +16,5 @@ SHOT 1015 css-cpu
 T 1020 css sss start
 SHOT 1040 sss-ystory
 T 1045 sss match launch
-LAUNCH 1045 p1=4 p2=0 p2type=1 difficulty=1 stage=1 turbo=0 lcancel=0 flashlcancel=0 walljump=0 tapjump=0,0,0,0 versus=0
+LAUNCH 1045 p1=4 p2=0 p2type=1 difficulty=1 stage=1 turbo=0 lcancel=0 flashlcancel=0 walljump=0 tapjump=0,0,0,0 versus=0 p3=0 p4=0 p3type=-1 p4type=-1
 END 1055 transitions=5

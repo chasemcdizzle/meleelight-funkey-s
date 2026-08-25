@@ -212,9 +212,11 @@ const char *foh_screen_token(FohScreen sc) {
 void foh_init(FohState *s) {
   memset(s, 0, sizeof *s);
   s->screen = FOH_STARTUP;
-  // characterSelections default [0,0,0,0] (main.js:59) -> marth/marth.
-  s->p1Char = 0;
-  s->p2Char = 0;
+  // characterSelections default [0,0,0,0] (main.js:59) -> marth on every
+  // port. memset already wrote the four zeros; the loop states upstream's
+  // own initialiser rather than inheriting it, the way versusMode's `= 0` is
+  // stated in sim_boot.c for the same reason.
+  for (int k = 0; k < FOH_CSS_PORTS; k++) s->selChar[k] = 0;
   // playerType init is [-1,-1,-1,-1] (main.js:107) and addPlayer (called at
   // main.js:386 when START is pressed on the title) assigns HMN at
   // main.js:495. So
@@ -222,8 +224,10 @@ void foh_init(FohState *s) {
   // port's type box is what raises READY TO FIGHT (css.js:1167-1181). That is
   // the whole point of MENU-SPEC item 4: the banner is the screen's feedback
   // channel, not decoration.
-  s->p1Type = 0;
-  s->p2Type = -1;
+  // A44: ports 2/3 join ports 1's N/A rather than being pinned there — the
+  // difference is that the type box can now walk them to HMN (D40).
+  for (int k = 0; k < FOH_CSS_PORTS; k++) s->portType[k] = -1;
+  s->portType[0] = 0;
   s->p1Difficulty = 3; // cpuDifficulty default (main.js:109)
   s->difficulty = 3;
   s->cssCarry = -1;    // whichTokenGrabbed (css.js:68)
@@ -568,15 +572,32 @@ static void step_menu(FohState *s, const PlatformInput *in,
 static const char *const kCssAnnouncer[5] = {"marth", "jigglypuff", "fox",
                                              "falco", "falcon"};
 
+// The per-port `S` trace field names. A44 widened both planes to four ports
+// (foh.h), and these tables are what keeps the widening honest in the trace:
+// the field a write reports is indexed by the PORT that was written, so a
+// write to selChar[2] can only ever announce itself as `p3char`. The old
+// `k == 0 ? "p1char" : "p2char"` conditional had no room for a third answer
+// and would have silently reported port 2's write as port 1's — which is
+// CONTEXT.md's "Port is never an index into something else" one layer up.
+static const char *const kCssCharField[FOH_CSS_PORTS] = {"p1char", "p2char",
+                                                         "p3char", "p4char"};
+static const char *const kCssTypeField[FOH_CSS_PORTS] = {"p1type", "p2type",
+                                                         "p3type", "p4type"};
+
 int foh_css_port_type(const FohState *s, int k) {
-  // DEVIATION D6: ports 3 and 4 are pinned N/A — they render (upstream draws
-  // all four type tabs unconditionally, css.js:860-879, and gates only the
-  // per-port PREVIEW on playerType > -1, css.js:881-882) but own no type
-  // field and no token.
-  return k == 0 ? s->p1Type : (k == 1 ? s->p2Type : -1);
+  // A44/D40: every port owns a real type field now. Upstream draws all four
+  // type tabs unconditionally (css.js:860-879) and gates only the per-port
+  // PREVIEW on playerType > -1 (css.js:881-882), which is exactly what
+  // css_panel does — so this accessor is now just the plane.
+  return s->portType[k];
 }
 
 int foh_css_port_diff(const FohState *s, int k) {
+  // The CPU-level plane stays TWO wide: D40 leaves CPU unreachable on ports
+  // 2/3 (foh.h, FohState.cssSliderX). A read for k >= 2 is only ever the
+  // renderer asking a question it then discards — css_panel draws the rail
+  // iff type == 1 — so port 1's value comes back rather than an invented
+  // one, and no pixel is ever computed from it.
   return k == 0 ? s->p1Difficulty : s->difficulty;
 }
 
@@ -620,17 +641,25 @@ void foh_css_token_pos(const FohState *s, int k, double *x, double *y) {
   }
   // Upstream never needs this: its canvas has ~270 px of margin right of the
   // roster, ours has none, so the quirk's +1-cell shift pushes the falcon slot
-  // past the right edge. The PAIR is shifted, not each token saturated: two
-  // ports must stay DISTINCT and both fully on screen, or they would overlap
-  // at x = 239 and the grab loop's j-order would silently decide which one a
-  // press takes. Registered as a layout consequence of D4, not a silent fix.
+  // past the right edge. The BLOCK is shifted, not each token saturated: the
+  // ports must stay DISTINCT and all of them fully on screen, or two would
+  // pile up at x = 239 and the grab loop's j-order would silently decide
+  // which one a press takes. Registered as a layout consequence of D4.
+  //
+  // ONE PITCH, not three, and D41's 2x2 is why: the stack is two COLUMNS
+  // wide however many ports exist, so the rightmost column is always
+  // base + PITCH. Only the leave-band arm above can ever exceed it (its
+  // c = 4 base is 249 against a 218 bound); the A-drop and snap arms are
+  // inside the cell by construction (foh.h's DX derivation).
   {
     const double maxBase =
         (double)(RAST_W - 1 - FOH_CSS_TOKEN_PITCH - FOH_CSS_TOKEN_R);
     if (base > maxBase) base = maxBase;
   }
-  *x = base + (double)(FOH_CSS_TOKEN_PITCH * k);
-  *y = (double)FOH_CSS_TOKEN_Y;
+  // D41: upstream's own 2x2 — port k sits at column k % 2, row k / 2, so
+  // ports 0/1 keep the top row they have always had and 2/3 open the second.
+  *x = base + (double)(FOH_CSS_TOKEN_PITCH * (k % 2));
+  *y = (double)(FOH_CSS_TOKEN_Y + FOH_CSS_TOKEN_ROW_PITCH * (k / 2));
 }
 
 int foh_css_hand_type(const FohState *s) { return s->cssHandType; }
@@ -757,7 +786,11 @@ static void css_back(FohState *s) {
     s->cssCarry = -1; // D35: release the grab that upstream leaks across
     ev_sel(s, "carry", -1);
   }
-  for (int k = 0; k < 2; k++) s->cssTokenRest[k] = 0; // D35: re-home on cssChar
+  // D35: re-home EVERY port on its own cssChar. The bound is FOH_CSS_PORTS
+  // and not 2 because A44 gave ports 2/3 tokens: leaving two of the four
+  // parked on whichever of Q1's formulas last applied is the same defect
+  // D35 exists to close, just two ports further right.
+  for (int k = 0; k < FOH_CSS_PORTS; k++) s->cssTokenRest[k] = 0;
   s->menuSelected = 0; // LOCALVS
 #if FOH_NETPLAY
   ev_trans(s, FOH_CSS, FOH_MENU_BATTLE, "bhold");
@@ -872,9 +905,9 @@ static void step_css(FohState *s, const PlatformInput *in,
             // (css.js:165-166) moves the shared selection — which is why the
             // two are separate fields and only this site writes both.
             *ch = c;
-            if (k == 0) s->p1Char = c; else s->p2Char = c;
+            s->selChar[k] = c; // the SHARED plane, by PORT (A44; foh.h)
             snd_push(s, "menuSelect"); // css.js:225
-            ev_sel(s, k == 0 ? "p1char" : "p2char", c);
+            ev_sel(s, kCssCharField[k], c);
           }
           if (aE) {
             // A drops it into the hovered cell and the character's announcer
@@ -889,15 +922,28 @@ static void step_css(FohState *s, const PlatformInput *in,
         }
       }
     } else {
-      // (b) A on a token you may take (css.js:297-313). The guard
-      // `playerType[j] == 1 || i == j` is upstream's ownership rule: your own
-      // token, or the token of any port set to CPU — never another human's.
+      // (b) A on a token you may take (css.js:297-313).
+      //
+      // DEVIATION D40 (A44, owner-reported "why can't I turn on player 3 and
+      // 4"). Upstream's guard here is `playerType[j] == 1 || i == j`: hand i
+      // takes its own token or any CPU port's, never another human's. That
+      // guard protects one human from another human's hand — upstream has
+      // FOUR hands. This device has ONE (foh.h PORT MODEL), so the guard
+      // protects nobody and instead removes the only way to give a HUMAN
+      // port a character. For P2 that was survivable via the CPU detour D6
+      // documented. For P3/P4 it is not: D40(b) leaves CPU off their cycle,
+      // so there is no detour and a switched-on P3 could never be given a
+      // character — the stub HARD RULE 2 forbids. The one hand therefore
+      // owns every token. Everything else about the grab is upstream's.
+      //
+      // The N/A asymmetry SURVIVES and widens with it: a port's token stays
+      // grabbable while nothing is drawn for it (foh.h D4 exception (b)),
+      // which is upstream's own mismatch between this guard and its token
+      // draw. Carried verbatim rather than tidied, for all four ports.
+      //
       // occupiedToken[j] is false for every j here (nothing is carried).
-      // NOTE the `j == 0` arm makes YOUR OWN token grabbable even at N/A,
-      // where nothing is drawn (foh.h D4 exception (b)) — upstream's own
-      // asymmetry between this guard and its token draw, carried verbatim.
-      for (int j = 0; j < 2; j++) { // D6: ports 3/4 own no token
-        if (!(foh_css_port_type(s, j) == 1 || j == 0)) continue;
+      // The 2x2 (D41) is tangent, not overlapping, so at most one j can hit.
+      for (int j = 0; j < FOH_CSS_PORTS; j++) { // D40(a): no ownership guard
         double tx, ty;
         foh_css_token_pos(s, j, &tx, &ty);
         if (s->cssHandY > ty - (double)FOH_CSS_TOKEN_R &&
@@ -969,8 +1015,8 @@ static void step_css(FohState *s, const PlatformInput *in,
       ev_sel(s, "carry", -1);
     }
     // The port-type box is a clickable widget (css.js:348-357): any hand may
-    // toggle any port's box. D6 stops the loop at 2.
-    for (int j = 0; j < 2; j++) {
+    // toggle any port's box. A44 runs the loop over all four ports.
+    for (int j = 0; j < FOH_CSS_PORTS; j++) {
       const double px = (double)foh_css_panel_x(j);
       if (s->cssHandY > (double)FOH_CSS_PANEL_Y &&
           s->cssHandY < (double)(FOH_CSS_PANEL_Y + FOH_CSS_TAB_H) &&
@@ -981,11 +1027,19 @@ static void step_css(FohState *s, const PlatformInput *in,
           // N/A(-1) -> HMN(0) -> CPU(1) -> N/A. The `ports <= i` HMN-skip arm
           // is inert here (foh.h PORT MODEL note). Upstream also clears the
           // port's name tag; tags are DEVIATION D8 and not in this build.
-          int *t = (j == 0) ? &s->p1Type : &s->p2Type;
+          //
+          // DEVIATION D40(b): ports 2/3 wrap one step EARLIER STILL —
+          // N/A(-1) -> HMN(0) -> N/A — because the sim refuses a second CPU
+          // slot (A46: AIBRIDGE1 is one recorded stream for one CPU slot).
+          // The cap is expressed as the first UNREACHABLE value so the two
+          // cycles are one line, and so that restoring CPU on 2/3 when the
+          // sim can replay it is a one-token change here.
+          const int wrapAt = j < 2 ? 2 : 1;
+          int *t = &s->portType[j];
           (*t)++;
-          if (*t == 2) *t = -1;
+          if (*t == wrapAt) *t = -1;
           snd_push(s, "menuSelect"); // css.js:351
-          ev_sel(s, j == 0 ? "p1type" : "p2type", *t);
+          ev_sel(s, kCssTypeField[j], *t);
         }
       }
     }
@@ -1021,6 +1075,9 @@ static void step_css(FohState *s, const PlatformInput *in,
   // not already dragging, and on allowRegrab so releasing cannot re-grab on
   // the same frame. occupiedCpu[] is implied: nothing is held here.
   if (s->cssCpuCarry == -1) {
+    // TWO, not FOH_CSS_PORTS: cssSliderX is two wide because CPU is not a
+    // reachable type on ports 2/3 (D40(b)), so there is no third knob to
+    // grab — see foh.h's note on the field.
     for (int j = 0; j < 2; j++) {
       if (foh_css_port_type(s, j) != 1) continue;
       const double kx = foh_css_knob_x(s, j), ky = foh_css_knob_y();
@@ -1043,30 +1100,45 @@ static void step_css(FohState *s, const PlatformInput *in,
   // the not-ready state is inert, which is what the banner already says.
   // `cssReady` here is the value the DRAW pass left LAST frame.
   if (s->cssReady && in->start && !pv->start) {
-    // LAUNCH-PLANE LIMITATION, registered and LOUD (the D6 family — a
-    // launch-plane limit, not a menu-plane one). The menu is faithful: any
-    // port may be CPU or N/A, and the ready rule is upstream's. The SIM is
-    // not: sim_setup_match pins port 0 to HMN with a fixed level, so a CPU P1
-    // would boot a HUMAN P1 and the launch record would be a lie (HARD RULE
-    // 2). The N/A arm is upstream's own one-frame race — cssReady is last
-    // frame's value (css.js:1167-1181 runs in the draw pass), so toggling a
-    // port to N/A and pressing START on the SAME frame reaches here with a
-    // configuration the ready rule would have rejected. Both refuse loudly
-    // instead of launching something else; delete this arm when
-    // sim_setup_match carries EVERY port's type and level.
+    // LAUNCH-PLANE LIMITATION, registered and LOUD. What it used to refuse
+    // was "anything other than exactly two ports", because sim_setup_match
+    // hard-pinned slots 2/3 absent. **A46 retired that half** —
+    // sim_setup_match_ports (port/sim/sim/sim_boot.c) is upstream's own
+    // four-port harnessSetupMatch loop, and the launch site below now calls
+    // it — so a 3- or 4-port configuration LAUNCHES rather than denying.
     //
-    // A44 (2026-08-24) re-measured the "both ports" this used to say and
-    // it is FOUR: sim_setup_match (port/sim/sim/sim_boot.c:381) also pins
-    // slots 2 and 3 to playerType=-1 / playerPresent=false /
-    // currentPlayers=-1, so this one guard is what gates the CPU-P1 arm
-    // AND the whole P3/P4 ask. The CSS's own planes and its panel layout
-    // are already 4-wide (foh.h's D6 note carries the measurement); this
-    // is the only thing in the way, and it is not in this file.
-    if (!(s->p1Type == 0 && (s->p2Type == 0 || s->p2Type == 1))) {
-      snd_push(s, "deny");
-      ev_refused(s, "portconfig");
-      if (pendingBack) css_back(s);
-      return;
+    // THREE conditions remain, and each names the thing that is still not
+    // real rather than a shape this screen dislikes:
+    //   (1) port 0 must be HMN. A CPU port 0 has no input source on the
+    //       launch path (the AI plane is fed per-slot and port 0 is the
+    //       one the physical controller drives), so booting one would make
+    //       the LAUNCH record a lie — HARD RULE 2. Unchanged refusal.
+    //   (2) no CPU above port 1. D40(b) keeps CPU off ports 2/3's type
+    //       cycle, so this is unreachable through the widget; it is
+    //       asserted anyway because the refusal must hold on the LAUNCH
+    //       plane, not merely on the widget that usually feeds it.
+    //   (3) at least two participating ports. This is upstream's own ready
+    //       rule re-checked at the seam: `cssReady` is LAST frame's value
+    //       (css.js:1167-1181 runs in the draw pass), so toggling a port to
+    //       N/A and pressing START on the SAME frame reaches here with a
+    //       configuration the ready rule would have rejected. Counting the
+    //       ports rather than testing two named ones is what makes
+    //       P1 + P3 (with P2 off) a legal match, which it is upstream.
+    // Delete (1) when a CPU port 0 has a real input source; delete (2)
+    // when the sim can replay more than one AI slot (A46 OPEN/OWED).
+    {
+      int participants = 0;
+      bool cpuTooHigh = false;
+      for (int j = 0; j < FOH_CSS_PORTS; j++) {
+        if (s->portType[j] > -1) participants++;
+        if (j >= 2 && s->portType[j] == 1) cpuTooHigh = true;
+      }
+      if (s->portType[0] != 0 || cpuTooHigh || participants < 2) {
+        snd_push(s, "deny");
+        ev_refused(s, "portconfig");
+        if (pendingBack) css_back(s);
+        return;
+      }
     }
     snd_push(s, "menuForward"); // css.js:448
     // START WINS over a pending B-hold exit: upstream's changeGamemode(6) is

@@ -169,6 +169,7 @@
 #include "foh.h"
 #include "foh_pause.h"   // A11/A12: the in-match pause overlay (live only)
 #include "foh_persist.h" // M4 task 13: the ONE persistence chokepoint
+#include "foh_launch.h"  // A44: the ONE FohState -> 4-port match config
 
 #define ML_BOOT_DRAWS 465 // the qjs boot pin (oracle/qjs/replay.sh)
 
@@ -1366,14 +1367,15 @@ static void tdev_end_game(GameState *g, FohState *f) {
   // unobservable omission and it is not (review-mexit-r2 Medium): the port's
   // token rest position is PATH DEPENDENT (foh.h cssTokenRest), so a player
   // returning to the CSS sees the tokens where the last drag left them
-  // instead of where endGame put them. Slot 2 is the snap; the loop stops at
-  // 2 (deviation D6's two ports — upstream's calls for 2..3 address ports
-  // this port does not have). Whichever token was in hand is released first
+  // instead of where endGame put them. Slot 2 is the snap; the loop runs to
+  // FOH_CSS_PORTS because A44 gave ports 2/3 tokens, so upstream's own calls
+  // for indices 2..3 now address ports this port HAS (they were the reason
+  // the bound used to be 2). Whichever token was in hand is released first
   // — carrying one out of a match is unreachable today (the launch path
   // leaves the CSS), but a stale carry would pin the token to the hand and
   // hide the snap.
   f->cssCarry = -1;
-  for (int k = 0; k < 2; k++) f->cssTokenRest[k] = 2;
+  for (int k = 0; k < FOH_CSS_PORTS; k++) f->cssTokenRest[k] = 2;
   // sounds.furaloop.stop(player[i].furaLoopID) for every ACTIVE player left
   // dizzy (:1410-1413). furaloop is a LOOPING voice, so before the A19
   // in-process return this was covered by the process exiting; now a match
@@ -2287,13 +2289,21 @@ foh_phase:;
           tr_line("TLAUNCH %ld char=%d tstage=%d", t, foh.p1Char,
                   foh.tssStage);
         } else {
+          // A44 appends p3/p4 + their types; the fifteen fields before
+          // them keep their names, order and domains (foh_app.c carries the
+          // argument — this line and that one must stay identical or the
+          // host/device trace comparison in check-device-foh.sh is comparing
+          // two grammars).
           tr_line("LAUNCH %ld p1=%d p2=%d p2type=%d difficulty=%d stage=%d "
                   "turbo=%d lcancel=%d flashlcancel=%d walljump=%d "
-                  "tapjump=%d,%d,%d,%d versus=%d",
+                  "tapjump=%d,%d,%d,%d versus=%d p3=%d p4=%d p3type=%d "
+                  "p4type=%d",
                   t, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
                   foh.stageSel, foh.turbo, foh.lCancelType, foh.flashOnLCancel,
                   foh.everyCharWallJump, foh.tapJumpOff[0], foh.tapJumpOff[1],
-                  foh.tapJumpOff[2], foh.tapJumpOff[3], foh.versusMode);
+                  foh.tapJumpOff[2], foh.tapJumpOff[3], foh.versusMode,
+                  foh.selChar[2], foh.selChar[3], foh.portType[2],
+                  foh.portType[3]);
         }
       }
     }
@@ -3001,8 +3011,12 @@ foh_phase:;
 
     if (brVerify || brLive) {
       gfx_data_load(&g_gfx.data, gfxdataPath);
-      gfx_load_anim(&g_gfx, animDir, foh.p1Char);
-      gfx_load_anim(&g_gfx, animDir, foh.p2Char);
+      // A44: every PARTICIPATING port's character, not the first two.
+      // gfx_load_anim is idempotent per character, so a 4-port match on two
+      // distinct characters loads exactly what a 2-port one did.
+      for (int k = 0; k < FOH_CSS_PORTS; k++) {
+        if (foh.portType[k] > -1) gfx_load_anim(&g_gfx, animDir, foh.selChar[k]);
+      }
       gfx_vfx_load(vfxdataPath);
       gfx_glyphs_load(glyphsPath);
       // peek startGame's background draw from a COPY (gfx_app.c)
@@ -3120,9 +3134,14 @@ foh_phase:;
     // versusMode BEFORE the setup, never with the gameSettings below —
     // startGame reads it (main.js:1334); foh_app.c carries the same line and
     // the same reason.
+    // A44: the 4-port entry point (A46), through foh_launch.h's one mapping
+    // — the same call foh_app.c makes, deliberately.
     G.sim.versusMode = foh.versusMode;
-    sim_setup_match(&G, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
-                    foh.stageSel);
+    {
+      SimPortCfg ports[4];
+      foh_launch_ports(&foh, ports);
+      sim_setup_match_ports(&G, ports, foh.stageSel);
+    }
     G.sim.turbo = foh.turbo != 0;
     G.sim.lCancelType = foh.lCancelType;
     for (int i = 0; i < 4; i++) G.sim.tapJumpOff[i] = foh.tapJumpOff[i];
@@ -3140,17 +3159,21 @@ foh_phase:;
       if (!bf) sim_fatal("cannot open --bstate-out for writing");
       uint64_t phantomBits;
       memcpy(&phantomBits, &G.sim.phantomThreshold, 8);
+      // A44: ports 2/3 appended, read back from G like every other field
+      // here (foh_app.c's twin carries the argument).
       if (fprintf(bf,
                   "BRIDGE-STATE p1=%d p2=%d p2type=%d difficulty=%d stage=%d "
                   "turbo=%d lcancel=%d tapjump=%d,%d,%d,%d "
-                  "phantom=%016" PRIx64 "\n",
+                  "phantom=%016" PRIx64 " p3=%d p4=%d p3type=%d p4type=%d\n",
                   (int)G.sim.characterSelections[0],
                   (int)G.sim.characterSelections[1], (int)G.sim.playerType[1],
                   (int)G.cpuDifficulty[1], (int)G.stageSelect,
                   G.sim.turbo ? 1 : 0, (int)G.sim.lCancelType,
                   (int)G.sim.tapJumpOff[0], (int)G.sim.tapJumpOff[1],
                   (int)G.sim.tapJumpOff[2], (int)G.sim.tapJumpOff[3],
-                  phantomBits) < 0) {
+                  phantomBits, (int)G.sim.characterSelections[2],
+                  (int)G.sim.characterSelections[3], (int)G.sim.playerType[2],
+                  (int)G.sim.playerType[3]) < 0) {
         sim_fatal("--bstate-out write failed");
       }
       if (fclose(bf) != 0) sim_fatal("--bstate-out close/flush failed");

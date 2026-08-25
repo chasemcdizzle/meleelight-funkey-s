@@ -152,7 +152,14 @@ BRIDGE_LINE='  G.sim.versusMode = foh.versusMode;'
 n="$(grep -cxF "$BRIDGE_LINE" "$FOH/foh_app.c")" || true
 [ "$n" = 1 ] || grammar_die "foh_app.c has $n versusMode bridge lines (want
   exactly 1) — T3 cannot move the write past sim_setup_match unambiguously"
-SETUP_LINE='  sim_setup_match(&G, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,'
+# A44 re-pins this line: foh_app.c now calls the FOUR-port entry point
+# (sim_setup_match_ports, A46) through foh_launch.h's one FohState -> config
+# mapping, so the anchor T3 moves the versusMode write past is the block
+# opener rather than the old five-argument call. What T3 proves is unchanged
+# and is the whole reason this pin exists: startGame READS versusMode
+# (main.js:1334), so a write that lands after the setup leaves a 4-stock
+# endless match.
+SETUP_LINE='    sim_setup_match_ports(&G, ports, foh.stageSel);'
 n="$(grep -cxF "$SETUP_LINE" "$FOH/foh_app.c")" || true
 [ "$n" = 1 ] || grammar_die "foh_app.c has $n sim_setup_match call sites (want
   exactly 1) — T3's ordering perturbation would be ambiguous"
@@ -385,7 +392,7 @@ made "$BUILD/foh_app"
 # first frames of its checksum stream. --frames 2 is deliberate: stocks are
 # written by startGame, so frame 1 already carries the whole answer, and a
 # 3600-frame replay would only make this slower.
-LAUNCH_RE='^LAUNCH [0-9]+ p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] flashlcancel=[01] walljump=[01] tapjump=[01],[01],[01],[01] versus=[01]$'
+LAUNCH_RE='^LAUNCH [0-9]+ p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] flashlcancel=[01] walljump=[01] tapjump=[01],[01],[01],[01] versus=[01] p3=[0-4] p4=[0-4] p3type=(-1|0) p4type=(-1|0)$'
 run_leg() { # <binary> <flow> <legId>
   local bin="$1" flow="$2" id="$3"
   rm -rf "$BUILD/$id" "$BUILD/$id-persist"
@@ -433,8 +440,17 @@ frozenLaunch="$(grep -E '^LAUNCH ' "$FOH/flows/f01-vs-g01.expect")"
 # for a reason that has nothing to do with the mode. Comparing the records
 # field for field is what makes the hash difference below attributable.
 ribLaunch="$(grep -E "$LAUNCH_RE" "$BUILD/ribbon/trace.txt")"
-strip_versus() { # <LAUNCH line> -> its fields after the frame, minus versus=
-  printf '%s\n' "$1" | cut -d' ' -f3- | sed 's/ versus=[01]$//'
+# A44 appended p3/p4/p3type/p4type AFTER `versus=`, so the old `versus=[01]$`
+# anchor moved off the end of the line and matched nothing — which would have
+# left this comparison silently comparing the versus field to itself and
+# passing for the wrong reason. It now NEUTRALISES the field's value in place
+# (the field keeps its position, so a future appended field cannot repeat the
+# failure) and every other column is still compared byte for byte. The
+# trailing-space form is safe because `versus=` is no longer the last field;
+# if it ever becomes the last field again this stops matching and the leg
+# fails loudly rather than going soft.
+strip_versus() { # <LAUNCH line> -> its fields after the frame, versus neutralised
+  printf '%s\n' "$1" | cut -d' ' -f3- | sed 's/ versus=[01] / versus=X /'
 }
 [ "$(strip_versus "$ctrlLaunch")" = "$(strip_versus "$ribLaunch")" ] \
   || fail "the ribbon gesture changed something OTHER than the mode, so a
@@ -452,6 +468,18 @@ echo "   the ribbon launch carries versus=1 and MOVES the sim's frame 1"
 echo "     stock   $c1"
 echo "     endless $r1"
 
+# The WHOLE setup block, so the perturbation below can move the versusMode
+# write to the far side of the CALL and not merely to the far side of a local
+# declaration. A44 turned the one-statement `sim_setup_match(...)` into a
+# four-line block around A46's four-port entry point, and anchoring on the
+# block's opener would have left the write still executing BEFORE the setup —
+# a tooth that no longer bites (MEASURED: it did not).
+SETUP_BLOCK='  {
+    SimPortCfg ports[4];
+    foh_launch_ports(&foh, ports);
+'"$SETUP_LINE"'
+  }'
+
 # --- [7] T3: the bridge write moved AFTER sim_setup_match --------------------
 # The ordering is the whole point of the bridge line's position: startGame
 # READS versusMode (main.js:1334) to give every player 1 stock, so a write
@@ -460,8 +488,8 @@ echo "     endless $r1"
 # stop moving frame 1, and this check must be the thing that notices.
 echo "=== [7] T3: the bridge write moved past sim_setup_match"
 perturb "$FOH/foh_app.c" "$BUILD/t3/foh_app.c" \
-  "$BRIDGE_LINE"$'\n'"$SETUP_LINE"$'\n'"                  foh.stageSel);" \
-  "$SETUP_LINE"$'\n'"                  foh.stageSel);"$'\n'"$BRIDGE_LINE // T3: too late" \
+  "$BRIDGE_LINE"$'\n'"$SETUP_BLOCK" \
+  "$SETUP_BLOCK"$'\n'"$BRIDGE_LINE // T3: too late" \
   'T3'
 build_foh_app "$BUILD/t3/foh_app.c" "$BUILD/t3/foh_app" \
   || fail "T3: the reordered copy did not build"

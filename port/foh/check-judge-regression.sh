@@ -349,7 +349,15 @@ for (const raw of fs.readFileSync(AUTH, "utf8").split("\n")) {
 // its refusal, because `refused credits` was a promise that the row did
 // nothing and the row now opens a screen. All four rows carry their own
 // upstream citation in judge-domains.authored.txt.
-const WANT = { S: 17, L: 16, E: 31, R: 7, N: 2, X: 20 };
+// A44 (fix_plan, owner-reported "why can't I turn on player 3 and 4") re-pins
+// S 17 -> 21 and L 16 -> 20 in the same change: the CSS became four ports
+// wide, so the S surface gained p3char/p4char/p3type/p4type and the LAUNCH
+// line gained p3/p4/p3type/p4type. `carry`'s domain also moved (-1..1 ->
+// -1..3) — that is a MOVED row, not a new one, so it changes no count and is
+// caught by the DOMAIN DISAGREEMENT arm below against its own authored
+// citation. Ports 2/3's type rows are TIGHTER than ports 0/1's (-1..0, no
+// CPU: DEVIATION D40(b)), which is why this is not a blanket widening.
+const WANT = { S: 21, L: 20, E: 31, R: 7, N: 2, X: 20 };
 for (const [k, arr] of [["S", S], ["L", L], ["E", E], ["R", R], ["N", N], ["X", X]]) {
   if (arr.length !== WANT[k])
     die("the authored table has " + arr.length + " " + k + " rows, want " +
@@ -567,24 +575,37 @@ function fieldExpr(text, who, field) {
   if (tok.length === 0) die(who + "'s launch-line expression for '" + field + "' is empty");
   return tok;
 }
-function classesFor(text, who, field) {
+// A44 TAUGHT THIS READER ONE CONSTRUCT, exactly as its own die() message
+// instructs, and no more. Ports 2/3 joined the launch line and an ABSENT
+// port's type is -1, which no character class can express (`[-01]` expands
+// to {-,0,1}, a set this reader would then compare against {-1,0,1} and
+// reject — measured before this change). Port 1 gained -1 for the same
+// reason: with four ports, P1 + P3 with P2 off is a legal match, so
+// `p2type=[01]` was about to become a grammar that REJECTED a launch the
+// machine can perform.
+//
+// The construct taught is the ALTERNATION-OF-LITERALS-AND-CLASSES form
+// `(-1|0)` / `(-1|[01])`, and it is not a new expander: `expandVals` above
+// already models exactly this shape for the normalizer's RE_S value classes,
+// with the same hard-fail on anything it cannot expand (a quantifier, an
+// escape, a negation, a bare multi-digit run inside a class). So the
+// property the old function defended — an unmodelled construct is a HARD
+// FAIL, never a guess — is preserved by REUSING the modelled reader rather
+// than by adding a second, laxer one. The Tier A+ round-5 exploit
+// (`difficulty=([1-4]|[5-9])` silently read back as {1,2,3,4}) still fails
+// here: expandVals expands BOTH legs and reports {1..9}, which then
+// disagrees with the authored row.
+function valsFor(text, who, field) {
   const tok = fieldExpr(text, who, field);
   const out = [];
   for (const part of tok.split(",")) {
-    let q = part;
-    if (/^\(.*\)$/.test(q)) q = q.slice(1, -1);   // a capture group around one class
-    const cls = /^\[([^\]\\^]+)\]$/.exec(q);
-    if (cls) { out.push(cls[1]); continue; }
-    if (/^[0-9]$/.test(q)) { out.push(q); continue; } // a fixed single-digit literal
-    die(who + "'s launch-line expression for '" + field + "' is `" + part +
-        "`, which this reader does not model (only a single character class, " +
-        "optionally capture-wrapped, or one fixed digit — no alternation, " +
-        "quantifier, escape, negation or multi-digit literal).\n" +
-        "The accepted set of such a construct cannot be reported honestly here, " +
-        "and a mis-read set is exactly how a widened launch field stays green. " +
-        "Teach this reader the construct, in the same change that introduces it.");
+    let q = part.trim();
+    // one CAPTURE wrapper (the judge writes `([01])`), never a non-capturing
+    // one — `(?:...)` is expandVals's own business and it strips that itself.
+    if (!q.startsWith("(?:") && /^\(.*\)$/.test(q)) q = q.slice(1, -1);
+    out.push(expandVals(q, who, "launch-line field '" + field + "'"));
   }
-  if (out.length === 0) die(who + " has no character class for '" + field + "'");
+  if (out.length === 0) die(who + " has no value class for '" + field + "'");
   return out;
 }
 for (const [who, source] of [["the judge", jsrc], ["the normalizer", nsrc]]) {
@@ -595,16 +616,16 @@ for (const [who, source] of [["the judge", jsrc], ["the normalizer", nsrc]]) {
     let spec;
     const tj = /^tapjump([1-4])$/.exec(r.f);
     if (tj) {
-      const all = classesFor(text, who, "tapjump");
+      const all = valsFor(text, who, "tapjump");
       if (all.length !== 4)
         die(who + "'s launch line binds " + all.length + " tapjump classes, want 4");
       spec = all[+tj[1] - 1];
     } else {
-      const all = classesFor(text, who, r.f);
-      if (all.length < 1) die(who + " has no character class for '" + r.f + "'");
+      const all = valsFor(text, who, r.f);
+      if (all.length < 1) die(who + " has no value class for '" + r.f + "'");
       spec = all[0];
     }
-    const got = [...expandClass(spec, who, r.f)].sort().join(",");
+    const got = [...spec].sort().join(",");
     const want = wantSet(r.lo, r.hi);
     if (got !== want)
       die("LAUNCH FIELD DOMAIN DISAGREEMENT in " + who + " for '" + r.f +
@@ -926,7 +947,17 @@ for (const r of L) {
     // The authored row decides, not either program: a value is legal iff it is
     // a canonical single digit inside [lo,hi]. Everything else must die on the
     // line FORM, in both programs, at the declared wording.
-    const ok = /^[0-9]$/.test(t) && +t >= r.lo && +t <= r.hi;
+    //
+    // A44 made the SIGN part of that canonical form, because the launch line
+    // gained its first fields that can be NEGATIVE: an absent port's type is
+    // -1 (p2type once ports 2/3 can make the pair, and p3type/p4type always).
+    // This is not a loosening of the launch plane — it is the S plane's model
+    // already applied here: `UNIVERSE` and `LUNIVERSE` have both carried "-1"
+    // since they were written, and the S-plane predicate above has always let
+    // an authored row whose lo is -1 accept it. "-0", "+1", "1.0", "00", "10"
+    // and "x" remain REJECTED at the line form in both programs, and no
+    // authored L row has hi >= 10, so multi-digit stays unrepresentable.
+    const ok = /^-?[0-9]$/.test(t) && +t >= r.lo && +t <= r.hi;
     const nd = formNeed(k + 1, line);
     push("l-" + r.line + "-" + r.f + "-" + tag(t), b, out,
          ok ? "A" : "R", ok ? "-" : nd, ok ? "-" : nd, "B");
@@ -1027,7 +1058,11 @@ const FORMSHAPE = {
   "S N W N":                        { sp: 3,  eq: 0,  cm: 0 },
   "S N W W":                        { sp: 3,  eq: 0,  cm: 0 },
   "SHOT N W":                       { sp: 2,  eq: 0,  cm: 0 },
-  "LAUNCH N K K K K K K K K K K K": { sp: 12, eq: 11, cm: 3 },
+  // A44 re-pins the LAUNCH form: four appended `k=v` fields (p3, p4, p3type,
+  // p4type) take it from 11 `=` columns to 15 and from 12 spaces to 16. The
+  // comma count is unchanged at 3 — the appended fields carry single values,
+  // only `tapjump=` is a comma list. Re-measured, not adjusted until green.
+  "LAUNCH N K K K K K K K K K K K K K K K": { sp: 16, eq: 15, cm: 3 },
   "TLAUNCH N K K":                  { sp: 3,  eq: 2,  cm: 0 },
   "END N K":                        { sp: 2,  eq: 1,  cm: 0 },
 };
@@ -1978,8 +2013,27 @@ done < "$B/dom/probes.tsv"
 #   widens what the judge ACCEPTS (proved by (a3), which evaluates the live
 #   EDGES set against all 31 authored rows) without adding a probe here. No
 #   surviving probe was removed or weakened.
-[ "$nprobe" = "1293" ] \
-  || fail "leg [0n] generated $nprobe behavioral probes, want 1293. The probe set is a FUNCTION of the authored table (S rows x every reachable screen x boundary, S rows x the fixed value universe, unauthored-edge and refusal-binding probes, and the frame-anchor form through both programs, every authored L field x the fixed launch-value universe through both programs, every DELIMITER POSITION of every parser FORM SIGNATURE perturbed (spaces doubled/tabbed/deleted; a k=v token's '=' and the ',' inside its value doubled/deleted/space-prefixed) plus 3 anchor probes per form through both programs, and one corrupt trace per authored TRACE-INTEGRITY row). A different count means the authored table or the reachable-screen set changed shape — re-pin here in the SAME change and say why."
+# A44 (fix_plan; owner-reported "why can't I turn on player 3 and 4 at the
+# CSS") — the CSS became four ports wide. 1293 -> 1569, +276, and every one
+# of the 276 is ACCOUNTED rather than absorbed (measured off
+# $B/dom/probes.tsv, by plane prefix):
+#   u- (S x the fixed value universe)   323 -> 399  +76 = 4 new S rows x 19
+#   x- (S x reachable screen x bound)   504 -> 616 +112 = 4 new S rows x 7
+#                                       reachable screens x 4 boundaries
+#                                       (lo, hi, lo-1, hi+1 — all four in the
+#                                       authored alphabet for both new
+#                                       domains, 0..4 and -1..0)
+#   l- (L x the fixed launch universe)  256 -> 320  +64 = 4 new L rows x 16
+#   w- (delimiter plane)                168 -> 192  +24 = the LAUNCH form's
+#                                       delimiters 26 -> 34 (sp 12->16,
+#                                       eq 11->15, cm 3) x 3 perturbations
+#   e-, r-, k-, quant-, z-              unchanged (6, 9, 20, 4, 3)
+# DIRECTION: every count went UP and no probe was removed, weakened or
+# carved out. The new S/L rows are p3char/p4char/p3type/p4type, and the type
+# rows' domain is -1..0 — NARROWER than p1type/p2type's, because DEVIATION
+# D40(b) keeps CPU off ports 2/3.
+[ "$nprobe" = "1569" ] \
+  || fail "leg [0n] generated $nprobe behavioral probes, want 1569. The probe set is a FUNCTION of the authored table (S rows x every reachable screen x boundary, S rows x the fixed value universe, unauthored-edge and refusal-binding probes, and the frame-anchor form through both programs, every authored L field x the fixed launch-value universe through both programs, every DELIMITER POSITION of every parser FORM SIGNATURE perturbed (spaces doubled/tabbed/deleted; a k=v token's '=' and the ',' inside its value doubled/deleted/space-prefixed) plus 3 anchor probes per form through both programs, and one corrupt trace per authored TRACE-INTEGRITY row). A different count means the authored table or the reachable-screen set changed shape — re-pin here in the SAME change and say why."
 # EVERY GENERATED PROBE WAS ACTUALLY RUN AND JUDGED (Tier A+ round-5 MINOR-1).
 # Without this, a probe could be generated, counted into the pin, and then
 # skipped by the dispatch loop -- the count would still look right.
@@ -2609,7 +2663,13 @@ EOF
 # remaining bytes — line numbers and offending text — as ONE hash, so any
 # drift in any diagnostic is a deliberate re-freeze rather than 31 typed
 # literals that churn whenever a fixture line moves. Same idiom as leg [0g].
-DIAG_SHA=3e361944f548794eea1259dc35d68aa47e51f22f5dc74c9a2c246af8084a3164
+# A44 re-pins this: the ONLY delta across all 36 asserted diagnostics is the
+# four appended LAUNCH columns inside the six diagnostics that QUOTE a
+# launch line (`... versus=0 p3=0 p4=0 p3type=-1 p4type=-1`). Every rule
+# fired, every line number and every ORDER is byte-identical — verified by
+# reading port/foh/build/judgereg/diag.acc against its pre-change self, not
+# by re-hashing until green.
+DIAG_SHA=b4eda525b48376a7938696f439d737fbbff7d6ecca2250d55d2f629319fb0c9b
 dgot="$(shasum -a 256 "$DIAGACC" | cut -d' ' -f1)"
 [ "$dgot" = "$DIAG_SHA" ] \
   || fail "the asserted diagnostics hash to $dgot, pinned $DIAG_SHA — a judge diagnostic changed its text, line number, or ORDER. Every row still passed its own anchored check, so this is the drift those checks cannot see. Re-pin DIAG_SHA in the SAME change and say why. (dump: $DIAGACC)"
@@ -2623,7 +2683,7 @@ node "$FOH/judge-foh-trace.js" "$B/neg/ctl-max.txt" f03-options 1 \
   > "$B/neg/ctl-max.out" 2> "$B/neg/ctl-max.err" || rc=$?
 [ "$rc" = 0 ] \
   || fail "positive control: the judge REJECTS soundsvol 10 (the in-domain maximum, i.e. master volume 1.0) — the negatives above would be satisfied by a judge that rejects everything (got: $(head -c 200 "$B/neg/ctl-max.err"))"
-echo "      $negs negative fixtures bite at their own rule (S domains, per-screen fields incl. refusals, LAUNCH form, the walljump and flashlcancel LAUNCH domains -- the two LAUNCH fields fixtured here; all 16 authored LAUNCH/TLAUNCH fields are judged BEHAVIORALLY by leg [0n]'s generated launch-plane probes -- every frame-number anchor, off-graph near-misses) + in-domain max accepted; these fixtures prove the DIAGNOSTICS are real. They are not the coverage instrument: leg [0g] NOTIFIES on any change to any rule (fixtured or not), and leg [0n] is what judges whether the S domains are RIGHT"
+echo "      $negs negative fixtures bite at their own rule (S domains, per-screen fields incl. refusals, LAUNCH form, the walljump and flashlcancel LAUNCH domains -- the two LAUNCH fields fixtured here; all 20 authored LAUNCH/TLAUNCH fields are judged BEHAVIORALLY by leg [0n]'s generated launch-plane probes -- every frame-number anchor, off-graph near-misses) + in-domain max accepted; these fixtures prove the DIAGNOSTICS are real. They are not the coverage instrument: leg [0g] NOTIFIES on any change to any rule (fixtured or not), and leg [0n] is what judges whether the S domains are RIGHT"
 
 # --- [6] the normalizer -----------------------------------------------------
 # It does NOT get a [5b]-class per-rule corpus of its own; its line forms are
