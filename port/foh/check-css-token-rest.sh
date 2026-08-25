@@ -154,7 +154,7 @@ echo "   foh_dev.c still snaps both tokens to rest slot 2; foh.c's rest base is 
 echo "=== [2] CSS token-rest witness (real gestures through real foh_tick)"
 CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror -Iport/ryu -Iport/sim
                -Ioracle/qjs)
-CTR_SRCS=("$FOH/foh_cssrest_witness.c" "$FOH/foh_render.c" "$FOH/foh_font.c"
+CTR_SRCS=("$FOH/foh_cssrest_witness.c" "$FOH/foh_render.c" "$FOH/foh_font.c" "$GFX/gfx_glyphs.c"
           "$GFX/raster.c" "$GFX/img1.c" "$GFX/ctl_style.c" port/fdlibm/fdlibm.c)
 CTR_OK='^CSS TOKEN REST OK$'
 cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/ctr" "$FOH/foh.c" "${CTR_SRCS[@]}" -lm \

@@ -29,204 +29,22 @@
 #include <string.h>
 
 // --- VFXGLYPHS1 -------------------------------------------------------------
-
-typedef struct {
-  int present;
-  int w, h;
-  double dx, dy, advance; // device px, relative to the pen (baseline) point
-  const uint8_t *fmask, *smask;
-} Glyph;
-
-typedef struct {
-  int present;
-  int w, h;
-  double dx, dy;
-  const uint8_t *rgba;
-} Sprite;
-
-static Glyph g_glyph[GFX_FONT_COUNT][128];
-static Sprite g_ready, g_go;
-
-#define GPOOL 1048576
-static uint8_t g_pool[GPOOL];
-static size_t g_pool_used;
-static int g_glyphs_loaded;
-
-static uint8_t *pool_take(size_t n) {
-  if (g_pool_used + n > GPOOL) gfx_fatal("glyphs: pool overflow");
-  uint8_t *p = &g_pool[g_pool_used];
-  g_pool_used += n;
-  return p;
-}
-
-static int hexv(char c) {
-  if (c >= '0' && c <= '9') return c - '0';
-  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-  gfx_fatal("glyphs: bad hex digit");
-  return 0;
-}
-
-static const uint8_t *parse_hex_line(FILE *f, const char *tag, size_t want) {
-  char *line = NULL;
-  size_t lcap = 0;
-  const ssize_t n = getline(&line, &lcap, f);
-  if (n <= 0) gfx_fatal("glyphs: truncated artifact");
-  const size_t taglen = strlen(tag);
-  if (strncmp(line, tag, taglen) != 0 || line[taglen] != ' ') {
-    fprintf(stderr, "glyphs: expected %s line, got: %.32s\n", tag, line);
-    gfx_fatal("glyphs: grammar violation");
-  }
-  const char *s = line + taglen + 1;
-  uint8_t *out = pool_take(want);
-  for (size_t i = 0; i < want; i++) {
-    if (s[2 * i] == 0 || s[2 * i + 1] == 0) gfx_fatal("glyphs: short hex line");
-    out[i] = (uint8_t)((hexv(s[2 * i]) << 4) | hexv(s[2 * i + 1]));
-  }
-  const char tail = s[2 * want];
-  if (tail != '\n' && tail != 0) gfx_fatal("glyphs: long hex line");
-  free(line);
-  return out;
-}
-
-void gfx_glyphs_load(const char *path) {
-  memset(g_glyph, 0, sizeof g_glyph);
-  memset(&g_ready, 0, sizeof g_ready);
-  memset(&g_go, 0, sizeof g_go);
-  g_pool_used = 0;
-  FILE *f = fopen(path, "r");
-  if (!f) gfx_fatal("glyphs: cannot open artifact");
-  char *line = NULL;
-  size_t lcap = 0;
-  ssize_t n;
-  int seenEnd = 0;
-  if ((n = getline(&line, &lcap, f)) <= 0 || strcmp(line, "VFXGLYPHS1\n") != 0) {
-    gfx_fatal("glyphs: bad magic");
-  }
-  while ((n = getline(&line, &lcap, f)) > 0) {
-    if (line[n - 1] == '\n') line[--n] = 0;
-    if (n == 0) continue;
-    if (strcmp(line, "END") == 0) { seenEnd = 1; break; }
-    if (strncmp(line, "GLYPH ", 6) == 0) {
-      int fid, code, w, h;
-      double dx, dy, adv;
-      if (sscanf(line + 6, "%d %d %d %d %lf %lf %lf", &fid, &code, &w, &h,
-                 &dx, &dy, &adv) != 7 ||
-          fid < 0 || fid >= GFX_FONT_COUNT || code < 32 || code >= 128 ||
-          w < 0 || h < 0 || w > 255 || h > 255) {
-        gfx_fatal("glyphs: bad GLYPH line");
-      }
-      Glyph *gl = &g_glyph[fid][code];
-      if (gl->present) gfx_fatal("glyphs: duplicate glyph");
-      gl->present = 1;
-      gl->w = w;
-      gl->h = h;
-      gl->dx = dx;
-      gl->dy = dy;
-      gl->advance = adv;
-      if (w * h > 0) {
-        gl->fmask = parse_hex_line(f, "FMASK", (size_t)(w * h));
-        gl->smask = parse_hex_line(f, "SMASK", (size_t)(w * h));
-      }
-    } else if (strncmp(line, "SPRITE ", 7) == 0) {
-      char name[16];
-      int w, h;
-      double dx, dy;
-      if (sscanf(line + 7, "%15s %d %d %lf %lf", name, &w, &h, &dx, &dy) != 5 ||
-          w <= 0 || h <= 0 || w > 400 || h > 400) {
-        gfx_fatal("glyphs: bad SPRITE line");
-      }
-      Sprite *sp = strcmp(name, "ready") == 0 ? &g_ready
-                   : strcmp(name, "go") == 0  ? &g_go
-                                              : 0;
-      if (!sp) gfx_fatal("glyphs: unknown sprite");
-      if (sp->present) gfx_fatal("glyphs: duplicate sprite");
-      sp->present = 1;
-      sp->w = w;
-      sp->h = h;
-      sp->dx = dx;
-      sp->dy = dy;
-      sp->rgba = parse_hex_line(f, "RGBA", (size_t)(4 * w * h));
-    } else {
-      fprintf(stderr, "glyphs: unknown line: %s\n", line);
-      gfx_fatal("glyphs: unknown line");
-    }
-  }
-  free(line);
-  fclose(f);
-  if (!seenEnd) gfx_fatal("glyphs: missing END");
-  if (!g_ready.present || !g_go.present) gfx_fatal("glyphs: missing banner sprite");
-  // every font needs at least the digits
-  for (int fid = 0; fid < GFX_FONT_COUNT; fid++) {
-    for (char c = '0'; c <= '9'; c++) {
-      if (!g_glyph[fid][(int)c].present) gfx_fatal("glyphs: digit coverage hole");
-    }
-  }
-  g_glyphs_loaded = 1;
-}
-
-// --- blitters ----------------------------------------------------------------
-
-static void blit_mask(Gfx *g, const uint8_t *mask, int w, int h, int x0,
-                      int y0, RastCol col) {
-  // M4 task 3 (measured-hotspot class fix): the pixel loop rides the
-  // -O3 batch primitive — arithmetic exactly the old per-pixel
-  // rast_blend_px calls, bit-identical (raster.c note).
-  rast_blit_a8mask(&g->rz, mask, w, h, x0, y0, col);
-}
-
-static const Glyph *glyph_get(int fontId, char c) {
-  if (fontId < 0 || fontId >= GFX_FONT_COUNT) gfx_fatal("glyphs: font id range");
-  const int code = (unsigned char)c;
-  if (code < 32 || code >= 128) gfx_fatal("glyphs: glyph out of ascii range");
-  const Glyph *gl = &g_glyph[fontId][code];
-  if (!gl->present) {
-    fprintf(stderr, "glyphs: font %d has no glyph '%c'\n", fontId, c);
-    gfx_fatal("glyphs: missing glyph");
-  }
-  return gl;
-}
-
-double gfx_glyph_text_width(int fontId, const char *s) {
-  if (!g_glyphs_loaded) gfx_fatal("glyphs: text before gfx_glyphs_load");
-  double w = 0;
-  for (; *s; s++) w += glyph_get(fontId, *s)->advance;
-  return w;
-}
+//
+// The atlas itself now lives in gfx_glyphs.c on the RASTER plane (A14 second
+// half; gfx_glyphs.h says why it had to move out of this TU). What stays here
+// is the Gfx-shaped surface every HUD caller already uses, as one-line
+// delegations — an API extraction, not a translation layer.
 
 void gfx_glyph_text(Gfx *g, int fontId, const char *s, double penX,
                     double penY, RastCol fill, RastCol stroke,
                     int strokeFirst) {
-  if (!g_glyphs_loaded) gfx_fatal("glyphs: text before gfx_glyphs_load");
-  double x = penX;
-  for (; *s; s++) {
-    const Glyph *gl = glyph_get(fontId, *s);
-    if (gl->w * gl->h > 0) {
-      const int gx = (int)lround(x + gl->dx);
-      const int gy = (int)lround(penY + gl->dy);
-      if (strokeFirst) {
-        blit_mask(g, gl->smask, gl->w, gl->h, gx, gy, stroke);
-        blit_mask(g, gl->fmask, gl->w, gl->h, gx, gy, fill);
-      } else {
-        blit_mask(g, gl->fmask, gl->w, gl->h, gx, gy, fill);
-        blit_mask(g, gl->smask, gl->w, gl->h, gx, gy, stroke);
-      }
-    }
-    x += gl->advance;
-  }
+  gfx_glyph_text_rz(&g->rz, fontId, s, penX, penY, fill, stroke, strokeFirst);
 }
 
 void gfx_sprite_blit(Gfx *g, const char *name, double anchorCanvasX,
                      double anchorCanvasY) {
-  if (!g_glyphs_loaded) gfx_fatal("glyphs: sprite before gfx_glyphs_load");
-  const Sprite *sp = strcmp(name, "ready") == 0 ? &g_ready
-                     : strcmp(name, "go") == 0  ? &g_go
-                                                : 0;
-  if (!sp || !sp->present) gfx_fatal("glyphs: unknown sprite blit");
-  const int x0 = (int)lround(anchorCanvasX * GFX_K + sp->dx);
-  const int y0 = (int)lround(anchorCanvasY * GFX_K + GFX_DY + sp->dy);
-  // M4 task 3 (measured-hotspot class fix): -O3 batch primitive,
-  // bit-identical to the old per-pixel loop (raster.c note).
-  rast_blit_rgba(&g->rz, sp->rgba, sp->w, sp->h, x0, y0);
+  gfx_sprite_blit_rz(&g->rz, name, anchorCanvasX * GFX_K,
+                     anchorCanvasY * GFX_K + GFX_DY);
 }
 
 // --- renderOverlay -----------------------------------------------------------

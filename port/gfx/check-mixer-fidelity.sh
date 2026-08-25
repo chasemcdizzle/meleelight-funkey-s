@@ -579,7 +579,7 @@ cc -O3 "${CFLAGS[@]}" -c "$GFX/raster.c" -o "$MF/raster.o"
 cc -O2 "${CFLAGS[@]}" -o "$MF/gfx_app_headless" \
   "$MF/raster.o" "$GFX/gfx_app.c" "$GFX/platform_headless.c" \
   "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_vfx.c" \
-  "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
+  "$GFX/gfx_overlay.c" "$GFX/gfx_glyphs.c" "$GFX/gfx_bg.c" \
   "${SIM_CORE[@]}" "${MOVES[@]}" -lm
 made "$MF/sim_host_snd" "$MF/snd_render" "$MF/gfx_app_headless"
 echo "   builds OK (every TU -ffp-contract=off -Wall -Wextra -Werror)"

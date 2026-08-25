@@ -953,12 +953,12 @@ static void render_title(const FohState *s, Raster *rz) {
   // reproduced here as an exact integer triangle so it needs no state).
   {
     const RastCol dark = {10, 8, 24, 256}, edge = {186, 186, 196, 256};
-    const int w = foh_text2_width("MELEE", 5);
+    const int w = foh_text2_width("MELEE", 5, 0);
     text2_outlined(rz, (RAST_W - w) / 2, 42, 5, 0, "MELEE", dark, edge);
     const int bob = ((f / 2) % 24 < 12 ? (f / 2) % 24 : 24 - (f / 2) % 24) / 3
                     - 2;
     const RastCol glow = {172, 172, 190, 256};
-    const int w2 = foh_text2_width("LIGHT", 3);
+    const int w2 = foh_text2_width("LIGHT", 3, 0);
     foh_text2(rz, (RAST_W - w2) / 2, 94 + bob, 3, 0, "LIGHT", glow);
   }
   // the two grey discs behind the prompt (:164-174)
@@ -967,7 +967,7 @@ static void render_title(const FohState *s, Raster *rz) {
   // PRESS START: #f0c900 over a black stroke (:175-181)
   {
     const RastCol gold = {0xf0, 0xc9, 0x00, 256}, blk = {0, 0, 0, 256};
-    const int w = foh_text2_width("PRESS START", 1);
+    const int w = foh_text2_width("PRESS START", 1, 0);
     text2_outlined(rz, (RAST_W - w) / 2, 183, 1, 0, "PRESS START", gold, blk);
   }
   // the letterbox arcs (:182-190): two huge circles of r 3000 centred far
@@ -1093,7 +1093,7 @@ static void render_menu(const FohState *s, Raster *rz) {
       stroke_closed(rz, xy, n, 1.0f, gold, 256);
       if (k == s->menuSelected) continue;
       const char *label = kMenuText[mm][k];
-      const int tw = foh_text2_width(label, 1);
+      const int tw = foh_text2_width(label, 1, 1);
       foh_text2(rz, (int)(123.0f - (float)(FOH_BAR_STEP * k)) - tw / 2,
                 (int)bar_top(k) + 6, 1, 1, label, sel);
     }
@@ -1106,7 +1106,7 @@ static void render_menu(const FohState *s, Raster *rz) {
       poly8(rz, xy, n, sel, 256);
       stroke_closed(rz, xy, n, 1.0f, gold, 256);
       const char *label = kMenuText[mm][k];
-      const int tw = foh_text2_width(label, 1);
+      const int tw = foh_text2_width(label, 1, 1);
       foh_text2(rz, (int)(123.0f - (float)(FOH_BAR_STEP * k)) - tw / 2,
                 (int)bar_top(k) + 6, 1, 1, label, selTx);
       // the pulse: two static rings, a fading disc, and one or two
@@ -1144,7 +1144,7 @@ static void render_menu(const FohState *s, Raster *rz) {
                                 236.0f, 216.0f, 4.0f, 216.0f};
     stroke_closed(rz, box, 4, 1.0f, edge, 256);
     const char *ex = kMenuExpl[mm][s->menuSelected];
-    const int w = foh_text2_width(ex, 1);
+    const int w = foh_text2_width(ex, 1, 0);
     foh_text2(rz, (RAST_W - w) / 2, 201, 1, 0, ex, txt);
   }
 }
@@ -1712,7 +1712,7 @@ static void render_css(const FohState *s, Raster *rz) {
     // (25 points) is upstream's; only the offset moved.
     const RastCol lit = hsl_col(52.0, 85.0, 35.0 + (double)tri * (25.0 / 30.0),
                                 256);
-    const int w = foh_text2_width("READY TO FIGHT", 2);
+    const int w = foh_text2_width("READY TO FIGHT", 2, 1);
     foh_text2(rz, (RAST_W - w) / 2, 68, 2, 1, "READY TO FIGHT", lit);
   }
 

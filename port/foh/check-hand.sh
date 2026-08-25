@@ -128,7 +128,7 @@ CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror -Iport/ryu -Iport/sim
 # port/gfx/ctl_style.c is REQUIRED, not optional: foh.c's Controls screen calls
 # ctl_style_get/ctl_style_set, which live in that TU and nowhere else. fdlibm
 # supplies the renderer's sin/cos.
-LINK_REST=("$FOH/foh.c" "$FOH/foh_render.c" "$FOH/foh_font.c" "$GFX/raster.c"
+LINK_REST=("$FOH/foh.c" "$FOH/foh_render.c" "$FOH/foh_font.c" "$GFX/gfx_glyphs.c" "$GFX/raster.c"
            "$GFX/img1.c" "$GFX/ctl_style.c" port/fdlibm/fdlibm.c)
 HAND_OK='^HAND OK$'
 
@@ -393,11 +393,13 @@ run_tooth() {
   cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/$dir/diff" \
     "$BUILD/$dir/port/foh/foh_cssdiff_witness.c" "$BUILD/$dir/port/foh/foh.c" \
     "$BUILD/$dir/port/foh/foh_render.c" "$BUILD/$dir/port/foh/foh_font.c" \
+    "$GFX/gfx_glyphs.c" \
     "$GFX/raster.c" "$GFX/img1.c" "$GFX/ctl_style.c" port/fdlibm/fdlibm.c -lm \
     || fail "$dir: the perturbed differential driver did not build"
   cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/$dir/hand" \
     "$BUILD/$dir/port/foh/foh_hand_witness.c" "$BUILD/$dir/port/foh/foh.c" \
     "$BUILD/$dir/port/foh/foh_render.c" "$BUILD/$dir/port/foh/foh_font.c" \
+    "$GFX/gfx_glyphs.c" \
     "$GFX/raster.c" "$GFX/img1.c" "$GFX/ctl_style.c" port/fdlibm/fdlibm.c -lm \
     || fail "$dir: the perturbed witness did not build"
   # A-FREE and MASKED, for the two reasons leg [4] states at length: an A

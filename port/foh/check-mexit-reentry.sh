@@ -546,7 +546,7 @@ echo "=== [6] launch-kind witness (both kinds through foh_tick) + T2"
 # (the value has no mirror in FohState, by design — MENU-SPEC §C30). Every
 # recipe that links foh.c must carry it; omitting it is an undefined-symbol
 # link failure, not a silent degradation.
-LKW_SRCS=("$FOH/foh_launchkind_witness.c" "$FOH/foh_render.c" "$FOH/foh_font.c"
+LKW_SRCS=("$FOH/foh_launchkind_witness.c" "$FOH/foh_render.c" "$FOH/foh_font.c" "$GFX/gfx_glyphs.c"
           "$GFX/raster.c" "$GFX/img1.c" "$GFX/ctl_style.c" port/fdlibm/fdlibm.c)
 LKW_OK='^LAUNCH KIND OK$'
 rm -f "$BUILD/lkw" "$BUILD/lkw.out"

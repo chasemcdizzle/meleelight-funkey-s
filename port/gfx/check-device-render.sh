@@ -691,7 +691,7 @@ cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$BUILD/raster.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/gfx_app_headless" \
   "$BUILD/raster.o" "$GFX/gfx_app.c" "$GFX/platform_headless.c" \
   "$GFX/anim1.c" "$GFX/gfx_render.c" \
-  "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
+  "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_glyphs.c" "$GFX/gfx_bg.c" \
   "${SIM_TUS[@]}" \
   port/sim/characters/shared/moves/*.c \
   port/sim/characters/fox/moves/*.c \
@@ -706,7 +706,7 @@ if command -v sdl2-config >/dev/null 2>&1; then
     -o "$BUILD/gfx_app_sdl2" \
     "$BUILD/raster.o" "$GFX/gfx_app.c" "$GFX/platform_sdl2.c" \
     "$GFX/anim1.c" "$GFX/gfx_render.c" \
-    "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
+    "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_glyphs.c" "$GFX/gfx_bg.c" \
     "${SIM_TUS[@]}" \
     port/sim/characters/shared/moves/*.c \
     port/sim/characters/fox/moves/*.c \

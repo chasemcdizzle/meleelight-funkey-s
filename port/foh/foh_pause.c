@@ -114,7 +114,7 @@ static void overlay_selfshot(const uint16_t *fb, const char *name) {
 
 static void text2_center(Raster *rz, int y, int scale, const char *s,
                          RastCol col) {
-  const int w = foh_text2_width(s, scale);
+  const int w = foh_text2_width(s, scale, 0);
   foh_text2(rz, (RAST_W - w) / 2, y, scale, 0, s, col);
 }
 
