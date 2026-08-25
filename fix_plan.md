@@ -6963,3 +6963,80 @@ through the modified `record-m4.sh`: both print
 - **LANE M's A44 FOLLOW-UP IS NOW UNBLOCKED**: `sim_setup_match_ports` is the
   entry point a 4-port FOH launch line needs, and A44's committed site inventory
   is the map.
+
+## A7 — DONE 2026-08-24 (D38). **THE CREDITS ARE A STAR FOX SHOOTING GALLERY.**
+
+The 2026-08-03 recon note *"A7 IS NOT A CREDITS ROLL"* is now explained.
+`src/menus/credits.js`, 422 lines, gameMode 13: a **100-star warp field**
+radiating from centre; **14 `ScrollingText` names** scrolling up at -2 px/frame
+with a sideways wobble; **twin lasers from the bottom corners converging on a
+rotating reticle**, A fires on an 8-frame cooldown, and the bolt is tested
+against the names **on the frame its `life` reaches 15 — so you must LEAD the
+target**; X/Y cycle 4 laser colours; START/L/R fast-forward. **Two exits**, both
+to gameMode 1: B, and a 2500-frame timer that plays `complete`/`failure` by
+score. **It is the only screen with two out edges.**
+
+**THE NAMES WERE NEVER TYPED — and that is the ticket's real safety property.**
+The C table was lifted from the pinned clone by a regex over
+`new ScrollingText(...)`, and **`check-credits.sh` leg [2] RE-RUNS THAT
+EXTRACTION against `$MELEELIGHT_CLONE` EVERY RUN** and requires the table to
+match row for row (name, role, blurb, yPos). The witness asserts **upstream
+literals** (`"SCHMOO"`, `"TATATAT0"`, `"PROGRAMMER"`), **never
+`foh_credits[i].name`** — *asserting the table it renders from would be
+self-referential and a placeholder would pass.* A separate assertion draws all
+42 authored strings through face 1, so **a credit containing an unmapped glyph
+is a `gfx_fatal`, not a silent blank.**
+
+**D38 (FOH-local RNG):** upstream's `Math.random` here **IS the seeded sim
+stream** — the same fact that makes the SSS RANDOM slot a registered refusal —
+and the 465-draw boot pin means sharing it would **move every golden**. Own
+mulberry32, own seed, one `FohState` field; **the FOH stays a pure
+`(state, input)` function.** Explicitly NOT an authored star table: those are
+values upstream *draws*.
+**D12 extended:** the reticle uses the **shared `foh_hand_step`** (A25c/D29), so
+`check-hand.sh`'s DRY caller pin moves 2 -> 3 — *which is the review that line's
+own text asks for by name.*
+
+**Judge edges: three added, one refusal DELETED**, each cited —
+`menu.js:145-149`, `credits.js:236-245`, `credits.js:226-235`. The deletion is
+the principled part: **a refusal promises an affordance does nothing, and this
+one now opens a screen** (the `audio`/`keyboard` precedent). `WANT` E 28->31 /
+R 8->7 and the probe count re-pinned **with the direction argued** — two probes
+are exactly what the deleted R row emitted.
+
+**Teeth (3, each proven to fail on ITS OWN line and not the others'):** T1 a
+placeholder credit fails the on-screen name assertion; T2 the B exit disabled
+fails the exit assertion with names untouched; T3 the panel keyed to the wrong
+index fails names-the-right-person with score/exit untouched.
+
+Green on merged bytes: `CREDITS CHECK OK` · `FOH FLOWS OK` ·
+`JUDGE REGRESSION OK` · `HAND CHECK OK`.
+
+### ⚠ DRIVER ERROR, MADE AND REVERTED — the freeze manifest
+A7 correctly listed four `m4-freeze-manifest.txt` rows as **the driver's to
+move** (the lane refused to touch a `reviewed-go` file — the same refusal A46's
+lane made). **I then ran a `sed` over that manifest and it rewrote the WHOLE
+FILE — 452 lines changed, not 4 rows. Reverted with `git checkout --`.**
+**I did exactly what I had told two agents not to do**, on the single file the
+M4 gate reads FIRST.
+**Correct handling, and it is already the rule:** §A-par.5 — *ONE BATCHED
+RE-PIN PASS, DRIVER-ONLY, AT THE END.* **M4 is owner-deferred, so that pass is
+not now.** The manifest stays byte-untouched.
+**MEASURED STATE for whoever runs that pass: 85 pins OK, 31 stale, 401 rows
+whose file is absent** (`.loop/` logs and historical citations). *Note the first
+audit I ran reported "116 stale" — that was MY BROKEN LOOP (`shasum` not on PATH
+inside it), not the tree. The corrected count is 31.* **A tool that cannot run
+reports everything as broken; check the tool before believing the alarm.**
+
+**The one row I DID fix stands** — `port/sim/target/check-device-target.sh`'s
+three stale judge-sha references (`8658ae0b` -> `594f1925`). That is a plain
+check script, not the reviewed manifest, and A7's lane flagged it as a blocker
+it could not reach from its own lane.
+
+### DEVICE LEGS OWED (added)
+1. **The credits screen has NEVER RENDERED on the FunKey-S.** Needs a device
+   shot and **Chase's eye at 240x240** — the warp field, the 1-px stars and the
+   7-px reticle are all guesses about a real panel.
+2. `check-device-foh.sh` / `check-device-persist.sh` judge-sha pins updated
+   host-side but the checks were **not run**.
+3. The four `m4-freeze-manifest.txt` rows above, in the batched pass.
