@@ -99,7 +99,26 @@ CFG_CHAR='    ports[k].character = s->selChar[k];'
 n="$(grep -cxF "$CFG_CHAR" "$FOH/foh_launch.h")" || true
 [ "$n" = 1 ] || grammar_die "foh_launch.h has $n per-port character rows (want
   exactly 1) — T3 cannot collapse the launch config unambiguously"
-echo "   the grab loop, the selection write and the launch config row are unique"
+
+# A49 adds three more. Each is the ONE line its own tooth rewrites, and each
+# sits in a DIFFERENT function — the type cycle, the token position and the
+# persist chokepoint — so the three A49 teeth cannot be one tooth wearing
+# three labels.
+D40B_CYCLE='          if (*t == 2) *t = -1;'
+n="$(grep -cxF "$D40B_CYCLE" "$FOH/foh.c")" || true
+[ "$n" = 1 ] || grammar_die "foh.c has $n type-cycle wrap lines (want exactly
+  1) — T4 cannot restore DEVIATION D40(b) unambiguously"
+
+D46_BASE='  const double base = (double)(foh_css_cell_x(c) + FOH_CSS_TOKEN_DX);'
+n="$(grep -cxF "$D46_BASE" "$FOH/foh.c")" || true
+[ "$n" = 1 ] || grammar_die "foh.c has $n resting-token base lines (want
+  exactly 1) — T5 cannot restore the leave-band quirk unambiguously"
+
+D45_REHOME='    s->cssChar[k] = p->selChar[k];'
+n="$(grep -cxF "$D45_REHOME" "$FOH/foh_persist.c")" || true
+[ "$n" = 1 ] || grammar_die "foh_persist.c has $n boot-time token re-home
+  lines (want exactly 1) — T6 cannot break the re-home unambiguously"
+echo "   all six perturbation targets are textually unique"
 
 # --- [2] the witness, against the REAL tree --------------------------------
 # Same objects and same reason as check-css-token-rest.sh's leg [2]:
@@ -109,8 +128,14 @@ echo "   the grab loop, the selection write and the launch config row are unique
 echo "=== [2] P3/P4 witness (real gestures through the real foh_tick)"
 CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror
                -Ipipeline/build/sim-tables -Iport/ryu -Iport/sim -Ioracle/qjs)
-W_SRCS=("$FOH/foh_render.c" "$FOH/foh_font.c" "$GFX/raster.c" "$GFX/img1.c"
-        "$GFX/ctl_style.c" port/fdlibm/fdlibm.c)
+# A49 adds the persistence chokepoint: leg [9] drives a REAL save/load
+# through foh_persist.c, so the file format is exercised rather than
+# modelled. ml_ser.c/sha256.c are its SHA-256 seal, ml_fmt.c is ml_ser.c's
+# own dependency; none of them is optional and none is a stub.
+W_SRCS=("$FOH/foh_render.c" "$FOH/foh_font.c" "$FOH/foh_persist.c"
+        "$GFX/raster.c" "$GFX/img1.c" "$GFX/ctl_style.c"
+        port/sim/ml_ser.c port/sim/ml_fmt.c oracle/qjs/sha256.c
+        port/fdlibm/fdlibm.c)
 W_OK='^P34 WITNESS OK$'
 
 # The generated M1 tables are a HEADER dependency here (foh_launch.h reaches
@@ -127,7 +152,12 @@ cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/w" \
   "$FOH/foh_p34_witness.c" "$FOH/foh.c" "${W_SRCS[@]}" -lm \
   || fail "the witness did not build against the real tree"
 made "$BUILD/w"
-MLFK_DATA_DIR="$GFX/data" "$BUILD/w" > "$BUILD/w.out" 2>&1 \
+# HERMETIC PERSISTENCE: a FRESH dir per run, and never the product path
+# (/mnt/mlfk-data). Leg [9] writes a real mlfk-persist.dat here; the
+# no-commit guard below then proves the run touched nothing else.
+PDIR="$BUILD/persist"
+rm -rf "$PDIR"; mkdir -p "$PDIR"
+MLFK_DATA_DIR="$GFX/data" MLFK_PERSIST_DIR="$PDIR" "$BUILD/w" > "$BUILD/w.out" 2>&1 \
   || { relay_lines < "$BUILD/w.out"; fail "the witness failed against the REAL foh.c"; }
 grep -qE "$W_OK" "$BUILD/w.out" \
   || { relay_lines < "$BUILD/w.out"; fail "the witness printed no OK verdict"; }
@@ -143,7 +173,8 @@ run_tooth() { # <id> <file> <old-line> <new-line> <needle> <label>
   local id="$1" file="$2" old="$3" new="$4" needle="$5" label="$6" rc=0
   local dir="$BUILD/$id"
   mkdir -p "$dir"
-  cp "$FOH/foh.c" "$FOH/foh_launch.h" "$FOH/foh_p34_witness.c" "$dir/"
+  cp "$FOH/foh.c" "$FOH/foh_launch.h" "$FOH/foh_p34_witness.c" \
+     "$FOH/foh_persist.c" "$dir/"
   node -e '
     const fs = require("fs");
     const [p, oldL, newL] = process.argv.slice(1);
@@ -160,10 +191,20 @@ run_tooth() { # <id> <file> <old-line> <new-line> <needle> <label>
   # -I"$dir" so the copies win, then -I"$FOH" so everything NOT copied (foh.h,
   # foh_hand.h, the rest) still comes from the real tree — the same shape
   # check-css-token-rest.sh's T1 copy-build uses.
+  # The perturbable TUs are passed from $dir; everything else still comes
+  # from W_SRCS, minus the one copy that would otherwise be linked twice.
+  local w_rest=()
+  local src
+  for src in "${W_SRCS[@]}"; do
+    [ "$src" = "$FOH/foh_persist.c" ] || w_rest+=("$src")
+  done
   cc -O2 "${CFLAGS_COMMON[@]}" -I"$dir" -I"$FOH" -o "$dir/w" \
-    "$dir/foh_p34_witness.c" "$dir/foh.c" "${W_SRCS[@]}" -lm \
+    "$dir/foh_p34_witness.c" "$dir/foh.c" "$dir/foh_persist.c" \
+    "${w_rest[@]}" -lm \
     || fail "$id: the perturbed copy did not build"
-  MLFK_DATA_DIR="$GFX/data" "$dir/w" > "$dir/w.out" 2>&1 || rc=$?
+  rm -rf "$dir/persist"; mkdir -p "$dir/persist"
+  MLFK_DATA_DIR="$GFX/data" MLFK_PERSIST_DIR="$dir/persist" "$dir/w" \
+    > "$dir/w.out" 2>&1 || rc=$?
   [ "$rc" = 1 ] \
     || fail "$id: the perturbed build exited rc $rc, want exactly 1 — rc 0
   means the witness is BLIND to the defect it exists to guard"
@@ -212,12 +253,53 @@ run_tooth t3-cfgcollapse foh_launch.h \
   "T3: a launch config that reads port 0's selection for every port dies at
    the seam, with the CSS still displaying the right characters"
 
-# --- [6] no-commit guard, closing ------------------------------------------
-echo "=== [6] no-commit guard (this run must not have touched the tree)"
+# --- [6] T4: DEVIATION D40(b) restored — CPU unreachable on ports 2/3 ------
+# This is the exact line the owner's first ruling deletes. Putting the
+# two-cycle asymmetry back (`wrapAt = j < 2 ? 2 : 1`, expressed as the first
+# unreachable value) makes ports 2 and 3 wrap N/A -> HMN -> N/A again, so the
+# CPU press the ticket is about does nothing. It must die at leg [1].
+echo "=== [6] T4: with D40(b) back, ports 2/3 can never reach CPU"
+run_tooth t4-d40b foh.c \
+  "$D40B_CYCLE" \
+  "          if (*t == (j < 2 ? 2 : 1)) *t = -1; // T4: D40(b) restored" \
+  "did not reach CPU(1) on the second press" \
+  "T4: restoring D40(b)'s two-state cycle on ports 2/3 kills the CPU press
+   the owner asked for, and the witness names the port and the press"
+
+# --- [7] T5: DEVIATION D46 reverted — the leave-band quirk restored --------
+# Upstream's second rest formula, verbatim as it stood before A49: a
+# different base AND a different pitch, landing a released token one whole
+# cell right of the character it just selected. That is what the owner
+# reported. The tooth touches ONLY rest slot 1, so it cannot pass by
+# breaking the A-drop path leg [4] tests — the two claims stay separable.
+echo "=== [7] T5: with the leave-band quirk back, a released pin misses"
+run_tooth t5-d46 foh.c \
+  "$D46_BASE" \
+  "  const double base = s->cssTokenRest[k] == 1 ? (double)(foh_css_cell_x(0) + FOH_CSS_TOKEN_DX + FOH_CSS_TOKEN_LB_DX + FOH_CSS_TOKEN_LB_PITCH * c) : (double)(foh_css_cell_x(c) + FOH_CSS_TOKEN_DX); // T5: D46 reverted" \
+  "D46 says a released pin returns to the character that port" \
+  "T5: reverting D46 puts a released pin back on the NEXT cell, and the
+   witness names the port and the character it should have returned to"
+
+# --- [8] T6: the boot-time token re-home broken (D21/D35/D46 at boot) ------
+# The selection still survives the restart; only the PIN lies. That is
+# precisely the shape of all three shipped bugs on this screen, and it is why
+# the persisted plane is the SELECTION with the token derived from it.
+# Perturbing the re-home rather than the selection keeps this orthogonal to
+# T5: T5 is the in-session gesture, T6 is the boot.
+echo "=== [8] T6: a restart that restores the pick but not the pin"
+run_tooth t6-rehome foh_persist.c \
+  "$D45_REHOME" \
+  "    s->cssChar[k] = 0; // T6: the pin boots on marth whatever was picked" \
+  "the token plane is re-homed FROM the selection at boot" \
+  "T6: a boot that restores selChar but leaves the token on marth dies at
+   the pin assertion, with the selection assertion still passing"
+
+# --- [9] no-commit guard, closing ------------------------------------------
+echo "=== [9] no-commit guard (this run must not have touched the tree)"
 git_dirty_after="$(tree_fingerprint)" \
   || fail "could not re-fingerprint the working tree (the guard fails CLOSED)"
 [ "$git_dirty_before" = "$git_dirty_after" ] \
   || fail "this check modified the working tree (it must only write $BUILD,
   which is ignored) before=$git_dirty_before after=$git_dirty_after"
 
-echo "CSS P34 CHECK OK (3 teeth)"
+echo "CSS P34 CHECK OK (6 teeth)"

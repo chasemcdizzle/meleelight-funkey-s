@@ -93,16 +93,16 @@ const RE_T = new RegExp("^T " + NUM + " ([a-z-]+ [a-z-]+ (?:timer|start|a|b|bhol
 // `turbo 9` and `difficulty 0`. Every field now carries its real domain,
 // so this copy rejects exactly what judge-foh-trace.js's SVAL_DOM does.
 // A44: p3char/p4char and p3type/p4type join the plane, and `carry` widens
-// to the four ports D40 lets the one hand hold. Ports 2/3 keep the NARROWER
-// type domain (-1|0) they have in judge-foh-trace.js's SVAL_DOM, so the two
-// copies still reject exactly the same set — including `p3type 1`.
+// to the four ports D40 lets the one hand hold. A49 retires D40(b), so
+// p3type/p4type take p2type's own (-1|0|1) and the CPU levels of ports 2/3
+// join as p3difficulty/p4difficulty — the two copies still reject exactly
+// the same set, which is the only property that makes this duplicate safe.
 const RE_S = new RegExp("^S " + NUM + " (" +
     "(?:p1char|p2char|p3char|p4char) [0-4]" +
-    "|(?:p1difficulty|difficulty) [1-4]" +
+    "|(?:p1difficulty|difficulty|p3difficulty|p4difficulty) [1-4]" +
     "|(?:turbo|flashlcancel|walljump|tapjump[1-4]) [01]" +
     "|lcancel [0-2]" +
-    "|(?:p1type|p2type) (?:-1|[01])" +
-    "|(?:p3type|p4type) (?:-1|0)" +
+    "|(?:p1type|p2type|p3type|p4type) (?:-1|[01])" +
     "|carry (?:-1|[0-3])" +
     "|(?:soundsvol|musicvol) (?:10|[0-9])" +
     "|refused [a-z0-9]+)$");
@@ -111,10 +111,12 @@ const RE_SHOT = new RegExp("^SHOT " + NUM + " ([a-z0-9-]{1,32})$");
 // needs p1type/p1difficulty columns (see judge-foh-trace.js's note).
 // A27 widened `versus` from the literal 0 to [01] — the CSS mode ribbon now
 // writes it (css.js:393). A44 APPENDED p3/p4 and their types; nothing before
-// `versus=` moved, and p3type/p4type carry the (-1|0) domain D40(b) fixes.
+// `versus=` moved. A49 widened p3type/p4type to (-1|[01]) — the owner
+// retired D40(b), so CPU is reachable on ports 2/3 — and APPENDED
+// p3difficulty/p4difficulty with p2's [1-4] slider domain.
 // judge-foh-trace.js carries the full argument; the `rest` group is still
 // the whole tail, so the normalized form is unchanged in shape.
-const RE_LAUNCH = new RegExp("^LAUNCH " + NUM + " (p1=[0-4] p2=[0-4] p2type=(?:-1|[01]) difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] flashlcancel=[01] walljump=[01] tapjump=[01],[01],[01],[01] versus=[01] p3=[0-4] p4=[0-4] p3type=(?:-1|0) p4type=(?:-1|0))$");
+const RE_LAUNCH = new RegExp("^LAUNCH " + NUM + " (p1=[0-4] p2=[0-4] p2type=(?:-1|[01]) difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] flashlcancel=[01] walljump=[01] tapjump=[01],[01],[01],[01] versus=[01] p3=[0-4] p4=[0-4] p3type=(?:-1|[01]) p4type=(?:-1|[01]) p3difficulty=[1-4] p4difficulty=[1-4])$");
 // iter 99 (M4 task 12): the target-mode launch record — same
 // END==launch-tick semantics as LAUNCH in bounded mode.
 const RE_TLAUNCH = new RegExp("^TLAUNCH " + NUM + " (char=[0-4] tstage=[0-9])$");

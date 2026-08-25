@@ -99,14 +99,25 @@ static void join_snd(const FohState *s, char *out, size_t cap) {
 //     with no input source and make the LAUNCH record a lie (HARD RULE 2).
 //     That is rows 0-2 (p1 = N/A) and rows 6-8 (p1 = CPU), whatever the
 //     other three ports hold.
-//   * inside the three p1 = HMN rows, a cell refuses if EITHER a port above
-//     1 is CPU (the third of each group of three, and the whole last group
-//     of three, are p4 = CPU and p3 = CPU respectively) OR fewer than two
-//     ports participate. The second clause is upstream's own readyToFight
-//     rule (css.js:1167-1181) re-checked at the seam, and it is why row 3's
+//   * inside the three p1 = HMN rows, a cell refuses ONLY if fewer than two
+//     ports participate. That is upstream's own readyToFight rule
+//     (css.js:1167-1181) re-checked at the seam, and it is why row 3's
 //     first cell is 'R': P1 alone, with P2, P3 and P4 all absent, is a
 //     one-port match, and it reaches the guard only through upstream's own
-//     one-frame draw-pass race.
+//     one-frame draw-pass race. It is the ONLY 'R' in those three rows.
+//   * A49 DELETED the clause that used to sit beside it. A44's table also
+//     refused every cell with a CPU above port 1 (DEVIATION D40(b)); the
+//     owner retired that deviation (*"yeah enable the CPu please"*), so
+//     rows 4 and 5 are now uniformly 'L' and row 3 refuses only its
+//     all-absent cell. Fifteen of the 26 launching cells are new here.
+//
+//     THE ACCEPTED CONSEQUENCE, stated where the verdicts are AUTHORED and
+//     not only where the guard is written: the cells with a CPU on port 2
+//     or 3 launch and PLAY — the play path links the live C ai.c through
+//     ml_sim_runai_live — but are NOT CHECKSUM-VERIFIED, because AIBRIDGE1
+//     replays one CPU slot and no golden covers a second (fix_plan A48).
+//     Authoring them 'R' again would be re-deciding a scope call the owner
+//     has made; the honest record is 'L' plus this paragraph.
 //   * row 3 (p1 HMN, p2 N/A) differs from rows 4 and 5 in exactly one cell,
 //     its first — with P2 present the pair is already made, so P3 and P4 may
 //     both be absent. That single-cell difference is the whole content of
@@ -116,9 +127,9 @@ static const char *const kVerdicts[9] = {
     "RRRRRRRRR", // p1 N/A, p2 N/A   — no human port 0
     "RRRRRRRRR", // p1 N/A, p2 HMN   — port 0 must be the human
     "RRRRRRRRR", // p1 N/A, p2 CPU   — still no human port 0
-    "RLRLLRRRR", // p1 HMN, p2 N/A   — needs a second port from 2/3, no CPU there
-    "LLRLLRRRR", // p1 HMN, p2 HMN   — the pair is made; 2/3 optional, never CPU
-    "LLRLLRRRR", // p1 HMN, p2 CPU   — the sim carries p2Type + difficulty
+    "RLLLLLLLL", // p1 HMN, p2 N/A   — needs a second port from 2/3, any type
+    "LLLLLLLLL", // p1 HMN, p2 HMN   — the pair is made; 2/3 optional, any type
+    "LLLLLLLLL", // p1 HMN, p2 CPU   — the sim carries p2Type + difficulty
     "RRRRRRRRR", // p1 CPU, p2 N/A   — the sim would boot a HUMAN P1 (a lie)
     "RRRRRRRRR", // p1 CPU, p2 HMN   — the port roles are swapped
     "RRRRRRRRR", // p1 CPU, p2 CPU   — no human port at all
@@ -216,14 +227,16 @@ int main(void) {
   // Shape pins: the grid must stay the FULL {-1,0,1}^4, and it must keep
   // both sides. An all-refuse table (a guard inverted to refuse everything)
   // would satisfy every cell above only if the table said so — these pins
-  // make the split itself a declared, checkable fact. 11 launching cells:
-  // 4 under each of (p1 HMN, p2 HMN) and (p1 HMN, p2 CPU), plus 3 under
+  // make the split itself a declared, checkable fact. 26 launching cells:
+  // 9 under each of (p1 HMN, p2 HMN) and (p1 HMN, p2 CPU), plus 8 under
   // (p1 HMN, p2 N/A), which loses the all-absent cell to the two-port rule.
+  // It was 11 before A49 retired D40(b), and the 15 new cells are exactly
+  // the ones with a CPU on port 2 or port 3.
   if (nLaunch + nRefuse != 81) {
     bad("drove %d cells, want the full {-1,0,1}^4 grid", nLaunch + nRefuse);
   }
-  if (nLaunch != 11) bad("%d launching cells, want 11", nLaunch);
-  if (nRefuse != 70) bad("%d refusing cells, want 70", nRefuse);
+  if (nLaunch != 26) bad("%d launching cells, want 26", nLaunch);
+  if (nRefuse != 55) bad("%d refusing cells, want 55", nRefuse);
 
   if (g_fails) {
     // Trailer grammar mirrors foh_snd_witness.c so the check side can parse
@@ -231,6 +244,6 @@ int main(void) {
     fprintf(stderr, "foh_launch_witness: %d failure(s)\n", g_fails);
     return 1;
   }
-  printf("LAUNCH GUARD WITNESS OK (cells=81 launch=11 refuse=70)\n");
+  printf("LAUNCH GUARD WITNESS OK (cells=81 launch=26 refuse=55)\n");
   return 0;
 }

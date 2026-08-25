@@ -402,24 +402,31 @@
 //     spanning 34..62 — inside the cell's 32..62 exactly, so the lower row
 //     never bleeds into the READY TO FIGHT ribbon (y 62..92), which
 //     render_css draws AFTER the tokens and would otherwise cover them.
-// The clamp in foh_css_token_pos is UNCHANGED and still subtracts one
-// PITCH + one R, because a 2x2 is two columns wide however many ports
-// exist — it is the leave-band quirk (below) that still needs it.
+// D41's clamp in foh_css_token_pos is GONE as of DEVIATION D46 (below), and
+// the arithmetic on the line above is why: the only arm that could ever
+// exceed the right edge was the leave-band formula, and D46 retires it. The
+// three surviving rest paths are all `cell_x(c) + DX`, whose widest case is
+// cell 4's right column at 226 < 240. A clamp that provably cannot fire is a
+// dead branch, so it is deleted rather than left to look load-bearing.
 #define FOH_CSS_TOKEN_R 7
 #define FOH_CSS_TOKEN_DX 15
 #define FOH_CSS_TOKEN_PITCH 14
 #define FOH_CSS_TOKEN_ROW_PITCH 14
 #define FOH_CSS_TOKEN_Y (FOH_CSS_CELL_Y + 9)
-// QUIRK Q1, carried (MENU-SPEC §2.6 "carried verbatim"). Upstream has TWO
-// rest formulas and they disagree: the A-drop slot is `419 + 95c + 40k` and
-// the leave-band slot is `518 + 93c + 40k` (css.js:288 vs :337). MENU-SPEC
-// calls that "a few px"; MEASURED it is a 99 px base offset on a 95 px cell
-// pitch, i.e. a leave-band token comes to rest on the NEXT character's cell,
-// and the pitch differs by 2 px per cell as well. Mapped onto this layout at
-// the same ratios (99/95 of a cell = +48 px here; -2/95 of a cell = -1 px per
-// cell), the quirk survives as itself: leave the band and your token rests
-// one cell to the right of the character it selected. Faithfulness > tidiness
-// — the spec's magnitude claim is wrong, its instruction is not.
+// QUIRK Q1 — and DEVIATION D46 (fix_plan A49, owner-reported P1) RETIRES ITS
+// SECOND HALF. Upstream has TWO rest formulas and they disagree: the A-drop
+// slot is `419 + 95c + 40k` and the leave-band slot is `518 + 93c + 40k`
+// (css.js:288 vs :337). MENU-SPEC called that "a few px"; MEASURED it is a
+// 99 px base offset on a 95 px cell pitch, i.e. a leave-band token comes to
+// rest on the NEXT character's cell. Mapped onto this layout at the same
+// ratios that is +48 px — one whole cell — and the owner filed exactly that:
+// *"whenever the pin is let go of (going off) it should go back to the
+// character you had selected"*. So the leave-band drop now homes on the
+// SELECTION, like the other two rest paths already do (D21, D35).
+//
+// These two constants are the MEASUREMENT, kept: they record what upstream's
+// second formula is and what it works out to here. Nothing computes a
+// position from them any more — see foh_css_token_pos (D46).
 #define FOH_CSS_TOKEN_LB_DX 48
 #define FOH_CSS_TOKEN_LB_PITCH (FOH_CSS_CELL_PITCH - 1)
 // The CPU-level rail, panel-relative. 3 steps of 12 px == the drawn track,
@@ -699,13 +706,14 @@ typedef struct {
   // is — deriving it back from the integer level would snap it to 4 stops
   // and move the re-grab target.
   //
-  // STILL TWO WIDE after A44/D40, and that is a measured consequence rather
-  // than an oversight: a slider exists only on a CPU port, and CPU is not a
-  // reachable type on ports 2/3 (see portType below). Widening this to four
-  // would add two knobs that no state can ever draw or grab — the kind of
-  // dead width HARD RULE 2 calls a stub. foh.c's two knob loops therefore
-  // stop at 2 and say so at the site.
-  double cssSliderX[2];
+  // FOUR WIDE as of A49, which is upstream's own width: `cpuSlider` is a
+  // FOUR-element array (css.js:72) and the knob-grab loop runs `s < 4`
+  // (css.js:397). A44 left it at two because D40(b) kept CPU off ports 2/3,
+  // so the third and fourth knobs would have been width nothing could draw
+  // or grab. The owner retired D40(b) (fix_plan A49 ruling 1), so all four
+  // ports can be CPU and all four knobs are live — foh.c's two knob loops
+  // now run to FOH_CSS_PORTS, as upstream's do.
+  double cssSliderX[FOH_CSS_PORTS];
   // handType[0] (css.js:63): 0 handPoint, 1 handOpen, 2 handGrab. STORED, not
   // derived, because upstream's assignments are path-dependent: an A-drop
   // clears whichTokenGrabbed but leaves handType at 2 for that draw.
@@ -744,6 +752,13 @@ typedef struct {
   // fields kept in sync by hand is exactly that. Overlaid storage cannot
   // drift. WRITE THROUGH `selChar[k]` in new code — a per-port `if (k == 0)
   // ... else ...` chain is how D21 and D35 were both written.
+  //
+  // A49/DEVIATION D45: this plane, and ONLY this plane, is PERSISTED to SD
+  // (`MLFKPERSIST6`, foh_persist.h). Upstream cookies no character at all, so
+  // persisting is the deviation; the owner asked for it in as many words
+  // (*"i want to MAKE it persistent ... I want it to be last character"*).
+  // The TOKEN plane below is NOT persisted and must never be: it is re-homed
+  // FROM this one at load, which is D21/D35's rule applied to boot.
   union {
     int selChar[FOH_CSS_PORTS]; // 0 marth 1 puff 2 fox 3 falco 4 falcon
     struct {
@@ -766,24 +781,42 @@ typedef struct {
   // are union aliases over the same storage for the ~25 existing readers
   // (same rule as selChar above — overlaid, never copied).
   //
-  // DOMAIN IS PER PORT and the asymmetry is deliberate, not an oversight:
-  // ports 0/1 cycle -1 -> 0 -> 1 -> -1 (N/A, HMN, CPU) while ports 2/3
-  // cycle -1 -> 0 -> -1 (N/A, HMN only). CPU is ABSENT on 2/3 because the
-  // sim refuses it: AIBRIDGE1 is one recorded stream for one CPU slot
-  // (A46's OPEN/OWED note), so a CPU P3 has no C-side replay and could not
-  // be checksum-verified. An honest missing state beats a tab that toggles
-  // to CPU and then denies at START (HARD RULE 2).
+  // DOMAIN IS UNIFORM ACROSS ALL FOUR PORTS as of A49: every port cycles
+  // -1 -> 0 -> 1 -> -1 (N/A, HMN, CPU), which is upstream's own togglePort
+  // with only D5's NET step removed. A44's DEVIATION D40(b) narrowed ports
+  // 2/3 to N/A -> HMN and is now RETIRED, by owner ruling (fix_plan A49
+  // ruling 1: *"yeah enable the CPu please"*).
+  //
+  // D40(b)'s STATED GROUND WAS WRONG and the correction is worth keeping:
+  // AIBRIDGE1 is the RECORDED stream used to REPLAY a CPU golden, not what
+  // makes the AI run. The play path links the LIVE `ai.c` through
+  // `ml_sim_runai_live` (fix_plan A48/`check-ai-live.sh` -> `AI LIVE
+  // CONFORMS`), so a CPU on port 2 or 3 plays. What AIBRIDGE1's single slot
+  // actually limits is VERIFICATION, not capability — see the ACCEPTED
+  // CONSEQUENCE written at the launch guard in foh.c.
   union {
     int portType[FOH_CSS_PORTS];
     struct {
       int p1Type, p2Type, p3Type, p4Type;
     };
   };
-  // cpuDifficulty[0..1] (main.js:109), 1..4 (slider domain), default 3.
-  // `difficulty` is port 1's and keeps its name: it is the field the launch
-  // bridge, foh_dev.c and every frozen LAUNCH line already mean by it.
-  int p1Difficulty;
-  int difficulty;
+  // cpuDifficulty[0..3] (main.js:109 — `[3,3,3,3]`), 1..4 (the slider's
+  // domain, css.js:325-327), default 3.
+  //
+  // A49 widened this from the two scalars `p1Difficulty` + `difficulty` to
+  // upstream's own four, because all four ports can now be CPU. It uses the
+  // SAME anonymous-union overlay selChar and portType use, for the same
+  // reason: `difficulty` is the name the launch bridge, foh_dev.c, foh_app.c
+  // and every frozen LAUNCH line already mean by port 1's level, and two
+  // fields kept in sync by hand is CONTEXT.md's costliest defect class.
+  // Overlaid storage cannot drift. WRITE THROUGH `cpuDifficulty[k]` in new
+  // code.
+  union {
+    int cpuDifficulty[FOH_CSS_PORTS];
+    struct {
+      int p1Difficulty, difficulty, p3Difficulty, p4Difficulty;
+    };
+  };
   int bHold;          // consecutive B frames in CSS (30 = back)
   // versusMode (main.js:140), 0 stock | 1 endless — written ONLY by the CSS
   // mode ribbon's `setVersusMode(1 - versusMode)` (css.js:393; A27). It is
@@ -998,6 +1031,19 @@ typedef struct {
 void foh_init(FohState *s);
 void foh_tick(FohState *s, const PlatformInput *in);
 const char *foh_screen_token(FohScreen sc);
+
+// Is this transition event one of the machine's PERSISTENCE SAVE POINTS?
+//
+// It lives here, once, for foh_launch.h's reason: two drivers reach the
+// save chokepoint — foh_app.c (host) and foh_dev.c (device/dev app) — and
+// each used to spell the condition out at its own call site. A31 MEASURED
+// the cost of that: the product binary's arm named only `options-gameplay`,
+// so a Controls-screen or audio edit reached SD only if the player later
+// happened to B-exit an unrelated screen, i.e. it silently vanished on
+// restart. One predicate, both drivers, cannot drift.
+//
+// `ev` must be a FOH_EV_TRANS event; anything else is false.
+bool foh_is_save_point(const FohEvent *ev);
 
 // foh.c: the CSS geometry the renderer must draw at, derived from the same
 // machine state the hit tests read (D4's "no hit region without a drawn

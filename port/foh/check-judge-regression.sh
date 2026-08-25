@@ -355,9 +355,15 @@ for (const raw of fs.readFileSync(AUTH, "utf8").split("\n")) {
 // line gained p3/p4/p3type/p4type. `carry`'s domain also moved (-1..1 ->
 // -1..3) — that is a MOVED row, not a new one, so it changes no count and is
 // caught by the DOMAIN DISAGREEMENT arm below against its own authored
-// citation. Ports 2/3's type rows are TIGHTER than ports 0/1's (-1..0, no
-// CPU: DEVIATION D40(b)), which is why this is not a blanket widening.
-const WANT = { S: 21, L: 20, E: 31, R: 7, N: 2, X: 20 };
+// citation.
+// A49 (owner rulings round 4) re-pins S 21 -> 23 and L 20 -> 22 in the same
+// change: the owner retired DEVIATION D40(b), so CPU is a reachable type on
+// ports 2/3 and each of them gained a live difficulty knob — the S surface
+// gained p3difficulty/p4difficulty and the LAUNCH line gained the same two
+// tokens. p3type/p4type's domains also MOVED (-1..0 -> -1..1, now exactly
+// p2type's), which is a moved row rather than a new one: it changes no count
+// here and is caught by the DOMAIN DISAGREEMENT arm against its own citation.
+const WANT = { S: 23, L: 22, E: 31, R: 7, N: 2, X: 20 };
 for (const [k, arr] of [["S", S], ["L", L], ["E", E], ["R", R], ["N", N], ["X", X]]) {
   if (arr.length !== WANT[k])
     die("the authored table has " + arr.length + " " + k + " rows, want " +
@@ -1058,11 +1064,13 @@ const FORMSHAPE = {
   "S N W N":                        { sp: 3,  eq: 0,  cm: 0 },
   "S N W W":                        { sp: 3,  eq: 0,  cm: 0 },
   "SHOT N W":                       { sp: 2,  eq: 0,  cm: 0 },
-  // A44 re-pins the LAUNCH form: four appended `k=v` fields (p3, p4, p3type,
-  // p4type) take it from 11 `=` columns to 15 and from 12 spaces to 16. The
-  // comma count is unchanged at 3 — the appended fields carry single values,
-  // only `tapjump=` is a comma list. Re-measured, not adjusted until green.
-  "LAUNCH N K K K K K K K K K K K K K K K": { sp: 16, eq: 15, cm: 3 },
+  // A44 re-pinned the LAUNCH form at 15 `=` columns (four appended `k=v`
+  // fields: p3, p4, p3type, p4type). A49 appends two more — p3difficulty and
+  // p4difficulty, the CPU levels of the two ports that can now be CPU — so
+  // it is 17 `=` columns and 18 spaces. The comma count is unchanged at 3:
+  // the appended fields carry single values and only `tapjump=` is a comma
+  // list. Re-measured against the regenerated flows, not adjusted until green.
+  "LAUNCH N K K K K K K K K K K K K K K K K K": { sp: 18, eq: 17, cm: 3 },
   "TLAUNCH N K K":                  { sp: 3,  eq: 2,  cm: 0 },
   "END N K":                        { sp: 2,  eq: 1,  cm: 0 },
 };
@@ -2032,8 +2040,28 @@ done < "$B/dom/probes.tsv"
 # carved out. The new S/L rows are p3char/p4char/p3type/p4type, and the type
 # rows' domain is -1..0 — NARROWER than p1type/p2type's, because DEVIATION
 # D40(b) keeps CPU off ports 2/3.
-[ "$nprobe" = "1569" ] \
-  || fail "leg [0n] generated $nprobe behavioral probes, want 1569. The probe set is a FUNCTION of the authored table (S rows x every reachable screen x boundary, S rows x the fixed value universe, unauthored-edge and refusal-binding probes, and the frame-anchor form through both programs, every authored L field x the fixed launch-value universe through both programs, every DELIMITER POSITION of every parser FORM SIGNATURE perturbed (spaces doubled/tabbed/deleted; a k=v token's '=' and the ',' inside its value doubled/deleted/space-prefixed) plus 3 anchor probes per form through both programs, and one corrupt trace per authored TRACE-INTEGRITY row). A different count means the authored table or the reachable-screen set changed shape — re-pin here in the SAME change and say why."
+# A49 (owner rulings round 4, "yeah enable the CPu please") — D40(b) RETIRED,
+# so ports 2/3 can be CPU and each gained a live difficulty knob. 1569 -> 1715,
+# +146, every one accounted off $B/dom/probes.tsv by plane prefix and by field:
+#   u- (S x the fixed value universe)   399 -> 437  +38 = 2 new S rows x 19
+#                                       (23 S fields x 19, exactly)
+#   x- (S x reachable screen x bound)   616 -> 680  +64 = 2 new S rows x 32
+#                                       (16 fields at 32 + 7 at 24 = 680;
+#                                       p3type/p4type stay at 24 — their
+#                                       widened hi+1 boundary still falls
+#                                       outside the authored value alphabet,
+#                                       so a WIDER domain added no probe here)
+#   l- (L x the fixed launch universe)  320 -> 352  +32 = 2 new L rows x 16
+#   w- (delimiter plane)                192 -> 204  +12 = the LAUNCH form's
+#                                       delimiters 34 -> 38 (sp 16->18,
+#                                       eq 15->17, cm 3) x 3 perturbations
+#   e-, r-, k-, quant-, z-              unchanged (6, 9, 20, 4, 3)
+# DIRECTION: every count went UP and no probe was removed, weakened or carved
+# out. The new rows are p3difficulty/p4difficulty; p3type/p4type's domain also
+# WIDENED to p2type's own -1..1, which is a moved row rather than a new one
+# and is asserted against its citation by the DOMAIN DISAGREEMENT arm above.
+[ "$nprobe" = "1715" ] \
+  || fail "leg [0n] generated $nprobe behavioral probes, want 1715. The probe set is a FUNCTION of the authored table (S rows x every reachable screen x boundary, S rows x the fixed value universe, unauthored-edge and refusal-binding probes, and the frame-anchor form through both programs, every authored L field x the fixed launch-value universe through both programs, every DELIMITER POSITION of every parser FORM SIGNATURE perturbed (spaces doubled/tabbed/deleted; a k=v token's '=' and the ',' inside its value doubled/deleted/space-prefixed) plus 3 anchor probes per form through both programs, and one corrupt trace per authored TRACE-INTEGRITY row). A different count means the authored table or the reachable-screen set changed shape — re-pin here in the SAME change and say why."
 # EVERY GENERATED PROBE WAS ACTUALLY RUN AND JUDGED (Tier A+ round-5 MINOR-1).
 # Without this, a probe could be generated, counted into the pin, and then
 # skipped by the dispatch loop -- the count would still look right.
@@ -2669,7 +2697,15 @@ EOF
 # fired, every line number and every ORDER is byte-identical — verified by
 # reading port/foh/build/judgereg/diag.acc against its pre-change self, not
 # by re-hashing until green.
-DIAG_SHA=b4eda525b48376a7938696f439d737fbbff7d6ecca2250d55d2f629319fb0c9b
+# A49 re-pins it again, on the same standard and with the delta PROVEN rather
+# than asserted: the two appended LAUNCH columns (p3difficulty/p4difficulty)
+# appear in 5 of the 36 diagnostics, and stripping exactly those two tokens
+# out of the new diag.acc reproduces A44's hash byte-for-byte
+#   sed -E 's/ p3difficulty=[0-9-]+ p4difficulty=[0-9-]+//g' diag.acc
+#     -> b4eda525b48376a7938696f439d737fbbff7d6ecca2250d55d2f629319fb0c9b
+# so no rule, line number, offending text or ORDER moved. That is the same
+# claim A44 made by reading; this one is a command anyone can re-run.
+DIAG_SHA=3adfb4d91103a66d9a8ed8fdac19036179e427f86090f20aac1af216d6b35f30
 dgot="$(shasum -a 256 "$DIAGACC" | cut -d' ' -f1)"
 [ "$dgot" = "$DIAG_SHA" ] \
   || fail "the asserted diagnostics hash to $dgot, pinned $DIAG_SHA — a judge diagnostic changed its text, line number, or ORDER. Every row still passed its own anchored check, so this is the drift those checks cannot see. Re-pin DIAG_SHA in the SAME change and say why. (dump: $DIAGACC)"

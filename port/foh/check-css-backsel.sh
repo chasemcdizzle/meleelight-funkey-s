@@ -139,7 +139,25 @@ n="$(grep -cxF "$D35_CARRY" "$FOH/foh.c")" || true
   1) — T1 cannot target the release unambiguously"
 n="$(grep -cxF "$D35_REST" "$FOH/foh.c")" || true
 [ "$n" = 1 ] || grammar_die "foh.c has $n D35 rest-rehome lines (want exactly 1)
-  — T2 cannot target the re-home unambiguously"
+  — css_back no longer records where it re-homed the tokens"
+
+# A49/DEVIATION D46 MOVED WHAT T2 CAN ASSERT, and this is the disarm being
+# named rather than absorbed. D35's rest re-home used to be the mechanism
+# protecting the re-entry display: it pulled a leave-band token back off
+# upstream's second rest formula. D46 retired that formula outright — every
+# resting token is now drawn on its port's SELECTION, one rule, one line — so
+# DELETING the re-home no longer changes a single pixel, and a tooth aimed at
+# it would pass quietly and prove nothing. CONTEXT.md's rule applies: a tooth
+# asserts the OUTCOME protected, so T2 moves to the line that now carries it.
+#
+# The re-home statement is KEPT and still pinned above, because cssTokenRest
+# is the machine's record of HOW a token came to rest and css_back really does
+# re-home them: a record that still claimed "the leave-band drop put this
+# here" after a back-out would simply be false.
+D46_BASE='  const double base = (double)(foh_css_cell_x(c) + FOH_CSS_TOKEN_DX);'
+n="$(grep -cxF "$D46_BASE" "$FOH/foh.c")" || true
+[ "$n" = 1 ] || grammar_die "foh.c has $n resting-token base lines (want
+  exactly 1) — T2 cannot target the rest position unambiguously"
 # Both must live inside css_back, not somewhere else that happens to match.
 awk '/^static void css_back\(FohState \*s\) \{$/,/^\}$/' "$FOH/foh.c" \
   > "$BUILD/css_back.txt"
@@ -219,20 +237,21 @@ grep -qF "A: after walking right across the whole roster: both planes still read
   wedge — the tooth is failing for some other reason and proves nothing"; }
 echo "   T1: the leak reproduces the owner's falcon and fails (rc 1)"
 
-# --- [4] T2: the DISPLAY lie (D35's rest re-home deleted) --------------------
-# Leave the release in place — so no plane can move — and delete only the
-# re-home. The leave-band token then stays drawn one cell right of the pick,
-# which is the half the owner described as "puts the pin on top of them". ONLY
-# the token-cell assertion may fail; a selection failure here would mean the
-# copy differs from foh.c by more than this one line.
-echo "=== [4] T2: without the rest re-home, the token must come back mis-drawn"
-perturb tooth-noRehome "$D35_REST" \
-  '  ; // T2: pre-A43 — the rest slot is left wherever the last drop put it'
-grep -qF "B: on re-entry: P1's token rests on the cell of the character P1 picked (fox/2, got cell 3)" \
+# --- [4] T2: the DISPLAY lie (D46 reverted on the leave-band path) ----------
+# Leave the release in place — so no plane can move — and put upstream's
+# second rest formula back for the LEAVE-BAND slot only. The dropped token is
+# then drawn one whole cell right of the pick, which is the half the owner
+# described as "it doesn't choose that character either but puts the pin on
+# top of them". ONLY the token-cell assertion may fail; a selection failure
+# here would mean the copy differs from foh.c by more than this one line.
+echo "=== [4] T2: with the leave-band quirk back, the drop must mis-draw"
+perturb tooth-noRehome "$D46_BASE" \
+  '  const double base = s->cssTokenRest[k] == 1 ? (double)(foh_css_cell_x(0) + FOH_CSS_TOKEN_DX + FOH_CSS_TOKEN_LB_DX + FOH_CSS_TOKEN_LB_PITCH * c) : (double)(foh_css_cell_x(c) + FOH_CSS_TOKEN_DX); // T2: D46 reverted'
+grep -qF "B: the leave-band drop draws the token on the character P1 picked (cell 3, want fox/2" \
   "$BUILD/tooth-noRehome/out" \
   || { relay_lines < "$BUILD/tooth-noRehome/out"
-       fail "T2: the leave-band token did not come back drawn on falco's cell
-  — the tooth is failing for some other reason and proves nothing"; }
+       fail "T2: the leave-band drop did not land on falco's cell — the tooth
+  is failing for some other reason and proves nothing"; }
 grep -qE '^CSS BACK SELECT FAIL: .*both planes still read the pick' \
   "$BUILD/tooth-noRehome/out" \
   && { relay_lines < "$BUILD/tooth-noRehome/out"

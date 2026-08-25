@@ -7461,6 +7461,100 @@ states against what marth's WALLJUMP ECB actually does and justify the pick.
 occurrences in `anim_1_puff.bin` vs 1 for marth), so puff would walljump with no
 walljump pose unless an existing animation is reused too.
 
+## A49 — DONE 2026-08-24 (D45/D46). **CPU IS ON ALL FOUR PORTS. THE SELECTION PERSISTS. THE PIN COMES HOME.**
+
+**Ticket 1 — CPU on ports 3/4 (D40(b) RETIRED, not weakened).** The refusal
+was expressed in **seven** places and they came out together, because six of
+them were consequences of the seventh:
+
+| # | site | what it said | now |
+|---|---|---|---|
+| 1 | `foh.c` togglePort | `const int wrapAt = j < 2 ? 2 : 1;` | one cycle, `if (*t == 2) *t = -1;` for every port |
+| 2 | `foh.c` launch guard | `cpuTooHigh` clause | deleted; the guard is TWO conditions (port 0 HMN, >= 2 participants) |
+| 3 | `foh.c` knob-grab loop | `for (j = 0; j < 2; ...)` | `FOH_CSS_PORTS` — which is upstream's own `s < 4` (css.js:397) |
+| 4 | `foh.c` / `foh.h` CPU-level plane | two scalars `p1Difficulty` + `difficulty` | `cpuDifficulty[FOH_CSS_PORTS]` under the SAME anonymous-union overlay selChar/portType use — upstream's own `[3,3,3,3]` (main.js:109) |
+| 5 | `foh.c` level ev_sel | `k == 0 ? "p1difficulty" : "difficulty"` | per-PORT table `kCssDiffField[4]` (a ternary has room for two answers and there are four ports) |
+| 6 | `foh_render.c` | `k < 2 ? foh_css_knob_x(s, k) : 0.0` | `foh_css_knob_x(s, k)` |
+| 7 | `foh_launch_witness.c` | verdict table refused every CPU-above-port-1 cell | rows 4/5 uniformly `L`, row 3 refuses only its all-absent cell; **launch 11 -> 26, refuse 70 -> 55** |
+
+**THE DIFFICULTY KNOB NOW DOES SOMETHING FOR PORTS 2/3, and it is witnessed
+on the LAUNCH plane, not only in the widget.** `LAUNCH` and `BRIDGE-STATE`
+gained **`p3difficulty` / `p4difficulty`** (APPENDED, nothing renumbered).
+Without them a P3-CPU-at-level-1 match and a P3-CPU-at-level-4 match emit
+byte-identical launch records — CONTEXT.md's "Seam" exactly, each side green
+with nothing asserting the crossing. `p3type`/`p4type` widen from `(-1|0)` to
+p2type's own `(-1|0|1)` in both the judge and the normalizer.
+
+**ACCEPTED CONSEQUENCE, written at four sites rather than filed:** a 3- or
+4-player match with a CPU on port 2 or 3 is **playable but NOT
+checksum-verified** — the play path links the LIVE `ai.c` via
+`ml_sim_runai_live`, but `AIBRIDGE1` replays ONE CPU slot so no golden covers
+a second (**A48**). It is at `foh.c`'s launch guard, `foh_launch_witness.c`'s
+verdict table, `judge-domains.authored.txt`'s LAUNCH header and MENU-SPEC
+§2.7. It is deliberately NOT expressed as a narrower judge domain: a domain
+row that lies about what the screen can emit is how a judge goes vacuous.
+
+**Ticket 2(a) — DEVIATION D45, `MLFKPERSIST6`.** One appended
+`sel <c> <c> <c> <c>` row after the v5 `bind` block; 68 -> 69 lines; v1..v5
+all MIGRATE (a v5 file has no opinion about characters, so every port takes
+the fresh-install marth while every setting, both control stamps, all four
+bindings and all 50 target records carry forward). **The bump is proved by
+its own round trip**, not by inspection: witness leg [9] saves to disk,
+re-loads, asserts every v1..v5 plane survived, then BUILDS A GENUINE v5 FILE
+from the v6 bytes (splice out `sel`, restamp the header, recompute the
+SHA-256 seal) and requires the loader to migrate rather than reset it.
+
+**ONLY the SELECTION plane is stored, and the answer on port TYPES is NO —
+as a decision, not an omission.** Restoring types would boot the CSS already
+READY TO FIGHT off a configuration the player last saw in another session;
+upstream's fresh state is `playerType = [-1,-1,-1,-1]` with addPlayer arming
+port 0, so not persisting them is the FAITHFUL answer too; and since ticket 1
+made CPU reachable on ports 2/3, persisting types would make the *unverified*
+configuration a device's DEFAULT BOOT STATE. The character survives; arming a
+port stays an explicit act. Witness leg [9](iv) ASSERTS the boot state rather
+than leaving the choice as prose. Save point = **leaving the CSS by either
+exit**, through **one shared predicate `foh_is_save_point`** that both drivers
+now ask — A31 measured what two hand-synced copies of that condition cost.
+
+**Ticket 2(b) — DEVIATION D46, the family's third instance, and the
+instrument had been asserting the bug.** `foh_cssbacksel_witness.c` leg [B]
+carried, since A43, the line *"and that slot really does draw the token off
+the pick ... the defect's precondition, reproduced"* — the leave-band rest
+formula parking the pin one whole cell right of the selection. That WAS the
+ticket. `foh_css_token_pos` now states ONE rule for all three rest paths
+(re-homed from `cssChar[k]`, the token plane the hover arm writes in the same
+statement as `selChar[k]`), because the failure mode this screen keeps having
+is one of three agreeing formulas drifting. D41's clamp went with the
+retired formula — every base is `cell_x(c) + DX`, widest case 226 < 240.
+
+**TWO DISARMS FOUND AND NAMED rather than absorbed** (CONTEXT.md's "Tooth"):
+1. **`check-css-backsel.sh` T2 went vacuous.** It deleted D35's rest re-home
+   and required a mis-drawn pin; under D46 that deletion moves no pixel. The
+   tooth MOVED onto the line that now carries the outcome (the rest base,
+   perturbed back to upstream's leave-band formula for slot 1 only) and leg
+   [B]'s expectation flipped from asserting the defect to asserting the fix.
+2. **`check-hand.sh` leg [4]'s "6 distinct roster pairs" floor** fell to 5,
+   because D46 moved where released tokens rest and every later grab in the
+   sweep starts from a different pixel. Re-stated as what it is FOR and
+   strictly stronger: **all five roster cells must be selected**, exhaustive.
+
+`check-css-token-rest.sh`'s T1 was re-scoped (`rest == 2 ? k : c`) to stay
+about the endGame snap alone now that one line serves all three paths.
+
+**GREEN:** `CSS P34 CHECK OK (6 teeth)` · `CSS TOKEN REST CHECK OK` ·
+`CSS BACK SELECT CHECK OK` · `CSS BACK CHECK OK` · `HAND CHECK OK` ·
+`JUDGE REGRESSION OK` · `FOH FLOWS OK` · `CSS MODE CHECK OK` ·
+`MEXIT REENTRY OK`.
+
+**OWED (device legs, not run by this lane):** `check-device-foh.sh`,
+`check-device-persist.sh` (the v6 format's device twin — the on-device
+`mlfk-persist.dat` gains a line), `check-device-fullgame.sh`,
+`verify_m3.sh` / `verify_m4.sh`, `install-play-opk.sh` reinstall so the
+device build carries D45/D46 and the CPU ports.
+**Stale `m4-freeze-manifest.txt` rows (driver-only, batched, NOT touched):**
+`judge-foh-trace.js`, `normalize-foh-trace.js`, `check-device-foh.sh`,
+`check-foh-flows.sh`, and all 8 `flows/f0{1,2,3,5}*.{expect,bstate.expect}`.
+
 ### DRIVER NOTE — a stale comment of the same class that cost the grab button
 `port/foh/foh_persist.h:195` still reads `everyCharWallJump ... // DEAD, no sim
 readers`. **D20 made it live** (`port/sim/physics.c:400`). Same class as

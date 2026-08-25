@@ -2252,11 +2252,12 @@ foh_phase:;
         // to B-exit an unrelated screen — i.e. it silently vanished on
         // restart. foh_app.c already carries the three-screen form and says
         // exactly that in its own note; the product path never got it.
-        // Same class, one condition, both drivers now agree.
-        if ((strcmp(ev->from, "options-gameplay") == 0 ||
-             strcmp(ev->from, "options-audio") == 0 ||
-             strcmp(ev->from, "controls-keyboard") == 0) &&
-            strcmp(ev->cause, "b") == 0) {
+        // Same class, one condition, both drivers now agree — and as of A49
+        // that condition is literally ONE condition: foh_is_save_point
+        // (foh.h) is the shared predicate, so the two drivers can no longer
+        // disagree by editing. It also carries the CSS exit, which is where
+        // the persisted selection is written (DEVIATION D45).
+        if (foh_is_save_point(ev)) {
           foh_persist_collect(&g_persist, &foh);
           tdev_persist_save();
         }
@@ -2297,13 +2298,13 @@ foh_phase:;
           tr_line("LAUNCH %ld p1=%d p2=%d p2type=%d difficulty=%d stage=%d "
                   "turbo=%d lcancel=%d flashlcancel=%d walljump=%d "
                   "tapjump=%d,%d,%d,%d versus=%d p3=%d p4=%d p3type=%d "
-                  "p4type=%d",
+                  "p4type=%d p3difficulty=%d p4difficulty=%d",
                   t, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
                   foh.stageSel, foh.turbo, foh.lCancelType, foh.flashOnLCancel,
                   foh.everyCharWallJump, foh.tapJumpOff[0], foh.tapJumpOff[1],
                   foh.tapJumpOff[2], foh.tapJumpOff[3], foh.versusMode,
                   foh.selChar[2], foh.selChar[3], foh.portType[2],
-                  foh.portType[3]);
+                  foh.portType[3], foh.cpuDifficulty[2], foh.cpuDifficulty[3]);
         }
       }
     }
@@ -3160,11 +3161,16 @@ foh_phase:;
       uint64_t phantomBits;
       memcpy(&phantomBits, &G.sim.phantomThreshold, 8);
       // A44: ports 2/3 appended, read back from G like every other field
-      // here (foh_app.c's twin carries the argument).
+      // here (foh_app.c's twin carries the argument). A49 appends their CPU
+      // levels for the same reason, and this line is where it matters most:
+      // it is the only artifact that reads the launched configuration back
+      // out of the GameState, so a P3 CPU difficulty that never arrived
+      // would otherwise be invisible on both sides of the seam.
       if (fprintf(bf,
                   "BRIDGE-STATE p1=%d p2=%d p2type=%d difficulty=%d stage=%d "
                   "turbo=%d lcancel=%d tapjump=%d,%d,%d,%d "
-                  "phantom=%016" PRIx64 " p3=%d p4=%d p3type=%d p4type=%d\n",
+                  "phantom=%016" PRIx64 " p3=%d p4=%d p3type=%d p4type=%d "
+                  "p3difficulty=%d p4difficulty=%d\n",
                   (int)G.sim.characterSelections[0],
                   (int)G.sim.characterSelections[1], (int)G.sim.playerType[1],
                   (int)G.cpuDifficulty[1], (int)G.stageSelect,
@@ -3173,7 +3179,8 @@ foh_phase:;
                   (int)G.sim.tapJumpOff[2], (int)G.sim.tapJumpOff[3],
                   phantomBits, (int)G.sim.characterSelections[2],
                   (int)G.sim.characterSelections[3], (int)G.sim.playerType[2],
-                  (int)G.sim.playerType[3]) < 0) {
+                  (int)G.sim.playerType[3], (int)G.cpuDifficulty[2],
+                  (int)G.cpuDifficulty[3]) < 0) {
         sim_fatal("--bstate-out write failed");
       }
       if (fclose(bf) != 0) sim_fatal("--bstate-out close/flush failed");
