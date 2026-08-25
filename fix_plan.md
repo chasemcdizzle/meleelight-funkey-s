@@ -6891,3 +6891,75 @@ than asserted.
 **Gates:** `STAGECODE MATCH` (re-verified on merged bytes) · `SIM CONFORMS` 8/8
 · nothing under `oracle/` written. **New TU deliberately NOT added to the frozen
 build list — T2 wires it in.**
+
+## A46 — DONE 2026-08-24. FOUR-PORT MATCH SETUP + A 4-PORT GOLDEN. **AND IT CAUGHT ITSELF ABOUT TO BREAK THE M4 GATE.**
+
+**THE ORACLE ANSWER: YES, AND NO `oracle/` BYTE WAS TOUCHED** (driver-verified:
+`git diff HEAD~1 HEAD -- oracle/` is empty). The driver's correction to A44 was
+right, and the lane went further: **`pagelib.js`'s `__serializeState` /
+`__runFrames` / `__coverage` ALL loop `i < 4`** too. **The ONLY two-port thing
+under `oracle/` is a CALLER** — `run.js:152-157`'s literal `[p1,p2,null,null]`.
+Solved with **the registered-fallback pattern already in-tree**
+(`run-target.js`'s precedent): new `port/goldens-m4/run-4p.js` reuses the oracle
+harness bytes **verbatim by path** and changes only `cfg.players`.
+
+**The widening:** `sim_setup_match_ports(g, const SimPortCfg ports[4], stageId)`
+is **upstream's patch verbatim** — one `for (i = 0; i < 4)` with its `if (pc)` /
+`else` arms. The old `sim_setup_match` **keeps its signature** and becomes a
+4-line wrapper, so `gfx_app.c`, `gfx_replay.c` and every other caller are
+**literally untouched**, and `sim_main.c` still routes the 8 goldens **through
+the wrapper** so they exercise it. **`startGame`'s body was ALREADY 4-port**
+(`for (n=0;n<4)` -> `initializePlayers` -> `drawVfx "entrance"` in port order,
+then `"start"`), so spawn positions and entrance-vfx ORDER are upstream's,
+untouched — **which is exactly the risk A44's lane flagged about doing this
+outside the engine.**
+
+**Verified by the driver on merged bytes:** `SIM CONFORMS` 8/8 ·
+`FOUR PORT OK` · `VERSUS ENDLESS OK` · `STAGECODE MATCH` (+ the lane's
+`AI LIVE CONFORMS`).
+**4-port witness `q01`** (fox/falco/puff/marth, battlefield): two fresh browser
+runs `IDENTICAL`, `rngCalls=280`, `QUALITY OK` with real KOs and
+`stocks=[2,3,4,3]`, and the C replay judged by the **UNCHANGED**
+`verify-stream.js`: `STREAM MATCH 3600/3600 frames exact`. Frame-1 envelope
+carries `p0..p3`; ports 2/3 sit at upstream's own `startingPoint[2]/[3]`.
+Three teeth, each biting alone.
+
+### ⚠ THE NEAR-MISS THAT RESHAPED THE DELIVERABLE — the best catch this session
+The lane **first added the 4-port golden to `port/goldens-m4/manifest.json` and
+had it GREEN.** Then it measured the CONSUMERS and **reverted it**, for two
+independent reasons **either of which is decisive**:
+1. **`check-device-fullgame.sh:707,836` enumerates every `^[ms][0-9]{2}$` row of
+   that manifest and replays it TWO-PORT on the device** — a 4-port row there
+   **breaks the M4 gate**.
+2. **`m4-freeze-manifest.txt:424` PINS `manifest.json`'s bytes as
+   `reviewed-go`**, and `verify_m4.sh` checks that pin FIRST. **Re-pinning is a
+   reviewed change, not a lane's.**
+So the 4-port family lives in a NEW `manifest-4p.json` (**the
+`manifest-target.json` precedent applied again**), and `manifest.json` is
+**byte-identical — driver re-verified `f10e0001…` before and after the merge.**
+**A green check is not evidence that a change is safe; the CONSUMERS have to be
+measured.** That is the same class as A42's seam, one layer up: the artifact was
+valid, and the thing that reads it was not consulted.
+
+`freeze-stream-m4.js` gained a **two-entry `REGISTRIES` table** — row schema and
+id grammar chosen by **WHICH REGISTRY, never guessed from the row's shape**, and
+the grammars (`^[ms][0-9]{2}$` vs `^q[0-9]{2}$`) are **disjoint so the shared
+golden home cannot collide.** Regression-proved by re-recording `s01` and `m01`
+through the modified `record-m4.sh`: both print
+`unchanged (byte-identical re-freeze)`.
+
+### OPEN / OWED
+- **D37 NOT consumed — nothing here is a deviation.** `harnessSetupMatch` and
+  `startGame` are 4-port upstream; this made a ported-but-NARROWED call site
+  match them. **D37 stays free.**
+- **`q01` is deliberately INVISIBLE to `verify_m4.sh` / `check-device-fullgame.sh`.**
+  Wiring the 4-port family into the M4 device gate needs a
+  `check-device-fullgame.sh` arg-list widening **plus** a re-pin of
+  `m4-freeze-manifest.txt` — **both reviewed changes, and the natural follow-up
+  ticket.**
+- **CPU on ports 2/3 is REFUSED, not stubbed** (`sim_main.c`, `record-m4.sh`,
+  the freezer): AIBRIDGE1 is one recorded stream for one CPU slot, so there is
+  no C-side replay for it today. **Honest refusal over a silent wrong answer.**
+- **LANE M's A44 FOLLOW-UP IS NOW UNBLOCKED**: `sim_setup_match_ports` is the
+  entry point a 4-port FOH launch line needs, and A44's committed site inventory
+  is the map.
