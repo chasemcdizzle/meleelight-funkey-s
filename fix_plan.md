@@ -7225,3 +7225,104 @@ forever.** `/tmp` is tmpfs while `/mnt` is the SD card, which is the whole
 reason the marker outlived the test. Two sibling files have the same
 outlive-the-test property and are worth a grep: `/mnt/last_opk`,
 `/run/rebooting`.
+
+## LANE P — 2026-08-24. **A34 CLOSED, A26 ANSWERED, D44 CRASH-SAFETY LANDED.**
+## And it corrected the driver TWICE.
+
+### ⚠ CORRECTION 1 — MY CRASH-SAFE RULE WAS LITERALLY UNIMPLEMENTABLE
+I made it binding that *"the marker must be removed BEFORE the test binary
+launches, never after."* **The lane measured that this cannot work:**
+`/usr/local/sbin/frontend:74-122` **re-reads the marker at the TOP of every loop
+pass and sleeps only 5 s** — so removing it before launch brings gmenu2x back
+onto the framebuffer within 5 s, **fighting the test for display and input.**
+Two other obvious fixes are also unavailable, both measured: `/mnt` is **vfat**
+(no symlink to a tmpfs marker), and `/run/rebooting` — the loop's other,
+genuinely-tmpfs park condition — makes the loop **`break`** (`:120-122`), a
+**one-way park that removal does not undo.**
+
+**THE ACTUAL FIX IS AT THE OTHER END, AND IT IS BETTER THAN WHAT I ASKED FOR.**
+`rig_boot_unpark_install()` appends one idempotent line to `/etc/rc.local`,
+which `S03rclocal` runs from `rcS` **BEFORE the login shell ever starts
+`frontend init`**. **No SD marker can survive a boot now — whoever wrote it,
+whenever they died.** Called from `rig_inherited_restore` step 0 and **FAILS
+CLOSED**: a run that cannot install *and verify* it **refuses to continue**
+rather than parking a device it cannot guarantee recoverable.
+**Why the class is impossible rather than unlikely: it no longer depends on any
+script reaching its cleanup.** The worst a power cut can now produce is
+*"power it back on"*.
+**Proven both directions on the device:** line present -> marker set + reboot ->
+`MARKER=GONE, GMENU running`; **tooth** (line cut) -> `MARKER=PRESENT,
+GMENU=NONE` — **the owner's "bricked" splash reproduced, then undone.**
+
+### ⚠ CORRECTION 2 — MY `frontend set none` SUGGESTION, MEASURED AND REJECTED
+I relayed the OS's official verb as the better path. **Three measured reasons it
+is strictly WORSE for this class:**
+1. `$HOME` is relocated to `/mnt/FunKey` (`/root/.profile:51`) and
+   `/mnt/FunKey/.frontend` **holds a real owner choice (`gmenu2x`)**. `set none`
+   **OVERWRITES it** — a SECOND persistent SD file the boot-unpark line does not
+   clear. And the unpark verb `set gmenu2x` **hardcodes a frontend the owner may
+   not use.**
+2. `dsh` runs a **non-login** shell where `HOME=/` and `/` is **ro** — measured:
+   `frontend get` dies with `can't create //.frontend: Read-only file system`
+   and **falls back to the default `retrofe`, which is not what is running**, so
+   `set` would **pkill the wrong name** after already touching the marker.
+3. It buys nothing: `set_frontend` is `touch`/`rm -f` plus a pkill the rigs
+   already do.
+**Sibling files clean** — nothing in `port/` writes `/mnt/last_opk` or
+`/run/rebooting`.
+
+### A34 — ROOT CAUSE: **`powerdown handle` IS NOT A SHUTDOWN VERB. IT IS CANCEL.**
+`/usr/local/sbin/powerdown` has three: `schedule <delay>` (SIGUSR1 the recorded
+app, wait, power down), **`handle` = `pkill -f "powerdown schedule"` — CANCEL a
+pending shutdown so the app can take it over** — and `now` (the real one).
+`foh_pause.c:570` called **`handle`**; with nothing pending it pkills nothing,
+**and busybox `pkill` still exits 0** (measured), so **even the `!= 0` degrade
+never fired.** The menu just closed. **That is the owner's symptom exactly.**
+**BOTH LEADS IN MY ROW WERE FALSE:** the OPK runs as **uid 0** and inherits a
+PATH containing `/usr/local/sbin` (read from the live process environ).
+**Neither privilege nor PATH was ever involved.** One call site — no class.
+**Fixed to `powerdown now`, and the done-check ran END TO END on hardware:**
+OPK rebuilt and installed, launched from the frontend grid via `fk_input`,
+drove MENU -> 3x down -> A, **and the device powered off** (adb gone, still down
+80 s later — a poweroff, not a reboot).
+
+### A26 — ANSWERED **WITHOUT** THE OWNER, by measuring instead of logging
+**No probe was needed — the mechanism is directly observable.** Chain: lid ->
+`fkgpiod` (built-in `KEY_POWER`/`KEY_SLEEP` -> `powerdown schedule 0.1`) ->
+`kill -USR1 $(pid print)` -> **0.1 s** -> `powerdown now`. `pid print` reads
+`/var/run/funkey.pid`, recorded by `frontend:106`.
+**Measured while a game ran:** gmenu2x **execs** into `opkrun` -> the launcher,
+preserving that pid. For sm64 it is the game binary. **For US it is
+`/bin/sh mlfk-foh.sh` — the LAUNCHER SHELL — with `foh_device` as its child**,
+because `mlfk-foh.sh` runs the binary in the foreground instead of `exec`ing it.
+Sending exactly what `powerdown schedule` sends:
+```
+BEFORE:      launcher=ALIVE  app=ALIVE
+kill -USR1 <launcher>
+AFTER_USR1:  launcher=DEAD   app=ALIVE   (orphaned; funkey.pid erased)
+```
+**ANSWER: YES, a signal arrives — SIGUSR1 — but it lands on the LAUNCHER, not
+the app, and its default disposition is terminate. World 2, so the cheap
+`foh_persist` route is OPEN. No owner action needed to decide the shape.**
+**Design constraint VERIFIED rather than assumed: POSIX `sh` DEFERS TRAPS until
+the foreground child completes** (measured: fired 4 s late, exactly when
+`sleep 4` ended). **A plain `trap … USR1` in `mlfk-foh.sh` would fire long after
+the 0.1 s grace expires.** The fix must background `foh_device` and `wait` — the
+platform's own `native_launch.sh` idiom — or handle it in C with the launcher
+forwarding. **And the log must go to `/mnt`, not tmpfs: hibernate powers the
+device OFF and `/tmp` is wiped.**
+
+### OWED
+- **`m4-freeze-manifest.txt:416` is STALE** — `riglib.sh` ->
+  `5e9a8f302aa91eb5449aa29052c3b7a8b7b6904954f7b2b77aa6350adfbc8b26`. **The
+  lane correctly did not touch it; neither did the driver this time.** Batched
+  §A-par.5 pass, when M4 resumes.
+- **ONE-TIME DEVICE MODIFICATION, on the record:** `/etc/rc.local` now carries
+  `rm -f /mnt/disable_frontend || :   # MLFK-BOOT-UNPARK (D44)`. Idempotent,
+  re-verified by any rig run, **and it cannot override a deliberate
+  `frontend set none`** (that also writes `.frontend`, read independently).
+- **A26 implementation is a SEPARATE ticket** (menu-level resume only;
+  mid-match snapshotting is its own serialization surface). **Owner
+  confirmation still nice-to-have, not blocking:** launch, close the lid,
+  reopen — to confirm the lid really routes through `powerdown schedule` as
+  `fkgpiod`'s table says.
