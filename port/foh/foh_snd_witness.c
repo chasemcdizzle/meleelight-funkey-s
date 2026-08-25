@@ -208,8 +208,22 @@ static const SndCase kCases[] = {
     // port/foh/check-credits.sh's witness rather than added here: this
     // table's length is pinned by check-foh-flows.sh's exact verdict line
     // (`cases=24`), which A7 does not get to move.
-    // --- refusals: `deny`, exactly once, and the screen does NOT move
-    {"top-A-targetbuilder", FOH_MENU_TOP, 2, "a", "deny", "menu-top", 2},
+    // A45 T4: the TARGET BUILDER row MOVES SIDES, exactly as the CREDITS row
+    // did above and the Controls row did before it — it was the last `deny`
+    // in this table and it now opens a real screen (menu.js:87-90's
+    // changeGamemode(4)). ONE menuForward, like every other changeGamemode
+    // leave in that switch: upstream's SECOND sound is emitted only by the
+    // local `menuMove` boolean, which only a menuMODE change sets, and this
+    // arm changes the gameMode instead. menuSelected is deliberately left on
+    // row 2, which is what puts the cursor back on TARGET BUILDER when the
+    // builder exits (targetbuilder.js:832-835 changes only the gameMode).
+    //
+    // THE `deny` BLOCK IS NOW EMPTY at FOH_NETPLAY 0 and the comment that
+    // headed it is gone with it. The remaining refusals in this build are
+    // `random` (sss) and `portconfig` (css); neither is a menu-top row, so
+    // neither belongs in this table.
+    {"top-A-targetbuilder", FOH_MENU_TOP, 2, "a", "menuForward",
+     "target-builder", 2},
     // --- cursor arms: ONE menuSelect (menu.js:236 via the up/down arms)
     {"top-up", FOH_MENU_TOP, 0, "up", "menuSelect", "menu-top", 3},
     {"top-down", FOH_MENU_TOP, 0, "down", "menuSelect", "menu-top", 1},

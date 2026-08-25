@@ -5,6 +5,7 @@
 // construction: pure function of FohState, no RNG, no clock — the
 // check's shot byte-stability x2 depends on it.
 #include "foh.h"
+#include "foh_tbuild.h" // A45 T4: the builder view snapshot + seam
 
 #include "../gfx/ctl_style.h" // C30(c): the Controls screen's two cells
 #include "foh_ctl_labels.h" // the Controls screen's action-label table
@@ -2398,6 +2399,11 @@ static void render_tss(const FohState *s, Raster *rz) {
   // :201 `rgba(255,255,255,0.6)` over the black slot body == 153 opaque.
   // CONSTANT: upstream never brightens a label on hover, only its border.
   const RastCol slotTx = {153, 153, 153, 256};
+  // A45 T3: an empty/refused custom slot, dimmer than a real one. Same
+  // family as the label ink, half its lift — upstream has no equivalent
+  // because upstream never draws a slot it has no stage for (:288's loop
+  // runs to customTargetStages.length). The port draws all ten, always.
+  const RastCol slotEmpty = {84, 84, 84, 256};
   // 2x5 grid of authored target stages (ids 0..9 == tstage ids), upstream's
   // own col = floor(j/5) / row = j%5 mapping. A25(c): the rects come from
   // foh_tss_slots(), the same table the hand is hit-tested against, so the
@@ -2410,10 +2416,23 @@ static void render_tss(const FohState *s, Raster *rz) {
     if (sel) rrect(rz, x - 2, y - 2, slot[k].w + 4, slot[k].h + 4, 0, hot);
     rrect(rz, x - 1, y - 1, slot[k].w + 2, slot[k].h + 2, 0, sel ? hot : idle);
     fill_rect(rz, x, y, slot[k].w, slot[k].h, sel ? slotSel : slotBg);
-    char label[10] = "TARGET ";
+    // A45 T3 — the same ten rects carry whichever family the page selects.
+    // Page 0 is upstream's authored "Target N" (:199-202); page 1 is its
+    // "Custom N" (:288-294), which upstream draws in a THIRD and FOURTH
+    // column of its 1200 px canvas. 240 px holds two columns, so they take
+    // turns instead (foh.h's tssPage note).
+    char label[12] = "TARGET ";
+    if (s->tssPage) memcpy(label, "CUSTOM ", 7);
     if (k == 9) { label[7] = '1'; label[8] = '0'; label[9] = 0; }
     else { label[7] = (char)('1' + k); label[8] = 0; }
-    foh_text(rz, x + 6, y + 6, 1, label, slotTx);
+    // An EMPTY or refused custom slot is drawn DIM and says so. D43's whole
+    // point is that slot i stays in place i whether or not it loaded, so the
+    // player must be able to see which of the ten are real — a compacted
+    // list would have hidden this by shifting, which is the behaviour the
+    // owner ruled against.
+    const int dead = s->tssPage && !s->tssSlotPresent[k];
+    foh_text(rz, x + 6, y + 6, 1, label, dead ? slotEmpty : slotTx);
+    if (dead) foh_text(rz, x + 58, y + 6, 1, "--", slotEmpty);
   }
   // the refusing "+ Add Code" slot (builder plane; foh.h note). Upstream
   // puts it at the head of the CUSTOM column (:206, i == 10 -> x = 635);
@@ -2430,7 +2449,26 @@ static void render_tss(const FohState *s, Raster *rz) {
     if (sel) rrect(rz, x - 2, y - 2, w + 4, h + 3, 0, hot);
     rrect(rz, x - 1, y - 1, w + 2, h + 2, 0, sel ? hot : idle);
     fill_rect(rz, x, y, w, h, sel ? slotSel : slotBg);
-    foh_text(rz, x + 6, y + 5, 1, "+ ADD CODE", slotTx);
+    // A45 T3 — this slot refused until now ("+ ADD CODE": upstream pastes a
+    // ~1 KB share code into an HTML textarea, :132-136, which this device
+    // cannot do — D42 replaced that transport with a file on the SD card).
+    // It is the page flip, and it says which page it goes to.
+    foh_text(rz, x + 6, y + 5, 1,
+             s->tssPage ? "TARGET STAGES" : "CUSTOM STAGES", slotTx);
+  }
+  // A45 T3 — the hovered CUSTOM slot's status, on screen. A slot that will
+  // not play says WHY ("empty", "SUM mismatch", "too many targets"...) in
+  // the place the player is already looking, rather than answering A with a
+  // `deny` he cannot hear. That failure mode is the whole reason this ticket
+  // exists, so it is not repeated inside it.
+  if (s->tssPage && s->tssCursor >= 0 && s->tssCursor < FOH_TB_SLOT_CACHE) {
+    const char *why = s->tssSlotPresent[s->tssCursor]
+                          ? "A  PLAY"
+                          : s->tssSlotReason[s->tssCursor];
+    if (why) {
+      const RastCol c = s->tssSlotPresent[s->tssCursor] ? kText : kDim;
+      foh_text(rz, 8, 164, 1, why, c);
+    }
   }
   // the character plate (:210-241): a rounded gradient tile with a chevron
   // on each side. Upstream stacks its chevrons vertically; ours point along
@@ -2527,6 +2565,191 @@ static void render_tmatch(Raster *rz) {
 // property bg_begin/bg_end already rely on to serve frame 1 and frame N the
 // same bytes. Order matters — the menu pass is LAST because it draws no
 // radial, so the memo is left holding the bloom the title redraws every frame.
+// --- A45 T4: the TARGET BUILDER --------------------------------------------
+//
+// Upstream's renderTargetBuilder (targetbuilder.js:974-1451) is ~480 lines on
+// a 1200x750 canvas, most of it a 10-icon toolbar and three positional
+// toasts. The design spike cut both by measurement: ten icons across 116
+// device px is 11.6 px each, below the legibility floor A32/A25a were filed
+// about. What is drawn here is the part that carries state — the stage, the
+// crosshair, the tool name, and the status line.
+//
+// PROJECTION. Upstream's world -> canvas is `x*scale + 600`, `-y*scale + 375`
+// (:178). The device raster is 240x240, and 1200/5 == 240, so the canvas maps
+// at exactly 1/5 with the 150-tall result centred: sx = (x*scale + 600)/5,
+// sy = (-y*scale + 375)/5 + TB_DY. One divisor, no second projection to keep
+// in sync with the hit tests — the crosshair's clamp is done in WORLD units
+// upstream and stays there (foh_tbuild.c's crosshair_step).
+#define TB_DY 45
+static int tb_sx(double wx, double scale) {
+  return (int)((wx * scale + 600.0) / 5.0);
+}
+static int tb_sy(double wy, double scale) {
+  return (int)((wy * -scale + 375.0) / 5.0) + TB_DY;
+}
+
+// Bresenham. The surfaces are not axis-aligned in general (a loaded stage can
+// carry any polygon edge), and fill_rect cannot draw a slope.
+static void tb_line(Raster *rz, int x0, int y0, int x1, int y1, RastCol c) {
+  int dx = x1 - x0, dy = y1 - y0;
+  const int sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1;
+  if (dx < 0) dx = -dx;
+  if (dy < 0) dy = -dy;
+  int err = dx - dy;
+  for (;;) {
+    if (x0 >= 0 && x0 < RAST_W && y0 >= 0 && y0 < RAST_H) {
+      px8_over(rz, x0, y0, c, c.a256);
+    }
+    if (x0 == x1 && y0 == y1) break;
+    const int e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; x0 += sx; }
+    if (e2 < dx) { err += dx; y0 += sy; }
+  }
+}
+
+static const char *const kTbTool[FOH_TB_TOOLS] = {"TARGET", "MOVE", "DELETE"};
+static const char *const kTbPause[FOH_TB_PAUSE_ROWS] = {"LOAD", "SAVE",
+                                                        "DELETE", "QUIT"};
+static const int kTbGridPx[5] = {80, 40, 20, 10, 0};
+
+static void render_tbuild(const FohState *s, Raster *rz) {
+  const RastCol white = {255, 255, 255, 256};
+  {
+    const RastCol b0 = {66, 42, 6, 256}, b1 = {26, 2, 2, 256};
+    rrect_v(rz, 0, 0, RAST_W, RAST_H, 0, b0, b1); // target-select's ramp
+  }
+  header(rz, "TARGET BUILDER");
+
+  // THE VISIBLE REFUSAL. A build without foh_tbuild.c linked still reaches
+  // this screen; it says so, in words, instead of being a menu row that
+  // appears to do nothing — the exact defect this ticket was filed about.
+  if (!foh_tbuild_ops) {
+    text_center(rz, 108, 1, "TARGET BUILDER", kText);
+    text_center(rz, 120, 1, "UNAVAILABLE IN THIS BUILD", kDim);
+    text_center(rz, 140, 1, "B  BACK", kDim);
+    return;
+  }
+
+  static FohTbView v; // ~2 KB — static, not on the render stack
+  foh_tbuild_ops->view(s, &v);
+
+  // the grid, when one is armed (targetbuilder.js:80's gridSizes; index 4 is
+  // free movement and draws nothing). Upstream's grid is in CANVAS units and
+  // phased by `600 % gridSize` / `375 % gridSize` — the same phase the snap
+  // uses, so a snapped crosshair lands ON a drawn line rather than near one.
+  if (s->tbGrid < 4) {
+    const RastCol g = {58, 44, 30, 256};
+    const int gp = kTbGridPx[s->tbGrid];
+    for (int cx = 600 % gp; cx < 1200; cx += gp) {
+      const int x = cx / 5;
+      for (int y = TB_DY; y < TB_DY + 150; y += 2) px8_over(rz, x, y, g, g.a256);
+    }
+    for (int cy = 375 % gp; cy < 750; cy += gp) {
+      const int y = cy / 5 + TB_DY;
+      for (int x = 0; x < RAST_W; x += 2) px8_over(rz, x, y, g, g.a256);
+    }
+  }
+  // the blastzone edge of the drawn area, so "off the stage" is visible
+  rrect(rz, 0, TB_DY, RAST_W, 150, 0, (RastCol){90, 80, 60, 256});
+
+  // collision surfaces (T4 edits none of them — D51's floor, or the loaded
+  // stage's own geometry)
+  for (int i = 0; i < v.nLine; i++) {
+    tb_line(rz, tb_sx(v.lx0[i], v.scale), tb_sy(v.ly0[i], v.scale),
+            tb_sx(v.lx1[i], v.scale), tb_sy(v.ly1[i], v.scale), white);
+  }
+  // starting points — hollow, so they cannot be mistaken for targets
+  for (int i = 0; i < v.nSp; i++) {
+    const int x = tb_sx(v.spx[i], v.scale), y = tb_sy(v.spy[i], v.scale);
+    const int hov = s->tbHover == FOH_TB_SP + i;
+    rrect(rz, x - 2, y - 3, 5, 7, 0, hov ? kAccent : kDim);
+  }
+  // targets
+  for (int i = 0; i < v.nTarget; i++) {
+    const int x = tb_sx(v.tx[i], v.scale), y = tb_sy(v.ty[i], v.scale);
+    const int hov = s->tbHover == i;
+    // DELETE tints its hover red, the way upstream's red X does (:1416-1432)
+    const RastCol c = !hov ? (RastCol){232, 108, 64, 256}
+                     : s->tbTool == FOH_TB_TOOL_DELETE
+                         ? (RastCol){236, 60, 60, 256}
+                         : kAccent;
+    fill_rect(rz, x - 2, y - 2, 5, 5, c);
+  }
+  // the crosshair: two bars, drawn last so it is never hidden by a target
+  {
+    const int x = tb_sx(s->tbX, v.scale), y = tb_sy(s->tbY, v.scale);
+    fill_rect(rz, x - 4, y, 9, 1, white);
+    fill_rect(rz, x, y - 4, 1, 9, white);
+  }
+
+  // the tool name — upstream's own toolbar replacement (the spike's cut:
+  // "replace [the 10 icons] with one centred tool name plus the existing
+  // 120-frame toast", which upstream already draws at :1150-1159).
+  {
+    char line[48];
+    snprintf(line, sizeof line, "%s   GRID %d", kTbTool[s->tbTool],
+             kTbGridPx[s->tbGrid]);
+    if (s->tbGrid == 4) {
+      snprintf(line, sizeof line, "%s   GRID OFF", kTbTool[s->tbTool]);
+    }
+    foh_text(rz, 8, 26, 1, line, s->tbToolTimer > 0 ? kAccent : kText);
+  }
+  {
+    char sl[32];
+    if (s->tbSlot >= 0) {
+      snprintf(sl, sizeof sl, "CUSTOM %d", s->tbSlot + 1);
+    } else {
+      snprintf(sl, sizeof sl, "UNSAVED");
+    }
+    foh_text(rz, RAST_W - 8 - foh_text_width(sl, 1), 26, 1, sl, kDim);
+  }
+  foh_text(rz, 8, 200, 1, "L R TOOL   Y GRID   X FINE", kDim);
+  foh_text(rz, 8, 212, 1, "START MENU   B BACK", kDim);
+
+  // THE STATUS LINE. Every refusal in this screen lands here as words.
+  if (s->tbMsgTimer > 0 && s->tbMsg) {
+    fill_rect(rz, 0, 224, RAST_W, 14, (RastCol){0, 0, 0, 200});
+    text_center(rz, 226, 1, s->tbMsg, kAccent);
+  }
+
+  if (!s->tbPaused) return;
+
+  // --- the pause menu (targetbuilder.js:780-844) ----------------------------
+  fill_rect(rz, 0, 0, RAST_W, RAST_H, (RastCol){0, 0, 0, 190});
+  if (s->tbPane == FOH_TB_PANE_NONE) {
+    text_center(rz, 60, 1, "PAUSED", kDim);
+    for (int r = 0; r < FOH_TB_PAUSE_ROWS; r++) {
+      const int y = 84 + r * 22;
+      const int sel = r == s->tbPauseRow;
+      if (sel) rrect(rz, 56, y - 4, 128, 18, 0, kAccent);
+      text_center(rz, y, 1, kTbPause[r], sel ? kAccent : kText);
+    }
+    return;
+  }
+  // the slot list. TEN ROWS, ALWAYS — D43: slot i is drawn in position i
+  // whether it holds a stage, is empty, or refused, and its reason is shown
+  // beside it. Nothing is compacted and nothing shifts, which is what makes
+  // "Custom 4" mean the same stage it meant a minute ago.
+  {
+    const char *title = s->tbPane == FOH_TB_PANE_LOAD    ? "LOAD SLOT"
+                        : s->tbPane == FOH_TB_PANE_SAVE  ? "SAVE TO SLOT"
+                                                         : "DELETE SLOT";
+    text_center(rz, 26, 1, title, kText);
+    for (int i = 0; i < FOH_TB_SLOTS; i++) {
+      const int y = 44 + i * 17;
+      const int sel = i == s->tbPaneRow;
+      if (sel) rrect(rz, 6, y - 3, RAST_W - 12, 15, 0, kAccent);
+      char name[16];
+      snprintf(name, sizeof name, "CUSTOM %d", i + 1);
+      foh_text(rz, 12, y, 1, name, sel ? kAccent : kText);
+      const char *st = v.present[i] ? "STAGE" : (v.reason[i] ? v.reason[i] : "empty");
+      foh_text(rz, RAST_W - 12 - foh_text_width(st, 1), y, 1, st,
+               v.present[i] ? kDim : kDim);
+    }
+    foh_text(rz, 8, 224, 1, "A CONFIRM   B BACK", kDim);
+  }
+}
+
 void foh_render_warm(Raster *rz) {
   FohState w;
   foh_init(&w);
@@ -2558,6 +2781,7 @@ void foh_render(const FohState *s, Raster *rz) {
     case FOH_CREDITS: render_credits(s, rz); break;
     case FOH_MATCH: render_match(rz); break;
     case FOH_TSS: render_tss(s, rz); break;
+    case FOH_TBUILD: render_tbuild(s, rz); break;
     case FOH_TMATCH: render_tmatch(rz); break;
     default: gfx_fatal("foh_render: invalid screen");
   }

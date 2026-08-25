@@ -20,7 +20,15 @@
 
 #include <string.h>
 
+#include "foh_tbuild.h" // A45 T4: the builder engine seam (may be unlinked)
+
 // Upstream menuMode constants (menu.js:44-47) mapped onto FOH screens.
+// A45 T4 — the target builder's engine seam. DEFINED here, in the TU every
+// build already links, so foh.c can READ it without depending on the engine:
+// NULL means foh_tbuild.c was not linked, and render_tbuild draws the
+// unavailable notice instead. foh_tbuild.h explains why it is a pointer.
+const FohTbuildOps *foh_tbuild_ops = 0;
+
 static const int kMenuCount[FOH_SCREEN_COUNT] = {
     // menuCount = [4, 4, 4, 2] (menu.js:31), indexed here by screen
     [FOH_MENU_TOP] = 4,
@@ -236,6 +244,7 @@ const char *foh_screen_token(FohScreen sc) {
     case FOH_MATCH: return "match";
     case FOH_TSS: return "target-select";
     case FOH_TMATCH: return "target-match";
+    case FOH_TBUILD: return "target-builder";
     default: gfx_fatal("foh: screen token for an invalid screen");
   }
 }
@@ -347,6 +356,11 @@ static void snd_push(FohState *s, const char *name) {
   s->snd[s->nsnd++] = name;
 }
 
+// The same push, reachable from foh_tbuild.c (A45 T4). It is a WRAPPER, not
+// a second implementation: the overflow guard has exactly one body, so the
+// builder cannot overflow the queue by a route this file does not police.
+void foh_snd_push(FohState *s, const char *name) { snd_push(s, name); }
+
 static void ev_trans(FohState *s, FohScreen from, FohScreen to,
                      const char *cause) {
   FohEvent e;
@@ -436,8 +450,22 @@ static void step_menu(FohState *s, const PlatformInput *in,
           snd_push(s, "menuForward"); // menu.js:70
           ev_trans(s, sc, FOH_TSS, "a"); // changeGamemode(7), menu.js:84
         } else if (s->menuSelected == 2) {
-          snd_push(s, "deny");
-          ev_refused(s, "targetbuilder"); // conventions scope exclusion
+          // A45 T4 — TARGETBUILDER (menu.js:87-90): `setEditingStage(-1);
+          // setTargetBuilder(i); changeGamemode(4)`. This row REFUSED until
+          // now (`deny` + ev_refused "targetbuilder"), which is the defect
+          // the owner filed as *"nothing happened"*. It opens the editor.
+          //
+          // slot -1 == upstream's setEditingStage(-1): a document with no
+          // slot yet. Note that upstream does NOT reset stageTemp here, so a
+          // second visit keeps what you were editing — module lifetime,
+          // carried verbatim (foh_tbuild.c's tb_enter).
+          //
+          // menuSelected is deliberately left alone, so the builder's exit
+          // lands back on the TARGET BUILDER row, like every other
+          // changeGamemode leave in this switch.
+          if (foh_tbuild_ops) foh_tbuild_ops->enter(s, -1);
+          snd_push(s, "menuForward"); // menu.js:70
+          ev_trans(s, sc, FOH_TBUILD, "a"); // changeGamemode(4), :90
         } else {
           s->menuSelected = 0; // AUDIOOPTIONS (menu.js:96)
           snd_push(s, "menuForward"); // menu.js:70
@@ -1263,6 +1291,24 @@ static void step_sss(FohState *s, const PlatformInput *in,
 
 // target-select (upstream stages/targetselect.js tssControls; the
 // rewrite deltas + per-edge citations live in foh.h).
+// A45 T3 — refresh the custom-slot presence cache. Called on entry to
+// target-select and on every page flip, never per frame: one scan opens ten
+// files, and the set can only change by leaving this screen (the builder is
+// the only writer).
+//
+// D43 — BY INDEX. Slot i is reported in position i whether it is present,
+// empty or corrupt; nothing is compacted, nothing shifts up. That is the
+// owner's ruling made structural: there is no length here to be off by one.
+void foh_tss_refresh_slots(FohState *s) {
+  for (int i = 0; i < FOH_TB_SLOT_CACHE; i++) {
+    s->tssSlotPresent[i] = false;
+    s->tssSlotReason[i] = "unavailable in this build";
+  }
+  if (foh_tbuild_ops) {
+    foh_tbuild_ops->slots(s->tssSlotPresent, s->tssSlotReason);
+  }
+}
+
 static void step_tss(FohState *s, const PlatformInput *in,
                      const PlatformInput *pv) {
   const bool aE = in->a && !pv->a;
@@ -1314,10 +1360,42 @@ static void step_tss(FohState *s, const PlatformInput *in,
   }
   if (aE || sE) { // targetselect.js:131 accepts START or A
     if (s->tssCursor == 10) {
-      // "+ Add Code" — builder/share-code plane, scope-excluded
-      // (registered; foh.h note): visible but REFUSING.
-      snd_push(s, "deny");
-      ev_refused(s, "addcode");
+      // A45 T3 — THE PAGE FLIP. This slot REFUSED until now (`deny` +
+      // ev_refused "addcode"): upstream's "+ Add Code" opens an HTML
+      // textarea to paste a ~1 KB share code into (targetselect.js:132-136),
+      // and this device has no clipboard, no keyboard and no network. A45 T2
+      // (DEVIATION D42) already replaced that transport with a FILE on the
+      // SD card, which left this slot the job the design spike named for it:
+      // showing the custom stages that were found.
+      //
+      // So it flips the grid between the ten AUTHORED stages and the ten
+      // CUSTOM slots (upstream's "Custom N", :288-294). Upstream shows both
+      // families at once in four columns of a 1200 px canvas; 240 px holds
+      // two, so the same ten rects carry whichever family is on show.
+      s->tssPage = s->tssPage ? 0 : 1;
+      foh_tss_refresh_slots(s);
+      snd_push(s, "menuSelect");
+      return;
+    }
+    if (s->tssPage) {
+      // A CUSTOM slot. `targetSelected > 9` upstream (:140-142):
+      // setActiveStageCustomTarget(targetSelected - 10) then
+      // setTargetStagePlaying(targetSelected) — so the id CARRIED is the
+      // 10 + slot one, which is exactly A45 T2's MLK_PLAYING_BASE + slot
+      // (custom_stage.h). The driver's launch seam reads tssStage >= 10 and
+      // routes through tp_setup_target_custom instead of tp_setup_target.
+      if (!s->tssSlotPresent[s->tssCursor]) {
+        // VISIBLY refused: the renderer draws tssSlotReason for the hovered
+        // slot, so "empty" or "SUM mismatch" is on screen, not just a beep.
+        snd_push(s, "deny");
+        return;
+      }
+      snd_push(s, "menuForward"); // :132
+      s->tssStage = FOH_TB_SLOT_CACHE + s->tssCursor;
+      s->targetMode = true;
+      s->launched = true;
+      ev_trans(s, FOH_TSS, FOH_TMATCH, "launch");
+      ev_launch(s);
       return;
     }
     // targetselect.js:131-146: menuForward + setActiveStageTarget +
@@ -1916,6 +1994,28 @@ void foh_tick(FohState *s, const PlatformInput *in) {
     case FOH_TSS:
       step_tss(s, in, &pv);
       break;
+    // A45 T4. The engine is a separate TU behind a pointer (foh_tbuild.h).
+    // With it linked, step() drives the editor and returns a verdict; the
+    // TRANSITION is issued here, because ev_trans/snd_push are this file's.
+    // WITHOUT it linked the screen is still reachable and still leaves on B
+    // — render_tbuild draws the unavailable notice on screen, so the refusal
+    // is READABLE rather than a button that appears to do nothing.
+    case FOH_TBUILD: {
+      FohTbVerdict v = FOH_TB_STAY;
+      if (foh_tbuild_ops) {
+        v = foh_tbuild_ops->step(s, in, &pv);
+      } else if (in->b && !pv.b) {
+        snd_push(s, "menuBack");
+        v = FOH_TB_QUIT;
+      }
+      if (v == FOH_TB_QUIT) {
+        // targetbuilder.js:833-835 — Quit is changeGamemode(1), i.e. the
+        // menu, however the builder was entered. menuSelected is untouched,
+        // so it lands back on the TARGET BUILDER row that opened it.
+        ev_trans(s, FOH_TBUILD, FOH_MENU_TOP, "b");
+      }
+      break;
+    }
     case FOH_MATCH:
     case FOH_TMATCH:
       // terminal for the FOH machine; the driver owns the sim from here

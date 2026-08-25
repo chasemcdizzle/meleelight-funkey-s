@@ -363,7 +363,7 @@ for (const raw of fs.readFileSync(AUTH, "utf8").split("\n")) {
 // tokens. p3type/p4type's domains also MOVED (-1..0 -> -1..1, now exactly
 // p2type's), which is a moved row rather than a new one: it changes no count
 // here and is caught by the DOMAIN DISAGREEMENT arm against its own citation.
-const WANT = { S: 23, L: 22, E: 31, R: 7, N: 2, X: 20 };
+const WANT = { S: 23, L: 22, E: 33, R: 5, N: 2, X: 20 };
 for (const [k, arr] of [["S", S], ["L", L], ["E", E], ["R", R], ["N", N], ["X", X]]) {
   if (arr.length !== WANT[k])
     die("the authored table has " + arr.length + " " + k + " rows, want " +
@@ -960,10 +960,24 @@ for (const r of L) {
     // This is not a loosening of the launch plane — it is the S plane's model
     // already applied here: `UNIVERSE` and `LUNIVERSE` have both carried "-1"
     // since they were written, and the S-plane predicate above has always let
-    // an authored row whose lo is -1 accept it. "-0", "+1", "1.0", "00", "10"
-    // and "x" remain REJECTED at the line form in both programs, and no
-    // authored L row has hi >= 10, so multi-digit stays unrepresentable.
-    const ok = /^-?[0-9]$/.test(t) && +t >= r.lo && +t <= r.hi;
+    // an authored row whose lo is -1 accept it. "-0", "+1", "1.0" and "x"
+    // remain REJECTED at the line form in both programs.
+    //
+    // A45 T3 RETIRED THE SINGLE-DIGIT ASSUMPTION, and the distinction matters:
+    // the old predicate was `/^-?[0-9]$/`, written when the sentence above
+    // ended "and no authored L row has hi >= 10, so multi-digit stays
+    // unrepresentable". `L tlaunch tstage` is now 0..19 (the ten authored
+    // stages plus the ten CUSTOM slots — MLK_PLAYING_BASE + slot,
+    // port/sim/target/custom_stage.h), so that assumption is false and the
+    // predicate was asserting a bound THE AUTHORED AUTHORITY DOES NOT STATE:
+    // it forbade tstage=10 no matter what judge-domains.authored.txt said,
+    // which is a generator bug, not a guard. The fix is the CANONICAL-DECIMAL
+    // form the frame plane already uses, still range-checked against the
+    // authored row — so "00" stays REJECTED (it is not canonical) even though
+    // its VALUE is in range, and every probe verdict except tstage=10 is
+    // unchanged. MEASURED: exactly one flips, and nprobe is unmoved because
+    // the probe SET is untouched.
+    const ok = /^-?(0|[1-9][0-9]*)$/.test(t) && +t >= r.lo && +t <= r.hi;
     const nd = formNeed(k + 1, line);
     push("l-" + r.line + "-" + r.f + "-" + tag(t), b, out,
          ok ? "A" : "R", ok ? "-" : nd, ok ? "-" : nd, "B");
@@ -2060,8 +2074,8 @@ done < "$B/dom/probes.tsv"
 # out. The new rows are p3difficulty/p4difficulty; p3type/p4type's domain also
 # WIDENED to p2type's own -1..1, which is a moved row rather than a new one
 # and is asserted against its citation by the DOMAIN DISAGREEMENT arm above.
-[ "$nprobe" = "1715" ] \
-  || fail "leg [0n] generated $nprobe behavioral probes, want 1715. The probe set is a FUNCTION of the authored table (S rows x every reachable screen x boundary, S rows x the fixed value universe, unauthored-edge and refusal-binding probes, and the frame-anchor form through both programs, every authored L field x the fixed launch-value universe through both programs, every DELIMITER POSITION of every parser FORM SIGNATURE perturbed (spaces doubled/tabbed/deleted; a k=v token's '=' and the ',' inside its value doubled/deleted/space-prefixed) plus 3 anchor probes per form through both programs, and one corrupt trace per authored TRACE-INTEGRITY row). A different count means the authored table or the reachable-screen set changed shape — re-pin here in the SAME change and say why."
+[ "$nprobe" = "1711" ] \
+  || fail "leg [0n] generated $nprobe behavioral probes, want 1711. The probe set is a FUNCTION of the authored table (S rows x every reachable screen x boundary, S rows x the fixed value universe, unauthored-edge and refusal-binding probes, and the frame-anchor form through both programs, every authored L field x the fixed launch-value universe through both programs, every DELIMITER POSITION of every parser FORM SIGNATURE perturbed (spaces doubled/tabbed/deleted; a k=v token's '=' and the ',' inside its value doubled/deleted/space-prefixed) plus 3 anchor probes per form through both programs, and one corrupt trace per authored TRACE-INTEGRITY row). A different count means the authored table or the reachable-screen set changed shape — re-pin here in the SAME change and say why. RE-PIN LOG: A45 T3/T4 1715 -> 1711, the two RETIRED refusal rows (targetbuilder, addcode: menu-top row 2 and target-select slot 10 name REAL destinations now) taking two refusal-binding probes each; the two ADDED edges (menu-top>target-builder>a, target-builder>menu-top>b) add none, because edge probes are generated from the UNAUTHORED complement and target-builder carries no S field."
 # EVERY GENERATED PROBE WAS ACTUALLY RUN AND JUDGED (Tier A+ round-5 MINOR-1).
 # Without this, a probe could be generated, counted into the pin, and then
 # skipped by the dispatch loop -- the count would still look right.
@@ -2360,6 +2374,15 @@ done < <(git ls-tree "$BASE_REF" --name-only "$FOH/flows/" | grep -E '\.expect$'
 # the launch-expectation check. A changed refusal REASON is a changed verdict
 # for this check's purposes, so it is enumerated rather than waved through as
 # "both rejected, close enough".
+# A45 T3 ADDS THE f07 PAIR, for exactly the reason A7 added the f03 pair
+# above: retiring a refusal TOKEN moves the verdict on every baseline flow
+# that carried it. `addcode` named the target-select "+ Add Code" slot, which
+# now flips the authored/custom page instead of refusing (foh.c's step_tss),
+# so the baseline f07 — recorded when that slot still emitted
+# `S 435 refused addcode` — is corruption to the current judge, not history.
+# `targetbuilder` was retired in the same change and needs NO new row: the
+# baseline f04-nav already moves on its menu-battle edge, which the judge
+# reports FIRST, so its pinned diagnostic is unchanged (measured).
 MOVED="f01-vs-g01|0|2|2|off-graph transition 'menu-top>menu-battle>a'
 f01-vs-g01|1|0|2|off-graph transition 'menu-top>menu-battle>a'
 f02-cpu-m01|0|2|2|off-graph transition 'menu-top>menu-battle>a'
@@ -2369,7 +2392,9 @@ f03-options|1|0|2|unregistered refused entry 'audio'
 f04-nav|0|0|2|off-graph transition 'menu-top>menu-battle>a'
 f04-nav|1|2|2|off-graph transition 'menu-top>menu-battle>a'
 f05-vs-g03|0|2|2|off-graph transition 'menu-top>menu-battle>a'
-f05-vs-g03|1|0|2|off-graph transition 'menu-top>menu-battle>a'"
+f05-vs-g03|1|0|2|off-graph transition 'menu-top>menu-battle>a'
+f07-target-t02|0|2|2|unregistered refused entry 'addcode'
+f07-target-t02|1|0|2|unregistered refused entry 'addcode'"
 # The flows this arc did NOT touch — leg 1's identity corpus. Anything not
 # listed as moved must be byte-identical, so this set is DERIVED, not typed.
 # NEVER `printf … | grep -q` UNDER `set -o pipefail` (Tier A+ round 3
@@ -2631,6 +2656,18 @@ done
 # relaxing it to `[0-9]+` in ANY ONE of them was a loosening that two fixtures
 # could not see. There is now one fixture per occurrence. They are cheap and
 # they are exactly the kind of rule nobody would have thought to fixture.
+#
+# A45 T3/T4 RE-POINTED `refusal-wrong-screen` from `targetbuilder` to
+# `random`. The rule that fixture targets is the SCREEN BINDING ("this screen
+# cannot refuse that entry"), and it can only REACH that rule with a token
+# that is still REGISTERED. `targetbuilder` is retired — menu-top row 2 opens
+# the real editor now — so the fixture began dying on "unregistered refused
+# entry" instead, which proves nothing about the binding and is exactly the
+# vacuous-fixture class this leg exists to prevent. `random` is bound to
+# `sss` alone (the registered seeded-draw exclusion, stageselect.js:80-84)
+# and the fixture writes it onto an options screen, so the BINDING is what
+# refuses it. NOTE FOR THE NEXT EDITOR: this table is parsed field-by-field
+# with no comment syntax — a `#` line inside NEG is read as a fixture.
 NEG='form-soundsvol-11|s/^S \([0-9]*\) soundsvol .*/S \1 soundsvol 11/|matches no FOHTRACE1 form
 domain-soundsvol-neg|s/^S \([0-9]*\) soundsvol .*/S \1 soundsvol -1/|outside the pinned domain of soundsvol
 domain-musicvol-neg|s/^S \([0-9]*\) musicvol .*/S \1 musicvol -1/|outside the pinned domain of musicvol
@@ -2643,7 +2680,7 @@ screen-soundsvol-on-gameplay|s/^S \([0-9]*\) turbo .*/S \1 soundsvol 5/|cannot w
 screen-musicvol-on-gameplay|s/^S \([0-9]*\) turbo .*/S \1 musicvol 5/|cannot write it
 screen-walljump-on-audio|s/^S \([0-9]*\) musicvol .*/S \1 walljump 1/|cannot write it
 screen-flashlcancel-on-audio|s/^S \([0-9]*\) musicvol .*/S \1 flashlcancel 1/|cannot write it
-refusal-wrong-screen|s/^S \([0-9]*\) turbo .*/S \1 refused targetbuilder/|cannot refuse it
+refusal-wrong-screen|s/^S \([0-9]*\) turbo .*/S \1 refused random/|cannot refuse it
 launch-missing-flashlcancel|s/ flashlcancel=[01]//|matches no FOHTRACE1 form
 launch-missing-walljump|s/ walljump=[01]//|matches no FOHTRACE1 form
 launch-domain-walljump-2|s/ walljump=[01] / walljump=2 /|matches no FOHTRACE1 form
@@ -2705,7 +2742,32 @@ EOF
 #     -> b4eda525b48376a7938696f439d737fbbff7d6ecca2250d55d2f629319fb0c9b
 # so no rule, line number, offending text or ORDER moved. That is the same
 # claim A44 made by reading; this one is a command anyone can re-run.
-DIAG_SHA=3adfb4d91103a66d9a8ed8fdac19036179e427f86090f20aac1af216d6b35f30
+#
+# A45 T3/T4 re-pins it again, to the same standard — the delta is THREE
+# changes and nothing else, and stripping exactly them from the new diag.acc
+# reproduces A49's hash byte-for-byte:
+#
+#   sed -e "/^f07-target-t02 flag=[01]\t/d" \
+#       -e "s|refusal 'random' at line 13 is emitted on 'options-gameplay', which cannot refuse it (legal: sss)|refusal 'targetbuilder' at line 13 is emitted on 'options-gameplay', which cannot refuse it (legal: menu-top)|" \
+#       -e "s|line 16 matches no FOHTRACE1 form: 'S 0740 refused random'|line 4 matches no FOHTRACE1 form: 'S 0390 refused targetbuilder'|" \
+#     diag.acc -> 3adfb4d91103a66d9a8ed8fdac19036179e427f86090f20aac1af216d6b35f30
+#
+# The three, each a consequence of retiring the `targetbuilder` and `addcode`
+# refusal tokens (both name REAL destinations now):
+#   1. TWO ADDED rows — the f07 movement pair from MOVED above. Retiring a
+#      token moves the verdict on every BASELINE flow that carried it, which
+#      is what A7 recorded for `audio` on f03.
+#   2. `neg refusal-wrong-screen` — the fixture was re-pointed off the retired
+#      `targetbuilder` onto `random`; see the note above the NEG table.
+#   3. `neg form-sref-leadingzero` — NOT EDITED, and the one this ticket did
+#      not predict: that fixture seds the FIRST `S <n> refused` line of
+#      f04-nav, which used to be `S 390 refused targetbuilder` at line 4 and
+#      is now `S 740 refused random` at line 16, because f04's builder leg
+#      became a real transition pair. Same rule, same flow, same bite — a
+#      different surviving refusal. It is listed here because a re-pin that
+#      only accounts for the lines someone edited is the drift this pin
+#      exists to catch.
+DIAG_SHA=bbc309529b09ccbe2b1c263896acfd4b50dfe5a8bd6390f6839fa979f1588272
 dgot="$(shasum -a 256 "$DIAGACC" | cut -d' ' -f1)"
 [ "$dgot" = "$DIAG_SHA" ] \
   || fail "the asserted diagnostics hash to $dgot, pinned $DIAG_SHA — a judge diagnostic changed its text, line number, or ORDER. Every row still passed its own anchored check, so this is the drift those checks cannot see. Re-pin DIAG_SHA in the SAME change and say why. (dump: $DIAGACC)"

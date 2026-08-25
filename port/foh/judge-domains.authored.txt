@@ -229,7 +229,7 @@ L launch p4type -1 1 foh.c launch guard — port 3 is CPU(1), HMN(0) or absent(-
 L launch p3difficulty 1 4 css.js:316-334 round((x-off)*3/166)+1; MENU-SPEC §2.8; fix_plan A49
 L launch p4difficulty 1 4 css.js:316-334 round((x-off)*3/166)+1; MENU-SPEC §2.8; fix_plan A49
 L tlaunch char 0 4 characters.js CHARIDS registry, 5 chars; pipeline/expected.json chars=5
-L tlaunch tstage 0 9 activeStage.js:36-47 targetStageMapping has exactly 10 keys, 0..9 -> targetstage1..10
+L tlaunch tstage 0 19 activeStage.js:36-47 targetStageMapping has exactly 10 keys, 0..9 -> targetstage1..10, and A45 T3 adds the ten CUSTOM slots above them: targetselect.js:140-146 plays a custom stage with setActiveStageCustomTarget(targetSelected-10) but setTargetStagePlaying(targetSelected), i.e. the id CARRIED is 10+slot, which is port/sim/target/custom_stage.h MLK_PLAYING_BASE. The upper bound is upstream's own hard limit of TEN custom stages (targetselect.js:102, :817), so 20 is out of domain by upstream's count, not by ours
 
 
 # === E — the legal screen transitions ======================================
@@ -255,6 +255,8 @@ E any sss match launch stageselect.js:80-88 A confirm -> startGame; main.js:1320
 E any menu-top target-select a menu.js:77-84 TARGETTEST -> changeGamemode(7)
 E any target-select menu-top b targetselect.js:73-78 B -> menuBack + changeGamemode(1)
 E any target-select target-match launch targetselect.js:127-148 A/START -> setActiveStageTarget + startTargetGame; main.js:987-990 gameMode==5 arm
+E any menu-top target-builder a menu.js:87-90 TARGETBUILDER -> setEditingStage(-1) + setTargetBuilder(i) + changeGamemode(4). BEFORE A45 T4 this row emitted `refused targetbuilder`; the owner filed it as "nothing happened", so the R row below is retired in the same change and the edge replaces it
+E any target-builder menu-top b targetbuilder.js:832-835 the pause menu's Quit is changeGamemode(1) — the MENU — however the builder was entered, and it leaves menuMode/menuSelected untouched, so the cursor is still on the TARGET BUILDER row. MENU-SPEC DEVIATION D50 gives plain B the SAME edge with the same sound: upstream's builder has no B arm at all, but B is the back button on every other screen in this machine (menu.js:164-190, css.js:186-194, stageselect.js:79, targetselect.js:76-81) and a screen whose back button does something else is a trap. ONE destination, two ways of asking for it — which is why both are cause `b` and there is no second edge
 E net menu-top menu-battle a menu.js:73-75 VS. Melee submenu (netplay build only)
 E net menu-battle css a menu.js:105 Local VS action
 E net menu-battle menu-top b menu.js:164-191 menuBack
@@ -280,9 +282,7 @@ E noctl controls-keyboard menu-options b MENU-SPEC §12.1 DEVIATION D27 — the 
 # is corruption. The `credits` row was deleted rather than retired in place,
 # because a refusal registration is a PROMISE THAT AN AFFORDANCE DOES
 # NOTHING, and that promise is now false.
-R any targetbuilder menu-top MENU-SPEC §11 — target builder is out of scope
 R any random sss MENU-SPEC §6.5 first paragraph + §6.6 gap row 6 — the refusal is a REGISTERED EXCLUSION (register: foh.h:69-76) because upstream's confirm arm draws from the seeded stream (stageselect.js:83). D11 is NOT the authority for it: D11 is the PENDING deviation that DELETES this refusal (§12 roadmap row 8), so citing it here would have said the opposite of what it says
-R any addcode target-select MENU-SPEC §11 — share-code/builder plane out of scope
 R any portconfig css MENU-SPEC §2.7 DEVIATION D17 — the CSS may reach a port config the LAUNCH plane cannot honour (togglePort has no port-0 case, main.js:510-526; sim.h:98-100 has no P1 type and sim_boot.c:374-383 pins types[0]=0). The refusal itself is foh.c:671-685, cited as the SITE, never as its own authority
 R net spectate menu-battle netplay build only — the page exists solely at FOH_NETPLAY 1
 R net p2p menu-battle netplay build only — the page exists solely at FOH_NETPLAY 1

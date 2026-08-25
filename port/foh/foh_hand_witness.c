@@ -265,15 +265,33 @@ int main(void) {
          "  ...and the launch reaches the trace as a real TLAUNCH event");
   }
 
-  // --- [7] A over + ADD CODE refuses, and launches nothing ------------------
+  // --- [7] A over slot 10 flips the page, and launches nothing --------------
+  //
+  // RETARGETED BY A45 T3, not weakened. This leg used to read "A on + ADD
+  // CODE REFUSES (the builder plane is scope-excluded)". That slot is no
+  // longer refusing: it flips target-select between the ten AUTHORED stages
+  // and the ten CUSTOM slots (foh.c's step_tss; DEVIATION D42 replaced
+  // upstream's paste-a-code textarea with a file on the SD card, which left
+  // this slot the job of showing what was found).
+  //
+  // What this leg is FOR is unchanged and is asserted more tightly than
+  // before: the hand's own contract, that slot 10 is reachable, selectable,
+  // and NOT A LAUNCH. The launch half is the same assertion; the page flip
+  // is added, so the leg now pins the outcome it protects instead of a
+  // refusal that no longer exists (the D46 "DISARM NAMED, not absorbed"
+  // rule — move the tooth onto the line that now carries the outcome).
   {
     to_tss(&s);
-    want(walk_to(&s, mid_x(10), mid_y(10)), "the hand walks to + ADD CODE");
-    want(s.tssCursor == 10, "  ...and + ADD CODE is selected");
+    want(walk_to(&s, mid_x(10), mid_y(10)), "the hand walks to slot 10");
+    want(s.tssCursor == 10, "  ...and slot 10 is selected");
+    const int page0 = s.tssPage;
     PRESS(&s, a);
     want(!s.launched && s.screen == FOH_TSS,
-         "A on + ADD CODE refuses (the builder plane is scope-excluded) and"
-         " launches nothing");
+         "A on slot 10 launches nothing and stays on target-select");
+    want(s.tssPage != page0, "  ...it flips the authored/custom page (A45 T3)");
+    PRESS(&s, a);
+    want(s.tssPage == page0, "  ...and a second A flips it back");
+    want(!s.launched && s.screen == FOH_TSS, "  ...still launching nothing");
   }
 
   // --- [8] the hand is clamped to the screen, so it is always recoverable ---

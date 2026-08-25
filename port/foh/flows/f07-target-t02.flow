@@ -7,8 +7,9 @@ FLOW1
 #   - ONE shoulder-L press wraps marth -> falcon (targetselect.js:62-66
 #     — the wrap witness);
 #   - the FREE HAND (DEVIATION D29, A25c) walks down the left column to
-#     the addcode slot; A there is the registered refusal (builder
-#     plane, foh.h); the hand walks back UP to slot 1 (tstage 1);
+#     slot 10; A there flips to the CUSTOM page and A again flips back
+#     (A45 T3 — it was the registered `addcode` refusal until then);
+#     the hand walks back UP to slot 1 (tstage 1);
 #   - A -> TLAUNCH char=4 tstage=1; the driver replays the frozen t02
 #     trace through the launch seam (both streams judged).
 #
@@ -44,12 +45,28 @@ I 400 K
 I 401 DR
 I 407 D
 I 429 -
-SHOT 430 tss-addcode
+# A45 T3: slot 10 no longer refuses — it FLIPS the grid between the ten
+# authored stages and the ten custom slots (foh.c's step_tss). So this leg
+# presses it TWICE, four frames apart, with the hand parked: once to see the
+# custom page and once to come back, which leaves the rest of the flow on the
+# AUTHORED page exactly as it was. The page is VIEW state and emits no event,
+# so f07-target-t02.expect loses its `S 435 refused addcode` line. The SHOT
+# moves 430 -> 437 and is renamed tss-addcode -> tss-custompage, so it is
+# taken AFTER the flip and actually pictures the custom page (empty here —
+# this flow writes no stages — which is exactly the D43 "ten slots, drawn
+# whether or not they loaded" arrangement).
 I 435 A
 I 436 -
-I 438 U
-I 460 -
-SHOT 460 tss-t02
+SHOT 437 tss-custompage
+I 439 A
+I 440 -
+# The UP run starts one frame later than it used to (441, not 438) because of
+# the second press above, so its 22 frames now end at 462 and the SHOT that
+# reads the landing slot moves 460 -> 463. The A at 465 and END 470 are
+# unmoved, and 22 frames of UP is the same journey it always was.
+I 441 U
+I 463 -
+SHOT 463 tss-t02
 I 465 A
 I 466 -
 END 470

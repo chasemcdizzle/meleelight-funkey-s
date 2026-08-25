@@ -124,6 +124,17 @@ const EDGES = new Set([
   "menu-options>credits>a",
   "credits>menu-options>b",
   "credits>menu-options>timer",
+  // A45 T4 — the TARGET BUILDER (gameMode 4). IN: menu.js:87-90
+  // `setEditingStage(-1); setTargetBuilder(i); changeGamemode(4)`, the row
+  // that REFUSED before this ticket. OUT: targetbuilder.js:832-835's pause
+  // menu Quit is `changeGamemode(1)` — the menu — however the builder was
+  // entered, and DEVIATION D50 gives B the same edge because B is the back
+  // button on every other screen in this machine. Both leaves are `b`:
+  // upstream has ONE exit and the port has two ways of pressing it, not two
+  // destinations. menuSelected is untouched by either, so both land back on
+  // the TARGET BUILDER row.
+  "menu-top>target-builder>a",
+  "target-builder>menu-top>b",
 ]);
 // PROFILE-DEPENDENT edges. Exactly one of these two blocks is legal in any
 // given build, and which one is decided by the header above — never by
@@ -161,15 +172,24 @@ for (const e of CHOOSER
 // netplay three are legal only in the FOH_NETPLAY 1 build, where their page
 // exists.
 const REFUSED = new Map([
-  ["targetbuilder", ["menu-top"]],   // conventions scope exclusion
+  // A45 T3/T4 RETIRE TWO TOKENS the same way A7 retired `credits` and
+  // iter 99 retired `targettest`: they name REAL destinations now, so a
+  // trace carrying them is corruption rather than history.
+  //   `targetbuilder` — menu-top row 2 opens the editor (menu.js:87-90).
+  //   `addcode`       — target-select slot 10 flips to the CUSTOM page.
+  //                     Upstream's "+ Add Code" pastes a share code into an
+  //                     HTML textarea (targetselect.js:132-136); DEVIATION
+  //                     D42 (A45 T2) already replaced that transport with a
+  //                     file on the SD card, which left the slot the job of
+  //                     showing the custom stages that were found.
+  // The page flip emits NO event: it is view state, like tssCursor and the
+  // hand position. What it makes observable is the LAUNCH — a custom slot
+  // launches with tstage 10..19, which is why RE_TLAUNCH's domain widens
+  // below and is the only judged consequence.
   // iter 93 (M4 task 10): the SSS RANDOM slot — visible but refusing
   // (registered exclusion; upstream's arm draws from the SEEDED stream,
   // stageselect.js:80-84 — measured, AGENT-LOG iter 93).
   ["random", ["sss"]],
-  // iter 99 (M4 task 12): `targettest` RETIRED (target-select is real);
-  // the target-select "+ Add Code" slot refuses (builder/share-code
-  // plane, scope-excluded — foh.h note).
-  ["addcode", ["target-select"]],
   // CSS mechanics arc (MENU-SPEC items 2/3/4): the CSS can now reach port
   // configurations the LAUNCH plane cannot honour — a CPU port 0 (togglePort
   // has no port-0 special case, main.js:504-520) and the one-frame N/A race
@@ -240,12 +260,27 @@ const RE_SHOT = /^SHOT (0|[1-9][0-9]*) ([a-z0-9-]{1,32})$/;
 const RE_LAUNCH =
     /^LAUNCH (0|[1-9][0-9]*) p1=([0-4]) p2=([0-4]) p2type=(-1|[01]) difficulty=([1-4]) stage=([0-5]) turbo=([01]) lcancel=([012]) flashlcancel=([01]) walljump=([01]) tapjump=([01]),([01]),([01]),([01]) versus=([01]) p3=([0-4]) p4=([0-4]) p3type=(-1|[01]) p4type=(-1|[01]) p3difficulty=([1-4]) p4difficulty=([1-4])$/;
 // iter 99 (M4 task 12): the target-mode launch record (foh.h TLAUNCH
-// note; char domain 0-4, tstage domain 0-9 == targetStageMapping).
+// note; char domain 0-4).
+//
+// TSTAGE DOMAIN 0-19 as of A45 T3, and the widening is EXACTLY the id space
+// A45 T2 defined rather than a loosening for convenience: 0..9 are the
+// authored TTAB1 stages (targetStageMapping) and 10..19 are the ten CUSTOM
+// slots — `MLK_PLAYING_BASE + slot`, port/sim/target/custom_stage.h, which
+// is upstream's own numbering at targetselect.js:140-146
+// (`setTargetStagePlaying(targetSelected)` with targetSelected > 9). Two
+// digits maximum: `tstage=20` is still corruption, and so is `tstage=05`.
 // iter 101 (review-99 L1): frame field is a CANONICAL decimal in the
 // judging layer itself — `TLAUNCH 0405` is corruption here, never the
 // normalizer backstop's problem. As of review-r14 that rule is file-wide
 // (see the note above RE_T); this line form was simply first.
-const RE_TLAUNCH = /^TLAUNCH (0|[1-9][0-9]*) char=([0-4]) tstage=([0-9])$/;
+// The 0..19 domain is spelled as an EXPANDABLE alternation (each leg a
+// character class or an integer literal) rather than the tighter
+// `[0-9]|1[0-9]`, because check-judge-regression.sh leg [0n] expands this
+// spec to compare the judge's accepted set against the authored authority
+// and hard-fails on any leg it cannot expand. The two forms accept exactly
+// the same twenty strings; this one can also be CHECKED from outside.
+const RE_TLAUNCH =
+    /^TLAUNCH (0|[1-9][0-9]*) char=([0-4]) tstage=([0-9]|10|11|12|13|14|15|16|17|18|19)$/;
 const RE_END = /^END (0|[1-9][0-9]*) transitions=(0|[1-9][0-9]*)$/;
 
 const raw = fs.readFileSync(path, "utf8");
