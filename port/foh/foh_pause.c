@@ -568,8 +568,21 @@ int foh_sysmenu_open(Raster *rz, uint64_t *pausedNs, long *presentFails) {
         result = 1;
         done = 1;
       } else if (sel == SYS_OPT_POWEROFF) {
-        // The OS takes the device down here; if it declines, close.
-        if (system("powerdown handle") != 0) { /* refused — just close */ }
+        // A34 ROOT CAUSE (measured on device 2026-08-24, D44): this arm used
+        // to run `powerdown handle`, and `handle` IS NOT A SHUTDOWN VERB. Read
+        // /usr/local/sbin/powerdown on the device: its three verbs are
+        //   schedule <delay>  SIGUSR1 the recorded app, wait, then power down
+        //   handle            `pkill -f "powerdown schedule"` — i.e. CANCEL a
+        //                     pending shutdown, so the app can take over
+        //   now               sync; notify; audio_amp off; ro; poweroff
+        // `handle` is what an app calls FROM ITS SIGUSR1 HANDLER to claim the
+        // shutdown for itself. Called from a menu with no shutdown pending it
+        // pkills nothing — and busybox pkill still exits 0 (measured: rc 0,
+        // device stayed up), so even the `!= 0` degrade never fired. The menu
+        // simply closed. That is exactly the owner's "POWER OFF does nothing".
+        // No privilege problem and no frontend-expects-exit problem: the OPK
+        // runs as root and gmenu2x powers the device down the same way.
+        if (system("powerdown now") != 0) { /* refused — just close */ }
         done = 1;
       }
     } else if (EDGE(b) || EDGE(menu)) {
