@@ -275,12 +275,27 @@ int main(void) {
   want(s.cssCarry == -1 && s.cssTokenRest[0] == 1,
        "B: the leave-band drop really used quirk Q1's other rest slot");
   {
+    // A49/DEVIATION D46 CHANGED WHAT THIS ARM OWES, and the change is
+    // deliberate rather than absorbed. Until A49 this leg asserted the
+    // DEFECT as its precondition: the leave-band slot drew the token on
+    // falco (3) while fox (2) was the pick, one whole cell right, and the
+    // point of the leg was that a BACK-OUT still brought it home. The owner
+    // then filed the drop itself — *"whenever the pin is let go of (going
+    // off) it should go back to the character you had selected"* — so the
+    // token no longer leaves home in the first place.
+    //
+    // The leg is KEPT, not deleted, and it still bites: the LEAVE-BAND PATH
+    // is still the one being driven (the rest-slot assertion above proves
+    // that), and what it now owes is the same claim the rest of this file
+    // makes — a token at rest is drawn on its port's SELECTION. Deleting the
+    // leg because its old expectation flipped would have quietly retired a
+    // path nothing else here covers.
     char buf[200];
     snprintf(buf, sizeof buf,
-             "B: and that slot really does draw the token off the pick "
-             "(cell %d, want falco/3 — the defect's precondition, reproduced)",
+             "B: the leave-band drop draws the token on the character P1 "
+             "picked (cell %d, want fox/2 — D46; it used to land on falco/3)",
              token_cell(&s, 0));
-    want(token_cell(&s, 0) == 3, buf);
+    want(token_cell(&s, 0) == PICK, buf);
     snprintf(buf, sizeof buf,
              "B: while the SELECTION never moved (p1Char=%s cssChar=%s)",
              kName[s.p1Char], kName[s.cssChar[0]]);

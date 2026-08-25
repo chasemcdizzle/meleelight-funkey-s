@@ -122,13 +122,15 @@ S p2type -1 1 css main.js:510-526 togglePort, MENU-SPEC DEVIATION D5 (NET droppe
 # replay exactly one AI slot (AIBRIDGE1 is one recorded stream for one CPU
 # slot — fix_plan A46 OPEN/OWED). A row here reading `-1 1` would mean that
 # refusal had been dropped and a CPU P3 launched with no replay behind it.
-S p3type -1 0 css main.js:510-526 togglePort; MENU-SPEC D5 (NET) + D40(b) (CPU: one AI replay slot, fix_plan A46)
-S p4type -1 0 css main.js:510-526 togglePort; MENU-SPEC D5 (NET) + D40(b) (CPU: one AI replay slot, fix_plan A46)
+S p3type -1 1 css main.js:510-526 togglePort; MENU-SPEC D5 (NET dropped); D40(b) RETIRED by owner ruling (fix_plan A49) so CPU(1) is reachable
+S p4type -1 1 css main.js:510-526 togglePort; MENU-SPEC D5 (NET dropped); D40(b) RETIRED by owner ruling (fix_plan A49) so CPU(1) is reachable
 # CPU difficulty knob. MEASURED domain 1..4, not 1..9: the 166-px track
 # parameter t maps round(t*3)+1 (css.js:325-326, MENU-SPEC §2.8). The oracle
 # harness's --difficulty 1-9 is a programmatic surface and is NOT this field.
 S p1difficulty 1 4 css css.js:316-334 round((x-off)*3/166)+1; MENU-SPEC §2.8
 S difficulty 1 4 css css.js:316-334 round((x-off)*3/166)+1; MENU-SPEC §2.8
+S p3difficulty 1 4 css css.js:316-334 round((x-off)*3/166)+1; MENU-SPEC §2.8; fix_plan A49 (D40(b) retired, port 2 has a live knob)
+S p4difficulty 1 4 css css.js:316-334 round((x-off)*3/166)+1; MENU-SPEC §2.8; fix_plan A49 (D40(b) retired, port 3 has a live knob)
 # Token-gesture state: whichTokenGrabbed[0]. -1 = empty-handed, else the PORT
 # whose token hand 0 is carrying. A44 fields FOUR ports and DEVIATION D40(a)
 # lets the single hand hold any of them (upstream's `playerType[j] == 1 ||
@@ -178,10 +180,16 @@ S musicvol 0 10 options-audio audiomenu.js:13,101-112 masterVolume[1] clamped [0
 # appears on this line, that refusal has been weakened and this block is
 # stale.
 # A44 APPENDED p3/p4/p3type/p4type. It is an appendix, not a relaxation: the
-# fifteen rows below keep their names, order and bounds, and the p3type/
-# p4type rows are TIGHTER than p2type's for D40(b)'s reason (one AI replay
-# slot). The launch arm's other two conditions are also rows-by-implication:
-# no CPU above port 1, and at least two participating ports.
+# fifteen rows below keep their names, order and bounds.
+# A49 APPENDED p3difficulty/p4difficulty the same way, and widened p3type/
+# p4type from (-1|0) to p2type's own (-1|0|1): the owner RETIRED D40(b), so
+# CPU is a reachable type on ports 2/3. The launch arm now has exactly TWO
+# conditions and both are rows-by-implication: port 0 is HMN, and at least
+# two ports participate. A CPU on port 2 or 3 launches and PLAYS (live ai.c)
+# but is NOT checksum-verified — AIBRIDGE1 replays one CPU slot (fix_plan
+# A48). That is a coverage limit, and it is deliberately NOT expressed here
+# as a narrower domain, because a domain row that lies about what the screen
+# can emit is how a judge goes quietly vacuous.
 # `versus` WAS a fixed literal `0` on the reasoning below, and that reasoning
 # conflated two different axes: VS-vs-target-test (which really is TLAUNCH's
 # job) with stock-vs-endless (a property OF a VS match). A27/D28 made the CSS
@@ -216,8 +224,10 @@ L launch tapjump4 0 1 gameplaymenu.js:56 `tapJumpOffp4 ^= true`; MENU-SPEC §3.1
 L launch versus 0 1 main.js:140,237-239 setVersusMode(1-versusMode) binary toggle; css.js:393; A27/D28 ribbon + A37 sim (SIM CONFORMS 8/8 flag-off, VERSUS ENDLESS OK flag-on)
 L launch p3 0 4 characters.js CHARIDS registry, 5 chars; main.js:59 characterSelections is a 4-array
 L launch p4 0 4 characters.js CHARIDS registry, 5 chars; main.js:59 characterSelections is a 4-array
-L launch p3type -1 0 foh.c launch refusal — port 2 is HMN(0) or absent(-1); CPU refused by D40(b) (one AI replay slot, fix_plan A46)
-L launch p4type -1 0 foh.c launch refusal — port 3 is HMN(0) or absent(-1); CPU refused by D40(b) (one AI replay slot, fix_plan A46)
+L launch p3type -1 1 foh.c launch guard — port 2 is CPU(1), HMN(0) or absent(-1); D40(b) RETIRED by owner ruling (fix_plan A49)
+L launch p4type -1 1 foh.c launch guard — port 3 is CPU(1), HMN(0) or absent(-1); D40(b) RETIRED by owner ruling (fix_plan A49)
+L launch p3difficulty 1 4 css.js:316-334 round((x-off)*3/166)+1; MENU-SPEC §2.8; fix_plan A49
+L launch p4difficulty 1 4 css.js:316-334 round((x-off)*3/166)+1; MENU-SPEC §2.8; fix_plan A49
 L tlaunch char 0 4 characters.js CHARIDS registry, 5 chars; pipeline/expected.json chars=5
 L tlaunch tstage 0 9 activeStage.js:36-47 targetStageMapping has exactly 10 keys, 0..9 -> targetstage1..10
 

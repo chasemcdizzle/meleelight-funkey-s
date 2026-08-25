@@ -206,7 +206,7 @@ const RE_T = /^T (0|[1-9][0-9]*) ([a-z-]+) ([a-z-]+) (timer|start|a|b|bhold|laun
 // write under the wrong port's field name. Domains are still pinned
 // per-name in SVAL_DOM, and p3type/p4type's is NARROWER than p1/p2's.
 const RE_S_NUM =
-    /^S (0|[1-9][0-9]*) (p1char|p2char|p3char|p4char|p1type|p2type|p3type|p4type|p1difficulty|difficulty|carry|turbo|lcancel|flashlcancel|walljump|tapjump[1-4]|soundsvol|musicvol) (-1|10|[0-9])$/;
+    /^S (0|[1-9][0-9]*) (p1char|p2char|p3char|p4char|p1type|p2type|p3type|p4type|p1difficulty|difficulty|p3difficulty|p4difficulty|carry|turbo|lcancel|flashlcancel|walljump|tapjump[1-4]|soundsvol|musicvol) (-1|10|[0-9])$/;
 const RE_S_REF = /^S (0|[1-9][0-9]*) refused ([a-z0-9]+)$/;
 const RE_SHOT = /^SHOT (0|[1-9][0-9]*) ([a-z0-9-]{1,32})$/;
 // p1type/p1difficulty are real machine state and are traced as S events, but
@@ -228,8 +228,17 @@ const RE_SHOT = /^SHOT (0|[1-9][0-9]*) ([a-z0-9-]{1,32})$/;
 // cmp'd byte-for-byte by check-foh-flows.sh, whose own LAUNCH_RE reads only
 // those frozen files and therefore still pins 0 exactly — the tightness
 // moved to where the value really is fixed rather than being given up.
+//
+// A49 does two things to this line and neither loosens it by accident.
+// (1) p3type/p4type widen from (-1|0) to (-1|[01]): the owner retired
+//     DEVIATION D40(b), so CPU is a reachable type on ports 2/3. They are
+//     now exactly p2type's domain, which is what "four ports, one rule"
+//     means; the tightness that is really gone is a refusal, not a check.
+// (2) p3difficulty/p4difficulty are APPENDED, never inserted, and carry
+//     p2's [1-4] slider domain. Without them two matches that differ only
+//     in a CPU level on port 2/3 would emit identical LAUNCH lines.
 const RE_LAUNCH =
-    /^LAUNCH (0|[1-9][0-9]*) p1=([0-4]) p2=([0-4]) p2type=(-1|[01]) difficulty=([1-4]) stage=([0-5]) turbo=([01]) lcancel=([012]) flashlcancel=([01]) walljump=([01]) tapjump=([01]),([01]),([01]),([01]) versus=([01]) p3=([0-4]) p4=([0-4]) p3type=(-1|0) p4type=(-1|0)$/;
+    /^LAUNCH (0|[1-9][0-9]*) p1=([0-4]) p2=([0-4]) p2type=(-1|[01]) difficulty=([1-4]) stage=([0-5]) turbo=([01]) lcancel=([012]) flashlcancel=([01]) walljump=([01]) tapjump=([01]),([01]),([01]),([01]) versus=([01]) p3=([0-4]) p4=([0-4]) p3type=(-1|[01]) p4type=(-1|[01]) p3difficulty=([1-4]) p4difficulty=([1-4])$/;
 // iter 99 (M4 task 12): the target-mode launch record (foh.h TLAUNCH
 // note; char domain 0-4, tstage domain 0-9 == targetStageMapping).
 // iter 101 (review-99 L1): frame field is a CANONICAL decimal in the
@@ -261,13 +270,18 @@ const shotNames = new Set();
 const SVAL_DOM = {
   p1char: [0, 4], p2char: [0, 4], p3char: [0, 4], p4char: [0, 4],
   // -1 N/A, 0 HMN, 1 CPU (main.js:504-520 with DEVIATION D5's NET dropped).
-  // Ports 2/3 stop at HMN — DEVIATION D40(b), the sim has no second AI
-  // replay slot — so their domain is DIFFERENT, not merely a copy.
-  p1type: [-1, 1], p2type: [-1, 1], p3type: [-1, 0], p4type: [-1, 0],
+  // A49: ONE domain for all four ports. A44's D40(b) stopped ports 2/3 at
+  // HMN; the owner retired it, so CPU is reachable everywhere and the four
+  // rows really are copies now.
+  p1type: [-1, 1], p2type: [-1, 1], p3type: [-1, 1], p4type: [-1, 1],
   // whichTokenGrabbed[0]: -1 = empty-handed, else the port whose token is
   // held. A44/D40 lets the one hand hold any of the four.
   carry: [-1, 3],
+  // Four CPU levels, upstream's own width (cpuDifficulty = [3,3,3,3],
+  // main.js:109). Port 1's keeps the bare name `difficulty` every frozen
+  // trace already means by it; A49 APPENDED ports 2/3 rather than renaming.
   p1difficulty: [1, 4], difficulty: [1, 4],
+  p3difficulty: [1, 4], p4difficulty: [1, 4],
   turbo: [0, 1], lcancel: [0, 2],
   // MENU-SPEC §3.1's completed row list: rows 2 and 3 (gameplaymenu.js:
   // 50/:53, both `^= true` so integer 0/1).
@@ -290,7 +304,8 @@ const SFIELD_SCREENS = {
   p1char: ["css", "target-select"], p2char: ["css"],
   p3char: ["css"], p4char: ["css"],
   p1type: ["css"], p2type: ["css"], p3type: ["css"], p4type: ["css"],
-  p1difficulty: ["css"], difficulty: ["css"], carry: ["css"],
+  p1difficulty: ["css"], difficulty: ["css"],
+  p3difficulty: ["css"], p4difficulty: ["css"], carry: ["css"],
   turbo: ["options-gameplay"], lcancel: ["options-gameplay"],
   flashlcancel: ["options-gameplay"], walljump: ["options-gameplay"],
   tapjump1: ["options-gameplay"], tapjump2: ["options-gameplay"],

@@ -1,1 +1,1 @@
-BRIDGE-STATE p1=0 p2=0 p2type=0 difficulty=3 stage=0 turbo=1 lcancel=2 tapjump=1,1,0,0 phantom=3f847ae147ae147b p3=0 p4=0 p3type=-1 p4type=-1
+BRIDGE-STATE p1=0 p2=0 p2type=0 difficulty=3 stage=0 turbo=1 lcancel=2 tapjump=1,1,0,0 phantom=3f847ae147ae147b p3=0 p4=0 p3type=-1 p4type=-1 p3difficulty=3 p4difficulty=3

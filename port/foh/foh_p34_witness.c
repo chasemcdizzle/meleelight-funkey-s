@@ -49,6 +49,8 @@
 
 #include "foh.h"
 #include "foh_launch.h"
+#include "foh_persist.h"
+#include "../sim/ml_ser.h" // ml_sha256_hex, for the v5 migration arm
 
 void gfx_fatal(const char *what) {
   fprintf(stderr, "foh_p34_witness: gfx_fatal: %s\n", what);
@@ -180,8 +182,12 @@ static void press_a_expect(FohState *s, const char *sound, const char *field,
   foh_tick(s, &in);
 }
 
-static void reach_css(FohState *s) {
+// The REAL boot order, taken from foh_app.c: foh_init, then the persist
+// chokepoint's load+apply, then the tick loop. `p` NULL means a boot with no
+// persisted record, which is every leg but the last one.
+static void reach_css_boot(FohState *s, const FohPersist *p) {
   foh_init(s);
+  if (p) foh_persist_apply(p, s);
   PlatformInput in;
   memset(&in, 0, sizeof in);
   for (int i = 0; i < 380; i++) foh_tick(s, &in); // startup timer
@@ -199,6 +205,8 @@ static void reach_css(FohState *s) {
   }
 }
 
+static void reach_css(FohState *s) { reach_css_boot(s, 0); }
+
 // The centre of port k's type tab, from the SAME constants foh.c hit-tests
 // and foh_render.c draws (DEVIATION D4's single source).
 static void tab_centre(int k, double *x, double *y) {
@@ -209,40 +217,107 @@ static void tab_centre(int k, double *x, double *y) {
 static const char *const kCharName[5] = {"marth", "puff", "fox", "falco",
                                          "falcon"};
 
+// Which cell is port k's token drawn in? Derived from the SAME rects foh.c
+// hit-tests, never from a remembered pixel — that is the whole subject of
+// D21/D35/D46, so the instrument must not restate the bug it is looking for.
+// Returns -1 if the token is not inside any cell.
+static int token_cell(const FohState *s, int k) {
+  double tx, ty;
+  foh_css_token_pos(s, k, &tx, &ty);
+  FohHandRect cells[5];
+  foh_css_cells(cells);
+  for (int c = 0; c < 5; c++) {
+    if (tx > (double)cells[c].x && tx < (double)(cells[c].x + cells[c].w) &&
+        ty > (double)cells[c].y && ty < (double)(cells[c].y + cells[c].h)) {
+      return c;
+    }
+  }
+  return -1;
+}
+
+// Walk the hand to the centre of cell c.
+static bool walk_to_cell(FohState *s, int c) {
+  FohHandRect cells[5];
+  foh_css_cells(cells);
+  return walk_to(s, (double)cells[c].x + (double)cells[c].w / 2.0,
+                 (double)cells[c].y + (double)cells[c].h / 2.0);
+}
+
+// Cycle port k's type tab until it reads `want`, by REAL A presses on the
+// real tab. Loud rather than looping forever if the cycle cannot reach it.
+static bool set_port_type(FohState *s, int k, int want) {
+  double tx, ty;
+  tab_centre(k, &tx, &ty);
+  if (!walk_to(s, tx, ty)) return false;
+  for (int i = 0; i < 8; i++) {
+    if (foh_css_port_type(s, k) == want) return true;
+    press_a(s);
+  }
+  bad("port %d's type box never reached %d in a full cycle (it is %d)", k,
+      want, foh_css_port_type(s, k));
+  return false;
+}
+
 int main(void) {
   FohState s;
   reach_css(&s);
 
-  // --- [1] the type tabs of ports 2 and 3 -----------------------------------
-  for (int port = 2; port <= 3; port++) {
-    const char *field = port == 2 ? "p3type" : "p4type";
-    double tx, ty;
-    tab_centre(port, &tx, &ty);
-    if (foh_css_port_type(&s, port) != -1) {
-      bad("port %d does not start at N/A (-1), it is %d", port,
-          foh_css_port_type(&s, port));
-    }
-    if (!walk_to(&s, tx, ty)) return 1;
+  // --- [1] the type tab of EVERY port, all four, independently --------------
+  // A49 (owner ruling 1, *"yeah enable the CPu please"*) retires DEVIATION
+  // D40(b): ports 2/3 used to cycle N/A -> HMN -> N/A with CPU unreachable.
+  // All four ports now run upstream's own three-state cycle, so this leg is
+  // driven over all four rather than the two A44 added — a rule that only
+  // holds on the ports someone remembered to check is not a rule.
+  {
+    static const char *const kTypeField[FOH_CSS_PORTS] = {"p1type", "p2type",
+                                                          "p3type", "p4type"};
+    for (int port = 0; port < FOH_CSS_PORTS; port++) {
+      const char *field = kTypeField[port];
+      double tx, ty;
+      // foh_init arms port 0 at HMN (addPlayer, main.js:495) and leaves the
+      // other three at N/A (main.js:107). Assert the start state rather than
+      // assuming it, then walk each port round to N/A so the three presses
+      // below mean the same thing on every port.
+      const int wantStart = port == 0 ? 0 : -1;
+      if (foh_css_port_type(&s, port) != wantStart) {
+        bad("port %d does not start at %d, it is %d", port, wantStart,
+            foh_css_port_type(&s, port));
+      }
+      tab_centre(port, &tx, &ty);
+      if (!walk_to(&s, tx, ty)) return 1;
+      while (foh_css_port_type(&s, port) != -1) press_a(&s);
 
-    press_a_expect(&s, "menuSelect", field, 0, "turning the port on");
-    if (foh_css_port_type(&s, port) != 0) {
-      bad("port %d did not become HMN(0) on the first press, it is %d — the "
-          "owner's whole ticket is this press", port,
-          foh_css_port_type(&s, port));
+      press_a_expect(&s, "menuSelect", field, 0, "turning the port on");
+      if (foh_css_port_type(&s, port) != 0) {
+        bad("port %d did not become HMN(0) on the first press, it is %d",
+            port, foh_css_port_type(&s, port));
+      }
+      press_a_expect(&s, "menuSelect", field, 1, "turning the port to CPU");
+      if (foh_css_port_type(&s, port) != 1) {
+        bad("port %d did not reach CPU(1) on the second press, it is %d — "
+            "this press IS the owner's ticket, and D40(b) is why it used to "
+            "wrap to N/A on ports 2 and 3", port, foh_css_port_type(&s, port));
+      }
+      press_a_expect(&s, "menuSelect", field, -1, "turning the port off");
+      if (foh_css_port_type(&s, port) != -1) {
+        bad("port %d's cycle did not wrap to N/A after CPU, it is %d", port,
+            foh_css_port_type(&s, port));
+      }
+      ok("port %d's type box cycles N/A -> HMN -> CPU -> N/A under real A "
+         "presses", port);
     }
-    press_a_expect(&s, "menuSelect", field, -1, "turning the port off");
-    if (foh_css_port_type(&s, port) != -1) {
-      bad("port %d's cycle did not wrap N/A after HMN, it is %d — a CPU here "
-          "would launch a match the sim cannot replay (D40(b))", port,
-          foh_css_port_type(&s, port));
+    // ...and leave the machine where legs [2]-[6] expect it: ports 0, 2 and 3
+    // HMN and port 1 N/A, which is where A44's version of this leg ended.
+    static const int kAfterLeg1[FOH_CSS_PORTS] = {0, -1, 0, 0};
+    for (int k = 0; k < FOH_CSS_PORTS; k++) {
+      if (!set_port_type(&s, k, kAfterLeg1[k])) return 1;
     }
-    press_a_expect(&s, "menuSelect", field, 0, "turning the port back on");
-    if (foh_css_port_type(&s, port) != 0) {
-      bad("port %d did not return to HMN(0), it is %d", port,
-          foh_css_port_type(&s, port));
+    for (int k = 0; k < FOH_CSS_PORTS; k++) {
+      if (foh_css_port_type(&s, k) != kAfterLeg1[k]) {
+        bad("port %d was left at %d after leg [1], want %d", k,
+            foh_css_port_type(&s, k), kAfterLeg1[k]);
+      }
     }
-    ok("port %d's type box cycles N/A -> HMN -> N/A under a real A press, and "
-       "never reaches CPU", port);
   }
 
   // --- [2] take port 2's token and give it a character ----------------------
@@ -388,6 +463,374 @@ int main(void) {
       bad("the launch played no menuForward");
     }
     ok("START on P1 + P3 (P2 and P4 off) launches — it used to deny");
+  }
+
+
+  // ==========================================================================
+  // [7] fix_plan A49 ticket 1 — A CPU ON PORTS 2 AND 3, WITH A REAL LEVEL,
+  //     AND IT LAUNCHES.
+  //
+  // The owner's words: *"yeah enable the CPu please"*. A44's DEVIATION D40(b)
+  // refused it on the ground that "the sim refuses it"; MEASURED, that was
+  // wrong. AIBRIDGE1 is the RECORDED stream used to REPLAY a CPU golden, not
+  // what makes the AI run — the play path links the live C ai.c through
+  // ml_sim_runai_live. What AIBRIDGE1's single slot limits is checksum
+  // COVERAGE, which is the owner's call and he has made it.
+  //
+  // This leg drives BOTH new CPU ports and gives them DIFFERENT levels on
+  // purpose: the CPU-level plane was two scalars until A49, so a widening
+  // that collapsed ports 2/3 onto port 1's field would pass a one-port test
+  // and fail here.
+  {
+    FohState c;
+    reach_css(&c);
+    const int cpuChar[FOH_CSS_PORTS] = {0, 0, 4, 1}; // falcon on 2, puff on 3
+
+    if (!set_port_type(&c, 2, 1)) return 1;
+    if (!set_port_type(&c, 3, 1)) return 1;
+    if (foh_css_port_type(&c, 2) != 1 || foh_css_port_type(&c, 3) != 1) {
+      bad("ports 2 and 3 did not both reach CPU(1) (%d, %d)",
+          foh_css_port_type(&c, 2), foh_css_port_type(&c, 3));
+    }
+    ok("ports 2 and 3 are CPU, reached by real A presses on their own tabs");
+
+    // Give each of them a character, so the launch config below is not just
+    // reading marth back out of a memset.
+    for (int k = 2; k <= 3; k++) {
+      double tx, ty;
+      foh_css_token_pos(&c, k, &tx, &ty);
+      if (!walk_to(&c, tx, ty)) return 1;
+      press_a(&c);
+      if (c.cssCarry != k) {
+        bad("could not pick up port %d's token (carry is %d)", k, c.cssCarry);
+        return 1;
+      }
+      if (!walk_to_cell(&c, cpuChar[k])) return 1;
+      press_a(&c);
+    }
+
+    // --- the knob, dragged. Port 2 to the rail's LEFT end (level 1) and port
+    // 3 to its RIGHT end (level 4): the two extremes, so a knob that silently
+    // addressed the wrong port's rail would land off its own track.
+    const int wantLevel[FOH_CSS_PORTS] = {3, 3, 1, 4};
+    for (int k = 2; k <= 3; k++) {
+      const double x0 = (double)(foh_css_panel_x(k) + FOH_CSS_RAIL_X0);
+      if (!walk_to(&c, foh_css_knob_x(&c, k), foh_css_knob_y())) return 1;
+      press_a(&c);
+      if (c.cssCpuCarry != k) {
+        bad("A on port %d's CPU knob did not grab it (cpu carry is %d) — "
+            "before A49 the grab loop stopped at port 1", k, c.cssCpuCarry);
+        return 1;
+      }
+      // Drag along the rail. The machine forces the hand's y while dragging,
+      // so the walk is x-only: passing the CURRENT y makes walk_to skip that
+      // axis rather than fight the clamp forever.
+      const double railX = k == 2 ? x0 : x0 + (double)FOH_CSS_RAIL_LEN;
+      if (!walk_to(&c, railX, c.cssHandY)) return 1;
+      press_a(&c); // release (css.js:328-333)
+      if (c.cssCpuCarry != -1) bad("port %d's knob was not released", k);
+      if (foh_css_port_diff(&c, k) != wantLevel[k]) {
+        bad("port %d's CPU level is %d after dragging its knob to the rail's "
+            "%s end, want %d", k, foh_css_port_diff(&c, k),
+            k == 2 ? "left" : "right", wantLevel[k]);
+      }
+    }
+    // ORTHOGONALITY BY PORT, which is the whole reason to drive two knobs:
+    // ports 0/1 must still read the default. A two-wide plane aliased behind
+    // a `k == 0 ? p1Difficulty : difficulty` accessor would have moved port
+    // 1's level twice here and reported it as ports 2 and 3.
+    for (int k = 0; k < FOH_CSS_PORTS; k++) {
+      if (foh_css_port_diff(&c, k) != wantLevel[k]) {
+        bad("port %d's CPU level is %d, want %d — the four levels are not "
+            "four independent fields", k, foh_css_port_diff(&c, k),
+            wantLevel[k]);
+      }
+    }
+    ok("port 2's knob reads level 1 and port 3's reads level 4, while ports "
+       "0 and 1 keep the default 3 — four independent knobs");
+
+    // --- the launch config the sim is handed --------------------------------
+    SimPortCfg ports[4];
+    foh_launch_ports(&c, ports);
+    const int wantType[FOH_CSS_PORTS] = {0, -1, 1, 1};
+    for (int k = 0; k < FOH_CSS_PORTS; k++) {
+      if (ports[k].type != wantType[k]) {
+        bad("cfg.players[%d].type is %d, want %d", k, ports[k].type,
+            wantType[k]);
+      }
+      if (ports[k].character != cpuChar[k]) {
+        bad("cfg.players[%d].character is %s, want %s", k,
+            kCharName[ports[k].character], kCharName[cpuChar[k]]);
+      }
+      // The harness patch reads cfg.players[i].difficulty and takes 3 when it
+      // is undefined; -1 is this port's spelling of undefined, and it belongs
+      // on exactly the non-CPU ports.
+      const int wantDiff = wantType[k] == 1 ? wantLevel[k] : -1;
+      if (ports[k].difficulty != wantDiff) {
+        bad("cfg.players[%d].difficulty is %d, want %d — the level the player "
+            "set on port %d's knob is what the match must be played at", k,
+            ports[k].difficulty, wantDiff, k);
+      }
+    }
+    ok("the launch config carries CPU falcon@1 on port 2 and CPU puff@4 on "
+       "port 3, with -1 (undefined) on the two non-CPU ports");
+
+    // --- and it LAUNCHES ----------------------------------------------------
+    c.cssReady = true; // a DRAW-pass value; the launch GUARD is under test
+    PlatformInput in;
+    memset(&in, 0, sizeof in);
+    foh_tick(&c, &in);
+    in.start = true;
+    foh_tick(&c, &in);
+    if (strcmp(foh_screen_token(c.screen), "sss") != 0) {
+      bad("START on HMN + CPU(2) + CPU(3) did not reach the stage select "
+          "(screen is '%s') — the pre-A49 guard's `cpuTooHigh` clause "
+          "refused exactly this and emitted `refused portconfig`",
+          foh_screen_token(c.screen));
+    }
+    if (!snd_has(&c, "menuForward")) bad("the CPU launch played no menuForward");
+    ok("START on a P1 + CPU P3 + CPU P4 match launches — it used to deny");
+  }
+
+  // ==========================================================================
+  // [8] fix_plan A49 ticket 2(b) / DEVIATION D46 — LETTING GO OF THE PIN PUTS
+  //     IT BACK ON THE CHARACTER YOU SELECTED.
+  //
+  // Owner: *"whenever the pin is let go of (going off) it should go back to
+  // the character you selected"*. "Going off" is the LEAVE-BAND drop
+  // (css.js:336-347), upstream's second rest formula, which MEASURED lands a
+  // whole cell to the RIGHT of the character just selected (foh.h,
+  // FOH_CSS_TOKEN_LB_DX). This is the D21/D35 family's third instance: in all
+  // three the token was re-homed from something that was not the selection.
+  //
+  // Driven on ALL FOUR PORTS with FOUR DISTINCT non-default characters, none
+  // of which equals its own port index — so a port/roster mix-up (the exact
+  // confusion D21 and D35 were) cannot pass by coincidence.
+  FohState d;
+  const int pick[FOH_CSS_PORTS] = {3, 4, 1, 2}; // falco falcon puff fox
+  {
+    reach_css(&d);
+    for (int k = 0; k < FOH_CSS_PORTS; k++) {
+      double tx, ty;
+      foh_css_token_pos(&d, k, &tx, &ty);
+      if (!walk_to(&d, tx, ty)) return 1;
+      press_a(&d);
+      if (d.cssCarry != k) {
+        bad("could not pick up port %d's token (carry is %d)", k, d.cssCarry);
+        return 1;
+      }
+      if (!walk_to_cell(&d, pick[k])) return 1;
+      if (d.selChar[k] != pick[k]) {
+        bad("hovering %s's cell while carrying port %d's token selected %s "
+            "instead", kCharName[pick[k]], k, kCharName[d.selChar[k]]);
+      }
+      // THE GESTURE UNDER TEST: carry it UP out of the roster band and let go
+      // there. No A press — leaving the band is what commits and drops it.
+      if (!walk_to(&d, d.cssHandX, (double)FOH_CSS_BAND_TOP - 2.0)) return 1;
+      if (d.cssCarry != -1) {
+        bad("carrying port %d's token out of the band did not drop it", k);
+      }
+      if (d.cssTokenRest[k] != 1) {
+        bad("port %d's token came to rest in slot %d, want 1 — this leg has "
+            "not reproduced the LEAVE-BAND path it claims to test", k,
+            d.cssTokenRest[k]);
+      }
+      if (token_cell(&d, k) != pick[k]) {
+        bad("port %d let go of its pin over %s and it came to rest on cell "
+            "%d — D46 says a released pin returns to the character that port "
+            "SELECTED, never to a pixel formula", k, kCharName[pick[k]],
+            token_cell(&d, k));
+      }
+    }
+    // ...and no port disturbed another. Asserted AFTER all four, so a rule
+    // that only holds for the port most recently touched fails here.
+    for (int k = 0; k < FOH_CSS_PORTS; k++) {
+      if (d.selChar[k] != pick[k] || token_cell(&d, k) != pick[k]) {
+        bad("port %d ended on selection %s / token cell %d, want %s / %d",
+            k, kCharName[d.selChar[k]], token_cell(&d, k),
+            kCharName[pick[k]], pick[k]);
+      }
+    }
+    ok("all four ports: letting the pin go outside the band puts it back on "
+       "falco/falcon/puff/fox — the character each port selected");
+  }
+
+  // ==========================================================================
+  // [9] fix_plan A49 ticket 2(a) / DEVIATION D45 — THE SELECTION SURVIVES A
+  //     RESTART, AND THE PIN COMES BACK ON IT.
+  //
+  // MEASURED before this ticket: FohPersist carried no CSS state at all, so a
+  // pick had NEVER survived a restart on any port. The restart here is the
+  // real one — foh_persist_save to disk, a FRESH FohState, foh_persist_load,
+  // and foh_app.c's own boot order (foh_init -> apply -> tick) — not a struct
+  // copied over a struct.
+  {
+    // (i) the SAVE POINT itself. Both drivers now ask one shared predicate
+    // (foh_is_save_point), so this asserts the wiring, not a copy of it.
+    PlatformInput in;
+    memset(&in, 0, sizeof in);
+    bool sawSavePoint = false;
+    // The event buffer is PER TICK — foh_tick clears it — so the scan has to
+    // happen inside the loop. Draining it once at the end would have found an
+    // empty buffer and reported the wiring missing, which is how an
+    // instrument passes or fails for a reason that is not its subject.
+    for (int i = 0; i < 40; i++) {
+      in.b = true;
+      foh_tick(&d, &in);
+      for (int e = 0; e < d.nev; e++) {
+        if (d.ev[e].kind == FOH_EV_TRANS && strcmp(d.ev[e].from, "css") == 0 &&
+            foh_is_save_point(&d.ev[e])) {
+          sawSavePoint = true;
+        }
+      }
+    }
+    if (!sawSavePoint) {
+      bad("backing out of the CSS emitted no transition that "
+          "foh_is_save_point() calls a save point — the selection would be "
+          "collected by nobody and the restart below would be a fiction");
+    }
+    if (strcmp(foh_screen_token(d.screen), "css") == 0) {
+      bad("30 frames of B did not leave the CSS");
+    }
+    ok("leaving the CSS is a persistence save point, through the one "
+       "predicate both drivers ask");
+
+    // (ii) collect -> save -> load, on disk.
+    FohPersist saved;
+    foh_persist_defaults(&saved);
+    foh_persist_collect(&saved, &d);
+    for (int k = 0; k < FOH_CSS_PORTS; k++) {
+      if (saved.selChar[k] != pick[k]) {
+        bad("foh_persist_collect took port %d's selection as %s, want %s", k,
+            kCharName[saved.selChar[k]], kCharName[pick[k]]);
+      }
+    }
+    foh_persist_save(&saved);
+
+    FohPersist loaded;
+    const FohPersistStatus st = foh_persist_load(&loaded);
+    if (st != FOH_PERSIST_LOADED) {
+      bad("re-loading the file this run just wrote returned status %d, want "
+          "FOH_PERSIST_LOADED(0) — a bump that cannot read its own output "
+          "would silently reset every setting on the owner's device",
+          (int)st);
+      fprintf(stderr, "foh_p34_witness: %d failure(s)\n", g_fails);
+      return 1;
+    }
+    // The bump must not have cost anything that was already persisted. These
+    // are the v1..v5 planes, checked through the SAME round trip.
+    if (loaded.ctlStyle != saved.ctlStyle || loaded.modOnR != saved.modOnR ||
+        loaded.turbo != saved.turbo || loaded.lCancelType != saved.lCancelType ||
+        loaded.phantomThreshold != saved.phantomThreshold ||
+        loaded.masterVolume[0] != saved.masterVolume[0] ||
+        loaded.masterVolume[1] != saved.masterVolume[1]) {
+      bad("MLFKPERSIST6 did not round-trip the settings v1..v5 already "
+          "carried — a half-done bump drops the player's settings, which is "
+          "worse than not shipping the feature");
+    }
+    for (int c = 0; c < FOH_PERSIST_CHARS; c++) {
+      for (int t = 0; t < FOH_PERSIST_TSTAGES; t++) {
+        if (loaded.targetRecords[c][t] != saved.targetRecords[c][t]) {
+          bad("MLFKPERSIST6 did not round-trip target record [%d][%d]", c, t);
+        }
+      }
+    }
+
+    // (iii) THE RESTART. A fresh machine, booted the way foh_app.c boots it.
+    FohState r;
+    reach_css_boot(&r, &loaded);
+    for (int k = 0; k < FOH_CSS_PORTS; k++) {
+      if (r.selChar[k] != pick[k]) {
+        bad("after a restart port %d's selection is %s, want %s — the owner "
+            "asked for the LAST CHARACTER", k, kCharName[r.selChar[k]],
+            kCharName[pick[k]]);
+      }
+      if (token_cell(&r, k) != pick[k]) {
+        bad("after a restart port %d's pin sits on cell %d, want %d — the "
+            "token plane is re-homed FROM the selection at boot (D21/D35/D46 "
+            "again), never left on a memset marth", k, token_cell(&r, k),
+            pick[k]);
+      }
+    }
+    ok("after a real save/load/reboot all four ports read falco/falcon/puff/"
+       "fox, and every pin sits on its own port's character");
+
+    // (iv) THE DESIGN ANSWER, asserted rather than only written down: the
+    // port TYPES are deliberately NOT persisted (foh_persist.h carries the
+    // argument). A restart must open the CSS on foh_init's own state — port 0
+    // HMN, the rest N/A — and NOT ready to fight off a configuration the
+    // player last saw in another session. It matters more since A49: a CPU on
+    // port 2 or 3 is playable but not checksum-verified, and that must never
+    // be a device's default boot state.
+    for (int k = 0; k < FOH_CSS_PORTS; k++) {
+      if (foh_css_port_type(&r, k) != (k == 0 ? 0 : -1)) {
+        bad("after a restart port %d's type is %d, want %d — types are NOT "
+            "persisted, by design", k, foh_css_port_type(&r, k),
+            k == 0 ? 0 : -1);
+      }
+      if (foh_css_port_diff(&r, k) != 3) {
+        bad("after a restart port %d's CPU level is %d, want the default 3",
+            k, foh_css_port_diff(&r, k));
+      }
+    }
+    ok("...while the port TYPES and CPU levels are NOT restored: the CSS "
+       "opens on HMN/N-A/N-A/N-A, exactly as a fresh install does");
+
+    // (v) THE MIGRATION ARM. An OLDER file must be carried forward, never
+    // reset: resetting a valid v5 record would destroy every target-test
+    // personal best on the owner's device. Build a genuine v5 file from the
+    // v6 bytes on disk — drop the appended `sel` row, restamp the header,
+    // recompute the seal — and require the loader to migrate it.
+    {
+      char path[512];
+      snprintf(path, sizeof path, "%s/mlfk-persist.dat", foh_persist_dir());
+      FILE *f = fopen(path, "rb");
+      if (!f) { bad("cannot re-open the file just saved"); return 1; }
+      static char buf[8192];
+      size_t n = fread(buf, 1, sizeof buf - 1, f);
+      fclose(f);
+      buf[n] = 0;
+      char *sel = strstr(buf, "\nsel ");
+      char *sum = strstr(buf, "\nSUM ");
+      if (!sel || !sum || sel > sum) {
+        bad("the v6 file has no `sel` row before its SUM — the appended block "
+            "is not where the format says it is");
+        return 1;
+      }
+      // Splice out the sel line and restamp v6 -> v5.
+      memmove(sel, strchr(sel + 1, '\n'), strlen(strchr(sel + 1, '\n')) + 1);
+      memcpy(buf + 11, "5", 1); // "MLFKPERSIST6" -> "...5"
+      char *body = strstr(buf, "\nSUM ");
+      const size_t bodyLen = (size_t)(body - buf) + 1;
+      char hex[65];
+      ml_sha256_hex(buf, bodyLen, hex);
+      snprintf(body + 1, sizeof buf - bodyLen - 1, "SUM %s\n", hex);
+      f = fopen(path, "wb");
+      if (!f) { bad("cannot rewrite the file as v5"); return 1; }
+      fwrite(buf, 1, strlen(buf), f);
+      fclose(f);
+
+      FohPersist mig;
+      const FohPersistStatus ms = foh_persist_load(&mig);
+      if (ms != FOH_PERSIST_LOADED) {
+        bad("a valid MLFKPERSIST5 file did not MIGRATE, it returned status "
+            "%d — an upgrade must never discard a player's settings and "
+            "target records", (int)ms);
+      }
+      if (mig.ctlStyle != saved.ctlStyle || mig.modOnR != saved.modOnR ||
+          mig.masterVolume[0] != saved.masterVolume[0]) {
+        bad("the v5 migration lost settings the older format did carry");
+      }
+      for (int k = 0; k < FOH_CSS_PORTS; k++) {
+        if (mig.selChar[k] != 0) {
+          bad("the v5 migration invented a selection for port %d (%s) — a v5 "
+              "file has no opinion about characters, so every port must take "
+              "the fresh-install marth", k, kCharName[mig.selChar[k]]);
+        }
+      }
+      ok("an MLFKPERSIST5 file MIGRATES: its settings and records survive and "
+         "every port takes marth, because v5 never stored a character");
+    }
   }
 
   if (g_fails) {

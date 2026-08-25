@@ -1727,10 +1727,10 @@ static void render_css(const FohState *s, Raster *rz) {
     const int diff = foh_css_port_diff(s, k);
     // The knob is drawn at the CONTINUOUS slider position the machine holds,
     // which is also what foh.c hit-tests (D4) — not re-derived from the level.
-    // The `k < 2` is cssSliderX's width, and it is SAFE rather than merely
-    // in-bounds: css_panel draws and hot-tests the rail iff type == 1, and
-    // D40(b) makes type == 1 unreachable above port 1.
-    const double kx = k < 2 ? foh_css_knob_x(s, k) : 0.0;
+    // A49: no `k < 2` guard any more. cssSliderX is FOUR wide (upstream's
+    // own cpuSlider, css.js:72) now that D40(b) is retired and every port
+    // can be CPU, so every port has a real knob position to draw.
+    const double kx = foh_css_knob_x(s, k);
     const double ky = foh_css_knob_y();
     const int hotCpu = type == 1 && (s->cssCpuCarry == k ||
                                      (hy >= ky - FOH_CSS_KNOB_R &&

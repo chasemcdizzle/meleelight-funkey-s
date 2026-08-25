@@ -507,10 +507,12 @@ int main(int argc, char **argv) {
         // the user later happened to visit an UNRELATED options screen, so it
         // silently vanished on restart — the same class of bug as an
         // inaudible slider: the setting appears to take and does not survive.
-        if ((strcmp(ev->from, "options-gameplay") == 0 ||
-             strcmp(ev->from, "options-audio") == 0 ||
-             strcmp(ev->from, "controls-keyboard") == 0) &&
-            strcmp(ev->cause, "b") == 0) {
+        // A49: the condition itself now lives in ONE place
+        // (foh_is_save_point, foh.h), because both drivers reach this
+        // chokepoint and A31 measured what it costs when their two copies
+        // disagree. It covers these options/controls B-exits and the CSS
+        // exit that persists the selection (DEVIATION D45).
+        if (foh_is_save_point(ev)) {
           foh_persist_collect(&g_persist, &foh);
           // C30(c): the twin of the load-side calls above (foh_persist.h).
           g_persist.ctlStyle = (int)ctl_style_get();
@@ -548,18 +550,29 @@ int main(int argc, char **argv) {
           // p3/p4 are CHARACTERS (like p1/p2) and p3type/p4type are the
           // types; p1type has never been on this line because condition (1)
           // of the launch guard pins it to 0, and that has not changed.
+          //
+          // A49 APPENDS p3difficulty/p4difficulty by the same rule, and they
+          // are not decoration: A49 makes CPU reachable on ports 2/3, so
+          // without these two tokens a P3-CPU-at-level-1 match and a
+          // P3-CPU-at-level-4 match would emit BYTE-IDENTICAL LAUNCH lines.
+          // A launch witness blind to a plane the screen now writes is
+          // CONTEXT.md's "Seam" — each side green, nothing asserting the
+          // crossing. There is still no p1difficulty, for the same reason
+          // there is no p1type: port 0 cannot be CPU.
           w = fprintf(tf,
                       "LAUNCH %ld p1=%d p2=%d p2type=%d difficulty=%d "
                       "stage=%d turbo=%d lcancel=%d flashlcancel=%d "
                       "walljump=%d tapjump=%d,%d,%d,%d "
-                      "versus=%d p3=%d p4=%d p3type=%d p4type=%d\n",
+                      "versus=%d p3=%d p4=%d p3type=%d p4type=%d "
+                      "p3difficulty=%d p4difficulty=%d\n",
                       f, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
                       foh.stageSel, foh.turbo, foh.lCancelType,
                       foh.flashOnLCancel, foh.everyCharWallJump,
                       foh.tapJumpOff[0], foh.tapJumpOff[1],
                       foh.tapJumpOff[2], foh.tapJumpOff[3], foh.versusMode,
                       foh.selChar[2], foh.selChar[3], foh.portType[2],
-                      foh.portType[3]);
+                      foh.portType[3], foh.cpuDifficulty[2],
+                      foh.cpuDifficulty[3]);
         }
         if (w < 0) sim_fatal("--flow-out write failed");
       }
@@ -767,7 +780,8 @@ int main(int argc, char **argv) {
     if (fprintf(bf,
                 "BRIDGE-STATE p1=%d p2=%d p2type=%d difficulty=%d stage=%d "
                 "turbo=%d lcancel=%d tapjump=%d,%d,%d,%d "
-                "phantom=%016" PRIx64 " p3=%d p4=%d p3type=%d p4type=%d\n",
+                "phantom=%016" PRIx64 " p3=%d p4=%d p3type=%d p4type=%d "
+                "p3difficulty=%d p4difficulty=%d\n",
                 (int)G.sim.characterSelections[0],
                 (int)G.sim.characterSelections[1], (int)G.sim.playerType[1],
                 (int)G.cpuDifficulty[1], (int)G.stageSelect,
@@ -776,7 +790,8 @@ int main(int argc, char **argv) {
                 (int)G.sim.tapJumpOff[2], (int)G.sim.tapJumpOff[3],
                 phantomBits, (int)G.sim.characterSelections[2],
                 (int)G.sim.characterSelections[3], (int)G.sim.playerType[2],
-                (int)G.sim.playerType[3]) < 0) {
+                (int)G.sim.playerType[3], (int)G.cpuDifficulty[2],
+                (int)G.cpuDifficulty[3]) < 0) {
       sim_fatal("--bstate-out write failed");
     }
     if (fclose(bf) != 0) sim_fatal("--bstate-out close/flush failed");

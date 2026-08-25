@@ -392,7 +392,7 @@ made "$BUILD/foh_app"
 # first frames of its checksum stream. --frames 2 is deliberate: stocks are
 # written by startGame, so frame 1 already carries the whole answer, and a
 # 3600-frame replay would only make this slower.
-LAUNCH_RE='^LAUNCH [0-9]+ p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] flashlcancel=[01] walljump=[01] tapjump=[01],[01],[01],[01] versus=[01] p3=[0-4] p4=[0-4] p3type=(-1|0) p4type=(-1|0)$'
+LAUNCH_RE='^LAUNCH [0-9]+ p1=[0-4] p2=[0-4] p2type=[01] difficulty=[1-4] stage=[0-5] turbo=[01] lcancel=[012] flashlcancel=[01] walljump=[01] tapjump=[01],[01],[01],[01] versus=[01] p3=[0-4] p4=[0-4] p3type=(-1|0|1) p4type=(-1|0|1) p3difficulty=[1-4] p4difficulty=[1-4]$'
 run_leg() { # <binary> <flow> <legId>
   local bin="$1" flow="$2" id="$3"
   rm -rf "$BUILD/$id" "$BUILD/$id-persist"

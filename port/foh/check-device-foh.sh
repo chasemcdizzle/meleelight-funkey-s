@@ -234,10 +234,10 @@ b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wr
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-5a19f1322ad0914b88f9ab99c8d65b6487fe8df3c47be31b8a02105f58ed8b17 port/foh/judge-foh-trace.js
+2cf26a5b8b7065c17ffa934d8a027d3bba3a8ea50b121cdd6d8bd8e9155b8668 port/foh/judge-foh-trace.js
 4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js
 2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e port/foh/keymap-frozen.txt
-a1353a71a66bb05bc28d547eee9385cfa8da7baf784f9e038bd31834cabb9cb8 port/foh/normalize-foh-trace.js
+62adf8078522647ab00853307026443b777f46ae556f6f9dec48520afa3b8308 port/foh/normalize-foh-trace.js
 1163e9c18323ac06aaaec4ee3068691d7d67ebbf98b3500a343a69c80ca793ea port/foh/flow-to-fkscript.js
 809ea4f6cc361014f75be8034d8fef69fd2a683213c1bc111574dfbbe98a31f9 port/foh/decode-pb-glyphs.js"
 # +2 (CSS mechanics arc): this check EXECUTES the normalizer (its poll-path
@@ -416,7 +416,7 @@ done <<< "$PRODUCER_PINS"
 # (the sibling's pin line sits inside its PRODUCER_PINS quoted block, so
 # it may carry the block's closing quote — match the exact sha+path pair
 # and require EXACTLY one occurrence)
-c="$(grep -cF "5a19f1322ad0914b88f9ab99c8d65b6487fe8df3c47be31b8a02105f58ed8b17 port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
+c="$(grep -cF "2cf26a5b8b7065c17ffa934d8a027d3bba3a8ea50b121cdd6d8bd8e9155b8668 port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
 [ "$c" = 1 ] || fail "twin pin — check-foh-flows.sh does not carry the same judge-foh-trace.js sha exactly once (count $c; paired change rule)"
 rig_pin_assert_once "$GFX/check-device-music.sh" SNDPACK_SHA256 "$SNDPACK_SHA256" || exit 1
 rig_pin_assert_once "$GFX/check-device-music.sh" MUSIC_BF_SHA256 "$MUSIC_BF_SHA256" || exit 1

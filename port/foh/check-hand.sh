@@ -296,10 +296,22 @@ carried="$(grep -c ' c=0,' "$BUILD/dump-new.txt")" || true
 [ "$carried" -ge 200 ] \
   || fail "only $carried swept frames carried a token (want >= 200) — the drop
   arm, which is the arm whose hit test the extraction moved, is barely covered"
-picks="$(grep -o 'ch=[0-9],[0-9]' "$BUILD/dump-new.txt" | sort -u | wc -l | tr -d ' ')"
-[ "$picks" -ge 6 ] \
-  || fail "the sweep only reached $picks distinct roster pairs (want >= 6) — the
-  cell hit test is barely exercised"
+# A49/DEVIATION D46 MOVED THIS FLOOR, and the direction is the point. Until
+# A49 a token released outside the band came to rest one cell RIGHT of the
+# character it selected (upstream's second rest formula); D46 homes it on the
+# selection instead, so every later grab in this sweep starts from a different
+# pixel and the walk lands differently. MEASURED consequence: the sweep used
+# to reach 6 distinct (cssChar[0], cssChar[1]) PAIRS and now reaches 5 — but
+# it reaches ALL FIVE ROSTER CELLS, which is what "the cell hit test is
+# exercised" actually means. So the floor is stated as the thing it is for,
+# EXHAUSTIVELY: every cell in the roster must be selected by this sweep. That
+# is strictly stronger than any pair count — a degenerate sweep cannot satisfy
+# it, and 6 mixed pairs could have been three characters across two ports.
+cells="$(grep -o 'ch=[0-9],[0-9]' "$BUILD/dump-new.txt" \
+  | sed -E 's/^ch=([0-9]),([0-9])$/\1\n\2/' | sort -u | wc -l | tr -d ' ')"
+[ "$cells" = 5 ] \
+  || fail "the sweep selected $cells of the 5 roster characters (want all 5) —
+  the cell hit test is not exercised across the whole roster"
 # A44 / DEVIATION D41 — THE TWO MASKED COLUMNS, and why masking them is not
 # a weakening. A44 put ports 2 and 3 on the CSS, and four radius-9 tokens at
 # pitch 20 do not fit a 44 px cell: laid out in a row they would have spanned
@@ -341,7 +353,7 @@ cmp -s "$BUILD/dump-head.noa.txt" "$BUILD/dump-new.noa.txt" \
   && fail "the unmasked dumps are byte-identical, so DEVIATION D41's token
   geometry is no longer in effect. The mask above is now covering nothing:
   delete it and restore the whole-dump comparison, in the same change."
-echo "   $FRAMES frames, all on the CSS, $carried carrying, $picks roster pairs:"
+echo "   $FRAMES frames, all on the CSS, $carried carrying, all $cells roster cells:"
 echo "   A-free: working tree == $A25C_BASE byte for byte outside D41's two"
 echo "   columns, and those two columns really do differ (the mask is live)"
 

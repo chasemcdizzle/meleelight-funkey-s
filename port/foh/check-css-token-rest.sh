@@ -130,14 +130,21 @@ n="$(grep -cxF '  for (int k = 0; k < FOH_CSS_PORTS; k++) f->cssTokenRest[k] = 2
   "$FOH/foh_dev.c")" || true
 [ "$n" = 1 ] || grammar_die "foh_dev.c has $n lines putting every token in rest
   slot 2 (want 1) — the endGame SNAP the witness models moved or changed slot"
-# (b) The D21 arm must be textually unique, so the negative test below can
-#     perturb exactly it (the A-drop arm computes the same base by design now,
-#     and its line would otherwise be indistinguishable).
-D21_LINE='    base = (double)(foh_css_cell_x(c) + FOH_CSS_TOKEN_DX); // D21: `c`, not `k`'
+# (b) The resting-token base line must be textually unique, so the negative
+#     test below can perturb exactly it.
+#     A49/DEVIATION D46 COLLAPSED THE THREE REST ARMS INTO ONE. Upstream's
+#     three rest formulas now all resolve to "the cell of the character this
+#     port chose" (foh_css_token_pos carries the argument), so there is one
+#     line to pin rather than a D21 arm that has to be told apart from an
+#     A-drop arm computing the same thing. The tooth below is UNCHANGED in
+#     what it asserts — a port-indexed rest position must fail the witness —
+#     and is now STRONGER, because that one line serves all three paths.
+D21_LINE='  const double base = (double)(foh_css_cell_x(c) + FOH_CSS_TOKEN_DX);'
 n="$(grep -cxF "$D21_LINE" "$FOH/foh.c")" || true
-[ "$n" = 1 ] || grammar_die "foh.c has $n D21 arm lines (want exactly 1) — the
-  negative test below cannot target the endGame snap arm unambiguously"
-echo "   foh_dev.c still snaps both tokens to rest slot 2; foh.c's D21 arm is unique"
+[ "$n" = 1 ] || grammar_die "foh.c has $n resting-token base lines (want
+  exactly 1) — the negative test below cannot target the rest position
+  unambiguously"
+echo "   foh_dev.c still snaps both tokens to rest slot 2; foh.c's rest base is unique"
 
 # --- [2] the witness against the REAL tree ----------------------------------
 # port/gfx/ctl_style.c is REQUIRED, not optional: foh.c's Controls screen calls
@@ -173,7 +180,12 @@ node -e '
     console.error("T1: found " + n + " copies of the D21 arm (want exactly 1)");
     process.exit(1);
   }
-  const back = "    base = (double)(foh_css_cell_x(k) + FOH_CSS_TOKEN_DX); // T1: pre-A29";
+  // The perturbation stays SCOPED TO REST SLOT 2, the endGame snap, even
+  // though A49/D46 collapsed the three rest arms onto one line: the claim
+  // this tooth makes is about the pre-A29 snap and nothing else, and the
+  // guard below (no CHARACTER PLANE assertion may fail) only means anything
+  // while the copy differs from foh.c by exactly that.
+  const back = "  const double base = (double)(foh_css_cell_x(s->cssTokenRest[k] == 2 ? k : c) + FOH_CSS_TOKEN_DX); // T1: pre-A29";
   const out = raw.replace(line, back);
   if (out === raw) { console.error("T1: substitution was a no-op"); process.exit(1); }
   fs.writeFileSync(dst, out);

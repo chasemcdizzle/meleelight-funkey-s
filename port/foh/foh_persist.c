@@ -20,7 +20,7 @@
 
 // The CURRENT format version. One number: the header literal is built from
 // it and every block gate below compares against it.
-#define FP_VERSION 5
+#define FP_VERSION 6
 #define FP_FILE "mlfk-persist.dat"
 #define FP_TMP "mlfk-persist.tmp"
 #define FP_DEFAULT_DIR "/mnt/mlfk-data"
@@ -76,6 +76,13 @@ void foh_persist_defaults(FohPersist *p) {
   for (int k = 0; k < CTL_BIND_PORTS; k++) {
     for (int i = 0; i < (int)CTL_BTN_COUNT; i++) p->bind[k][i] = i;
   }
+  // v6 (fix_plan A49; DEVIATION D45): the CSS selection. Marth (0) on every
+  // port, which is BOTH upstream's fresh state (characterSelections is
+  // `[0,0,0,0]`, main.js:59) and foh_init's — so this line is what the
+  // memset already gives and is written out anyway, because a default that
+  // is only true by accident of being zero is the one that breaks silently
+  // when the roster order changes. Same argument ctlStyle carries above.
+  for (int k = 0; k < FOH_CSS_PORTS; k++) p->selChar[k] = 0;
 }
 
 // --- canonical serialization (deterministic bytes; twin-cmp'd) --------------
@@ -106,7 +113,7 @@ static double fp_double(uint64_t b) {
 static size_t fp_serialize(const FohPersist *p, char *buf, size_t cap) {
   size_t n = 0;
   int w = snprintf(buf + n, cap - n,
-                   "MLFKPERSIST5\nturbo %d\nlcancel %d\n"
+                   "MLFKPERSIST6\nturbo %d\nlcancel %d\n"
                    "tapjump %d %d %d %d\nctlstyle %d\nmodonr %d\n",
                    p->turbo, p->lCancelType, p->tapJumpOff[0],
                    p->tapJumpOff[1], p->tapJumpOff[2], p->tapJumpOff[3],
@@ -149,6 +156,16 @@ static size_t fp_serialize(const FohPersist *p, char *buf, size_t cap) {
     }
     n += (size_t)w;
   }
+  // v6 BLOCK (fix_plan A49; DEVIATION D45) — appended after the v5 block for
+  // the same prefix reason: v1..v5 stay strict prefixes, so one parser still
+  // serves every one of them and no older line index moves.
+  //
+  // The SELECTION plane only — never the token plane, and never the port
+  // types or the CPU levels. The argument is at foh_persist.h's format note.
+  w = snprintf(buf + n, cap - n, "sel %d %d %d %d\n", p->selChar[0],
+               p->selChar[1], p->selChar[2], p->selChar[3]);
+  if (w < 0 || (size_t)w >= cap - n) gfx_fatal("foh_persist: serialize overflow");
+  n += (size_t)w;
   char hex[65];
   ml_sha256_hex(buf, n, hex);
   w = snprintf(buf + n, cap - n, "SUM %s\n", hex);
@@ -246,8 +263,17 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
     while (e < sumStart && buf[e] != '\n') e++;
     if (e >= sumStart) return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "header");
     const size_t len = e - pos;
-    if (len == 12 && memcmp(buf + pos, "MLFKPERSIST5", 12) == 0) {
+    if (len == 12 && memcmp(buf + pos, "MLFKPERSIST6", 12) == 0) {
       // current version
+    } else if (len == 12 && memcmp(buf + pos, "MLFKPERSIST5", 12) == 0) {
+      // MIGRATION. v6 is v5 plus the one appended `sel` row (fix_plan A49).
+      // A v5 file was written by a build that persisted no character at all,
+      // so it HAS no opinion to carry forward and the fresh-install marth
+      // foh_persist_defaults() already put in *p is exactly the selection
+      // that device booted with. Nothing a player set is lost: every
+      // setting, both control stamps, all four bindings and all 50 target
+      // records parse with the SAME code below.
+      fromVer = 5;
     } else if (len == 12 && memcmp(buf + pos, "MLFKPERSIST4", 12) == 0) {
       // MIGRATION. v4 is v5 minus the four appended `bind` rows (fix_plan
       // A31). A v4 file was written by a build that had no rebinder, so the
@@ -491,11 +517,36 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
       pos += 23;
     }
   }
+  // v6 BLOCK (fix_plan A49) — present only in v6 files. A v5-or-older file
+  // keeps the fresh-install marth selection foh_persist_defaults(&v) put in.
+  if (ver >= 6) {
+    // "sel <c> <c> <c> <c>" — fixed width, anchored: 4 + 4*2 = 12 bytes.
+    if (sumStart - pos < 12 || memcmp(buf + pos, "sel ", 4) != 0 ||
+        buf[pos + 11] != '\n') {
+      return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "grammar");
+    }
+    for (int k = 0; k < FOH_CSS_PORTS; k++) {
+      const char d = buf[pos + 4 + 2 * (size_t)k];
+      const char sep = buf[pos + 5 + 2 * (size_t)k];
+      if (sep != (k == FOH_CSS_PORTS - 1 ? '\n' : ' ')) {
+        return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "grammar");
+      }
+      // DOMAIN: a roster id, 0..4 (CHARIDS, five characters — the same five
+      // pipeline/expected.json pins). A sixth id would index charAttributes
+      // out of bounds at launch, so it is corruption and resets loudly; it
+      // is never clamped, which is the qjs Number("")-zeroing lesson.
+      if (d < '0' || d > '4') {
+        return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "domain");
+      }
+      v.selChar[k] = d - '0';
+    }
+    pos += 12;
+  }
   // nothing may sit between the last content line and the SUM line
   if (pos != sumStart) return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "grammar");
   *p = v;
   // A migrated older file is LOADED, not reset — but it says so loudly,
-  // so an upgrade is never silent. The next save republishes it as v5.
+  // so an upgrade is never silent. The next save republishes it as v6.
   if (fromVer) fprintf(stderr, "foh_persist: migrated from=%d\n", fromVer);
   fprintf(stderr, "foh_persist: loaded\n");
   return FOH_PERSIST_LOADED;
@@ -577,6 +628,22 @@ void foh_persist_apply(const FohPersist *p, FohState *s) {
   s->masterVolume[1] = p->masterVolume[1];
   for (int k = 0; k < 4; k++) s->tapJumpOff[k] = p->tapJumpOff[k];
   memcpy(s->targetRecords, p->targetRecords, sizeof s->targetRecords);
+  // A49/D45: the SELECTION plane, and the TOKEN plane RE-HOMED FROM IT.
+  //
+  // Writing both here is the whole of observable (b) at boot, and it is
+  // D21/D35/D46's rule stated once more: a token is re-homed from the
+  // SELECTION, never from anything else. Only `selChar` is on disk — if the
+  // token plane were persisted separately the two could come back
+  // disagreeing, and a player would boot looking at a character he did not
+  // pick, which is CONTEXT.md's costliest defect on this exact screen.
+  //
+  // cssTokenRest is deliberately NOT touched: foh_init's memset leaves it at
+  // 0 (the A-drop slot) and, since D46, every slot draws on the selection
+  // anyway. The bound is FOH_CSS_PORTS because the plane is four ports wide.
+  for (int k = 0; k < FOH_CSS_PORTS; k++) {
+    s->selChar[k] = p->selChar[k];
+    s->cssChar[k] = p->selChar[k];
+  }
   g_bound = s; // review-100 M1: bind for the record-time refresh
 }
 
@@ -591,6 +658,9 @@ void foh_persist_collect(FohPersist *p, const FohState *s) {
   p->masterVolume[0] = s->masterVolume[0];
   p->masterVolume[1] = s->masterVolume[1];
   for (int k = 0; k < 4; k++) p->tapJumpOff[k] = s->tapJumpOff[k];
+  // A49/D45: the SELECTION plane. `cssChar` is NOT collected — it is a view
+  // of this one (foh.h), and storing a view is how two representations drift.
+  for (int k = 0; k < FOH_CSS_PORTS; k++) p->selChar[k] = s->selChar[k];
   // records are chokepoint-owned: they change ONLY through
   // foh_persist_record_update (the finishGame arm), never collected
   // back from the display copy.

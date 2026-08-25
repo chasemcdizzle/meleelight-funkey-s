@@ -30,7 +30,7 @@
 //     truth (medal DISPLAY = the registered iter-99 pipeline-extension
 //     deferral).
 //
-// FILE FORMAT `MLFKPERSIST5` (versioned + checksummed; exactly 68 LF
+// FILE FORMAT `MLFKPERSIST6` (versioned + checksummed; exactly 69 LF
 // lines, deterministic bytes — twin checks cmp host vs device). v2
 // added the `ctlstyle` line, v3 the `modonr` line (fix_plan A4), v4
 // the seven options lines below (MENU-SPEC §3/§4 — the completed
@@ -50,13 +50,17 @@
 // Older files on disk are MIGRATED, never discarded (review-ctl r1/r2):
 // the checksum is verified like any other and every setting plus all 50
 // target records are carried forward, emitting
-// `foh_persist: migrated from=<1|2|3|4>` and then `loaded`. Resetting a
+// `foh_persist: migrated from=<1|2|3|4|5>` and then `loaded`. Resetting a
 // VALID older file would destroy every target-test personal best on the
 // owner's device. Every older format is a strict PREFIX of the
 // next, so one parse serves them all and the migration only fills what
 // is absent:
 //   from v2 — ctlStyle carries over UNCHANGED (the CtlStyle enum numbers
 //     are frozen for exactly this reason), modOnR takes the ratified 0.
+//   from v5 — no `sel` row, so every port takes MARTH (0): a v5 file was
+//     written by a build that persisted no character at all, so it has no
+//     opinion to carry forward, and marth is exactly the selection that
+//     device booted its CSS with.
 //   from v4 — no `bind` rows, so every port takes the IDENTITY binding:
 //     a v4 file was written by a build with no rebinder at all, so the
 //     identity is precisely the mapping that device already had.
@@ -67,9 +71,9 @@
 // NATURAL is the default for a FRESH/reset install only, and an upgrade
 // never silently moves a binding. Each version is validated against ITS
 // OWN grammar: a v2 file's ctlstyle domain is the historical {0,1}, not
-// the current {0,1,2} (review-ctl n1). Any version >= 6 (a FUTURE format
+// the current {0,1,2} (review-ctl n1). Any version >= 7 (a FUTURE format
 // this build cannot know) takes RESET_VERSION:
-//   MLFKPERSIST5
+//   MLFKPERSIST6
 //   turbo [01]
 //   lcancel [0-2]
 //   tapjump [01] [01] [01] [01]
@@ -85,10 +89,11 @@
 //   musiclevel <hex16>
 //   bind <port> <8 slot digits>   x4, port-major (port 0..3, in order);
 //                                 each row a PERMUTATION of 0..7
+//   sel <c> <c> <c> <c>           [0-4] x4, port-major (fix_plan A49, D45)
 //   SUM <sha256-lowercase-hex of ALL preceding bytes>
-// The v4 and v5 blocks are APPENDED after the 50 rec rows on purpose: it
+// The v4, v5 and v6 blocks are APPENDED after the 50 rec rows on purpose: it
 // keeps every older version a strict PREFIX through the rec block, so the
-// one shared parser still serves v1/v2/v3/v4 and their rec-row line
+// one shared parser still serves v1/v2/v3/v4/v5 and their rec-row line
 // indices are unchanged. Migration fills the v4 block with the authored defaults
 // (flash/walljump/blastzone/dustless 0, phantom 0.01, soundslevel 0.5,
 // musiclevel 0.3) — the same values a fresh install gets, because no
@@ -128,7 +133,7 @@
 // by check-device-persist.sh; committed device checks' summary parsers
 // are needle-anywhere and unaffected):
 //   foh_persist: loaded
-//   foh_persist: migrated from=<1|2|3|4>  (review-ctl r1/r2 + the
+//   foh_persist: migrated from=<1|2|3|4|5>  (review-ctl r1/r2 + the
 //                2026-07-29 v3 bump and the v4 bump: a VALID older file
 //                was carried forward — settings + all 50 records
 //                preserved; from=1 also sets ctlStyle to BOX, the only
@@ -217,6 +222,43 @@ typedef struct {
   //   load:        for (k) ctl_bind_set_row(k, p.bind[k]);
   //   before save: for (k, i) p.bind[k][i] = ctl_bind_get(k, i);
   int bind[CTL_BIND_PORTS][CTL_BTN_COUNT];
+
+  // --- v6 (fix_plan A49; DEVIATION D45) ---------------------------------
+  // The CSS SELECTION plane: which character each PORT has chosen
+  // (FohState.selChar — CONTEXT.md's "Selection plane"). Owner, verbatim:
+  // *"i want to MAKE it persistent please ... I want it to be the last
+  // character"*. Upstream cookies no character at all (getGameplayCookies
+  // reads gameSettings and nothing else), so persisting one is the
+  // deviation, not the omission. MEASURED before writing it: nothing here
+  // carried any CSS state, so picks had NEVER survived a restart on any
+  // port — this is a new feature, not a regression being repaired.
+  //
+  // WHAT IS DELIBERATELY NOT HERE, and why — this was a design question,
+  // answered, not an oversight:
+  //
+  //   * the TOKEN plane (FohState.cssChar) is a VIEW of this one, so it is
+  //     re-homed FROM it by foh_persist_apply rather than stored beside it.
+  //     Storing a view next to the thing it views is precisely CONTEXT.md's
+  //     "one thing having two representations that drifted apart" — the
+  //     class that has already cost this screen D21, D35 and D46.
+  //
+  //   * the PORT TYPES (FohState.portType) and the CPU LEVELS are NOT
+  //     persisted. Restoring them would boot the machine with ports already
+  //     switched on — a CSS that is READY TO FIGHT before the player has
+  //     touched it, off a configuration he last saw in another session. Two
+  //     reasons beyond taste: (1) upstream's fresh state is
+  //     `playerType = [-1,-1,-1,-1]` (main.js:107) with addPlayer arming
+  //     port 0 (main.js:495), which is what foh_init reproduces, so not
+  //     persisting types is the FAITHFUL answer as well as the quiet one;
+  //     (2) A49 also made CPU reachable on ports 2/3, and a 3-or-4-port CPU
+  //     match is playable but NOT checksum-verified (the launch guard in
+  //     foh.c carries that consequence in full) — persisting types would
+  //     make that unverified configuration a device's DEFAULT BOOT STATE
+  //     rather than something the player chose this session. The character
+  //     survives; arming a port stays an explicit act. If the owner wants
+  //     types too it is one more appended row and one more `ver >= 7` block,
+  //     which is exactly what the migration rule above makes cheap.
+  int selChar[FOH_CSS_PORTS];
 } FohPersist;
 
 typedef enum {
@@ -235,8 +277,8 @@ void foh_persist_defaults(FohPersist *p);
 
 // Load <dir>/mlfk-persist.dat. On ANY reset arm, *p holds the defaults
 // on return. Emits exactly one TERMINAL stderr event line (`loaded` or
-// one `reset cause=...`); a v1, v2 OR v3 migration additionally emits
-// the `migrated from=<1|2|3>` PRELUDE line immediately before its `loaded`, so
+// one `reset cause=...`); a v1..v5 migration additionally emits
+// the `migrated from=<1|2|3|4|5>` PRELUDE line immediately before `loaded`, so
 // a migrating boot emits two lines, never one.
 FohPersistStatus foh_persist_load(FohPersist *p);
 
