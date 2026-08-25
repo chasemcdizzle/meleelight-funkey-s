@@ -7466,3 +7466,76 @@ walljump pose unless an existing animation is reused too.
 readers`. **D20 made it live** (`port/sim/physics.c:400`). Same class as
 `s1_input.h`'s "Z: grab" comment, which was true of real Melee, false of this
 engine, and shipped a dead button. **A comment is not evidence.**
+
+## PUFF WALLJUMP — DONE 2026-08-24 (D47). **AND #16 IS CLOSED.**
+
+**THE SOURCE ECB IS `WALLTECHJUMP`, NOT `FALL` — and the measurement is the
+whole ticket.** For **all FOUR characters that HAVE a WALLJUMP ECB** (marth,
+fox, falco, falcon), their **WALLTECHJUMP ECB is BYTE-IDENTICAL to it** — 40
+frames, all 160 coordinates, **four independent instances.** So this is not a
+resemblance argument: **upstream's own data says a wall-tech-jump ECB IS a
+walljump ECB**, and the reused number is the one upstream WOULD have authored,
+not an approximation of it. Puff has WALLTECHJUMP with **45** ECB frames against
+the **40** that `framesData["WALLJUMP"]` clamps to (`physics.c:1456`) — it
+covers.
+
+**THE OWNER'S `FALL` HYPOTHESIS IS REJECTED, AND HIS QUESTION MARK WAS THE RIGHT
+INSTINCT.** **Puff's FALL ECB is 8 FRAMES.** Walljump frame 9 would trap
+`ecb frame out of range` — **mechanically impossible, not merely a worse fit.**
+It also ranked **7th** when marth's own states were ranked by mean
+per-coordinate distance to marth's WALLJUMP ECB; **WALLTECHJUMP ranked 1st at
+distance exactly 0**, which is how the lane found it.
+
+**HOW IT SURVIVES REGENERATION — it never touches the generated tables.**
+`pipeline/stages/tables.js` serializes upstream verbatim and `check-tables.sh`
+round-trips the generated C against a fresh executed-JS walk, so a hand-added
+puff ECB would be **both erased by the next `node pipeline/run.js` AND a house
+rule disguised as upstream data.** The alias lives at the DEVIATION SITE: a new
+`walljump_ecb()` in `physics.c` is **the single owner of "which ECB does a
+walljump use", called by BOTH the ability gate and the per-frame lookup.**
+**That shared owner is deliberate — gate-and-lookup drift is precisely how D20
+shipped its crash.**
+
+**ANIMATION ADDRESSED, NOT DEFERRED.** Puff has **0** WALLJUMP occurrences in
+`anim_1_puff.bin` and **1** WALLTECHJUMP — same reuse, same measurement, 4 lines
+in `gfx_render.c`. Without it **puff would walljump INVISIBLY for up to 40
+frames**: the existing `if (!as) return` is upstream-faithful for a state
+upstream cannot reach, **but D20 can now reach it.** Inert for the four
+characters with their own pose.
+
+**#16 — THE D20 MARTH WITNESS — IS CLOSED.** flag-off
+`JUMPAERIALB -> FALLAERIAL`; flag-on **`WALLJUMP` from frame 186.** **The D20
+marth path has now executed for the first time.** It needed a DOUBLE JUMP to
+hold marth beside the wall — **marth and fox otherwise fall straight past
+ystory's wall and SD, which is why six walk-and-drift patterns found zero wall
+frames in August.**
+
+**THE RIG PROVES ITS INSTRUMENT ON A POSITIVE FIRST — the thing the 2026-08-05
+attempt skipped:** **fox walljumps on the witness trace with NO house rule at
+all** (`attributes.walljump` is 1 upstream). **Only then does it trust a null.**
+That is the direct answer to this session's five vacuous teeth.
+
+**Results:** `WALLJUMP D47 OK` — which INCLUDES `SIM CONFORMS`, 8/8
+`STREAM MATCH`, 3600/3600 exact, **flag-off bit-identical** · `TABLES OK`
+(38,832 leaf values bit-exact). Both re-verified by the driver on merged bytes.
+**Both teeth bite** (run, then reverse-edited — not `git checkout --`): deleting
+the fallback in `walljump_ecb()` drops puff 3 -> 0 walljump frames; deleting it
+in `ecb_state()` **reproduces D20's shipped crash EXACTLY** —
+`SIM FATAL frame 187: ecb: unknown action state`, one frame after the walljump
+fires.
+
+### DRIVER ITEMS FROM THIS LANE
+1. **`oracle/harness/.gitignore` has `node_modules/` WITH A TRAILING SLASH**, so
+   it matches directories but **not a symlink** — which is exactly the **A36**
+   mechanism. The lane suggested a one-char fix. **THE DRIVER IS NOT MAKING IT:
+   that file is under `oracle/`, which is READ-ONLY outside M0 (HARD RULE 3).**
+   Registered instead — the same discipline given to every lane, and the same
+   trap the driver already fell into once today on the freeze manifest.
+2. **`port/foh/foh_persist.h:195` still reads `everyCharWallJump ... // DEAD, no
+   sim readers`** — **now DOUBLY false** (D20 gave it sim readers; D47 widened
+   them). In the parallel lane's file; owed once that lane merges.
+3. **NEW GOTCHA CLASS, cost the lane one run: editing a bash script WHILE IT IS
+   EXECUTING corrupts the run** — bash re-reads by byte offset, so a mid-run
+   comment insert made it execute fragments and exit 1 **after a fully green
+   `SIM CONFORMS`**. **Signature: a green sub-result followed by a nonsense
+   failure.**
