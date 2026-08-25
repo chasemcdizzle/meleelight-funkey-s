@@ -98,8 +98,33 @@ void sim_boot_page(GameState *g);
 // = Vec2D(undefined,undefined)x4 — the startingPoint-array .x/.y quirk),
 // matchTimer=480, startTimer=1.5, starting=true, playing=true.
 // p2type: 0 human, 1 cpu.
+//
+// A46: this is now the 2-PORT WRAPPER over sim_setup_match_ports below.
+// Every pre-A46 caller keeps this signature and this behaviour
+// bit-for-bit — check-sim.sh's 8 goldens all run through the wrapper.
 void sim_setup_match(GameState *g, int p1, int p2, int p2type,
                      int difficulty, int stageId);
+
+// One port's match-setup slot — harnessSetupMatch's cfg.players[i]
+// (oracle/meleelight-harness.patch:76-92, which is FOUR-port by
+// construction: `for (var i = 0; i < 4; i++) { var pc = cfg.players[i];
+// if (pc) {…} else {…} }`). A46: the engine plane is four ports wide
+// (CONTEXT.md "Participant"); only the CALLERS were ever two.
+typedef struct {
+  int type;       // -1 ABSENT port (the patch's `else` arm); 0 human, 1 cpu
+  int character;  // 0 marth 1 puff 2 fox 3 falco 4 falcon (unread when absent)
+  int difficulty; // <0 == cfg.players[i].difficulty undefined -> patch:84's 3
+} SimPortCfg;
+
+// harnessSetupMatch + startGame over ALL FOUR ports. `ports` is indexed
+// by PORT (CONTEXT.md: a player slot 0-3, never a roster index); an
+// entry with type == -1 takes the patch's else arm, exactly as slots
+// 2/3 unconditionally did before. startGame's own body was ALREADY
+// 4-port here (its `for (n = 0; n < 4)` initializePlayers / entrance-vfx
+// / stocks loop), so spawn positions and the entrance/start vfx ORDER
+// are upstream's, untouched by this widening.
+void sim_setup_match_ports(GameState *g, const SimPortCfg ports[4],
+                           int stageId);
 
 // upstream buildPlayerObject(i) (main.js:1296-1301).
 void sim_build_player(GameState *g, int i);

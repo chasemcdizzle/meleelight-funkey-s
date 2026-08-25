@@ -1,0 +1,19 @@
+{
+  "comment": "FOUR-PORT golden registry (A46). SEPARATE from port/goldens-m4/manifest.json for two MEASURED reasons, either of which alone is decisive: (1) port/sim/device/check-device-fullgame.sh enumerates every ^[ms][0-9]{2}$ row of manifest.json and replays it on the FunKey with a two-port arg list, so a four-port row there would be replayed wrong and fail the M4 gate; (2) manifest.json's bytes are a reviewed pin in port/sim/device/m4-freeze-manifest.txt (sha f10e0001…), and re-pinning it is a reviewed change, not a lane's. This registry is therefore the manifest-target.json precedent applied again: a golden family the device M4 gate cannot replay today gets its own registry, and manifest.json stays byte-identical. WHY FOUR PORTS ARE RECORDABLE AT ALL: the browser harness was ALWAYS four-port — oracle/meleelight-harness.patch:76-92 is `for (var i = 0; i < 4; i++) { var pc = cfg.players[i]; if (pc) {…} else {…} }` and oracle/harness/pagelib.js's __serializeState/__runFrames/__coverage all loop i<4 over playerType[i] > -1. The only two-port thing under oracle/ is a CALLER, oracle/harness/run.js:152-157, which hands setupMatch a literal [p1,p2,null,null]. HARD RULE 3 makes oracle/ read-only outside M0, so the four-port driver lives HERE (port/goldens-m4/run-4p.js, the run-target.js registered-fallback pattern: the oracle harness bytes reused VERBATIM by path, only the cfg.players array differs). Nothing under oracle/ is written. SCHEMA: manifest.json's row schema plus p3/p4 — ports 2/3, an integer char index or null for an ABSENT port (the patch's else arm). p1/p2 are ports 0/1. Ports may be occupied in any pattern; a hole is a config upstream supports, not corruption. ID GRAMMAR: ^q[0-9]{2}$ (q = quad) — disjoint from manifest.json's ^[ms][0-9]{2}$ by construction, so the two registries can never mint colliding artifact names into their shared golden home. HUMAN-ONLY: every port is type 0 and trace-driven. The AIBRIDGE1 replay artifact (port/sim/ai_bridge.h) is one recorded stream for one CPU slot, so a CPU on port 2/3 has no C-side replay today; record-m4.sh refuses cpu:true here. q01 (A46): the first four-port golden — fox/falco/puff/marth on battlefield, generator gen-q01-trace.js, ports 2/3 spawning at upstream startingPoint[2]/[3] = (-25,5)/(25,5) (main.js:168). Recorded by run-4p.js, frozen by freeze-stream-m4.js --manifest, judged by the UNCHANGED oracle/harness/verify-stream.js, and replayed on the C side by sim_host --p3/--p4 through sim_setup_match_ports (port/sim/check-fourport.sh).",
+  "goldens": [
+    {
+      "id": "q01",
+      "name": "q01-fourport-fox-falco-puff-marth-battlefield",
+      "trace": "q01-fourport-fox-falco-puff-marth-battlefield.trace.json",
+      "frames": 3600,
+      "seed": 8146,
+      "p1": 2,
+      "p2": 3,
+      "p3": 1,
+      "p4": 0,
+      "stage": 0,
+      "cpu": false,
+      "difficulty": null
+    }
+  ]
+}
