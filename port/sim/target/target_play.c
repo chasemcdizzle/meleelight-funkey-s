@@ -237,7 +237,17 @@ void tp_target_timer_tick(GameState *g) {
 
 // --- setup: targetselect entry + startTargetGame(p, false) ----------------------
 
-void tp_setup_target(GameState *g, int charId, int tstageId) {
+// A45 T2: the setup body below is IDENTICAL for an authored (TTAB1) and a
+// custom (.mlstage) stage — only where the geometry, the targets and the
+// starting point come FROM differs. So the body lives here once, taking
+// them as arguments, and BOTH entries route through it: tp_setup_target
+// decodes TTAB1 (below), tp_setup_target_custom decodes an MlkStage
+// (custom_stage.c). Duplicating startTargetGame would leave two
+// translations of one upstream function to keep in sync — the exact
+// failure HARD RULE 5 makes expensive.
+void tp_setup_target_core(GameState *g, int charId, double playingId,
+                          const MlStageX *stage, const Vec2D *targets,
+                          int targetCount, Vec2D startingPoint) {
   // The page state the REAL flow leaves before startTargetGame — the
   // harnessSetupMatch writes (patch:76-92) projected to the 1-player
   // target domain (slot 0 human keyboard; 1-3 off), exactly what the
@@ -257,24 +267,21 @@ void tp_setup_target(GameState *g, int charId, int tstageId) {
   // setActiveStageTarget(tstageId) (targetselect.js:143; activeStage.js
   // :49-51 targetStageMapping) — activeStage now points at the target
   // stage; stageKind stays 0: the mode-5 arm NEVER calls movingPlatforms
-  // (main.js:987-1044 — measured absence).
-  tp_stage_from_ttab1(tstageId, &g->sim.stage);
+  // (main.js:987-1044 — measured absence). For a custom stage the same
+  // assignment is activeStage.js:83 setActiveStageCustomTarget.
+  g->sim.stage = *stage;
   // setTargetStagePlaying(tstageId) (targetselect.js:145)
-  TP.targetStagePlaying = (double)tstageId;
+  TP.targetStagePlaying = playingId;
   // activeStage.target -> the module's decoded copy
-  const ml_tstage_t *st = &ml_tstages[tstageId];
   // review-94 M5: LOUD death outside the measured authored domain
   // 1..ML_MAX_TARGETS (never truncation) — above the cap the
   // targetDestroyed plane would index out of bounds.
-  if (st->targetCount < 1 || st->targetCount > ML_MAX_TARGETS) {
-    sim_fatal("TTAB1 target count outside 1..ML_MAX_TARGETS (the measured "
+  if (targetCount < 1 || targetCount > ML_MAX_TARGETS) {
+    sim_fatal("target count outside 1..ML_MAX_TARGETS (the measured "
               "authored cap; refusing — never truncated)");
   }
-  TP.targetCount = st->targetCount;
-  for (int32_t k = 0; k < st->targetCount; k++) {
-    TP.target[k].x = ml_target_f64(st->target[k].x);
-    TP.target[k].y = ml_target_f64(st->target[k].y);
-  }
+  TP.targetCount = targetCount;
+  for (int k = 0; k < targetCount; k++) TP.target[k] = targets[k];
   // sounds.menuForward.play() (targetselect.js:127): menu-plane Howl, no
   // seeded draw — not part of the sim slice.
 
@@ -300,8 +307,8 @@ void tp_setup_target(GameState *g, int charId, int tstageId) {
   // + the target-arm entrance vfx at activeStage.startingPoint[0].
   sim_build_player(g, p);
   {
-    const double spx = ml_target_f64(st->startingPoint.x);
-    const double spy = ml_target_f64(st->startingPoint.y);
+    const double spx = startingPoint.x;
+    const double spy = startingPoint.y;
     ml_drawVfx_p("entrance", spx, spy);
     // renderPlayer(p) (:194): render plane.
     // player[p].phys.pos = new Vec2D(activeStage.startingPoint[0].x, .y)
@@ -329,6 +336,29 @@ void tp_setup_target(GameState *g, int charId, int tstageId) {
   memset(&g->arts, 0, sizeof g->arts);
   sim_chd_reset();
   g->frame = 0;
+}
+
+// A45 T2: NULL here (see target_play.h); custom_stage.c installs it.
+bool (*tp_custom_setup)(GameState *g, int charId, const char *dir, int slot,
+                        const char **why) = 0;
+
+void tp_setup_target(GameState *g, int charId, int tstageId) {
+  MlStageX stage;
+  tp_stage_from_ttab1(tstageId, &stage); // dies loudly on a bad id
+  const ml_tstage_t *st = &ml_tstages[tstageId];
+  Vec2D targets[ML_MAX_TARGETS];
+  // The cap check is the CORE's (one site for both entries); this loop
+  // must not run past our own array first.
+  const int n = st->targetCount;
+  if (n >= 1 && n <= ML_MAX_TARGETS) {
+    for (int k = 0; k < n; k++) {
+      targets[k].x = ml_target_f64(st->target[k].x);
+      targets[k].y = ml_target_f64(st->target[k].y);
+    }
+  }
+  const Vec2D sp = vec2d(ml_target_f64(st->startingPoint.x),
+                         ml_target_f64(st->startingPoint.y));
+  tp_setup_target_core(g, charId, (double)tstageId, &stage, targets, n, sp);
 }
 
 // --- finishGame, target arm (main.js:1420-1476) — REAL since iter 99 ------------

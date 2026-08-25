@@ -6,10 +6,17 @@
 
 #include "gfx.h"
 #include "../sim/target/target_play.h" // MlTargets
+#include "../sim/target/custom_stage.h" // MlkStage (A45 T2)
 
 // Bind the active TARGET stage (TTAB1 row + camera) + boot state; the
 // gfx_init twin for gameMode 5 (g->stab stays NULL — never consulted).
 void gfx_target_init(Gfx *g, int tstageId, int backgroundType);
+
+// A45 T2 (D42): the same, for a stage that has no TTAB1 id — a custom
+// stage decoded from a .mlstage share code. Materialises a runtime TTAB1
+// row and binds it, so every draw path stays identical to the authored
+// one. Dies loudly if the stage is not mlk_stage_playable.
+void gfx_target_init_custom(Gfx *g, const MlkStage *cs, int backgroundType);
 
 // Render one target-mode frame into g->rz (clear -> background ->
 // stage -> targets -> player 0 -> articles -> vfx -> timer overlay).

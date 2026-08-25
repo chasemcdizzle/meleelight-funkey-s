@@ -77,6 +77,35 @@ void tp_stage_from_ttab1(int tstageId, MlStageX *out);
 // background draw (targetplay.js:187, the startGame twin).
 void tp_setup_target(GameState *g, int charId, int tstageId);
 
+// A45 T2 (D42): the same body with the stage plane passed IN rather than
+// read out of TTAB1 — the ONE place startTargetGame is translated. The
+// custom-stage entry (tp_setup_target_custom, target/custom_stage.h)
+// routes through it, so an authored and a custom stage differ only in
+// WHERE their geometry came from and in nothing else. That is what makes
+// the T2 done-check a real differential: the same trace over the same
+// geometry delivered by the two paths must produce byte-identical
+// streams. `playingId` is upstream's targetStagePlaying (0..9 authored;
+// MLK_PLAYING_BASE + slot for a custom stage, mirroring targetselect.js's
+// custom slots 10..19). Dies loudly outside 1..ML_MAX_TARGETS.
+void tp_setup_target_core(GameState *g, int charId, double playingId,
+                          const MlStageX *stage, const Vec2D *targets,
+                          int targetCount, Vec2D startingPoint);
+
+// A45 T2 (D42): the CUSTOM-STAGE seam, installed by a constructor in
+// target/custom_stage.c and NULL in every build that does not link it —
+// the ml_sim_runai_live pointer-seam precedent (port/sim/sim/sim_ai_live.c),
+// reused for the same reason. target_main.c's --custom arm is behind it, so
+// the TU list of every EXISTING builder of target_main.c
+// (check-target-sim.sh, port/foh/check-foh-flows.sh) is symbol- and
+// behaviour-identical and neither script needs a line changed. A --custom
+// run against a build that did not link custom_stage.c is refused, loudly,
+// rather than silently doing something else.
+// Loads <dir>/custom<slot>.mlstage, validates it, and performs
+// tp_setup_target_custom. False + *why on any refusal; nothing reaches the
+// sim on false.
+extern bool (*tp_custom_setup)(GameState *g, int charId, const char *dir,
+                               int slot, const char **why);
+
 // targetplay.js:224-255 targetHitDetection(p) — verbatim, incl. the
 // double-destroy quirk (the article loop still runs for a target the
 // hitbox loop just destroyed: targetDestroyed[i] was only checked at the

@@ -1038,6 +1038,53 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   (2) a new device script should NOT join `RIG_SCRIPTS` unless its bytes can
   change a COMPILED byte — joining it forces every device check to rebuild.
 
+- **Custom target stages PLAY (A45 T2 committed form; D42/D43):**
+  `bash port/sim/target/check-custom-stage.sh` → `CUSTOM STAGE PLAYS`,
+  exit 0 — the DIFFERENTIAL that makes a `.mlstage` playable rather than
+  merely parseable: for EVERY golden in `port/goldens-m4/manifest-target.json`
+  it re-expresses the AUTHORED stage as a share code (T1's `mlk_encode`),
+  publishes it as `<dir>/custom0.mlstage`, loads it back through the custom
+  path, replays the SAME trace, requires the two runs BYTE-IDENTICAL, then
+  judges BOTH with the UNCHANGED `verify-stream.js` + `verify-target-stream.js`
+  against the frozen goldens (so it cannot pass by both sides being wrong the
+  same way) and asserts the custom run really destroyed targets. Sound only
+  because the round trip is EXACT: MEASURED, all 10 authored target stages =
+  210 numbers, ZERO lossy at `toFixed(2)`. The blocker was `tp_setup_target` /
+  `tp_stage_from_ttab1` / `gfx_target_init` all keying on a TTAB1 integer id;
+  the fix is ROOT-CAUSE, not an arm — `tp_setup_target_core` is the ONE
+  translation of `startTargetGame` and BOTH entries route through it
+  (`target_play.c`; the custom entry is `tp_setup_target_custom`,
+  `port/sim/target/custom_stage.c`), and `gfx_target_init_custom`
+  materialises a runtime `ml_tstage_t` row so all ten `gfx_target.c` draw
+  functions stay byte-unchanged. `--custom <dir> <slot>` on `sim_host_target`
+  sits behind the `tp_custom_setup` POINTER SEAM (the `ml_sim_runai_live`
+  precedent) so `check-target-sim.sh` and `port/foh/check-foh-flows.sh` — the
+  other two builders of `target_main.c` — need no line changed; an in-check
+  witness builds without `custom_stage.c` and proves `--custom` is refused.
+  ON-DISK CONTRACT: three LF lines `MLSTAGE1` / share code / `SUM <64 hex>`
+  (sha256 over preceding bytes — `foh_persist.c:154`'s idiom reused, not a
+  second one invented). VALIDATE ON READ, ALWAYS: bounded read, strict
+  anchored grammar, SUM verified BEFORE parsing, then `mlk_parse` +
+  `mlk_stage_playable`; every refusal names its rule; a corrupt file cannot
+  reach the sim. T2 has NO WRITER by design — files arrive by SD card; when
+  T3/T4 needs one it must generalise `foh_persist_save`'s existing atomic
+  publish (`foh_persist.c:506-551`), never grow a second write path.
+  Gotcha classes: (1) the damage plane HAS NEVER EXECUTED (zero authored
+  stages carry `damageType`) and a share code CAN carry one — `mlk_stage_playable`
+  REFUSES it at load naming A45 T6 as owing the golden, but props with a
+  **null** damageType are inert (physics tests truthiness) and are exactly
+  what upstream BUG 1 emits for every sixth surface, so only a real type
+  string refuses; (2) the play-leg tooth first shifted GROUND SURFACE 0 and
+  did NOT bite — on t01 that surface is a ledge at y=88 the fox never
+  touches (5th razor-thin-nudge no-op this session): a tooth must perturb
+  the domain that OCCURS, not the first row of it; (3) `getConnected` is NOT
+  needed — `connected` is not one of the code grammar's 14 fields, so a
+  decoded stage never had one to recompute (`hasConnected = false`, the
+  fdest/ystory arms); it belongs to A45 T7. R2 (target cap 10 vs the codec's
+  20) ships as a LOUD REFUSAL, the safe half; raising it is an owner ruling
+  and would break the `_Static_assert` tying the cap to upstream's own
+  10-element `targetDestroyed` literal.
+
 ## Build/gotcha notes (the loop appends here)
 
 - Log to tmpfs during play, copy to SD on exit (SD streaming = multi-second

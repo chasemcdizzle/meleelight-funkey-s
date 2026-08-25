@@ -22339,3 +22339,94 @@ site stops passing a literal.
 Leg [3e] now says X "emits the Z chord" and points at leg [4] for the grab;
 the shipped defect was precisely a bit assertion claiming an action it had
 never observed.
+
+## lane S — 2026-08-24 — A45-T2 / DEVIATIONS D42 + D43: custom target stages PLAY, and the ZOOM-OUT is that a "custom arm" would have translated startTargetGame twice
+
+**The spike's §5.2 reading was right and I checked it before building rather
+than after.** `tp_setup_target` / `tp_stage_from_ttab1` / `gfx_target_init` all
+key on an integer id into generated TTAB1, so a player-authored stage had
+nowhere to go — but `MlStageX` (`physics.h:74-89`) is a plain runtime struct,
+neither generated nor const, and T1 had already modelled `MlkStage.s` as the
+sim's own `Stage`. So `tp_stage_from_custom` is `out->s = cs->s` plus ledges,
+blastzone and two zeroes. About twenty lines. **The estimate held because the
+value model was chosen well one ticket earlier**, which is worth saying out
+loud: T1's decision to reuse `Stage`/`Surface`/`MlLedge` instead of inventing a
+parallel vocabulary is what made T2 an assignment.
+
+**ZOOM-OUT (HARD RULE 8).** The instance was "custom stages cannot load". The
+CLASS is *"a second source of the same data grows a second copy of the code
+that consumes it"*, and the lazy-looking fix — add an `if (custom)` to
+`tp_setup_target` — would have been exactly that: `startTargetGame` translated
+ONCE and branched TWICE, two paths to keep in sync forever under HARD RULE 5.
+The class fix is `tp_setup_target_core(g, charId, playingId, stage, targets,
+count, startingPoint)`: the ONE translation, with the stage plane passed IN.
+Both entries route through it. **An authored and a custom stage now differ in
+where their geometry came from and in NOTHING ELSE — which is also what makes
+the done-check a differential instead of a self-consistency test.** Same move
+in the renderer: `gfx_target_init_custom` materialises a runtime
+`ml_tstage_t` row and binds `g_tt` to it, so all ten `gfx_target.c` draw
+functions are byte-unchanged and the renderer cannot tell a custom stage from
+an authored one.
+
+**THE DONE-CHECK IS JUDGED BY FROZEN BROWSER EVIDENCE, NOT BY ITSELF.**
+`check-custom-stage.sh` → `CUSTOM STAGE PLAYS`. Per target golden: re-express
+the AUTHORED stage as a share code, publish it as a `.mlstage`, load it back
+through the custom path, replay the SAME trace, `cmp` the two full outputs,
+then judge BOTH with the UNCHANGED `verify-stream.js` and
+`verify-target-stream.js` against the frozen goldens — so it cannot pass by
+both sides being wrong the same way — and assert the CUSTOM run really broke
+targets. t01 and t02: `authored == custom, both == frozen, 2 targets
+destroyed`. It is sound only because the round trip is exact, and that was
+MEASURED FIRST (executed walk over `targets.json`): **210 numbers across all 10
+authored stages, ZERO lossy at `toFixed(2)`**.
+
+**THE TOOTH THAT DID NOT BITE.** The play-leg tooth first shifted GROUND
+SURFACE 0 by 1.00 world units and the stream did not move — on t01 that
+surface is a ledge at y=88 the fox never touches. **Fifth razor-thin-nudge
+no-op this session** (fix_plan rule-12 corollary). A tooth must perturb the
+domain that OCCURS, not the first row of it; shifting every surface in all
+five lists bites, and the miss is recorded at the site.
+
+**A LANE CONSTRAINT FORCED A BETTER DESIGN.** `target_main.c` has three
+builders and one of them is `port/foh/check-foh-flows.sh` — the parallel
+lane's, untouchable. Adding two TUs to everyone's link set was therefore off
+the table, so `--custom` sits behind the `tp_custom_setup` POINTER SEAM (the
+in-tree `ml_sim_runai_live` precedent): NULL in `target_play.c`,
+constructor-installed by `custom_stage.c`. **`check-target-sim.sh` and
+`check-foh-flows.sh` need no line changed**, and an IN-CHECK WITNESS builds
+`target_main.c` without `custom_stage.c` and proves `--custom` is refused —
+the claim as an executable fact rather than a comment. `TARGET SIM CONFORMS`
+re-run cold as the refactor's regression.
+
+**D43 (owner ruling, verbatim: "ok let's fix it like you say").** Upstream's
+custom list clobbers on BOTH the add path (`targetselect.js:164-166`) and the
+boot reload (`:551-552`) — measured in the spike: A, B, C leaves
+`["B","C","C"]`. The fix is the VALUE MODEL, not a patch to two sites: ten
+slots **addressed by index**, no append, no length cursor, so both clobber
+sites are *structurally absent*. **That is why the reload half is fixed too** —
+repairing only the reported half would have left it live, and this is the
+second time this session that reading for the CLASS rather than the reported
+symptom paid for itself.
+
+**THE DAMAGE PLANE DID NOT GO LIVE — IT IS REFUSED AT THE DOOR.** A share code
+CAN carry a damage digit, which would have made
+`dealWithDamagingStageCollision`'s five translated, golden-less call sites
+reachable (and `target_play.c`'s tick arm would have trapped mid-match).
+`mlk_stage_playable` refuses at load, naming A45 T6 as owing the golden. One
+measured subtlety worth carrying: props with a **null** `damageType` are inert
+(physics tests truthiness) and are exactly what upstream BUG 1 emits for every
+sixth surface — refusing those would reject codes upstream plays fine.
+
+**WHAT I DID NOT BUILD, DELIBERATELY.** No writer: T2 loads and plays, files
+arrive by SD card. When T3/T4 needs to write one it must generalise
+`foh_persist_save`'s existing atomic publish (`foh_persist.c:506-551`) rather
+than grow a second file-writing path — `/mnt` is journal-less vfat mounted
+`errors=remount-ro` with a measured power-loss history on this device. No
+`getConnected` (89 lines): `connected` is not one of the grammar's 14 fields,
+so a decoded stage never had one to recompute — it is T7's. No cap raise: R2
+ships as a loud refusal and the recommendation is to KEEP it, because raising
+`ML_MAX_TARGETS` would break the `_Static_assert` tying it to upstream's own
+10-element `targetDestroyed` literal and no authored stage exceeds 9.
+
+**Gates:** `CUSTOM STAGE PLAYS` · `SIM CONFORMS` 8/8 · `STAGECODE MATCH` ·
+`TARGET SIM CONFORMS` · `oracle/` untouched · `port/foh/` untouched.

@@ -5,6 +5,12 @@
 //   sim_host_target --trace <trace.txt> --simdata <simdata.txt>
 //                   --seed <u32> --char <0-4> --tstage <0-9> --frames <n>
 //                   [--dump-frames a,b]
+// A45 T2: `--custom <dir> <slot>` REPLACES --tstage and plays a
+// player-authored stage loaded from <dir>/custom<slot>.mlstage instead of
+// a TTAB1 row. Everything downstream is identical — that identity is what
+// port/sim/target/check-custom-stage.sh proves, by re-expressing each
+// authored stage as a share code and asserting the two paths emit
+// byte-identical player AND target streams over the same golden trace.
 // stdout: per frame (1..n) "F <frame> <sha256hex>"  — the UNCHANGED
 //         CHECKSUM.md spec-v1 player/article envelope (sim_ser.c), then
 //         "T <frame> <sha256hex>"  — the target-plane envelope
@@ -162,6 +168,8 @@ static uint32_t draws_between(uint32_t from, uint32_t to) {
 int main(int argc, char **argv) {
   const char *tracePath = 0, *simdataPath = 0;
   const char *dumpFrames = 0;
+  const char *customDir = 0;
+  long customSlot = -1;
   bool posDump = false; // diagnostic: per-frame "P f x y state" (stderr)
   long seed = -1, charId = -1, tstage = -1, frames = -1;
   for (int i = 1; i < argc; i++) {
@@ -174,18 +182,32 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--tstage") == 0 && hasV) tstage = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--frames") == 0 && hasV) frames = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--dump-frames") == 0 && hasV) dumpFrames = argv[++i];
+    else if (strcmp(a, "--custom") == 0 && i + 2 < argc) {
+      customDir = argv[++i];
+      customSlot = strtol(argv[++i], 0, 10);
+    }
     else if (strcmp(a, "--pos-dump") == 0) posDump = true;
     else {
       fprintf(stderr, "sim_host_target: bad argument %s\n", a);
       return 1;
     }
   }
+  const bool custom = customDir != 0;
   if (!tracePath || !simdataPath || seed < 0 || charId < 0 || charId > 4 ||
-      tstage < 0 || tstage > 9 || frames <= 0) {
+      frames <= 0 || (custom ? tstage >= 0 : (tstage < 0 || tstage > 9))) {
     fprintf(stderr,
             "usage: sim_host_target --trace t.txt --simdata s.txt --seed N "
-            "--char 0-4 --tstage 0-9 --frames N [--dump-frames a,b]\n");
+            "--char 0-4 (--tstage 0-9 | --custom <dir> <slot>) --frames N "
+            "[--dump-frames a,b]\n");
     return 1;
+  }
+  // The A45 T2 seam (target_play.h) is NULL unless custom_stage.c is linked.
+  // Checked HERE, with the other argument validation and before any work, so
+  // a build without custom-stage support refuses immediately and legibly.
+  if (custom && !tp_custom_setup) {
+    fprintf(stderr, "sim_host_target: this build has no custom-stage support "
+                    "(custom_stage.c not linked)\n");
+    return 2;
   }
 
   sim_boot_page(&G);
@@ -198,7 +220,19 @@ int main(int argc, char **argv) {
   for (int k = 0; k < ML_BOOT_DRAWS; k++) (void)ml_rng_next(&G.rng);
   G.rngStateAtReset = G.rng.a;
 
-  tp_setup_target(&G, (int)charId, (int)tstage);
+  if (custom) {
+    // VALIDATE ON READ: the seam bounds the read, checks the grammar,
+    // verifies SUM before parsing, then parses and validates. A refusal
+    // names its rule and NOTHING reaches the sim.
+    const char *why = "unknown";
+    if (!tp_custom_setup(&G, (int)charId, customDir, (int)customSlot, &why)) {
+      fprintf(stderr, "sim_host_target: custom slot %ld refused: %s\n",
+              customSlot, why);
+      return 2;
+    }
+  } else {
+    tp_setup_target(&G, (int)charId, (int)tstage);
+  }
   G.rngStateAtFrame1 = G.rng.a;
 
   char hex[65], thex[65];
