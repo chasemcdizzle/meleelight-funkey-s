@@ -8,10 +8,14 @@
 #
 # Usage: bash port/goldens-m4/record-m4.sh <golden-id> [--refreeze]
 #   <golden-id>  id or name from port/goldens-m4/manifest.json (e.g. m01)
+#                or, A46, from port/goldens-m4/manifest-4p.json (e.g. q01
+#                — the FOUR-PORT registry, recorded by run-4p.js instead
+#                of run.js; manifest-4p.json's comment carries why it is
+#                a separate registry and why oracle/ is never written)
 #   --refreeze   allow overwriting an existing, DIFFERING frozen stream —
 #                only legitimate with a spec version bump (CHECKSUM.md §8)
 #
-# Procedure (params come ONLY from port/goldens-m4/manifest.json):
+# Procedure (params come ONLY from the two registries above):
 #   1. the golden's trace must exist (generated once by
 #      `node oracle/harness/gen-trace.js <trace> 3800 <seed>` — the
 #      manifest seed doubles as the gen-trace seed, M0 convention);
@@ -64,25 +68,45 @@ if [ ! -f "$DIST/dist/meleelight.html" ]; then
   die "no built upstream at $DIST — run oracle/build-upstream.sh"
 fi
 
-# Pull the golden's params out of the M4 manifest — strict key=value
+# Pull the golden's params out of the M4 registries — strict key=value
 # line-parse with per-key anchored whitelists (the eval class is dead;
 # PROCESS §3 whitelist-grammar rule).
+#
+# TWO REGISTRIES (A46). manifest.json is searched FIRST and is byte-
+# untouched; manifest-4p.json holds the four-port (q) family, which
+# manifest.json deliberately cannot hold — see manifest-4p.json's
+# comment for the two measured reasons. The id grammars are disjoint, so
+# the search order cannot mask a row. A row missing p3/p4 (i.e. every
+# manifest.json row) emits them as the literal `null`, so the parser
+# below sees exactly 12 lines either way.
 out="$(node -e '
   const fs = require("fs");
-  const m = JSON.parse(fs.readFileSync("port/goldens-m4/manifest.json", "utf8"));
-  const g = m.goldens.find((x) => x.id === process.argv[1] || x.name === process.argv[1]);
-  if (!g) { console.error("unknown m4 golden: " + process.argv[1]); process.exit(1); }
+  const want = process.argv[1];
+  let g = null, reg = null;
+  for (const f of ["manifest.json", "manifest-4p.json"]) {
+    const m = JSON.parse(fs.readFileSync("port/goldens-m4/" + f, "utf8"));
+    const hit = m.goldens.find((x) => x.id === want || x.name === want);
+    if (hit) { g = hit; reg = f; break; }
+  }
+  if (!g) { console.error("unknown m4 golden: " + want); process.exit(1); }
   const emit = (k, v) => process.stdout.write(k + "=" + String(v) + "\n");
+  emit("registry", reg);
   emit("name", g.name); emit("trace", g.trace); emit("frames", g.frames);
   emit("seed", g.seed); emit("p1", g.p1); emit("p2", g.p2);
+  emit("p3", g.p3 === undefined ? null : g.p3);
+  emit("p4", g.p4 === undefined ? null : g.p4);
   emit("stage", g.stage); emit("cpu", g.cpu); emit("difficulty", g.difficulty);
 ' "$ID")" || die "manifest read failed for '$ID'"
-NAME= TRACE= FRAMES= SEED= P1= P2= STAGE= CPU= DIFFICULTY=
+REGISTRY= NAME= TRACE= FRAMES= SEED= P1= P2= P3= P4= STAGE= CPU= DIFFICULTY=
 n=0
 while IFS= read -r line; do
   n=$((n + 1))
   v="${line#*=}"
   case "$line" in
+    (registry=*)
+      [[ "$v" =~ ^manifest(-4p)?\.json$ ]] || die "manifest grammar — registry '$v' is not one of manifest.json, manifest-4p.json"
+      [ -z "$REGISTRY" ] || die "manifest grammar — duplicate registry line"
+      REGISTRY="$v" ;;
     (name=*)
       [[ "$v" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "manifest grammar — name '$v' fails the whitelist [a-z0-9-]"
       [ -z "$NAME" ] || die "manifest grammar — duplicate name line"
@@ -107,6 +131,18 @@ while IFS= read -r line; do
       [[ "$v" =~ ^[0-4]$ ]] || die "manifest grammar — p2 '$v' outside the char domain 0-4"
       [ -z "$P2" ] || die "manifest grammar — duplicate p2 line"
       P2="$v" ;;
+    # A46 ports 2/3: a char index, or the literal null for an ABSENT port
+    # (harnessSetupMatch's else arm). Empty-string sentinel note: P3/P4
+    # are seeded to the sentinel "" and every legal value is non-empty,
+    # so the duplicate guard below still bites.
+    (p3=*)
+      [[ "$v" =~ ^([0-4]|null)$ ]] || die "manifest grammar — p3 '$v' is neither null nor in the char domain 0-4"
+      [ -z "$P3" ] || die "manifest grammar — duplicate p3 line"
+      P3="$v" ;;
+    (p4=*)
+      [[ "$v" =~ ^([0-4]|null)$ ]] || die "manifest grammar — p4 '$v' is neither null nor in the char domain 0-4"
+      [ -z "$P4" ] || die "manifest grammar — duplicate p4 line"
+      P4="$v" ;;
     (stage=*)
       [[ "$v" =~ ^[0-5]$ ]] || die "manifest grammar — stage '$v' outside the stage domain 0-5"
       [ -z "$STAGE" ] || die "manifest grammar — duplicate stage line"
@@ -123,7 +159,7 @@ while IFS= read -r line; do
       die "manifest grammar — unrecognized param line '$line' (whitelist parse; resembles-but-doesn't-match is corruption)" ;;
   esac
 done <<< "$out"
-[ "$n" = 9 ] || die "manifest grammar — got $n param lines, want exactly 9"
+[ "$n" = 12 ] || die "manifest grammar — got $n param lines, want exactly 12"
 if [ "$TRACE" != "$NAME.trace.json" ]; then
   die "manifest grammar — trace '$TRACE' != name-derived '$NAME.trace.json' (basename-only by construction; no path escape from the golden home)"
 fi
@@ -131,6 +167,21 @@ if [ "$CPU" = "true" ]; then
   [ "$DIFFICULTY" != "null" ] || die "manifest grammar — cpu golden without a difficulty"
 else
   [ "$DIFFICULTY" = "null" ] || die "manifest grammar — non-cpu golden with a difficulty"
+fi
+# A46: registry <-> port-count coupling, both directions (a row that
+# ended up in the wrong registry is corruption, not a config), and a
+# four-port golden is HUMAN-ONLY by construction (run-4p.js types every
+# port 0; the AIBRIDGE1 replay artifact is one stream for one CPU slot,
+# so there is no C-side replay for a CPU on port 2/3).
+NPORTS=2
+[ "$P3" = "null" ] || NPORTS=$((NPORTS + 1))
+[ "$P4" = "null" ] || NPORTS=$((NPORTS + 1))
+if [ "$REGISTRY" = "manifest.json" ] && [ "$NPORTS" != 2 ]; then
+  die "manifest grammar — golden '$NAME' carries ports 2/3 but lives in manifest.json; four-port goldens belong in manifest-4p.json"
+fi
+if [ "$REGISTRY" = "manifest-4p.json" ]; then
+  [ "$NPORTS" != 2 ] || die "manifest grammar — golden '$NAME' is in manifest-4p.json with no port 2/3"
+  [ "$CPU" != "true" ] || die "manifest grammar — golden '$NAME' has cpu:true; the four-port recorder is human-only"
 fi
 
 # RUN LOCK (no-reclaim, iter-41 posture): the shared resources are the
@@ -156,8 +207,11 @@ if [ ! -f "$M4G/$TRACE" ]; then
   # never a sibling (s01) fallback and never gen-trace.js, either of
   # which would silently fabricate a WRONG trace whose recording could
   # then be frozen.
+  # (A46: the q family joins s here — a four-port trace has four input
+  # columns, which oracle/harness/gen-trace.js cannot emit, so it also
+  # comes from its own committed deterministic generator.)
   case "$NAME" in
-    (s*)
+    (s*|q*)
       GEN="$M4G/gen-${NAME%%-*}-trace.js"
       if [ ! -f "$GEN" ]; then
         die "trace $M4G/$TRACE is missing and '$NAME' is a CRAFTED-scenario golden whose committed generator $GEN does NOT exist — refusing (no gen-trace.js fallback, no sibling-generator fallback); commit the golden's own generator first"
@@ -174,11 +228,26 @@ fi
 test -s "$M4G/$TRACE" || die "trace $M4G/$TRACE missing or empty"
 
 REPO="$PWD"
-RUN=(node run.js --dist "$DIST" --trace "$REPO/$M4G/$TRACE"
-     --frames "$FRAMES" --seed "$SEED"
-     --p1 "$P1" --p2 "$P2" --stage "$STAGE")
-if [ "$CPU" = "true" ]; then
-  RUN+=(--cpu --difficulty "$DIFFICULTY")
+# RECORDER DISPATCH (A46). A 2-port row is recorded by the UNCHANGED
+# oracle/harness/run.js exactly as before; a row with a port 2/3 goes to
+# port/goldens-m4/run-4p.js, which is run.js's init pipeline (fdlibm.js /
+# init.js / pagelib.js by path) differing ONLY in the cfg.players array
+# it hands the already-4-port harnessSetupMatch. Both are invoked with
+# cwd == $HARNESS, so --out stays relative to out/.
+if [ "$NPORTS" = 2 ]; then
+  RUN=(node run.js --dist "$DIST" --trace "$REPO/$M4G/$TRACE"
+       --frames "$FRAMES" --seed "$SEED"
+       --p1 "$P1" --p2 "$P2" --stage "$STAGE")
+  if [ "$CPU" = "true" ]; then
+    RUN+=(--cpu --difficulty "$DIFFICULTY")
+  fi
+else
+  RUN=(node "$REPO/$M4G/run-4p.js" --dist "$DIST" --trace "$REPO/$M4G/$TRACE"
+       --frames "$FRAMES" --seed "$SEED"
+       --p1 "$P1" --p2 "$P2"
+       --p3 "$([ "$P3" = null ] && echo none || echo "$P3")"
+       --p4 "$([ "$P4" = null ] && echo none || echo "$P4")"
+       --stage "$STAGE")
 fi
 
 # FRESHNESS (rm-before-produce): stale A/B run JSONs can never
@@ -198,11 +267,11 @@ node compare.js "out/record-$ID-a.json" "out/record-$ID-b.json"
 cd "$REPO"
 
 echo "record-m4.sh: gameplay-quality contract (mechanical)"
-node "$M4G/check-quality.js" "$HARNESS/out/record-$ID-a.json"
+node "$M4G/check-quality.js" "$HARNESS/out/record-$ID-a.json" --ports "$NPORTS"
 
 echo "record-m4.sh: freezing into $M4G/"
 node "$M4G/freeze-stream-m4.js" "$ID" "$HARNESS/out/record-$ID-a.json" \
-  "$HARNESS/out/record-$ID-b.json" $REFREEZE
+  "$HARNESS/out/record-$ID-b.json" $REFREEZE --manifest "$REGISTRY"
 
 echo "record-m4.sh: self-check — run A vs frozen stream (unchanged verifier)"
 node "$HARNESS/verify-stream.js" "$HARNESS/out/record-$ID-a.json" \

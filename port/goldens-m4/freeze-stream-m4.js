@@ -13,7 +13,13 @@
 // oracle/harness/verify-stream.js judges M4 goldens with zero changes.
 //
 // Usage: node freeze-stream-m4.js <golden-id> <runA.json> <runB.json>
-//          [--refreeze]
+//          [--refreeze] [--manifest <manifest.json|manifest-4p.json>]
+//
+// REGISTRY (A46): --manifest selects which registry in this directory the
+// row comes from, and with it the row schema and id grammar (the
+// REGISTRIES table below). Omitted == manifest.json == the pre-A46
+// behaviour, bit-for-bit: manifest.json's rows, schema, grammar and
+// frozen `params` block are all byte-untouched by A46.
 //
 // Identical contract to the M0 freezer: refuses unless the two fresh
 // runs are bit-identical on every conformance channel; pins
@@ -77,15 +83,58 @@ const CUR_SPEC = checkSpec(specVersion(), "current oracle/CHECKSUM.md");
 
 // The exact per-golden schema, key ORDER included (measured from the
 // committed manifest; a reordered or widened row is a reviewed change).
-const GOLDEN_KEYS = ["id", "name", "trace", "frames", "seed",
+// REGISTRY TABLE (A46). Two registries share this golden home, and the
+// row schema and id grammar are selected by WHICH ONE a row came from —
+// never guessed from the row's own shape, so a malformed row can never
+// pick the schema that accepts it. Anything not in this table is
+// refused. The two id grammars are DISJOINT, so the two registries can
+// never mint colliding <name>.sha256.json artifacts here.
+//   manifest.json    — the M4 registry (m/s families). Its bytes are a
+//                      reviewed pin in port/sim/device/m4-freeze-manifest
+//                      .txt and port/sim/device/check-device-fullgame.sh
+//                      replays its rows two-port on the device: it is
+//                      byte-untouched by A46.
+//   manifest-4p.json — the four-port registry (q family). Adds p3/p4:
+//                      ports 2/3, an int char index or null for an
+//                      ABSENT port (the harness patch's else arm). They
+//                      are REQUIRED KEYS there — the raw duplicate-key
+//                      token guard counts one occurrence per golden, so
+//                      an optional key would be unguardable — and they
+//                      reach the frozen `params` block only for rows
+//                      from THIS registry, which is what keeps every
+//                      manifest.json frozen stream byte-identical.
+const BASE_KEYS = ["id", "name", "trace", "frames", "seed",
   "p1", "p2", "stage", "cpu", "difficulty"];
+const REGISTRIES = {
+  "manifest.json": {
+    keys: BASE_KEYS,
+    idRe: /^[ms][0-9]{2}$/,
+    idWhat: "^[ms][0-9]{2}$ (m = match/CPU goldens, s = crafted-scenario " +
+      "goldens — iter-84 grammar)",
+    nameRe: /^[ms][0-9]{2}(-[a-z0-9]+)+$/,
+    fourPort: false,
+  },
+  "manifest-4p.json": {
+    keys: BASE_KEYS.slice(0, 7).concat(["p3", "p4"], BASE_KEYS.slice(7)),
+    idRe: /^q[0-9]{2}$/,
+    idWhat: "^q[0-9]{2}$ (q = quad, the four-port registry)",
+    nameRe: /^q[0-9]{2}(-[a-z0-9]+)+$/,
+    fourPort: true,
+  },
+};
 
-function loadManifest() {
-  const mPath = path.join(GOLDENS_DIR, "manifest.json");
+function loadManifest(registry) {
+  const R = REGISTRIES[registry];
+  if (!R) {
+    vdie("unknown registry '" + registry + "' (want one of " +
+      Object.keys(REGISTRIES).join(", ") + ")");
+  }
+  const GOLDEN_KEYS = R.keys;
+  const mPath = path.join(GOLDENS_DIR, registry);
   const raw = fs.readFileSync(mPath, "utf8");
   let m;
   try { m = JSON.parse(raw); } catch (e) {
-    vdie("manifest.json is not valid JSON: " + e.message);
+    vdie(registry + " is not valid JSON: " + e.message);
   }
   if (typeof m !== "object" || m === null || Array.isArray(m)) {
     vdie("top level is not an object");
@@ -125,12 +174,11 @@ function loadManifest() {
       vdie(where + " key set/order {" + keys.join(",") + "} != {" +
         GOLDEN_KEYS.join(",") + "} (exact schema, fail closed)");
     }
-    if (typeof g.id !== "string" || !/^[ms][0-9]{2}$/.test(g.id)) {
-      vdie(where + " id '" + g.id + "' fails ^[ms][0-9]{2}$ (m = match/CPU " +
-        "goldens, s = crafted-scenario goldens — iter-84 grammar)");
+    if (typeof g.id !== "string" || !R.idRe.test(g.id)) {
+      vdie(where + " id '" + g.id + "' fails " + R.idWhat);
     }
-    if (typeof g.name !== "string" || !/^[ms][0-9]{2}(-[a-z0-9]+)+$/.test(g.name)) {
-      vdie(where + " name '" + g.name + "' fails ^[ms][0-9]{2}(-[a-z0-9]+)+$");
+    if (typeof g.name !== "string" || !R.nameRe.test(g.name)) {
+      vdie(where + " name '" + g.name + "' fails " + String(R.nameRe));
     }
     if (g.name.slice(0, 3) !== g.id) {
       vdie(where + " name '" + g.name + "' does not begin with its id '" + g.id + "'");
@@ -161,6 +209,28 @@ function loadManifest() {
     if (!Number.isInteger(g.p2) || g.p2 < 0 || g.p2 > 4) {
       vdie(where + " p2 " + g.p2 + " outside the char domain 0-4");
     }
+    if (R.fourPort) {
+      for (const k of ["p3", "p4"]) {
+        if (g[k] === null) continue;
+        if (!Number.isInteger(g[k]) || g[k] < 0 || g[k] > 4) {
+          vdie(where + " " + k + " " + JSON.stringify(g[k]) + " is neither " +
+            "null (absent port) nor an integer in the char domain 0-4");
+        }
+      }
+      if (g.p3 === null && g.p4 === null) {
+        vdie(where + " lives in the four-port registry but has NO port 2/3 " +
+          "(both null) — it belongs in manifest.json");
+      }
+      if (g.cpu !== false) {
+        vdie(where + " has cpu:true; the four-port recorder is human-only " +
+          "(one AIBRIDGE1 stream, one CPU slot)");
+      }
+    }
+    // NOTE deliberately NOT constrained: ports may be occupied in any
+    // pattern. harnessSetupMatch's per-i `if (pc)` accepts a hole
+    // (e.g. [p0, null, p2, null]), sim_setup_match_ports mirrors it, and
+    // run-4p.js/--p3/--p4 express each port independently. Refusing a
+    // hole would rule out a config upstream supports.
     if (!Number.isInteger(g.stage) || g.stage < 0 || g.stage > 5) {
       vdie(where + " stage " + g.stage + " outside the stage domain 0-5");
     }
@@ -181,21 +251,42 @@ function loadManifest() {
   return m;
 }
 
-function goldenById(id) {
-  const m = loadManifest();
+function goldenById(id, registry) {
+  const m = loadManifest(registry);
   const g = m.goldens.find((x) => x.id === id || x.name === id);
-  if (!g) die("golden not in port/goldens-m4/manifest.json: " + id);
+  if (!g) die("golden not in port/goldens-m4/" + registry + ": " + id);
   return g;
 }
 
 // STRICT argv (no silent extra-arg tolerance): exactly
-// <id> <runA> <runB> or <id> <runA> <runB> --refreeze.
+// <id> <runA> <runB>, optionally followed by --refreeze and/or
+// --manifest <registry basename> in either order. A46 adds --manifest;
+// omitting it keeps the pre-A46 behaviour (manifest.json) exactly.
 const argv = process.argv.slice(2);
-if (!(argv.length === 3 || (argv.length === 4 && argv[3] === "--refreeze"))) {
-  die("usage: node freeze-stream-m4.js <golden-id> <runA.json> <runB.json> [--refreeze]");
+const USAGE = "usage: node freeze-stream-m4.js <golden-id> <runA.json> " +
+  "<runB.json> [--refreeze] [--manifest <manifest.json|manifest-4p.json>]";
+let refreeze = false;
+let REGISTRY = "manifest.json";
+const positional = [];
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === "--refreeze") {
+    if (refreeze) die("duplicate --refreeze; " + USAGE);
+    refreeze = true;
+  } else if (argv[i] === "--manifest") {
+    const v = argv[++i];
+    if (!Object.prototype.hasOwnProperty.call(REGISTRIES, String(v))) {
+      die("--manifest must be one of " + Object.keys(REGISTRIES).join(", ") +
+        "; got: " + v);
+    }
+    REGISTRY = v;
+  } else if (String(argv[i]).startsWith("--")) {
+    die("unknown flag " + argv[i] + "; " + USAGE);
+  } else {
+    positional.push(argv[i]);
+  }
 }
-const [id, fileA, fileB] = argv;
-const refreeze = argv.length === 4;
+if (positional.length !== 3) die(USAGE);
+const [id, fileA, fileB] = positional;
 if (!/^[a-z0-9-]+$/.test(id)) {
   die("golden id '" + id + "' fails the whitelist [a-z0-9-]");
 }
@@ -217,7 +308,8 @@ if (path.resolve(fileA) === path.resolve(fileB)) {
   }
 }
 
-const g = goldenById(id);
+const g = goldenById(id, REGISTRY);
+const FOURPORT = REGISTRIES[REGISTRY].fourPort;
 const a = JSON.parse(fs.readFileSync(fileA, "utf8"));
 const b = JSON.parse(fs.readFileSync(fileB, "utf8"));
 
@@ -249,6 +341,10 @@ for (const [label, r] of [["A", a], ["B", b]]) {
   const want = { frames: g.frames, seed: g.seed, p1: g.p1, p2: g.p2,
     stage: g.stage, cpu: g.cpu, difficulty: g.cpu ? g.difficulty : null,
     seedRandom: true, fdlibm: true };
+  // A46: a four-port recording carries meta.p3/meta.p4 (run-4p.js) and
+  // must agree with its registry row. run.js never emits them, so a
+  // run.js recording can NEVER satisfy a four-port row (undefined !== 1).
+  if (FOURPORT) { want.p3 = g.p3; want.p4 = g.p4; }
   for (const k of Object.keys(want)) {
     if (m[k] !== want[k]) {
       die(`run ${label} meta.${k} = ${m[k]}, manifest wants ${want[k]}`);
@@ -263,9 +359,16 @@ for (const [label, r] of [["A", a], ["B", b]]) {
 }
 
 // --- build the frozen file deterministically (M0 format, verbatim) -------
+// A46: p3/p4 join params ONLY in the four-port registry, so every
+// manifest.json row's frozen bytes — and therefore its byte-identical
+// re-freeze — are exactly what they were before A46. (The UNCHANGED
+// oracle/harness/verify-stream.js pins the nine keys it knows about;
+// port/sim/check-fourport.sh pins params.p3/p4 against what it hands
+// the C sim, which is the crossing verify-stream.js cannot see.)
 const params = { trace: g.trace, traceSha256: traceSha256, frames: g.frames,
   seed: g.seed, p1: g.p1, p2: g.p2, stage: g.stage, cpu: g.cpu,
   difficulty: g.cpu ? g.difficulty : null, fdlibm: true, seedRandom: true };
+if (FOURPORT) { params.p3 = g.p3; params.p4 = g.p4; }
 const lines = [];
 lines.push("{");
 lines.push('"golden": ' + JSON.stringify(g.name) + ",");

@@ -11,6 +11,9 @@
 // (check-ai-live.sh's sim_host_live); in the frozen M2-gate build
 // (check-sim.sh — never edited) the live seam is NULL and the old
 // "--cpu requires --ai-bridge" error is preserved bit-for-bit.
+// A46 ports 2/3: --p3 <char> / --p4 <char> add a THIRD/FOURTH trace-driven
+// human port (the harness patch's cfg.players[2]/[3]); omitted = absent =
+// the pre-A46 2-port wrapper call, bit-for-bit.
 // --ai-cover (live builds only): dump the ml_ai_cov arm table to stderr
 // after the run — coverage-delta diagnostic, never part of the judged
 // stdout stream.
@@ -189,6 +192,12 @@ int main(int argc, char **argv) {
   const char *dumpFrames = 0; // diagnostic: comma-separated frame list
   const char *timingPath = 0; // per-frame sim-only ns (written post-run)
   long seed = -1, p1 = -1, p2 = -1, stage = -1, frames = -1, difficulty = 3;
+  // A46: ports 2/3. Absent (< 0) = the harness patch's `else` arm =
+  // every pre-A46 invocation, which then takes the 2-port
+  // sim_setup_match wrapper verbatim. Human (trace-driven) only: the
+  // AIBRIDGE1 artifact is one recorded stream for one CPU slot, so a
+  // CPU on port 2/3 is out of this task's scope and is refused below.
+  long p3 = -1, p4 = -1;
   bool cpu = false;
   bool aiCover = false;      // M4 task 5: post-run arm-table dump (stderr)
   bool wallJumpAll = false;  // MENU-SPEC D20 house rule; default = upstream
@@ -204,6 +213,12 @@ int main(int argc, char **argv) {
     else if (strcmp(a, "--seed") == 0 && hasV) seed = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--p1") == 0 && hasV) p1 = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--p2") == 0 && hasV) p2 = strtol(argv[++i], 0, 10);
+    // A46 (ports 2/3). NOT listed in the usage string below, for exactly
+    // the reason --walljump-all and --versus-endless are not:
+    // check-ai-live.sh's M2-contract witness pins that rejection to
+    // EXACTLY two lines. Absent = ports absent = every golden unaffected.
+    else if (strcmp(a, "--p3") == 0 && hasV) p3 = strtol(argv[++i], 0, 10);
+    else if (strcmp(a, "--p4") == 0 && hasV) p4 = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--stage") == 0 && hasV) stage = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--frames") == 0 && hasV) frames = strtol(argv[++i], 0, 10);
     else if (strcmp(a, "--difficulty") == 0 && hasV) difficulty = strtol(argv[++i], 0, 10);
@@ -245,6 +260,18 @@ int main(int argc, char **argv) {
     fprintf(stderr, "sim_host: --ai-cover needs the live-AI build\n");
     return 1;
   }
+  // A46 domain guards (own lines — the two-line usage pin above is not
+  // touched). Ports 2/3 are human-only for the reason given at the decl.
+  if (p3 < -1 || p3 > 4 || p4 < -1 || p4 > 4) {
+    fprintf(stderr, "sim_host: --p3/--p4 must be a char 0-4 (or -1/omitted "
+                    "for an absent port)\n");
+    return 1;
+  }
+  if (cpu && (p3 >= 0 || p4 >= 0)) {
+    fprintf(stderr, "sim_host: --cpu with --p3/--p4 is not supported "
+                    "(one AI stream, one CPU slot)\n");
+    return 1;
+  }
 
   sim_boot_page(&G);
   sim_data_load(simdataPath);
@@ -275,8 +302,20 @@ int main(int argc, char **argv) {
   // startGame's stocks=1 arm reads it — so unlike every gameSettings
   // override below, this one must be set BEFORE sim_setup_match.
   if (versusEndless) G.sim.versusMode = 1;
-  sim_setup_match(&G, (int)p1, (int)p2, cpu ? 1 : 0, (int)difficulty,
-                  (int)stage);
+  if (p3 < 0 && p4 < 0) {
+    // the pre-A46 path, byte-for-byte: the 2-port wrapper. Every golden
+    // in oracle/goldens/manifest.json comes through here.
+    sim_setup_match(&G, (int)p1, (int)p2, cpu ? 1 : 0, (int)difficulty,
+                    (int)stage);
+  } else {
+    const SimPortCfg ports[4] = {
+        {0, (int)p1, -1},
+        {0, (int)p2, -1},
+        {p3 < 0 ? -1 : 0, (int)(p3 < 0 ? 0 : p3), -1},
+        {p4 < 0 ? -1 : 0, (int)(p4 < 0 ? 0 : p4), -1},
+    };
+    sim_setup_match_ports(&G, ports, (int)stage);
+  }
   // M3 task 5 (S1 contract): tapJumpOffp1 = 1 for replaying recorded
   // S1 live sessions — the live app (gfx_app --live --tapjump-off-p1)
   // ran with this setting, so its trace replays under the same one.

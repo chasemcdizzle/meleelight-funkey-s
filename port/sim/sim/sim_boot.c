@@ -378,27 +378,44 @@ void sim_boot_page(GameState *g) {
 
 // --- harnessSetupMatch + startGame ---------------------------------------------
 
+// The 2-port wrapper (A46). Pre-A46 callers are byte-unchanged: this
+// builds exactly the config the old hardcoded body wrote — port 0 human
+// on p1 with difficulty undefined, port 1 p2type on p2 carrying the
+// difficulty ONLY when it is the CPU (run.js:154-156), ports 2/3 absent.
 void sim_setup_match(GameState *g, int p1, int p2, int p2type, int difficulty,
                      int stageId) {
-  // harnessSetupMatch (oracle/meleelight-harness.patch:76-92): slots 0/1
-  // active, 2/3 off. mType pinned "keyboard" for every active slot.
-  const int chars[2] = {p1, p2};
-  const int types[2] = {0, p2type};
-  for (int i = 0; i < 2; i++) {
-    g->sim.playerType[i] = types[i];
-    g->sim.playerPresent[i] = true;
-    g->inp.mType[i] = ML_MTYPE_KEYBOARD;
-    g->inp.currentPlayers[i] = i;
-    g->sim.characterSelections[i] = chars[i];
-    // cfg.difficulty is only passed for the CPU slot (run.js:154-156);
-    // undefined -> 3 (patch:84)
-    g->cpuDifficulty[i] = (i == 1 && p2type == 1) ? difficulty : 3;
-    g->slotIsAi[i] = types[i] == 1;
-  }
-  for (int i = 2; i < 4; i++) {
-    g->sim.playerType[i] = -1;
-    g->sim.playerPresent[i] = false;
-    g->inp.currentPlayers[i] = -1;
+  const SimPortCfg ports[4] = {
+      {0, p1, -1},
+      {p2type, p2, p2type == 1 ? difficulty : -1},
+      {-1, 0, -1},
+      {-1, 0, -1},
+  };
+  sim_setup_match_ports(g, ports, stageId);
+}
+
+void sim_setup_match_ports(GameState *g, const SimPortCfg ports[4],
+                           int stageId) {
+  // harnessSetupMatch (oracle/meleelight-harness.patch:76-92) VERBATIM:
+  // one `for (var i = 0; i < 4; i++)` over cfg.players, `if (pc)` writing
+  // the per-port plane and `else` pinning playerType/currentPlayers to
+  // -1. mType is pinned "keyboard" for every present port; the else arm
+  // deliberately does NOT touch mType/cpuDifficulty/slotIsAi — upstream
+  // leaves those at their page-boot values, and so did the pre-A46 body.
+  for (int i = 0; i < 4; i++) {
+    if (ports[i].type > -1) {
+      g->sim.playerType[i] = ports[i].type;
+      g->sim.playerPresent[i] = true;
+      g->inp.mType[i] = ML_MTYPE_KEYBOARD;
+      g->inp.currentPlayers[i] = i;
+      g->sim.characterSelections[i] = ports[i].character;
+      // pc.difficulty === undefined -> 3 (patch:84)
+      g->cpuDifficulty[i] = ports[i].difficulty < 0 ? 3 : ports[i].difficulty;
+      g->slotIsAi[i] = ports[i].type == 1;
+    } else {
+      g->sim.playerType[i] = -1;
+      g->sim.playerPresent[i] = false;
+      g->inp.currentPlayers[i] = -1;
+    }
   }
   g->stageSelect = stageId; // setStageSelect (main.js:189-191)
 
