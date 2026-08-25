@@ -8191,3 +8191,91 @@ non-vacuous by reverting the off-by-one and watching it fail.
   overlay** (`foh_pause.c`) is open, its loop does not poll the flag, so nothing
   notices until it returns — after the power is gone. **Degrades to pre-A26
   behaviour, never to a wrong screen.**
+
+## TARGET BUILDER T3+T4 — DONE 2026-08-25 (D50/D51/D52). **THE MENU ENTRY OPENS A REAL EDITOR.**
+
+Owner clicked TARGET BUILDER and got *"nothing happened"* (a `deny` sound he
+could not hear). **`menu-top` row 2 now opens `FOH_TBUILD`.**
+
+**T4 — the editor:** TARGET / MOVE / DELETE, upstream's crosshair and grid
+verbatim, and a pause menu of LOAD / SAVE / DELETE / QUIT. **Tools 0-4 and 8-9
+are ABSENT, NOT STUBBED — the cycle has three entries, not ten with seven that
+beep.** `foh_hand.h`'s model is reused (same doubles, same D1 axes, same clamp
+shape) but **not CALLED, and the reason is principled**: its clamp is a raster
+rect while the builder rewrites `unGriddedCrossHairPos` in WORLD units — *the
+same reason that header keeps hit-testing with the caller.*
+
+**T3 — the slots:** target-select slot 10 stopped refusing; it **flips the grid**
+between the ten authored stages and ten "Custom N" slots. **Upstream draws both
+families in four columns of 1200 px; 240 px holds two, so they take turns.**
+Launch uses `tstage = MLK_PLAYING_BASE + slot` — **upstream's own numbering.**
+**Delete moved off target-select because upstream binds it to `z` and THIS
+HARDWARE HAS NO `z`** — it landed in the builder's pause menu, where the stage
+being destroyed is on screen. **D43 preserved structurally**: ten slots by
+index, no append, no cursor, no shift.
+
+**Writing:** `foh_persist_save`'s publish became
+`foh_persist_publish(name, buf, n, &why)` — **a pure extraction, exactly as
+`custom_stage.h` instructed.** It **REPORTS instead of dying**, so settings keep
+the loud death while the builder puts the reason on screen — *killing the app
+mid-edit destroys the stage in hand.* `statvfs` free-space check before the
+first byte opens; every rc checked; temp file removed on any failure.
+
+**Every refusal is VISIBLE**, which is what the owner actually complained about:
+`10 targets max` · `place at least 1 target` · `disk full` · `SUM mismatch` ·
+`damaging surface (unsupported)`. An unlinked build still enters and draws
+`TARGET BUILDER UNAVAILABLE IN THIS BUILD`. **R2 untouched — it refuses the 11th
+target rather than raising a cap.**
+
+### ⚠ THE DIFFERENTIAL FOUND A CRASH PATH BEFORE THE OWNER COULD
+`port/foh` **cannot even INCLUDE `custom_stage.h`** (it drags generated
+`ml_stages.h`), so the builder has its own reader — **checked against the sim's
+unmodified `mlk_slot_load` over ten corpus files.** *The damage entry
+disagreed:* **the FOH ACCEPTED what the sim REFUSES — and the FOH decides which
+slots draw as playable, so that slot would have launched into a loud death.**
+All three playability rules are now mirrored at the read. **T3's tooth is the
+one that proves it: the witness stays FULLY GREEN and only the differential
+notices.**
+
+**Three mechanical findings:** leg `[0n]`'s expected-verdict predicate
+hardcoded `/^-?[0-9]$/` and **forbade `tstage=10` regardless of what the
+authority said — a generator bug asserting a bound nobody wrote**; the
+authority's expander takes only class-or-literal legs, so the domain must stay
+a regex LITERAL; and the `DIAG_SHA` re-pin had **THREE** deltas where only two
+were predictable — `neg form-sref-leadingzero` moved without being edited, and
+the log carries a command reproducing the old hash byte-for-byte.
+
+**Two witnesses RETARGETED, not weakened:** `check-hand` leg [7] now asserts the
+page flip **plus** the unchanged "launches nothing"; `foh_snd_witness`'s
+`top-A-targetbuilder` moved from the `deny` block to the single-`menuForward`
+leaves, **as the Credits row did under A7.**
+
+### ⚠ A SEMANTIC MERGE CONFLICT — AND A26's DESIGN CAUGHT IT
+The two lanes merged **textually clean** and **did not compile**: A26's
+`foh_persist_resume_target()` is an **EXHAUSTIVE switch over every FOH screen**,
+and T4 added one. **Its own comment promised this**: *"Listed rather than
+defaulted so a NEW screen is a compile error here — the one place that must
+think about it."* **It worked exactly as designed.**
+**Resolved by A26's own rule** (a screen resumes to itself unless the literal
+screen would be worse than nothing): **`FOH_TBUILD -> FOH_MENU_TOP`**, because
+the builder holds an **UNSAVED DOCUMENT that is not persisted** — resuming into
+an empty editor would read as *"my work is still here"* when it is not. That is
+also its own Quit destination upstream.
+
+**Green:** `TBUILD CHECK OK (76 assertions, 6 teeth)` · `HIBERNATE OK` ·
+`REBIND` · `FOH FLOWS` · `JUDGE REGRESSION` · `HAND` · `CSS P34` · `LEGIBILITY`.
+**T1's tooth only bites because the document CHANGES between saves — its first
+version clobbered identical bytes.** (Sixth vacuous-tooth catch this session.)
+
+### OWED
+- **Device legs, none run** (the owner was playing): `check-device-foh.sh`,
+  `check-device-persist.sh`, `check-device-fullgame.sh`, `check-live-arms.sh`,
+  and an OPK install. **All build lists gained `foh_tbuild.c` + `stage_code.c` +
+  `custom_stage.c`** so `foh_device` links the engine — **host-syntax-checked
+  only.**
+- **No stale `m4-freeze-manifest.txt` rows from this lane** — nothing it pins
+  moved.
+- **JUDGEMENT CALL FOR THE OWNER:** upstream's **"Test stage" pause row was
+  dropped.** Save-then-play from Target Test is the same journey through one
+  launch path instead of two. **If in-place testing is wanted, it is a real
+  ticket, not a line.**

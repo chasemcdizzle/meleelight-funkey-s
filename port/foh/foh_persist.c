@@ -109,6 +109,14 @@ FohScreen foh_persist_resume_target(FohScreen sc) {
     case FOH_CREDITS: return FOH_MENU_OPTIONS;
     // unreachable at FOH_NETPLAY 0 (foh.h); its B-exit is the menu top
     case FOH_MENU_BATTLE: return FOH_MENU_TOP;
+    // A45-T4. The builder holds an UNSAVED DOCUMENT that is not persisted, so
+    // resuming INTO it would present an empty editor and read as "my work is
+    // still here" when it is not — worse than not resuming at all. Its own
+    // B/Quit exit is the menu top (targetbuilder.js:832-835), so land there.
+    // This case exists because A26 made the switch EXHAUSTIVE on purpose: the
+    // two lanes merged textually clean and the COMPILER caught the gap, which
+    // is exactly what the comment below promised it would do.
+    case FOH_TBUILD: return FOH_MENU_TOP;
     // Everything else opens with NO entry-time initialisation beyond what
     // foh_init already gives (measured over every ev_trans site in foh.c:
     // the only entry arms that write state are TSS's cursor/hand re-home,
