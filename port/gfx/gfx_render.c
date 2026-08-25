@@ -404,6 +404,18 @@ static void render_player(Gfx *g, const GameState *st, int i) {
   if (fdFound && frame > (double)fd) frame = (double)fd;
 
   const Anim1State *as = anim1_find(&g->anim[charId], p->actionState);
+  // D47 (see port/sim/physics.c:64): puff has no WALLJUMP animation, so under
+  // the D20 house rule it would walljump INVISIBLY for up to 40 frames — the
+  // `!as` arm below is upstream-faithful for a state upstream cannot reach,
+  // but D20 can now reach it. Same reuse as the ECB, same measurement:
+  // WALLTECHJUMP is the state whose ECB is byte-identical to WALLJUMP on all
+  // four characters that have both, and puff HAS a WALLTECHJUMP animation
+  // (measured 2026-08-24: 1 occurrence in anim_1_puff.bin, 0 for WALLJUMP).
+  // Inert for every character that has its own WALLJUMP animation, and
+  // unreachable with the flag off, so no frozen render moves.
+  if (!as && strcmp(p->actionState, "WALLJUMP") == 0) {
+    as = anim1_find(&g->anim[charId], "WALLTECHJUMP");
+  }
   if (!as) return; // animations[c][s] === undefined
   if (frame < 1 || (uint32_t)(frame - 1) >= as->frameCount) {
     return; // animations[c][s][frame-1] === undefined
