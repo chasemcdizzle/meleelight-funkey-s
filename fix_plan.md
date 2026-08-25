@@ -6754,3 +6754,82 @@ ANIM1 rendering outside a match (cosmetic; the doc names the two-file read);
 against a player authoring 20 targets / 120 polygons (host-measurable);
 legibility at 240x150 (**owner playtest, not source**); whether the built
 browser page truly reloads >1 custom stage (the LOGIC is measured broken).
+
+## A47 (SPIKE, owner-ideated 2026-08-24) — TWO-DEVICE LINK PLAY. **The transport already ships.**
+
+Owner: *"what about connecting two funkey-s where one is the master and the
+other is slave and slave sends its inputs to master and master is used for
+screen? and also, what about if both sent inputs to each other and game was
+sync'd so both players' screens show the same thing... even send pixel data of
+the screen to the other device? needs a spike to figure out what is best way,
+easiest way with no downside... this could even be a bigger project where it
+could apply to other games / emulators on the funkey?"*
+
+### CONNECTIVITY — MEASURED ON THE DEVICE 2026-08-24, and it is decisive
+```
+/sys/class/net/        lo  sit0          <- loopback + a virtual tunnel. NOTHING REAL.
+/sys/class/ieee80211/  none              <- NO WIFI
+/sys/class/bluetooth/  none              <- NO BLUETOOTH
+/sys/class/udc/        musb-hdrc.1.auto  <- a USB DEVICE CONTROLLER, state "configured"
+/lib/modules/4.14.14-funkey/.../gadget/legacy/
+        g_ether.ko  g_ncm.ko  g_serial.ko  g_acm_ms.ko   <- ALL PRESENT
+built-in: libcomposite, usb_f_fs, usb_f_serial ; configfs gadget "FunKey" is LIVE
+```
+**THE ONLY POSSIBLE LINK IS USB — and the transport for it is ALREADY ON THE
+DEVICE.** `g_ether` / `g_ncm` are USB-ethernet gadgets: **plug two FunKeys
+together and you get an IP link**, no soldering, no extra hardware.
+
+**BUT THE A33 CONSTRAINT BINDS EXACTLY HERE, AND IT IS THE WHOLE TICKET.**
+USB is asymmetric: **one end must be HOST, the other DEVICE.** Both FunKeys ship
+`dr_mode = "peripheral"` (A33, measured), so **two stock devices CANNOT talk —
+they are both gadgets.** One of them needs the same four-line
+`dr_mode = "host"` fork A33 already scoped.
+**So A47 and A33 share a prerequisite.** One OS fork unlocks BOTH the GameCube
+adapter and two-device link play. That materially changes A33's cost/benefit:
+it is no longer "a controller", it is "the port becomes usable for anything".
+**AND THE SAME RISK BINDS: `adb` runs over MUSB gadget.** The HOST-side device
+would likely lose adb — survivable for a play unit, fatal for the dev unit.
+**Test on a throwaway SD first.**
+
+### WHICH SYNC MODEL — THE ANSWER IS ALREADY BUILT, AND IT IS NOT PIXELS
+The owner listed three: (a) slave sends inputs, master renders both;
+(b) both send inputs, both simulate; (c) send pixel data.
+
+**(b) IS NEARLY FREE FOR THIS PROJECT SPECIFICALLY, AND IT IS NOT A COINCIDENCE.**
+The entire port is built on **deterministic input replay with per-frame
+checksums**:
+- `oracle/goldens/*.trace.json` ARE input traces; the sim replays them to
+  **bit-identical** state.
+- `check-sim.sh` proves 8 goldens **exact over 3600 frames**, and
+  `check-device-conform.sh` proves the **same streams on the device**.
+- **So "both ends simulate from shared inputs" is the thing this codebase has
+  already proven it does bit-exactly, host AND device.** The per-frame checksum
+  is *already* a desync detector — the hardest part of lockstep netplay is
+  built and verified.
+
+**(c) PIXELS IS THE WORST OPTION, by measurement:** 240x240x16bpp = **112.5 KB
+per frame**, x60 = **6.75 MB/s**. USB 2.0 could carry it, but the FunKey must
+also *render* it, and `device-perf.md:34` records only **~6 ms of headroom** in
+a 16.67 ms frame. **Inputs are ~8 bytes per frame per player** — six orders of
+magnitude less.
+**(a) is a legitimate SIMPLER first rung** (one sim, one screen, second pad
+remote) and is genuinely easier — but it gives the second player no screen,
+which is a real downside the owner should weigh.
+
+### WHY THIS IS BIGGER THAN THIS GAME (the owner's last question: YES)
+`g_ether` + a host-mode fork is a **generic FunKey-to-FunKey IP link.** Nothing
+about it is meleelight-specific. Any emulator with netplay (and most have it)
+inherits it. **But note the honest asymmetry: OTHER emulators do NOT have this
+port's determinism proof**, so link play for them is a much harder correctness
+problem than it is here. **We are the easy case, not the representative one.**
+
+### THE SPIKE'S QUESTIONS, in order
+1. **Does a host-mode fork actually enumerate a second FunKey as `g_ether`?**
+   (rung 3 of A33's ladder + one `modprobe` — settles the whole idea)
+2. **Does the HOST end keep `adb`?** If not, the dev unit must stay the gadget.
+3. **Latency, measured, not assumed** — USB-ethernet RTT between two devices
+   against the 16.67 ms frame. Decides lockstep vs rollback.
+4. **Power:** can a bus-powered FunKey run the link, or does the host end need
+   its own supply? (A33's VBUS finding applies.)
+5. **Which model to build first** — recommend (a) as a rung, (b) as the goal.
+**PREREQUISITE: A33 rung 3. Do not start A47 before it.**
