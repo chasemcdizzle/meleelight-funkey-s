@@ -61,34 +61,85 @@ static bool frames_data(const MlSim *S, double i, const char *state,
   return false;
 }
 
-// Non-fatal twin of ecb_state below: does this character's CTAB1 data carry
-// the state at all? Exists ONLY for the MENU-SPEC D20 house rule, which must
-// never push a character into a state whose data upstream never authored.
-// MEASURED 2026-08-04: marth has ECB + framesData for WALLJUMP, puff has
-// framesData but NO ECB — because puff cannot walljump upstream, so nobody
-// ever needed the boxes. Without this guard, D20 + puff = `ecb: unknown
-// action state` one frame after the walljump fires (witnessed, g02 frame
-// 1888).
-static bool has_ecb_state(const MlSim *S, double i, const char *state) {
+// ecb[characterSelections[i]][state] — the raw CTAB1 lookup. NULL = the
+// character's data does not carry the state (upstream: `undefined`).
+static const ml_ecb_state_t *ecb_find(const MlSim *S, double i,
+                                      const char *state) {
   const int c = (int)S->characterSelections[slot(i)];
   const ml_ecb_state_t *tab = ml_ecb_states[c];
   for (int k = 0; k < ml_ecb_state_count[c]; k++) {
-    if (strcmp(tab[k].name, state) == 0) return true;
+    if (strcmp(tab[k].name, state) == 0) return &tab[k];
   }
-  return false;
+  return 0;
+}
+
+// Which ECB does a walljump use for THIS character? NULL = it cannot supply
+// one, so the D20 house rule must not push the character into WALLJUMP.
+// The ONE place that rule is expressed: both the :400 ability gate and the
+// per-frame ecb_state() lookup route through here, so the gate can never
+// admit a walljump the lookup then traps on (that seam is exactly how D20
+// shipped a crash — see below).
+//
+// MENU-SPEC DEVIATION **D47** (owner ruling 2026-08-24 round 4 item 4,
+// "option 1": reuse an existing puff ECB rather than author new geometry).
+//
+// The problem D20 left open, MEASURED 2026-08-04: all five characters carry
+// framesData WALLJUMP:40, but puff carries NO WALLJUMP ECB and no WALLJUMP
+// animation — upstream never authored boxes for a state puff cannot enter.
+// D20's data guard therefore excluded puff, so "Everyone Walljumps" silently
+// meant "everyone except puff" (the guard was added after the crash was
+// witnessed at g02 frame 1888: `ecb: unknown action state`).
+//
+// D47 reuses puff's **WALLTECHJUMP** ECB. MEASURED 2026-08-24 over the
+// generated CTAB1 (pipeline/build/<out>/tables.json, regenerate with
+// `node pipeline/run.js --only animations,tables`):
+//   * for ALL FOUR characters that HAVE a WALLJUMP ECB — marth(0), fox(2),
+//     falco(3), falcon(4) — the WALLTECHJUMP ECB is BYTE-IDENTICAL to the
+//     WALLJUMP ECB: 40 frames, every one of the 160 coordinates equal. Four
+//     independent instances. Upstream's own data says a wall-tech-jump ECB
+//     *is* a walljump ECB, so this is not an approximation of the missing
+//     number, it is the number upstream would have authored.
+//   * puff HAS WALLTECHJUMP: 45 ECB frames >= the 40 that framesData
+//     ["WALLJUMP"] clamps the frame index to (:1456 below), so the reuse can
+//     never run off the end.
+//   * puff also HAS a WALLTECHJUMP animation (1 occurrence in anim_1_puff.bin
+//     vs 0 for WALLJUMP), which port/gfx/gfx_render.c aliases the same way.
+// HARD RULE 5 holds: the numbers still come from the executed-data pipeline,
+// unchanged — only the *state name* used to reach them deviates.
+//
+// REJECTED — FALL (the owner's stated hypothesis). Not a matter of taste:
+// puff's FALL ECB is 8 frames, and the frame index is clamped by
+// framesData["WALLJUMP"] == 40, so walljump frame 9 would trap "ecb frame
+// out of range". FALL is mechanically impossible here. (It also ranked only
+// 7th when marth's own states were ranked by mean per-coordinate distance to
+// marth's WALLJUMP ECB; WALLTECHJUMP ranked 1st, at distance exactly 0.)
+//
+// WHY THE ALIAS LIVES HERE AND NOT IN THE TABLES: pipeline/stages/tables.js
+// serializes upstream verbatim and pipeline/check-tables.sh round-trips the
+// generated C against a fresh executed-JS walk. A hand-added puff WALLJUMP
+// ECB would be overwritten by the next `node pipeline/run.js` AND would be a
+// house-rule deviation disguised as upstream data. Expressed here it is a
+// visible deviation that regeneration cannot erase.
+//
+// Gated on everyCharWallJump: with the flag off (the forever default) this
+// whole arm is dead and the sim is bit-identical to upstream.
+static const ml_ecb_state_t *walljump_ecb(const MlSim *S, double i) {
+  const ml_ecb_state_t *es = ecb_find(S, i, "WALLJUMP");
+  if (!es && S->everyCharWallJump) es = ecb_find(S, i, "WALLTECHJUMP"); // D47
+  return es;
 }
 
 // ecb[characterSelections[i]][state] — CTAB1 lookup. Upstream would throw
 // on a missing state / out-of-range frame (undefined[0]): domain trap.
 static const ml_ecb_state_t *ecb_state(const MlSim *S, double i,
                                        const char *state) {
-  const int c = (int)S->characterSelections[slot(i)];
-  const ml_ecb_state_t *tab = ml_ecb_states[c];
-  for (int k = 0; k < ml_ecb_state_count[c]; k++) {
-    if (strcmp(tab[k].name, state) == 0) return &tab[k];
+  const ml_ecb_state_t *es = ecb_find(S, i, state);
+  if (!es && strcmp(state, "WALLJUMP") == 0) es = walljump_ecb(S, i); // D47
+  if (!es) {
+    ml_phys_out_of_domain("ecb: unknown action state");
+    return 0;
   }
-  ml_phys_out_of_domain("ecb: unknown action state");
-  return 0;
+  return es;
 }
 
 // ECB (envcoll value type) <-> the player model's Vec2D[4]
@@ -391,13 +442,14 @@ static void dealWithWallCollision(MlSim *S, double i, Vec2D newPosition,
       // of". With the flag false this is bit-identical to upstream.
       // The D20 arm is GUARDED ON DATA, not on a character list: the house
       // rule grants walljump to any character whose CTAB1 data can actually
-      // represent the WALLJUMP state. Puff is excluded by that measurement
-      // (no ECB for WALLJUMP — upstream never authored boxes for a state puff
-      // cannot enter), and authoring them would be inventing Nintendo-derived
-      // animation data. Marth is included: it has both ECB and framesData.
+      // supply a WALLJUMP ECB. walljump_ecb() (:64) is the single owner of
+      // that question, and it is the SAME call the per-frame lookup makes —
+      // gate and lookup cannot drift apart. Under D47 it resolves puff's
+      // missing WALLJUMP ECB to puff's WALLTECHJUMP ECB, so "Everyone
+      // Walljumps" now means everyone, puff included.
       if (sign * in[0].lsX >= 0.7 && sign * in[3].lsX <= 0 &&
           (ATTR(S, i)->walljump ||
-           (S->everyCharWallJump && has_ecb_state(S, i, "WALLJUMP")))) {
+           (S->everyCharWallJump && walljump_ecb(S, i) != 0))) {
         p->phys.wallJumpTimer = 254;
         p->phys.face = sign;
         dsp(S, "init", "WALLJUMP", i);
