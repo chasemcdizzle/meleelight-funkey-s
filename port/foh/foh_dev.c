@@ -146,12 +146,14 @@
 #include <limits.h>
 #include <inttypes.h>
 #include <pthread.h>
+#include <signal.h> // A26/D53: the hibernate SIGUSR1
 #include <stdarg.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h> // A26/D53: _exit on the hibernate path
 
 #include "../gfx/attrib.h" // --attrib row sampler/writer (shared w/ gfx_app.c)
 #include "../gfx/pace.h"   // pace_sleep_until_ns: frame pacing (shared w/ gfx_app.c)
@@ -1355,6 +1357,79 @@ static void tdev_persist_load(void) {
   // table with an action missing from it.
   for (int k = 0; k < CTL_BIND_PORTS; k++) ctl_bind_set_row(k, g_persist.bind[k]);
 }
+
+// --- A26 / DEVIATION D53: hibernate — closing the lid ------------------------
+//
+// MEASURED, and this is the WHOLE mechanism (no probe was needed):
+//   lid -> fkgpiod (KEY_POWER/KEY_SLEEP) -> `powerdown schedule 0.1`
+//        -> kill -USR1 <the pid frontend:106 recorded> -> 100 ms
+//        -> `powerdown now`
+// The device does NOT suspend-and-resume: it powers OFF. So /tmp is gone by
+// the next boot and a resume record can only live on /mnt, and "resume"
+// means recording a place and going back to it — not surviving a clock jump.
+// The pid the signal reaches is the LAUNCHER's, because mlfk-foh.sh runs
+// this binary as a child; that script now backgrounds it, `wait`s, and
+// forwards the signal here. A plain `trap ... USR1` there could NOT work:
+// POSIX sh DEFERS traps until a FOREGROUND child completes (measured firing
+// 4 s late, exactly when the child ended).
+//
+// THE HANDLER SETS A FLAG AND NOTHING ELSE, and that is not ceremony: this
+// process runs an SDL audio callback and a music reader thread, a
+// process-directed signal lands on whichever thread has it unblocked, and
+// stdio/fsync are not async-signal-safe. Whichever loop the main thread is
+// in notices within one frame.
+//
+// THE 100 ms BUDGET, measured on the device instead of assumed:
+//   * 20 real foh_persist_save() calls against /mnt (vfat, no journal, two
+//     fsyncs): min 8.1 ms, median ~12.2 ms, max 49.6 ms.
+//   * end to end — `kill -USR1 <launcher>` through the real launcher idiom
+//     to the app's exit — 20 / 30 / 30 / 60 ms over four runs.
+// Worst observed 60 ms of 100. AND OVERRUNNING IS SAFE, which is why this
+// needs no `powerdown handle` cancel dance to own the shutdown: the save
+// publishes by rename(), so a kill mid-save leaves a stale .tmp and the
+// PREVIOUS file untouched. An overrun costs the resume, never the settings.
+//
+// KNOWN CEILING, registered rather than hidden: the flag is polled by the
+// three main loops. If the lid closes while a MODAL OVERLAY is open
+// (foh_pause.c's pause and system menus run their own loops), nothing
+// notices until it returns — which is after the power is gone. That degrades
+// to the pre-A26 behaviour; it can never land the player on a wrong screen.
+static volatile sig_atomic_t g_hibernate;
+static void tdev_hibernate_signal(int sig) {
+  (void)sig;
+  g_hibernate = 1;
+}
+static void tdev_hibernate_install(void) {
+  struct sigaction sa;
+  memset(&sa, 0, sizeof sa);
+  sa.sa_handler = tdev_hibernate_signal;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_RESTART; // never break the music reader's blocking I/O
+  if (sigaction(SIGUSR1, &sa, 0) != 0) {
+    sim_fatal("foh_dev: cannot install the hibernate SIGUSR1 handler");
+  }
+}
+// Called by every main loop, first thing after its input poll. The screen is
+// PASSED rather than read off f->screen because both match loops are also
+// reachable from --direct-match, which runs no FOH transition at all and so
+// leaves f->screen at FOH_STARTUP.
+static void tdev_hibernate_check(FohScreen sc, const FohState *f) {
+  if (!g_hibernate) return;
+  g_persist.resumeScreen = (int)foh_persist_resume_target(sc);
+  // the player's settings go with it — a hibernate is an exit like any other
+  foh_persist_collect(&g_persist, f);
+  tdev_persist_save();
+  fprintf(stderr, "foh_dev: hibernate from=%s resume=%s\n",
+          foh_screen_token(sc),
+          foh_screen_token((FohScreen)g_persist.resumeScreen));
+  fflush(NULL);
+  // _exit, not exit: the machine is powering off inside the grace we just
+  // spent. SDL teardown, the music reader join and the trace flush are time
+  // we do not have and output nobody will read. The one thing that had to
+  // reach the card is already published.
+  _exit(0);
+}
+
 static void tdev_end_game(GameState *g, FohState *f) {
   art_resetAArticles(&g->arts);     // resetAArticles() (:1376)
   hd_setPhantonQueue(&g->hq, 0, 0); // setPhantonQueue([]) (:1375)
@@ -2014,6 +2089,10 @@ int main(int argc, char **argv) {
   // the load chokepoint, so no site can load without it.
   tdev_persist_load();
   foh_persist_apply(&g_persist, &foh);
+  // A26/D53. Unconditional: SIGUSR1's default disposition is TERMINATE, so
+  // installing the handler can only make this binary harder to kill by
+  // accident, and no evidence rig has a sender — their runs are unchanged.
+  tdev_hibernate_install();
   if (direct) {
     // DIRECT MATCH: write the SAME FohState fields a menu launch writes
     // (foh.c:666-679's SSS-A arm), then mark it launched. Everything
@@ -2053,6 +2132,48 @@ int main(int argc, char **argv) {
   memset(&cur, 0, sizeof cur);
   memset(&prevPin, 0, sizeof prevPin);
   bool menuMusicOn = false;
+  // A26/D53: THE RESUME. Put the machine on the screen the last hibernate
+  // recorded — the same shape the post-match return uses (the `foh.screen =`
+  // arm further down), i.e. KEEP the state machine and move only the screen.
+  // Everything the resumed screen needs beyond foh_init is already in place:
+  // the persisted settings, the control plane and the CSS selection all came
+  // from the apply above, and foh_persist_resume_target() has already
+  // excluded the screens whose ENTERING TRANSITION is what sets them up.
+  //
+  // NOT gated on the input mode, deliberately. The obvious guard — "only on
+  // the real-input play path" — is REDUNDANT and would have made this arm
+  // unreachable from every host check: nothing can arm the row except a
+  // hibernate, a hibernate needs SIGUSR1, and no evidence rig has a sender.
+  // Rigs additionally get a FRESH MLFK_PERSIST_DIR per run (foh_persist.h),
+  // so their boot cannot see an armed row even by accident, and a stale one
+  // would fail LOUDLY against their frozen transition traces rather than
+  // quietly. `direct` IS excluded: --direct-match has no FOH phase to resume
+  // into and writes its own launch plane immediately below.
+  //
+  // CONSUMED IN MEMORY on the way past. The row on the card is left alone —
+  // rewriting it here would cost a second ~10-50 ms SD write at every boot
+  // after a hibernate — but the in-process copy goes neutral, so an ordinary
+  // save later in the session (an options B-exit, a CSS exit) republishes it
+  // as "nothing armed" rather than silently re-arming a screen the player
+  // has since left.
+  if (!direct && g_persist.resumeScreen != (int)FOH_STARTUP) {
+    foh.screen = (FohScreen)g_persist.resumeScreen;
+    g_persist.resumeScreen = (int)FOH_STARTUP;
+    fprintf(stderr, "foh_dev: resumed screen=%s\n", foh_screen_token(foh.screen));
+    // The menu loop is playing wherever upstream plays it. The boot has
+    // already programmed track 0 SILENT (:1974), so this is the same
+    // lock-bracketed flag flip the title->menu-top arm makes below — not a
+    // program, which the reader thread's contract forbids while it is live.
+    // TITLE keeps the boot's silence (that arm turns it on at the join) and
+    // TSS is silent upstream too (gameMode 5 takes no playMenuLoop,
+    // targetselect.js) — the same two exceptions the post-match arm carries.
+    if (g_have_music && foh.screen != FOH_TITLE && foh.screen != FOH_TSS) {
+      platform_audio_lock();
+      g_mix.music.on = 1;
+      platform_audio_unlock();
+      menuMusicOn = true;
+    }
+  }
   long fohTicks = 0;
   // direct mode has no FOH phase at all: 0 ticks, so the loop body below
   // never executes (chosen over wrapping 140 lines in an `if` — the
@@ -2176,6 +2297,12 @@ foh_phase:;
   uint64_t fohStart = now_ns();
   long endTick = 0;
   for (long t = 1; t <= fohLimit; t++) {
+    // A26/D53. FIRST statement of the body, and OUTSIDE the inPoll/flow split
+    // below on purpose: the first shape of this sat inside the `if (inPoll)`
+    // arm next to platform_poll, which made the arm unreachable from every
+    // flow-driven run — i.e. from every check that could have proven it.
+    // Caught by leg [4] of check-hibernate.sh failing, not by reading.
+    tdev_hibernate_check(foh.screen, &foh); // exits iff the lid closed
     fohTicks = t;
     const uint64_t deadline = fohStart + (uint64_t)t * budgetNs;
     bool qEdge = false;
@@ -2657,6 +2784,9 @@ foh_phase:;
         uint64_t tStart = now_ns(); // NOT const: the overlay shifts it
         for (long f = 0; f < loopMax; f++) {
           poll_bound(&pin); // live: THE input; tverify: backend pump
+          // A26/D53. FOH_TMATCH literally, not foh.screen: --direct-match
+          // never runs a transition, so that field can still be FOH_STARTUP.
+          tdev_hibernate_check(FOH_TMATCH, &foh); // exits iff the lid closed
           // A12: MENU opens the same overlay here. START does NOT — in
           // target mode it is upstream's own endGame quit (main.js:1013
           // -1015) via tp_endgame_hook, which is faithful and already
@@ -3261,6 +3391,8 @@ foh_phase:;
         // inflate a number judge-render-timing.js computes.
         if (attrib) attrib_sample(&attrib[f]);
         poll_bound(&pin);
+        // A26/D53. FOH_MATCH literally — see the target loop's note.
+        tdev_hibernate_check(FOH_MATCH, &foh); // exits iff the lid closed
         // A11/A12: START opens the modal pause overlay. MENU does NOT — since
         // A12b it opens the FunKey SYSTEM menu, dispatched by the arm just
         // below on its own button (review-mexit-r5 Low corrects this note,

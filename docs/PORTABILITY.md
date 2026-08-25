@@ -298,6 +298,37 @@ A new device = write one new backend TU (+ audio open params).
   poll window). FunKey-OS `/proc` + `cat cmdline | tr` shapes; the
   scan-then-kill-by-pid PATTERN and the "teardown on every exit path,
   never trust a cancel racing a wipe" rule are the portable parts.
+- **Hibernate/resume** (fix_plan A26, DEVIATION D53 — the SIGUSR1 arm in
+  `port/foh/foh_dev.c` + the background/`wait`/forward idiom in
+  `port/gfx/opk/mlfk-foh.sh`). FunKey-BOUND, all of it MEASURED on this
+  device and none of it a portable constant: closing the lid is `fkgpiod`
+  (built-in `KEY_POWER`/`KEY_SLEEP`) running
+  `/usr/local/sbin/powerdown schedule 0.1`, which SIGUSR1s the pid
+  `frontend:106` recorded in `/var/run/funkey.pid` and then runs
+  `powerdown now` **100 ms later**; because gmenu2x execs into opkrun and
+  then into the LAUNCHER SHELL, that pid is the shell's, not the app's, so
+  the launcher must forward — and it must background+`wait` to do it,
+  because POSIX `sh` defers traps until a FOREGROUND child completes.
+  **The whole design is a consequence of that 100 ms**, and a new target
+  must RE-MEASURE three things before reusing any of it: (1) whether the
+  lid suspends the process or kills it (this one KILLS — so `/tmp` is gone
+  by the next boot and the resume record must live on `/mnt`); (2) which
+  signal arrives, and to which pid; (3) what one `foh_persist_save` costs
+  on the target's filesystem — here, 20 real saves against
+  vfat-with-no-journal measured min 8.1 / median ~12.2 / **max 49.6 ms**,
+  and end-to-end signal-to-exit 20-60 ms, which is what makes 100 ms
+  sufficient. A target with a shorter grace or a slower card needs a
+  different design, not a re-tuned constant.
+  PORTABLE, and worth keeping whatever the mechanism: the record is ONE
+  appended row in the EXISTING versioned+checksummed persist file — no
+  second write path, so the atomic tmp+rename publish already guarantees
+  that missing the grace costs the resume and never the settings; the
+  row's domain IS `foh_persist_resume_target()`, so a screen the driver
+  would refuse to restore can be neither written nor loaded; the signal
+  handler only sets a flag (this process has an audio callback and a music
+  reader thread, and a process-directed signal lands on whichever has it
+  unblocked); and the scope rule — restore the SCREEN, never mid-match
+  state.
 
 ## Porting recipe (when a new target appears)
 

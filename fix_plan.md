@@ -7917,3 +7917,106 @@ therefore proved nothing, and I reported it as verification. **Re-tested with
 the environment cleared, it did pass** — but the first result was worthless and
 I presented it as decisive. **Same class I have flagged in others repeatedly:
 the check environment silently supplied what the real one could not.**
+
+## A26 — IMPLEMENTED 2026-08-25 (LANE P). **DEVIATION D53, `MLFKPERSIST7`.**
+
+Owner: *"closing screen and opening it doesn't come back to the game though.
+i want it to, is it possible?"* — **yes, and it now does, to the screen.**
+
+### THE MECHANISM WAS ALREADY MEASURED; THIS LANE ONLY CONFIRMED AND BUILT ON IT
+Lid -> `fkgpiod` -> `powerdown schedule 0.1` -> `kill -USR1 $(pid print)` ->
+**100 ms** -> `powerdown now`. The signal lands on the LAUNCHER SHELL, and a
+plain `trap` there is DEFERRED until the foreground child ends. Both facts
+stood up; nothing was re-derived.
+
+### SIGNAL ROUTE: BACKGROUND + `wait` + FORWARD, handled in C
+`mlfk-foh.sh`'s LIVE branch (the evidence branch is byte-untouched) backgrounds
+`foh_device`, `wait`s, and forwards SIGUSR1. The C handler sets a
+`volatile sig_atomic_t` and nothing else — this process runs an SDL audio
+callback and a music reader thread, a process-directed signal lands on
+whichever has it unblocked, and stdio/fsync are not async-signal-safe. Three
+main loops poll the flag (FOH, VS match, target match).
+**`exec` was rejected**: it would take the launcher's `copyback` trap and its
+`RC=` write to `opk.rc` with it, and the device rigs parse both.
+**The stdin worry was FALSIFIED rather than insured against**:
+`check-device-foh.sh:2173` already runs `foh_device --input poll` on this
+device in exactly this shape (`... & wait $!`, the whole thing `</dev/null`),
+driven through the real SDL keysym path, and it is green.
+
+### THE 100 ms BUDGET — MEASURED ON THE DEVICE, NOT ASSUMED
+| what | measurement |
+|---|---|
+| 20 real `foh_persist_save()` calls, `/mnt` (vfat, no journal, 2 fsyncs) | min **8.1 ms**, median ~12.2, max **49.6** |
+| end-to-end `kill -USR1 <launcher>` -> app exit, real launcher idiom, x4 | **20 / 30 / 30 / 60 ms** |
+
+Worst observed **60 ms of 100**. **And overrunning is SAFE, which is why no
+`powerdown handle` cancel dance was built**: the save publishes by `rename()`,
+so a kill mid-save leaves a stale `.tmp` and the PREVIOUS file untouched. An
+overrun costs the resume, never the settings. Taking over the shutdown would
+have traded that for a device that fails to power off.
+
+### WHAT IS RESTORED, AND WHAT DELIBERATELY IS NOT
+`foh_persist_resume_target()` is BOTH the driver's mapping and the file's
+DOMAIN, so a screen the driver would refuse to restore can be neither written
+nor loaded. Identity for title / menu-top / menu-options / menu-controls / css
+/ opt-gameplay / opt-audio / ctrl-pad / ctrl-key / tss. Non-identity, each
+because the literal screen would be WORSE than no resume: **MATCH -> CSS** and
+**TMATCH -> TSS** (mid-match state is a separate serialization surface —
+scope-excluded, exactly as the row proposed); **SSS -> CSS** (stage select
+launches with port types the CSS arms, and those are deliberately not
+persisted); **CREDITS -> MENU_OPTIONS** (its reticle is placed by the ENTERING
+transition, which a resume never runs); **MENU_BATTLE -> MENU_TOP**
+(unreachable at `FOH_NETPLAY 0`). One-shot: the row is CONSUMED IN MEMORY at
+boot, so an ordinary later save republishes "nothing armed" instead of silently
+re-arming a screen the player has since left.
+
+### GOTCHA CLASS FOUND, and it was NOT mine — **A49 LEFT THREE STALE FIXTURES**
+Every format bump has to strip its new row from the OLD-VERSION FIXTURES that
+other checks synthesise, and has to move the SUM recompute. **A49 did neither
+in three places, and this bump is how they surfaced:**
+- `check-device-persist.sh:733` recomputed the seal over `head -n 67` while a
+  v6 body is 68 lines — **from A49 until now that whitelist would have
+  rejected every genuine file.** Fixed, and now DERIVED from the SUM's own line
+  index (`ln - 1`) so the next bump cannot repeat it.
+- `check-device-persist.sh`'s T-H3 fixture had the same off-by-one.
+- `foh_rebind_witness.c` and `foh_p34_witness.c` synthesise old files by
+  stripping appended rows; both stripped `sel` and not `resume`, which makes a
+  "v5/v4" fixture a v5 header over v7 content and fails as a MIGRATION defect
+  that does not exist. Both fixed; the p34 one now strips from a LIST so the
+  next row is one entry.
+**Because `check-device-persist.sh` is a DEVICE check, its bump would have
+shipped unverified — which is exactly how it acquired the A49 defect.** So
+`check-hibernate.sh` leg [7] EXTRACTS its positional whitelist and runs it on
+the host against the real v7 file the run just published, and asserts it
+REJECTS a real v6 one. Proven non-vacuous by reverting the off-by-one and
+watching leg [7] fail.
+
+`done-check:` `bash port/foh/check-hibernate.sh` -> `HIBERNATE OK`, exit 0.
+Builds the host twin via `check-device-foh.sh`'s OWN extracted recipe, then:
+[3] runs the four load-bearing launcher lines EXTRACTED from `mlfk-foh.sh`
+against a stand-in child (trap fires immediately; the child's real rc reaches
+`opk.rc` — the `wait "$APP" || rc=$?` form reported a clean exit as `RC=138`);
+[4] sends a REAL SIGUSR1 to a paced FOH run parked on the CSS and asserts one
+save, `hibernate from=css resume=css`, exit 0, and `resume 06` published in an
+`MLFKPERSIST7` file; [5] boots again on that dir and asserts the app comes up
+on the CSS **judged from the transition trace** (the cold reference walks
+`startup title timer`; the resumed boot walks none of it); [6] four orthogonal
+teeth — T1 a checksum-VALID file whose resume row names `FOH_MATCH` must reset
+`cause=corrupt detail=domain` and apply nothing, T2 a v6 file must migrate,
+keep its settings and boot cold, T3 a perturbed `foh_dev.c` copy with the stamp
+removed must arm nothing, T4 the launcher idiom reverted to the foreground form
+must fail to deliver the signal; [7] the device whitelist leg above.
+
+### OWED
+- **`port/gfx/opk/mlfk-foh.sh` is SHA256-PINNED in
+  `port/sim/device/m4-freeze-manifest.txt` and that row is now STALE.** The
+  lane did not touch the manifest (driver-only, batched §A-par.5).
+- **DEVICE LEGS OWED** (the device went offline mid-lane and this lane does not
+  run device checks): `check-device-persist.sh` on hardware to confirm the v7
+  bump + the three A49 fixes end to end; and the owner-visible confirmation —
+  install the play OPK, launch, close the lid, reopen, and see the CSS.
+- **`check-mexit-reentry.sh` is not runnable in this worktree** for an unrelated
+  reason: `oracle/harness/node_modules` was never installed here and
+  `dump-sim-data.js` requires playwright. Pre-existing environment gap, not this
+  change. `check-rebind.sh` and `check-css-p34.sh` — the two host checks that do
+  touch the persist file — are GREEN.

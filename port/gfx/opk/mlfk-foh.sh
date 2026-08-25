@@ -174,6 +174,43 @@ else
   # is not grammar-pinned (check-device-foh.sh pins `foh_dev foh:` lines only).
   SEED="$(( ($(date +%s) + $$) % 2147483647 ))"
   echo "mlfk-foh.sh: play seed=$SEED" >> "$LOG"
+  # A26 / DEVIATION D53 — HIBERNATE. The app is BACKGROUNDED and `wait`ed on,
+  # and the USR1 trap forwards to it. Every word of that is forced:
+  #
+  #   * Closing the lid runs `powerdown schedule 0.1`, which sends SIGUSR1 to
+  #     the pid `frontend:106` recorded and powers the device off 100 ms
+  #     later. gmenu2x execs into opkrun and then into THIS SCRIPT, so the pid
+  #     it recorded is the SHELL's, not the app's — MEASURED: `kill -USR1
+  #     <launcher>` left `launcher=DEAD app=ALIVE` (orphaned), because a shell
+  #     with no USR1 trap takes the default disposition and terminates.
+  #     So the app must be told, and only this script can tell it.
+  #
+  #   * The trap CANNOT be added to the old foreground form. POSIX sh DEFERS
+  #     traps until a foreground child completes — MEASURED firing 4 s late,
+  #     exactly when a `sleep 4` ended, which is 40x past the whole grace.
+  #     Backgrounding + `wait` is the platform's own native_launch.sh idiom
+  #     and makes the trap fire immediately (measured: forward + save + exit
+  #     in 20-60 ms of the 100 ms budget).
+  #
+  #   * `wait` is REPEATED because a trap-interrupted `wait` returns 128+signo
+  #     for the interruption, not the child's status; the second `wait` on the
+  #     already-known job yields the real one. Written as `wait "$APP"; rc=$?`
+  #     and never `wait "$APP" || rc=$?` — the `||` form leaves rc at the
+  #     stale 138 when the retry succeeds (measured: `RC=138` in opk.rc for a
+  #     clean exit, which the FOH evidence parsers read as a crash).
+  #
+  #   * Backgrounding does NOT cost the app its input, which is the obvious
+  #     worry: an asynchronous list gets /dev/null on stdin, and this SDL 1.2
+  #     backend takes its buttons through SDL_PollEvent. Checked rather than
+  #     reasoned about — check-device-foh.sh:2173 already runs `foh_device
+  #     --input poll` on THIS device in exactly this shape (`... & wait $!`,
+  #     the whole thing `</dev/null`), driven through the real SDL keysym
+  #     path by the uinput injector, and it is green. So the shape is proven
+  #     on the hardware before this row ever used it.
+  #
+  # The evidence branch above is deliberately UNCHANGED: nothing sends it
+  # SIGUSR1, its rc handling is pinned by the rigs, and one shape per branch
+  # beats one shared shape neither branch is written for.
   # shellcheck disable=SC2086 — $SND/$MUS are word lists on purpose
   "$DIR/foh_device" --flow "$DIR/f01-vs-g01.flow" --input poll \
     --flow-out "$EV/foh-trace.txt" \
@@ -184,7 +221,11 @@ else
     --vfxdata "$DATA/vfxdata-frozen.txt" \
     --glyphs "$DATA/vfxglyphs-frozen.txt" --legible \
     --anim-dir "$DATA" --tapjump-off-p1 --system-menu $SND $MUS \
-    >> "$LOG" 2>&1 || rc=$?
+    >> "$LOG" 2>&1 &
+  APP=$!
+  trap 'kill -USR1 "$APP" 2>/dev/null' USR1
+  wait "$APP"; rc=$?
+  if [ "$rc" -gt 128 ]; then wait "$APP"; rc=$?; fi
 fi
 echo "RC=$rc" > "$EV/opk.rc"
 exit "$rc"

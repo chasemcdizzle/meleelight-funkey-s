@@ -97,17 +97,18 @@ REC_BITS=402d000000000000
 REC_DISPLAY="00:14.50"
 WORSE_BITS=4030000000000000
 
-# review-102 M-b: a genuine MLFKPERSIST6 file is EXACTLY this many bytes
+# review-102 M-b: a genuine MLFKPERSIST7 file is EXACTLY this many bytes
 # (line-derived: header 13 + turbo 8 + lcancel 10 + tapjump 16 +
 # ctlstyle 11 + modonr 9 (fix_plan A4) + 50 rec rows x25 + the v4 options
 # block 124 (flash 8 + walljump 11 + blastzone 12 + dustless 11 +
 # phantom 25 + soundslevel 29 + musiclevel 28; MENU-SPEC §3/§4) + the v5
 # bind block 92 (4 rows x23; fix_plan A31) + the v6 sel row 12
-# (`sel c c c c` + LF; fix_plan A49, DEVIATION D45) + SUM 69
-# = 1614). A dropped/added byte — including an embedded NUL that command
+# (`sel c c c c` + LF; fix_plan A49, DEVIATION D45) + the v7 resume row 10
+# (`resume NN` + LF; fix_plan A26, DEVIATION D53) + SUM 69
+# = 1624). A dropped/added byte — including an embedded NUL that command
 # substitution silently swallows through the per-line sed reads — breaks
 # this reconciliation.
-PERSIST_BYTES=1614
+PERSIST_BYTES=1624
 
 DEADMAN_S="${MLFK_DEADMAN_S:-900}"
 READY_TRIES=60
@@ -601,7 +602,7 @@ run_host() {
     || grammar_die "host leg $id: the degraded 'saved-nodirsync' token appeared on a healthy leg"
 }
 
-# EXACT POSITIONAL MLFKPERSIST6 whitelist verification, INDEPENDENT of
+# EXACT POSITIONAL MLFKPERSIST7 whitelist verification, INDEPENDENT of
 # the C loader (review-100 M2 + the whitelist-grammar rule, PROCESS §3).
 # The format is a FIXED shape — so this asserts it BY POSITION:
 # final byte LF, exactly 68 lines, each line matched at its exact index
@@ -611,7 +612,7 @@ run_host() {
 # pattern in the C loader's domain (== the -1.0 sentinel or finite in
 # [0,6000)), the four v5 bind rows carrying the port-major progression and
 # each being a PERMUTATION of 0..7, and a shasum recompute of the SUM seal
-# over lines 1..67.
+# over lines 1..69 (the whole body; the SUM line itself is line 70).
 # Binary outcome: exact match -> pass; resembles-but-doesn't -> fail
 # closed (grammar_die). NO global counts, NO permissive scan.
 hex_lt() ( LC_ALL=C; [[ "$1" < "$2" ]]; ) # fixed 16-hex: byte order == numeric order
@@ -628,10 +629,10 @@ verify_persist_file() { # <file> <ctx>
   # line-derived expectation. Catches any dropped/added byte (embedded
   # NUL, stray CR, truncation) the per-line $(sed) reads would launder.
   nbytes="$(wc -c < "$f" | tr -d ' ')"
-  [ "$nbytes" = "$PERSIST_BYTES" ] || grammar_die "$ctx: file is $nbytes bytes != $PERSIST_BYTES (MLFKPERSIST6 fixed size; byte-count reconciliation failed — dropped/added/NUL byte)"
+  [ "$nbytes" = "$PERSIST_BYTES" ] || grammar_die "$ctx: file is $nbytes bytes != $PERSIST_BYTES (MLFKPERSIST7 fixed size; byte-count reconciliation failed — dropped/added/NUL byte)"
   nl="$(grep -c "" "$f")" || grammar_die "$ctx: cannot count lines"
-  [ "$nl" = 69 ] || grammar_die "$ctx: $nl lines != 69 (MLFKPERSIST6 is exactly 69 LF lines)"
-  L="$(sed -n 1p "$f")"; [ "$L" = "MLFKPERSIST6" ] || grammar_die "$ctx: line 1 is not the exact header ('$L')"
+  [ "$nl" = 70 ] || grammar_die "$ctx: $nl lines != 70 (MLFKPERSIST7 is exactly 70 LF lines)"
+  L="$(sed -n 1p "$f")"; [ "$L" = "MLFKPERSIST7" ] || grammar_die "$ctx: line 1 is not the exact header ('$L')"
   L="$(sed -n 2p "$f")"; [[ "$L" =~ ^turbo\ [01]$ ]] || grammar_die "$ctx: line 2 turbo grammar ('$L')"
   L="$(sed -n 3p "$f")"; [[ "$L" =~ ^lcancel\ [0-2]$ ]] || grammar_die "$ctx: line 3 lcancel grammar ('$L')"
   L="$(sed -n 4p "$f")"; [[ "$L" =~ ^tapjump\ [01]\ [01]\ [01]\ [01]$ ]] || grammar_die "$ctx: line 4 tapjump grammar ('$L')"
@@ -722,15 +723,34 @@ verify_persist_file() { # <file> <ctx>
   L="$(sed -n 68p "$f")"
   [[ "$L" =~ ^sel\ ([0-4])\ ([0-4])\ ([0-4])\ ([0-4])$ ]] \
     || grammar_die "$ctx: line 68 is not the v6 sel row ('$L')"
-  ln=69
+  # v7 block (fix_plan A26, DEVIATION D53): the hibernate resume screen, one
+  # row, TWO digits. The domain here is deliberately NARROWER than "a
+  # FohScreen": it is exactly the screens foh_persist_resume_target() maps to
+  # themselves, restated INDEPENDENTLY of the C loader the way every rec/bind
+  # domain above is. 00 = FOH_STARTUP = nothing armed; the rest are the
+  # resumable screens (title 01, menu-top 02, menu-options 03, menu-controls
+  # 05, css 06, opt-gameplay 08, opt-audio 09, ctrl-pad 10, ctrl-key 11,
+  # tss 14). NOT here, and that is the point: 04 menu-battle, 07 sss,
+  # 12 credits, 13 match, 15 tmatch — screens a resume must never restore.
   L="$(sed -n 69p "$f")"
-  [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 69 is not the SUM line ('$L')"
+  [[ "$L" =~ ^resume\ (00|01|02|03|05|06|08|09|10|11|14)$ ]] \
+    || grammar_die "$ctx: line 69 is not a v7 resume row in the resumable
+  domain ('$L') — a screen the driver would refuse to restore must never
+  reach the file either"
+  ln=70
+  L="$(sed -n 70p "$f")"
+  [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 70 is not the SUM line ('$L')"
   sum="${BASH_REMATCH[1]}"
   # review-102 M-b: validate the COMPLETE recomputed shasum line grammar
   # (`<64hex>  -` on stdin), never a `cut -d' ' -f1` first-field scrape —
   # a truncated line with a plausible first field is corruption.
   local sumline
-  sumline="$(head -n 67 "$f" | shasum -a 256)" || fail "$ctx: shasum failed"
+  # 69, not 67: the body is EVERY line before the SUM. A49 added the `sel`
+  # row and moved the SUM's own index from 68 to 69 but left this recompute
+  # at 67, so from that commit until this one the whitelist hashed two lines
+  # short and would have rejected every genuine file. Derived from the SUM's
+  # index above rather than retyped, so the next bump cannot repeat it.
+  sumline="$(head -n $((ln - 1)) "$f" | shasum -a 256)" || fail "$ctx: shasum failed"
   [[ "$sumline" =~ ^([0-9a-f]{64})\ \ -$ ]] || grammar_die "$ctx: recomputed shasum line is not exactly '<64hex>  -' ('$sumline')"
   want="${BASH_REMATCH[1]}"
   [ "$want" = "$sum" ] || grammar_die "$ctx: SUM seal $sum != recomputed $want (torn/corrupt file passed as evidence)"
@@ -1083,12 +1103,12 @@ echo "    T-H1 OK: nibble-flipped rec dies on the SUM seal (loud reset)"
 # T-H2 unsupported-version bump WITH a recomputed (valid) SUM.
 # review-ctl r1 / the 2026-07-29 v3 bump / the v4 menus bump: v1, v2 AND
 # v3 were legitimate MIGRATIONS rather than resets, and since fix_plan
-# A31's v5 bump so is v4, and since A49's v6 bump so is v5 — v6 is the
-# CURRENT version, so the unsupported-version tooth moves to v7, a version
-# this build cannot know. (It has moved with every bump; leaving it behind
+# A31's v5 bump so is v4, since A49's v6 bump so is v5, and since A26's v7
+# bump so is v6 — v7 is the CURRENT version, so the unsupported-version tooth
+# moves to v8, a version this build cannot know. (It has moved with every bump; leaving it behind
 # turns this tooth into a no-op that asserts the CURRENT format resets.)
 mk_pdir "$HP/th2" -
-{ printf 'MLFKPERSIST7\n'; tail -n +2 "$FILE_REC" | head -n 67; } > "$HP/th2/body"
+{ printf 'MLFKPERSIST8\n'; tail -n +2 "$FILE_REC" | head -n 68; } > "$HP/th2/body"
 { cat "$HP/th2/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th2/body" | cut -d' ' -f1)"; } \
   > "$HP/th2/mlfk-persist.dat"
 rm -f "$HP/th2/body"
@@ -1098,7 +1118,7 @@ echo "    T-H2 OK: unsupported version (checksum-valid) resets loudly"
 # T-H3 domain: NaN record bits with a recomputed SUM
 mk_pdir "$HP/th3" -
 sed "s/^rec $REC_CHAR $REC_TSTAGE $REC_BITS\$/rec $REC_CHAR $REC_TSTAGE 7ff8000000000000/" \
-  "$FILE_REC" | head -n 67 > "$HP/th3/body"
+  "$FILE_REC" | head -n 69 > "$HP/th3/body"
 { cat "$HP/th3/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th3/body" | cut -d' ' -f1)"; } \
   > "$HP/th3/mlfk-persist.dat"
 rm -f "$HP/th3/body"
@@ -1211,6 +1231,15 @@ v5_defaults() {
 v6_defaults() {
   printf 'sel 0 0 0 0\n'
 }
+# fix_plan A26 (DEVIATION D53): the v7 resume row at its fresh-install value,
+# FOH_STARTUP = NOTHING ARMED. Every migration fills it with exactly this,
+# because no v1..v6 file ever carried an opinion about where the player was —
+# those builds could not record a screen, so "do not resume" is the only thing
+# such a file can honestly say. Inventing a screen here would be the
+# "restores the wrong screen" defect the row exists to avoid.
+v7_defaults() {
+  printf 'resume 00\n'
+}
 mk_pdir "$HP/th9" -
 { printf 'MLFKPERSIST1\n'; sed -n '2,4p' "$FILE_P01"; th9_rows "$WORSE_BITS"; } \
   > "$HP/th9/body"
@@ -1226,9 +1255,9 @@ rm -f "$HP/th9/body"
 # improved to $REC_BITS, and ctlstyle 1 — because the migration must
 # carry the ratified BOX mapping forward rather than re-map to the
 # fresh-install NATURAL.
-{ printf 'MLFKPERSIST6\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 1\n';
+{ printf 'MLFKPERSIST7\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 1\n';
   printf 'modonr 0\n'; th9_rows "$REC_BITS"; v4_defaults; v5_defaults;
-  v6_defaults; } \
+  v6_defaults; v7_defaults; } \
   > "$HP/th9.expect.body"
 { cat "$HP/th9.expect.body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th9.expect.body" | cut -d' ' -f1)"; } \
   > "$HP/th9.expect.dat"

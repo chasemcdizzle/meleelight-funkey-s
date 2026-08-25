@@ -724,14 +724,14 @@ int main(void) {
         loaded.phantomThreshold != saved.phantomThreshold ||
         loaded.masterVolume[0] != saved.masterVolume[0] ||
         loaded.masterVolume[1] != saved.masterVolume[1]) {
-      bad("MLFKPERSIST6 did not round-trip the settings v1..v5 already "
+      bad("MLFKPERSIST7 did not round-trip the settings v1..v5 already "
           "carried — a half-done bump drops the player's settings, which is "
           "worse than not shipping the feature");
     }
     for (int c = 0; c < FOH_PERSIST_CHARS; c++) {
       for (int t = 0; t < FOH_PERSIST_TSTAGES; t++) {
         if (loaded.targetRecords[c][t] != saved.targetRecords[c][t]) {
-          bad("MLFKPERSIST6 did not round-trip target record [%d][%d]", c, t);
+          bad("MLFKPERSIST7 did not round-trip target record [%d][%d]", c, t);
         }
       }
     }
@@ -779,8 +779,15 @@ int main(void) {
     // (v) THE MIGRATION ARM. An OLDER file must be carried forward, never
     // reset: resetting a valid v5 record would destroy every target-test
     // personal best on the owner's device. Build a genuine v5 file from the
-    // v6 bytes on disk — drop the appended `sel` row, restamp the header,
-    // recompute the seal — and require the loader to migrate it.
+    // CURRENT bytes on disk — drop EVERY row appended after v5, restamp the
+    // header, recompute the seal — and require the loader to migrate it.
+    //
+    // "EVERY row appended after v5" is the whole discipline, and it is why
+    // this block has to be revisited on every bump: A26 added `resume` and a
+    // fixture that dropped only `sel` was a v5 header over v7 content, which
+    // the loader rightly refuses — so the tooth failed as a MIGRATION defect
+    // that did not exist. A49 left the same trap for A26 in the rebind
+    // witness. If you append a row to the format, strip it here.
     {
       char path[512];
       snprintf(path, sizeof path, "%s/mlfk-persist.dat", foh_persist_dir());
@@ -790,16 +797,25 @@ int main(void) {
       size_t n = fread(buf, 1, sizeof buf - 1, f);
       fclose(f);
       buf[n] = 0;
-      char *sel = strstr(buf, "\nsel ");
       char *sum = strstr(buf, "\nSUM ");
-      if (!sel || !sum || sel > sum) {
-        bad("the v6 file has no `sel` row before its SUM — the appended block "
-            "is not where the format says it is");
+      if (!sum) {
+        bad("the saved file has no SUM line");
         return 1;
       }
-      // Splice out the sel line and restamp v6 -> v5.
-      memmove(sel, strchr(sel + 1, '\n'), strlen(strchr(sel + 1, '\n')) + 1);
-      memcpy(buf + 11, "5", 1); // "MLFKPERSIST6" -> "...5"
+      // Splice out every post-v5 row, LAST FIRST so the earlier pointers stay
+      // valid, then restamp the header to v5.
+      static const char *const kPostV5[] = {"\nresume ", "\nsel "};
+      for (size_t r = 0; r < sizeof kPostV5 / sizeof *kPostV5; r++) {
+        char *row = strstr(buf, kPostV5[r]);
+        sum = strstr(buf, "\nSUM ");
+        if (!row || !sum || row > sum) {
+          bad("the saved file has no `%s` row before its SUM — an appended "
+              "block is not where the format says it is", kPostV5[r] + 1);
+          return 1;
+        }
+        memmove(row, strchr(row + 1, '\n'), strlen(strchr(row + 1, '\n')) + 1);
+      }
+      memcpy(buf + 11, "5", 1); // "MLFKPERSIST<current>" -> "...5"
       char *body = strstr(buf, "\nSUM ");
       const size_t bodyLen = (size_t)(body - buf) + 1;
       char hex[65];

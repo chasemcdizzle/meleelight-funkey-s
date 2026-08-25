@@ -598,7 +598,8 @@ static void a31_v4_migrates(void) {
   }
   // strip every row v4 never had (`bind ` from v5, `sel ` from v6) plus the
   // SUM line, restore the v4 header, reseal.
-  // A49 (MLFKPERSIST6) added `sel`; this constructor synthesises an OLD file
+  // A49 (MLFKPERSIST6) added `sel` and A26 (MLFKPERSIST7) `resume`; this
+  // constructor synthesises an OLD file
   // out of a CURRENT one, so EVERY row a later version appends must be
   // stripped here or the fixture is a v4 header over v6 content and the
   // loader rightly refuses it. That is what broke all four v4 assertions
@@ -606,7 +607,7 @@ static void a31_v4_migrates(void) {
   // a real old device never had either row and still migrates.
   static char out[8192];
   size_t m = 0;
-  int stripped = 0, strippedSel = 0;
+  int stripped = 0, strippedSel = 0, strippedResume = 0;
   for (size_t i = 0; i < n;) {
     size_t e = i;
     while (e < n && buf[e] != '\n') e++;
@@ -615,6 +616,8 @@ static void a31_v4_migrates(void) {
       stripped++;
     } else if (len > 4 && memcmp(buf + i, "sel ", 4) == 0) {
       strippedSel++; /* v6's selection row — v4 never had it */
+    } else if (len > 7 && memcmp(buf + i, "resume ", 7) == 0) {
+      strippedResume++; /* v7's hibernate row (A26) — v4 never had it */
     } else if (len > 4 && memcmp(buf + i, "SUM ", 4) == 0) {
       /* dropped; resealed below */
     } else if (i == 0) {
@@ -631,6 +634,9 @@ static void a31_v4_migrates(void) {
   want(strippedSel == 1,
        "the synthetic v4 fixture dropped v6's sel row (a fixture carrying a "
        "later version's rows under an older header is not that older version)");
+  want(strippedResume == 1,
+       "the synthetic v4 fixture dropped v7's resume row (same rule: every "
+       "format bump has to be stripped here or the fixture stops being v4)");
   {
     char hex[65];
     ml_sha256_hex(out, m, hex);
@@ -664,8 +670,8 @@ static void a31_v4_migrates(void) {
     FILE *f = fopen(path, "rb");
     char hdr[16] = {0};
     if (f) { (void)!fread(hdr, 1, 13, f); fclose(f); }
-    want(memcmp(hdr, "MLFKPERSIST6\n", 13) == 0,
-         "and the next save republishes it as MLFKPERSIST6 (upgrade once)");
+    want(memcmp(hdr, "MLFKPERSIST7\n", 13) == 0,
+         "and the next save republishes it as MLFKPERSIST7 (upgrade once)");
   }
   reset_process();
 }
