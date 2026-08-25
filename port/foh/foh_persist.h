@@ -197,7 +197,11 @@ typedef struct {
   // it in inServerMode) — neither is a mechanic, so the owner ruling
   // "implement it faithfully dead" still holds: row + persisted bit, wired
   // to nothing.
-  int everyCharWallJump;       // settings.js:51 (0) — DEAD, no sim readers
+  int everyCharWallJump;       // settings.js:51 (0) — LIVE since D20
+  // (physics.c:400 gates the per-character walljump ability on it) and
+  // widened by D47 (puff reaches it via the WALLTECHJUMP ECB alias).
+  // Was commented "DEAD, no sim readers" until 2026-08-24 — stale by two
+  // deviations. A comment is not evidence; see CONTEXT.md.
   int blastzoneWrapping;       // settings.js:47 (0) — DEAD, zero readers
   int dustLessPerfectWavedash; // settings.js:49 (0) — DEAD, zero readers
   double phantomThreshold;     // settings.js:50 (0.01) — CHECKSUM SURFACE
