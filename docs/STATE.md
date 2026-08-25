@@ -1,74 +1,62 @@
-# ▶ RESUME HERE (rewritten 2026-08-23 — read this first, then §rulings)
+# ▶ RESUME HERE (rewritten 2026-08-24 — read this first, then §rulings)
 
-**Branch `agent/auto`, tree clean. Phase M4 — but M4 IS DEFERRED BY OWNER
-RULING (2026-08-23): *"i want to skip m4 for now and just do all my
-features."*** The gate's 8 arc-in-flight rows are untouched; B9 is still the
-keystone (it taints 5 of 8). Feature work runs instead, mapped in
-**`docs/FEATURES-SPEC.md`** (lanes + ticket graph + frontier).
+**Branch `agent/auto`, tree clean. 50 commits this session.**
+**M4 IS OWNER-DEFERRED** (2026-08-23: *"skip m4 for now and just do all my
+features"*). Feature work runs from **`docs/FEATURES-SPEC.md`**; vocabulary is
+pinned in **`/CONTEXT.md`** — read that second, it exists because almost every
+defect below was a NAMING failure, not a logic failure.
 
-## What landed 2026-08-23
-- **A29 FIXED (D21)** — CSS never lost the picks. endGame's token snap indexed
-  the roster by PORT, not by chosen character, so both tokens parked on
-  marth/puff. One token changed. Tooth + negative test.
-- **A23 DONE (D22)** — BACK wedge hit-testable, hold-to-back bar. **The bar was
-  UPSTREAM'S all along** (css.js:735-746) — a fidelity gap, no deviation; only
-  the TRIGGER is ours (upstream's wedge is an instant A-click). **Zero shots
-  re-frozen** (bar draws nothing at bHold==0).
-- **A28 RELOCATED** — the digital audio path is PROVEN CLEAN (poisoned-buffer
-  runs over 7 idle states, bit-zero out). New standing instrument
-  `check-snd-idle.sh` with its tooth as step [2/3]. Buzz is BELOW our mixer.
-- **A25b + A3 = ONE DEFECT, isolated to ONE hop** (physical L button -> Linux
-  keycode). Everything downstream is proven green ON DEVICE by f07. The rig is
-  structurally blind to physical-button->keycode for EVERY button, because
-  every check injects through our own uinput while the buttons come from
-  fkgpiod, which the rig's quiesce bracket stops.
-- **A10 CLOSED, NO CODE** — the build already goes straight to VS. Melee.
-- **A35/A36/A37 registered**; **A32 + A25a in flight**.
+## Owner-reported bugs — ALL FIXED
+| Bug | Cause |
+|---|---|
+| Back button did nothing | wedge drawn but never hit-tested (D22) |
+| Character picks reset to marth/puff | endGame token snap indexed by PORT (D21) |
+| Backing out re-selected falcon | the token GRAB leaked across back-out (D35) |
+| Constant audio buzz | 512-frame period = **0.70 of one frame** — starved forever |
+| L did nothing | keymap said `k`; the button emits **`m`** |
+| X didn't grab | **`z` is not grab in this engine** — it is alt-attack + lCancel |
+| Shieldbreaker sound ran on | menu clicks and sim shared one play-id counter |
+| Controls unusable | all 9 rows now rebindable (D26), `mod`/`rebind:N/A` gone |
+| "TAPJUMP OFF: ON" | double negative; relabelled + inverted (D23) |
+| No mode switch | ribbon toggles stock/endless, reaching the sim (D28+A37) |
 
-## THE QUEUE
-| # | Item | State |
-|---|---|---|
-| 1 | A32 + A25a | IN FLIGHT (lane/m-a32) |
-| 2 | **A24 renames** | ratified — but see A24 HOLD below |
-| 3 | A31 · A30b · A25c · B4 · A7 · A14 | ready, SERIAL in lane M |
-| 4 | D8-later | blocked by A14 |
-| 5 | **A37** (sim lane) | prerequisite for A27; different plane, does not queue behind menus |
-| 6 | A28 · A25b/A3 · A34 · A26 | **DEVICE-BLOCKED** |
-| 7 | M4 gate | owner-deferred |
+## Also landed
+4-port match setup **verified by a 4-port golden** (A46) · the stage-code codec
+proven against upstream's executed encoder (T1/D39) · credits — **a Star Fox
+shooting gallery**, not a roll (D38) · target-select free cursor (D29) ·
+control scheme re-ratified: L-only shield, R C-stick, **X grabs on BOX** (D31-33)
 
-## ⚠ A24 IS HELD — and A33 is why
-**A33 went NO-GO -> retraction -> UNKNOWN in one session.** Its NO-GO rested on
-*"an image this project neither owns nor ships"* — **pricing the owner's
-appetite for work and calling it evidence.** The owner can fork DrUm78's OS;
-enabling USB host is **four line-edits + ~1.5 h**. The remaining unknown is one
-electrical question (a port that never drives VBUS — does a self-powered device
-still enumerate?), answerable only on hardware.
-**The owner ratified collapsing the Controls submenu on the retracted framing.
-The RENAMES stand; the COLLAPSE is suspended.** A31's per-port plane and A32's
-re-open note are LIVE again too.
-**RUNG 1 IS FREE AND SETTLES IT:** `ls -d /sys/bus/usb/devices/usb*` on a
-reconnected device.
-**BIGGEST RISK, do not bury it: `adb` RUNS OVER PERIPHERAL MODE.** Dual-role
-could take the whole verification rig with it. Verify before building; keep a
-rollback SD.
+## IN FLIGHT (3 lanes)
+- **M** P3/P4 at the CSS — sim half done; **A14 QUEUES BEHIND IT** (same file)
+- **S** T2 custom stages playable + the clobber fix (owner ruled: FIX it)
+- **P** crash-safe harness -> A34 power-off -> A26 hibernate probe
 
-## STANDING HAZARDS (measured this session)
-- **A STATED `done-check:` IS NOT AUTOMATICALLY A REAL ONE.** A29's row said
-  "assert both slots still read the picks" — that **already passed before the
-  fix**. It tested the plane the bug never touched. When filing a check from a
-  symptom report, name the observable THE REPORTER SAW.
-- **`npm install` in a lane worktree LOOSENS A FROZEN PIN** — it rewrote
-  `oracle/harness/package.json` playwright `1.61.1` -> `^1.61.1`. Re-check that
-  file before committing in any lane.
-- **§A-par.3 makes the menus plane SERIAL.** 9 of 10 remaining feature tickets
-  edit `foh_render.c`; they cannot be parallelised. Lanes buy parallel EDITING
-  only, and §A-par.4 means verification never parallelises at all.
-- **Don't price the owner's appetite as evidence** (A33's own recorded lesson).
-- 13 pre-existing `.claude/worktrees/` are 0 commits ahead with real but
-  already-landed edits — deletable, left alone pending owner word.
+## OWED / OPEN
+- **A33 rung 3** (host-mode fork) — owner: after the ready-now list. It now
+  unlocks BOTH the GC adapter and **A47 two-device link play** (`g_ether`
+  already ships on the device; no wifi/BT exists).
+- **Device legs stacked**: keymap re-measure, `DEVICE FOH OK`, persist reboot,
+  `check-device-input` legs [4]-[9], 4-port gate wiring. **And the credits
+  screen has NEVER rendered on hardware.**
+- **Freeze manifest: 85 pins OK, 31 stale.** §A-par.5 batched pass, driver-only,
+  **when M4 resumes — NOT now.**
+- T1's cap ruling (refuse at load vs raise caps) owed before T2 finishes.
+
+## STANDING HAZARDS (all paid for this session)
+- **A comment is not evidence.** `z` was documented as grab for months.
+- **A name is not evidence about its plane.** A sound was nearly reported as a
+  missing visual effect.
+- **A green check is not evidence a change is safe — measure the CONSUMERS.**
+  A 4-port golden passed its own check and would have broken the M4 gate.
+- **Teeth go vacuous silently.** FOUR found disarmed; two by unrelated changes.
+- **A tool that cannot run reports everything as broken.** A driver audit
+  claimed 116 stale pins; the real number was 31.
+- **Deviation numbers are DRIVER-allocated** — two lanes collided on D29.
+- **Never leave a device marker that outlives the test** — one stranded the
+  owner's device at a splash screen. Lane P is making the class impossible.
+- **Twelve filed premises falsified by running the code; five were mine.**
 
 ---
-
 
 # STATE.md — current truth (driver-updated every turn)
 
