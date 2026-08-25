@@ -2001,6 +2001,19 @@ int main(int argc, char **argv) {
     if (fclose(rf) != 0) sim_fatal("--ready-file close failed");
   }
 
+  // A14/D48 FIX (owner-reported launch crash, 2026-08-25): the FOH draws menu
+  // text from FRAME 0, and since D48 that text comes from the browser glyph
+  // ATLAS. The only other gfx_glyphs_load() calls sit on the MATCH-LAUNCH
+  // paths, so on the play path nothing had loaded the atlas by the time the
+  // title screen drew — and gfx_glyphs.c's ensure_loaded() fallback resolves
+  // by MLFK_GLYPHS / MLFK_DATA_DIR / the SOURCE-TREE path, never from this
+  // program's --glyphs argument. On the device none of those exist, so it
+  // died `glyphs: artifact not found` at frame 0.
+  // Load it HERE, from the argument the launcher already passes, before any
+  // text can be drawn. (Every host check ran from the repo root, where the
+  // source-tree fallback resolves — which is exactly why they were all green.)
+  if (glyphsPath) gfx_glyphs_load(glyphsPath);
+
   FohState foh;
   foh_init(&foh);
   // task 13: load + apply the persisted plane through the chokepoint

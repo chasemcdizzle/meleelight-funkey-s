@@ -7812,3 +7812,54 @@ renderer one.** `foh_text2` is the one function where the metrics move.
 `gfx_overlay.c` and `foh_font.c` to zero mid-session with a bad Python heredoc
 (`b'''` parsed as a bytes literal), recovered both from git and re-applied. The
 final files are verified by the green run.)*
+
+## ⚠ A14 SHIPPED A LAUNCH CRASH. Owner-reported 2026-08-25, fixed same session.
+
+**Symptom:** *"weird i am launching and it crashes."* Device log:
+```
+SIM FATAL frame 0: glyphs: artifact not found (port/gfx/vfxglyphs-frozen.txt)
+```
+`RC=3`, at **frame 0** — the title screen's first text draw.
+
+**ROOT CAUSE — a seam, again.** Since D48 the menus draw from the browser glyph
+ATLAS. The FOH draws menu text **from frame 0**, but **the only
+`gfx_glyphs_load()` calls in `foh_dev.c` sit on the MATCH-LAUNCH paths**
+(`:2515`, `:3022`). So on the PLAY path nothing had loaded the atlas by the time
+the title drew, and `gfx_glyphs.c`'s `ensure_loaded()` fallback resolves by
+**`MLFK_GLYPHS` -> `MLFK_DATA_DIR` -> the SOURCE-TREE path** — **never from this
+program's own `--glyphs` ARGUMENT**, which the launcher has been passing
+correctly all along (`mlfk-foh.sh:185`).
+
+**WHY EVERY HOST CHECK WAS GREEN — and this is the transferable part.**
+`ensure_loaded()`'s last candidate is the literal relative path
+`port/gfx/vfxglyphs-frozen.txt`. **Every host check runs FROM THE REPO ROOT,
+where that resolves.** On the device it does not exist. **So the fallback that
+exists to make a forgotten `--glyphs` die loudly instead SILENTLY RESCUED every
+host run, and the first environment without a repo tree was the owner's
+device.** The comment above it even reasons about device behaviour — *"it does
+not exist on device, so a forgotten `--glyphs` still dies"* — **which is exactly
+what happened, and the code never used the argument that would have prevented
+it.**
+
+**FIX:** load the atlas at FOH boot from the argument, before any text can draw
+— `if (glyphsPath) gfx_glyphs_load(glyphsPath);` immediately before
+`foh_init(&foh)` (`foh_dev.c:2004`). **Not** a launcher change: `mlfk-foh.sh` is
+sha256-pinned in `m4-freeze-manifest.txt`, so exporting `MLFK_GLYPHS` there
+would have broken the M4 gate **and** left the ignored argument unresolved.
+
+**VERIFIED ON THE DEVICE**, not merely rebuilt: loop-mounted the installed OPK,
+ran the real launcher, and after 12 s `foh_device` is **RUNNING** with **0**
+`glyphs:` lines in the log (was `RC=3` at frame 0). Test instance killed, mount
+removed, no marker left, frontend confirmed up.
+
+### THE LESSON — third instance of one class this session
+A42 (X->grab), A40 (the play-id drift) and now this are the same shape:
+**each side's own check passed and nothing asserted the CROSSING.** Here the
+crossing is *program argument -> loader*, and the check environment
+(a repo root) silently supplied what the device could not.
+**A fallback that only ever fires in the test environment is not a fallback —
+it is a blind spot.** The candidate list should be re-examined: the
+source-tree path arguably belongs behind an explicit opt-in, so a host run
+without `--glyphs` fails the same way a device run does.
+**REGISTERED AS OWED, not fixed here** — narrowing that fallback changes how
+every host check resolves the atlas and wants its own ticket.
