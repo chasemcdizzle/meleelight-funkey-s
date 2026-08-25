@@ -412,6 +412,15 @@ rig_inherited_restore() {
       exit 1
       ;;
   esac
+  # D44 / TICKET-1: the park marker can no longer outlive a power cut.
+  # Installed HERE — after the inherited marker is gone and BEFORE this run
+  # (or any consumer sourcing riglib) is allowed to park anything.
+  if ! rig_boot_unpark_install; then
+    rig_qd_unclaim
+    echo "DEVICE FAIL: the boot-unpark line could not be installed/verified in /etc/rc.local — REFUSING to continue, because parking the frontend without it can strand the device across a power cut (D44)" >&2
+    # lock release: the EXIT trap is the sole releaser (review-109-5 H1)
+    exit 1
+  fi
   # THE HANDOFF COMPLETES HERE, and not one statement earlier: the
   # inherited state is now restored AND verified, so the old watchdog has
   # nothing left to recover and is retired through the universal cancel
@@ -424,6 +433,107 @@ rig_inherited_restore() {
     exit 1
   fi
   rig_qd_unclaim
+}
+
+# rig_boot_unpark_install — D44, THE CRASH-SAFETY INSTRUMENT (owner incident
+# 2026-08-24: a run parked the frontend, the device was powered off mid-test,
+# and it rebooted to a splash screen with no frontend. It looked bricked.)
+#
+# THE CLASS. `/mnt/disable_frontend` is the ONLY reversible way to stop
+# `frontend init` from respawning gmenu2x under a test binary, and it lives on
+# the SD card, so it survives a power cut. Every producer in this tree parks
+# with it and unparks afterwards; the deadman covers a host death; NOTHING
+# covered a power cut. That is the whole class, and it is a persistence
+# property of the marker, not a mistake in any one script.
+#
+# WHY NOT THE OBVIOUS FIXES — all three were MEASURED on device and all three
+# are unavailable, which is why this one looks indirect:
+#   * "remove the marker before the test binary launches" — the literal rule
+#     cannot be implemented: `/usr/local/sbin/frontend:74-122` consults the
+#     marker at the TOP of its relaunch loop and sleeps only 5 s, so a marker
+#     removed before launch puts gmenu2x back on the framebuffer within 5 s,
+#     fighting the test binary for the display and the input devices.
+#   * a tmpfs-backed marker (symlink /mnt/disable_frontend -> /tmp/...) —
+#     `/mnt` is `vfat` (measured: mount(8) on device), which has no symlinks.
+#   * `/run/rebooting`, the loop's OTHER park condition and genuinely tmpfs —
+#     `frontend:120-122` BREAKS out of the loop on it, so it is a one-way
+#     park: removing it does not bring the frontend back. Unusable.
+#
+# SO THE FIX IS AT THE OTHER END: make BOOT clear the marker. One idempotent
+# line appended after the shebang of `/etc/rc.local`, which `S03rclocal` runs
+# from `rcS` — i.e. before `frontend init` is ever started by the login shell.
+# After this, no marker on the SD card can survive a boot, whoever wrote it
+# and whenever they died. The class is IMPOSSIBLE rather than unlikely,
+# because it no longer depends on any script reaching its cleanup: the worst
+# case a power cut can produce is "power it back on", which is what the owner
+# does anyway.
+#
+# IT DOES NOT OVERRIDE AN OWNER SETTING. `frontend set none` writes BOTH the
+# marker and `$HOME/.frontend=none` (`frontend:38-46`), and the loop reads
+# `.frontend` independently (`get_frontend`), so a deliberate "no frontend"
+# choice still holds with the marker cleared. The marker ALONE is only ever a
+# rig park.
+#
+# AND WHY THE RIG STILL TOUCHES THE MARKER DIRECTLY RATHER THAN CALLING THE
+# OFFICIAL `frontend set none` / `frontend set gmenu2x` VERBS — three measured
+# reasons, all on this device, 2026-08-24:
+#   1. `$HOME/.frontend` is REAL, PERSISTENT OWNER STATE. `/root/.profile:51`
+#      relocates HOME to /mnt/FunKey, and /mnt/FunKey/.frontend currently
+#      reads `gmenu2x`. `set none` OVERWRITES it with `none` — a second SD
+#      file the boot-unpark line above does NOT clear, so the official verb
+#      is strictly WORSE for the very class this function closes. And the
+#      unpark verb `set gmenu2x` hardcodes a frontend the owner may not use
+#      (`set retrofe` is equally legal), silently changing his choice.
+#   2. dsh RUNS A NON-LOGIN SHELL, where HOME is `/` and `/` is mounted ro.
+#      Measured: `frontend get` in that context dies with
+#      `can't create //.frontend: Read-only file system` and falls back to
+#      the built-in default `retrofe` — which is NOT what is running. So
+#      `frontend set` from the rig would pkill the wrong frontend name and
+#      fail to record, AFTER having already touched the marker, and
+#      set_frontend checks none of it.
+#   3. It buys nothing: `set_frontend` is `touch`/`rm -f` on the same marker
+#      plus a pkill the rigs already do themselves.
+# The rig's park is a rig park, not a user preference change, so it stays on
+# the one file that expresses exactly that.
+#
+# THE SIBLING PERSISTENT FILES ARE CLEAN. `frontend` also reads
+# `/mnt/last_opk` (SD, same outlive-the-test property) and `/run/rebooting`
+# (tmpfs, but one-way — see above). Grepped 2026-08-24: NOTHING in port/
+# writes either; both are written only by the OS's own gmenu2x/opkrun and
+# powerdown paths. No second instance of this class in the rig.
+#
+# FAIL CLOSED. Called from rig_inherited_restore, i.e. step 0, before any
+# consumer can park: if the line cannot be installed AND verified, the run
+# dies rather than parking a device it cannot guarantee is recoverable.
+# Idempotent: the healthy case is one grep and no rootfs write at all (`/` is
+# mounted `ro` in normal operation and is left exactly as it was found).
+rig_boot_unpark_install() {
+  # Already installed => nothing to do, and NOTHING is remounted.
+  if dsh "grep -q MLFK-BOOT-UNPARK /etc/rc.local" >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "   step-0: installing the D44 boot-unpark line into /etc/rc.local (one-time)" >&2
+  # rw -> append after the shebang -> sync -> ro. `rm -f` on an absent vfat
+  # path is rc 0, so the `|| :` is belt-and-braces against rc.local's `-e`.
+  # `ro` runs unconditionally so a failed edit still leaves / read-only.
+  # NOTE: no `exit` in a dsh payload — dsh appends its RC marker as a further
+  # command in the SAME shell, so an `exit` swallows the marker and every call
+  # reads back as a transport failure (measured while writing this).
+  dsh "rw && sed -i '1a rm -f /mnt/disable_frontend || :   # MLFK-BOOT-UNPARK (D44)' /etc/rc.local && sync; r=\$?; ro >/dev/null 2>&1 || true; test \$r -eq 0" >/dev/null 2>&1 || {
+    echo "DEVICE FAIL: could not write the boot-unpark line to /etc/rc.local" >&2
+    return 1
+  }
+  # VERIFY what is now on disk, not what we believe we wrote: exactly one
+  # occurrence, the file still parses as a shell script, still executable,
+  # and / is back to read-only.
+  if ! dsh "test \$(grep -c MLFK-BOOT-UNPARK /etc/rc.local) -eq 1 && sh -n /etc/rc.local && test -x /etc/rc.local" >/dev/null 2>&1; then
+    echo "DEVICE FAIL: /etc/rc.local did not verify after the boot-unpark edit (count/syntax/exec bit)" >&2
+    return 1
+  fi
+  dsh "mount | grep -q 'ext4 (ro'" >/dev/null 2>&1 \
+    || echo "WARN: / is still mounted read-write after the boot-unpark install — run 'ro' on the device" >&2
+  echo "   step-0: boot-unpark line installed and verified (D44)" >&2
+  return 0
 }
 
 # rig_lock_release — THE ONLY code path that removes the rig lock
