@@ -20,11 +20,11 @@
 
 // The CURRENT format version. One number: the header literal is built from
 // it and every block gate below compares against it.
-#define FP_VERSION 6
+#define FP_VERSION 7
 #define FP_FILE "mlfk-persist.dat"
 #define FP_TMP "mlfk-persist.tmp"
 #define FP_DEFAULT_DIR "/mnt/mlfk-data"
-// 64 lines, ~1.6 KB canonical — anything larger is not ours.
+// 70 lines, ~1.6 KB canonical — anything larger is not ours.
 #define FP_CAP 4096
 // MLFKPERSIST2's ctlstyle domain was {0 normal, 1 box} — CTL_STYLE_NATURAL
 // did not exist yet. FROZEN: never re-point this at CTL_STYLE_COUNT.
@@ -83,6 +83,50 @@ void foh_persist_defaults(FohPersist *p) {
   // is only true by accident of being zero is the one that breaks silently
   // when the roster order changes. Same argument ctlStyle carries above.
   for (int k = 0; k < FOH_CSS_PORTS; k++) p->selChar[k] = 0;
+  // v7 (fix_plan A26; DEVIATION D53): NO resume armed. Written out for the
+  // same reason as selChar — a fresh install must never send the player
+  // anywhere but the boot screen, and that must not be true only because
+  // FOH_STARTUP happens to be the zero of the enum.
+  p->resumeScreen = (int)FOH_STARTUP;
+}
+
+// A26/D53. The contract, and the reason for every non-identity row, is at
+// foh_persist.h. This function is BOTH the driver's mapping and the file's
+// domain check, so the two can never disagree by editing.
+FohScreen foh_persist_resume_target(FohScreen sc) {
+  switch (sc) {
+    // out of scope / not a place: nothing is armed
+    case FOH_STARTUP: return FOH_STARTUP;
+    // mid-match is a separate serialization surface — record the screen the
+    // match's own exit lands on instead (foh_dev.c's MEX_CSS/MEX_TSS arm)
+    case FOH_MATCH: return FOH_CSS;
+    case FOH_TMATCH: return FOH_TSS;
+    // launches with port types the CSS arms, and those are not persisted
+    case FOH_SSS: return FOH_CSS;
+    // its reticle is placed by the entering transition, which a resume
+    // never runs; this is the screen its own B-exit goes to (foh.c:1701)
+    case FOH_CREDITS: return FOH_MENU_OPTIONS;
+    // unreachable at FOH_NETPLAY 0 (foh.h); its B-exit is the menu top
+    case FOH_MENU_BATTLE: return FOH_MENU_TOP;
+    // Everything else opens with NO entry-time initialisation beyond what
+    // foh_init already gives (measured over every ev_trans site in foh.c:
+    // the only entry arms that write state are TSS's cursor/hand re-home,
+    // which lands on the same FOH_TSS_HOME_X/Y foh_init does, and the two
+    // excluded above). Listed rather than defaulted so a NEW screen is a
+    // compile error here — the one place that must think about it.
+    case FOH_TITLE:
+    case FOH_MENU_TOP:
+    case FOH_MENU_OPTIONS:
+    case FOH_MENU_CONTROLS:
+    case FOH_CSS:
+    case FOH_OPT_GAMEPLAY:
+    case FOH_OPT_AUDIO:
+    case FOH_CTRL_PAD:
+    case FOH_CTRL_KEY:
+    case FOH_TSS: return sc;
+    case FOH_SCREEN_COUNT: break;
+  }
+  return FOH_STARTUP;
 }
 
 // --- canonical serialization (deterministic bytes; twin-cmp'd) --------------
@@ -113,7 +157,7 @@ static double fp_double(uint64_t b) {
 static size_t fp_serialize(const FohPersist *p, char *buf, size_t cap) {
   size_t n = 0;
   int w = snprintf(buf + n, cap - n,
-                   "MLFKPERSIST6\nturbo %d\nlcancel %d\n"
+                   "MLFKPERSIST7\nturbo %d\nlcancel %d\n"
                    "tapjump %d %d %d %d\nctlstyle %d\nmodonr %d\n",
                    p->turbo, p->lCancelType, p->tapJumpOff[0],
                    p->tapJumpOff[1], p->tapJumpOff[2], p->tapJumpOff[3],
@@ -164,6 +208,23 @@ static size_t fp_serialize(const FohPersist *p, char *buf, size_t cap) {
   // types or the CPU levels. The argument is at foh_persist.h's format note.
   w = snprintf(buf + n, cap - n, "sel %d %d %d %d\n", p->selChar[0],
                p->selChar[1], p->selChar[2], p->selChar[3]);
+  if (w < 0 || (size_t)w >= cap - n) gfx_fatal("foh_persist: serialize overflow");
+  n += (size_t)w;
+  // v7 BLOCK (fix_plan A26; DEVIATION D53) — appended after the v6 block for
+  // the same prefix reason. TWO digits always ("%02d"), so the row is fixed
+  // width like every other and the parser stays anchored; FOH_SCREEN_COUNT is
+  // 16, and the guard below keeps that true.
+  if ((int)FOH_SCREEN_COUNT > 100) {
+    gfx_fatal("foh_persist: FohScreen outgrew the 2-digit resume row — widen "
+              "the format (and bump MLFKPERSIST) before growing FohScreen");
+  }
+  // A screen this build would refuse to RESTORE must never be WRITTEN either
+  // — the domain is one function, checked on both sides of the file.
+  if (foh_persist_resume_target((FohScreen)p->resumeScreen) !=
+      (FohScreen)p->resumeScreen) {
+    gfx_fatal("foh_persist: resumeScreen is not a resume target");
+  }
+  w = snprintf(buf + n, cap - n, "resume %02d\n", p->resumeScreen);
   if (w < 0 || (size_t)w >= cap - n) gfx_fatal("foh_persist: serialize overflow");
   n += (size_t)w;
   char hex[65];
@@ -263,8 +324,16 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
     while (e < sumStart && buf[e] != '\n') e++;
     if (e >= sumStart) return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "header");
     const size_t len = e - pos;
-    if (len == 12 && memcmp(buf + pos, "MLFKPERSIST6", 12) == 0) {
+    if (len == 12 && memcmp(buf + pos, "MLFKPERSIST7", 12) == 0) {
       // current version
+    } else if (len == 12 && memcmp(buf + pos, "MLFKPERSIST6", 12) == 0) {
+      // MIGRATION. v7 is v6 plus the one appended `resume` row (fix_plan
+      // A26). A v6 file was written by a build that could not record a
+      // screen, so FOH_STARTUP — "nothing armed" — is the only thing it can
+      // honestly say, and that is what foh_persist_defaults() already put in
+      // *p. Every setting, both control stamps, all four bindings, the
+      // selection and all 50 target records parse with the SAME code below.
+      fromVer = 6;
     } else if (len == 12 && memcmp(buf + pos, "MLFKPERSIST5", 12) == 0) {
       // MIGRATION. v6 is v5 plus the one appended `sel` row (fix_plan A49).
       // A v5 file was written by a build that persisted no character at all,
@@ -541,6 +610,30 @@ FohPersistStatus foh_persist_load(FohPersist *p) {
       v.selChar[k] = d - '0';
     }
     pos += 12;
+  }
+  // v7 BLOCK (fix_plan A26; DEVIATION D53) — present only in v7 files. A
+  // v6-or-older file keeps the "nothing armed" foh_persist_defaults(&v) put in.
+  if (ver >= 7) {
+    // "resume <NN>" — fixed width, anchored: 7 + 2 + 1 = 10 bytes.
+    if (sumStart - pos < 10 || memcmp(buf + pos, "resume ", 7) != 0 ||
+        buf[pos + 7] < '0' || buf[pos + 7] > '9' || buf[pos + 8] < '0' ||
+        buf[pos + 8] > '9' || buf[pos + 9] != '\n') {
+      return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "grammar");
+    }
+    const int sc = (buf[pos + 7] - '0') * 10 + (buf[pos + 8] - '0');
+    // DOMAIN: exactly the screens foh_persist_resume_target() maps to
+    // themselves, i.e. the ones the driver would actually restore. A screen
+    // outside that set — FOH_MATCH, a retired token, a number past
+    // FOH_SCREEN_COUNT — is corruption and resets LOUDLY. It is never
+    // clamped and never "repaired" to something nearby: a resume that puts
+    // the player on the wrong screen is worse than no resume at all, which
+    // is the whole reason this row has a domain rather than a range.
+    if (sc >= (int)FOH_SCREEN_COUNT ||
+        foh_persist_resume_target((FohScreen)sc) != (FohScreen)sc) {
+      return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "domain");
+    }
+    v.resumeScreen = sc;
+    pos += 10;
   }
   // nothing may sit between the last content line and the SUM line
   if (pos != sumStart) return fp_reset(p, FOH_PERSIST_RESET_CORRUPT, "grammar");

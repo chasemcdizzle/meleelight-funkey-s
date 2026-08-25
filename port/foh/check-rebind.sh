@@ -210,13 +210,14 @@ nexact="$(grep -cE "$OK_RE" "$BUILD/real/reb.out")" || true
   || grammar_die "witness verdict: $nres line(s) resemble 'REBIND OK' and
   $nexact match it exactly (want 1 and 1)"
 # the round trip really did write a CURRENT record (and nothing else).
-# A49 bumped the format to MLFKPERSIST6 (it appends the `sel` selection row).
+# A49 bumped the format to MLFKPERSIST6 (the `sel` selection row) and A26 to
+# MLFKPERSIST7 (the `resume` hibernate row).
 # This pin moves with the format ON PURPOSE — it asserts "the save is current",
 # and a pin left on an older version asserts the opposite of what it means.
 made "$BUILD/real/persist/mlfk-persist.dat"
 hdr="$(sed -n 1p "$BUILD/real/persist/mlfk-persist.dat")"
-[ "$hdr" = MLFKPERSIST6 ] \
-  || grammar_die "the witness's saved record is headed '$hdr', not MLFKPERSIST6"
+[ "$hdr" = MLFKPERSIST7 ] \
+  || grammar_die "the witness's saved record is headed '$hdr', not MLFKPERSIST7"
 nbind="$(grep -c '^bind [0-3] [0-7] [0-7] [0-7] [0-7] [0-7] [0-7] [0-7] [0-7]$' \
          "$BUILD/real/persist/mlfk-persist.dat")" || true
 [ "$nbind" = 4 ] \
