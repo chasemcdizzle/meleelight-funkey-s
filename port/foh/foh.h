@@ -154,45 +154,46 @@
 // token cannot be taken, so setting P2's character means putting P2 on
 // CPU, taking its token, and walking the type box back round to HMN.
 // Every step of that is upstream-legal (togglePort never touches
-// chosenChar), but the sequence is ours. DEVIATION D6: ports 3 and 4 RENDER (as
-// upstream's N-A panels) but their type tabs do not toggle and they own
-// no token, because every frozen golden and the whole check-sim.sh
-// conformance surface is 2-player. Consequence of one hand + upstream's
-// ownership guard: another HUMAN port's token cannot be taken, so P2's
-// character is set by putting P2 on CPU, taking its token, and (if a
-// human P2 is wanted) toggling the type back — every step upstream-legal.
+// chosenChar), but the sequence is ours.
 //
-// A44 MEASURED 2026-08-24 (lane M) — what D6 actually costs, and what it
-// does NOT. The owner asked why P3/P4 cannot be turned on here. Three
-// facts, all measured this session, because the obvious guesses are wrong:
-//   (a) THE LAYOUT IS NOT THE OBSTACLE — it already fits, at zero cost.
-//       FOH_CSS_PANEL_{X0,PITCH,W} = {1,60,58} put ports 0..3 at x =
-//       1/61/121/181, so port 3 spans 181..238 inside the 240 px screen;
-//       foh_render.c's render_css ALREADY loops k=0..3 and css_panel is
-//       already fully port-parameterised (kPortTint has four entries, the
-//       ghost letter is 'P'+(char)('1'+port), the N/A watermark arm
-//       exists). All four panels are on screen today. Nothing needs to
-//       shrink, move, or become a 2x2 grid.
-//   (b) css_ready already counts all four ports (foh.c) — the ready rule
-//       is upstream's and is not 2-port.
-//   (c) THE OBSTACLE IS THE LAUNCH PLANE, AND IT IS ONE FUNCTION.
-//       sim_setup_match (port/sim/sim/sim_boot.c:381) takes exactly
-//       (p1, p2, p2type, difficulty, stageId): its i<2 loop writes
-//       playerType/playerPresent/currentPlayers/characterSelections/
-//       cpuDifficulty/slotIsAi, and its i=2..3 loop HARD-PINS
-//       playerType=-1, playerPresent=false, currentPlayers=-1. It mirrors
-//       oracle/meleelight-harness.patch:76-92, which is 2-slot BY
-//       CONSTRUCTION. So a FOH-only widening would let a player switch P3
-//       on and then get the `portconfig` refusal at START — a port that
-//       can be turned on but cannot play, which is worse than this N/A
-//       panel, not better.
-//   AND THERE IS NO 4-PORT ORACLE. Every frozen golden is 2-player and
-//   `oracle/` is read-only outside M0 (HARD RULE 3), so a 3-/4-port match
-//   cannot be checksum-verified against the browser today. That, not the
-//   pixels, is why D6 stands. Widening it means widening sim_setup_match
-//   (a 2-port-compatible wrapper keeps sim_main.c/gfx_app.c/gfx_replay.c
-//   and every golden byte-unchanged) plus a 4-slot harness path — sim and
-//   oracle work, not menu work.
+// DEVIATION D6 IS RETIRED (A44, 2026-08-24, owner-reported: "why can't I
+// turn on player 3 and 4 at the CSS?"). It said ports 3 and 4 RENDER as
+// upstream's N-A panels but own no type field and no token, and the reason
+// it gave was never the pixels — it was that sim_setup_match hard-pinned
+// slots 2/3 to playerType=-1. **A46 removed that**: sim_setup_match_ports
+// (port/sim/sim/sim_boot.c) is upstream's own four-port harnessSetupMatch
+// loop, verified by the 4-port golden q01 (STREAM MATCH 3600/3600). So the
+// obstacle D6 named is gone, and D6 with it. Two NEW deviations take its
+// place, and they are narrower:
+//
+// DEVIATION D40 — ONE HAND OWNS EVERY TOKEN, and ports 2/3 offer HMN or
+// N/A only. Two halves of one ruling:
+//   (a) upstream's grab guard is `playerType[j] == 1 || i == j` (css.js:300)
+//       — hand i may take its own token or any CPU port's, never another
+//       HUMAN's, because upstream has FOUR hands and each human works its
+//       own. This device has ONE physical input device and therefore ONE
+//       hand (the PORT MODEL above), so that guard does not protect another
+//       player's agency here; it removes the only way to choose a
+//       character for a human port. Today that is survivable for P2 via the
+//       CPU detour described above. For P3/P4 it is NOT: with CPU absent
+//       from their cycle (b) there is no detour at all, so a P3 you can
+//       switch on but never give a character to is precisely the stub HARD
+//       RULE 2 forbids. The one hand may therefore grab ANY port's token.
+//       Nothing else about the grab changes; the guard is the deviation.
+//   (b) ports 2/3 cycle N/A -> HMN -> N/A. CPU is not offered because the
+//       sim refuses a second AI slot (A46's OPEN/OWED: AIBRIDGE1 is one
+//       recorded stream for one CPU slot). Absent beats denied-at-START.
+// CONSEQUENCE, stated because a player will see it: a HMN port with no
+// physical controller stands still. That is already true of P2 today —
+// the PORT MODEL note above treats port 1 as ATTACHED so the two-human
+// goldens can be launched — and A33's second-controller spike is what
+// closes it, not this screen.
+//
+// DEVIATION D41 — the token 2x2. Four tokens on one 44 px cell need
+// upstream's own 2x2 stack rather than the single row two ports read as.
+// The four inequalities that fix r/pitch/DX/Y are at FOH_CSS_TOKEN_R.
+// It is registered because the numbers moved, not because the shape did:
+// the 2x2 is what the constant block always said upstream draws.
 //
 // Menu entries whose screens are excluded/deferred stay VISIBLE with
 // their faithful labels (menu.js:19-24) and selecting one emits a
@@ -296,6 +297,11 @@
 //       `playerType[j] == 1 || i == j` (css.js:300) while its token DRAW is
 //       guarded on `playerType[i] > -1` (css.js:1018/1077). That asymmetry is
 //       upstream's; it is carried verbatim, not repaired.
+// Ports on this screen. FOUR — upstream's number (main.js's playerType is a
+// 4-array), the sim's number since A46 (sim_setup_match_ports), and since
+// A44/D40 the number the FOH actually models. CONTEXT.md "Port": a port is a
+// player slot 0..3 and is NEVER an index into the 5-character roster.
+#define FOH_CSS_PORTS 4
 #define FOH_CSS_CELL_W 44
 #define FOH_CSS_CELL_H 30
 #define FOH_CSS_CELL_PITCH 46
@@ -365,12 +371,45 @@
 #define FOH_CSS_BACK_BAR_LEAN 203.0f
 #define FOH_CSS_BACK_BAR_PER_FRAME 1.2f
 #define FOH_CSS_BACK_BAR_TOP 24.0f
-// Token rest slots: two ports stack inside one cell (upstream stacks four
-// 2x2 within a 95 px cell; two fit a 44 px one).
-#define FOH_CSS_TOKEN_R 9
-#define FOH_CSS_TOKEN_DX 12
-#define FOH_CSS_TOKEN_PITCH 20
-#define FOH_CSS_TOKEN_Y (FOH_CSS_CELL_Y + 11)
+// Token rest slots: FOUR ports stack inside one cell, in UPSTREAM'S OWN 2x2
+// (css.js — the note this block has always carried said so: "upstream stacks
+// four 2x2 within a 95 px cell"). Until A44 only two ports existed, so only
+// the top row was ever drawn and the 2x2 read as a single row of two.
+//
+// A44 (2026-08-24, D41) put the other two ports on screen and the row came
+// back. The numbers are re-derived, not scaled, and the derivation is the
+// whole justification — write it down because the next person to nudge one
+// of them needs the four inequalities it satisfies:
+//   * a cell is 44x30 at (FOH_CSS_CELL_X0 + 46c, 32). A 2x2 of radius-r
+//     discs at column pitch P and row pitch Q occupies P + 2r wide and
+//     Q + 2r tall, and BOTH must fit the cell or a token drawn on cell 4
+//     leaves the 240 px screen / overlaps the READY ribbon below.
+//   * r = 7, P = Q = 14 gives exactly 28 x 28 inside 44 x 30 — the discs
+//     are TANGENT, never overlapping, which is what keeps foh.c's grab
+//     hit test (strict |dx| < r, |dy| < r) unambiguous: no point can be
+//     inside two tokens, so the loop's j-order can never silently decide
+//     which port a press takes. That property is load-bearing now that
+//     D40 makes all four tokens grabbable; at r = 9 / P = 20 four discs
+//     would have spanned 78 px of a 44 px cell and the old clamp would
+//     have parked port 0's token a whole cell LEFT of the character it
+//     chose — i.e. it would have re-created DEVIATION D21's defect (the
+//     token is the only roster-level indicator on this screen) in the
+//     one configuration A44 exists to add.
+//   * DX = 15 centres the 28 px block in the 44 px cell (15 + 14 + 7 = 36,
+//     8 px of margin each side), so the A-drop slot needs NO clamp at all:
+//     cell 4's right column lands at 190 + 15 + 14 + 7 = 226 < 240.
+//   * TOKEN_Y = CELL_Y + 9 = 41 and Q = 14 put the two rows at 41 and 55,
+//     spanning 34..62 — inside the cell's 32..62 exactly, so the lower row
+//     never bleeds into the READY TO FIGHT ribbon (y 62..92), which
+//     render_css draws AFTER the tokens and would otherwise cover them.
+// The clamp in foh_css_token_pos is UNCHANGED and still subtracts one
+// PITCH + one R, because a 2x2 is two columns wide however many ports
+// exist — it is the leave-band quirk (below) that still needs it.
+#define FOH_CSS_TOKEN_R 7
+#define FOH_CSS_TOKEN_DX 15
+#define FOH_CSS_TOKEN_PITCH 14
+#define FOH_CSS_TOKEN_ROW_PITCH 14
+#define FOH_CSS_TOKEN_Y (FOH_CSS_CELL_Y + 9)
 // QUIRK Q1, carried (MENU-SPEC §2.6 "carried verbatim"). Upstream has TWO
 // rest formulas and they disagree: the A-drop slot is `419 + 95c + 40k` and
 // the leave-band slot is `518 + 93c + 40k` (css.js:288 vs :337). MENU-SPEC
@@ -659,6 +698,13 @@ typedef struct {
   // position after release, so a re-grab hit-tests where the knob actually
   // is — deriving it back from the integer level would snap it to 4 stops
   // and move the re-grab target.
+  //
+  // STILL TWO WIDE after A44/D40, and that is a measured consequence rather
+  // than an oversight: a slider exists only on a CPU port, and CPU is not a
+  // reachable type on ports 2/3 (see portType below). Widening this to four
+  // would add two knobs that no state can ever draw or grab — the kind of
+  // dead width HARD RULE 2 calls a stub. foh.c's two knob loops therefore
+  // stop at 2 and say so at the site.
   double cssSliderX[2];
   // handType[0] (css.js:63): 0 handPoint, 1 handOpen, 2 handGrab. STORED, not
   // derived, because upstream's assignments are path-dependent: an A-drop
@@ -677,7 +723,7 @@ typedef struct {
   // player's tokens are where endGame put them, not where the last drag
   // left them (review-mexit-r2 Medium). Before the return existed the CSS
   // was only ever entered before a match, so the snap had nothing to move.
-  int cssTokenRest[2];
+  int cssTokenRest[FOH_CSS_PORTS];
   // readyToFight (css.js:78). Upstream computes it in the DRAW pass
   // (css.js:1167-1181), one frame after the controls that read it, and that
   // pass belongs to the screen the tick ENDS on — so foh_tick recomputes it
@@ -689,7 +735,21 @@ typedef struct {
   // the match launches with, what the port panels preview, and what the
   // target-select screen's shoulder arms write (targetselect.js:60-69 calls
   // setCS directly).
-  int p1Char, p2Char; // 0 marth 1 puff 2 fox 3 falco 4 falcon
+  //
+  // A44/D40: FOUR ports wide. `selChar[k]` is the plane; `p1Char`/`p2Char`
+  // are the SAME STORAGE under their historical names, because port/gfx's
+  // ctl_input_witness.c reads `s.p1Char` and this lane may not touch that
+  // file. A union, not a second copy: CONTEXT.md's costliest defect class is
+  // "one thing having two representations that drifted apart", and two
+  // fields kept in sync by hand is exactly that. Overlaid storage cannot
+  // drift. WRITE THROUGH `selChar[k]` in new code — a per-port `if (k == 0)
+  // ... else ...` chain is how D21 and D35 were both written.
+  union {
+    int selChar[FOH_CSS_PORTS]; // 0 marth 1 puff 2 fox 3 falco 4 falcon
+    struct {
+      int p1Char, p2Char, p3Char, p4Char;
+    };
+  };
   // chosenChar[0..1] (css.js:66) — the CSS's OWN plane, written only by this
   // screen's hover arm, which assigns `chosenChar[k] = c` INLINE and then
   // calls changeCharacter (css.js:222-226; changeCharacter itself, :165-172,
@@ -700,10 +760,25 @@ typedef struct {
   // characterSelections without touching chosenChar upstream, so coming back
   // to the CSS afterwards must leave the token where the player left it, not
   // teleport it to the target-test character.
-  int cssChar[2];
-  // playerType[0..1] (main.js:107): -1 N/A, 0 HMN, 1 CPU. NET (2) is
-  // DEVIATION D5; ports 2/3 are pinned N/A by D6 and have no field.
-  int p1Type, p2Type;
+  int cssChar[FOH_CSS_PORTS];
+  // playerType[0..3] (main.js:107): -1 N/A, 0 HMN, 1 CPU. NET (2) is
+  // DEVIATION D5. A44/D40 made this FOUR wide; the `p1Type`/`p2Type` names
+  // are union aliases over the same storage for the ~25 existing readers
+  // (same rule as selChar above — overlaid, never copied).
+  //
+  // DOMAIN IS PER PORT and the asymmetry is deliberate, not an oversight:
+  // ports 0/1 cycle -1 -> 0 -> 1 -> -1 (N/A, HMN, CPU) while ports 2/3
+  // cycle -1 -> 0 -> -1 (N/A, HMN only). CPU is ABSENT on 2/3 because the
+  // sim refuses it: AIBRIDGE1 is one recorded stream for one CPU slot
+  // (A46's OPEN/OWED note), so a CPU P3 has no C-side replay and could not
+  // be checksum-verified. An honest missing state beats a tab that toggles
+  // to CPU and then denies at START (HARD RULE 2).
+  union {
+    int portType[FOH_CSS_PORTS];
+    struct {
+      int p1Type, p2Type, p3Type, p4Type;
+    };
+  };
   // cpuDifficulty[0..1] (main.js:109), 1..4 (slider domain), default 3.
   // `difficulty` is port 1's and keeps its name: it is the field the launch
   // bridge, foh_dev.c and every frozen LAUNCH line already mean by it.
@@ -936,7 +1011,9 @@ void foh_css_token_pos(const FohState *s, int k, double *x, double *y);
 // The knob's drawn centre for port k, from the continuous slider position.
 double foh_css_knob_x(const FohState *s, int k);
 double foh_css_knob_y(void);
-// Port k's type (-1/0/1) and CPU level (1..4); k >= 2 is D6's pinned N/A.
+// Port k's type (-1/0/1) for every k in 0..3 (A44/D40), and its CPU level
+// (1..4). The level is only meaningful where type == 1, which D40 confines
+// to ports 0/1 — the accessor says so at its own site.
 int foh_css_port_type(const FohState *s, int k);
 int foh_css_port_diff(const FohState *s, int k);
 

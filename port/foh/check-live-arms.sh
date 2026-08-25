@@ -1279,7 +1279,7 @@ expect_ok() { # <legId>
 # The single fact every leg's navigation must have achieved before any arm
 # assertion means anything: the COMMITTED f01 flow launched a VS match through
 # the polled input path. Fully anchored — the producer's grammar is exact.
-LAUNCH_RE='^LAUNCH 903 p1=2 p2=0 p2type=0 difficulty=3 stage=0 turbo=0 lcancel=0 flashlcancel=0 walljump=0 tapjump=0,0,0,0 versus=0$'
+LAUNCH_RE='^LAUNCH 903 p1=2 p2=0 p2type=0 difficulty=3 stage=0 turbo=0 lcancel=0 flashlcancel=0 walljump=0 tapjump=0,0,0,0 versus=0 p3=0 p4=0 p3type=-1 p4type=-1$'
 assert_launched() { # <legId>
   one_canonical "$BUILD/$1/trace.txt" 'LAUNCH ' "$LAUNCH_RE" \
     "$1 f01 VS launch"

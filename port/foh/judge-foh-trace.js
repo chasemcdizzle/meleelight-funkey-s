@@ -199,16 +199,28 @@ const RE_T = /^T (0|[1-9][0-9]*) ([a-z-]+) ([a-z-]+) (timer|start|a|b|bhold|laun
 // audiomenu step, MENU-SPEC §4). It is NOT a loosening of the existing
 // fields: every field's real domain is pinned per-name in SVAL_DOM below
 // and checked on every line, so `S 400 turbo 10` still dies.
+// A44: the CSS is four ports wide, so the char and type planes gained
+// p3char/p4char and p3type/p4type. The port number in the NAME is what
+// carries the port, which is the point — foh.c indexes kCssCharField /
+// kCssTypeField by the port it wrote, so a widened plane cannot report a
+// write under the wrong port's field name. Domains are still pinned
+// per-name in SVAL_DOM, and p3type/p4type's is NARROWER than p1/p2's.
 const RE_S_NUM =
-    /^S (0|[1-9][0-9]*) (p1char|p2char|p1type|p2type|p1difficulty|difficulty|carry|turbo|lcancel|flashlcancel|walljump|tapjump[1-4]|soundsvol|musicvol) (-1|10|[0-9])$/;
+    /^S (0|[1-9][0-9]*) (p1char|p2char|p3char|p4char|p1type|p2type|p3type|p4type|p1difficulty|difficulty|carry|turbo|lcancel|flashlcancel|walljump|tapjump[1-4]|soundsvol|musicvol) (-1|10|[0-9])$/;
 const RE_S_REF = /^S (0|[1-9][0-9]*) refused ([a-z0-9]+)$/;
 const RE_SHOT = /^SHOT (0|[1-9][0-9]*) ([a-z0-9-]{1,32})$/;
-// UNCHANGED by the CSS mechanics arc, deliberately. p1type/p1difficulty are
-// real machine state and are traced as S events, but they are NOT on this
-// line: the launch plane only supports a human port 0 (sim_setup_match pins
-// types[0]=0), so foh.c REFUSES a launch whose port configuration is anything
-// but (p1 HMN, p2 HMN|CPU) — the record can therefore never need the columns,
-// and the device app's independent copy of this format stays valid.
+// p1type/p1difficulty are real machine state and are traced as S events, but
+// they are still NOT on this line: guard condition (1) at foh.c's launch arm
+// pins a launched port 0 to HMN, so the record can never need those columns.
+//
+// A44 APPENDED p3/p4 and their types, and appended is the operative word —
+// the fifteen fields up to and including `versus=` keep their names, their
+// order and their domains, so the only change to a frozen pre-A44 line is
+// the fixed suffix an absent pair emits. THE JUDGE IS NOT LOOSENED BY THIS:
+// p3type/p4type are pinned to `(-1|0)`, which REFUSES the CPU value the
+// p2type column accepts, because DEVIATION D40(b) keeps CPU off ports 2/3
+// and the sim would have no AI replay for it (A46 OPEN/OWED). A trace
+// claiming `p3type=1` is corruption here, not a configuration.
 // A27: `versus` was the literal 0 until the mode ribbon became clickable,
 // because the field could not be anything else. It is now the CSS ribbon's
 // binary versusMode (css.js:393), so the domain widens to [01]. The frozen
@@ -217,7 +229,7 @@ const RE_SHOT = /^SHOT (0|[1-9][0-9]*) ([a-z0-9-]{1,32})$/;
 // those frozen files and therefore still pins 0 exactly — the tightness
 // moved to where the value really is fixed rather than being given up.
 const RE_LAUNCH =
-    /^LAUNCH (0|[1-9][0-9]*) p1=([0-4]) p2=([0-4]) p2type=([01]) difficulty=([1-4]) stage=([0-5]) turbo=([01]) lcancel=([012]) flashlcancel=([01]) walljump=([01]) tapjump=([01]),([01]),([01]),([01]) versus=([01])$/;
+    /^LAUNCH (0|[1-9][0-9]*) p1=([0-4]) p2=([0-4]) p2type=(-1|[01]) difficulty=([1-4]) stage=([0-5]) turbo=([01]) lcancel=([012]) flashlcancel=([01]) walljump=([01]) tapjump=([01]),([01]),([01]),([01]) versus=([01]) p3=([0-4]) p4=([0-4]) p3type=(-1|0) p4type=(-1|0)$/;
 // iter 99 (M4 task 12): the target-mode launch record (foh.h TLAUNCH
 // note; char domain 0-4, tstage domain 0-9 == targetStageMapping).
 // iter 101 (review-99 L1): frame field is a CANONICAL decimal in the
@@ -247,11 +259,14 @@ let prevLaunchFrame = -1;
 const shotNames = new Set();
 
 const SVAL_DOM = {
-  p1char: [0, 4], p2char: [0, 4],
-  // -1 N/A, 0 HMN, 1 CPU (main.js:504-520 with DEVIATION D5's NET dropped)
-  p1type: [-1, 1], p2type: [-1, 1],
-  // whichTokenGrabbed[0]: -1 = empty-handed, else the port whose token is held
-  carry: [-1, 1],
+  p1char: [0, 4], p2char: [0, 4], p3char: [0, 4], p4char: [0, 4],
+  // -1 N/A, 0 HMN, 1 CPU (main.js:504-520 with DEVIATION D5's NET dropped).
+  // Ports 2/3 stop at HMN — DEVIATION D40(b), the sim has no second AI
+  // replay slot — so their domain is DIFFERENT, not merely a copy.
+  p1type: [-1, 1], p2type: [-1, 1], p3type: [-1, 0], p4type: [-1, 0],
+  // whichTokenGrabbed[0]: -1 = empty-handed, else the port whose token is
+  // held. A44/D40 lets the one hand hold any of the four.
+  carry: [-1, 3],
   p1difficulty: [1, 4], difficulty: [1, 4],
   turbo: [0, 1], lcancel: [0, 2],
   // MENU-SPEC §3.1's completed row list: rows 2 and 3 (gameplaymenu.js:
@@ -273,7 +288,8 @@ const SFIELD_SCREENS = {
   // (css.js:222-226); target-select's shoulder arms write the SHARED
   // characterSelections[0] (targetselect.js:60-74).
   p1char: ["css", "target-select"], p2char: ["css"],
-  p1type: ["css"], p2type: ["css"],
+  p3char: ["css"], p4char: ["css"],
+  p1type: ["css"], p2type: ["css"], p3type: ["css"], p4type: ["css"],
   p1difficulty: ["css"], difficulty: ["css"], carry: ["css"],
   turbo: ["options-gameplay"], lcancel: ["options-gameplay"],
   flashlcancel: ["options-gameplay"], walljump: ["options-gameplay"],

@@ -36,6 +36,7 @@
 #include "foh.h"
 #include "../gfx/ctl_style.h" // C30(c)
 #include "foh_persist.h" // M4 task 13: the ONE persistence chokepoint
+#include "foh_launch.h"  // A44: the ONE FohState -> 4-port match config
 
 #define ML_BOOT_DRAWS 465 // the qjs boot pin (oracle/qjs/replay.sh)
 
@@ -539,16 +540,26 @@ int main(int argc, char **argv) {
           w = fprintf(tf, "TLAUNCH %ld char=%d tstage=%d\n", f, foh.p1Char,
                       foh.tssStage);
         } else {
+          // A44 APPENDS the two new ports; it does not renumber the old
+          // fifteen tokens. Every field before `versus=` keeps its name,
+          // position and domain, so the ONLY edit a pre-A44 frozen line
+          // needs is the fixed suffix an absent pair produces — which is
+          // what the four flows/*.expect diffs in this commit are.
+          // p3/p4 are CHARACTERS (like p1/p2) and p3type/p4type are the
+          // types; p1type has never been on this line because condition (1)
+          // of the launch guard pins it to 0, and that has not changed.
           w = fprintf(tf,
                       "LAUNCH %ld p1=%d p2=%d p2type=%d difficulty=%d "
                       "stage=%d turbo=%d lcancel=%d flashlcancel=%d "
                       "walljump=%d tapjump=%d,%d,%d,%d "
-                      "versus=%d\n",
+                      "versus=%d p3=%d p4=%d p3type=%d p4type=%d\n",
                       f, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
                       foh.stageSel, foh.turbo, foh.lCancelType,
                       foh.flashOnLCancel, foh.everyCharWallJump,
                       foh.tapJumpOff[0], foh.tapJumpOff[1],
-                      foh.tapJumpOff[2], foh.tapJumpOff[3], foh.versusMode);
+                      foh.tapJumpOff[2], foh.tapJumpOff[3], foh.versusMode,
+                      foh.selChar[2], foh.selChar[3], foh.portType[2],
+                      foh.portType[3]);
         }
         if (w < 0) sim_fatal("--flow-out write failed");
       }
@@ -714,9 +725,16 @@ int main(int argc, char **argv) {
   // mode's whole point silently dropped. sim_boot.c says the same thing at
   // the other end, and check-css-mode.sh's T3 is the tooth that bites when
   // this line moves down.
+  // A44: the FOUR-port entry point (A46's sim_setup_match_ports), fed by the
+  // one FohState -> cfg.players mapping in foh_launch.h. For a 2-port
+  // configuration this builds byte-for-byte the config sim_setup_match's own
+  // wrapper builds, so nothing about the existing flows moves.
   G.sim.versusMode = foh.versusMode;
-  sim_setup_match(&G, foh.p1Char, foh.p2Char, foh.p2Type, foh.difficulty,
-                  foh.stageSel);
+  {
+    SimPortCfg ports[4];
+    foh_launch_ports(&foh, ports);
+    sim_setup_match_ports(&G, ports, foh.stageSel);
+  }
   // FOH gameSettings applied AFTER setup (which writes the defaults) —
   // the gfx_app --tapjump-off-p1 precedent.
   G.sim.turbo = foh.turbo != 0;
@@ -740,17 +758,25 @@ int main(int argc, char **argv) {
     if (!bf) sim_fatal("cannot open --bstate-out for writing");
     uint64_t phantomBits;
     memcpy(&phantomBits, &G.sim.phantomThreshold, 8);
+    // A44 appends the two new ports here for the same reason it appends them
+    // to LAUNCH, and it matters MORE here: this line is the only artifact
+    // that reads the launched configuration back out of the GameState. A
+    // 4-port launch whose bridge witness still reported two ports would be
+    // green on both sides of the seam with nothing asserting the crossing —
+    // CONTEXT.md's "Seam", exactly. Read back from G, never from `foh`.
     if (fprintf(bf,
                 "BRIDGE-STATE p1=%d p2=%d p2type=%d difficulty=%d stage=%d "
                 "turbo=%d lcancel=%d tapjump=%d,%d,%d,%d "
-                "phantom=%016" PRIx64 "\n",
+                "phantom=%016" PRIx64 " p3=%d p4=%d p3type=%d p4type=%d\n",
                 (int)G.sim.characterSelections[0],
                 (int)G.sim.characterSelections[1], (int)G.sim.playerType[1],
                 (int)G.cpuDifficulty[1], (int)G.stageSelect,
                 G.sim.turbo ? 1 : 0, (int)G.sim.lCancelType,
                 (int)G.sim.tapJumpOff[0], (int)G.sim.tapJumpOff[1],
                 (int)G.sim.tapJumpOff[2], (int)G.sim.tapJumpOff[3],
-                phantomBits) < 0) {
+                phantomBits, (int)G.sim.characterSelections[2],
+                (int)G.sim.characterSelections[3], (int)G.sim.playerType[2],
+                (int)G.sim.playerType[3]) < 0) {
       sim_fatal("--bstate-out write failed");
     }
     if (fclose(bf) != 0) sim_fatal("--bstate-out close/flush failed");

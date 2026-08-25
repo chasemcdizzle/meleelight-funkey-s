@@ -106,21 +106,37 @@
 # `setCS(i, ...)` with wrap <0 -> 4 and >4 -> 0).
 S p1char 0 4 css,target-select characters.js CHARIDS registry, 5 chars; pipeline/expected.json chars=5
 S p2char 0 4 css characters.js CHARIDS registry, 5 chars; pipeline/expected.json chars=5
+# A44: ports 2 and 3 joined the CSS (owner-reported). characterSelections is
+# a FOUR-array upstream (main.js:59 `[0,0,0,0]`) and always was; what changed
+# is that this port now writes all four of it.
+S p3char 0 4 css characters.js CHARIDS registry, 5 chars; main.js:59 characterSelections is a 4-array
+S p4char 0 4 css characters.js CHARIDS registry, 5 chars; main.js:59 characterSelections is a 4-array
 # Port type cycle. Upstream togglePort (main.js:510-526) cycles the port
 # through N/A -> HMN -> CPU -> NET; DEVIATION D5 drops NET, leaving 3 states
 # encoded -1 = N/A, 0 = HMN, 1 = CPU. There is no port-0 special case
 # upstream, so P1 carries its own type.
 S p1type -1 1 css main.js:510-526 togglePort, MENU-SPEC DEVIATION D5 (NET dropped)
 S p2type -1 1 css main.js:510-526 togglePort, MENU-SPEC DEVIATION D5 (NET dropped)
+# Ports 2/3 stop ONE STATE EARLIER than ports 0/1, and the narrowing is the
+# claim: DEVIATION D40(b) keeps CPU off their cycle because the sim can
+# replay exactly one AI slot (AIBRIDGE1 is one recorded stream for one CPU
+# slot — fix_plan A46 OPEN/OWED). A row here reading `-1 1` would mean that
+# refusal had been dropped and a CPU P3 launched with no replay behind it.
+S p3type -1 0 css main.js:510-526 togglePort; MENU-SPEC D5 (NET) + D40(b) (CPU: one AI replay slot, fix_plan A46)
+S p4type -1 0 css main.js:510-526 togglePort; MENU-SPEC D5 (NET) + D40(b) (CPU: one AI replay slot, fix_plan A46)
 # CPU difficulty knob. MEASURED domain 1..4, not 1..9: the 166-px track
 # parameter t maps round(t*3)+1 (css.js:325-326, MENU-SPEC §2.8). The oracle
 # harness's --difficulty 1-9 is a programmatic surface and is NOT this field.
 S p1difficulty 1 4 css css.js:316-334 round((x-off)*3/166)+1; MENU-SPEC §2.8
 S difficulty 1 4 css css.js:316-334 round((x-off)*3/166)+1; MENU-SPEC §2.8
 # Token-gesture state: whichTokenGrabbed[0]. -1 = empty-handed, else the PORT
-# whose token hand 0 is carrying. The FOH fields 2 ports, so the carried port
-# is 0 or 1.
-S carry -1 1 css css.js:68 whichTokenGrabbed; MENU-SPEC §2.4; FOH is 2-port (DEVIATION D6)
+# whose token hand 0 is carrying. A44 fields FOUR ports and DEVIATION D40(a)
+# lets the single hand hold any of them (upstream's `playerType[j] == 1 ||
+# i == j` guard defends one human hand from another, and there is only one
+# hand here), so the carried port is 0..3. UPPER BOUND IS THE PORT COUNT, not
+# a roster index — CONTEXT.md's "Port" row exists because those two have been
+# confused twice on this screen.
+S carry -1 3 css css.js:68 whichTokenGrabbed; MENU-SPEC §2.4; DEVIATION D40(a), FOH is 4-port (fix_plan A44)
 
 # --- Gameplay options plane ------------------------------------------------
 # The five upstream rows of gameplaymenu.js, MENU-SPEC §3.1's table. Every
@@ -157,10 +173,15 @@ S musicvol 0 10 options-audio audiomenu.js:13,101-112 masterVolume[1] clamped [0
 # re-freeze).
 #
 # There is deliberately NO `p1type` field on the LAUNCH line: port 0 is
-# pinned HUMAN and the FOH REFUSES to launch otherwise (foh.c:682-687 emits
-# `refused portconfig` when !(p1Type==0 && (p2Type==0||p2Type==1))). If a
-# p1type field ever appears on this line, that refusal has been weakened and
-# this row block is stale.
+# pinned HUMAN and the FOH REFUSES to launch otherwise (foh.c's launch arm
+# emits `refused portconfig` unless portType[0]==0). If a p1type field ever
+# appears on this line, that refusal has been weakened and this block is
+# stale.
+# A44 APPENDED p3/p4/p3type/p4type. It is an appendix, not a relaxation: the
+# fifteen rows below keep their names, order and bounds, and the p3type/
+# p4type rows are TIGHTER than p2type's for D40(b)'s reason (one AI replay
+# slot). The launch arm's other two conditions are also rows-by-implication:
+# no CPU above port 1, and at least two participating ports.
 # `versus` WAS a fixed literal `0` on the reasoning below, and that reasoning
 # conflated two different axes: VS-vs-target-test (which really is TLAUNCH's
 # job) with stock-vs-endless (a property OF a VS match). A27/D28 made the CSS
@@ -175,7 +196,13 @@ S musicvol 0 10 options-audio audiomenu.js:13,101-112 masterVolume[1] clamped [0
 # The target-test plane still uses TLAUNCH; that half of the note stands.
 L launch p1 0 4 characters.js CHARIDS registry, 5 chars; pipeline/expected.json chars=5
 L launch p2 0 4 characters.js CHARIDS registry, 5 chars; pipeline/expected.json chars=5
-L launch p2type 0 1 foh.c:682-687 launch refusal — port 1 is HMN(0) or CPU(1); N/A never launches
+# A44 WIDENED THIS ROW, and it is a widening the four-port CSS forces rather
+# than one it permits: with ports 2/3 live, `P1 human + P3 human, P2 off` is a
+# match the launch guard admits (its third condition counts PARTICIPANTS, not
+# named ports — upstream's own readyToFight rule, css.js:1167-1181), so port 1
+# can be ABSENT at launch. The old row said "N/A never launches" and that
+# sentence stopped being true the moment a third port could make up the pair.
+L launch p2type -1 1 foh.c launch refusal counts participants (css.js:1167-1181); port 1 is HMN(0), CPU(1) or absent(-1) once ports 2/3 can make the pair
 L launch difficulty 1 4 css.js:316-334 round((x-off)*3/166)+1; MENU-SPEC §2.8
 L launch stage 0 5 vs-stages.js:8-15 exports 6 VS stages; activeStage.js:21-28 stageMapping 0..5; pipeline/expected.json stages=6
 L launch turbo 0 1 gameplaymenu.js:41 `turbo ^= true`; MENU-SPEC §3.1 row 0
@@ -187,6 +214,10 @@ L launch tapjump2 0 1 gameplaymenu.js:56 `tapJumpOffp2 ^= true`; MENU-SPEC §3.1
 L launch tapjump3 0 1 gameplaymenu.js:56 `tapJumpOffp3 ^= true`; MENU-SPEC §3.1 row 4 col 2
 L launch tapjump4 0 1 gameplaymenu.js:56 `tapJumpOffp4 ^= true`; MENU-SPEC §3.1 row 4 col 3
 L launch versus 0 1 main.js:140,237-239 setVersusMode(1-versusMode) binary toggle; css.js:393; A27/D28 ribbon + A37 sim (SIM CONFORMS 8/8 flag-off, VERSUS ENDLESS OK flag-on)
+L launch p3 0 4 characters.js CHARIDS registry, 5 chars; main.js:59 characterSelections is a 4-array
+L launch p4 0 4 characters.js CHARIDS registry, 5 chars; main.js:59 characterSelections is a 4-array
+L launch p3type -1 0 foh.c launch refusal — port 2 is HMN(0) or absent(-1); CPU refused by D40(b) (one AI replay slot, fix_plan A46)
+L launch p4type -1 0 foh.c launch refusal — port 3 is HMN(0) or absent(-1); CPU refused by D40(b) (one AI replay slot, fix_plan A46)
 L tlaunch char 0 4 characters.js CHARIDS registry, 5 chars; pipeline/expected.json chars=5
 L tlaunch tstage 0 9 activeStage.js:36-47 targetStageMapping has exactly 10 keys, 0..9 -> targetstage1..10
 

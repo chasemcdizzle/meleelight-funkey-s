@@ -120,9 +120,15 @@ made "$FOH/foh_dev.c" "$FOH/foh.c" "$FOH/foh_cssrest_witness.c"
 n="$(grep -cxF '  f->cssCarry = -1;' "$FOH/foh_dev.c")" || true
 [ "$n" = 1 ] || grammar_die "foh_dev.c has $n 'f->cssCarry = -1;' lines (want 1)
   — tdev_end_game's CSS mutation moved; re-read it and re-sync the witness"
-n="$(grep -cxF '  for (int k = 0; k < 2; k++) f->cssTokenRest[k] = 2;' \
+# A44 re-pins the BOUND, not the line: the loop was `k < 2` while the FOH had
+# two ports and is `k < FOH_CSS_PORTS` now that it has four. Pinning the
+# literal 2 after that change would have pinned a bound that no longer exists;
+# pinning the constant keeps the pin asserting what it always asserted —
+# that endGame snaps EVERY port's token to rest slot 2, which is the model
+# foh_cssrest_witness.c hand-copies.
+n="$(grep -cxF '  for (int k = 0; k < FOH_CSS_PORTS; k++) f->cssTokenRest[k] = 2;' \
   "$FOH/foh_dev.c")" || true
-[ "$n" = 1 ] || grammar_die "foh_dev.c has $n lines putting both tokens in rest
+[ "$n" = 1 ] || grammar_die "foh_dev.c has $n lines putting every token in rest
   slot 2 (want 1) — the endGame SNAP the witness models moved or changed slot"
 # (b) The D21 arm must be textually unique, so the negative test below can
 #     perturb exactly it (the A-drop arm computes the same base by design now,

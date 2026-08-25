@@ -245,11 +245,44 @@ build_diff "$BUILD/diff-new" || fail "the differential driver did not build agai
 build_diff "$BUILD/diff-head" "$BUILD/head" \
   || fail "the differential driver did not build against $A25C_BASE (it must use only
   the FOH surface that exists on both sides — see the pin in [1])"
+# TWO SWEEPS, and A44 is why there are two.
+#
+# The A-PRESSING sweep (dump-new.txt) is the one this leg has always run and
+# is what the coverage floors below are measured on: it grabs, carries and
+# drops, which is the arm the A25(c) extraction moved.
+#
+# The A-FREE sweep (the `.noa` pair) is the CROSS-BUILD comparison. DEVIATION
+# D40 gave the one hand the right to take ANY port's token and gave ports 2/3
+# live type tabs, so an A press now reaches machine state $A25C_BASE has no
+# field for — MEASURED: 34,150 of the 60,000 A-pressing frames diverge, the
+# first at frame 6001 where the working tree carries PORT 3's token (`c=3`).
+# Requiring byte equality there would be asserting something false about the
+# base build, so this leg compares the plane both builds still share. Every
+# D40 arm sits inside an `if (aE)`, so with no A edge the comparison is total
+# again — and it stays total: the hand's raw doubles, the D3 clamp, the CELL
+# HIT PREDICATE (hover SELECTS with no button, css.js:222-226), the selection
+# plane, the sound queue, the event counts and the ink plane are all still
+# compared byte for byte over all $FRAMES frames.
+# WHAT MOVED, so it is not merely lost: the cross-build claim about the
+# A-gated arms is now port/foh/check-css-p34.sh's, which drives grab, drop
+# and the type tabs through the real foh_tick on all four ports with its own
+# negative tests. The floors below still prove THIS sweep reaches them.
 MLFK_DATA_DIR="$DATA" "$BUILD/diff-new" "$FRAMES" > "$BUILD/dump-new.txt" \
   || fail "the working-tree differential run failed"
-MLFK_DATA_DIR="$DATA" "$BUILD/diff-head" "$FRAMES" > "$BUILD/dump-head.txt" \
-  || fail "the HEAD differential run failed"
-made "$BUILD/dump-new.txt" "$BUILD/dump-head.txt"
+MLFK_DATA_DIR="$DATA" "$BUILD/diff-new" "$FRAMES" --no-a > "$BUILD/dump-new.noa.txt" \
+  || fail "the working-tree A-free differential run failed"
+MLFK_DATA_DIR="$DATA" "$BUILD/diff-head" "$FRAMES" --no-a > "$BUILD/dump-head.noa.txt" \
+  || fail "the HEAD A-free differential run failed"
+made "$BUILD/dump-new.txt" "$BUILD/dump-new.noa.txt" "$BUILD/dump-head.noa.txt"
+# The two working-tree sweeps must DIFFER, or `--no-a` is being ignored (an
+# older base build silently dropping the flag would make the comparison below
+# pass for free — the flag lives in the witness, which BOTH builds compile).
+cmp -s "$BUILD/dump-new.txt" "$BUILD/dump-new.noa.txt" \
+  && fail "the A-free sweep dumped the same bytes as the A-pressing one, so
+  --no-a reached nothing and the differential below is vacuous"
+nnoa="$(wc -l < "$BUILD/dump-head.noa.txt" | tr -d ' ')"
+[ "$nnoa" = "$FRAMES" ] \
+  || fail "the A-free HEAD sweep dumped $nnoa lines, want $FRAMES"
 n="$(wc -l < "$BUILD/dump-new.txt" | tr -d ' ')"
 [ "$n" = "$FRAMES" ] \
   || fail "the differential dumped $n lines, want $FRAMES (the sweep ended early)"
@@ -267,14 +300,50 @@ picks="$(grep -o 'ch=[0-9],[0-9]' "$BUILD/dump-new.txt" | sort -u | wc -l | tr -
 [ "$picks" -ge 6 ] \
   || fail "the sweep only reached $picks distinct roster pairs (want >= 6) — the
   cell hit test is barely exercised"
-cmp "$BUILD/dump-head.txt" "$BUILD/dump-new.txt" \
-  || fail "THE CSS CHANGED. The extraction was supposed to be a pure refactor on
-  that side: same doubles, same integration order, same clamp, same hit
-  predicate. The first differing line is above; the fields are the hand's raw
-  IEEE-754 bits, the machine plane, the sound queue, the token positions and a
-  hash of the rendered frame."
+# A44 / DEVIATION D41 — THE TWO MASKED COLUMNS, and why masking them is not
+# a weakening. A44 put ports 2 and 3 on the CSS, and four radius-9 tokens at
+# pitch 20 do not fit a 44 px cell: laid out in a row they would have spanned
+# 78 px and parked port 0's token a whole cell LEFT of the character it chose
+# (foh.h's D41 derivation). The tokens therefore moved to upstream's own 2x2
+# at r=7 / pitch 14 / DX 15 / y = CELL_Y+9. That moves exactly two columns of
+# this dump — the token pixels (`tk*`) and the framebuffer hash (`fb=`) they
+# are drawn into — and MEASURED, it moves nothing else: `h=` (the hand's raw
+# IEEE-754 bits), `t=`, `c=`, `ch=`, `rest=`, `sl=`, `p=`, `vm=`, `bh=`,
+# `sc=`, the event/sound counts, every sound NAME and `ink=` are byte-
+# identical across all $FRAMES frames. That set IS what A25(c) extracted and
+# what this leg exists to defend: the clamp, the integration order, the hit
+# predicate and the machine plane they feed.
+#
+# THE MASK IS PROVEN LIVE, not assumed: the unmasked comparison must still
+# FAIL. If a later change reverts D41's geometry the masked columns stop
+# differing, that assertion fires, and the mask is to be deleted in the same
+# change rather than left standing over nothing (CONTEXT.md "Tooth" — a mask
+# nobody notices is how a differential goes quietly vacuous). And because the
+# masked files are byte-EQUAL while the unmasked ones are not, the difference
+# is contained in the masked columns BY CONSTRUCTION — no third column can
+# have moved without the first cmp catching it.
+D41_MASK='s/ tk[0-9]=[0-9a-f]*,[0-9a-f]*//g; s/ fb=[0-9a-f]*//'
+sed "$D41_MASK" "$BUILD/dump-head.noa.txt" > "$BUILD/dump-head.masked.txt"
+sed "$D41_MASK" "$BUILD/dump-new.noa.txt" > "$BUILD/dump-new.masked.txt"
+made "$BUILD/dump-head.masked.txt" "$BUILD/dump-new.masked.txt"
+cmp -s "$BUILD/dump-head.noa.txt" "$BUILD/dump-head.masked.txt" \
+  && fail "the D41 mask removed nothing from the dump — it no longer names the
+  columns it claims to, so the comparison below is unbounded"
+cmp "$BUILD/dump-head.masked.txt" "$BUILD/dump-new.masked.txt" \
+  || fail "THE CSS CHANGED OUTSIDE THE TOKEN GEOMETRY. The extraction was
+  supposed to be a pure refactor on that side: same doubles, same integration
+  order, same clamp, same hit predicate. The first differing line is above;
+  the fields are the hand's raw IEEE-754 bits, the machine plane, the sound
+  queue and the renderer's ink plane. DEVIATION D41 moves the token pixels
+  and the framebuffer hash and those two columns are masked out here — a
+  difference reported above is in NEITHER of them."
+cmp -s "$BUILD/dump-head.noa.txt" "$BUILD/dump-new.noa.txt" \
+  && fail "the unmasked dumps are byte-identical, so DEVIATION D41's token
+  geometry is no longer in effect. The mask above is now covering nothing:
+  delete it and restore the whole-dump comparison, in the same change."
 echo "   $FRAMES frames, all on the CSS, $carried carrying, $picks roster pairs:"
-echo "   working tree == $A25C_BASE, byte for byte"
+echo "   A-free: working tree == $A25C_BASE byte for byte outside D41's two"
+echo "   columns, and those two columns really do differ (the mask is live)"
 
 # --- [5] T1: the gutter becomes a hit (the shared PREDICATE lies) -----------
 # foh_hand_hit's comparisons are strict on all four sides, which is what makes
@@ -319,9 +388,16 @@ run_tooth() {
     "$BUILD/$dir/port/foh/foh_render.c" "$BUILD/$dir/port/foh/foh_font.c" \
     "$GFX/raster.c" "$GFX/img1.c" "$GFX/ctl_style.c" port/fdlibm/fdlibm.c -lm \
     || fail "$dir: the perturbed witness did not build"
-  MLFK_DATA_DIR="$DATA" "$BUILD/$dir/diff" "$FRAMES" > "$BUILD/$dir/dump.txt" \
+  # A-FREE and MASKED, for the two reasons leg [4] states at length: an A
+  # press reaches DEVIATION D40 arms the pinned base has no field for, and
+  # DEVIATION D41 moves the token pixels and the framebuffer hash. The
+  # reference on the other side of this cmp is $A25C_BASE's own A-free dump,
+  # so both sides must be reduced the same way or every tooth "bites" for
+  # A44's reasons instead of its own.
+  MLFK_DATA_DIR="$DATA" "$BUILD/$dir/diff" "$FRAMES" --no-a > "$BUILD/$dir/dump.txt" \
     || fail "$dir: the perturbed differential run failed"
-  rc=0; cmp -s "$BUILD/head-dump-ref.txt" "$BUILD/$dir/dump.txt" || rc=1
+  sed "$D41_MASK" "$BUILD/$dir/dump.txt" > "$BUILD/$dir/dump.masked.txt"
+  rc=0; cmp -s "$BUILD/head-dump-ref.masked.txt" "$BUILD/$dir/dump.masked.txt" || rc=1
   [ "$rc" = "$wantDiff" ] \
     || fail "$dir: the CSS differential came out $( [ $rc = 0 ] && echo IDENTICAL || echo DIFFERENT ),
   want $( [ "$wantDiff" = 0 ] && echo IDENTICAL || echo DIFFERENT ). A tooth that
@@ -333,7 +409,8 @@ run_tooth() {
     || { relay_lines < "$BUILD/$dir/hand.out"
          fail "$dir: the feature witness exited rc $rc, want $wantWit"; }
 }
-cp "$BUILD/dump-head.txt" "$BUILD/head-dump-ref.txt"
+cp "$BUILD/dump-head.noa.txt" "$BUILD/head-dump-ref.txt"
+cp "$BUILD/dump-head.masked.txt" "$BUILD/head-dump-ref.masked.txt"
 
 # The perturbation WIDENS the rect by the gutter rather than merely relaxing a
 # `>` to a `>=`. MEASURED, and it is this project's rule-12 corollary again: a

@@ -24,5 +24,5 @@ T 530 menu-top css a
 S 725 p2type 0
 T 735 css sss start
 T 745 sss match launch
-LAUNCH 745 p1=0 p2=0 p2type=0 difficulty=3 stage=0 turbo=1 lcancel=2 flashlcancel=1 walljump=1 tapjump=1,1,0,0 versus=0
+LAUNCH 745 p1=0 p2=0 p2type=0 difficulty=3 stage=0 turbo=1 lcancel=2 flashlcancel=1 walljump=1 tapjump=1,1,0,0 versus=0 p3=0 p4=0 p3type=-1 p4type=-1
 END 755 transitions=11
