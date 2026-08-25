@@ -10,7 +10,16 @@
 // Coverage: A-Z 0-9 space and the punctuation the FOH screens use.
 // Unknown characters are a LOUD failure (gfx_fatal), never a silent blank
 // (HARD RULE 2 — a missing glyph is a bug, not a fallback).
+//
+// A14 (second half) moved foh_text2 off the SECOND hand-authored face in
+// this file — the 6x9 display face — and onto the browser's own Arial, via
+// the VFXGLYPHS1 atlas. The 5x7 face above did not move; see the note at
+// foh_text2 for why the swap stopped where it did.
 #include "foh.h"
+
+#include <math.h>
+
+#include "../gfx/gfx_glyphs.h"
 
 typedef struct {
   char ch;
@@ -83,6 +92,28 @@ static const FohGlyph kGlyphs[] = {
 // A7 added '&' above and that does NOT touch the tooth: it is a different
 // character, and "COMPLETE?" still dies here.
 
+
+// --- FACE 2, RETAINED (A14 second half) -----------------------------------
+//
+// The 6x9 display face below is NO LONGER what foh_text2 draws — the atlas
+// swap at the bottom of this file took that over. It is kept, at the
+// driver's explicit instruction, because deleting it is a SEPARATE step that
+// only happens once the swap is green everywhere, and because one committed
+// instrument still reads this table AS DATA: check-live-arms.sh computes the
+// system overlay's expected "VOLUME" bitmap by parsing kGlyphs2[] out of
+// this file. That decoder now expects a face the renderer no longer draws
+// and is an OWED device-leg rewrite; the table stays until it lands, so that
+// rewrite has the bytes it is replacing in front of it.
+//
+// The two entry points are renamed foh_text2_face2 / foh_text2_face2_width
+// so nothing can reach the retired face by habit: the live names mean the
+// atlas, and only the atlas.
+//
+// WHAT DOES NOT CHANGE IS THE CONTRACT. A character this face lacks is a
+// gfx_fatal, never a placeholder box, and the same is true of the atlas path
+// that replaced it (gfx_glyphs.c's glyph_get). A silent fallback on either
+// side would have hidden exactly the D8 bug the atlas widening exists to fix
+// — the loud guard is precisely the part that survives the swap intact.
 // --- FACE 2: the heavy 6x9 display face (A1 restyle Phase 0) --------------
 // Upstream's menus set "700 35px Arial" for the bar/explanation text and
 // "italic 900 48px Arial" for the mode title (menu.js:436-440). Neither is
@@ -211,7 +242,7 @@ static const FohGlyph2 *glyph2_for(char c) {
 }
 
 // Advance = 7 columns per glyph (6 px + 1 px gap) at scale 1.
-int foh_text2_width(const char *s, int scale) {
+int foh_text2_face2_width(const char *s, int scale) {
   int n = 0;
   for (const char *p = s; *p; p++) n++;
   if (n == 0) return 0;
@@ -221,8 +252,8 @@ int foh_text2_width(const char *s, int scale) {
 // Italic lean, in unscaled glyph columns: 2 at the cap line down to 0 at the
 // baseline. The whole string leans as one block (per-glyph shear only, no
 // advance change) — the same trick a synthetic-oblique renderer uses.
-void foh_text2(Raster *rz, int x, int y, int scale, int italic,
-               const char *s, RastCol col) {
+void foh_text2_face2(Raster *rz, int x, int y, int scale, int italic,
+                     const char *s, RastCol col) {
   int penX = x;
   for (const char *p = s; *p; p++) {
     const FohGlyph2 *g = glyph2_for(*p);
@@ -245,4 +276,90 @@ void foh_text2(Raster *rz, int x, int y, int scale, int italic,
     }
     penX += 7 * scale;
   }
+}
+
+// --- FACE 2 IS NOW THE BROWSER'S ARIAL (A14, second half) -----------------
+//
+// This file used to carry a second hand-authored face — 6 columns x 9 rows,
+// fixed 7 px advance, italic faked by shearing it at blit time — because the
+// port has no font engine and no third-party font bytes may enter the tree
+// (LICENSING). The VFXGLYPHS1 atlas removes that constraint: it is the
+// BROWSER'S OWN Arial rasterization, dumped at capture time from upstream's
+// own draw calls, so the menus can be set in the face upstream actually uses
+// instead of an imitation of it. A14's first half widened atlas fonts 0 and
+// 3 to the FOH's character set; this is the swap onto them.
+//
+// FONT MAPPING (fix_plan, A14 second half):
+//   italic  -> font 3, "italic 700 70px Arial" — upstream's own menu weight
+//   upright -> font 0, "900 40px Arial"
+//
+// SCALE. The atlas holds each spec at ONE size (font 0's ink cell is 9
+// device px, font 3's caps stand 12), while callers ask for scale 1, 2, 3
+// and 5. `scale` therefore became an integer upscale of the glyph mask, and
+// the two faces take it differently — measured, not chosen:
+//
+//   * font 0's ink cell is EXACTLY 9 px, which is exactly what the old 6x9
+//     face occupied at scale 1. up = scale is a box-for-box drop-in at every
+//     upright call site; only the advances go proportional, which narrows
+//     each upright string to 0.67-0.88 of its old width (the '!' warn glyph,
+//     alone in being a single narrow character, goes to 0.44). Nothing
+//     overflows: measured against every screen's own budget, the worst case
+//     is the explanation bar at 163.5 px of 232.
+//   * font 3 is 1.75x font 0 (70px vs 40px) — its caps already stand 12 px
+//     where the old face stood 9. up = 1 is the only integer that fits: up =
+//     2 would set the mode titles 24 px tall inside an 18 px budget, and the
+//     menu bars are 22 px high. So every italic string draws at native size
+//     regardless of the scale it was asked for.
+//
+// The consequence to judge with an eye rather than a check: italic scale 1
+// (the menu bar labels) and italic scale 2 (the mode titles, the CSS header,
+// READY TO FIGHT) now render at the SAME size, because font 3 has only one.
+// Bar labels grow 1.20-1.44x — the widest, "TARGET BUILDER", sets 123.7 px
+// against roughly 128 px of bar, the tightest fit on any screen — and the
+// titles shrink to 0.61-0.71x. Chase's acceptance playthrough is the
+// authority on whether that reads right. If it does not, this function is
+// the ONE place the metrics move.
+//
+// WHY foh_text (the 5x7 face) DID NOT MOVE WITH IT, though the brief named
+// both. Two committed instruments read that face AS DATA, and the atlas has
+// no equivalent:
+//   * check-foh-flows.sh's banner tooth renders "COMPLETE?" through it and
+//     requires the missing-glyph gfx_fatal. Atlas font 0 HAS '?', so routing
+//     foh_text at the atlas would have silently defused the tooth — the
+//     precise shape HARD RULE 3 forbids.
+//   * decode-pb-glyphs.js reads device banner shots back through kGlyphs[],
+//     and check-device-foh.sh's VSF_BANNER_* pins are face-1 metrics.
+// Moving face 1 is its own change, with its own evidence.
+
+// A missing glyph stays a LOUD failure: gfx_glyph_text_menu and
+// gfx_glyph_text_width abort inside the atlas rather than drawing a
+// placeholder box — the same contract glyph_for above keeps.
+
+static int face2_font(int italic) {
+  return italic ? GFX_FONT_C70 : GFX_FONT_T40;
+}
+
+static int face2_up(int italic, int scale) { return italic ? 1 : scale; }
+
+// Total advance in device px. Per-glyph now, not (n * 7 - 1) * scale — which
+// is why this needs the same `italic` the draw will use (foh.h).
+int foh_text2_width(const char *s, int scale, int italic) {
+  const int fid = face2_font(italic);
+  return (int)lround(gfx_glyph_text_width(fid, s) * face2_up(italic, scale));
+}
+
+// `y` stays what every call site already means by it: the TOP of the text
+// box. The atlas draws from a baseline, so the cap ascent — read out of the
+// atlas itself, never hardcoded — converts one to the other.
+void foh_text2(Raster *rz, int x, int y, int scale, int italic,
+               const char *s, RastCol col) {
+  const int fid = face2_font(italic);
+  const int up = face2_up(italic, scale);
+  // One colour and BINARY coverage: the FOH does its own outlining by
+  // overdrawing (text2_outlined in foh_render.c), and every FOH witness
+  // reads text back off a frame by overdrawing too — which is only a proof
+  // if compositing is idempotent, and source-over at partial alpha is not
+  // (gfx_glyphs.h carries the measurement).
+  gfx_glyph_text_menu(rz, fid, s, (double)x,
+                      (double)(y + gfx_glyph_cap_ascent(fid) * up), col, up);
 }

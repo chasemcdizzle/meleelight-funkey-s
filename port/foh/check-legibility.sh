@@ -169,7 +169,7 @@ echo "   $DATA/assets/menu.img1 built"
 # fdlibm supplies the renderer's sin/cos.
 CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror -Iport/ryu -Iport/sim
                -Ioracle/qjs)
-LEG_SRCS=("$FOH/foh_legibility_witness.c" "$FOH/foh.c" "$FOH/foh_font.c"
+LEG_SRCS=("$FOH/foh_legibility_witness.c" "$FOH/foh.c" "$FOH/foh_font.c" "$GFX/gfx_glyphs.c"
           "$GFX/raster.c" "$GFX/img1.c" "$GFX/ctl_style.c" port/fdlibm/fdlibm.c)
 LEG_OK='^LEGIBILITY OK$'
 

@@ -1852,7 +1852,7 @@ rig_arm_build() {
         "$DEVB/raster_arm.o" \
         "$GFX/gfx_app.c" "$GFX/platform_sdl1.c" \
         "$GFX/anim1.c" "$GFX/gfx_render.c" \
-        "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
+        "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_glyphs.c" "$GFX/gfx_bg.c" \
         "$SIM/sim_boot.c" "$SIM/sim_tick.c" "$SIM/sim_ser.c" \
         "$SIM/sim_data.c" \
         "$CAL/canon.c" "$CAL/player_canon.c" \
@@ -1899,7 +1899,7 @@ rig_arm_build() {
         port/sim/target/target_play.c \
         "$GFX/platform_sdl1.c" \
         "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_target.c" \
-        "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_bg.c" \
+        "$GFX/gfx_vfx.c" "$GFX/gfx_overlay.c" "$GFX/gfx_glyphs.c" "$GFX/gfx_bg.c" \
         "$SIM/sim_boot.c" "$SIM/sim_tick.c" "$SIM/sim_ser.c" \
         "$SIM/sim_data.c" "$SIM/sim_ai_live.c" \
         "$CAL/canon.c" "$CAL/player_canon.c" \

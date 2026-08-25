@@ -176,7 +176,7 @@ echo "   both D35 statements are unique in foh.c and inside css_back()"
 echo "=== [2] CSS back-select witness (real gestures through real foh_tick)"
 CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror -Iport/ryu -Iport/sim
                -Ioracle/qjs)
-CBS_SRCS=("$FOH/foh_cssbacksel_witness.c" "$FOH/foh_render.c" "$FOH/foh_font.c"
+CBS_SRCS=("$FOH/foh_cssbacksel_witness.c" "$FOH/foh_render.c" "$FOH/foh_font.c" "$GFX/gfx_glyphs.c"
           "$GFX/raster.c" "$GFX/img1.c" "$GFX/ctl_style.c" port/fdlibm/fdlibm.c)
 CBS_OK='^CSS BACK SELECT OK$'
 cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/cbs" "$FOH/foh.c" "${CBS_SRCS[@]}" -lm \
