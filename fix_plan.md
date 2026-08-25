@@ -6892,6 +6892,114 @@ than asserted.
 · nothing under `oracle/` written. **New TU deliberately NOT added to the frozen
 build list — T2 wires it in.**
 
+## A45-T2 — DONE 2026-08-24 (D42, D43). **CUSTOM STAGES PLAY. THE SPIKE'S "ONE NEW FILLER" HELD.**
+
+**The blocker was exactly what the spike measured, and I verified it before
+building rather than after.** `tp_setup_target` / `tp_stage_from_ttab1` /
+`gfx_target_init` all take an integer id into generated TTAB1, so a stage the
+player authored had nowhere to go — but `MlStageX` (`physics.h:74-89`) is a
+plain runtime struct, neither generated nor const. **So the sim change is an
+ASSIGNMENT, not a conversion:** T1 modelled `MlkStage.s` as the sim's own
+`Stage`, so `tp_stage_from_custom` is `out->s = cs->s` plus ledges, blastzone,
+`hasConnected = false`, `respawnCount = 0`. Roughly twenty lines.
+
+**THE REAL WORK WAS THE SEAM, AND IT IS A ROOT-CAUSE FIX, NOT AN ARM.** The
+lazy-looking move — add a custom `if` to `tp_setup_target` — would have left
+`startTargetGame` translated once and *branched* twice. Instead
+`tp_setup_target_core(g, charId, playingId, stage, targets, count,
+startingPoint)` is the ONE translation and **both** entries route through it:
+the TTAB1 entry decodes a generated row, `tp_setup_target_custom` decodes an
+`MlkStage`. An authored and a custom stage now differ in **where their geometry
+came from and in nothing else** — which is also what makes the done-check a real
+differential instead of a self-consistency test.
+
+**Same trick in the renderer, and it cost nothing.** All ten `gfx_target.c` draw
+functions read `g_tt`, a `const ml_tstage_t *`. The TTAB1 *rows* are const; the
+*pointer* is not. So `gfx_target_init_custom` materialises one TTAB1-shaped row
+at runtime and binds it — **every draw function is byte-unchanged**, and the
+renderer cannot accidentally treat a custom stage differently because it cannot
+tell them apart. (`box` count 0 and `offset [600,375]` are CONSTANTS of this
+plane, not missing data: neither is a field of the 14-field code grammar, and
+`targetbuilder.js:66` shows no tool ever edits `offset`.)
+
+**THE DONE-CHECK IS A DIFFERENTIAL AGAINST FROZEN BROWSER EVIDENCE.**
+`port/sim/target/check-custom-stage.sh` -> **`CUSTOM STAGE PLAYS`**. For every
+target golden: re-express its AUTHORED stage as a share code, publish it as a
+`.mlstage`, load it back through the custom path, replay the **same** trace, and
+require the two runs byte-identical — then judge **both** with the UNCHANGED
+`verify-stream.js` + `verify-target-stream.js` against the frozen goldens, so
+the differential cannot pass by both sides being wrong the same way. t01 and t02
+both: `authored == custom, both == frozen, 2 targets destroyed`. **That is the
+ticket's ask — it PLAYS, measured frame by frame, nothing hand-poked.**
+
+**IT IS ONLY SOUND BECAUSE THE ROUND TRIP IS EXACT, AND THAT WAS MEASURED FIRST**
+(executed walk over `targets.json`, all 10 authored stages): **210 numbers, ZERO
+lossy at `toFixed(2)`**. Had one been lossy the streams would diverge — the
+check re-measures it every run rather than trusting the note.
+
+**THE TOOTH THAT DID NOT BITE, AND WHY IT MATTERS.** The play-leg tooth first
+shifted **ground surface 0** by 1.00 world units and the stream did not move —
+on t01 that surface is a ledge at y=88 the fox never touches. **Fifth instance
+this session of the razor-thin-nudge class** (fix_plan rule-12 corollary): a
+tooth must perturb the domain that OCCURS, not the first row of it. Shifting
+every surface in all five lists bites, and the miss is recorded at the site so
+the next author does not re-learn it.
+
+**`getConnected` WAS NOT NEEDED — and the reason is structural, not lucky.**
+`connected` is not one of the code grammar's 14 fields at all, so a decoded
+stage never had one to recompute; `hasConnected = false` puts the physics reads
+in their absent arms exactly like fdest/ystory. `getConnected` is the BUILDER
+recomputing after a structural edit (`targetbuilder.js:410` etc.) — **A45 T7's,
+not T2's.** Its 89 lines stay unwritten.
+
+**THE DAMAGE PLANE DID NOT BECOME LIVE — IT IS REFUSED AT THE DOOR, LOUDLY.**
+A share code CAN carry a damage digit (field `d`, 0..4), so loading one would
+have made `dealWithDamagingStageCollision`'s five translated call sites live
+with **no golden behind them** — and `target_play.c`'s tick arm would have hit
+its stage-damage trap mid-match. `mlk_stage_playable` refuses at load with a
+reason naming T6 as the owner of the golden it owes. **The refusal is the
+marker, not a stub.** One measured subtlety: props with a **null** `damageType`
+are inert (physics tests truthiness) and are exactly what upstream BUG 1 emits
+for every sixth surface — refusing those would reject codes upstream plays fine,
+so only a real type string refuses.
+
+**D43 (owner ruling): the clobbering is fixed IN THE VALUE MODEL.** Ten slots
+**addressed by index**, no append, no length cursor — so upstream's two clobber
+sites (`targetselect.js:164-166` add, `:551-552` reload) are *structurally
+absent* rather than individually repaired. **That is why the reload half is
+fixed too**, which a patch to the add path alone would have missed. Leg [2]
+runs upstream's exact data-destroying sequence and proves all three stages
+survive.
+
+**R2 — MY RECOMMENDATION, NOT A UNILATERAL CAP CHANGE: REFUSE, DO NOT RAISE.**
+The port refuses an 11th target with a reason. Raising `ML_MAX_TARGETS` 10 -> 20
+is *possible* (the `ML_MAX_LEDGES` 8->16 capacity precedent) but it would break
+the `_Static_assert` tying the cap to upstream's own 10-element
+`targetDestroyed` literal (`targetplay.js:37`), and **no authored stage exceeds
+9** — so raising it buys nothing today and costs the one compile-time guard that
+keeps `targetDestroyed[]` in bounds. **The builder (T4) should refuse the 11th
+target at authoring time**, which is where the message is useful. Owner's call;
+the safe half ships.
+
+**Gates:** `CUSTOM STAGE PLAYS` · `SIM CONFORMS` 8/8 · `STAGECODE MATCH` ·
+`TARGET SIM CONFORMS` (the `tp_setup_target` refactor's regression) · nothing
+under `oracle/` written · `port/foh/` untouched (parallel lane).
+
+**WHAT T3 NEEDS FROM THE FOH, and the ONE thing T2 deliberately did not build:**
+T2 has **no writer**. It loads and plays; the file arrives by SD card. When T3
+or T4 needs to WRITE a `.mlstage`, the correct move is to **generalise
+`foh_persist_save`'s existing atomic publish** (`foh_persist.c:506-551` — tmp
+write, fsync file, rename, fsync dir, every rc checked, loud on failure) into
+`foh_persist_publish(name, buf, n)` and call it — **not** to grow a second
+file-writing path. `/mnt` is journal-less vfat mounted `errors=remount-ro`, so
+an unchecked write rc is silent data loss, and a free-space check before writing
+turns a dying card into a clear message instead of a truncated stage file.
+Beyond that T3 needs only: `mlk_slots_scan(dir, &slots)` for the list (presence
+by index, a named reason per empty slot), `mlk_slot_load(dir, slot, &stage,
+&why)` at play time, then `tp_setup_target_custom` + `gfx_target_init_custom`.
+Stages are deliberately **not** held resident — `sizeof(MlkStage)` is ~45 KB and
+ten would be ~450 KB on a device that counts them.
+
 ## A46 — DONE 2026-08-24. FOUR-PORT MATCH SETUP + A 4-PORT GOLDEN. **AND IT CAUGHT ITSELF ABOUT TO BREAK THE M4 GATE.**
 
 **THE ORACLE ANSWER: YES, AND NO `oracle/` BYTE WAS TOUCHED** (driver-verified:

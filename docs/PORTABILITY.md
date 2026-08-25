@@ -35,6 +35,26 @@ the port cost for a new target is the DEVICE-BOUND column, not the sim.
   sim over the same raster + camera constants — device-agnostic
   (iter 99); the Layer-2 letterbox/legibility constants apply as for
   the VS renderer.
+- The custom-target-stage plane (`port/sim/target/custom_stage.{h,c}`,
+  A45 T2, D42/D43) is Layer 0 whole. The `.mlstage` file is three LF
+  lines (`MLSTAGE1` / share code / `SUM <64 hex>`) carrying upstream's
+  OWN `createStageCode` alphabet `-?\d+(\.\d{1,2})?`, parsed as
+  integer hundredths / 100.0 — **strtod-free by design**, the same
+  iter-38 reasoning that shaped `foh_persist`, so device-libc parse
+  quirks are structurally out here too. The only device-bound thing is
+  the DIRECTORY, which is the caller's argument and never baked in:
+  the FOH passes `foh_persist_dir()`, the checks pass a scratch dir.
+  Ten slots addressed by index (`custom<0..9>.mlstage`) with no append
+  and no length cursor, so slot addressing is filesystem-independent.
+  A new target needs to change nothing here; it needs only to say
+  where its persist directory is. NOTE for whoever ports the WRITE
+  side (A45 T3/T4, not built here): it must reuse
+  `foh_persist_save`'s atomic tmp+fsync+rename publish rather than
+  growing a second file-writing path — that publish is already proven
+  device-agnostic (row above), and `/mnt` on this device is
+  journal-less vfat mounted `errors=remount-ro`, so an unchecked
+  write rc is silent data loss on THIS target and plausibly on the
+  next one.
 - The persistence chokepoint (`port/foh/foh_persist.{h,c}`, iter
   100): the MLFKPERSIST3 format (checksummed, hex16 bit-pattern
   doubles — strtod-free by design, so device-libc parse quirks are

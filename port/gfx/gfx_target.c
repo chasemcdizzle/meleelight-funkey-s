@@ -37,6 +37,7 @@
 
 #include "ml_targets.h" // TTAB1 (generated; -I the tables build dir)
 #include "../sim/target/target_play.h"
+#include "../sim/target/custom_stage.h" // A45 T2: MlkStage + mlk_stage_playable
 #include "../foh/foh.h" // M4 iter 103: the self-authored FOH 5x7 font
                         // (foh_text) — the frozen VFXGLYPHS atlas font 0
                         // carries only digits + ':', so the banner's
@@ -85,6 +86,108 @@ void gfx_target_init(Gfx *g, int tstageId, int backgroundType) {
   g->offy = (double)g_tt->offset[1];
   g->backgroundType = backgroundType;
   g->fg2LineWidth = 1.0; // fresh canvas context default
+}
+
+// --- A45 T2 (D42): binding a CUSTOM stage ----------------------------------
+//
+// Every draw function below reads g_tt, a `const ml_tstage_t *`. The TTAB1
+// rows are const generated data, but the POINTER is not and ml_tstage_t is
+// an ordinary struct — so a custom stage binds by materialising one row at
+// runtime and pointing g_tt at it. All ten draw functions stay
+// byte-unchanged, which is the point: the renderer cannot accidentally
+// treat a custom stage differently from an authored one, because it cannot
+// tell them apart. (The alternative — a second MlkStage plane plus an `if`
+// in every draw — is ten branches to keep in sync for no behaviour.)
+static struct {
+  ml_tstage_t row;
+  ml_tstage_surface_t ground[ML_MAX_SURFACES], ceiling[ML_MAX_SURFACES],
+      platform[ML_MAX_SURFACES], wallL[ML_MAX_SURFACES],
+      wallR[ML_MAX_SURFACES];
+  ml_tstage_ledge_t ledge[ML_MAX_LEDGES];
+  ml_tstage_vec2b_t target[ML_MAX_TARGETS];
+} g_custom;
+
+static uint64_t tbits(double d) {
+  uint64_t b;
+  memcpy(&b, &d, 8);
+  return b;
+}
+
+static int32_t tcopy_list(ml_tstage_surface_t *dst, const SurfaceList *src) {
+  if (src->count > ML_MAX_SURFACES) {
+    gfx_fatal("gfx_target: custom surface list over cap");
+  }
+  for (int k = 0; k < src->count; k++) {
+    dst[k].x1 = tbits(src->items[k].p0.x);
+    dst[k].y1 = tbits(src->items[k].p0.y);
+    dst[k].x2 = tbits(src->items[k].p1.x);
+    dst[k].y2 = tbits(src->items[k].p1.y);
+  }
+  return (int32_t)src->count;
+}
+
+// NOTE: this deliberately calls NOTHING from custom_stage.c. Six scripts
+// link gfx_target.c (check-foh-flows.sh, check-device-foh.sh,
+// check-device-persist.sh, check-device-target.sh, check-device-fullgame.sh,
+// riglib.sh) and a cross-TU call here would force two new TUs into every one
+// of their link sets — including port/foh/'s, a lane this ticket must not
+// touch. MlkStage is used as a TYPE only, which costs no link edge. Content
+// validation is the LOADER's (mlk_slot_load -> mlk_stage_playable): nothing
+// reaches this function unvalidated. What is left is the bounds this
+// function's OWN copies need, and those are checked here, loudly, rather
+// than assumed from a caller's promise.
+void gfx_target_init_custom(Gfx *g, const MlkStage *cs, int backgroundType) {
+  if (cs->startingPointCount < 1) gfx_fatal("gfx_target: no starting point");
+  if (cs->ledgeCount > ML_MAX_LEDGES) gfx_fatal("gfx_target: ledges over cap");
+  if (cs->targetCount < 0 || cs->targetCount > ML_MAX_TARGETS) {
+    gfx_fatal("gfx_target: targets over cap");
+  }
+  ml_tstage_t *r = &g_custom.row;
+  memset(r, 0, sizeof *r);
+  r->name = "custom";
+  r->startingPoint.x = tbits(cs->startingPoint[0].x);
+  r->startingPoint.y = tbits(cs->startingPoint[0].y);
+  r->groundCount = tcopy_list(g_custom.ground, &cs->s.ground);
+  r->ground = g_custom.ground;
+  r->ceilingCount = tcopy_list(g_custom.ceiling, &cs->s.ceiling);
+  r->ceiling = g_custom.ceiling;
+  r->platformCount = tcopy_list(g_custom.platform, &cs->s.platform);
+  r->platform = g_custom.platform;
+  r->wallLCount = tcopy_list(g_custom.wallL, &cs->s.wallL);
+  r->wallL = g_custom.wallL;
+  r->wallRCount = tcopy_list(g_custom.wallR, &cs->s.wallR);
+  r->wallR = g_custom.wallR;
+  for (int k = 0; k < cs->ledgeCount; k++) {
+    g_custom.ledge[k].type = cs->ledge[k].list == 'g' ? 0 : 1;
+    g_custom.ledge[k].index = (int32_t)cs->ledge[k].index;
+    g_custom.ledge[k].side = (int32_t)cs->ledge[k].point;
+  }
+  r->ledgeCount = (int32_t)cs->ledgeCount;
+  r->ledge = cs->ledgeCount ? g_custom.ledge : 0;
+  for (int k = 0; k < cs->targetCount; k++) {
+    g_custom.target[k].x = tbits(cs->target[k].x);
+    g_custom.target[k].y = tbits(cs->target[k].y);
+  }
+  r->targetCount = (int32_t)cs->targetCount;
+  r->target = g_custom.target;
+  // boxCount 0 and offset [600,375] are CONSTANTS of this plane, not
+  // missing data: `box` is authored-stage machinery and is not a field of
+  // the share-code grammar at all (encode.js has 14 fields, none of them
+  // box), so tdraw_stage_fg2's loop runs zero times exactly as it does for
+  // an authored stage with none; and the builder's stageTemp carries
+  // offset [600, 375] which NO tool ever edits (targetbuilder.js:66) and
+  // encode.js never emits.
+  r->offset[0] = 600;
+  r->offset[1] = 375;
+  r->scale = tbits(cs->scale);
+
+  g_tt = r;
+  g->stab = 0; // the VS stage plane is never consulted in target mode
+  g->scale = cs->scale;
+  g->offx = (double)r->offset[0];
+  g->offy = (double)r->offset[1];
+  g->backgroundType = backgroundType;
+  g->fg2LineWidth = 1.0;
 }
 
 static void tstroke_list(Gfx *g, const ml_tstage_surface_t *list,
