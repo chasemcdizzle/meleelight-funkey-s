@@ -89,12 +89,48 @@
 // defines it (see the TU note above).
 #define FOH_TB_SLOTS FOH_TB_SLOT_CACHE
 
-// The three tools, in upstream's own cycle order (targetbuilder.js:36's
-// toolInfo, indices 5/6/7 — TARGET, MOVE, DELETE).
-#define FOH_TB_TOOL_TARGET 0
-#define FOH_TB_TOOL_MOVE 1
-#define FOH_TB_TOOL_DELETE 2
-#define FOH_TB_TOOLS 3
+// THE TOOLS, at UPSTREAM'S OWN indices (targetbuilder.js:36's toolInfo).
+// A45 T4 shipped three and numbered them 0/1/2; T5-T8 completed the set, so
+// the numbering is now upstream's and every citation lines up without
+// arithmetic. The CYCLE is a separate thing: kToolOrder in foh_tbuild.c
+// lists the BUILT tools in this order, so an unbuilt tool is absent from
+// the cycle rather than present and inert.
+#define FOH_TB_TOOL_POLYGON 0
+#define FOH_TB_TOOL_PLATFORM 1
+#define FOH_TB_TOOL_WALL 2
+#define FOH_TB_TOOL_LEDGE 3
+#define FOH_TB_TOOL_DAMAGE 4
+#define FOH_TB_TOOL_TARGET 5
+#define FOH_TB_TOOL_MOVE 6
+#define FOH_TB_TOOL_DELETE 7
+#define FOH_TB_TOOL_SCALE 8
+#define FOH_TB_TOOL_DRAWMODE 9
+#define FOH_TB_TOOL_IDS 10
+
+// hoverItem's kind. Upstream's is `0` or a `[typeString, index]` pair; NONE
+// is 0 here so `hoverItem != 0` reads the same way it does upstream.
+#define FOH_TB_H_NONE 0
+#define FOH_TB_H_STARTINGPOINT 1
+#define FOH_TB_H_TARGET 2
+#define FOH_TB_H_POLYGON 3
+#define FOH_TB_H_POLYGONBG 4
+#define FOH_TB_H_LINE 5 // background.line
+#define FOH_TB_H_PLATFORM 6
+#define FOH_TB_H_GROUND 7
+#define FOH_TB_H_CEILING 8
+#define FOH_TB_H_WALLL 9
+#define FOH_TB_H_WALLR 10
+
+// wallTypeList (:29) and damageTypeList (:33), in upstream's cycle order.
+#define FOH_TB_WALLTYPES 4
+#define FOH_TB_DAMAGETYPES 4
+
+// The tool and type NAMES travel in the view, not as exported symbols.
+// THE REASON IS THE SEAM, and it was measured the hard way: exporting
+// foh_tb_tool_name() and calling it from foh_render.c gave foh_render.c an
+// unconditional LINK dependency on this TU, which broke eleven witnesses
+// that deliberately do not link it — the exact coupling the pointer above
+// exists to prevent. Anything the renderer needs comes through view().
 
 // The pause rows. Upstream's are Test / Save / Quit (targetbuilder.js:
 // 793-836). DELETE is added because the FunKey-S has NO `z` BUTTON — the
@@ -131,20 +167,46 @@ typedef enum {
 // Sizes are the codec's own caps (stage_code.h) restated locally.
 #define FOH_TB_MAX_TARGETS 20
 #define FOH_TB_MAX_SP 8
-#define FOH_TB_MAX_LINES 64
+#define FOH_TB_MAX_LINES 160
+#define FOH_TB_MAX_POLYS 32       // foreground + background together
+#define FOH_TB_MAX_POLY_POINTS_V 512 // their points, in one flat buffer
+#define FOH_TB_MAX_LEDGES_V 16
 
 typedef struct {
   int nTarget;
   double tx[FOH_TB_MAX_TARGETS], ty[FOH_TB_MAX_TARGETS];
   int nSp;
   double spx[FOH_TB_MAX_SP], spy[FOH_TB_MAX_SP];
-  // The collision surfaces, drawn so the player can see the floor he is
-  // placing targets on. T4 edits none of them — they come from the D51
-  // template or from the loaded slot and are written straight back out.
+  // Every drawn segment: the five collision lists AND background.line.
+  // `kind` is the FOH_TB_H_* the segment came from and `idx` its position in
+  // that list, so the renderer can highlight exactly what the machine says
+  // is hovered instead of re-deriving it from pixels — the /CONTEXT.md
+  // token-plane lesson applied to a different plane.
   int nLine;
   double lx0[FOH_TB_MAX_LINES], ly0[FOH_TB_MAX_LINES];
   double lx1[FOH_TB_MAX_LINES], ly1[FOH_TB_MAX_LINES];
+  int lineKind[FOH_TB_MAX_LINES];
+  int lineIdx[FOH_TB_MAX_LINES];
+  // -1 = no damage type; else the damageTypeList index, so a damaging
+  // surface is visibly different from an inert one. A surface whose props
+  // carry a NULL damageType is INERT (physics tests truthiness) and reads
+  // as -1 here, which is what upstream's own toggle leaves behind.
+  int lineDamage[FOH_TB_MAX_LINES];
+  // Closed shapes, flat: shape i owns points [polyStart[i], +polyCount[i]).
+  int nPoly;
+  int polyStart[FOH_TB_MAX_POLYS], polyCount[FOH_TB_MAX_POLYS];
+  bool polyBg[FOH_TB_MAX_POLYS];
+  int nPolyPt;
+  double polyX[FOH_TB_MAX_POLY_POINTS_V], polyY[FOH_TB_MAX_POLY_POINTS_V];
+  // Where each ledge actually IS, resolved through its [list, index, side]
+  // triple — upstream's own `ledgePos` derivation (encode.js:236).
+  int nLedge;
+  double ledgeX[FOH_TB_MAX_LEDGES_V], ledgeY[FOH_TB_MAX_LEDGES_V];
   double scale; // world -> upstream-canvas factor (targetbuilder.js:65)
+  // The CURRENT tool's name, and its type's name when it has one (WALL and
+  // DAMAGE do; D54 moved that cycle to X+shoulder, so it must be visible).
+  const char *toolName;
+  const char *typeName; // NULL when the tool carries no type
   // Slot presence for the pane list. `reason[i]` is NULL when present,
   // else the rule that refused it — a corrupt slot shows up NAMED rather
   // than silently vanishing (D43's argument: never shift, never hide).

@@ -490,6 +490,13 @@ void foh_css_cells(FohHandRect out[5]);
 // foh_tbuild.c _Static_asserts the two are equal, and check-tbuild.sh
 // re-asserts it against the sim's MLK_MAX_SLOTS, so neither copy can drift.
 #define FOH_TB_SLOT_CACHE 10
+
+// drawingPolygon's working length: MLK_MAX_POLY_POINTS committed vertices
+// (stage_code.h's cap; upstream is unbounded) plus the one element that
+// TRACKS the cursor. Restated here rather than included — port/foh cannot
+// reach stage_code.h from foh.h, and check-tbuild.sh leg [1] cross-checks
+// every restated cap with a _Static_assert against the sim's own.
+#define FOH_TB_MAX_POLY_PTS 33
 void foh_tss_slots(FohHandRect out[FOH_TSS_SLOTS]);
 // Where the hand is parked when target-select is entered: the centre of slot
 // 0, so the screen opens hovering tstage 0 exactly as the index cursor's
@@ -903,7 +910,10 @@ typedef struct {
   // upstream's `stageTemp` is module state in targetbuilder.js:53-72. What
   // lives here is what the machine and the renderer both read. Semantics and
   // upstream citations: port/foh/foh_tbuild.h.
-  int tbTool;                 // 0 TARGET, 1 MOVE, 2 DELETE (:36 order)
+  int tbTool;                 // targetTool (:26) — UPSTREAM'S OWN index
+                              // 0..9, see FOH_TB_TOOL_* in foh_tbuild.h.
+                              // The CYCLE contains only built tools; the
+                              // NUMBERING is upstream's so citations line up.
   int tbGrid;                 // index into gridSizes (:80); 4 == free
   int tbSlot;                 // editingStage (:57); -1 == never saved
   double tbUnX, tbUnY;        // unGriddedCrossHairPos (:24), WORLD units
@@ -912,7 +922,36 @@ typedef struct {
   bool tbHoldA;               // holdingA (:37)
   int tbPauseRow;             // builderPauseSelected (:76)
   int tbPane, tbPaneRow;      // the slot list a pause row opened
-  int tbHover, tbGrab;        // hoverItem (:73) / grabbedItem (:72)
+  // hoverItem (:73) / grabbedItem (:72). Upstream's is `0` for nothing and
+  // `[typeString, index]` otherwise; the port splits that into a KIND
+  // (FOH_TB_H_*, with NONE == 0 so the falsy test reads the same) and an
+  // index. A45 T4 could encode it in one int because only two kinds were
+  // reachable; T5-T7 reach ten.
+  int tbHoverKind, tbHoverIdx;
+  int tbGrabKind, tbGrabIdx;
+  // ledgeHoverItem (:74) — [type, index, side], a THIRD cursor because
+  // upstream's LEDGE arm keeps it separate from hoverItem (:513-541).
+  int tbLedgeKind, tbLedgeIdx, tbLedgeSide;
+  int tbWallType;             // wallTypeIndex (:27) into wallTypeList (:29)
+  int tbDamageType;           // damageTypeIndex (:31) into (:33)
+  int tbDrawMode;             // drawMode (:44) — 0 | 1, upstream's own type
+  int tbScaleScroll;          // scaleScroll (:43), the 6-frame divider
+  // The in-progress drag, tools PLATFORM and WALL (:39, :41). CANVAS units
+  // (upstream stores realCrossHair here, not the world position).
+  double tbDragX0, tbDragY0, tbDragX1, tbDragY1;
+  // drawingPolygon (:40) + currentPolygonLines + `denied`, the POLYGON
+  // tool's in-progress state. CANVAS units. The last element TRACKS the
+  // cursor (:386), so a committed vertex count is tbPolyN - 1.
+  bool tbDrawingPoly;         // amDrawingPolygon (:38)
+  int tbPolyN;
+  double tbPolyX[FOH_TB_MAX_POLY_PTS], tbPolyY[FOH_TB_MAX_POLY_PTS];
+  // currentPolygonLines is derivable — line k is (poly[k], poly[k+1]) —
+  // so only its LENGTH is state. It is not the same as tbPolyN: it lags by
+  // two and it is popped by B independently (:296, :404).
+  int tbPolyLinesN;
+  bool tbDenied;              // `denied` (:298-302), sticky across frames
+  bool tbConnectInd;          // drawConnectIndicator (:389)
+  double tbConnectX, tbConnectY;
   int tbToolTimer;            // toolInfoTimer (:35), 120 frames
   // THE VISIBLE REFUSAL. Every "no" this screen says puts a string here and
   // the renderer draws it. The ticket exists because a refusal was a `deny`

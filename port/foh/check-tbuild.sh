@@ -152,6 +152,13 @@ cc -O1 "${CFLAGS_COMMON[@]}" -I"$FOH" -I"$DATA" -o "$BUILD/capcheck" \
 # never be built against a different set of bodies than the real run.
 WIT_SRCS=("$FOH/foh_tbuild_witness.c" "$FOH/foh.c" "$FOH/foh_render.c"
   "$FOH/foh_font.c" "$FOH/foh_persist.c" "$FOH/foh_tbuild.c"
+  # A45 T5/T7: the builder hovers and validates GEOMETRY with the port's
+  # already-replay-verified primitives (intersectsAny / distanceToLine /
+  # distanceToPolygon / lineDistanceToLines), and those are inline in
+  # detect_intersections.h except for coordinateInterceptParameter, which
+  # lives in this TU. It compiles standalone (measured: fd_atan2 + libc are
+  # its only externals) so it costs the witness nothing else.
+  "$SIM/environmental_collision.c"
   "$GFX/raster.c" "$GFX/img1.c" "$GFX/ctl_style.c"
   "$SIM/stage_code.c" "$SIM/ml_fmt.c" "$SIM/ml_ser.c"
   oracle/qjs/sha256.c port/fdlibm/fdlibm.c)
@@ -368,9 +375,9 @@ bites t1-clobber '...and custom0.mlstage is BYTE-IDENTICAL (no clobber, no shift
 # assertion it would be proving something coarser than it claims.
 echo "=== [T2] tooth: the 11th-target refusal becomes a sound only"
 perturb t2-silent foh_tbuild.c \
-  '          foh_snd_push(s, "deny"); // :568
-          say(s, "10 targets max");' \
-  '          foh_snd_push(s, "deny"); // :568 — T2: no on-screen reason'
+  '    foh_snd_push(s, "deny"); // :568
+    say(s, "10 targets max");' \
+  '    foh_snd_push(s, "deny"); // :568 — T2: no on-screen reason'
 build_tooth t2-silent foh_tbuild.c
 bites t2-silent '...and the refusal is a STRING ON SCREEN, not just a deny sound'
 grep -qF 'ok  ...with the deny sound as well' "$BUILD/t2-silent/wit.out" \
@@ -460,6 +467,44 @@ perturb t6-addcode foh.c \
 build_tooth t6-addcode foh.c
 bites t6-addcode 'A flips to the CUSTOM page (was: refused addcode)'
 
+# --- [T7] SCALE stops freezing the crosshair --------------------------------
+# targetbuilder.js:172-174 is `if (targetTool === 8) { multi = 0; }` and it is
+# the WHOLE of DEVIATION D55: the d-pad conflict this device would otherwise
+# have with the SCALE tool is solved by upstream's own freeze, so nothing is
+# rebound. MEASURED: this line was MISSING from the first T8 implementation
+# and only leg [9] noticed. A tooth is the only thing that keeps it noticing.
+echo "=== [T7] tooth: SCALE stops freezing the crosshair (D55's mechanism)"
+perturb t7-scalefreeze foh_tbuild.c \
+  '  if (s->tbTool == FOH_TB_TOOL_SCALE) multi = 0.0;' \
+  '  // T7: no freeze'
+build_tooth t7-scalefreeze foh_tbuild.c
+bites t7-scalefreeze '...and the crosshair is FROZEN while SCALE is active (:172-174)'
+
+# --- [T8] DELETE stops following polygonMap ---------------------------------
+# Deleting a polygon must take the collision surfaces it OWNS with it
+# (:696-731). Leaving them behind is invisible on screen — the outline goes,
+# the physics stays — which is exactly the class of defect this project keeps
+# finding at seams, so it gets its own tooth rather than riding on [9]'s
+# polygon-count assertion.
+echo "=== [T8] tooth: deleting a polygon leaves its surfaces behind"
+perturb t8-orphan foh_tbuild.c \
+  '      if (!map_is_null(idx)) {
+        for (int j = 0; j < g_map[idx].count; j++) {' \
+  '      if (false) { // T8: do not follow polygonMap
+        for (int j = 0; j < g_map[idx].count; j++) {'
+build_tooth t8-orphan foh_tbuild.c
+bites t8-orphan '...taking its THREE owned surfaces with it (:696-731 polygonMap)'
+
+# The two T5-T8 teeth must be orthogonal to each other AND to the T4 legs:
+# a tooth that breaks the whole editor proves only that the build broke.
+grep -qF 'ok  A places one target' "$BUILD/t7-scalefreeze/wit.out" \
+  || fail "T7 broke the TARGET tool — the scale tooth is not orthogonal"
+grep -qF 'ok  A places one target' "$BUILD/t8-orphan/wit.out" \
+  || fail "T8 broke the TARGET tool — the polygon tooth is not orthogonal"
+grep -qF 'ok  six d-pad frames zoom in by one step (:747)' \
+  "$BUILD/t8-orphan/wit.out" \
+  || fail "T8 also broke SCALE — T7 and T8 are not orthogonal"
+
 # ORTHOGONALITY, MEASURED. T5 and T6 both live in foh.c and both break a
 # single entry point; if either cascaded into the other's legs they would be
 # one tooth wearing two names.
@@ -468,7 +513,7 @@ grep -qF 'ok  TARGET BUILDER -> the target-builder screen' \
   || fail "T6 also broke the BUILDER entry — T5 and T6 are not orthogonal"
 grep -qF 'ok  A flips to the CUSTOM page' "$BUILD/t1-clobber/wit.out" \
   || fail "T1 also broke the custom page — the clobber tooth is not orthogonal"
-echo "  teeth are orthogonal (T1 $(nfails t1-clobber), T2 $(nfails t2-silent), T5 $(nfails t5-refuse), T6 $(nfails t6-addcode) failure(s) each)"
+echo "  teeth are orthogonal (T1 $(nfails t1-clobber), T2 $(nfails t2-silent), T5 $(nfails t5-refuse), T6 $(nfails t6-addcode), T7 $(nfails t7-scalefreeze), T8 $(nfails t8-orphan) failure(s) each)"
 
 # --- [5] hygiene -------------------------------------------------------------
 git_dirty_after="$(tree_fingerprint)" \

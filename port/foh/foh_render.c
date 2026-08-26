@@ -2607,7 +2607,10 @@ static void tb_line(Raster *rz, int x0, int y0, int x1, int y1, RastCol c) {
   }
 }
 
-static const char *const kTbTool[FOH_TB_TOOLS] = {"TARGET", "MOVE", "DELETE"};
+// Tool / type names come from foh_tbuild.c, which owns the cycle: a name
+// table here would be a SECOND list to keep in step, and an unbuilt tool
+// would still have a label. foh_tb_tool_name returns NULL for anything not
+// in the cycle.
 static const char *const kTbPause[FOH_TB_PAUSE_ROWS] = {"LOAD", "SAVE",
                                                         "DELETE", "QUIT"};
 static const int kTbGridPx[5] = {80, 40, 20, 10, 0};
@@ -2652,28 +2655,107 @@ static void render_tbuild(const FohState *s, Raster *rz) {
   // the blastzone edge of the drawn area, so "off the stage" is visible
   rrect(rz, 0, TB_DY, RAST_W, 150, 0, (RastCol){90, 80, 60, 256});
 
-  // collision surfaces (T4 edits none of them — D51's floor, or the loaded
-  // stage's own geometry)
+  // The DELETE tool tints whatever it is hovering red, the way upstream's
+  // red X does (:1416-1432); every other tool tints it with the accent.
+  const RastCol kRed = {236, 60, 60, 256};
+  const RastCol hovCol =
+      (s->tbTool == FOH_TB_TOOL_DELETE) ? kRed : kAccent;
+  // the four damage types, so a damaging surface is not a surface that looks
+  // ordinary and hurts (fire / electric / slash / darkness, in list order)
+  static const RastCol kDmg[4] = {{236, 120, 40, 256},
+                                  {110, 190, 240, 256},
+                                  {230, 230, 120, 256},
+                                  {170, 110, 210, 256}};
+
+  // background plane first, dimmer: it has no collision and must not read as
+  // geometry the player can stand on
+  const RastCol kBgPlane = {96, 96, 120, 256};
+  for (int p = 0; p < v.nPoly; p++) {
+    if (!v.polyBg[p]) continue;
+    for (int k = 0; k < v.polyCount[p]; k++) {
+      const int a = v.polyStart[p] + k;
+      const int b = v.polyStart[p] + ((k + 1) % v.polyCount[p]);
+      tb_line(rz, tb_sx(v.polyX[a], v.scale), tb_sy(v.polyY[a], v.scale),
+              tb_sx(v.polyX[b], v.scale), tb_sy(v.polyY[b], v.scale), kBgPlane);
+    }
+  }
+  // collision surfaces and background lines
   for (int i = 0; i < v.nLine; i++) {
+    const bool hov = (s->tbHoverKind == v.lineKind[i] &&
+                      s->tbHoverIdx == v.lineIdx[i]);
+    RastCol c = white;
+    if (v.lineKind[i] == FOH_TB_H_LINE) c = kBgPlane;
+    if (v.lineDamage[i] >= 0) c = kDmg[v.lineDamage[i]];
+    if (hov) c = hovCol;
     tb_line(rz, tb_sx(v.lx0[i], v.scale), tb_sy(v.ly0[i], v.scale),
-            tb_sx(v.lx1[i], v.scale), tb_sy(v.ly1[i], v.scale), white);
+            tb_sx(v.lx1[i], v.scale), tb_sy(v.ly1[i], v.scale), c);
+  }
+  // foreground polygon OUTLINES, drawn over their own surfaces so a polygon
+  // reads as one object rather than as N unrelated lines
+  for (int p = 0; p < v.nPoly; p++) {
+    if (v.polyBg[p]) continue;
+    const bool hov = (s->tbHoverKind == FOH_TB_H_POLYGON && s->tbHoverIdx == p);
+    const RastCol c = hov ? hovCol : (RastCol){170, 210, 255, 256};
+    for (int k = 0; k < v.polyCount[p]; k++) {
+      const int a = v.polyStart[p] + k;
+      const int b = v.polyStart[p] + ((k + 1) % v.polyCount[p]);
+      tb_line(rz, tb_sx(v.polyX[a], v.scale), tb_sy(v.polyY[a], v.scale),
+              tb_sx(v.polyX[b], v.scale), tb_sy(v.polyY[b], v.scale), c);
+    }
+  }
+  // ledges — the one thing on this screen with no shape of its own, so it
+  // gets a mark at the point its triple resolves to
+  for (int i = 0; i < v.nLedge; i++) {
+    const int x = tb_sx(v.ledgeX[i], v.scale), y = tb_sy(v.ledgeY[i], v.scale);
+    fill_rect(rz, x - 1, y - 3, 3, 3, (RastCol){120, 240, 160, 256});
+  }
+  // the LEDGE tool's own hover cursor, which upstream keeps separate from
+  // hoverItem (:74 ledgeHoverItem)
+  if (s->tbLedgeKind != FOH_TB_H_NONE) {
+    for (int i = 0; i < v.nLine; i++) {
+      if (v.lineKind[i] != s->tbLedgeKind || v.lineIdx[i] != s->tbLedgeIdx) {
+        continue;
+      }
+      const double wx = s->tbLedgeSide == 0 ? v.lx0[i] : v.lx1[i];
+      const double wy = s->tbLedgeSide == 0 ? v.ly0[i] : v.ly1[i];
+      const int x = tb_sx(wx, v.scale), y = tb_sy(wy, v.scale);
+      rrect(rz, x - 3, y - 3, 7, 7, 0, kAccent);
+      break;
+    }
   }
   // starting points — hollow, so they cannot be mistaken for targets
   for (int i = 0; i < v.nSp; i++) {
     const int x = tb_sx(v.spx[i], v.scale), y = tb_sy(v.spy[i], v.scale);
-    const int hov = s->tbHover == FOH_TB_SP + i;
-    rrect(rz, x - 2, y - 3, 5, 7, 0, hov ? kAccent : kDim);
+    const bool hov = (s->tbHoverKind == FOH_TB_H_STARTINGPOINT &&
+                      s->tbHoverIdx == i);
+    rrect(rz, x - 2, y - 3, 5, 7, 0, hov ? hovCol : kDim);
   }
   // targets
   for (int i = 0; i < v.nTarget; i++) {
     const int x = tb_sx(v.tx[i], v.scale), y = tb_sy(v.ty[i], v.scale);
-    const int hov = s->tbHover == i;
-    // DELETE tints its hover red, the way upstream's red X does (:1416-1432)
-    const RastCol c = !hov ? (RastCol){232, 108, 64, 256}
-                     : s->tbTool == FOH_TB_TOOL_DELETE
-                         ? (RastCol){236, 60, 60, 256}
-                         : kAccent;
-    fill_rect(rz, x - 2, y - 2, 5, 5, c);
+    const bool hov = (s->tbHoverKind == FOH_TB_H_TARGET && s->tbHoverIdx == i);
+    fill_rect(rz, x - 2, y - 2, 5, 5,
+              hov ? hovCol : (RastCol){232, 108, 64, 256});
+  }
+  // the IN-PROGRESS drag (PLATFORM / WALL) and polygon, read straight off
+  // FohState because they are not part of the document yet. Both are stored
+  // in upstream CANVAS units, which is 5 device pixels per unit.
+  if (s->tbHoldA && (s->tbTool == FOH_TB_TOOL_PLATFORM ||
+                     s->tbTool == FOH_TB_TOOL_WALL)) {
+    tb_line(rz, (int)(s->tbDragX0 / 5.0), (int)(s->tbDragY0 / 5.0) + TB_DY,
+            (int)(s->tbDragX1 / 5.0), (int)(s->tbDragY1 / 5.0) + TB_DY,
+            kAccent);
+  }
+  if (s->tbDrawingPoly) {
+    for (int k = 0; k + 1 < s->tbPolyN; k++) {
+      tb_line(rz, (int)(s->tbPolyX[k] / 5.0), (int)(s->tbPolyY[k] / 5.0) + TB_DY,
+              (int)(s->tbPolyX[k + 1] / 5.0),
+              (int)(s->tbPolyY[k + 1] / 5.0) + TB_DY, kAccent);
+    }
+    if (s->tbConnectInd) { // :389-391 — "release here and it closes"
+      rrect(rz, (int)(s->tbConnectX / 5.0) - 3,
+            (int)(s->tbConnectY / 5.0) + TB_DY - 3, 7, 7, 0, kAccent);
+    }
   }
   // the crosshair: two bars, drawn last so it is never hidden by a target
   {
@@ -2686,13 +2768,23 @@ static void render_tbuild(const FohState *s, Raster *rz) {
   // "replace [the 10 icons] with one centred tool name plus the existing
   // 120-frame toast", which upstream already draws at :1150-1159).
   {
-    char line[48];
-    snprintf(line, sizeof line, "%s   GRID %d", kTbTool[s->tbTool],
-             kTbGridPx[s->tbGrid]);
+    char line[64];
+    // Both names come from the VIEW, never from a symbol in foh_tbuild.c:
+    // this TU is linked by eleven witnesses that do not link the builder,
+    // and a direct call would break every one of them (measured).
+    const char *tool = v.toolName ? v.toolName : "?";
+    // The two tools that carry a TYPE show it, because D54 moved the cycle
+    // to X+shoulder and an invisible modal type is a trap on a 240px screen.
+    const char *type = v.typeName;
     if (s->tbGrid == 4) {
-      snprintf(line, sizeof line, "%s   GRID OFF", kTbTool[s->tbTool]);
+      snprintf(line, sizeof line, "%s%s%s   GRID OFF", tool, type ? " " : "",
+               type ? type : "");
+    } else {
+      snprintf(line, sizeof line, "%s%s%s   GRID %d", tool, type ? " " : "",
+               type ? type : "", kTbGridPx[s->tbGrid]);
     }
     foh_text(rz, 8, 26, 1, line, s->tbToolTimer > 0 ? kAccent : kText);
+    if (s->tbDrawMode) foh_text(rz, 8, 38, 1, "BACKGROUND", kDim);
   }
   {
     char sl[32];
@@ -2703,7 +2795,7 @@ static void render_tbuild(const FohState *s, Raster *rz) {
     }
     foh_text(rz, RAST_W - 8 - foh_text_width(sl, 1), 26, 1, sl, kDim);
   }
-  foh_text(rz, 8, 200, 1, "L R TOOL   Y GRID   X FINE", kDim);
+  foh_text(rz, 8, 200, 1, "L R TOOL   X+LR TYPE   Y GRID", kDim);
   foh_text(rz, 8, 212, 1, "START MENU   B BACK", kDim);
 
   // THE STATUS LINE. Every refusal in this screen lands here as words.

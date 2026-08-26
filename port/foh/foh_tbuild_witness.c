@@ -119,7 +119,7 @@ static void to_builder(FohState *s) {
 
 // Put the crosshair on a world point WITHOUT hand-poking: hold the d-pad.
 // The grid is left at its default, so the landing point is the snapped one.
-static bool crosshair_to(FohState *s, double wx, double wy) {
+static bool crosshair_to_held(FohState *s, double wx, double wy, bool holdA) {
   PlatformInput in;
   for (int axis = 0; axis < 2; axis++) {
     double prev = 1e300;
@@ -134,14 +134,105 @@ static bool crosshair_to(FohState *s, double wx, double wy) {
       // X is the FINE modifier (D50), which is what makes a small target
       // reachable at all: without it one frame moves 5 units.
       in.x = true;
+      in.a = holdA; // A45 T5: a drag is A HELD ACROSS the movement
       if (axis == 0) { if (cur < aim) in.right = true; else in.left = true; }
       else { if (cur < aim) in.up = true; else in.down = true; }
       foh_tick(s, &in);
     }
   }
-  tick_neutral(s, 1);
+  if (!holdA) tick_neutral(s, 1);
   const double dx = s->tbX - wx, dy = s->tbY - wy;
   return dx > -6.0 && dx < 6.0 && dy > -6.0 && dy < 6.0;
+}
+
+static bool crosshair_to(FohState *s, double wx, double wy) {
+  return crosshair_to_held(s, wx, wy, false);
+}
+
+// A45 T5: press A at (x0,y0), drag to (x1,y1), release. The three-phase
+// shape is upstream's own (initiate on the A EDGE, stretch while HELD,
+// build on RELEASE) and is why a drag cannot be written as two presses.
+static void drag(FohState *s, double x0, double y0, double x1, double y1) {
+  PlatformInput in;
+  crosshair_to(s, x0, y0);
+  memset(&in, 0, sizeof in);
+  in.a = true;
+  foh_tick(s, &in); // the A edge: initiate
+  snd_drain(s);
+  crosshair_to_held(s, x1, y1, true);
+  g_nsnd = 0;
+  memset(&in, 0, sizeof in);
+  foh_tick(s, &in); // release
+  snd_drain(s);
+  tick_neutral(s, 1);
+}
+
+// Count the segments of one collision list in the view.
+static int tb_lines(const FohState *s, int kind) {
+  static FohTbView v;
+  if (!foh_tbuild_ops) return -1;
+  foh_tbuild_ops->view(s, &v);
+  int n = 0;
+  for (int i = 0; i < v.nLine; i++) {
+    if (v.lineKind[i] == kind) n++;
+  }
+  return n;
+}
+
+// Every COLLISION segment (the five physics lists), which is what a polygon
+// adds to. Counting one list is wrong: which list an edge lands in depends
+// on its ANGLE and on the loop's winding (:351-367), so a triangle need not
+// produce a ground at all.
+static int tb_collision(const FohState *s) {
+  static FohTbView v;
+  if (!foh_tbuild_ops) return -1;
+  foh_tbuild_ops->view(s, &v);
+  int n = 0;
+  for (int i = 0; i < v.nLine; i++) {
+    if (v.lineKind[i] != FOH_TB_H_LINE) n++;
+  }
+  return n;
+}
+
+static int tb_polys(const FohState *s) {
+  static FohTbView v;
+  if (!foh_tbuild_ops) return -1;
+  foh_tbuild_ops->view(s, &v);
+  return v.nPoly;
+}
+
+static int tb_ledges(const FohState *s) {
+  static FohTbView v;
+  if (!foh_tbuild_ops) return -1;
+  foh_tbuild_ops->view(s, &v);
+  return v.nLedge;
+}
+
+static int tb_damaged(const FohState *s) {
+  static FohTbView v;
+  if (!foh_tbuild_ops) return -1;
+  foh_tbuild_ops->view(s, &v);
+  int n = 0;
+  for (int i = 0; i < v.nLine; i++) {
+    if (v.lineDamage[i] >= 0) n++;
+  }
+  return n;
+}
+
+// X + shoulder is the TYPE cycle (DEVIATION D54): the same shoulder that
+// cycles the tool when X is not held.
+static void type_next(FohState *s) {
+  PlatformInput in;
+  g_nsnd = 0;
+  memset(&in, 0, sizeof in);
+  in.x = true;
+  foh_tick(s, &in); // X down, no shoulder yet: no edge
+  in.r = true;
+  foh_tick(s, &in);
+  snd_drain(s);
+  memset(&in, 0, sizeof in);
+  foh_tick(s, &in);
+  snd_drain(s);
 }
 
 static int tb_targets(const FohState *s) {
@@ -161,8 +252,11 @@ static void pause_row(FohState *s, int row) {
 // Cycle R until the wanted tool is current. Explicit, because a leg that
 // ASSUMES which tool it inherited breaks the moment an earlier leg changes
 // one — measured: it did, and it cascaded five assertions.
+// FOH_TB_TOOL_IDS is the id SPACE (upstream's ten); the cycle may be
+// shorter if a tool is not built. Bounding the walk by the id space is
+// therefore always enough and never assumes the cycle's length.
 static void tool_to(FohState *s, int tool) {
-  for (int i = 0; i < FOH_TB_TOOLS && s->tbTool != tool; i++) PRESS(s, r);
+  for (int i = 0; i < FOH_TB_TOOL_IDS && s->tbTool != tool; i++) PRESS(s, r);
 }
 
 static void pane_row(FohState *s, int row) {
@@ -248,7 +342,14 @@ int main(int argc, char **argv) {
 
   // --- [2] TARGET: place --------------------------------------------------
   printf("== [2] the TARGET tool places targets at the crosshair\n");
-  want(s.tbTool == FOH_TB_TOOL_TARGET, "the editor opens on the TARGET tool");
+  // A45 T5-T8 completed upstream's ten tools, so the port now opens where
+  // UPSTREAM opens: `targetTool = 0` is POLYGON (targetbuilder.js:26/:36).
+  // A45 T4 shipped three tools and renumbered them, and this assertion used
+  // to encode that renumbering; with the set complete, upstream's own
+  // default is the faithful one.
+  want(s.tbTool == FOH_TB_TOOL_POLYGON, "the editor opens on POLYGON (:26)");
+  tool_to(&s, FOH_TB_TOOL_TARGET);
+  want(s.tbTool == FOH_TB_TOOL_TARGET, "R reaches the TARGET tool");
   {
     const double x0 = s.tbX, y0 = s.tbY;
     HOLD(&s, right, 4);
@@ -286,7 +387,7 @@ int main(int argc, char **argv) {
   PRESS(&s, r);
   want(s.tbTool == FOH_TB_TOOL_MOVE, "R cycles TARGET -> MOVE");
   tick_neutral(&s, 1);
-  want(s.tbHover != FOH_TB_NONE,
+  want(s.tbHoverKind != FOH_TB_H_NONE,
        "the crosshair sitting on a target HOVERS it (findTarget, :1465)");
   {
     static FohTbView v;
@@ -318,14 +419,14 @@ int main(int argc, char **argv) {
   PRESS(&s, r);
   want(s.tbTool == FOH_TB_TOOL_DELETE, "R cycles MOVE -> DELETE");
   tick_neutral(&s, 1);
-  want(s.tbHover != FOH_TB_NONE, "DELETE hovers the target under the crosshair");
+  want(s.tbHoverKind != FOH_TB_H_NONE, "DELETE hovers the target under the crosshair");
   PRESS(&s, a);
   want(tb_targets(&s) == 1, "A deletes it (:656-658 splice)");
 
   // --- [8a] the 11th target refuses, VISIBLY -------------------------------
   printf("== [8a] the 11th target refuses ON SCREEN (R2's safe half)\n");
   PRESS(&s, l); // DELETE -> MOVE
-  PRESS(&s, l); // MOVE -> TARGET
+  PRESS(&s, l); // MOVE -> TARGET (upstream's 7 -> 6 -> 5)
   want(s.tbTool == FOH_TB_TOOL_TARGET, "L cycles back to TARGET");
   for (int i = 0; i < 12; i++) {
     // Every press is at a slightly different place, so none of them is a
@@ -418,7 +519,7 @@ int main(int argc, char **argv) {
       static FohTbView v;
       foh_tbuild_ops->view(&s, &v);
       crosshair_to(&s, v.tx[0], v.ty[0]);
-      if (s.tbHover == FOH_TB_NONE) break;
+      if (s.tbHoverKind == FOH_TB_H_NONE) break;
       PRESS(&s, a);
     }
     want(tb_targets(&s) == 0, "every target is deleted");
@@ -532,6 +633,246 @@ int main(int argc, char **argv) {
     PRESS(&s, a); // hand is homed on slot 0
     want(s.screen == FOH_TMATCH && s.tssStage == 0,
          "A on authored slot 0 still launches tstage 0");
+  }
+
+  // --- [9] A45 T5-T8: the seven tools T4 did not ship ---------------------
+  //
+  // Driven through the real foh_tick like every other leg. A tool that is
+  // built but never exercised is a claim, not evidence — and this file is
+  // the only thing standing between "the tool cycle has ten entries" and
+  // "seven of them do something".
+  printf("== [9] T5-T8: PLATFORM, WALL, LEDGE, DAMAGE, POLYGON, SCALE, DRAW\n");
+  {
+    foh_init(&s);
+    to_builder(&s);
+    for (int i = 0; i < 4; i++) PRESS(&s, y); // grid -> FREE, so aim is exact
+    want(s.tbGrid == 4, "[9] the grid is free");
+
+    // --- T5 PLATFORM (:412-458) --------------------------------------------
+    tool_to(&s, FOH_TB_TOOL_PLATFORM);
+    want(s.tbTool == FOH_TB_TOOL_PLATFORM, "the PLATFORM tool is reachable");
+    const int plat0 = tb_lines(&s, FOH_TB_H_PLATFORM);
+    drag(&s, -60.0, 40.0, -20.0, 40.0);
+    want(tb_lines(&s, FOH_TB_H_PLATFORM) == plat0 + 1,
+         "a wide shallow drag builds a platform (:441 |angle| <= PI/6)");
+    want(sound_fired(&s, "blunthit"), "...playing blunthit on release (:453)");
+    // :429 — the WIDTH test is in CANVAS px and needs >= 10, i.e. >= 3.33
+    // world units at scale 3. One world unit is 3 canvas px: too small.
+    const int plat1 = tb_lines(&s, FOH_TB_H_PLATFORM);
+    drag(&s, 20.0, 40.0, 21.0, 40.0);
+    want(tb_lines(&s, FOH_TB_H_PLATFORM) == plat1,
+         "a 1-unit drag builds nothing (:429 width < 10 canvas px)");
+    want(s.tbMsgTimer > 0 && s.tbMsg && strcmp(s.tbMsg, "too small") == 0,
+         "...and says `too small` ON SCREEN, not just a sound");
+    // a steep drag: wide enough, but past PI/6
+    drag(&s, 40.0, 10.0, 70.0, 70.0);
+    want(tb_lines(&s, FOH_TB_H_PLATFORM) == plat1,
+         "a steep drag builds nothing (:441 the angle guard)");
+    want(s.tbMsg && strcmp(s.tbMsg, "bad angle") == 0,
+         "...and says `bad angle` ON SCREEN");
+
+    // --- T5 WALL (:459-512) + DEVIATION D54 --------------------------------
+    tool_to(&s, FOH_TB_TOOL_WALL);
+    want(s.tbTool == FOH_TB_TOOL_WALL, "the WALL tool is reachable");
+    want(s.tbWallType == 0, "...starting on GROUND (:27 wallTypeIndex)");
+    type_next(&s);
+    want(s.tbWallType == 1, "X+R cycles the wall TYPE, not the tool (D54)");
+    want(s.tbTool == FOH_TB_TOOL_WALL, "...and the tool is unchanged");
+    want(sound_fired(&s, "menuSelect"), "...playing menuSelect (:233)");
+    PRESS(&s, r);
+    want(s.tbTool != FOH_TB_TOOL_WALL,
+         "R WITHOUT X still cycles the tool (D54 adds, never replaces)");
+    tool_to(&s, FOH_TB_TOOL_WALL);
+    type_next(&s); // -> wallL
+    type_next(&s);
+    want(s.tbWallType == 2 || s.tbWallType == 3,
+         "the type cycle reaches the wall types");
+    // BOUNDED, always. Under tooth T5 the builder is unreachable and this
+    // state never changes — an unbounded `while` there is not a failing
+    // assertion, it is a hung check. (Measured: it hung.)
+    for (int i = 0; i < FOH_TB_WALLTYPES && s.tbWallType != 2; i++) type_next(&s);
+    const int wl0 = tb_lines(&s, FOH_TB_H_WALLL);
+    drag(&s, -80.0, -20.0, -80.0, 30.0);
+    want(tb_lines(&s, FOH_TB_H_WALLL) == wl0 + 1,
+         "a vertical drag builds a wallL (:493 non-axis angle)");
+    // :481-492 — an L wall within 2 WORLD units of an R wall refuses. Build
+    // the R wall first, then try an L wall on top of it.
+    for (int i = 0; i < FOH_TB_WALLTYPES && s.tbWallType != 3; i++) type_next(&s);
+    drag(&s, 60.0, -20.0, 60.0, 30.0);
+    want(tb_lines(&s, FOH_TB_H_WALLR) >= 1, "...and a wallR the same way");
+    for (int i = 0; i < FOH_TB_WALLTYPES && s.tbWallType != 2; i++) type_next(&s);
+    const int wl1 = tb_lines(&s, FOH_TB_H_WALLL);
+    drag(&s, 60.0, -20.0, 60.0, 30.0);
+    want(tb_lines(&s, FOH_TB_H_WALLL) == wl1,
+         "an L wall ON an R wall refuses (:484 lineDistanceToLines < 2)");
+    want(s.tbMsg && strcmp(s.tbMsg, "walls too close") == 0,
+         "...and says `walls too close` ON SCREEN");
+
+    // --- T6 LEDGE (:513-541) -----------------------------------------------
+    tool_to(&s, FOH_TB_TOOL_LEDGE);
+    want(s.tbTool == FOH_TB_TOOL_LEDGE, "the LEDGE tool is reachable");
+    // D51's template floor runs -100..100 at y = 0; its right END is where
+    // a ledge belongs.
+    const int led0 = tb_ledges(&s);
+    crosshair_to(&s, 98.0, 0.0);
+    tick_neutral(&s, 1);
+    want(s.tbLedgeKind != FOH_TB_H_NONE,
+         "hovering a ground END arms the ledge cursor (:516-523)");
+    want(s.tbLedgeSide == 1, "...on the RIGHT end, by manhattan distance");
+    PRESS(&s, a);
+    want(tb_ledges(&s) == led0 + 1, "A adds a ledge (:534-537)");
+    PRESS(&s, a);
+    want(tb_ledges(&s) == led0,
+         "...and A again REMOVES it — upstream's toggle (:526-533)");
+    PRESS(&s, a); // leave one behind for the DELETE renumbering leg
+
+    // --- T6 DAMAGE (:542-559) ----------------------------------------------
+    tool_to(&s, FOH_TB_TOOL_DAMAGE);
+    want(s.tbTool == FOH_TB_TOOL_DAMAGE, "the DAMAGE tool is reachable");
+    want(s.tbDamageType == 0, "...starting on FIRE (:31 damageTypeIndex)");
+    crosshair_to(&s, 0.0, 0.0);
+    tick_neutral(&s, 1);
+    want(s.tbHoverKind == FOH_TB_H_GROUND, "it hovers the floor");
+    PRESS(&s, a);
+    want(tb_damaged(&s) == 1, "A tags the surface with a damage type");
+    PRESS(&s, a);
+    want(tb_damaged(&s) == 0,
+         "...and A again writes {damageType: null}, which is INERT (:554)");
+    type_next(&s);
+    want(s.tbDamageType == 1, "X+R cycles the damage TYPE (D54)");
+    PRESS(&s, a);
+    want(tb_damaged(&s) == 1, "...and the new type tags");
+    // The SIM still refuses a damaging stage at load (A45 T6 owes the
+    // golden), so SAVE must refuse it HERE, with the reason on screen —
+    // never write a file that cannot be launched.
+    PRESS(&s, start);
+    pause_row(&s, FOH_TB_PAUSE_SAVE);
+    PRESS(&s, a);
+    pane_row(&s, 5);
+    PRESS(&s, a);
+    want(s.tbMsgTimer > 0 && s.tbMsg &&
+             strstr(s.tbMsg, "damaging") != NULL,
+         "SAVE refuses a damaging stage, naming the rule (R1 is still open)");
+    want(s.screen == FOH_TBUILD, "...and stays in the builder");
+    PRESS(&s, b);
+    PRESS(&s, b); // out of the pane, out of the pause menu
+    tool_to(&s, FOH_TB_TOOL_DAMAGE);
+    crosshair_to(&s, 0.0, 0.0);
+    tick_neutral(&s, 1);
+    for (int i = 0; i < FOH_TB_DAMAGETYPES && s.tbDamageType != 1; i++) type_next(&s);
+    PRESS(&s, a); // toggle the damage back off
+    want(tb_damaged(&s) == 0, "the damage is cleared again");
+
+    // --- T7 POLYGON (:277-411) ---------------------------------------------
+    tool_to(&s, FOH_TB_TOOL_POLYGON);
+    want(s.tbTool == FOH_TB_TOOL_POLYGON, "the POLYGON tool is reachable");
+    const int poly0 = tb_polys(&s);
+    const int g0 = tb_collision(&s);
+    crosshair_to(&s, -40.0, -60.0);
+    PRESS(&s, a);
+    want(s.tbDrawingPoly, "A starts a polygon (:279-287)");
+    crosshair_to(&s, 40.0, -60.0);
+    PRESS(&s, a);
+    crosshair_to(&s, 0.0, -20.0);
+    PRESS(&s, a);
+    want(tb_polys(&s) == poly0, "...three vertices, still open");
+    // B pops one — DEVIATION D56: while drawing, B is upstream's own
+    // vertex pop (:396-408), NOT the screen's back edge.
+    PRESS(&s, b);
+    want(s.screen == FOH_TBUILD, "B while drawing does NOT leave (D56)");
+    want(s.tbDrawingPoly, "...it pops a vertex and keeps drawing");
+    crosshair_to(&s, 0.0, -20.0);
+    PRESS(&s, a);
+    crosshair_to(&s, -40.0, -60.0); // back to the origin: close
+    PRESS(&s, a);
+    want(!s.tbDrawingPoly, "returning to the origin CLOSES it (:292, :305)");
+    want(tb_polys(&s) == poly0 + 1, "...and the polygon is in the document");
+    want(tb_collision(&s) >= g0 + 3,
+         "...having classified its three edges into collision surfaces (:351-367)");
+    // A polygon's edges are ground/ceiling/wall by ANGLE, so a closed loop
+    // must produce more than one KIND — one kind would mean the classifier
+    // collapsed.
+    {
+      int kinds = 0;
+      if (tb_lines(&s, FOH_TB_H_GROUND) > 1) kinds++;   // + D51's floor
+      if (tb_lines(&s, FOH_TB_H_CEILING) > 0) kinds++;
+      if (tb_lines(&s, FOH_TB_H_WALLL) > wl1) kinds++;
+      if (tb_lines(&s, FOH_TB_H_WALLR) > 1) kinds++;
+      want(kinds >= 2, "...into MORE THAN ONE kind (the angle classifier)");
+    }
+    // DELETE removes the polygon AND everything polygonMap says it owns.
+    const int gBefore = tb_collision(&s);
+    tool_to(&s, FOH_TB_TOOL_DELETE);
+    crosshair_to(&s, 0.0, -50.0); // inside the triangle
+    tick_neutral(&s, 1);
+    want(s.tbHoverKind == FOH_TB_H_POLYGON, "DELETE hovers the polygon");
+    PRESS(&s, a);
+    want(tb_polys(&s) == poly0, "A deletes it");
+    want(tb_collision(&s) == gBefore - 3,
+         "...taking its THREE owned surfaces with it (:696-731 polygonMap)");
+    want(tb_ledges(&s) >= 1,
+         "...and the ledge on the UNRELATED template floor survives");
+
+    // --- T8 SCALE (:739-764) -----------------------------------------------
+    tool_to(&s, FOH_TB_TOOL_SCALE);
+    want(s.tbTool == FOH_TB_TOOL_SCALE, "the SCALE tool is reachable");
+    {
+      static FohTbView v;
+      foh_tbuild_ops->view(&s, &v);
+      const double sc0 = v.scale;
+      const double cx = s.tbX, cy = s.tbY;
+      HOLD(&s, up, 6); // :741-750 fires on the SIXTH frame
+      foh_tbuild_ops->view(&s, &v);
+      want(v.scale > sc0, "six d-pad frames zoom in by one step (:747)");
+      want(s.tbX == cx && s.tbY == cy,
+           "...and the crosshair is FROZEN while SCALE is active (:172-174)");
+      HOLD(&s, up, 300); // far past the clamp
+      foh_tbuild_ops->view(&s, &v);
+      want(v.scale <= 6.0, "...clamped at 6 (:749-751)");
+      HOLD(&s, down, 400);
+      foh_tbuild_ops->view(&s, &v);
+      want(v.scale >= 2.0, "...and at 2 going the other way (:759-761)");
+      for (int i = 0; i < 64 && v.scale < 3.0; i++) {
+        HOLD(&s, up, 6);
+        foh_tbuild_ops->view(&s, &v);
+      }
+    }
+
+    // --- T8 DRAW MODE (:765-770) -------------------------------------------
+    tool_to(&s, FOH_TB_TOOL_DRAWMODE);
+    want(s.tbTool == FOH_TB_TOOL_DRAWMODE, "the DRAW MODE tool is reachable");
+    want(s.tbDrawMode == 0, "the collision plane is the default");
+    PRESS(&s, a);
+    want(s.tbDrawMode == 1, "A switches to the background plane");
+    want(s.tbMsg && strstr(s.tbMsg, "background") != NULL,
+         "...and SAYS SO — an invisible mode switch is a trap at 240px");
+    // :226-227 and :269-273 — while drawMode is on, WALL/LEDGE/DAMAGE are
+    // unreachable: cycling FORWARD out of PLATFORM skips straight to MOVE,
+    // and the backward arm is caught by the second coercion. So tool_to()
+    // can never land on WALL, and it exhausts its bound instead — assert
+    // the reachable property directly rather than through the helper.
+    tool_to(&s, FOH_TB_TOOL_PLATFORM);
+    want(s.tbTool == FOH_TB_TOOL_PLATFORM, "PLATFORM is reachable in drawMode");
+    PRESS(&s, r);
+    want(s.tbTool == FOH_TB_TOOL_MOVE,
+         "R from PLATFORM skips WALL/LEDGE/DAMAGE to MOVE (:226-227)");
+    PRESS(&s, l);
+    want(s.tbTool != FOH_TB_TOOL_DAMAGE && s.tbTool != FOH_TB_TOOL_LEDGE &&
+             s.tbTool != FOH_TB_TOOL_WALL,
+         "...and L back out of MOVE cannot land on one either (:269-273)");
+    tool_to(&s, FOH_TB_TOOL_PLATFORM);
+    // and a background LINE is a real thing the plane can hold
+    {
+      const int bl0 = tb_lines(&s, FOH_TB_H_LINE);
+      drag(&s, -60.0, 70.0, -20.0, 70.0);
+      want(tb_lines(&s, FOH_TB_H_LINE) == bl0 + 1,
+           "the PLATFORM tool draws a background LINE while drawMode (:436)");
+      want(tb_lines(&s, FOH_TB_H_PLATFORM) == plat1,
+           "...and adds NO collision platform");
+    }
+    tool_to(&s, FOH_TB_TOOL_DRAWMODE);
+    PRESS(&s, a);
+    want(s.tbDrawMode == 0, "A switches back to the collision plane");
   }
 
   if (g_fails) {

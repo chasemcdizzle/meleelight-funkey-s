@@ -110,6 +110,16 @@ The **value model is already complete** (`stage_code.h`): `polygon`,
 `DamageType` tagged value (`stage_types.h:20-44`) all exist and round-trip
 through `mlk_encode`/`mlk_parse`. **T5–T8 add no fields to `MlkStage`.**
 
+**CORRECTED WHILE BUILDING (2026-08-26).** `polygonMapIsNull[]` records the
+SHAPE of upstream BUG 2 but not the map's CONTENTS — because a parsed stage
+never has any. The builder does, for a polygon drawn this session. That map
+therefore lives in `foh_tbuild.c` module state beside `g_doc`, not in
+`MlkStage`: the codec could never write it, adding it would move the pinned
+`sizeof(MlkStage)` for nothing, and keeping it out reproduces upstream's
+observable behaviour exactly — a polygon you drew moves with its surfaces
+and one you loaded does not. `map_all_null()` is called at every document
+boundary, which is what makes BUG 2 deliberate rather than accidental.
+
 Caps that bind (all Cited, all already `_Static_assert`-cross-checked by
 `check-tbuild.sh` leg [1]): `MLK_MAX_POLYGONS` 16 (upstream 120),
 `MLK_MAX_POLY_POINTS` 32, `ML_MAX_SURFACES` 64 per list,
@@ -136,6 +146,8 @@ way SCALE does — it would cost precision movement on exactly the two tools
 
 ### D55 — SCALE keeps upstream's d-pad, because upstream already froze the
 ### crosshair for it
+*(Registered. And the freeze turned out to be the thing that was missing from
+the first implementation — see §9.)*
 **Cited** `:172-174`: `if (targetTool === 8) { multi = 0; }`. The crosshair
 does not move while SCALE is active, so d-pad up/down is free **by upstream's
 own construction**. T8 is therefore verbatim — this row exists to record that
@@ -330,3 +342,31 @@ hover, and T8's drawMode coercion needs the final tool list.
 3. **Whether `MLK_MAX_POLYGONS` 16 is enough** for a stage a player wants to
    build. Refusing loudly is shipped either way; raising it is an owner
    ruling with a `sizeof(MlSim)` cost, still unmeasured.
+
+---
+
+## 9. What building it changed about this spec
+
+Recorded rather than quietly edited, because a spec that silently agrees with
+whatever got built is not evidence of anything.
+
+1. **`polygonMap`'s contents are builder state, not value-model state** —
+   §1's correction above.
+2. **`getConnected` landed before any tool did**, as its own commit, because
+   §0 turned out to be a live defect rather than a T7 dependency.
+3. **The tool NAMES had to travel in the view, not as exported symbols.**
+   The first version called `foh_tb_tool_name()` from `foh_render.c`, which
+   gave that TU an unconditional LINK dependency on `foh_tbuild.c` — the
+   exact coupling the `foh_tbuild_ops` pointer exists to prevent. It broke
+   eleven witnesses that deliberately do not link the builder, and it broke
+   them at the linker rather than at a check, which is the only reason it was
+   cheap to find. Anything the renderer needs now comes through `view()`.
+4. **D55's freeze (`multi = 0` under SCALE) was missing** from the first T8
+   implementation. Nothing about SCALE looks wrong without it — the tool
+   zooms correctly — and the crosshair simply drifts while it does. Leg [9]
+   caught it; it now has its own tooth.
+5. **Three unbounded `while` loops in the witness hung the check** under
+   tooth T5, where the builder is unreachable and the state they wait on
+   never changes. A loop waiting on a state a tooth can freeze must be
+   bounded, always: an unbounded one is not a failing assertion, it is a
+   check that never returns.
