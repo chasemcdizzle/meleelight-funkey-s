@@ -160,3 +160,13 @@ ssb64-funkey-s (sibling project, same owner) — process prior art
   this port's own face rather than SDL_ttf + OpenSans-Bold. The OS assets
   under /usr/games/menu_resources/ are read from the device at runtime and
   are NOT redistributed. Attribution kept in the foh_pause.h header.
+
+write-legible-c — MIT, Copyright (c) 2026 7etsuo
+
+  docs/c-legibility.md carries, below its marker, a byte-verbatim copy of
+  github.com/7etsuo/write-legible-c @ 2f624ed's
+  plugins/write-legible-c/skills/write-legible-c/references/c-standard.md
+  (sha256 9932bfc9fa4e8efa290d6cd6e6b9628486e293e6dc6a10fc1d136d035fb0e237).
+  Documentation only — no source code from that repo is compiled into any
+  artifact. Adopted as a scoped coding standard for ORIGINAL (non-translation)
+  C planes per the preamble's owner ruling (2026-08-26).

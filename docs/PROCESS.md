@@ -254,6 +254,22 @@ the entire real corpus before shipping — zero false rejections on genuine
 data. Apply up front to anything decision-bearing; retroactively the
 moment an arc raises the same input-trust objection twice.
 
+### §3.2 C-legibility lens for original-plane C (owner ruling 2026-08-26)
+
+When a reviewed diff touches ORIGINAL-plane C — code with no upstream JS to
+mirror: `port/foh/`, `port/gfx/`, `port/sim/target/`, `port/sim/device/`
+tools, the future M4 mixer — the driver-authored reviewer prompt MUST
+include the legibility lens from `docs/c-legibility.md` (scope + deltas in
+its preamble): the §14 pre-delivery checklist and, explicitly, the §16
+near-miss diagnosis ("passes generic review but is still structurally
+wrong": pasted logic blocks, data encoded as control flow, multiple
+concepts interleaved in one body). The prompt states the scope ruling to
+the reviewer verbatim: translation TUs are EXEMPT — faithfulness (HARD
+RULE 5) wins there, and a reviewer finding that "refactors" a translation
+TU toward the standard is itself a defect. Forward-only: the lens judges
+the new/touched code in the diff, never demands retrofit sweeps of
+untouched code.
+
 ## 4. Artifact identity pins (narrow form)
 
 - Every device check script sha256-verifies the ON-DEVICE binary against

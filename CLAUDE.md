@@ -1102,3 +1102,9 @@ phase-advance only). CHECKER rejects any non-runnable/placeholder check.
   driver + writer briefs (tiered Codex review arcs, pre-registration,
   identity pins, ground-truth ritual); current truth lives in
   `docs/STATE.md` (driver-updated every turn).
+- C legibility standard (owner ruling 2026-08-26): `docs/c-legibility.md`
+  (vendored 7etsuo/write-legible-c + scope preamble) governs ORIGINAL-plane
+  C (`port/foh/`, `port/gfx/`, `port/sim/target/`, `port/sim/device/`
+  tools, M4 mixer) FORWARD-ONLY — new/touched code, no retrofit sweeps.
+  Translation TUs are EXEMPT (HARD RULE 5 wins). Reviewer prompts for
+  original-plane diffs carry the §14+§16 lens per PROCESS.md §3.2.
