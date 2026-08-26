@@ -275,7 +275,20 @@ TEETH_PIN=25
 # 24 host+device logs. Held as ONE literal (see assert_direct_bypass).
 FOH_BYPASS_LINE='foh_dev foh: 0 ticks, 0 transitions, 0 shots, 0 render skips, 0 failed presents, launched=1'
 AUDIO_RATE=44100
-AUDIO_SAMPLES=512
+# The audio PERIOD is not this check's to name, and pinning the literal 512
+# stranded it: A28 (22a46db) derived the period from the frame budget and
+# raised it to 2048 to kill the owner's "constant audio buzz" — 512 frames
+# at 44100 Hz is 0.70 of one video frame — and this check had not been RUN
+# on hardware since, so the pin went stale rather than loud. This run does
+# not pass --audio-samples, so what the device reports IS the build's
+# default; read it from the SSOT with a strict grammar and a loud death.
+# Same class fix as check-device-foh.sh's, made in the same session.
+AUDIO_SAMPLES="$(grep -oE '^#define PLATFORM_AUDIO_SAMPLES_DEFAULT [0-9]+$' \
+  port/gfx/platform.h | awk '{print $3}')" || true
+case "$AUDIO_SAMPLES" in
+  [1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]) ;;
+  *) echo "FULLGAME FAIL: could not read PLATFORM_AUDIO_SAMPLES_DEFAULT out of port/gfx/platform.h (got '$AUDIO_SAMPLES')" >&2; exit 2 ;;
+esac
 AUDIO_CHANNELS=2
 SNDPACK_COUNT=180
 # the frozen MENU-DRIVEN launch witness the direct entry must reproduce
