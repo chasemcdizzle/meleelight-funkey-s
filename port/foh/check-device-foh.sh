@@ -229,15 +229,29 @@ FBWIT_VYRES_PIN=720
 # Producer byte pins (the check-foh-flows.sh discipline: a producer
 # change invalidates this check's evidence — reviewed pin update in the
 # same commit).
+#
+# THREE UPDATED 2026-08-26, with their citations, and the reason they were
+# stale is worth recording because it is a CLASS: this check had not been
+# RUN on hardware since the changes landed, so nothing noticed. The rule is
+# working exactly as designed — it refused stale evidence — but a pin only
+# refuses when someone runs the check.
+#   judge-foh-trace.js   -> 5440cf1 (A45 T3+T4; check-foh-flows.sh's twin
+#                           pin WAS updated in that commit, this one was not)
+#   normalize-foh-trace.js -> 5440cf1 (same commit, same omission)
+#   keymap-frozen.txt    -> 74ce8d1 (A25b/A3/A30(a): the L shoulder emits
+#                           `m`, not `k` — /CONTEXT.md's keysym entry)
+# port/sim/device/m4-freeze-manifest.txt pins two of these as well and is
+# DELIBERATELY NOT touched here: its stale rows are one batched driver-only
+# pass when M4 resumes (owner instruction, 2026-08-26).
 PRODUCER_PINS="\
 b835b5f886225e0015dae152576eea5a42fa69d7ba0699f4de0e31438d05c5b9 port/sim/sim/wrap-run.js
 f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/verify-stream.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-2cf26a5b8b7065c17ffa934d8a027d3bba3a8ea50b121cdd6d8bd8e9155b8668 port/foh/judge-foh-trace.js
+8fda41757516dc6331ca0836cf729f865ec388c22fa28e015f9c68528c97f83b port/foh/judge-foh-trace.js
 4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js
-2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e port/foh/keymap-frozen.txt
-62adf8078522647ab00853307026443b777f46ae556f6f9dec48520afa3b8308 port/foh/normalize-foh-trace.js
+452b6e41cbd7d692d35e1f89e0a8f4554c5af964b01bb87631cf01322de255ee port/foh/keymap-frozen.txt
+9bf4411e80cb54e871cc87b367d960739103e4dd8ae1328a93c272481182ace8 port/foh/normalize-foh-trace.js
 1163e9c18323ac06aaaec4ee3068691d7d67ebbf98b3500a343a69c80ca793ea port/foh/flow-to-fkscript.js
 809ea4f6cc361014f75be8034d8fef69fd2a683213c1bc111574dfbbe98a31f9 port/foh/decode-pb-glyphs.js"
 # +2 (CSS mechanics arc): this check EXECUTES the normalizer (its poll-path
@@ -416,7 +430,7 @@ done <<< "$PRODUCER_PINS"
 # (the sibling's pin line sits inside its PRODUCER_PINS quoted block, so
 # it may carry the block's closing quote — match the exact sha+path pair
 # and require EXACTLY one occurrence)
-c="$(grep -cF "2cf26a5b8b7065c17ffa934d8a027d3bba3a8ea50b121cdd6d8bd8e9155b8668 port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
+c="$(grep -cF "8fda41757516dc6331ca0836cf729f865ec388c22fa28e015f9c68528c97f83b port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
 [ "$c" = 1 ] || fail "twin pin — check-foh-flows.sh does not carry the same judge-foh-trace.js sha exactly once (count $c; paired change rule)"
 rig_pin_assert_once "$GFX/check-device-music.sh" SNDPACK_SHA256 "$SNDPACK_SHA256" || exit 1
 rig_pin_assert_once "$GFX/check-device-music.sh" MUSIC_BF_SHA256 "$MUSIC_BF_SHA256" || exit 1
@@ -993,13 +1007,33 @@ judge_vsfinish() { # <side-label> <applog> <banner.ppm> <hold-ceiling-ms>
   echo "   $side vsfinish: expiry on frame $fin_frames, banner decodes '$dec', hold ${hold} ms in [$VSF_HOLD_FLOOR_MS,$ceil], 0 skips / 0 failed presents"
 }
 
+# The audio PERIOD is not this check's to name. A28 (22a46db, 2026-08-24)
+# derived it from the frame budget and raised it 512 -> 2048 to kill the
+# owner's "constant audio buzz" — 512 frames at 44100 Hz is 0.70 of one
+# video frame, so the device starved forever. This check pinned the literal
+# 512 and, because it had not been RUN on hardware since, nothing noticed:
+# a pin that restates a constant instead of READING it goes stale silently
+# the moment the constant legitimately moves.
+#
+# So it is read from the SSOT, with a strict grammar and a loud death. The
+# check still refuses a device that reports a period the build did not ask
+# for; it just cannot be stranded by a legitimate change again.
+# (check-device-music.sh is different on purpose: it PASSES --audio-samples
+# explicitly, so it pins the number it supplied.)
+AUDIO_SAMPLES_EXPECT="$(grep -oE '^#define PLATFORM_AUDIO_SAMPLES_DEFAULT [0-9]+$' \
+  "$GFX/platform.h" | awk '{print $3}')" || true
+case "$AUDIO_SAMPLES_EXPECT" in
+  [1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]) ;;
+  *) grammar_die "could not read PLATFORM_AUDIO_SAMPLES_DEFAULT out of $GFX/platform.h (got '$AUDIO_SAMPLES_EXPECT')" ;;
+esac
+
 parse_audio_summary() { # <log>
   local log="$1" re cnt line pcnt
   unset au_underruns au_badlen au_starts au_stops
   nl_terminated "$log" "audio summary"
   pcnt="$(grep_count 'foh_dev audio:' "$log" "audio summary")"
   [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt lines containing 'foh_dev audio:' (want exactly 1 — resemblance ANYWHERE is corruption)"
-  re="^foh_dev audio: ${NUM12} callbacks, ${NUM12} underruns, ${NUM12} badlen, ${NUM12} voice starts, ${NUM12} voice stops, ${NUM12} steals, rate=(0|44100) samples=(0|512) channels=(0|2)\$"
+  re="^foh_dev audio: ${NUM12} callbacks, ${NUM12} underruns, ${NUM12} badlen, ${NUM12} voice starts, ${NUM12} voice stops, ${NUM12} steals, rate=(0|44100) samples=(0|${AUDIO_SAMPLES_EXPECT}) channels=(0|2)\$"
   cnt="$(grep_count "$re" "$log" "audio summary")"
   [ "$cnt" = 1 ] || grammar_die "app log $log has $cnt lines matching the pinned audio-summary grammar (want 1)"
   line="$(grep -E "$re" "$log")"
@@ -1971,7 +2005,7 @@ adb -s "$DEV" push "$BUILD/foh-args" "$DSD/" >/dev/null
 hsum="$(rig_host_sha256 "$BUILD/foh-args")" || exit 1
 dsum="$(rig_dev_sha256 "$DSD/foh-args")" || exit 1
 [ "$dsum" = "$hsum" ] || fail "pushed foh-args sha mismatch"
-dsh "mkdir -p $DTMP/opkmnt /tmp/mlfk/opkfoh/shots && rm -rf /tmp/mlfk/opkfoh/foh-trace.txt /tmp/mlfk/opkfoh/opk.rc /tmp/mlfk/opkfoh/boot-marker"
+dsh "mkdir -p $DTMP/opkmnt /tmp/mlfk/opkfoh/shots $DTMP/opk-persist && rm -rf /tmp/mlfk/opkfoh/foh-trace.txt /tmp/mlfk/opkfoh/opk.rc /tmp/mlfk/opkfoh/boot-marker $DTMP/opk-persist/mlfk-persist.dat"
 OPK_MOUNTED=1
 dsh "mount -t squashfs -o loop,ro $DEVAPPS/$OPK_NAME $DTMP/opkmnt"
 dsh "test -x $DTMP/opkmnt/mlfk-foh.sh"
@@ -1985,7 +2019,21 @@ LBC_STOPPED=1
 lbc_pid="$(rig_daemon_stop low_bat_check)"
 dsh "date +%s > $DTMP/qstop.ts"
 dsh "date +%s > $DTMP/opk.start.ts"
-dsh "setsid sh -lc '$DTMP/opkmnt/mlfk-foh.sh' </dev/null >/dev/null 2>&1 & sleep 2"
+# HERMETIC PERSIST, and it took a real failure to notice this was missing.
+# Every other leg passes MLFK_PERSIST_DIR explicitly; this one did not,
+# because mlfk-foh.sh does not set it — so the OPK evidence run fell through
+# to foh_persist.c's FP_DEFAULT_DIR, /mnt/mlfk-data, which is THE OWNER'S
+# REAL SAVE FILE. MEASURED 2026-08-26: that file carried `resume 06`
+# (FOH_CSS) because the owner had closed the lid at the character select,
+# so A26/D53's resume arm (foh_dev.c:2165-2167) set foh.screen DIRECTLY —
+# no ev_trans, no `T ... startup title timer` — and this leg failed against
+# an expectation that assumes a cold boot.
+#
+# The leg was never wrong about the transition. It was reading a machine
+# whose state it did not control, so its verdict depended on what the owner
+# last did with his device. The launcher INHERITS the environment, so one
+# variable makes the evidence hermetic without touching the save file.
+dsh "setsid sh -lc 'MLFK_PERSIST_DIR=$DTMP/opk-persist $DTMP/opkmnt/mlfk-foh.sh' </dev/null >/dev/null 2>&1 & sleep 2"
 sleep 10 # 500 paced ticks ~ 8.4 s
 opk_done=0
 for _ in $(seq 1 15); do
@@ -2019,6 +2067,17 @@ rm -f "$BUILD/opk-boot-want"
 printf 'MLFK FOH BOOT\nbin %s\nmode evidence\n' "$STAMP_FOH_SHA" > "$BUILD/opk-boot-want"
 cmp "$BUILD/opk-boot-marker" "$BUILD/opk-boot-want" \
   || fail "OPK boot marker != expected (MOUNTED foh_device sha must equal the arm-build stamp record — the launcher must run the FOH binary from the OPK)"
+# ...and SAY SO if the resume arm ever fires here again. The trace cannot
+# show it — a resumed boot assigns foh.screen with no transition event, and
+# SHOT rows are labelled by the FLOW, not by the live screen, so a resumed
+# run produces a trace that LOOKS like a cold one until the transition count
+# disagrees. The app log names it, so that is what is asserted.
+pullv /tmp/mlfk/opkfoh/mlfk-foh.log "$BUILD/opk.applog.txt"
+if grep -q 'foh_dev: resumed screen=' "$BUILD/opk.applog.txt"; then
+  relay_lines < "$BUILD/opk.applog.txt"
+  fail "OPK evidence run RESUMED a screen (A26/D53) instead of cold-booting —
+   its persist dir is not the hermetic one this leg installs"
+fi
 pullv /tmp/mlfk/opkfoh/foh-trace.txt "$BUILD/opk.dev-trace.txt"
 node "$FOH/judge-foh-trace.js" "$BUILD/opk.dev-trace.txt" f01-vs-g01 0
 norm "$BUILD/opk.dev-trace.txt" "$BUILD/opk.dev-trace.norm"
