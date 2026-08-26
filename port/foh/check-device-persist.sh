@@ -405,7 +405,12 @@ echo "   device state clean; sha tool self-tested"
 
 # --- [1] twin pin + data planes -----------------------------------------------
 echo "== [1/10] judge twin pin + data planes =="
-JUDGE_SHA=2cf26a5b8b7065c17ffa934d8a027d3bba3a8ea50b121cdd6d8bd8e9155b8668
+# Updated 2026-08-26: judge-foh-trace.js changed in 5440cf1 (A45 T3+T4).
+# check-foh-flows.sh's twin pin WAS updated in that commit; this one and
+# check-device-foh.sh's were not, and neither check had been RUN on hardware
+# since — so nothing noticed. Both are now current and the twin check below
+# is what keeps them together.
+JUDGE_SHA=8fda41757516dc6331ca0836cf729f865ec388c22fa28e015f9c68528c97f83b
 have="$(rig_host_sha256 "$FOH/judge-foh-trace.js")" || exit 1
 [ "$have" = "$JUDGE_SHA" ] || fail "judge-foh-trace.js sha $have != pinned $JUDGE_SHA (reviewed pin update in the same commit)"
 c="$(grep -cF "$JUDGE_SHA port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
@@ -1256,14 +1261,32 @@ rm -f "$HP/th9/body"
 # improved to $REC_BITS, and ctlstyle 1 — because the migration must
 # carry the ratified BOX mapping forward rather than re-map to the
 # fresh-install NATURAL.
-{ printf 'MLFKPERSIST7\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 1\n';
-  printf 'modonr 0\n'; th9_rows "$REC_BITS"; v4_defaults; v5_defaults;
-  v6_defaults; v7_defaults; } \
-  > "$HP/th9.expect.body"
-{ cat "$HP/th9.expect.body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th9.expect.body" | cut -d' ' -f1)"; } \
-  > "$HP/th9.expect.dat"
-rm -f "$HP/th9.expect.body"
-rc=0; cmp -s "$HP/th9/mlfk-persist.dat" "$HP/th9.expect.dat" || rc=$?
+#
+# TWO expectations, not one — and the split is the point (2026-08-26).
+# `modonr` is not one rule, it is two:
+#   a v1/v2 file has NO modonr row, so the loader FILLS THE DEFAULT
+#     (foh_persist.c:477-478), which d60505e flipped from 0 to 1 for D29/D30
+#     ("shield on L, Mod on R"). Those arms must expect 1.
+#   a v3+ file HAS the row, so its value is CARRIED FORWARD unchanged. The
+#     v3/v4 fixtures below seed 0, so those arms must expect 0.
+# One shared expectation conflated them, and because this check had not
+# been RUN on hardware since d60505e, it went stale rather than loud.
+# Splitting it is what makes each arm assert its own rule.
+mk_expect() { # <out> <modonr>
+  { printf 'MLFKPERSIST7\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 1\n';
+    printf 'modonr %s\n' "$2"; th9_rows "$REC_BITS"; v4_defaults; v5_defaults;
+    v6_defaults; v7_defaults; } > "$HP/expect.body"
+  { cat "$HP/expect.body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/expect.body" | cut -d' ' -f1)"; } \
+    > "$1"
+  rm -f "$HP/expect.body"
+}
+# v3+ CARRY the seeded 0; v1/v2 FILL the ratified default 1.
+mk_expect "$HP/th9.expect.dat" 0
+mk_expect "$HP/th9.expect-default.dat" 1
+cmp -s "$HP/th9.expect.dat" "$HP/th9.expect-default.dat" \
+  && fail "the two migration expectations are identical — the modonr split
+   is not being tested (dead tooth)"
+rc=0; cmp -s "$HP/th9/mlfk-persist.dat" "$HP/th9.expect-default.dat" || rc=$?
 [ "$rc" = 1 ] || fail "T-H9: fixture and expectation are already identical (dead tooth)"
 rc=0
 MLFK_PERSIST_DIR="$PWD/$HP/th9" \
@@ -1278,7 +1301,7 @@ c="$(grep -c '^foh_persist: reset cause=' "$HP/th9.log")" || true
 [ "$c" = 0 ] \
   || grammar_die "T-H9: a reset occurred while migrating a VALID v1 file (PB data-loss regression)"
 verify_persist_file "$HP/th9/mlfk-persist.dat" "T-H9 migrated"
-cmp "$HP/th9/mlfk-persist.dat" "$HP/th9.expect.dat" \
+cmp "$HP/th9/mlfk-persist.dat" "$HP/th9.expect-default.dat" \
   || fail "T-H9: the migrated+saved file != the independently built v5 (settings, the 49 untouched target records, the improved slot, the carried-forward BOX style, or the default-filled v4 options block were not preserved) — the PB data-loss regression"
 teeth=$((teeth + 1))
 echo "    T-H9 OK: genuine v1 migrates byte-for-byte (settings + 49 seeded records intact + 1 improved, style carried forward as BOX, no reset)"
@@ -1340,7 +1363,7 @@ c="$(grep -c '^foh_persist: reset cause=' "$HP/th13.log")" || true
 [ "$c" = 0 ] \
   || grammar_die "T-H13: a reset occurred while migrating a VALID v2 file (PB data-loss regression)"
 verify_persist_file "$HP/th13/mlfk-persist.dat" "T-H13 migrated"
-cmp "$HP/th13/mlfk-persist.dat" "$HP/th9.expect.dat" \
+cmp "$HP/th13/mlfk-persist.dat" "$HP/th9.expect-default.dat" \
   || fail "T-H13: the migrated v2 file != the independently built v5 (settings, the 49 untouched records, the improved slot, the PRESERVED ctlstyle, the ratified modonr default, or the default-filled v4 options block were not carried forward)"
 teeth=$((teeth + 1))
 echo "    T-H13 OK: genuine v2 migrates byte-for-byte (ctlstyle preserved, modonr ratified default)"
