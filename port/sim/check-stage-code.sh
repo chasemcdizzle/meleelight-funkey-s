@@ -115,6 +115,29 @@ cmp "$B/wellformed.c.txt" "$B/wellformed.js.txt"
 cmp "$B/edge.c.txt" "$B/edge.js.txt"
 echo "  stage differential: wellformed + edge byte-identical to upstream's executed encode.js"
 
+# --- 7b. the CONNECTED plane (A45 T5) --------------------------------------
+# parseStageCode does not just read a code, it DERIVES `connected` from the
+# parsed surfaces (encode.js:237) — so it is part of what a custom stage IS,
+# and the port derives it in tp_stage_from_custom (util/get_connected.h).
+# It needs its own corpus because the buckets above cannot reach it: their
+# coordinates are random doubles, so two surfaces coinciding within
+# getConnected's 0.001 never happens, which is precisely why this plane was
+# wrong on disk from A45 T2 until 2026-08-26 with every check green.
+node "$REF" conngen "$B/tp" "$B"
+node "$REF" conn "$B/tp" "$B/codes-conn.txt" "$B/conn.js.txt" > "$B/conn.js.log"
+"$B/stage_code_diff" --conn "$B/codes-conn.txt" "$B/conn.c.txt"
+"$B/stage_code_diff" --conn "$B/codes-conn.txt" "$B/conn.c2.txt"
+cmp "$B/conn.c.txt" "$B/conn.c2.txt"
+cmp "$B/conn.c.txt" "$B/conn.js.txt"
+# ...and the plane the OTHER buckets do reach must agree too: all-null on
+# both sides is the shipped corpus's answer and it is asserted, not assumed.
+for k in wellformed edge; do
+  node "$REF" conn "$B/tp" "$B/codes-$k.txt" "$B/conn-$k.js.txt" > /dev/null
+  "$B/stage_code_diff" --conn "$B/codes-$k.txt" "$B/conn-$k.c.txt"
+  cmp "$B/conn-$k.c.txt" "$B/conn-$k.js.txt"
+done
+echo "  connected differential: byte-identical to upstream's executed getConnected"
+
 # --- 8. judge (idempotence, the BUG 1 assertion, the frozen pins) ----------
 node "$REF" judge "$B" "$EXPECTED"
 
@@ -145,7 +168,47 @@ tooth() { # <name> <sed-expr> <leg>
     wellformed|hostile)
       "$B/tooth" --ref "$B/codes-$leg.txt" "$B/tooth.txt" 2>/dev/null || true
       cmp -s "$B/tooth.txt" "$B/$leg.c.txt" || bit=1 ;;
+    conn)
+      "$B/tooth" --conn "$B/codes-conn.txt" "$B/tooth.txt" 2>/dev/null || true
+      cmp -s "$B/tooth.txt" "$B/conn.c.txt" || bit=1 ;;
   esac
+  if [ "$bit" != 1 ]; then
+    echo "STAGECODE FAIL: tooth '$name' did not bite the $leg leg" >&2
+    exit 1
+  fi
+  echo "  tooth '$name' bites the $leg leg"
+}
+
+# The connected plane lives in a HEADER, so its tooth shadows that header
+# through an -I directory that precedes -Iport/sim. Same discipline: the
+# tracked file is never edited and there is nothing to restore.
+htooth() { # <name> <sed-expr> <leg>
+  local name=$1 expr=$2 leg=$3
+  # A SYMLINK FARM of port/sim, with the one header replaced by a real file.
+  # get_connected.h includes "../physics.h", which resolves relative to the
+  # INCLUDING FILE's directory, so a bare scratch dir does not compile — the
+  # shadow tree has to look like port/sim from the inside.
+  rm -rf "$B/htooth" && mkdir -p "$B/htooth/util"
+  local f
+  for f in port/sim/*.h; do ln -sf "$PWD/$f" "$B/htooth/$(basename "$f")"; done
+  for f in port/sim/util/*.h; do
+    ln -sf "$PWD/$f" "$B/htooth/util/$(basename "$f")"
+  done
+  # rm FIRST: writing to a symlink writes through it, into the tracked file.
+  rm -f "$B/htooth/util/get_connected.h"
+  sed "$expr" port/sim/util/get_connected.h > "$B/htooth/util/get_connected.h"
+  if cmp -s "$B/htooth/util/get_connected.h" port/sim/util/get_connected.h; then
+    echo "STAGECODE FAIL: tooth '$name' did not perturb anything — its site moved" >&2
+    exit 1
+  fi
+  # -I the shadow BEFORE the real tree, or the real header wins and the
+  # tooth silently tests nothing (measured: that is exactly what happened
+  # the first time this helper was written).
+  cc -I"$B/htooth" "${CFLAGS[@]}" -o "$B/tooth" \
+    port/sim/calib/stage_code_diff.c port/sim/stage_code.c port/sim/ml_fmt.c -lm
+  local bit=0
+  "$B/tooth" --conn "$B/codes-$leg.txt" "$B/tooth.txt" 2>/dev/null || true
+  cmp -s "$B/tooth.txt" "$B/$leg.c.txt" || bit=1
   if [ "$bit" != 1 ]; then
     echo "STAGECODE FAIL: tooth '$name' did not bite the $leg leg" >&2
     exit 1
@@ -160,6 +223,21 @@ tooth carry-bug-1 's/if (i != 5) {/if (1) {/' wellformed
 tooth exact-tofixed 's/if (s >= 61) {/if (s >= 60) {/' tofixed
 # (c) drop the ledge range check, so codes upstream throws on are accepted.
 tooth ledge-range 's/if (!(idx >= 0 \&\& idx < (double)ref->count)) FAIL("ledge out of range");/(void)ref;/' hostile
+# (e) WIDEN getConnected's coincidence threshold, so the corpus's deliberate
+#     one-hundredth near-misses become links.
+#     MEASURED, and it is the razor-thin-nudge class again (6th instance in
+#     this project): TIGHTENING the threshold — 0.001 -> 1e-10 — is a
+#     provable NO-OP here and was tried first. Every coordinate in a share
+#     code is a hundredth, so a chain shares its endpoints EXACTLY and the
+#     distance is 0.0, which is below any positive threshold. A tooth has to
+#     perturb the domain that OCCURS: 0.01 near-misses do occur, so the tooth
+#     goes the other way.
+htooth connected-threshold-wide 's/< 0\.001;/< 0.05;/' conn
+# (f) mislabel the wallL link as a right wall. getConnected.js:36-47 is
+#     ASYMMETRIC (a right-facing wall bounds a ground on its LEFT, a
+#     left-facing one on its RIGHT) and physics.js:281-285 / :311-315 branch
+#     on that letter, so the LABEL is load-bearing and not decoration.
+htooth connected-wall-label 's/gc_link(.l., j)/gc_link(0x72, j)/' conn
 # (d) lose the parser'"'"'s -0 (invisible in any emitted code — toFixed erases
 #     the sign — so only the value model can see it).
 tooth minus-zero-parse 's/\*out = neg ? -d : d;/*out = (neg \&\& d != 0.0) ? -d : d;/' selftest

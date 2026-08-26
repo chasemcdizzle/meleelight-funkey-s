@@ -150,13 +150,18 @@ bool mlk_stage_playable(const MlkStage *st, const char **reason);
 // must have passed mlk_stage_playable (this asserts it and dies loudly
 // rather than trusting).
 //
-// hasConnected is false: `connected` is not a field of the share-code
-// grammar at all (encode.js has 14 fields, none of them connected), so a
-// decoded stage has none, exactly like fdest/ystory, and the physics reads
-// fall into their absent arms. That answers the spike's getConnected
-// question for T2: NOT NEEDED. getConnected is the BUILDER recomputing
-// `connected` after a structural edit (targetbuilder.js:410 etc.); a
-// stage arriving as a code never had one to recompute. It is A45 T7's.
+// hasConnected is TRUE, and the plane is DERIVED here — corrected
+// 2026-08-26 (A45 T5 prerequisite). `connected` is indeed not one of the
+// share-code grammar's 14 fields, but upstream does not read it out of the
+// code: parseStageCode ENDS with `stage.connected = getConnected(stage)`
+// (encode.js:237), so every custom stage upstream plays has one, computed
+// from its own surfaces. The previous note here read the grammar and
+// concluded "NOT NEEDED", which was true about the grammar and wrong about
+// the behaviour. It was invisible to every check because the authored
+// corpus yields ZERO links (measured, all ten stages) and an all-null
+// connected takes the same physics arm as an absent one — the divergence
+// only appears once a player DRAWS, which A45 T5/T7 are about to let them
+// do. Full argument + measurement: util/get_connected.h.
 //
 // respawnCount stays 0 like every authored target stage: target mode's
 // isFinalDeath() is unconditionally true (actionStateShortcuts.js:153,

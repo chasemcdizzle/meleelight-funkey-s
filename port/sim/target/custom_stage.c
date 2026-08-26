@@ -7,6 +7,8 @@
 
 #include "sha256.h" // oracle/qjs/sha256.c (-Ioracle/qjs), the foh_persist
                     // SUM idiom reused rather than re-invented
+#include "../util/get_connected.h" // encode.js:237 — see the note at
+                                   // tp_stage_from_custom
 
 // --- the ONE validator ------------------------------------------------------
 
@@ -79,7 +81,17 @@ void tp_stage_from_custom(const MlkStage *cs, MlStageX *out) {
   // a conversion. That is the whole reason the spike's "one new filler"
   // estimate held.
   out->s = cs->s;
-  out->hasConnected = false; // no `connected` field in the code grammar
+  // encode.js:237 — parseStageCode ENDS with `stage.connected =
+  // getConnected(stage)`, so every custom stage upstream plays carries a
+  // derived connected plane. This used to write `false` with the comment
+  // "no `connected` field in the code grammar", which is true about the
+  // GRAMMAR and wrong about the BEHAVIOUR: upstream does not read connected
+  // out of the code, it derives it from the surfaces. The full argument,
+  // and the measurement that shows why no existing check could see the
+  // difference, is at the top of util/get_connected.h.
+  out->hasConnected = true;
+  getConnected(&out->s, out->connGround, &out->connGroundCount,
+               out->connPlatform, &out->connPlatformCount);
   out->ledgeCount = cs->ledgeCount;
   for (int k = 0; k < cs->ledgeCount; k++) out->ledge[k] = cs->ledge[k];
   out->blastzone = cs->blastzone;

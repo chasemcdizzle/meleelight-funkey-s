@@ -166,6 +166,145 @@ function makeGen(r) {
   };
 }
 
+// --- the CONNECTIVITY corpus (A45 T5) --------------------------------------
+//
+// makeGen's coordinates are random doubles, so two surfaces coinciding to
+// within getConnected's 0.001 is impossible by construction — which is
+// exactly why the `connected` gap survived every existing check. This
+// generator instead BUILDS the adjacency: chains of grounds laid end to
+// end, platforms abutting them, and walls meeting a ground's ends, which is
+// what a polygon emits and what a player draws.
+//
+// The threshold's own neighbourhood is testable, but not at arbitrary
+// resolution: every coordinate in a share code goes through toFixed(2), so
+// the smallest non-zero separation a code can carry is 0.01, ten times
+// getConnected's 0.001. "Connected in a code" therefore means "coincident
+// to the hundredth", and the near-miss rows sit at exactly one hundredth.
+function makeConnGen(r) {
+  const ri = (n) => Math.floor(r() * n);
+  // hundredth-grid coordinates only: the code is the canonical form and
+  // these stages must be their own fixed point, so the corpus stays in the
+  // `wellformed` regime and a mismatch is never explainable as lossiness.
+  const c = () => (ri(40001) - 20000) / 100;
+  return function stage() {
+    const st = {
+      startingPoint: [{ x: 0, y: 0 }],
+      ledge: [], polygon: [], ground: [], ceiling: [], wallL: [], wallR: [],
+      platform: [], target: [{ x: 0, y: 0 }],
+      background: { polygon: [], line: [] },
+      blastzone: { min: { x: -250, y: -250 }, max: { x: 250, y: 250 } },
+      scale: 3,
+    };
+    // a chain of grounds, each starting where the previous ended, with an
+    // occasional deliberate one-hundredth gap
+    let x = c(), y = c();
+    const nchain = 1 + ri(5);
+    for (let i = 0; i < nchain; i++) {
+      const w = 1 + ri(60);
+      st.ground.push([{ x: x, y: y }, { x: x + w, y: y }]);
+      x += w;
+      if (r() < 0.3) x += 0.01; // near miss: 0.01 > 0.001, must NOT link
+      if (r() < 0.3) y = c();   // a bend: same x, different y -> no link
+    }
+    // Each END of the chain gets a platform OR a wall, never both, and that
+    // exclusivity is the point: getConnected's four inner loops run
+    // ground -> platform -> wallR -> wallL and each is `!broke`-guarded, so
+    // a platform at an end MASKS the wall arm entirely. Generating both
+    // (measured, first attempt) produced a corpus with ZERO `l` links and a
+    // wall tooth that could not bite.
+    const leftEnd = ri(3);  // 0 none, 1 platform, 2 wallR
+    const rightEnd = ri(3); // 0 none, 1 platform, 2 wallL
+    if (st.ground.length > 0) {
+      const g0 = st.ground[0];
+      if (leftEnd === 1) {
+        st.platform.push([{ x: g0[0].x - 20, y: g0[0].y }, { x: g0[0].x, y: g0[0].y }]);
+      } else if (leftEnd === 2) {
+        // wallR bounds a ground on its LEFT (getConnected.js:36-41)
+        st.wallR.push([{ x: g0[0].x, y: g0[0].y - 30 }, { x: g0[0].x, y: g0[0].y }]);
+      }
+      const gn = st.ground[st.ground.length - 1];
+      if (rightEnd === 1) {
+        st.platform.push([{ x: gn[1].x, y: gn[1].y }, { x: gn[1].x + 20, y: gn[1].y }]);
+      } else if (rightEnd === 2) {
+        // wallL bounds a ground on its RIGHT (getConnected.js:42-47).
+        // POINT ORDER MATTERS AND IS NOT SYMMETRIC: for a VERTICAL wall
+        // extremePoint returns v2 for BOTH "l" and "r" (extremePoint.js:24-38
+        // compares x with a strict `>` / `<`, so equal x falls to the else),
+        // so the end that can connect is the SECOND point, whichever end of
+        // the wall it geometrically is. Writing this pair the other way round
+        // (measured, first attempt) produced a corpus with zero `l` links.
+        st.wallL.push([{ x: gn[1].x, y: gn[1].y - 30 }, { x: gn[1].x, y: gn[1].y }]);
+      }
+    }
+    // platform-to-platform, so connected[1] is not a copy of connected[0]
+    if (st.platform.length > 0 && r() < 0.6) {
+      const q = st.platform[st.platform.length - 1];
+      st.platform.push([{ x: q[1].x, y: q[1].y }, { x: q[1].x + 15, y: q[1].y }]);
+    }
+    // a ceiling, which getConnected never consults — a negative control
+    if (r() < 0.4 && st.ground.length > 0) {
+      const g = st.ground[0];
+      st.ceiling.push([{ x: g[0].x, y: g[0].y }, { x: g[0].x + 10, y: g[0].y }]);
+    }
+    return st;
+  };
+}
+
+// The canonical serialization the two sides are compared on. One line per
+// code: NULL, or `OK` then the two rows of `connected`, each entry a pair
+// `<left>|<right>` with `-` for null and `<type><index>` for a link.
+function connDump(E, code) {
+  const st = E.parseStageCode(code);
+  if (st === null) return "NULL";
+  const half = (h) => (h === null || h === undefined ? "-" : h[0] + h[1]);
+  const row = (a) => a.map((e) => half(e[0]) + "|" + half(e[1])).join(",");
+  return "OK g:" + row(st.connected[0]) + " p:" + row(st.connected[1]);
+}
+
+function conngen(tpdir, outdir) {
+  const E = loadEncode(tpdir);
+  const r = rng(0x5c04ec7);
+  const nextStage = makeConnGen(r);
+  const codes = [];
+  let links = 0;
+  const byType = {};
+  for (let i = 0; i < 1500; i++) {
+    const st = nextStage();
+    const c1 = E.createStageCode(st);
+    const p = E.parseStageCode(c1);
+    if (p === null) continue;
+    if (E.createStageCode(p) !== c1) continue; // stay in the fixed-point regime
+    codes.push(c1);
+    for (const row of p.connected) {
+      for (const e of row) for (const h of e) {
+        if (h !== null && h !== undefined) { links++; byType[h[0]] = (byType[h[0]] || 0) + 1; }
+      }
+    }
+  }
+  fs.writeFileSync(path.join(outdir, "codes-conn.txt"), codes.join("\n") + "\n");
+  // A corpus with no links would make the differential vacuous — the exact
+  // failure mode this whole leg exists to close. Assert it, never hope.
+  // A corpus missing any ONE of the four link types leaves that arm of
+  // getConnected untested while the leg still reports green — the vacuity
+  // this whole check exists to close. Every type is required, by name.
+  const missing = ["g", "p", "r", "l"].filter((t) => !byType[t]);
+  if (codes.length === 0 || links === 0 || missing.length > 0) {
+    throw new Error("connectivity corpus is degenerate: codes=" + codes.length +
+                    " links=" + links + " missing link types=[" +
+                    missing.join(",") + "]");
+  }
+  process.stdout.write("  connectivity corpus: " + codes.length +
+    " codes carrying " + links + " live connected links (g " + byType.g +
+    ", p " + byType.p + ", r " + byType.r + ", l " + byType.l + ")\n");
+}
+
+function conn(tpdir, codesPath, outPath) {
+  const E = loadEncode(tpdir);
+  const lines = fs.readFileSync(codesPath, "utf8").split("\n");
+  if (lines[lines.length - 1] === "") lines.pop();
+  fs.writeFileSync(outPath, lines.map((c) => connDump(E, c)).join("\n") + "\n");
+}
+
 // Codes whose parse upstream and the port answer DIFFERENTLY, or whose
 // answer is interesting enough to freeze. Each is labelled; the check
 // records both sides' verdicts and compares the table with the committed
@@ -456,9 +595,11 @@ switch (a[0]) {
   case "transpile": transpile(a[1], a[2]); break;
   case "gen": gen(a[1], a[2]); break;
   case "ref": ref(a[1], a[2], a[3]); break;
+  case "conngen": conngen(a[1], a[2]); break;
+  case "conn": conn(a[1], a[2], a[3]); break;
   case "tofixed": tofixed(a[1], a[2]); break;
   case "judge": judge(a[1], a[2]); break;
   default:
-    process.stderr.write("usage: stage-code-js-ref.js transpile|gen|ref|tofixed|judge ...\n");
+    process.stderr.write("usage: stage-code-js-ref.js transpile|gen|conngen|ref|conn|tofixed|judge ...\n");
     process.exit(2);
 }

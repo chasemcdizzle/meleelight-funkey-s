@@ -132,7 +132,29 @@ int main(int argc, char **argv) {
     if (!mlk_stage_playable(&st, &why)) die(why);
     MlStageX x;
     tp_stage_from_custom(&st, &x);
-    if (x.hasConnected) die("custom stage must have no connected plane");
+    // encode.js:237 — parseStageCode DERIVES `connected` for every custom
+    // stage, so the plane is PRESENT (corrected 2026-08-26; this anchor
+    // used to assert the opposite, which is why nothing caught the gap —
+    // util/get_connected.h carries the argument).
+    if (!x.hasConnected) die("custom stage must carry a connected plane");
+    if (x.connGroundCount != x.s.ground.count) die("connGround count");
+    if (x.connPlatformCount != x.s.platform.count) die("connPlatform count");
+    // ...and on the AUTHORED corpus every entry is absent. MEASURED with
+    // upstream's own getConnected over all ten target stages: zero links.
+    // That is exactly why this leg's byte-identical TTAB1-vs-custom stream
+    // comparison stays sound (physics.js:265-300 takes the same arm for an
+    // all-null plane as for an absent one) — and it is a MEASUREMENT, not
+    // an assumption, so it is pinned here rather than trusted.
+    for (int k = 0; k < x.connGroundCount; k++) {
+      if (x.connGround[k].l.present || x.connGround[k].r.present) {
+        die("authored target stage 1 grew a ground link");
+      }
+    }
+    for (int k = 0; k < x.connPlatformCount; k++) {
+      if (x.connPlatform[k].l.present || x.connPlatform[k].r.present) {
+        die("authored target stage 1 grew a platform link");
+      }
+    }
     if (x.respawnCount != 0) die("custom stage must have no respawn points");
     if (x.s.ground.count != ml_tstages[0].groundCount) die("ground count");
     // the damage refusal, exercised directly

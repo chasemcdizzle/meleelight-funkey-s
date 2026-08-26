@@ -7,6 +7,12 @@
 //   --genhex <out>            deterministic double corpus (bit patterns)
 //   --tofixed <hex> <out>     one ml_to_fixed2 line per bit pattern
 //   --ref <codes> <out>       per code: "NULL" | "OK <re-encoded code>"
+//   --conn <codes> <out>      per code: "NULL" | "OK g:<row> p:<row>" — the
+//                             `connected` plane parseStageCode derives at
+//                             encode.js:237, which the port derives in
+//                             tp_stage_from_custom (util/get_connected.h).
+//                             Compared against upstream's OWN executed
+//                             getConnected via stage-code-js-ref.js conn.
 //                             ("NULL" is spelled the same as the JS side's
 //                             null return so the two files can be cmp'd;
 //                             the rejecting rule goes to stderr, where it
@@ -20,6 +26,7 @@
 #include <string.h>
 
 #include "stage_code.h"
+#include "util/get_connected.h" // A45 T5: the encode.js:237 plane
 
 static double bits_to_d(uint64_t b) {
   double d;
@@ -236,13 +243,79 @@ static int self_test(void) {
   return 0;
 }
 
+// --conn: the connected plane, in the same canonical form the JS ref emits.
+// Note WHERE it is computed: upstream computes it inside parseStageCode, the
+// port inside tp_stage_from_custom. Both are "as soon as a stage exists", and
+// the plane is a pure function of the five surface lists, so comparing them
+// here is comparing the same thing. The MlStageX arrays are what physics
+// actually reads, so this dumps those and not a private copy.
+static void conn_half(FILE *fo, const MlConnHalf *h) {
+  if (!h->present) {
+    fputc('-', fo);
+    return;
+  }
+  // index is a double carrying an integer; %d after a cast is what the JS
+  // side's `h[1]` prints, and mlk_parse's caps keep it inside int range.
+  fprintf(fo, "%c%d", h->type, (int)h->index);
+}
+
+static void conn_row(FILE *fo, const MlConnPair *row, int n) {
+  for (int i = 0; i < n; i++) {
+    if (i > 0) fputc(',', fo);
+    conn_half(fo, &row[i].l);
+    fputc('|', fo);
+    conn_half(fo, &row[i].r);
+  }
+}
+
+static int do_conn(const char *in, const char *out) {
+  FILE *fi = fopen(in, "r");
+  FILE *fo = fopen(out, "w");
+  if (fi == NULL || fo == NULL) return 1;
+  char *line = malloc(MLK_CODE_MAX + 2);
+  MlkStage *st = malloc(sizeof *st);
+  MlStageX *x = malloc(sizeof *x);
+  if (line == NULL || st == NULL || x == NULL) return 1;
+  while (fgets(line, MLK_CODE_MAX + 2, fi) != NULL) {
+    size_t len = strlen(line);
+    while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+      line[--len] = '\0';
+    const char *reason = NULL;
+    if (!mlk_parse(line, st, &reason)) {
+      fprintf(fo, "NULL\n");
+      continue;
+    }
+    // Deliberately NOT tp_stage_from_custom: that one dies loudly on a stage
+    // mlk_stage_playable refuses (no targets, a damage surface, over-cap),
+    // and this corpus is about the connected plane, not about playability.
+    // getConnected is called on the same lists it would be called on there.
+    memset(x, 0, sizeof *x);
+    x->s = st->s;
+    getConnected(&x->s, x->connGround, &x->connGroundCount, x->connPlatform,
+                 &x->connPlatformCount);
+    fputs("OK g:", fo);
+    conn_row(fo, x->connGround, x->connGroundCount);
+    fputs(" p:", fo);
+    conn_row(fo, x->connPlatform, x->connPlatformCount);
+    fputc('\n', fo);
+  }
+  fclose(fi);
+  free(line);
+  free(st);
+  free(x);
+  return fclose(fo) == 0 ? 0 : 1;
+}
+
 int main(int argc, char **argv) {
   if (argc >= 2 && strcmp(argv[1], "--self-test") == 0) return self_test();
   if (argc == 3 && strcmp(argv[1], "--genhex") == 0) return gen_hex(argv[2]);
   if (argc == 4 && strcmp(argv[1], "--tofixed") == 0)
     return do_tofixed(argv[2], argv[3]);
   if (argc == 4 && strcmp(argv[1], "--ref") == 0) return do_ref(argv[2], argv[3]);
+  if (argc == 4 && strcmp(argv[1], "--conn") == 0)
+    return do_conn(argv[2], argv[3]);
   fprintf(stderr, "usage: stage_code_diff --self-test | --genhex <out> | "
-                  "--tofixed <hex> <out> | --ref <codes> <out>\n");
+                  "--tofixed <hex> <out> | --ref <codes> <out> | "
+                  "--conn <codes> <out>\n");
   return 2;
 }
