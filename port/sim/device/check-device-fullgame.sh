@@ -309,8 +309,26 @@ G01_MENU_BSTATE=$FOH/flows/f01-vs-g01.bstate.expect
 # scheduling jitter is real) but FAR narrower than any early-stop
 # regression: music stopping after one refill yields refills=1 and
 # mu_out ~ 44,100, both of which die here.
-CB_MIN=5000
-CB_MAX=5400
+#
+# THE CALLBACK WINDOW IS DERIVED, NOT FROZEN (2026-08-26). A callback count
+# is not an independent fact: it is rate*seconds/PERIOD, so A28 raising the
+# period 512 -> 2048 divided it by four and the frozen [5000,5400] window
+# failed all 12 legs at 1302-1303 — the arithmetic, not a regression. What
+# the leg is actually asserting is TIME (did the audio plane run for the
+# whole 60-second match?), and time is what survives a period change. So
+# the nominal is computed and the SAME relative tolerance the frozen pair
+# encoded is applied to it:
+#   [5000,5400] around 5168 is -3.25% / +4.49%; rounded outward to the
+#   -4% / +5% band below, which is wider than the measured spread and
+#   still an order of magnitude tighter than any early-stop regression
+#   (music stopping after one refill is ~1/60th of the window).
+# The music/refill windows stay FROZEN: those are frames and reads, and
+# neither is a function of the period.
+CB_NOMINAL=$(( AUDIO_RATE * 60 / AUDIO_SAMPLES ))
+CB_MIN=$(( CB_NOMINAL * 96 / 100 ))
+CB_MAX=$(( CB_NOMINAL * 105 / 100 ))
+[ "$CB_MIN" -gt 0 ] && [ "$CB_MAX" -gt "$CB_MIN" ] \
+  || { echo "FULLGAME FAIL: derived callback window [$CB_MIN,$CB_MAX] is degenerate (rate=$AUDIO_RATE samples=$AUDIO_SAMPLES)" >&2; exit 2; }
 MUSOUT_MIN=2600000
 MUSOUT_MAX=2700000
 REFILL_MIN=70
@@ -3265,8 +3283,14 @@ echo "    T17 OK: music that stopped after ~1 s dies on the out-frames window (r
 sed -E 's/^(foh_dev audio: )[0-9]+( callbacks)/\112\2/' \
   "$BUILD/g01.dev-applog.txt" > "$T/t18.log"
 cmp -s "$T/t18.log" "$BUILD/g01.dev-applog.txt" && fail "T18: substitution was a no-op (dead tooth)"
+# The window is DERIVED now (see CB_NOMINAL), so the pinned diagnostic
+# interpolates it rather than restating a literal that goes stale the next
+# time the audio period legitimately moves. What stays pinned is the SHAPE
+# of the message and the collapsed count that must trigger it — which is
+# what a tooth is for. (T17's literals stay: frames and refills are not a
+# function of the period.)
 tooth_expect T18 1 \
-  '^FULLGAME FAIL: tooth18: 12 audio callbacks outside the sustained-playback window \[5000,5400\]$' \
+  "^FULLGAME FAIL: tooth18: 12 audio callbacks outside the sustained-playback window \[$CB_MIN,$CB_MAX\]\$" \
   -- tooth_applog "tooth18" "$T/t18.log"
 echo "    T18 OK: a collapsed audio-callback count dies on the cadence window (rc 1)"
 
