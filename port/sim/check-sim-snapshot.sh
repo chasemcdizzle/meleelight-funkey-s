@@ -538,6 +538,83 @@ the 'rng' row. Leg [4]'s verdict is not judging what it claims to judge."
   echo "         the unchanged verifier reject the spliced stream"
 fi
 
+# --- [7] adding sim state without a decision must not build ------------------
+# Two halves, because neither covers the other.
+#
+# (a) NEGATIVE BUILD. A member added to GameState changes sizeof, the
+#     _Static_assert stops holding, and the compile FAILS with a message that
+#     says what to do. The perturbation is applied to a mirrored COPY of
+#     sim.h — the tree is never edited (check-rebind.sh's perturb_build
+#     discipline; the no-commit guard at the bottom enforces it).
+#
+# (b) MEMBER LIST vs ROW LIST. The compiler cannot see a `bool` added INTO one
+#     of GameState's five alignment holes: sizeof does not change and no
+#     offsetof changes, so every assertion in sim_snapshot.c still passes and
+#     the member would go unpersisted in silence. sim_snapshot.c says so in as
+#     many words. THIS is where that is caught — GameState's members are
+#     derived from sim.h and diffed against SS_FIELDS' row keys, so a member
+#     with no row fails wherever it sits.
+echo "=== [7] a new field must not build"
+
+NEG=$WORK/neg
+rm -rf "$NEG"; mkdir -p "$NEG/sim"
+for e in port/sim/*; do
+  b="$(basename "$e")"
+  [ "$b" = sim ] && continue
+  ln -sfn "$PWD/$e" "$NEG/$b"
+done
+for e in port/sim/sim/*; do
+  b="$(basename "$e")"
+  [ "$b" = sim.h ] && continue
+  ln -sfn "$PWD/$e" "$NEG/sim/$b"
+done
+node -e '
+  const fs = require("fs");
+  const src = fs.readFileSync(process.argv[1], "utf8");
+  const anchor = "  long frame;";
+  const i = src.indexOf(anchor);
+  if (i < 0) throw new Error("sim.h no longer declares `long frame;` — the " +
+    "negative-build probe is anchored on it");
+  fs.writeFileSync(process.argv[2],
+    src.slice(0, i) + "  double t28NegativeBuildProbe;\n" + src.slice(i));
+' port/sim/sim/sim.h "$NEG/sim/sim.h"
+if cc "${CFLAGS[@]}" -fsyntax-only "$NEG/sim/sim_snapshot.c" \
+     > "$WORK/neg.log" 2>&1; then
+  fail "[7](a) a member added to GameState still COMPILES. The field table's \
+_Static_assert is what makes 'someone must remember' into 'the build does not \
+hold'; without it a new plane of sim state ships unpersisted and silent."
+fi
+grep -q 'SNAPSHOT FIELD TABLE' "$WORK/neg.log" \
+  || { cat "$WORK/neg.log" >&2
+       fail "[7](a) the build failed, but not on the field table's assertion \
+— the negative build is proving something other than what it claims"; }
+
+# (b) the member list
+awk '
+  /^typedef struct \{/ { buf = ""; d = 1; next }
+  /^\} GameState;/ { if (d) { printf "%s", buf; exit } }
+  d { buf = buf $0 "\n" }
+' port/sim/sim/sim.h \
+  | sed -E 's|//.*$||' \
+  | grep ';' \
+  | sed -E 's/\[[^]]*\]//g; s/;.*$//' \
+  | awk 'NF > 1 {print $NF}' | sort > "$WORK/gs-members.txt"
+grep -oE '^  X\([A-Za-z0-9_]+' "$SIM/sim_snapshot.c" | sed 's/^  X(//' | sort \
+  > "$WORK/gs-rows.txt"
+nmem="$(wc -l < "$WORK/gs-members.txt" | tr -d ' ')"
+[ "$nmem" = 24 ] \
+  || fail "[7](b) derived $nmem members from GameState (want 24). Either the \
+struct changed — in which case the rows and this number move with it — or the \
+derivation stopped seeing the struct, which would make this leg vacuous."
+diff -u "$WORK/gs-members.txt" "$WORK/gs-rows.txt" > "$WORK/gs.diff" \
+  || { cat "$WORK/gs.diff" >&2
+       fail "[7](b) GameState's members and SS_FIELDS' rows disagree. A '-' \
+line is a member of the sim state with no row: decide whether it is copied \
+(SS_POD), RECONSTRUCTED (SS_RECON — the answer for anything pointer-valued), \
+or deliberately not carried, and say so in the table."; }
+echo "  [7] OK: a new GameState member does not compile, and all 24 members"
+echo "         have a row (including any that would hide in the padding)"
+
 # --- no-commit guard ---------------------------------------------------------
 dirty_after="$(tree_fingerprint)" \
   || fail "could not re-fingerprint the working tree (fails CLOSED)"

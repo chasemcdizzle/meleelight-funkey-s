@@ -103,13 +103,24 @@ enum { SS_TABLE_BYTES = 0 SS_FIELDS(SS_ROW_BYTES) };
 //
 // Each hole is written as an ALIGNMENT EXPRESSION rather than a measured
 // number, and each is then asserted equal to the hole the compiler actually
-// left. That pairing is what closes the one gap a plain size check leaves
-// open: a `bool` added into an existing hole would not change
-// sizeof(GameState), but it WOULD shrink the real gap below the alignment
-// the expression says it must be, and the per-hole assertion fires. The
-// expressions are also why this file does not need a per-architecture
-// number — armv7 (`long` and pointers 4 bytes wide) moves three of the five
-// and each expression moves with it.
+// left. That is why this file needs no per-architecture number: armv7
+// (`long` and pointers 4 bytes wide) moves three of the five, and each
+// expression moves with it. It is also a real guard — if a change elsewhere
+// alters GameState's internal alignment, the total stops matching and the
+// author is told which hole moved rather than being told only that the size
+// changed.
+//
+// WHAT IT DOES NOT CATCH, said plainly. A `bool` added INTO one of these
+// holes changes neither sizeof(GameState) nor any offsetof, so no
+// compile-time expression over this struct can see it: the size assertion
+// passes and so does every gap assertion. The member would go unpersisted and
+// the build would be silent about it. That hole is closed OUTSIDE the
+// compiler, by check-sim-snapshot.sh leg [7], which derives GameState's
+// member list from sim.h and diffs it against SS_FIELDS' row keys — a member
+// with no row fails there, wherever it sits. (foh_persist.c closes the same
+// hole by having no slack at all to hide in; GameState is the sim's core
+// struct and reordering it to buy that is not worth the risk, so the guard
+// moves to the check instead of the layout moving to suit the guard.)
 #define SS_GAP(cur, next)                                                     \
   (offsetof(GameState, next) -                                                \
    (offsetof(GameState, cur) + sizeof(((GameState *)0)->cur)))
@@ -121,22 +132,39 @@ enum { SS_TABLE_BYTES = 0 SS_FIELDS(SS_ROW_BYTES) };
 #define SS_GAP_HASBRIDGE (_Alignof(long) - sizeof(((GameState *)0)->hasBridge))
 
 _Static_assert(SS_GAP(slotIsAi, curBuf) == SS_GAP_SLOTISAI,
-               "GameState's slotIsAi/curBuf alignment hole changed size — a "
-               "member was added into it. Give it a row in SS_FIELDS.");
+               "GameState's slotIsAi/curBuf alignment hole is not the size\n"
+               "its alignment expression says it is. The struct's internal\n"
+               "layout moved: re-read SS_PAD_BYTES above (and note that a\n"
+               "member hiding INSIDE a hole is invisible here by construction\n"
+               "— check-sim-snapshot.sh leg [7] is what catches that).");
+
 _Static_assert(SS_GAP(starting, startTimer) == SS_GAP_STARTING,
-               "GameState's starting/startTimer alignment hole changed size — "
-               "a member was added into it. Give it a row in SS_FIELDS.");
+               "GameState's starting/startTimer alignment hole is not the size\n"
+               "its alignment expression says it is. The struct's internal\n"
+               "layout moved: re-read SS_PAD_BYTES above (and note that a\n"
+               "member hiding INSIDE a hole is invisible here by construction\n"
+               "— check-sim-snapshot.sh leg [7] is what catches that).");
+
 _Static_assert(SS_GAP(stageKind, cpuDifficulty) == SS_GAP_STAGEKIND,
-               "GameState's stageKind/cpuDifficulty alignment hole changed "
-               "size — a member was added into it. Give it a row in "
-               "SS_FIELDS.");
+               "GameState's stageKind/cpuDifficulty alignment hole is not the size\n"
+               "its alignment expression says it is. The struct's internal\n"
+               "layout moved: re-read SS_PAD_BYTES above (and note that a\n"
+               "member hiding INSIDE a hole is invisible here by construction\n"
+               "— check-sim-snapshot.sh leg [7] is what catches that).");
+
 _Static_assert(SS_GAP(rngStateAtFrame1, bridge) == SS_GAP_BRIDGE,
-               "GameState's rngStateAtFrame1/bridge alignment hole changed "
-               "size — a member was added into it. Give it a row in "
-               "SS_FIELDS.");
+               "GameState's rngStateAtFrame1/bridge alignment hole is not the size\n"
+               "its alignment expression says it is. The struct's internal\n"
+               "layout moved: re-read SS_PAD_BYTES above (and note that a\n"
+               "member hiding INSIDE a hole is invisible here by construction\n"
+               "— check-sim-snapshot.sh leg [7] is what catches that).");
+
 _Static_assert(SS_GAP(hasBridge, frame) == SS_GAP_HASBRIDGE,
-               "GameState's hasBridge/frame alignment hole changed size — a "
-               "member was added into it. Give it a row in SS_FIELDS.");
+               "GameState's hasBridge/frame alignment hole is not the size\n"
+               "its alignment expression says it is. The struct's internal\n"
+               "layout moved: re-read SS_PAD_BYTES above (and note that a\n"
+               "member hiding INSIDE a hole is invisible here by construction\n"
+               "— check-sim-snapshot.sh leg [7] is what catches that).");
 
 #define SS_PAD_BYTES                                                          \
   (SS_GAP_SLOTISAI + SS_GAP_STARTING + SS_GAP_STAGEKIND + SS_GAP_BRIDGE +     \
