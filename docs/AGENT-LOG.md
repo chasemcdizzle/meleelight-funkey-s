@@ -22497,6 +22497,73 @@ red: `check-device-fullgame.sh` runs the real `foh_device` with render, sfx
 and music live and measured 15.786 ms green over all 12 legs. **The bar was
 not moved and must not be.**
 
+
+## driver — 2026-08-26 (later) — A45 T6 + D57. ZOOM-OUT: two of today's blockers were the SECOND HALF of a split that nobody had ever been able to reach
+
+**A45 T6 — the damage plane.** The five
+`dealWithDamagingStageCollision` call sites had never executed, and the
+reason they could not is worth stating precisely, because it is not the one
+the spec assumed. The spec said T6 owed a GOLDEN. It did — but underneath
+that, **the routing had never been written**. Upstream pushes straight into
+`hitQueue` (physics.js:53); the port had to split the queues because
+physics.c cannot see hit_detection's `HdQueues`, and BOTH call sites carried
+a comment saying the target stages "own the real routing" — which nobody had
+written, because nothing could reach it to notice. A trap stood in its place
+at each site.
+
+**That is a class**: a deferral that names its owner but not its work reads
+as done. `hd_route_stage_damage` is now the join, at exactly the point
+upstream's push happens (main.js:1002-1003). The `HdRow` value model already
+carried the shape from M2 task 6, so it was a translation, not a design.
+
+**THE TRAPS ARE NARROWED, NOT REMOVED**, and `TP.stageHasDamage` is DERIVED
+in `tp_setup_target_core` from the `MlStageX` the sim is about to read — for
+BOTH entry points, so it cannot disagree with what physics sees, and an
+authored stage that ever grew a damaging surface is covered by the same rule
+instead of falling through it.
+
+**A LIFTED REFUSAL WITH NOTHING BEHIND IT IS WORSE THAN THE REFUSAL WAS.**
+Three assertions asserted the old world and all three were RETARGETED rather
+than deleted, because each still protected something:
+the tool self-test now asserts a damaging stage PLAYS and that a NULL
+damageType still reads inert; `check-tbuild.sh`'s corpus entry 7 swapped its
+damage digit for ELEVEN TARGETS (R2's cap is the rule still mirrored — left
+alone that entry would have gone quietly inert and the FOH/sim mirror would
+have been tested over nothing); and the witness's SAVE leg now asserts a
+damaging stage saves, with the fire digit really in the published bytes.
+What replaced the refusal is a GATE — `check-custom-stage.sh` [5] fails by
+name if no golden covers the plane, and its tooth zeroes every damage digit
+in a manifest COPY and requires the gate to refuse.
+
+**D57 — the builder resume.** Same shape, different plane. A45 T4 redirected
+FOH_TBUILD to the menu top because the document was not persisted, and
+resuming into an empty editor would have claimed the player's work was still
+there. **The honest way to remove a refusal is to make the statement it
+refused TRUE.** The document is an `MlkStage` and `mlk_encode` already
+serialises one, so it travels as `tbdoc.mlstage` through A45 T2's contract
+and `foh_persist_publish`'s atomic publish — the same artifact, the same
+writer, no new format and no persist-record version bump.
+
+**The refusal did not disappear, it moved to where it can be checked:**
+`foh_persist_resume_target` is a pure domain map and cannot know whether the
+write succeeded, so `tdev_hibernate_check` publishes FIRST and downgrades to
+the menu top on failure.
+
+**MEASURED, because this rides in a ~100 ms grace window:** a write+fsync to
+`/mnt` costs **22 ms at 2 KB and 33 ms at 160 KB** on the device. That also
+answers the T5-T8 spec's open question about a mid-match snapshot —
+`sizeof(GameState)` is 158.9 KB, i.e. the 33 ms case. **Time is not what
+blocks mid-match resume.** What blocks it is that GameState holds function
+pointers, so it needs a canonical form rather than a raw write.
+
+**THE PROOF IS BYTE-IDENTITY, NOT A LOG LINE** (`check-hibernate.sh` [5b]):
+park in the builder, EDIT, hibernate, boot, resume, hibernate again, and
+require the two published documents identical. A resume that silently reset
+to D51's template passes every log assertion and fails that one. The leg
+carries a dead-leg guard that re-runs the flow WITHOUT the edit and requires
+the documents to differ, so the round trip cannot be satisfied by a document
+that was never the player's.
+
 ## Scoreboard, hardware, 2026-08-26
 
 GREEN: `DEVICE FOH OK` · `PERSIST OK` · `FULLGAME CONFORMS 12/12` ·

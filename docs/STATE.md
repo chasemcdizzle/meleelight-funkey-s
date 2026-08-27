@@ -29,38 +29,48 @@ the three-part class fix: `docs/AGENT-LOG.md`, driver 2026-08-26.
 `platform.h`; a callback count is `rate*seconds/PERIOD`), make inventories
 self-check against their source, and make evidence hermetic.
 
-## A45 target builder — T1..T8 SHIPPED, T6 half
+## A45 target builder — T1..T8 COMPLETE
 
 - **T5-T8 landed**: all ten upstream tools, at upstream's own indices.
   `TBUILD CHECK OK` — 139 assertions, 8 teeth. New deviations **D54** (type
   cycle -> X+shoulder), **D55** (SCALE keeps the d-pad; upstream already
-  freezes the crosshair), **D56** (B pops a polygon vertex while drawing).
+  freezes the crosshair), **D56** (B pops a polygon vertex while drawing),
+  **D57** (the builder resumes into itself with its document).
 - **`getConnected` was a LIVE DEFECT**, found while specifying T5 — custom
   stages have had no `connected` plane since T2 and no check could see it.
   Fixed at upstream's own site with a 1500-code differential against
   upstream's executed `getConnected`.
-- **T6 IS HALF-SHIPPED, DELIBERATELY.** The DAMAGE tool works; the sim still
-  REFUSES to load a damaging stage because that physics plane has never
-  executed, so the builder refuses to SAVE one and names the rule. Un-gating
-  needs one recorded browser golden — spec §5 of
-  `docs/research/target-builder-t5-t8-spec.md`, confirmed reachable without
-  touching `oracle/`. **This is the next A45 piece.**
+- **T6 IS DONE — the damage plane EXECUTES.** `dealWithDamagingStageCollision`
+  had five translated call sites and had never run; the routing from physics'
+  queue into the hitQueue had never been written, because nothing could reach
+  it. Golden **t03** (fox, custom stage, fire ground) discharged the refusal:
+  MEASURED sim frame 263 WALK percent 0 -> frame 264 DAMAGEFLYN percent 10,
+  and the C sim reproduces both frozen browser streams exactly. The traps are
+  NARROWED, not removed (a damage row on a stage with no damaging surface is
+  still fatal), and `check-custom-stage.sh` leg [5] fails by name if no golden
+  covers the plane.
 
 ## OWED / OPEN
-- **A45 T6's damage golden** (above) — the only thing between here and T1-T8
-  complete.
 - **A33 rung 3** (host-mode fork) — owner: after the ready-now list. Unlocks
   BOTH the GC adapter and **A47 two-device link play**.
 - **Freeze manifest: 31 stale pins.** §A-par.5 batched pass, driver-only,
   **when M4 resumes — NOT now** (owner instruction, 2026-08-26). Deliberately
   untouched all session; the repo-wide producer-pin audit excludes it.
-- **A26/D53 resume is a SCREEN, not a state.** Owner asked 2026-08-26 whether
-  an exact restore is possible. Measured answer: `sizeof(GameState)` = 158.9
-  KB, `sizeof(MlSim)` = 71.9 KB — small. The binding constraint is the
-  **~100 ms SIGUSR1 grace window**, and that write time is UNMEASURED. The
-  cheap half is persisting the BUILDER's document (an `MlkStage`, and
-  `mlk_encode` already serialises it) so TBUILD can resume into itself
-  instead of bouncing to menu-top.
+- **A26 resume: the builder half is DONE (D57), the match half is not.**
+  Closing the lid in the target builder now comes back to it WITH the stage
+  you were drawing — the document travels as a `tbdoc.mlstage` through A45
+  T2's contract, and the resume is downgraded to the menu top if that write
+  fails, so it can never claim work it does not have. Proved by byte-identity
+  across park->hibernate->resume->hibernate (`check-hibernate.sh` [5b]).
+  **The remaining redirects** are MATCH -> CSS, TMATCH -> target-select,
+  SSS -> CSS, CREDITS -> options. The match one is the real ticket, and TIME
+  IS NOT WHAT BLOCKS IT: measured on the device, a write+fsync to `/mnt`
+  costs 22 ms at 2 KB and **33 ms at 160 KB**, inside a ~100 ms grace that
+  already carries the settings save — and `sizeof(GameState)` is 158.9 KB.
+  What blocks it is that GameState holds function pointers (move tables,
+  hooks) so it needs a canonical form rather than a raw write, and
+  CHECKSUM.md deliberately excludes some timing-dependent fields, so
+  "checksum-equal" and "byte-equal" are a decision to make, not a given.
 
 ## STANDING HAZARDS (all paid for)
 - **A comment is not evidence.** `z` was documented as grab for months;
