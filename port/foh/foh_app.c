@@ -356,6 +356,11 @@ static void write_shot_ppm(const uint16_t *fb, const char *path) {
 static Raster g_rz; // 240x240 fb + ink (static: large)
 
 int main(int argc, char **argv) {
+  // PRODUCT BUILD. A character outside the face domain draws a placeholder
+  // box here instead of killing the app (spec #20; foh_font.c's header has
+  // the polarity argument). This call and foh_dev.c's are the ONLY two in
+  // the tree — every check build keeps the loud gfx_fatal by leaving it out.
+  foh_font_enable_placeholder();
   const char *flowPath = 0, *flowOut = 0, *shotsDir = 0;
   const char *bridge = 0; // "state" | "verify" | "tstate" | "tverify"
   const char *simdataPath = 0, *tracePath = 0, *outPath = 0, *bstateOut = 0;

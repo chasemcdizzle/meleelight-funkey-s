@@ -8,8 +8,29 @@
 //
 // Format: 7 rows per glyph, 5 bits per row, bit 4 = leftmost pixel.
 // Coverage: A-Z 0-9 space and the punctuation the FOH screens use.
-// Unknown characters are a LOUD failure (gfx_fatal), never a silent blank
-// (HARD RULE 2 — a missing glyph is a bug, not a fallback).
+//
+// THE FACE DOMAIN (CONTEXT.md; spec #20 / ticket #21). The two tables below
+// ARE the domain — "what can we draw" is this file and nothing else, and
+// `foh_face_domain` hands the set out so a check can ENUMERATE it rather
+// than restate it somewhere that then drifts.
+//
+// A character outside the domain used to be a hard kill on every build, and
+// that shipped EIGHT crashes to hardware in one evening: every refusal string
+// the target builder writes was lowercase, so the app died at the exact
+// moment the player most needed to read why. The behaviour now SPLITS BY
+// BUILD, which is spec #20's ruling:
+//
+//   * check builds keep the LOUD failure (gfx_fatal). That is the DEFAULT,
+//     and it is the default on purpose: a check that forgets to opt in stays
+//     loud, so loudness can never be lost by omission. check-foh-flows.sh's
+//     finish-banner tooth rests on exactly this and is untouched.
+//   * the PRODUCT build draws a visible placeholder box. A player mid-stage
+//     should lose a glyph, not a session.
+//
+// The switch is the project's own pointer/flag-seam idiom (ml_sim_runai_live,
+// foh_tbuild_ops): the product mains — foh_app.c and foh_dev.c — call
+// `foh_font_enable_placeholder()` at startup and nothing else does. No build
+// flag, so no check build can be mis-compiled into silence.
 #include "foh.h"
 
 typedef struct {
@@ -155,11 +176,66 @@ static const FohGlyph2 kGlyphs2[] = {
     {'<', {0x06, 0x0C, 0x18, 0x30, 0x18, 0x0C, 0x06, 0x00, 0x00}},
 };
 
+// --- the domain, and what happens outside it --------------------------------
+//
+// The placeholder is a filled-corner box: it cannot be mistaken for any
+// authored glyph, and at scale 1 it is as loud on screen as a 5x7 face gets.
+// It is NOT in either table, so it is unreachable from any real character —
+// only from a miss.
+static const FohGlyph kMissing1 = {'\0',
+                                   {0x1F, 0x11, 0x15, 0x15, 0x15, 0x11, 0x1F}};
+static const FohGlyph2 kMissing2 = {
+    '\0', {0x3F, 0x21, 0x2D, 0x2D, 0x2D, 0x2D, 0x2D, 0x21, 0x3F}};
+
+// 0 = LOUD (the default, and what every check build gets); 1 = placeholder.
+// Product mains flip it; see this file's header for why the polarity is that
+// way round and not the other.
+static int g_placeholder;
+
+void foh_font_enable_placeholder(void) { g_placeholder = 1; }
+
+int foh_font_placeholder_enabled(void) { return g_placeholder; }
+
+bool foh_face_has(char c, int face) {
+  if (face == 2) {
+    const int n = (int)(sizeof kGlyphs2 / sizeof kGlyphs2[0]);
+    for (int k = 0; k < n; k++) {
+      if (kGlyphs2[k].ch == c) return true;
+    }
+    return false;
+  }
+  const int n = (int)(sizeof kGlyphs / sizeof kGlyphs[0]);
+  for (int k = 0; k < n; k++) {
+    if (kGlyphs[k].ch == c) return true;
+  }
+  return false;
+}
+
+char foh_face_undrawable(const char *s, int face) {
+  if (!s) return 0;
+  for (const char *p = s; *p; p++) {
+    if (!foh_face_has(*p, face)) return *p;
+  }
+  return 0;
+}
+
+int foh_face_domain(int face, char *out, int cap) {
+  const int n = face == 2 ? (int)(sizeof kGlyphs2 / sizeof kGlyphs2[0])
+                          : (int)(sizeof kGlyphs / sizeof kGlyphs[0]);
+  if (!out || cap <= n) return -1;
+  for (int k = 0; k < n; k++) {
+    out[k] = face == 2 ? kGlyphs2[k].ch : kGlyphs[k].ch;
+  }
+  out[n] = '\0';
+  return n;
+}
+
 static const FohGlyph *glyph_for(char c) {
   const int n = (int)(sizeof kGlyphs / sizeof kGlyphs[0]);
   for (int k = 0; k < n; k++) {
     if (kGlyphs[k].ch == c) return &kGlyphs[k];
   }
+  if (g_placeholder) return &kMissing1;
   gfx_fatal("foh_font: no glyph for requested character");
 }
 
@@ -207,6 +283,7 @@ static const FohGlyph2 *glyph2_for(char c) {
   for (int k = 0; k < n; k++) {
     if (kGlyphs2[k].ch == c) return &kGlyphs2[k];
   }
+  if (g_placeholder) return &kMissing2;
   gfx_fatal("foh_font: no face-2 glyph for requested character");
 }
 

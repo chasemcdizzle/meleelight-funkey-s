@@ -1209,4 +1209,24 @@ void foh_text2(Raster *rz, int x, int y, int scale, int italic,
                const char *s, RastCol col);
 int foh_text2_width(const char *s, int scale);
 
+// --- THE FACE DOMAIN (CONTEXT.md; spec #20 / ticket #21) --------------------
+// The set of characters a face can actually draw. It lives in foh_font.c's
+// glyph tables and NOWHERE ELSE — these four are the only way to ask about
+// it, so no caller has to restate a list that then drifts out of step.
+// `face` is 1 (the 5x7 body face) or 2 (the 6x9 display face).
+bool foh_face_has(char c, int face);
+// The first character of `s` the face cannot draw, or 0 when the whole
+// string is drawable. NULL-safe (a null string is drawable: nothing to draw).
+char foh_face_undrawable(const char *s, int face);
+// Writes the face's whole drawable set into `out` as a NUL-terminated string
+// and returns its length; -1 if `cap` cannot hold it. For checks that want to
+// ENUMERATE the domain rather than assert a hand-copied list.
+int foh_face_domain(int face, char *out, int cap);
+// Product builds ONLY (foh_app.c, foh_dev.c): draw a visible placeholder box
+// for a character outside the domain instead of dying. Every check build
+// leaves this alone and keeps the loud gfx_fatal — see foh_font.c's header
+// for why the default is that way round.
+void foh_font_enable_placeholder(void);
+int foh_font_placeholder_enabled(void);
+
 #endif // FOH_FOH_H

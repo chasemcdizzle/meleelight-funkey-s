@@ -134,12 +134,23 @@ n="$(grep -cxF '#define FOH_TB_PLAYABLE_TARGETS 10' "$FOH/foh_tbuild.c")" || tru
    — the cap moved; re-read foh_tbuild.c and re-sync this check's capcheck.c"
 
 # --- [2] the data planes the probe links -------------------------------------
-echo "=== [2] generated tables (own dir; host prerequisite: node)"
-node pipeline/run.js --only animations,tables,stages,targets --out "$DATA" \
-  > "$BUILD/pipeline.log" 2>&1 \
+# `assets` joined this list for ticket #21: the witness now DRAWS every frame
+# it simulates, and foh_render's first statement is art_load(), which hard
+# fails without menu.img1. Built into this check's OWN dir (check-legibility.sh
+# :156-164's arrangement); nothing outside $BUILD is written.
+echo "=== [2] generated tables + renderer art (own dir; prerequisite: node)"
+node pipeline/run.js --only animations,tables,stages,targets,assets \
+  --out "$DATA" > "$BUILD/pipeline.log" 2>&1 \
   || { relay_lines < "$BUILD/pipeline.log"
        fail "the pipeline's table stages did not run (host prerequisite: node)"; }
-made "$DATA/ml_tables.c" "$DATA/ml_stages.c" "$DATA/ml_targets.c"
+made "$DATA/ml_tables.c" "$DATA/ml_stages.c" "$DATA/ml_targets.c" \
+     "$DATA/assets/menu.img1"
+# EXPORTED, not set per command: the witness is run seven times below (once
+# for real, once per corpus slot, once per tooth) and every one of them now
+# renders. A per-command assignment is a run someone forgets to update, and a
+# witness that dies on `artwork unusable` looks exactly like a witness that
+# found nothing.
+export MLFK_DATA_DIR="$DATA"
 
 cc -O1 "${CFLAGS_COMMON[@]}" -I"$FOH" -I"$DATA" -o "$BUILD/capcheck" \
   "$BUILD/capcheck.c" \
@@ -289,6 +300,112 @@ done
    agree vacuously, which proves nothing"
 echo "  10/10 verdicts agree ($nacc accepted, $((10 - nacc)) refused)"
 
+# --- [4b] THE FACE DOMAIN'S TWO BEHAVIOURS ----------------------------------
+# A character outside the face domain must be a LOUD failure in a check build
+# and a VISIBLE PLACEHOLDER in the product build (spec #20). That is one
+# decision with two arms, so both are exercised here, in one probe, against
+# the real foh_font.c: nothing about it is taken on trust from a comment.
+#
+# The probe also states the domain the way the rest of the tree should — by
+# ASKING foh_font.c through foh_face_domain, never by restating a list here
+# that then drifts out of step with the glyph tables.
+echo "=== [4b] the face domain: loud in checks, a visible placeholder in product"
+cat > "$BUILD/facedomain.c" <<'EOF'
+#include "../gfx/raster.h"
+#include "foh.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+static int g_fatals;
+void gfx_fatal(const char *what) {
+  printf("FATAL %s\n", what);
+  g_fatals++;
+  exit(7); // the loud arm ends the process, exactly as it does in a witness
+}
+
+static Raster rz;
+static int ink_count(void) {
+  int n = 0;
+  for (int i = 0; i < RAST_W * RAST_H; i++) if (rz.fb[i] != 0) n++;
+  return n;
+}
+
+int main(int argc, char **argv) {
+  const int product = argc > 1 && strcmp(argv[1], "--product") == 0;
+  if (product) foh_font_enable_placeholder();
+  // The domain, asked for rather than restated.
+  char dom1[128], dom2[128];
+  const int n1 = foh_face_domain(1, dom1, sizeof dom1);
+  const int n2 = foh_face_domain(2, dom2, sizeof dom2);
+  if (n1 <= 0 || n2 <= 0) { printf("DOMAIN BROKEN\n"); return 1; }
+  int lower1 = 0, lower2 = 0;
+  for (int i = 0; i < n1; i++) if (dom1[i] >= 'a' && dom1[i] <= 'z') lower1++;
+  for (int i = 0; i < n2; i++) if (dom2[i] >= 'a' && dom2[i] <= 'z') lower2++;
+  printf("DOMAIN face1=%d face2=%d lower1=%d lower2=%d q1=%d q2=%d\n", n1, n2,
+         lower1, lower2, foh_face_has('?', 1) ? 1 : 0,
+         foh_face_has('?', 2) ? 1 : 0);
+  rast_clear(&rz, 0, 0, 0, 0, RAST_H);
+  // A lowercase string: the exact shape of every crash that shipped.
+  foh_text(&rz, 8, 8, 1, "saved", (RastCol){255, 255, 255, 256});
+  printf("DREW ink=%d fatals=%d placeholder=%d\n", ink_count(), g_fatals,
+         foh_font_placeholder_enabled());
+  return 0;
+}
+EOF
+cc -O1 "${CFLAGS_COMMON[@]}" -I"$FOH" -o "$BUILD/facedomain" \
+  "$BUILD/facedomain.c" "$FOH/foh_font.c" "$GFX/raster.c" port/fdlibm/fdlibm.c \
+  -lm || fail "the face-domain probe did not build"
+# (a) CHECK BUILD — the default, nothing opted in: an undrawable character
+#     must END THE PROCESS. rc 7 is the probe's own gfx_fatal, so this is
+#     "the loud arm ran", not "something went wrong".
+rcf=0
+"$BUILD/facedomain" > "$BUILD/facedomain-check.out" 2>&1 || rcf=$?
+relay_lines < "$BUILD/facedomain-check.out"
+[ "$rcf" = 7 ] || { relay_lines < "$BUILD/facedomain-check.out"
+  fail "the DEFAULT build drew a lowercase string and lived (rc $rcf) — the
+   loud missing-glyph failure has been lost, and every check in the tree that
+   relies on it (check-foh-flows.sh's finish-banner tooth included) is now
+   quietly vacuous"; }
+grep -q '^DREW ' "$BUILD/facedomain-check.out" \
+  && fail "the default build got PAST the undrawable string"
+# The domain itself: no lowercase in either face, and face 1 still has no '?'
+# (foh_font.c's note explains why that hole must stay — a tooth lives in it).
+grep -qE '^DOMAIN face1=[0-9]+ face2=[0-9]+ lower1=0 lower2=0 q1=0 q2=1$' \
+  "$BUILD/facedomain-check.out" \
+  || fail "the face domain is not what the tree believes: it must carry NO
+   lowercase in either face, and face 1 must still lack '?' (see foh_font.c)"
+# (b) PRODUCT BUILD — the placeholder arm: the same string must draw VISIBLE
+#     ink and the process must live.
+"$BUILD/facedomain" --product > "$BUILD/facedomain-product.out" 2>&1 \
+  || { relay_lines < "$BUILD/facedomain-product.out"
+       fail "the PRODUCT arm died on a character outside the domain — a typo
+   must cost the player a glyph, not the session"; }
+relay_lines < "$BUILD/facedomain-product.out"
+pink="$(sed -n 's/^DREW ink=\([0-9]*\) fatals=0 placeholder=1$/\1/p' \
+  "$BUILD/facedomain-product.out")"
+[ -n "$pink" ] || fail "the product arm printed no clean DREW line"
+# Five placeholder boxes, 5x7 with a hollow middle: nowhere near zero, and a
+# floor rather than a pin so the box may be redrawn without editing a check.
+[ "$pink" -ge 60 ] || fail "the placeholder drew only $pink lit pixels — it
+   must be VISIBLE, which is the whole point of drawing it at all"
+echo "  loud by default (rc 7); placeholder draws $pink lit pixels on demand"
+
+# THE SEAM'S OWN PIN. The placeholder arm is opt-in and exactly two files may
+# opt in. If a third did, a check would go quietly blind; if neither did, the
+# product would still be killing players. Both are caught here.
+# COMMITTED sources only (git ls-files), and the CALL STATEMENT only — a
+# mention in a comment is not an opt-in, and neither is a copy this check
+# built into its own scratch dir.
+optin="$(git ls-files -- '*.c' \
+  | xargs grep -lE '^[[:space:]]*foh_font_enable_placeholder\(\);$' \
+  | sort | tr '\n' ' ')"
+[ "$optin" = "port/foh/foh_app.c port/foh/foh_dev.c " ] \
+  || fail "foh_font_enable_placeholder() is called from |$optin| — it belongs
+   to the two PRODUCT mains and to nothing else (port/foh/foh_app.c and
+   port/foh/foh_dev.c). A check build that opts in stops being loud."
+echo "  the placeholder is opted into by the two product mains and nothing else"
+
 # --- TEETH -------------------------------------------------------------------
 # Every tooth perturbs a COPY. The committed sources are never written.
 # Each is checked for BITING (the right leg fails) and for ORTHOGONALITY
@@ -392,7 +509,7 @@ bites t1-clobber '...and custom0.mlstage is BYTE-IDENTICAL (no clobber, no shift
 echo "=== [T2] tooth: the 11th-target refusal becomes a sound only"
 perturb t2-silent foh_tbuild.c \
   '    foh_snd_push(s, "deny"); // :568
-    say(s, "10 targets max");' \
+    say(s, "10 TARGETS MAX");' \
   '    foh_snd_push(s, "deny"); // :568 — T2: no on-screen reason'
 build_tooth t2-silent foh_tbuild.c
 bites t2-silent '...and the refusal is a STRING ON SCREEN, not just a deny sound'
@@ -442,14 +559,14 @@ echo "  T3 bites leg [4] only: FOH says OK, the sim says REFUSED"
 # comparison entirely, so a corrupt file reaches mlk_parse.
 echo "=== [T4] tooth: SUM verified is skipped (corrupt bytes reach the parser)"
 perturb t4-nosum foh_tbuild.c \
-  '    if (memcmp(hex, buf + sumAt + 4, 64) != 0) RD_FAIL("SUM mismatch");' \
+  '    if (memcmp(hex, buf + sumAt + 4, 64) != 0) RD_FAIL("SUM MISMATCH");' \
   '    (void)hex; // T4: SUM computed and then ignored'
 build_tooth t4-nosum foh_tbuild.c
 t4a="$(MLFK_PERSIST_DIR="$CORP" "$BUILD/t4-nosum/wit" --probe 1 2>&1)" || true
 t4b="$(MLFK_PERSIST_DIR="$CORP" "$BUILD/t4-nosum/wit" --probe 2 2>&1)" || true
 bit=0
-case "$t4a" in "FOHLOAD REFUSED SUM mismatch") ;; *) bit=$((bit + 1));; esac
-case "$t4b" in "FOHLOAD REFUSED SUM mismatch") ;; *) bit=$((bit + 1));; esac
+case "$t4a" in "FOHLOAD REFUSED SUM MISMATCH") ;; *) bit=$((bit + 1));; esac
+case "$t4b" in "FOHLOAD REFUSED SUM MISMATCH") ;; *) bit=$((bit + 1));; esac
 [ "$bit" -ge 1 ] || fail "T4: dropping the SUM check changed no verdict —
    the corpus's corrupted entries are not reaching the SUM rule
      slot 1: $t4a
@@ -511,6 +628,88 @@ perturb t8-orphan foh_tbuild.c \
 build_tooth t8-orphan foh_tbuild.c
 bites t8-orphan '...taking its THREE owned surfaces with it (:696-731 polygonMap)'
 
+# --- [T9] the crash that shipped, put back ----------------------------------
+# EIGHT crashes reached hardware because refusal strings were written in
+# lowercase and the face has none. This tooth restores that defect exactly as
+# it shipped — one refusal reverted to the words it had, and the seam that now
+# brings foreign text into the domain taken back out — and requires the check
+# to DIE where the player would have died.
+#
+# rc 3 is the witness's own gfx_fatal exit, and the ONLY thing in this witness
+# that can reach the font is foh_render. So a rc-3 death is the measurement
+# that DRAWING is what caught it: before this ticket the same defect ran to
+# completion and printed TBUILD OK.
+echo "=== [T9] tooth: a refusal string goes back outside the face domain"
+perturb t9-lowercase foh_tbuild.c \
+  '  static char buf[TB_MSG_MAX];
+  tb_domain_copy(buf, sizeof buf, msg);
+  s->tbMsg = buf;' \
+  '  s->tbMsg = msg; // T9: straight to the screen, as authored' \
+  '    say(s, "10 TARGETS MAX");' \
+  '    say(s, "10 targets max"); // T9: the words that shipped'
+build_tooth t9-lowercase foh_tbuild.c
+t9rc=0
+run_tooth t9-lowercase || t9rc=$?
+relay_lines < "$BUILD/t9-lowercase/wit.out"
+[ "$t9rc" = 3 ] || fail "T9: a lowercase refusal string produced rc $t9rc, want
+   the missing-glyph fatal class 3 — rc 0 means the check would ship those
+   eight crashes again, and any other rc means it died somewhere else"
+grep -qxF 'TBUILD OK' "$BUILD/t9-lowercase/wit.out" \
+  && fail "T9: the perturbed build still printed the OK verdict"
+# ORTHOGONALITY, and the point of the whole ticket: the run got all the way to
+# the refusal on its OWN assertions before the renderer killed it. Those
+# assertions are exactly the ones that used to pass while the app crashed.
+grep -qF 'ok  A places one target' "$BUILD/t9-lowercase/wit.out" \
+  || fail "T9: the run died before it reached the refusal — the tooth is
+   measuring a build failure, not the defect"
+echo "  T9 bites: the run reaches the refusal, then dies drawing it (rc 3)"
+
+# --- [T10] the witness stops drawing ----------------------------------------
+# The ticket's own mechanism, held hostage to nothing but its outcome: with
+# the render call gone the machine still ticks and every pre-existing
+# assertion still passes — and this check must still refuse to say OK, because
+# nothing it claims about what the player SEES can be true of a frame nobody
+# drew. This is the hole that let eight crashes through, asserted shut.
+echo "=== [T10] tooth: the witness simulates without drawing"
+perturb t10-blind foh_tbuild_witness.c \
+  '  foh_render(s, &g_rz);' \
+  '  (void)0; // T10: the frame is never drawn'
+build_tooth t10-blind foh_tbuild_witness.c
+bites t10-blind 'the SELECTED pause row is readable against its own highlight'
+# and it must be the DRAWING that broke, not the machine underneath it
+grep -qF 'ok  A places one target' "$BUILD/t10-blind/wit.out" \
+  || fail "T10: the machine legs broke too — this tooth must remove only the
+   drawing, or it is not measuring the drawing"
+
+# --- [T11] the selected pause row hides in its own highlight -----------------
+# The defect the owner could see: `rrect` FILLS, so a selected row drawn in
+# the highlight's own colour is the one row nobody can read.
+echo "=== [T11] tooth: the selected pause row takes the highlight's colour"
+perturb t11-invisible foh_render.c \
+  'text_center(rz, y, 1, kTbPause[r], sel ? kOnAccent : kText);' \
+  'text_center(rz, y, 1, kTbPause[r], sel ? kAccent : kText); // T11'
+build_tooth t11-invisible foh_render.c
+bites t11-invisible 'the SELECTED pause row is readable against its own highlight'
+grep -qF 'ok  ...and the two are NOT the same ink' \
+  "$BUILD/t11-invisible/wit.out" \
+  || fail "T11: the slot-list ink assertion broke too — T11 and T12 are not
+   orthogonal, so one of them is not measuring what it names"
+
+# --- [T12] a stage and an empty slot read the same ---------------------------
+# The half-finished edit the ticket did not name: `v.present[i] ? kDim : kDim`,
+# both arms identical, so the one distinction the slot list exists to draw was
+# invisible. Orthogonal to T11: same screen, different ink, different row.
+echo "=== [T12] tooth: a slot holding a stage draws like an empty one"
+perturb t12-sameink foh_render.c \
+  '               sel ? kOnAccent : (v.present[i] ? kText : kDim));' \
+  '               sel ? kOnAccent : kDim); // T12: one ink for both'
+build_tooth t12-sameink foh_render.c
+bites t12-sameink '...and the two are NOT the same ink'
+grep -qF 'ok  the SELECTED pause row is readable against its own highlight' \
+  "$BUILD/t12-sameink/wit.out" \
+  || fail "T12: the pause-row assertion broke too — T11 and T12 are not
+   orthogonal"
+
 # The two T5-T8 teeth must be orthogonal to each other AND to the T4 legs:
 # a tooth that breaks the whole editor proves only that the build broke.
 grep -qF 'ok  A places one target' "$BUILD/t7-scalefreeze/wit.out" \
@@ -529,7 +728,7 @@ grep -qF 'ok  TARGET BUILDER -> the target-builder screen' \
   || fail "T6 also broke the BUILDER entry — T5 and T6 are not orthogonal"
 grep -qF 'ok  A flips to the CUSTOM page' "$BUILD/t1-clobber/wit.out" \
   || fail "T1 also broke the custom page — the clobber tooth is not orthogonal"
-echo "  teeth are orthogonal (T1 $(nfails t1-clobber), T2 $(nfails t2-silent), T5 $(nfails t5-refuse), T6 $(nfails t6-addcode), T7 $(nfails t7-scalefreeze), T8 $(nfails t8-orphan) failure(s) each)"
+echo "  teeth are orthogonal (T1 $(nfails t1-clobber), T2 $(nfails t2-silent), T5 $(nfails t5-refuse), T6 $(nfails t6-addcode), T7 $(nfails t7-scalefreeze), T8 $(nfails t8-orphan), T10 $(nfails t10-blind), T11 $(nfails t11-invisible), T12 $(nfails t12-sameink) failure(s) each)"
 
 # --- [5] hygiene -------------------------------------------------------------
 git_dirty_after="$(tree_fingerprint)" \

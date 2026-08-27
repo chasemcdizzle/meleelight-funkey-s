@@ -101,6 +101,12 @@ static const RastCol kPanel = {30, 30, 60, 256};
 static const RastCol kText = {220, 220, 230, 256};
 static const RastCol kDim = {120, 120, 140, 256};
 static const RastCol kAccent = {255, 200, 60, 256};
+// Ink for text sitting ON a kAccent fill. `rrect` FILLS, so a highlighted row
+// whose text is also kAccent is a row nobody can read — which is what the
+// target builder's pause menu and its slot list both shipped (ticket #21).
+// One named colour, so the two sites cannot drift apart again and a check can
+// pin the pair. Near-black on amber: the strongest contrast the palette holds.
+static const RastCol kOnAccent = {16, 14, 8, 256};
 static const RastCol kCursor = {90, 160, 255, 256};
 
 // --- 8-bit source-over, then an OPAQUE store ------------------------------
@@ -2040,9 +2046,12 @@ static void render_ctrl_pad(Raster *rz) {
 // D13 sketched as "listening mode, hold-A clear, protected primaries" is
 // deliberately NOT what shipped — see foh.c's step_ctrl note for why a
 // permutation on an L/R row needs none of those three parts.
-// foh_font.c's face 1 is UPPERCASE-ONLY (49 glyphs) and an unknown glyph is
-// a hard gfx_fatal, so any string that comes from outside this file — e.g.
-// ctl_style.h's display names — is folded before it reaches foh_text.
+// foh_font.c's face 1 is UPPERCASE-ONLY — the FACE DOMAIN (CONTEXT.md),
+// which lives in that file's glyph tables and is asked for through
+// foh_face_domain rather than restated here. A character outside it is a
+// gfx_fatal in check builds and a placeholder box in the product, and
+// neither is what a name should look like, so any string that comes from
+// outside this file — e.g. ctl_style.h's display names — is folded first.
 static void foh_upper(char *p) {
   for (; *p; p++) {
     if (*p >= 'a' && *p <= 'z') *p = (char)(*p - 'a' + 'A');
@@ -2105,8 +2114,8 @@ static void render_ctrl_key(const FohState *s, Raster *rz) {
   {
     char buf[40];
     // UPPERCASE at the RENDER site, not in ctl_style.c: foh_font.c's face 1
-    // carries no lowercase glyphs at all (49 glyphs: A-Z 0-9 and a short
-    // punctuation set), and a missing glyph is a FATAL, not a blank — the
+    // carries no lowercase glyphs at all, and a character outside the face
+    // domain is a check-build FATAL (a placeholder box in the product) — the
     // f04-nav flow proved it. The shared API keeps its natural-case strings
     // for any consumer with a real font; only this screen folds them.
     snprintf(buf, sizeof buf, "STYLE: %s", ctl_style_name((int)ctl_style_get()));
@@ -2772,7 +2781,11 @@ static void render_tbuild(const FohState *s, Raster *rz) {
     // Both names come from the VIEW, never from a symbol in foh_tbuild.c:
     // this TU is linked by eleven witnesses that do not link the builder,
     // and a direct call would break every one of them (measured).
-    const char *tool = v.toolName ? v.toolName : "?";
+    // "-", not "?": face 1 has no '?' at all (foh_font.c's note explains why
+    // it must stay out), so the NULL arm was itself a kill. It is not
+    // reachable today — the view always names a tool — and this keeps it
+    // harmless if it ever becomes so.
+    const char *tool = v.toolName ? v.toolName : "-";
     // The two tools that carry a TYPE show it, because D54 moved the cycle
     // to X+shoulder and an invisible modal type is a trap on a 240px screen.
     const char *type = v.typeName;
@@ -2814,7 +2827,9 @@ static void render_tbuild(const FohState *s, Raster *rz) {
       const int y = 84 + r * 22;
       const int sel = r == s->tbPauseRow;
       if (sel) rrect(rz, 56, y - 4, 128, 18, 0, kAccent);
-      text_center(rz, y, 1, kTbPause[r], sel ? kAccent : kText);
+      // kOnAccent, NOT kAccent: the rrect above is a FILL, so the selected
+      // row's own words used to vanish into their own highlight.
+      text_center(rz, y, 1, kTbPause[r], sel ? kOnAccent : kText);
     }
     return;
   }
@@ -2833,10 +2848,17 @@ static void render_tbuild(const FohState *s, Raster *rz) {
       if (sel) rrect(rz, 6, y - 3, RAST_W - 12, 15, 0, kAccent);
       char name[16];
       snprintf(name, sizeof name, "CUSTOM %d", i + 1);
-      foh_text(rz, 12, y, 1, name, sel ? kAccent : kText);
-      const char *st = v.present[i] ? "STAGE" : (v.reason[i] ? v.reason[i] : "empty");
+      // Same fill, same defect, same fix as the pause rows above.
+      foh_text(rz, 12, y, 1, name, sel ? kOnAccent : kText);
+      const char *st =
+          v.present[i] ? "STAGE" : (v.reason[i] ? v.reason[i] : "EMPTY");
+      // A slot that HOLDS a stage and a slot that refused used to draw in the
+      // identical ink (`v.present[i] ? kDim : kDim`, both arms the same), so
+      // the one distinction this list exists to make was invisible. A stage
+      // reads at full strength; a reason stays dim; a selected row takes the
+      // contrasting ink because the highlight is underneath it.
       foh_text(rz, RAST_W - 12 - foh_text_width(st, 1), y, 1, st,
-               v.present[i] ? kDim : kDim);
+               sel ? kOnAccent : (v.present[i] ? kText : kDim));
     }
     foh_text(rz, 8, 224, 1, "A CONFIRM   B BACK", kDim);
   }
