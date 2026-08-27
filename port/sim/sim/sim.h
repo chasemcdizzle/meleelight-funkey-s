@@ -207,6 +207,24 @@ extern void (*ml_sim_ai_cov_dump)(void);
 // is what proves the sim side did not move by accident.
 #define ML_MATCH_TIMER_TICK 0.016667
 
+// --- snapshot seam (ticket #28) --------------------------------------------
+//
+// The SAME link seam as ml_sim_runai_live above, for the same reason:
+// port/sim/check-sim.sh's frozen TU list does not carry sim_snapshot.c, so
+// both pointers stay NULL in the M2 EXIT GATE's binary and its behaviour is
+// preserved bit-for-bit (`SIM CONFORMS` is the standing proof). A build that
+// links sim_snapshot.c gets them installed by that TU's constructor, which
+// runs before main.
+//
+// ml_sim_snap_boot runs ONCE, after boot/setup/bridge-load and before the
+// frame loop, and returns the number of frames the restored state has
+// already simulated (0 when there is nothing to restore) — so the loop
+// resumes at the frame after the one the snapshot was taken at.
+// ml_sim_snap_frame runs after each frame's tick and hash, i.e. exactly at
+// the frame boundary oracle/CHECKSUM.md §5 defines.
+extern long (*ml_sim_snap_boot)(GameState *g);
+extern void (*ml_sim_snap_frame)(GameState *g, long frame);
+
 // --- finishGame seam (punch-list C18) --------------------------------------
 //
 // Upstream calls finishGame from FIVE sites: matchTimerTick's expiry

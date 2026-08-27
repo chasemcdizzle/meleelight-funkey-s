@@ -30,9 +30,12 @@
 // domain aborts).
 #include "sim.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "sim_modstate.h" // ticket #28: the charHitboxes snapshot blob
 
 #include "../calib/canon.h"
 #include "../characters/falco/moves.h"
@@ -782,6 +785,48 @@ typedef struct {
 static SdChdMove g_chd[ML_CHARS][SD_CHD_MOVES];
 static SdChdProv g_prov[4][4];
 static bool g_chd_ready = false;
+
+// --- ticket #28: the LIVE charHitboxes plane is snapshot state -------------
+//
+// Move code WRITES this plane through stale id aliases (rule 17: puff's
+// rollout dmg, sing's id[0].size, marth's charge dmg — measured live drift on
+// g04), so it is not recoverable from pristine CTAB1 once a match has
+// started, and the provenance is what says which player slot aliases which
+// entry. It is module state by construction (upstream's global chars data
+// object), which is why it travels as a blob with its own accessors rather
+// than as a GameState row. Declared in sim_modstate.h; sim-modstate.frozen.txt
+// is the ledger. The blob is a struct so that its size is one expression and
+// the _Static_assert below fails if a member is added without a decision.
+typedef struct {
+  SdChdMove chd[ML_CHARS][SD_CHD_MOVES];
+  SdChdProv prov[4][4];
+  uint8_t ready;
+} SdChdSnap;
+_Static_assert(sizeof(SdChdSnap) == sizeof(SdChdMove) * ML_CHARS *
+                                            SD_CHD_MOVES +
+                                        sizeof(SdChdProv) * 16 + 8,
+               "SdChdSnap gained or lost a member (or its padding moved): the "
+               "charHitboxes snapshot blob is ticket #28 state — carry the "
+               "new member in sim_chd_snap_save/load too.");
+
+size_t sim_chd_snap_bytes(void) { return sizeof(SdChdSnap); }
+
+void sim_chd_snap_save(void *dst) {
+  SdChdSnap s;
+  memset(&s, 0, sizeof s); // padding is written, so the bytes are stable
+  memcpy(s.chd, g_chd, sizeof g_chd);
+  memcpy(s.prov, g_prov, sizeof g_prov);
+  s.ready = g_chd_ready ? 1u : 0u;
+  memcpy(dst, &s, sizeof s);
+}
+
+void sim_chd_snap_load(const void *src) {
+  SdChdSnap s;
+  memcpy(&s, src, sizeof s);
+  memcpy(g_chd, s.chd, sizeof g_chd);
+  memcpy(g_prov, s.prov, sizeof g_prov);
+  g_chd_ready = s.ready != 0;
+}
 
 void sim_chd_reset(void) {
   for (int c = 0; c < ML_CHARS; c++) {

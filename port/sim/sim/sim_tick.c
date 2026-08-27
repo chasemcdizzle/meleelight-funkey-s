@@ -64,6 +64,13 @@ void (*ml_sim_ai_cov_dump)(void) = 0;
 // run behaves exactly as before.
 void (*ml_sim_finish_hook)(void) = 0;
 
+// snapshot pointer seam (sim.h; ticket #28): NULL unless sim_snapshot.c is
+// linked — its constructor installs the real hooks. The frozen M2-gate build
+// never links it, so both stay NULL and sim_main.c's frame loop is the loop
+// it always was.
+long (*ml_sim_snap_boot)(GameState *g) = 0;
+void (*ml_sim_snap_frame)(GameState *g, long frame) = 0;
+
 void mv_out_of_domain(const char *what) { sim_fatal(what); }
 void ml_phys_out_of_domain(const char *what) { sim_fatal(what); }
 void ml_hd_out_of_domain(const char *what) { sim_fatal(what); }
@@ -189,6 +196,13 @@ double mv_howl_play_id(const char *name) {
   (void)name;
   return ++g_howl_counter;
 }
+
+// ticket #28: this counter is MODULE state that a snapshot has to carry —
+// the ids it mints are stored in players (marth's shieldBreakerID) and read
+// back by `.stop(id)`, so a resumed match that restarted it would re-issue
+// an id a live voice already holds. Declared in sim_modstate.h.
+double sim_tick_howl_counter_get(void) { return g_howl_counter; }
+void sim_tick_howl_counter_set(double v) { g_howl_counter = v; }
 
 // --- the moving-platforms bridge (task 14 -> the live plane) --------------------
 
