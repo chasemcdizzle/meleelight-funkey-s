@@ -111,6 +111,48 @@
 // exactly the -1.0 pattern (bff0000000000000) or finite in [0, 6000)
 // (the matchTimer cap, targetplay.js:282).
 //
+// THE FIELD TABLE, AND WHY VERSION BUMPS ARE RETIRED (ticket #22, ADR
+// 0001 — read the ADR; this is the mechanism, not the argument).
+// Everything above describes the BYTES, and every byte of it is now
+// produced and consumed by ONE declarative table — foh_persist.c's
+// FP_FIELDS, one row per persisted field naming its key, its type, its
+// offset, its domain and the earliest file version that carries it. The
+// writer walks it and the reader walks it, so a field cannot be written
+// in a shape the reader does not accept, and adding a field is ONE ROW.
+//
+// Three consequences, all of them load-bearing:
+//
+//   * THE SIX MIGRATION ARMS ARE GONE, replaced by the table's `since`
+//     column. A v1 file simply has no row with since > 1, so those fields
+//     take their absent value; that IS the migration, and it is the same
+//     code path as a current file. Every arm's documented outcome above is
+//     unchanged and still proven by check-device-persist.sh's T-H9/T-H13/
+//     T-H16 byte-for-byte migration teeth.
+//
+//   * A HISTORICAL VERSION IS PARSED AGAINST ITS OWN FROZEN GRAMMAR:
+//     exactly the rows with since <= ver, in order, ALL MANDATORY, and
+//     nothing else permitted. A v3 file carrying a v4 line is still
+//     corrupt, a v3 file missing `modonr` is still corrupt (T-H10/T-H11/
+//     T-H12/T-H14/T-H15/T-H17). Old formats do not become permissive.
+//
+//   * THE CURRENT VERSION IS PARSED EXTENSIBLY, and that is what retires
+//     the bump: known keys in order, UNKNOWN KEYS SKIPPED, ABSENT KEYS
+//     DEFAULTED. A future build that appends a row keeps writing
+//     MLFKPERSIST7, this build ignores the row it does not know, and that
+//     build defaults the row this one did not write. `MLFKPERSIST7` is
+//     therefore the LAST version number: >= 8 stays RESET_VERSION because
+//     nothing will ever write one. Out-of-order and duplicate keys are
+//     still `order` corruption, and a known key's VALUE is still judged by
+//     its own grammar and domain — extensible is not permissive.
+//
+// POINTER-VALUED FIELDS ARE NEVER COPIED. The table's kinds are int and
+// double only, so a pointer field cannot be given a row; it must instead
+// be declared unpersisted (FP_UNPERSISTED_BYTES) and RECONSTRUCTED after
+// the fields land — a raw byte image would restore an address that is
+// valid only while the binary is unchanged, which is a trap and not a
+// feature. There are none today, and the table kind FP_RECON exists to
+// mark the first one.
+//
 // LOAD (foh_persist_load): strict anchored line-by-line parse. Missing
 // file / UNSUPPORTED version (>= 8; v1..v6 migrate, see above) / ANY
 // grammar, order, domain, checksum,
@@ -296,6 +338,35 @@ typedef struct {
   // foh_persist_resume_target() below and it is also the file's DOMAIN,
   // so a screen the driver would refuse to restore cannot be stored.
   int resumeScreen;
+
+  // --- LAYOUT GUARD (ticket #22 / ADR 0001) — NOT DATA, NOT PERSISTED ----
+  // Persistence is driven by a DECLARATIVE FIELD TABLE (foh_persist.c's
+  // FP_FIELDS), and the table's byte total is `_Static_assert`ed against
+  // sizeof(FohPersist), so ADDING A FIELD HERE WITHOUT DECIDING WHAT
+  // HAPPENS TO IT FAILS THE BUILD. That assertion is the whole reason the
+  // ADR chose a table over per-screen save/load: it turns "someone must
+  // remember" into "the compiler will not let you forget".
+  //
+  // This member exists because the assertion would otherwise have a hole.
+  // Every other member is an int or a double and the int count is ODD, so
+  // the struct carries exactly four bytes of TAIL ALIGNMENT PADDING — and a
+  // new `int` appended at the end would land in that padding, leaving
+  // sizeof(FohPersist) UNCHANGED and the guard silent. That is precisely
+  // the next change anyone will make (tickets #25/#26/#27 each add one).
+  // Declaring the padding as a member closes it: the member total now
+  // EQUALS sizeof, the assertion is an equality with zero slack, and any
+  // added field of any size moves it.
+  //
+  // MEASURED, not assumed: check-persist-table.sh's static-assert tooth
+  // adds an `int` to a COPY of this header and requires the build to FAIL.
+  // Delete this member and that tooth goes quiet — the hostage relationship
+  // ADR 0001 documents under "Accepted risk", stated here as well.
+  //
+  // It is never serialised, never read and never written; foh_persist_
+  // defaults() zeroes it with everything else. It is accounted for by
+  // FP_UNPERSISTED_BYTES in foh_persist.c, which is the ONE place a
+  // deliberately-unpersisted field is declared.
+  int layoutGuard;
 } FohPersist;
 
 typedef enum {

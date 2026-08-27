@@ -347,16 +347,27 @@ must_pass t4-noreset 'REBIND FAIL: (the caret|DOWN reaches row)' \
 echo "   T4: a reset that resets nothing fails (rc 1)"
 
 # --- [8] T5: the persisted bind rows silently dropped -----------------------
-# The format-bump half. A build that writes v5 without the rows would round
-# trip to the identity and the player's rebind would vanish on the next boot.
+# The format-bump half. A build that writes the bind rows as the IDENTITY
+# would round trip to the identity and the player's rebind would vanish on
+# the next boot.
+#
+# RE-POINTED, not weakened (ticket #22): persistence is now a declarative
+# field table (foh_persist.c's FP_FIELDS) walked by one writer, so the
+# hand-written `snprintf("bind %d …")` this tooth used to perturb no longer
+# exists. The perturbation below is its exact equivalent in the new
+# mechanism — the writer emits the ROW INDEX instead of the cell for the one
+# row whose domain is a permutation, i.e. the identity for `bind` and
+# nothing else — and every assertion underneath is unchanged. Dropping the
+# table ROW is not usable here because the static assertion would refuse to
+# BUILD such a tree, which perturb_build reads as a broken tooth rather than
+# a caught defect; check-persist-table.sh leg [9] is where that is proven.
 echo "=== [8] T5: bindings dropped from the persisted record must fail"
 perturb_build t5-nopersist "$FOH/foh_persist.c" \
-  '  for (int k = 0; k < CTL_BIND_PORTS; k++) {
-    w = snprintf(buf + n, cap - n, "bind %d %d %d %d %d %d %d %d %d\n", k,
-                 p->bind[k][0], p->bind[k][1], p->bind[k][2], p->bind[k][3],
-                 p->bind[k][4], p->bind[k][5], p->bind[k][6], p->bind[k][7]);' \
-  '  for (int k = 0; k < CTL_BIND_PORTS; k++) {
-    w = snprintf(buf + n, cap - n, "bind %d 0 1 2 3 4 5 6 7\n", k); // T5'
+  '          case FP_FLAG: n = fp_addf(buf, cap, n, " %d", *(const int *)cell); break;' \
+  '          case FP_FLAG: // T5
+            n = fp_addf(buf, cap, n, " %d",
+                        f->dom == FP_DOM_PERM ? i : *(const int *)cell);
+            break;'
 must_fail t5-nopersist 'REBIND FAIL: the binding SURVIVED the save/load round trip' \
   "the round-trip assertion did not fail — a rebind that vanishes on the next
   boot would ship"
