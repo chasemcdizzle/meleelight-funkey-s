@@ -94,6 +94,30 @@ queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## §rulings (standing owner directives, day-tagged)
 
+- **2026-08-27 — PERSIST THE PORT TYPES AND CPU LEVELS (Chase, in session).**
+  Offered three options — (A) persist them, (B) persist presence and difficulty
+  but leave the port disarmed on boot, (C) persist only the mode and difficulty
+  — with the recommendation of B. Verbatim: *"for the options I want A. persist
+  them anyway."*
+  **This REVERSES a written judgement** at `foh_persist.h:258-272`, which
+  refuses to persist `FohState.portType` and the CPU levels because upstream's
+  fresh state is `playerType = [-1,-1,-1,-1]` (faithfulness) and because A49
+  made CPU reachable on ports 2/3 where a 3-or-4-port CPU match is playable but
+  **NOT checksum-verified**. `foh.h:846` carries the parallel note for
+  `versusMode`. The comment anticipated the ruling — *"if the owner wants types
+  too it is one more appended row"* — so this is a cost the design priced, not
+  one it missed.
+  **MECHANICAL CONSEQUENCE, stated not papered over:** the device can now boot
+  into a character select that is already armed, possibly READY TO FIGHT before
+  the player touches it, off a configuration from another session — and if that
+  configuration was a 3-or-4-port CPU match, it wakes into a state no golden
+  covers. Do not file that later as a defect; it is this ruling's price.
+  **PAIRED CHANGE, BINDING:** the two comments above must be rewritten in the
+  same change that persists the fields. A comment left asserting the opposite of
+  what the code does is exactly the `getConnected` class — true about its own
+  reasoning, false about the behaviour, believed for three days.
+  Ticket #25; recorded on the issue as well.
+
 - **2026-08-03 — RE-PRIORITIZATION; B11 DEFERRED (Chase, in session).** Verbatim:
   *"let's skip B11 I am totally done with all this for now. defer it until after
   we're done. … A3, A4/A5, A5, A7, A13, D8-later, wj-later are all priority now
