@@ -144,6 +144,15 @@
 //      DAMAGE GOLDEN for it — the refusal is the marker, not a stub.
 bool mlk_stage_playable(const MlkStage *st, const char **reason);
 
+// Does any collision surface carry a REAL (truthy) damageType? Not a
+// validity question — a damaging stage has been playable since A45 T6
+// discharged that refusal — but a COVERAGE one: the checks use it to
+// assert that the golden which discharged it still exercises the plane.
+// The rule is physics' own truthiness test, so a props object with a NULL
+// damageType (upstream BUG 1's output, and what the builder's toggle
+// writes) reads as false here exactly as it does there.
+bool mlk_stage_has_damage(const MlkStage *st);
+
 // --- the sim side -----------------------------------------------------
 
 // The tp_stage_from_ttab1 twin: MlkStage -> the physics read set. Caller

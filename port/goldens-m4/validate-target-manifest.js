@@ -35,8 +35,12 @@ const { assertNoDuplicateKeys } = require("./json-dup-key-scan");
 
 const GOLDENS_DIR = __dirname; // port/goldens-m4
 
+// A45 T6: `customStage` is REQUIRED on every row and is the empty string on
+// an authored one. Required-and-possibly-empty rather than optional, because
+// an optional key is a key a row can silently lack, and this one decides
+// WHICH STAGE the golden plays.
 const GOLDEN_KEYS = ["id", "name", "trace", "frames", "seed",
-  "char", "tstage", "minTargets", "wantArticles"];
+  "char", "tstage", "minTargets", "wantArticles", "customStage"];
 
 function loadValidatedManifest(manifestPath) {
   const mPath = manifestPath ||
@@ -110,8 +114,36 @@ function loadValidatedManifest(manifestPath) {
     if (!Number.isInteger(g.char) || g.char < 0 || g.char > 4) {
       vdie(where + " char " + g.char + " outside the char domain 0-4");
     }
-    if (!Number.isInteger(g.tstage) || g.tstage < 0 || g.tstage > 9) {
-      vdie(where + " tstage " + g.tstage + " outside the target-stage domain 0-9");
+    // 0-9 authored; 10-19 a CUSTOM slot — upstream's own numbering at
+    // targetselect.js:140-146, the port's MLK_PLAYING_BASE + slot (D52).
+    if (!Number.isInteger(g.tstage) || g.tstage < 0 || g.tstage > 19) {
+      vdie(where + " tstage " + g.tstage + " outside the target-stage domain 0-19");
+    }
+    if (typeof g.customStage !== "string") {
+      vdie(where + " customStage is not a string");
+    }
+    // ALL OR NOTHING, both ways: a custom tstage without a code has no
+    // stage to play, and a code on an authored tstage would be ignored
+    // silently — which is worse, because the row would LOOK covered.
+    if ((g.tstage >= 10) !== (g.customStage.length > 0)) {
+      vdie(where + " tstage " + g.tstage + " and customStage (" +
+        (g.customStage.length > 0 ? "present" : "empty") +
+        ") disagree — custom is tstage 10-19 WITH a code, authored is 0-9 " +
+        "WITHOUT one");
+    }
+    // The share-code alphabet, anchored: 14 `&`-separated fields whose
+    // number tokens are what createStageCode can emit (`-?\d+(\.\d\d)?`,
+    // D39). This is a GRAMMAR check, not a parse — the browser's own
+    // parseStageCode is the authority and run-target.js makes it prove the
+    // code is its own fixed point before playing it.
+    if (g.customStage.length > 0) {
+      if (!/^[-0-9.,~&]+$/.test(g.customStage)) {
+        vdie(where + " customStage carries a character outside the share-code alphabet");
+      }
+      const fields = g.customStage.split("&");
+      if (fields.length !== 14) {
+        vdie(where + " customStage has " + fields.length + " `&` fields (want exactly 14)");
+      }
     }
     if (!Number.isInteger(g.minTargets) || g.minTargets < 1 || g.minTargets > 10) {
       vdie(where + " minTargets " + g.minTargets + " outside 1..10");

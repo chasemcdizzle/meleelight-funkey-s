@@ -174,6 +174,27 @@ static void dsp_bool(MlSim *S, HdQueues *q, const char *phase,
 
 // --- module state setters (:15-21) ------------------------------------------------
 
+// A45 T6. See hit_detection.h for why this exists and why it is here.
+void hd_route_stage_damage(MlSim *S, HdQueues *q) {
+  for (int k = 0; k < S->hqCount; k++) {
+    const MlHqRow *src = &S->hq[k];
+    if (q->hqCount >= HD_HQ_CAP) ml_hd_out_of_domain("hitQueue overflow (stage damage)");
+    HdRow *r = &q->hq[q->hqCount++];
+    memset(r, 0, sizeof *r);
+    r->v = src->i;          // row[0]
+    r->aIsObj = true;       // row[1] is {normal, angular, corner}
+    r->normal = src->normal;
+    r->angular = src->angular;
+    r->corner = src->corner;
+    r->h = src->damageTypeIndex; // row[2]
+    r->shieldHit = false;        // row[3]
+    r->isThrow = false;          // row[4]
+    r->drawBounce = true;        // row[5]
+    // six elements: no row[6], so hasPhantom/phantom stay false
+  }
+  S->hqCount = 0; // physics' queue is a HANDOFF buffer, never a history
+}
+
 void hd_resetHitQueue(HdQueues *q) {
   q->hqCount = 0; // hitQueue = []
 }

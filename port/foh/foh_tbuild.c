@@ -305,17 +305,7 @@ static bool hexdigit(char c) {
 // precisely what upstream BUG 1 emits for the sixth surface of every type
 // (encode.js:39's `i !== 5`). Refusing those would reject codes the browser
 // plays fine, which is why only a real type string counts. This mirrors
-// custom_stage.c's list_has_damage; check-tbuild.sh leg [4] proves the two
-// agree on a corpus rather than trusting that they do.
-static bool list_has_damage(const SurfaceList *l) {
-  for (int k = 0; k < l->count; k++) {
-    const Surface *sf = &l->items[k];
-    if (sf->hasProps && sf->propsDamageType.tag == DT_STR) return true;
-  }
-  return false;
-}
-
-// THE THREE RULES THE SIM ENFORCES, MIRRORED HERE — not a subset.
+// THE RULES THE SIM ENFORCES, MIRRORED HERE — not a subset.
 //
 // This is not belt-and-braces, it closes a CRASH PATH found by the
 // differential while building this ticket: the FOH decides what
@@ -339,14 +329,20 @@ static const char *doc_unplayable(const MlkStage *st) {
                        st->s.platform.count;
     if (total > ML_MAX_LABELLED_SURFACES) return "too many surfaces";
   }
-  // (3) the DAMAGE plane, which has never executed and which no golden
-  //     covers. A45 T6 owes that golden; until then the refusal is the
-  //     marker, and it must appear at LOAD, not mid-match.
-  if (list_has_damage(&st->s.ground) || list_has_damage(&st->s.ceiling) ||
-      list_has_damage(&st->s.wallL) || list_has_damage(&st->s.wallR) ||
-      list_has_damage(&st->s.platform)) {
-    return "damaging surface (unsupported)";
-  }
+  // (3) THE DAMAGE RULE IS GONE, because the sim's is (A45 T6, 2026-08-26).
+  //     It refused any stage carrying a truthy damageType while
+  //     dealWithDamagingStageCollision had no golden coverage — and the
+  //     mirror had to refuse whatever the sim refuses, or a slot would draw
+  //     as playable and then die on launch. Golden t03 discharged the sim's
+  //     rule (custom_stage.c), so keeping it here would do the mirror's own
+  //     damage in the other direction: the builder would refuse to SAVE a
+  //     stage the sim will happily play, and the DAMAGE tool would be a tool
+  //     whose output is unusable.
+  //
+  //     The mirror is still exact and check-tbuild.sh leg [4] still proves
+  //     it differentially against the sim's UNMODIFIED mlk_slot_load over
+  //     the same corpus — including the corpus's re-SUMmed DAMAGE entry,
+  //     whose expected verdict moves from REFUSED to OK in the same change.
   if (st->startingPointCount < 1) return "no starting point";
   return 0;
 }

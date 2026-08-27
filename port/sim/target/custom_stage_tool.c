@@ -157,16 +157,24 @@ int main(int argc, char **argv) {
     }
     if (x.respawnCount != 0) die("custom stage must have no respawn points");
     if (x.s.ground.count != ml_tstages[0].groundCount) die("ground count");
-    // the damage refusal, exercised directly
+    // THE DAMAGE PLANE, discharged by A45 T6 (golden t03). This used to
+    // assert that a damaging surface REFUSES; it now asserts the two things
+    // that replaced that refusal — the stage is PLAYABLE, and the coverage
+    // probe SEES it. An anchor that still demanded a refusal would have
+    // frozen the very restriction the golden was recorded to lift.
     st.s.ground.items[0].hasProps = true;
     st.s.ground.items[0].propsHasDamageTypeKey = true;
     st.s.ground.items[0].propsDamageType.tag = DT_STR;
     snprintf(st.s.ground.items[0].propsDamageType.str,
              sizeof st.s.ground.items[0].propsDamageType.str, "fire");
-    if (mlk_stage_playable(&st, &why)) die("a damaging surface must refuse");
-    // props with a NULL damageType are inert (upstream BUG 1 emits them)
+    if (!mlk_stage_playable(&st, &why)) die("a damaging surface must PLAY (A45 T6)");
+    if (!mlk_stage_has_damage(&st)) die("the damage probe must see a fire surface");
+    // props with a NULL damageType are inert (upstream BUG 1 emits them),
+    // and the probe must agree — physics tests TRUTHINESS, so an inert
+    // surface must not make a stage count as covered.
     st.s.ground.items[0].propsDamageType = damage_null();
     if (!mlk_stage_playable(&st, &why)) die("null damageType must be inert");
+    if (mlk_stage_has_damage(&st)) die("a NULL damageType must read as inert");
     // the R2 cap
     from_ttab1(0, &st);
     st.targetCount = ML_MAX_TARGETS + 1;

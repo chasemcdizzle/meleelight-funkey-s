@@ -58,6 +58,20 @@ typedef struct {
   // activeStage.target for the ACTIVE target stage (TTAB1-decoded)
   Vec2D target[ML_MAX_TARGETS];
   int targetCount;
+  // A45 T6. Does the ACTIVE stage carry a truthy damageType on any
+  // collision surface? DERIVED in tp_setup_target_core from the MlStageX
+  // the sim is about to read, so it cannot disagree with what physics
+  // sees, and derived for BOTH entries rather than set by the custom one —
+  // an authored stage that ever grew a damaging surface would be covered
+  // by the same rule instead of falling through it.
+  //
+  // It gates ONE thing: whether a dealWithDamagingStageCollision row is a
+  // fatal impossibility or ordinary work. On a stage with no damaging
+  // surface such a row cannot exist and the trap stays (it is the VS-trap
+  // twin). On one that HAS them the rows are consumed by hd_executeHits
+  // on the very next line, which is upstream's own order at main.js
+  // :1002-1003.
+  bool stageHasDamage;
 } MlTargets;
 
 extern MlTargets TP; // one module instance per process (upstream page)

@@ -145,6 +145,11 @@ CLUSTER_TUS=(
   port/sim/characters/puff/puff_next_jump.c
   port/sim/characters/puff/moves/*.c
   "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" "$TABLES/ml_targets.c"
+  # A45 T6: t03 plays a CUSTOM stage, so this build needs the codec and the
+  # custom-stage loader. sim_host_target refuses `--custom` without them
+  # (target_main.c checks tp_custom_setup before any work), so a build that
+  # dropped these would fail loudly rather than skip the golden.
+  "$TGT/custom_stage.c" port/sim/stage_code.c
   oracle/qjs/sha256.c port/fdlibm/fdlibm.c
 )
 CFLAGS=(-O2 -ffp-contract=off -Wall -Wextra -Werror
@@ -167,6 +172,36 @@ echo "    build OK (cc -O2 -ffp-contract=off -Wall -Wextra -Werror)"
 # dies HERE naming the dup — it can never surface as "2 goldens" while
 # judging one twice. Scratch paths below derive from the now-validated
 # unique ids.
+# A45 T6. An AUTHORED golden passes `--tstage N`; a CUSTOM one publishes the
+# manifest's share code as a slot file and passes `--custom <dir> <slot>`.
+# The file is written HERE, from the manifest, in A45 T2's on-disk contract
+# (custom_stage.h: three LF lines MLSTAGE1 / code / `SUM <64 hex>` over every
+# preceding byte) — so the check exercises the REAL loader, SUM verification
+# and all, rather than a back door that hands the sim a parsed stage.
+target_stage_args() { # <id> <tstage>
+  local id="$1" tstage="$2" code dir body
+  if [ "$tstage" -lt 10 ]; then
+    printf -- '--tstage %s' "$tstage"
+    return 0
+  fi
+  code="$(node -e '
+    const m = require("./port/goldens-m4/validate-target-manifest").loadValidatedManifest();
+    const g = m.goldens.find((x) => x.id === process.argv[1]);
+    if (!g) { process.exit(1); }
+    process.stdout.write(g.customStage);
+  ' "$id")" || { echo "TARGET SIM FAIL: no customStage for $id" >&2; exit 1; }
+  [ -n "$code" ] || { echo "TARGET SIM FAIL: $id customStage is empty" >&2; exit 1; }
+  dir="$BUILD/slots-$id"
+  rm -rf "$dir" && mkdir -p "$dir"
+  body="$dir/.body"
+  printf 'MLSTAGE1\n%s\n' "$code" > "$body"
+  printf 'MLSTAGE1\n%s\nSUM %s\n' "$code" \
+    "$(shasum -a 256 "$body" | cut -d' ' -f1)" \
+    > "$dir/custom$((tstage - 10)).mlstage"
+  rm -f "$body"
+  printf -- '--custom %s %s' "$dir" "$((tstage - 10))"
+}
+
 node port/goldens-m4/validate-target-manifest.js 2>&1 | relay_lines \
   || fail "manifest-target.json failed the shared strict validator"
 IDS="$(node -e 'const m=require("./port/goldens-m4/validate-target-manifest").loadValidatedManifest(); process.stdout.write(m.goldens.map(g=>g.id).join(" "));')" \
@@ -192,7 +227,7 @@ for id in $IDS; do
   made "$BUILD/$id.trace.txt"
   "$BUILD/sim_host_target" --trace "$BUILD/$id.trace.txt" \
     --simdata "$BUILD/simdata.txt" --seed "$seed" --char "$char" \
-    --tstage "$tstage" --frames "$frames" > "$BUILD/$id.sim.out"
+    $(target_stage_args "$id" "$tstage") --frames "$frames" > "$BUILD/$id.sim.out"
   made "$BUILD/$id.sim.out"
 
   rm -f "$BUILD/$id.player.json" "$BUILD/$id.target.json"

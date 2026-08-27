@@ -166,8 +166,10 @@ if (!isInt(P.seed) || P.seed < 0 || P.seed > 4294967295) {
 if (!isInt(P.char) || P.char < 0 || P.char > 4) {
   die("frozen params.char outside the char domain 0-4");
 }
-if (!isInt(P.tstage) || P.tstage < 0 || P.tstage > 9) {
-  die("frozen params.tstage outside the target-stage domain 0-9");
+// 0-9 authored; 10-19 a CUSTOM slot — upstream's own numbering at
+// targetselect.js:140-146, the port's MLK_PLAYING_BASE + slot (D52, A45 T6).
+if (!isInt(P.tstage) || P.tstage < 0 || P.tstage > 19) {
+  die("frozen params.tstage outside the target-stage domain 0-19");
 }
 if (P.mode !== "target") die("frozen params.mode is not \"target\"");
 if (!isInt(P.minTargets) || P.minTargets < 1 || P.minTargets > 10) {

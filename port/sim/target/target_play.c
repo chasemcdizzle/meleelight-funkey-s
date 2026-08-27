@@ -270,6 +270,27 @@ void tp_setup_target_core(GameState *g, int charId, double playingId,
   // (main.js:987-1044 — measured absence). For a custom stage the same
   // assignment is activeStage.js:83 setActiveStageCustomTarget.
   g->sim.stage = *stage;
+  // A45 T6 — derived from the stage the SIM will read, never from which
+  // entry point we came through. physics tests `wall[2] !== undefined ?
+  // wall[2].damageType : null` for TRUTHINESS, so a props object carrying
+  // a NULL damageType (upstream BUG 1's output for every sixth surface,
+  // and what the builder's own toggle writes) is INERT and reads false
+  // here exactly as it does there.
+  {
+    const SurfaceList *lists[5] = {&stage->s.ground, &stage->s.ceiling,
+                                   &stage->s.wallL, &stage->s.wallR,
+                                   &stage->s.platform};
+    TP.stageHasDamage = false;
+    for (int L = 0; L < 5 && !TP.stageHasDamage; L++) {
+      for (int k = 0; k < lists[L]->count; k++) {
+        if (lists[L]->items[k].hasProps &&
+            lists[L]->items[k].propsDamageType.tag == DT_STR) {
+          TP.stageHasDamage = true;
+          break;
+        }
+      }
+    }
+  }
   // setTargetStagePlaying(tstageId) (targetselect.js:145)
   TP.targetStagePlaying = playingId;
   // activeStage.target -> the module's decoded copy
@@ -422,12 +443,20 @@ void tp_game_tick_target(GameState *g, const MlInput *traceRow0) {
       MlInput in4[4];
       for (int k = 0; k < 4; k++) in4[k] = g->curBuf[tb].slot[k];
       ml_physics(&g->sim, (double)tb, in4);
-      if (g->sim.hqCount != 0) {
-        // dealWithDamagingStageCollision rows: measured IMPOSSIBLE on the
-        // authored target stages (zero damageType surfaces, iter 94) — the
-        // VS-trap twin. The consume path stays covered by target_hq_probe.
-        sim_fatal("physics pushed stage-damage hq rows on an authored target "
-                  "stage (measured impossible: no damageType surfaces)");
+      // A45 T6 — the routing upstream does implicitly by pushing straight
+      // into `hitQueue` (physics.js:53). hd_executeHits runs on the very
+      // next lines, which is main.js:1002-1003's own order.
+      if (TP.stageHasDamage) hd_route_stage_damage(&g->sim, &g->hq);
+      if (g->sim.hqCount != 0 && !TP.stageHasDamage) {
+        // dealWithDamagingStageCollision rows: still measured IMPOSSIBLE on
+        // a stage with no damaging surface — every authored target stage
+        // (zero damageType surfaces, iter 94) and the VS-trap twin. The
+        // trap is NARROWED by A45 T6, not removed: on a stage that HAS
+        // damaging surfaces the rows are ordinary work and hd_executeHits
+        // consumes them on the very next line, which is upstream's own
+        // order at main.js:1002-1003. Golden: t03.
+        sim_fatal("physics pushed stage-damage hq rows on a target stage "
+                  "with NO damaging surface (measured impossible)");
       }
     }
     ml_ev_reset();

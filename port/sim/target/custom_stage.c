@@ -19,6 +19,9 @@
     return false;               \
   } while (0)
 
+// Still here, and still exactly the truthiness rule physics applies — it is
+// what `mlk_stage_has_damage` below answers for the checks that must assert
+// the damage plane is COVERED rather than merely allowed.
 static bool list_has_damage(const SurfaceList *l) {
   for (int k = 0; k < l->count; k++) {
     const Surface *s = &l->items[k];
@@ -53,19 +56,37 @@ bool mlk_stage_playable(const MlkStage *st, const char **reason) {
              "lists — the collision routine concatenates them)");
     }
   }
-  // (3) the damage plane, which no golden covers (header note (3)).
-  if (list_has_damage(&st->s.ground) || list_has_damage(&st->s.ceiling) ||
-      list_has_damage(&st->s.wallL) || list_has_damage(&st->s.wallR) ||
-      list_has_damage(&st->s.platform)) {
-    REFUSE("stage carries a damaging surface: that plane has never executed "
-           "and no golden covers it (A45 T6 owes one) — refusing rather "
-           "than running untested collision code");
-  }
+  // (3) THE DAMAGE PLANE IS OPEN (A45 T6, 2026-08-26). This used to refuse
+  //     any stage carrying a real damageType, because
+  //     dealWithDamagingStageCollision's five translated call sites
+  //     (physics.c:415/502/720/748/783) had NEVER EXECUTED under any
+  //     golden — the authored corpus has no damaging surface (measured,
+  //     pipeline/lib/targets-schema.js), so shipping the tool that makes
+  //     them live would have shipped untested collision code.
+  //
+  //     The golden that owed it exists: t03 in
+  //     port/goldens-m4/manifest-target.json plays a CUSTOM stage whose
+  //     right-hand ground carries `fire`, recorded through the browser
+  //     oracle's OWN parseStageCode and judged by the UNCHANGED
+  //     verify-stream.js. The refusal is not deleted, it is DISCHARGED,
+  //     and check-custom-stage.sh asserts that discharge is still real:
+  //     if t03 leaves the manifest the damage plane loses its only
+  //     coverage and that check fails.
+  //
+  //     A props object with a NULL damageType stays inert and always was
+  //     (physics tests truthiness), which is upstream BUG 1's output for
+  //     every sixth surface and what the builder's own toggle writes.
   // startingPoint[0] is what startTargetGame reads (targetplay.js:196);
   // mlk_parse already refuses a code without one, so this is a belt on
   // the direct-caller path rather than a second parser rule.
   if (st->startingPointCount < 1) REFUSE("stage has no starting point");
   return true;
+}
+
+bool mlk_stage_has_damage(const MlkStage *st) {
+  return list_has_damage(&st->s.ground) || list_has_damage(&st->s.ceiling) ||
+         list_has_damage(&st->s.wallL) || list_has_damage(&st->s.wallR) ||
+         list_has_damage(&st->s.platform);
 }
 
 #undef REFUSE

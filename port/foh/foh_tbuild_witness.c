@@ -742,20 +742,34 @@ int main(int argc, char **argv) {
     want(s.tbDamageType == 1, "X+R cycles the damage TYPE (D54)");
     PRESS(&s, a);
     want(tb_damaged(&s) == 1, "...and the new type tags");
-    // The SIM still refuses a damaging stage at load (A45 T6 owes the
-    // golden), so SAVE must refuse it HERE, with the reason on screen —
-    // never write a file that cannot be launched.
+    // A45 T6: the sim PLAYS a damaging stage now (golden t03 discharged
+    // mlk_stage_playable's refusal), so SAVE must accept one. This leg used
+    // to assert the opposite; asserting a refusal that no longer exists
+    // would have made the DAMAGE tool a tool whose output cannot be saved.
     PRESS(&s, start);
     pause_row(&s, FOH_TB_PAUSE_SAVE);
     PRESS(&s, a);
     pane_row(&s, 5);
     PRESS(&s, a);
-    want(s.tbMsgTimer > 0 && s.tbMsg &&
-             strstr(s.tbMsg, "damaging") != NULL,
-         "SAVE refuses a damaging stage, naming the rule (R1 is still open)");
+    want(s.tbMsg && strcmp(s.tbMsg, "saved") == 0,
+         "SAVE accepts a DAMAGING stage (A45 T6 — golden t03 discharged it)");
+    want(s.tbSlot == 5, "...into the slot it was aimed at");
     want(s.screen == FOH_TBUILD, "...and stays in the builder");
-    PRESS(&s, b);
-    PRESS(&s, b); // out of the pane, out of the pause menu
+    // and the saved bytes really carry the damage digit — a save that
+    // silently dropped it would pass every assertion above
+    {
+      char path[512];
+      snprintf(path, sizeof path, "%s/custom5.mlstage", foh_persist_dir());
+      static char buf[8192];
+      const long n = slurp(path, buf, (long)sizeof buf - 1);
+      want(n > 0, "...and the slot file exists");
+      if (n > 0) {
+        buf[n] = 0;
+        want(strstr(buf, ",1~") != NULL || strstr(buf, ",1\n") != NULL ||
+                 strstr(buf, ",1&") != NULL,
+             "...carrying a fire damage digit on a surface record");
+      }
+    }
     tool_to(&s, FOH_TB_TOOL_DAMAGE);
     crosshair_to(&s, 0.0, 0.0);
     tick_neutral(&s, 1);

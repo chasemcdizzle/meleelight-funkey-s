@@ -222,11 +222,20 @@ put(3, b.subarray(0, b.length >> 1));
                           code.slice(10) + "\n", "latin1"))); }
 // 6  trailing junk after the SUM line
 put(6, Buffer.concat([b, Buffer.from("junk\n")]));
-// 7  a stage carrying a DAMAGE digit, SUM RE-COMPUTED — grammar and SUM are
+// 7  a stage with ELEVEN targets, SUM RE-COMPUTED — grammar and SUM are
 //    both fine, so ONLY a playability rule can refuse it. This is the entry
 //    that found the crash path (see this file's header).
+//    IT USED TO CARRY A DAMAGE DIGIT. A45 T6 discharged that refusal on the
+//    strength of golden t03, so a damaging stage now PLAYS and this entry
+//    would have quietly stopped exercising any playability rule at all —
+//    the mirror differential would still have run, over a corpus where
+//    nothing tested the mirror. R2's target cap is the rule that is still
+//    mirrored, still refuses, and is still content-only (the codec allows
+//    20, this build allows 10).
 { const f = b.toString("latin1").split("\n")[1].split("&");
-  f[2] = f[2].replace(/,0/g, ",1");
+  const t = [];
+  for (let i = 0; i < 11; i++) t.push((-50 + i * 5).toFixed(2) + ",20.00");
+  f[11] = t.join("~");
   put(7, seal(Buffer.from("MLSTAGE1\n" + f.join("&") + "\n", "latin1"))); }
 // 8  empty file
 put(8, Buffer.alloc(0));
@@ -417,7 +426,7 @@ esac
 case "$t3s" in
   "SIMLOAD REFUSED"*) ;;
   *) fail "T3: the SIM accepted corpus entry 7 ('$t3s') — the corpus entry
-   is not exercising the damage refusal any more";;
+   is not exercising a playability rule any more";;
 esac
 echo "  T3 bites leg [4] only: FOH says OK, the sim says REFUSED"
 

@@ -225,6 +225,19 @@ for id in $IDS; do
     process.stdout.write([g.name,g.trace,g.frames,g.seed,g.char,g.tstage].join(" "));
   ' "$id")"
 
+  # This leg is the AUTHORED-vs-CUSTOM differential: it re-expresses an
+  # authored stage as a share code and requires the two runs byte-identical.
+  # A golden that is ALREADY custom (tstage 10-19, A45 T6's t03) has no
+  # authored twin to be compared against, so it is skipped — BY NAME and out
+  # loud, because a silently skipped golden is how a loop stops covering
+  # what its header says it covers. t03's own conformance is
+  # check-target-sim.sh's [3], and leg [5] below asserts it still exists.
+  if [ "$tstage" -ge 10 ]; then
+    echo "    $id: SKIPPED here — already a custom stage (tstage $tstage), so"
+    echo "        there is no authored twin; its conformance is check-target-sim.sh"
+    continue
+  fi
+
   rm -f "$BUILD/$id.trace.txt"
   node "$SIM/trace-to-txt.js" "$M4G/$trace" "$BUILD/$id.trace.txt" >/dev/null
   made "$BUILD/$id.trace.txt"
@@ -325,11 +338,44 @@ open(p,'wb').write(b[:len(b)//2])
 PY
 bites truncated "truncated file"
 
-# (c) DAMAGE leg: a VALID file (correct SUM) carrying a damaging surface —
-#     the plane no golden covers. The content rule must refuse it, not the
-#     integrity rule.
-"$BUILD/custom_stage_tool" --emit-damage "$ttstage" "$TOOTH/custom0.mlstage"
-bites damage-surface "damaging surface"
+# (c) DAMAGE leg — RETARGETED by A45 T6, not deleted. It used to publish a
+#     valid file carrying a damaging surface and require a REFUSAL, because
+#     dealWithDamagingStageCollision had never executed. t03 discharged that
+#     refusal, so asserting it would now freeze the restriction the golden
+#     was recorded to lift.
+#
+#     What replaced the refusal is leg [5]'s coverage gate, so that is what
+#     this tooth protects. It runs [5]'s predicate against a manifest whose
+#     damage digits have been zeroed — i.e. the world where t03 exists but
+#     no longer damages anything — and requires the gate to REFUSE. Without
+#     it, [5] could be quietly satisfied by any custom golden at all and the
+#     five call sites would be uncovered again with everything green.
+echo "  tooth 'damage-coverage': the coverage gate must refuse a manifest with"
+echo "    no damaging golden"
+if node -e '
+  const fs = require("fs");
+  const m = JSON.parse(fs.readFileSync("port/goldens-m4/manifest-target.json", "utf8"));
+  // strip every truthy damage digit: `,1`..`,4` at the end of a surface
+  // record becomes `,0`. The manifest object is NEVER written back.
+  for (const g of m.goldens) {
+    if (!g.customStage) continue;
+    const f = g.customStage.split("&");
+    for (let i = 2; i < 7; i++) {
+      f[i] = f[i].split("~").map((r) => r.replace(/,[1-4]$/, ",0")).join("~");
+    }
+    g.customStage = f.join("&");
+  }
+  const cov = m.goldens.filter((g) => g.customStage &&
+    g.customStage.split("&").slice(2, 7).some((x) =>
+      x.split("~").some((rec) => /,[1-4]$/.test(rec))));
+  if (cov.length !== 0) { process.exit(0); }  // gate would still pass -> no bite
+  process.exit(3);                             // gate would refuse -> bites
+' ; then
+  fail "tooth 'damage-coverage' did not bite — leg [5]'s predicate still finds
+   a damaging golden after every damage digit was zeroed, so it is not
+   actually testing for damage"
+fi
+echo "    tooth 'damage-coverage' bites: zeroing the digits empties the gate"
 
 # (d) CAP leg (R2): a VALID file with 11 targets — legal in the codec
 #     (cap 20) and legal upstream (JS arrays grow), over this build's cap.
@@ -385,5 +431,34 @@ echo "    tooth 'moved-ground' bites: a 1.00-unit shift of every collision surfa
 if git status --porcelain -- "$BUILD" | grep -q .; then
   fail "build output is not gitignored"
 fi
+
+# --- [5] THE DAMAGE PLANE IS COVERED, not merely allowed (A45 T6) ------------
+#
+# A45 T2 REFUSED any stage carrying a real damageType, because
+# dealWithDamagingStageCollision's five call sites had never executed. T6
+# lifted that refusal — and a lifted refusal with nothing behind it is
+# strictly worse than the refusal was. What replaced it is a golden, so this
+# leg asserts the golden is still there and still damaging: if t03 leaves
+# manifest-target.json, or its stage stops carrying a truthy damageType, the
+# plane silently loses its ONLY coverage and this check says so by name.
+echo "=== [5] the damage plane's coverage (the golden that discharged the refusal)"
+node -e '
+  const m = require("./port/goldens-m4/validate-target-manifest").loadValidatedManifest();
+  const cov = m.goldens.filter((g) => g.customStage &&
+    // field 2..6 are the five collision lists; a trailing non-zero damage
+    // digit on any surface record is a truthy damageType (encode.js:39-60,
+    // "1" fire .. "4" darkness; "0" is none).
+    g.customStage.split("&").slice(2, 7).some((f) =>
+      f.split("~").some((rec) => /,[1-4]$/.test(rec))));
+  if (cov.length === 0) {
+    console.error("CUSTOM STAGE FAIL: NO target golden plays a stage with a " +
+      "damaging surface. A45 T6 lifted mlk_stage_playable\u0027s damage refusal " +
+      "ON THE STRENGTH OF ONE (t03); with it gone the five " +
+      "dealWithDamagingStageCollision call sites are untested again and the " +
+      "refusal must come back.");
+    process.exit(1);
+  }
+  console.log("  damage plane covered by: " + cov.map((g) => g.id).join(" "));
+' || fail "the damage plane has no golden coverage"
 
 echo "CUSTOM STAGE PLAYS"

@@ -74,8 +74,10 @@ out="$(node -e '
   emit("name", g.name); emit("trace", g.trace); emit("frames", g.frames);
   emit("seed", g.seed); emit("char", g.char); emit("tstage", g.tstage);
   emit("minTargets", g.minTargets); emit("wantArticles", g.wantArticles);
+  emit("customStage", g.customStage);
 ' "$ID")" || die "manifest read failed for '$ID'"
 NAME= TRACE= FRAMES= SEED= CHAR= TSTAGE= MINTARGETS= WANTARTICLES=
+CUSTOMSTAGE= HAVE_CUSTOM=0
 n=0
 while IFS= read -r line; do
   n=$((n + 1))
@@ -97,7 +99,7 @@ while IFS= read -r line; do
       [[ "$v" =~ ^[0-4]$ ]] || die "manifest grammar — char '$v' outside 0-4"
       [ -z "$CHAR" ] || die "manifest grammar — duplicate char line"; CHAR="$v" ;;
     (tstage=*)
-      [[ "$v" =~ ^[0-9]$ ]] || die "manifest grammar — tstage '$v' outside 0-9"
+      [[ "$v" =~ ^([0-9]|1[0-9])$ ]] || die "manifest grammar — tstage '$v' outside 0-19"
       [ -z "$TSTAGE" ] || die "manifest grammar — duplicate tstage line"; TSTAGE="$v" ;;
     (minTargets=*)
       [[ "$v" =~ ^([1-9]|10)$ ]] || die "manifest grammar — minTargets '$v' outside 1-10"
@@ -105,11 +107,31 @@ while IFS= read -r line; do
     (wantArticles=*)
       [[ "$v" =~ ^(true|false)$ ]] || die "manifest grammar — wantArticles '$v' is not a boolean"
       [ -z "$WANTARTICLES" ] || die "manifest grammar — duplicate wantArticles line"; WANTARTICLES="$v" ;;
+    (customStage=*)
+      # Empty on an authored row; on a custom one, the share-code alphabet
+      # ANCHORED (D39's emitted language) — never a free string reaching a
+      # command line. HAVE_CUSTOM distinguishes "empty" from "absent",
+      # which a bare -z cannot.
+      [ "$HAVE_CUSTOM" = 0 ] || die "manifest grammar — duplicate customStage line"
+      HAVE_CUSTOM=1
+      if [ -n "$v" ]; then
+        [[ "$v" =~ ^[-0-9.,~\&]+$ ]] \
+          || die "manifest grammar — customStage carries a character outside the share-code alphabet"
+      fi
+      CUSTOMSTAGE="$v" ;;
     (*)
       die "manifest grammar — unrecognized param line '$line' (whitelist parse)" ;;
   esac
 done <<< "$out"
-[ "$n" = 8 ] || die "manifest grammar — got $n param lines, want exactly 8"
+[ "$n" = 9 ] || die "manifest grammar — got $n param lines, want exactly 9"
+# ALL OR NOTHING, asserted here too and not only in the shared validator:
+# this script builds the argv, so it is the last place a mismatch could turn
+# into a run that silently played the wrong stage.
+if [ "$TSTAGE" -ge 10 ] 2>/dev/null; then
+  [ -n "$CUSTOMSTAGE" ] || die "manifest grammar — tstage $TSTAGE is a CUSTOM slot but customStage is empty"
+else
+  [ -z "$CUSTOMSTAGE" ] || die "manifest grammar — tstage $TSTAGE is AUTHORED but customStage is non-empty"
+fi
 if [ "$TRACE" != "$NAME.trace.json" ]; then
   die "manifest grammar — trace '$TRACE' != name-derived '$NAME.trace.json'"
 fi
@@ -140,6 +162,7 @@ WANT_ART_FLAG=0
 
 RUN=(node "$M4G/run-target.js" --dist "$DIST" --trace "$M4G/$TRACE"
      --frames "$FRAMES" --seed "$SEED" --char "$CHAR" --tstage "$TSTAGE")
+[ -n "$CUSTOMSTAGE" ] && RUN+=(--custom-code "$CUSTOMSTAGE")
 
 # FRESHNESS (rm-before-produce): stale A/B run JSONs can never masquerade
 # as the two fresh independent browser runs.

@@ -80,6 +80,29 @@ typedef struct {
   int phqCount;
 } HdQueues;
 
+// --- stage-damage routing (A45 T6) ------------------------------------------
+//
+// physics pushes dealWithDamagingStageCollision's rows into its OWN small
+// queue (MlSim.hq / MlHqRow, physics.h) because physics.c cannot see this
+// module's HdQueues. Upstream has no such split — physics.js:53 pushes
+// straight into `hitQueue` — so the two have to be joined back at the
+// caller, at exactly the point upstream's push happened: immediately after
+// physics(i, input) and before executeHits (main.js:1002-1003).
+//
+// It went unwritten until now because the plane could not execute: every
+// authored stage, VS and target, carries zero damageType surfaces
+// (measured), so both callers TRAPPED on a non-empty queue and the VS one
+// still does. A45 T6's DAMAGE tool and the t03 golden made it real.
+//
+// The row is upstream's, verbatim:
+//     hitQueue.push([i, {normal, angular, corner}, damageTypeIndex,
+//                    false, false, true])
+// — six elements, so `drawBounce` (row[5]) is TRUE and there is no
+// row[6]; `a` is an OBJECT, which is what HdRow.aIsObj already models.
+// Order is preserved: physics can push more than one row in a tick (a
+// corner touches two surfaces) and the queue is order-sensitive.
+void hd_route_stage_damage(MlSim *S, HdQueues *q);
+
 // --- hdFlags: the actionStates data plane hitDetection branches on -----------
 
 typedef struct {

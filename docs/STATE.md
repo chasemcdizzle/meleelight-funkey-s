@@ -51,7 +51,6 @@ self-check against their source, and make evidence hermetic.
   complete.
 - **A33 rung 3** (host-mode fork) — owner: after the ready-now list. Unlocks
   BOTH the GC adapter and **A47 two-device link play**.
-- **The credits screen has still never rendered on hardware.**
 - **Freeze manifest: 31 stale pins.** §A-par.5 batched pass, driver-only,
   **when M4 resumes — NOT now** (owner instruction, 2026-08-26). Deliberately
   untouched all session; the repo-wide producer-pin audit excludes it.

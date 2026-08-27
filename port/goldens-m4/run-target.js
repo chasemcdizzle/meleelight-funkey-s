@@ -86,8 +86,24 @@ const SEED = intArg("seed", 42, 0, 4294967295, "Math.random seed");
 const OUT = arg("out", "run-target.json");
 const CHAR = intArg("char", 2, 0, 4,
   "character: 0 marth 1 puff 2 fox 3 falco 4 falcon");
-const TSTAGE = intArg("tstage", 0, 0, 9,
-  "target stage: 0-9 == targetstage1..10 (activeStage.js targetStageMapping)");
+// 0-9 = an AUTHORED stage (activeStage.js targetStageMapping). 10-19 = a
+// CUSTOM slot, which is upstream's OWN numbering at targetselect.js:140-146
+// (`setActiveStageCustomTarget(targetSelected - 10)` but
+// `setTargetStagePlaying(targetSelected)`) and the port's MLK_PLAYING_BASE
+// + slot (D52). A custom tstage REQUIRES --custom-code and vice versa.
+const TSTAGE = intArg("tstage", 0, 0, 19,
+  "target stage: 0-9 authored, 10-19 custom slot (needs --custom-code)");
+// The share code a custom run plays. It is passed through upstream's OWN
+// parseStageCode inside the page — never through the port's codec — which
+// is the whole point: the oracle must build its stage the way a browser
+// would, or the differential is comparing the port to itself.
+const CUSTOM_CODE = arg("custom-code", "");
+if ((TSTAGE >= 10) !== (CUSTOM_CODE !== "")) {
+  console.error("run-target: --tstage 10-19 and --custom-code are ALL or " +
+    "NOTHING (got tstage=" + TSTAGE + ", custom-code " +
+    (CUSTOM_CODE === "" ? "absent" : "present") + ")");
+  process.exit(2);
+}
 const CHUNK = 120;
 
 const MIME = {
@@ -191,7 +207,7 @@ async function main() {
   // Locate the three upstream modules by EXPORT SHAPE (unique-match
   // hard-fail), mirror the harnessSetupMatch state writes for the
   // 1-player target domain, then take the MEASURED targetselect entry.
-  await page.evaluate(({ trace, charId, tstage }) => {
+  await page.evaluate(({ trace, charId, tstage, customCode }) => {
     function findModule(what, pred) {
       const c = window.__wpCache;
       const hits = [];
@@ -215,7 +231,9 @@ async function main() {
       typeof ex.targetHitDetection === "function" &&
       Array.isArray(ex.targetDestroyed));
     const asM = findModule("stages/activeStage", (ex) =>
-      typeof ex.setActiveStageTarget === "function" && ex.activeStage);
+      typeof ex.setActiveStageTarget === "function" &&
+      typeof ex.setActiveStageCustomTarget === "function" &&
+      typeof ex.setCustomTargetStages === "function" && ex.activeStage);
 
     window.__trace = trace;
     window.__resetMathCalls(); // count sim exposure, not boot noise (run.js:150)
@@ -232,8 +250,32 @@ async function main() {
       mainM.currentPlayers[i] = -1;
     }
     // stages/targetselect.js:143-146 (sounds.menuForward.play() is a
-    // menu-plane Howl with no seeded draw — not part of the sim entry):
-    asM.setActiveStageTarget(tstage);
+    // menu-plane Howl with no seeded draw — not part of the sim entry).
+    // The custom arm is upstream's OWN other branch at :140-146: the code
+    // goes through PARSESTAGECODE, not through anything this repo wrote,
+    // and the parse is what derives `connected` (encode.js:237).
+    if (customCode) {
+      const encM = findModule("stages/encode", (ex) =>
+        typeof ex.parseStageCode === "function" &&
+        typeof ex.createStageCode === "function");
+      const st = encM.parseStageCode(customCode);
+      if (st === null || st === undefined) {
+        throw new Error("run-target: upstream parseStageCode REFUSED the " +
+          "custom code — the golden's stage is not in the emitted language");
+      }
+      // Prove it is upstream's own canonical form before playing it: a code
+      // that is not its own fixed point would make "the port and the browser
+      // played the same stage" an assumption instead of a fact.
+      const round = encM.createStageCode(st);
+      if (round !== customCode) {
+        throw new Error("run-target: the custom code is NOT a fixed point of " +
+          "upstream's createStageCode (re-encode differs) — refusing");
+      }
+      asM.setCustomTargetStages(tstage - 10, st);
+      asM.setActiveStageCustomTarget(tstage - 10);
+    } else {
+      asM.setActiveStageTarget(tstage);
+    }
     tpM.setTargetStagePlaying(tstage);
     tpM.startTargetGame(0, false); // the ONE off-step seeded draw inside
 
@@ -281,7 +323,7 @@ async function main() {
         gameMode: window.__harness.getGameMode(),
       };
     };
-  }, { trace, charId: CHAR, tstage: TSTAGE });
+  }, { trace, charId: CHAR, tstage: TSTAGE, customCode: CUSTOM_CODE });
 
   const captureFrames = {};
   if (arg("capture-frames", null)) {
@@ -344,6 +386,11 @@ async function main() {
       p1: CHAR, p2: null, stage: null,
       seedRandom: true, fdlibm: true, cpu: false, difficulty: null,
       mode: "target", tstage: TSTAGE, wallMs: wall,
+      // The custom stage travels WITH the run, so the freeze and every
+      // later verification pin the exact code that was played rather than
+      // trusting the manifest to still say the same thing. "" for an
+      // authored run, which is what every existing golden records.
+      customCode: CUSTOM_CODE,
       browser: browser.browserType().name(), version: browser.version(),
     },
     coverage,
