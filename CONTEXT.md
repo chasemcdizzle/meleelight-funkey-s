@@ -100,6 +100,49 @@ menu clicks advanced one counter and not the other.)*
 templates. An effect only appears if both are true. The relationship should be
 checked, not assumed.
 
+**Face domain** — the set of characters a font can actually draw. A string is
+not free-form data once it reaches the renderer: it is only *drawable* if every
+character is in the face. The port's face carries digits, uppercase and a dozen
+punctuation marks, and **no lowercase at all**. A character outside the domain
+is not a blank and not a box — it kills the app.
+*(Cost: eight separate crashes shipped to hardware in one build. Every refusal
+string written in lowercase — `too small`, `saved`, `empty` — was a crash at
+the moment the player most needed to read it. The same defect had already
+shipped once, unnoticed, three days earlier.)*
+
+---
+
+## Persistence vocabulary
+
+**Resume** — has meant two different things, and the gap between them is the
+whole of one owner complaint. **Screen resume** restores *which screen you were
+looking at*. **State resume** restores *what you were doing*. The port ships the
+first and the name implies the second, so every gap (your CPU opponent gone,
+your hand back at the top, the mode reverted) reads as a bug rather than as the
+documented limit it is. A claim about "resuming" must say which one.
+*(Cost: an owner bug report listing six separate "failures" that were all one
+undocumented boundary.)*
+
+**Save state** — an *emulator* word, and it does not name anything this port
+has. On a handheld it means a complete machine snapshot that restores play
+exactly. What this port persists is a **settings record**: about twenty named
+fields plus a screen name. Borrowing the emulator word for the settings record
+sets an expectation the record cannot meet.
+
+**Screen-local state** — the state a screen owns and rebuilds on entry: cursor
+rows, hand position, which page a grid is showing, what is held. It is not
+settings and not sim state, it is *where you had got to*, and it is the plane
+that survives nothing today. Losing it is never data loss and always friction.
+
+**The same state** — ambiguous, and the two readings need different work.
+**Byte-equal** means the restored bytes match. **Checksum-equal** means the
+restored game *plays* identically — the per-frame checksum stream continues as
+if nothing happened. Byte-equal implies checksum-equal; the reverse is false,
+because the checksum spec deliberately excludes some timing-dependent fields.
+They also fail differently: a byte comparison catches a *serialiser* bug, and a
+checksum continuation catches a *completeness* bug — state nobody knew had to
+be saved. Neither finds the other's failures.
+
 ---
 
 ## Verification vocabulary
