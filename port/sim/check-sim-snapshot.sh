@@ -240,6 +240,134 @@ node oracle/harness/verify-stream.js "$WORK/g01.rt.json" \
 echo "  [3] OK: every row byte-identical through poison, both files identical,"
 echo "         and the run it interrupted still conforms to the frozen golden"
 
+# --- [4] the checksum continuation -------------------------------------------
+# THE COMPLETENESS TEST, and the reason this ticket needs two. Run the golden
+# straight through; then run it again, snapshotting at the half-way frame in
+# one process and RESTORING into another, and require that every frame after
+# the restore point is identical to the uninterrupted run. A field nobody knew
+# had to be saved shows up here and cannot show up in a round trip, which only
+# ever compares the fields it already knows about.
+#
+# The verdict is not ours: the restored frames are SPLICED onto the
+# uninterrupted run's prefix and the whole stream is judged by the UNCHANGED
+# oracle/harness/verify-stream.js against the frozen golden — exact per-frame
+# hash equality over the full 3600 frames, plus the rngCalls /
+# rngCallsOutsideStep pins, which the restored process can only reproduce if
+# it carried the RNG counters across too.
+echo "=== [4] checksum continuation"
+
+: "${SNAP_GOLDENS:=}"
+ids="$SNAP_GOLDENS"
+if [ -z "$ids" ]; then
+  ids=$(node -e "const m=require('./oracle/goldens/manifest.json');console.log(m.goldens.map(g=>g.id).join(' '))")
+fi
+
+conf=0
+for id in $ids; do
+  eval "$(node -e "
+    const m=require('./oracle/goldens/manifest.json');
+    const g=m.goldens.find(x=>x.id==='$id');
+    if(!g) { console.error('no such golden'); process.exit(1); }
+    console.log('name='+g.name);
+    console.log('seed='+g.seed);
+    console.log('p1='+g.p1); console.log('p2='+g.p2);
+    console.log('stage='+g.stage);
+    console.log('frames='+g.frames);
+    console.log('cpu='+(g.cpu?1:0));
+    console.log('difficulty='+(g.difficulty||5));
+    console.log('trace='+g.trace);
+  ")"
+  echo "  == $id ($name)"
+  node "$SIM/trace-to-txt.js" "oracle/goldens/$trace" "$WORK/$id.trace.txt" \
+    > /dev/null
+
+  # The CPU goldens exercise the AI plane and its seeded draws, and their
+  # AIBRIDGE1 artifact is a RECON row: a restored process reloads it and the
+  # snapshot carries only the cursor into it (which is real match state, and
+  # is verified against the reloaded artifact's identity on the way in).
+  bridge_args=()
+  if [ "$cpu" = "1" ]; then
+    art="$BUILD/$id.ai-bridge.txt"
+    if [ ! -f "$art" ]; then
+      echo "     AI bridge artifact absent — recording the ai capture"
+      node "$CAL/run-capture.js" --spec ai --golden "$id" \
+        --out-jsonl "$WORK/$id.ai.jsonl" --out-run "$WORK/$id.ai-run.json"
+      node oracle/harness/verify-stream.js "$WORK/$id.ai-run.json" \
+        "oracle/goldens/$name.sha256.json" \
+        || fail "[4] the $id ai capture perturbed the sim"
+      node "$CAL/build-ai-bridge.js" "$id" "$WORK/$id.ai.jsonl" "$art"
+    fi
+    bridge_args=(--cpu --difficulty "$difficulty" --ai-bridge "$art")
+  fi
+
+  # <outfile> [VAR=value ...] — the environment is passed through `env` on
+  # purpose: whether a `VAR=x func` prefix survives a shell function differs
+  # between bash modes, and a snapshot control that silently leaked into the
+  # next run would be an invisible false pass.
+  run() {
+    local out="$1"; shift
+    env "$@" "$WORK/sim_host_snap" \
+      --trace "$WORK/$id.trace.txt" --simdata "$WORK/simdata.txt" \
+      --seed "$seed" --p1 "$p1" --p2 "$p2" --stage "$stage" \
+      --frames "$frames" ${bridge_args[@]+"${bridge_args[@]}"} > "$out"
+  }
+
+  # (a) the uninterrupted run, judged in its own right — so a continuation
+  #     that matched a BROKEN baseline could not pass quietly.
+  run "$WORK/$id.uninterrupted.txt" \
+    || fail "[4] $id: the uninterrupted run died"
+  node "$SIM/wrap-run.js" "$id" "$WORK/$id.uninterrupted.txt" \
+    "$WORK/$id.uninterrupted.json" > /dev/null
+  node oracle/harness/verify-stream.js "$WORK/$id.uninterrupted.json" \
+    "oracle/goldens/$name.sha256.json" > /dev/null \
+    || fail "[4] $id: the uninterrupted run does not conform — the \
+continuation below would be measuring the wrong thing"
+
+  at=$(( frames / 2 ))
+
+  # (b) snapshot at the half-way frame, in a process that then exits.
+  run "$WORK/$id.prefix.txt" "MLFK_SNAP_OUT=$WORK/$id.snap" \
+      "MLFK_SNAP_AT=$at" MLFK_SNAP_STOP=1 2> "$WORK/$id.save.err" \
+    || { cat "$WORK/$id.save.err" >&2; fail "[4] $id: the saving run died"; }
+  grep -q "^SNAP WROTE .* frame $at " "$WORK/$id.save.err" \
+    || { cat "$WORK/$id.save.err" >&2
+         fail "[4] $id: no snapshot was written at frame $at"; }
+
+  # (c) restore into a DIFFERENT process and play the rest.
+  run "$WORK/$id.resumed.txt" "MLFK_SNAP_IN=$WORK/$id.snap" \
+    2> "$WORK/$id.load.err" \
+    || { cat "$WORK/$id.load.err" >&2; fail "[4] $id: the resumed run died"; }
+  first=$(grep -m1 '^F ' "$WORK/$id.resumed.txt" | awk '{print $2}')
+  [ "$first" = "$(( at + 1 ))" ] \
+    || fail "[4] $id: the resumed run started at frame $first, not $(( at + 1 ))"
+
+  # Frame-for-frame against the uninterrupted run ... (split through FILES,
+  # not pipes: `grep | head` hands grep a SIGPIPE and `set -o pipefail` would
+  # then report a check failure that is really a plumbing artefact.)
+  grep '^F ' "$WORK/$id.uninterrupted.txt" > "$WORK/$id.frames-a.txt"
+  tail -n "$(( frames - at ))" "$WORK/$id.frames-a.txt" > "$WORK/$id.tail-a.txt"
+  grep '^F ' "$WORK/$id.resumed.txt" > "$WORK/$id.tail-c.txt"
+  cmp "$WORK/$id.tail-a.txt" "$WORK/$id.tail-c.txt" \
+    || fail "[4] $id: the frames after the restore point differ from the \
+uninterrupted run — something in the sim state was not carried"
+
+  # ... and, spliced onto the prefix, against the FROZEN golden, by the
+  # oracle's own verifier. This is the leg's actual verdict.
+  {
+    head -n "$at" "$WORK/$id.frames-a.txt"
+    cat "$WORK/$id.tail-c.txt"
+    grep -E '^(RNG |SIM OK$)' "$WORK/$id.resumed.txt"
+  } > "$WORK/$id.spliced.txt"
+  node "$SIM/wrap-run.js" "$id" "$WORK/$id.spliced.txt" \
+    "$WORK/$id.spliced.json" > /dev/null
+  node oracle/harness/verify-stream.js "$WORK/$id.spliced.json" \
+    "oracle/goldens/$name.sha256.json" \
+    || fail "[4] $id: the spliced stream does not conform to the frozen golden"
+  conf=$(( conf + 1 ))
+done
+[ "$conf" -ge 1 ] || fail "[4] no golden was covered"
+echo "  [4] OK: $conf golden(s) continued across a process boundary"
+
 # --- no-commit guard ---------------------------------------------------------
 dirty_after="$(tree_fingerprint)" \
   || fail "could not re-fingerprint the working tree (fails CLOSED)"
