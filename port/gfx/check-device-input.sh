@@ -87,6 +87,19 @@ BUDGET_NS=16666667  # 60 fps pacing budget
 S1_SCRIPT=$GFX/s1-session.script  # committed deterministic input script
 GFXDATA_FROZEN=$GFX/gfxdata-frozen.txt
 GFXDATA_SHA256=5499a3dd5fc374d6ed988faf0bef6fa2e189eb314e892bdd83c7534dc0865c94
+# The vfx data plane and its glyph atlas became REQUIRED arguments of
+# gfx_app after this check was last run on hardware (M4 task 1 widened the
+# vfx seam; the glyph atlas came with it), so leg [5] launched the app with
+# an incomplete argv, gfx_app printed its usage and exited, and the check
+# reported "app ready marker never appeared (30s) — SDL init/boot failure?".
+# It was not an SDL failure and it was not the device: the app never
+# started. Same literals and the same discipline as check-device-audio.sh
+# :187-190 and check-device-render.sh:127-130 — committed INPUT, content
+# integrity pinned here, freshness is git's.
+VFXDATA_FROZEN=$GFX/vfxdata-frozen.txt
+VFXDATA_SHA256=545015a3d7e3bc138059fcb9711040758e729a7d21aac650b009ed7fdb5bd662
+VFXGLYPHS_FROZEN=$GFX/vfxglyphs-frozen.txt
+VFXGLYPHS_SHA256=a9f08ad66cbf3f52d4003b87b7ff8f529367aa8b28bf08dbebfc3d6296d995d6
 READY_TRIES=30      # x1 s: app boot to ready marker
 DONE_TRIES=30       # x2 s: session end after the injector returns
 ANIM_P1=anim_2_fox.bin
@@ -137,6 +150,18 @@ if [ "$gsum" != "$GFXDATA_SHA256" ]; then
   exit 1
 fi
 echo "   gfxdata-frozen pin OK ($GFXDATA_SHA256)"
+made "$VFXDATA_FROZEN" "$VFXGLYPHS_FROZEN"
+vsum="$(shasum -a 256 "$VFXDATA_FROZEN" | cut -d' ' -f1)"
+if [ "$vsum" != "$VFXDATA_SHA256" ]; then
+  echo "DEVICE FAIL: $VFXDATA_FROZEN sha256 $vsum != pinned $VFXDATA_SHA256" >&2
+  exit 1
+fi
+gsum2="$(shasum -a 256 "$VFXGLYPHS_FROZEN" | cut -d' ' -f1)"
+if [ "$gsum2" != "$VFXGLYPHS_SHA256" ]; then
+  echo "DEVICE FAIL: $VFXGLYPHS_FROZEN sha256 $gsum2 != pinned $VFXGLYPHS_SHA256" >&2
+  exit 1
+fi
+echo "   vfxdata + vfxglyphs pins OK"
 bash pipeline/extractor/build-extractor.sh
 rm -f "$TABLES/ml_tables.c" "$TABLES/ml_tables.h" \
   "$TABLES/ml_stages.c" "$TABLES/ml_stages.h" \
@@ -270,13 +295,15 @@ rig_arm_build
 rig_stamp_rehash gfx_device fk_input sim_device
 dsh "rm -rf $DTMP $DSD && mkdir -p $DTMP $DSD"
 adb -s "$DEV" push "$DEVB/gfx_device" "$DEVB/fk_input" "$DEVB/sim_device" \
-  "$DEVB/simdata.txt" "$GFXDATA_FROZEN" "$S1_SCRIPT" \
+  "$DEVB/simdata.txt" "$GFXDATA_FROZEN" "$VFXDATA_FROZEN" \
+  "$VFXGLYPHS_FROZEN" "$S1_SCRIPT" \
   "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2" "$DTMP/" >/dev/null
 rig_push_provenance "$DTMP" gfx_device fk_input sim_device
 dsh "chmod +x $DTMP/gfx_device $DTMP/fk_input $DTMP/sim_device"
 # iter 52 parser audit: device digests via the strict full-line
 # rig_dev_sha256 parser (was a first-nonempty-line awk scrape)
-for hf in "$DEVB/simdata.txt" "$GFXDATA_FROZEN" "$S1_SCRIPT" \
+for hf in "$DEVB/simdata.txt" "$GFXDATA_FROZEN" "$VFXDATA_FROZEN" \
+          "$VFXGLYPHS_FROZEN" "$S1_SCRIPT" \
           "$TABLES/$ANIM_P1" "$TABLES/$ANIM_P2"; do
   bn="$(basename "$hf")"
   hsum="$(shasum -a 256 "$hf" | cut -d' ' -f1)"
@@ -286,7 +313,7 @@ for hf in "$DEVB/simdata.txt" "$GFXDATA_FROZEN" "$S1_SCRIPT" \
     exit 1
   fi
 done
-echo "   pushed data sha-verified on device (simdata, gfxdata, script, 2 anim bins)"
+echo "   pushed data sha-verified on device (simdata, gfxdata, vfxdata, glyphs, script, 2 anim bins)"
 
 echo "== [5/9] device: LIVE uinput-driven S1 session (frontend parked around the run) =="
 # Generated launcher (host-expanded, pushed + sha-verified): the app is
@@ -303,6 +330,7 @@ setsid sh -c './gfx_device --live --record-trace $DTMP/s1.trace.json \
   --record-keys $DTMP/s1.keys.txt \
   --ready-file $DTMP/s1.ready \
   --simdata $DTMP/simdata.txt --gfxdata $DTMP/gfxdata-frozen.txt \
+  --vfxdata $DTMP/vfxdata-frozen.txt --glyphs $DTMP/vfxglyphs-frozen.txt \
   --anim-dir $DTMP \
   --seed $SESSION_SEED --p1 $SESSION_P1 --p2 $SESSION_P2 \
   --stage $SESSION_STAGE --frames $SESSION_FRAMES \
