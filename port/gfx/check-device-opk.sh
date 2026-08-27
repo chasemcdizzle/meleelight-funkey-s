@@ -1264,7 +1264,21 @@ if [ "$ev_pfails" -ne 0 ]; then
   echo "DEVICE FAIL: $ev_pfails failed presents on the evidence run" >&2
   exit 1
 fi
-au_cnt="$(grep -Ec '^gfx_app audio: [0-9]{1,12} callbacks, [0-9]{1,12} underruns, [0-9]{1,12} badlen, [0-9]{1,12} voice starts, [0-9]{1,12} voice stops, [0-9]{1,12} steals, rate=44100 samples=512 channels=2$' "$OPK_APPLOG_HOST")" || true
+# The audio PERIOD is not this check's to name. A28 (22a46db) derived it
+# from the frame budget and raised it 512 -> 2048 to kill the owner's
+# "constant audio buzz"; this run does not pass --audio-samples, so what
+# the device reports IS the build's default. Restating the literal is what
+# stranded three sibling checks this session — read it from the SSOT, with
+# a strict grammar and a loud death. (check-device-audio.sh and
+# check-device-music.sh keep their literal on purpose: they PASS
+# --audio-samples, so they pin the number they supplied.)
+AUDIO_SAMPLES_EXPECT="$(grep -oE '^#define PLATFORM_AUDIO_SAMPLES_DEFAULT [0-9]+$' \
+  port/gfx/platform.h | awk '{print $3}')" || true
+case "$AUDIO_SAMPLES_EXPECT" in
+  [1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]) ;;
+  *) echo "DEVICE FAIL: could not read PLATFORM_AUDIO_SAMPLES_DEFAULT out of port/gfx/platform.h (got '$AUDIO_SAMPLES_EXPECT')" >&2; exit 2 ;;
+esac
+au_cnt="$(grep -Ec "^gfx_app audio: [0-9]{1,12} callbacks, [0-9]{1,12} underruns, [0-9]{1,12} badlen, [0-9]{1,12} voice starts, [0-9]{1,12} voice stops, [0-9]{1,12} steals, rate=44100 samples=${AUDIO_SAMPLES_EXPECT} channels=2\$" "$OPK_APPLOG_HOST")" || true
 if [ "$au_cnt" != 1 ]; then
   echo "DEVICE FAIL: app log has $au_cnt device audio summary lines (want exactly 1 — audio callback liveness under the frontend launch)" >&2
   exit 1

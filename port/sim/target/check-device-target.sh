@@ -98,6 +98,21 @@ ascii_text_ok() {
 
 cd "$(dirname "$0")/../../.."
 
+# The audio PERIOD is not this check's to name. A28 (22a46db) derived it
+# from the frame budget and raised it 512 -> 2048 to kill the owner's
+# "constant audio buzz"; this run does not pass --audio-samples, so what
+# the device reports IS the build's default. Restating the literal is what
+# stranded three sibling checks this session — read it from the SSOT, with
+# a strict grammar and a loud death. (check-device-audio.sh and
+# check-device-music.sh keep their literal on purpose: they PASS
+# --audio-samples, so they pin the number they supplied.)
+AUDIO_SAMPLES_EXPECT="$(grep -oE '^#define PLATFORM_AUDIO_SAMPLES_DEFAULT [0-9]+$' \
+  port/gfx/platform.h | awk '{print $3}')" || true
+case "$AUDIO_SAMPLES_EXPECT" in
+  [1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]) ;;
+  *) echo "TARGET DEVICE FAIL: could not read PLATFORM_AUDIO_SAMPLES_DEFAULT out of port/gfx/platform.h (got '$AUDIO_SAMPLES_EXPECT')" >&2; exit 2 ;;
+esac
+
 GFX=port/gfx
 FOH=port/foh
 FLOWS=$FOH/flows
@@ -140,11 +155,11 @@ f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/
 0bc801ea46b06a63e79377aae164636a5e9f649ee45835748e5f2387b9e04281 oracle/harness/streamlib.js
 4160a35b36e8d3d6896ad2c3c6239d4a4860a0d7f43814a7a9b53b7c136742ab port/sim/sim/trace-to-txt.js
 7186734f8c3ff9bfad04f59bf9e13f201663e82481e399911433136673721bba port/sim/calib/dump-sim-data.js
-594f1925628259bf702f12b21d7991e9be0dcf3d3e9fa0a8de1cca311259b9db port/foh/judge-foh-trace.js
-a1353a71a66bb05bc28d547eee9385cfa8da7baf784f9e038bd31834cabb9cb8 port/foh/normalize-foh-trace.js
+8fda41757516dc6331ca0836cf729f865ec388c22fa28e015f9c68528c97f83b port/foh/judge-foh-trace.js
+9bf4411e80cb54e871cc87b367d960739103e4dd8ae1328a93c272481182ace8 port/foh/normalize-foh-trace.js
 1163e9c18323ac06aaaec4ee3068691d7d67ebbf98b3500a343a69c80ca793ea port/foh/flow-to-fkscript.js
 4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js
-2b208cfe18c9e5aac370e0212fc74721489fd404aeb67c9deeddee88ba1bfc1e port/foh/keymap-frozen.txt
+452b6e41cbd7d692d35e1f89e0a8f4554c5af964b01bb87631cf01322de255ee port/foh/keymap-frozen.txt
 2cf5c5a532207372b70c4cee57412c7ac65643ac4f4066c745d9eb7fe4aa0e9b port/goldens-m4/wrap-target.js
 415335239fcc04df97eba07298a1fa521602d5ea45b087aa8d7d40bd740c122a port/goldens-m4/verify-target-stream.js
 6b1b6b5be3700c51dfae8c0c4cb1f012e5b61239394ae4146c2e5e19cc4fcc47 port/goldens-m4/validate-target-manifest.js
@@ -172,7 +187,21 @@ MUSIC_MENU_LOOP='7425,173500'
 # these exactly — a deleted snd_push plane (the both-zero
 # self-consistency hole) is death by construction. Re-freeze =
 # reviewed change in the same commit.
-SFX_STARTS_PIN=(15 31)
+#
+# RE-FROZEN 2026-08-26, f07: 31 -> 32, and the +1 is DERIVED before it is
+# accepted rather than after. 5440cf1 (A45 T3, D52) re-cut
+# f07-target-t02.flow because target-select's slot 10 stopped emitting
+# `ev_refused(s, "addcode")` and started FLIPPING the grid between the
+# authored and custom pages. A flip is not a destination, so the flow now
+# presses slot 10 TWICE — once to see the custom page, once to come back —
+# and foh.c:1375-1377's flip arm plays `menuSelect` on each press. One
+# extra press, one extra menuSelect, one extra voice start. The flow diff
+# and the sound site both say +1 and the measurement says 32; f06 is
+# untouched at 15, which is what makes this a targeted delta rather than a
+# drift. This is the paired half 5440cf1 owed and did not pay: it re-cut
+# the flow without re-freezing the pin, and the check had not been RUN on
+# hardware since, so it went stale rather than loud.
+SFX_STARTS_PIN=(15 32)
 
 source port/sim/device/adbsh.sh
 require_device
@@ -295,9 +324,9 @@ done <<< "$PRODUCER_PINS"
 [ "$n_pins" = "$N_PINS_WANT" ] || fail "producer pin inventory — $n_pins/$N_PINS_WANT pins verified"
 # twin pins: the judge sha must sit in check-foh-flows.sh's pin table
 # exactly once; sndpack/menu.pcm must equal the sibling device checks'.
-c="$(grep -cF "594f1925628259bf702f12b21d7991e9be0dcf3d3e9fa0a8de1cca311259b9db port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
+c="$(grep -cF "8fda41757516dc6331ca0836cf729f865ec388c22fa28e015f9c68528c97f83b port/foh/judge-foh-trace.js" "$FOH/check-foh-flows.sh")" || true
 [ "$c" = 1 ] || fail "twin pin — check-foh-flows.sh does not carry the same judge-foh-trace.js sha exactly once (count $c; paired change rule)"
-c="$(grep -cF "594f1925628259bf702f12b21d7991e9be0dcf3d3e9fa0a8de1cca311259b9db port/foh/judge-foh-trace.js" "$FOH/check-device-foh.sh")" || true
+c="$(grep -cF "8fda41757516dc6331ca0836cf729f865ec388c22fa28e015f9c68528c97f83b port/foh/judge-foh-trace.js" "$FOH/check-device-foh.sh")" || true
 # exactly 2 there: its PRODUCER_PINS row + its own twin grep of
 # check-foh-flows.sh (both carry the sha+path pair)
 [ "$c" = 2 ] || fail "twin pin — check-device-foh.sh does not carry the same judge-foh-trace.js sha exactly twice (count $c; pin row + its twin grep)"
@@ -345,7 +374,26 @@ echo "   target manifest validated; t01/t02 traces regen-guarded"
 
 # flow inventory (paired with check-foh-flows.sh's 7-flow pin)
 FLOW_IDS=(f06-target-t01 f07-target-t02)
-FLOW_SHOTS=("menu-targettest tss-t01" "tss-addcode tss-t02")
+# f07's first shot was RENAMED in 5440cf1 (A45 T3, D52): slot 10 stopped
+# refusing `addcode` and started flipping the grid, so the shot moved
+# 430 -> 437 and is now taken AFTER the flip, picturing the custom page
+# rather than a refusal. Same paired-change omission as the SFX pin above —
+# the flow was re-cut and this inventory was not, and the check had not
+# been RUN on hardware since. The names must equal the flow's SHOT rows
+# exactly; the guard below asserts that rather than trusting it.
+FLOW_SHOTS=("menu-targettest tss-t01" "tss-custompage tss-t02")
+# INVENTORY GUARD: a shot this check pulls that the flow does not take is
+# an adb "remote object does not exist" three legs later, which reads as a
+# device problem and is not one. Compare the two lists at their source.
+for _k in "${!FLOW_IDS[@]}"; do
+  _want="$(printf '%s\n' ${FLOW_SHOTS[$_k]} | sort)"
+  _have="$(grep -E '^SHOT [0-9]+ [A-Za-z0-9_-]+$' "$FOH/flows/${FLOW_IDS[$_k]}.flow" \
+           | awk '{print $3}' | sort)"
+  [ "$_want" = "$_have" ] || fail "flow ${FLOW_IDS[$_k]}: this check's shot
+   inventory [$(echo $_want)] != the flow's own SHOT rows [$(echo $_have)]
+   — re-cutting a flow and its consumers is ONE change"
+done
+echo "   flow shot inventories match the committed flows"
 FLOW_SEED=("$T01_SEED" "$T02_SEED")
 FLOW_FRAMES=("$T01_FRAMES" "$T02_FRAMES")
 FLOW_GID=(t01 t02)
@@ -513,6 +561,7 @@ cc -O3 "${CFLAGS_COMMON[@]}" -c "$GFX/raster.c" -o "$BUILD/raster.o"
 cc -O2 "${CFLAGS_COMMON[@]}" -o "$BUILD/foh_dev_headless" \
   "$BUILD/raster.o" "$FOH/foh_dev.c" "$FOH/foh.c" "$FOH/foh_font.c" \
   "$FOH/foh_render.c" "$FOH/foh_persist.c" "$FOH/foh_pause.c" \
+  "$FOH/foh_tbuild.c" port/sim/stage_code.c "$TGT/custom_stage.c" \
   "$GFX/ctl_style.c" "$GFX/img1.c" \
   "$GFX/platform_headless.c" \
   "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_target.c" \
@@ -657,7 +706,7 @@ parse_audio_summary() { # <log>
   nl_terminated "$log" "audio summary"
   pcnt="$(grep_count 'foh_dev audio:' "$log" "audio summary")"
   [ "$pcnt" = 1 ] || grammar_die "app log $log has $pcnt 'foh_dev audio:' needles (want 1)"
-  re="^foh_dev audio: ${NUM12} callbacks, ${NUM12} underruns, ${NUM12} badlen, ${NUM12} voice starts, ${NUM12} voice stops, ${NUM12} steals, rate=(0|44100) samples=(0|512) channels=(0|2)\$"
+  re="^foh_dev audio: ${NUM12} callbacks, ${NUM12} underruns, ${NUM12} badlen, ${NUM12} voice starts, ${NUM12} voice stops, ${NUM12} steals, rate=(0|44100) samples=(0|${AUDIO_SAMPLES_EXPECT}) channels=(0|2)\$"
   cnt="$(grep_count "$re" "$log" "audio summary")"
   [ "$cnt" = 1 ] || grammar_die "app log $log has $cnt audio-summary grammar matches (want 1)"
   line="$(grep -E "$re" "$log")"
@@ -1211,8 +1260,12 @@ LIVE_ID=f08-live-target
 LIVE_FRAMES=900   # 15 s bound; the START quit must land well under it
 LIVE_FOHMAX=1400
 # fk script: the f06 NAV (title -> menu -> target-select -> fox -> slot 0 ->
-# launch), then real gameplay (jabs — deliberately NO movement, so fox
-# cannot self-destruct and switch which exit arm runs), then START.
+# launch), then real gameplay, then START. The two presses are the PHYSICAL
+# A button, which D33 makes JUMP (s1_input.h:356) — this comment said
+# "jabs" and predates that re-ratification. What the leg needs of them is
+# unchanged and is why they were chosen: they are input the sim must act on,
+# with NO horizontal movement, so fox cannot self-destruct and switch which
+# exit arm runs.
 # Derived x2, byte-stable.
 # The `q` marker presses the generator emits are no-ops here BY DESIGN: this
 # leg runs without --shots-dir, exactly like the OPK play path.
@@ -1379,9 +1432,23 @@ kn="$(wc -l < "$BUILD/$LIVE_ID.keys.txt" | tr -d ' ')"
 rn="$(grep -c -- ",null,null,null\]" "$BUILD/$LIVE_ID.rec.json")" || true
 [ "$rn" = "$kn" ] \
   || fail "live leg: --record-trace rows ($rn) != --record-keys rows ($kn)"
-# the capture must contain REAL input, not a constant neutral row: the
-# injected jabs have to show up, or the recorder is not recording.
-grep -q '"a":true' "$BUILD/$LIVE_ID.rec.json" \
+# The capture must contain REAL input, not a constant neutral row, or the
+# recorder is not recording.
+#
+# WHICH FIELD, and why it is named rather than wildcarded (2026-08-26):
+# this asserted `"a":true` and failed with "the recorder emitted only
+# neutral rows despite injected gameplay", which was a true statement about
+# the wrong field. The injector presses the PHYSICAL A button, and D33
+# ("A->jump, B->attack, Y->special, X->grab") re-ratified what that drives:
+# s1_input.h:356 is `in.x = p->a; // JUMP`, so physical A now shows up as
+# the sim's `x`. The sim's `a` is ATTACK and is driven by physical B/X
+# (:354). Nothing was broken; the control map moved under an assertion that
+# had not been RUN on hardware since.
+#
+# It stays a NAMED field rather than "any pressed key", because a wildcard
+# would also pass on a stuck d-pad or a stray START — and this leg's whole
+# claim is that THE INJECTED BUTTON reached the sim.
+grep -q '"x":true' "$BUILD/$LIVE_ID.rec.json" \
   || fail "live leg: no pressed field in --record-trace — the recorder
   emitted only neutral rows despite injected gameplay"
 # SHAPE GUARD (not a tooth — rec_frame_solo hardcodes the 1-slot row, so
@@ -1404,7 +1471,7 @@ lpf="$(printf '%s' "$mline" | awk '{print $8}')"
 # a completely silent run.
 are="^foh_dev audio: [1-9][0-9]{0,11} callbacks, 0 underruns, 0 badlen,"
 are="$are ${N12} voice starts, ${N12} voice stops, ${N12} steals,"
-are="$are rate=44100 samples=512 channels=2$"
+are="$are rate=44100 samples=${AUDIO_SAMPLES_EXPECT} channels=2$"
 ac="$(grep_count "$are" "$BUILD/$LIVE_ID.applog.txt" "live audio summary")"
 [ "$ac" = 1 ] \
   || grammar_die "live leg: $ac audio-summary grammar matches (want 1)"
