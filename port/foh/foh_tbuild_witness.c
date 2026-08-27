@@ -15,6 +15,7 @@
 //   [8] every refusal is VISIBLE — a string in FohState.tbMsg, never a sound
 //       alone. That failure mode is the reason the ticket exists.
 //   [9] D43: writing one slot does not disturb another, on any path.
+//  [10] EVERY FRAME IT SIMULATES IS ALSO DRAWN (ticket #21).
 //
 // NOTHING IS HAND-POKED. The only things written directly into FohState are
 // the two the player's hand owns — the target-select cursor position and,
@@ -50,6 +51,119 @@ static void bad(const char *what) {
 }
 static void want(int cond, const char *what) {
   if (cond) ok(what); else bad(what);
+}
+
+// --- [10] EVERY SIMULATED FRAME IS DRAWN ------------------------------------
+//
+// This witness made 139 assertions while EIGHT crashes shipped to hardware,
+// and the reason is one line long: it drove `foh_tick` and never once called
+// `foh_render`, so the whole renderer — every string the builder puts on
+// screen, and the font lookup that kills the app on a character it cannot
+// draw — sat outside the check. Ticket #21 closes that hole here rather than
+// later, because the fix without it leaves the hole that produced the bug.
+//
+// It is done with a MACRO over `foh_tick`, deliberately, rather than by
+// editing the call sites: there are a dozen of them, several written inline
+// in main(), and a thirteenth added next month would silently be an undrawn
+// frame again. With the macro there is no way to simulate a frame this file
+// does not draw. `(foh_tick)(...)` inside the wrapper is the real function —
+// the parentheses suppress the function-like macro, so there is no recursion.
+//
+// The state is drawn AS IT IS, not through foh_look_canonical: this is not a
+// shot being compared against another target, it is the real renderer being
+// exercised, so the phase counters should advance exactly as they do in the
+// player's hands (and foh_look_canonical refuses FOH_STARTUP anyway, which
+// is where the first 380 frames live).
+static Raster g_rz; // 240x240, far too large for the stack
+static long g_framesDrawn;
+
+// THE DOMAIN ASSERTION IS A RUNTIME ONE, not a source scan (spec #20): the
+// strings on this screen are assembled at draw time out of three TUs' tables,
+// and no grep sees through that. Drawing the frame is already the proof — an
+// undrawable character is a gfx_fatal one line later — but a fatal names the
+// FONT, not the CHANNEL, and the next person to hit this deserves to be told
+// which string it was. So the two string channels the builder owns are read
+// after every frame and the FIRST offender is kept.
+static const char *g_domainBad;
+static char g_domainBadCh;
+
+static void domain_watch(const FohState *s) {
+  if (g_domainBad) return; // first offender only; it names the channel
+  const char *cand[1 + FOH_TB_SLOT_CACHE];
+  int n = 0;
+  cand[n++] = s->tbMsg;                              // the status line
+  for (int i = 0; i < FOH_TB_SLOT_CACHE; i++) {      // target-select's
+    cand[n++] = s->tssSlotReason[i];                 // per-slot reasons
+  }
+  for (int i = 0; i < n; i++) {
+    const char c = foh_face_undrawable(cand[i], 1);
+    if (c) {
+      g_domainBad = cand[i];
+      g_domainBadCh = c;
+      return;
+    }
+  }
+}
+
+static void wit_tick(FohState *s, const PlatformInput *in) {
+  (foh_tick)(s, in);
+  memset(&g_rz, 0, sizeof g_rz);
+  foh_render(s, &g_rz);
+  domain_watch(s);
+  g_framesDrawn++;
+}
+#define foh_tick(s, in) wit_tick((s), (in))
+
+// --- reading the frame back --------------------------------------------------
+//
+// Both helpers below judge WHAT A PLAYER WOULD SEE, out of the rendered
+// framebuffer, and neither of them names a colour: a legibility check written
+// against `kAccent` would pass the day someone changed the palette and broke
+// the contrast again. What is asserted is the relationship — ink against its
+// own background, one row's ink against another's.
+
+// Pixels inside the box that differ from the colour sampled at (sx, sy). The
+// caller picks a sample point it knows is background, so this is "how much is
+// drawn on top of that background" — zero means a solid, wordless block.
+static int ink_on(const Raster *rz, int x0, int y0, int w, int h, int sx,
+                  int sy) {
+  if (sx < 0 || sy < 0 || sx >= RAST_W || sy >= RAST_H) return -1;
+  const long bg = (long)rz->fb[sy * RAST_W + sx];
+  int n = 0;
+  for (int y = y0; y < y0 + h; y++) {
+    if (y < 0 || y >= RAST_H) continue;
+    for (int x = x0; x < x0 + w; x++) {
+      if (x < 0 || x >= RAST_W) continue;
+      if ((long)rz->fb[y * RAST_W + x] != bg) n++;
+    }
+  }
+  return n;
+}
+
+// The exact ink a string was drawn in, read out of a live frame THROUGH THE
+// FONT'S OWN GLYPH MASK: the same string is drawn into a scratch raster to
+// learn which pixels a glyph covers, and only those pixels are read back. So
+// it does not care what is behind the text, and it does not restate the font.
+// Returns the ink, -1 if the mask is empty, or -2 if the covered pixels are
+// not one flat colour — which means that string is not drawn there at all.
+static Raster g_mask;
+static long ink_of(const Raster *live, int x, int y, const char *text) {
+  // rast_clear, not memset: the clip window lives in the Raster and a zeroed
+  // one clips EVERYTHING away, which would make this silently return an empty
+  // mask (measured, while this leg was being written).
+  rast_clear(&g_mask, 0, 0, 0, 0, RAST_H);
+  const RastCol white = {255, 255, 255, 256};
+  foh_text(&g_mask, x, y, 1, text, white);
+  long ink = -1;
+  for (int yy = 0; yy < RAST_H; yy++) {
+    for (int xx = 0; xx < RAST_W; xx++) {
+      if (g_mask.fb[yy * RAST_W + xx] == 0) continue;
+      const long v = (long)live->fb[yy * RAST_W + xx];
+      if (ink < 0) ink = v;
+      else if (ink != v) return -2;
+    }
+  }
+  return ink;
 }
 
 // --- driving the real machine ------------------------------------------------
@@ -263,6 +377,11 @@ static void pane_row(FohState *s, int row) {
   for (int i = 0; i < FOH_TB_SLOTS && s->tbPaneRow != row; i++) PRESS(s, down);
 }
 
+// One more neutral frame, so g_rz holds the CURRENT screen. A press ends on
+// its release tick, which already drew — this only makes the intent explicit
+// at the sites that then read pixels back.
+static void neutral_frame(FohState *s) { tick_neutral(s, 1); }
+
 // --- the .mlstage file, read as BYTES ----------------------------------------
 // Deliberately NOT through the builder's own reader: [6] is asserting that
 // what landed on disk matches A45 T2's published contract, and a reader
@@ -298,7 +417,20 @@ static int probe_mode(int slot) {
            v.nLine);
     return 0;
   }
-  printf("FOHLOAD REFUSED %s\n", s.tbMsg ? s.tbMsg : "?");
+  // This is where port/sim/stage_code.c's OWN refusal vocabulary arrives —
+  // mlk_parse's words, forwarded verbatim by named_read and then drawn. The
+  // corpus below feeds this path deliberately malformed files, so it is the
+  // one place those foreign strings can be seen at runtime. A miss is
+  // reported in the verdict FIELD, where check-tbuild.sh's parser fails
+  // closed on anything that is not OK/REFUSED.
+  {
+    const char c = foh_face_undrawable(s.tbMsg, 1);
+    if (c) {
+      printf("FOHLOAD UNDRAWABLE '%c' in %s\n", c, s.tbMsg ? s.tbMsg : "");
+      return 1;
+    }
+  }
+  printf("FOHLOAD REFUSED %s\n", s.tbMsg ? s.tbMsg : "-");
   return 1;
 }
 
@@ -436,7 +568,7 @@ int main(int argc, char **argv) {
   }
   want(tb_targets(&s) == 10,
        "the document stops at 10 targets — the SIM's ML_MAX_TARGETS");
-  want(s.tbMsgTimer > 0 && s.tbMsg && strcmp(s.tbMsg, "10 targets max") == 0,
+  want(s.tbMsgTimer > 0 && s.tbMsg && strcmp(s.tbMsg, "10 TARGETS MAX") == 0,
        "...and the refusal is a STRING ON SCREEN, not just a deny sound");
   want(sound_fired(&s, "deny"), "...with the deny sound as well");
 
@@ -451,7 +583,7 @@ int main(int argc, char **argv) {
   want(s.tbPane == FOH_TB_PANE_SAVE, "SAVE opens the slot list");
   pane_row(&s, 0);
   PRESS(&s, a);
-  want(s.tbMsg && strcmp(s.tbMsg, "saved") == 0, "slot 0 reports `saved`");
+  want(s.tbMsg && strcmp(s.tbMsg, "SAVED") == 0, "slot 0 reports `saved`");
   want(!s.tbPaused, "...and the pause menu closes");
   want(s.tbSlot == 0, "...and the document now belongs to slot 0");
 
@@ -499,7 +631,7 @@ int main(int argc, char **argv) {
     PRESS(&s, a);
     pane_row(&s, 3);
     PRESS(&s, a);
-    want(s.tbMsg && strcmp(s.tbMsg, "saved") == 0, "slot 3 saves");
+    want(s.tbMsg && strcmp(s.tbMsg, "SAVED") == 0, "slot 3 saves");
     const long no = slurp(p3, other, (long)sizeof other);
     want(no > 0, "custom3.mlstage exists");
     want(no != nb || memcmp(before, other, (size_t)no) != 0,
@@ -528,7 +660,7 @@ int main(int argc, char **argv) {
     PRESS(&s, a);
     pane_row(&s, 5);
     PRESS(&s, a);
-    want(s.tbMsg && strcmp(s.tbMsg, "place at least 1 target") == 0,
+    want(s.tbMsg && strcmp(s.tbMsg, "PLACE AT LEAST 1 TARGET") == 0,
          "...SAVE names the rule on screen");
     want(s.tbPane == FOH_TB_PANE_SAVE, "...and stays in the slot list");
     char p5[1024];
@@ -544,7 +676,7 @@ int main(int argc, char **argv) {
   PRESS(&s, a);
   pane_row(&s, 0);
   PRESS(&s, a);
-  want(s.tbMsg && strcmp(s.tbMsg, "loaded") == 0, "slot 0 reports `loaded`");
+  want(s.tbMsg && strcmp(s.tbMsg, "LOADED") == 0, "slot 0 reports `loaded`");
   want(tb_targets(&s) == 10, "...with all ten targets back");
   want(s.tbSlot == 0, "...and editingStage follows the slot");
 
@@ -558,7 +690,7 @@ int main(int argc, char **argv) {
     PRESS(&s, a);
     pane_row(&s, 3);
     PRESS(&s, a);
-    want(s.tbMsg && strcmp(s.tbMsg, "deleted") == 0, "slot 3 reports `deleted`");
+    want(s.tbMsg && strcmp(s.tbMsg, "DELETED") == 0, "slot 3 reports `deleted`");
     static char junk[64];
     want(slurp(p3, junk, 16) < 0, "...custom3.mlstage is gone");
     const long na = slurp(p0, after, (long)sizeof after);
@@ -567,7 +699,7 @@ int main(int argc, char **argv) {
     // deleting an empty slot refuses, visibly
     pane_row(&s, 7);
     PRESS(&s, a);
-    want(s.tbMsg && strcmp(s.tbMsg, "empty") == 0,
+    want(s.tbMsg && strcmp(s.tbMsg, "EMPTY") == 0,
          "...and deleting an empty slot says `empty` on screen");
   }
 
@@ -662,13 +794,13 @@ int main(int argc, char **argv) {
     drag(&s, 20.0, 40.0, 21.0, 40.0);
     want(tb_lines(&s, FOH_TB_H_PLATFORM) == plat1,
          "a 1-unit drag builds nothing (:429 width < 10 canvas px)");
-    want(s.tbMsgTimer > 0 && s.tbMsg && strcmp(s.tbMsg, "too small") == 0,
+    want(s.tbMsgTimer > 0 && s.tbMsg && strcmp(s.tbMsg, "TOO SMALL") == 0,
          "...and says `too small` ON SCREEN, not just a sound");
     // a steep drag: wide enough, but past PI/6
     drag(&s, 40.0, 10.0, 70.0, 70.0);
     want(tb_lines(&s, FOH_TB_H_PLATFORM) == plat1,
          "a steep drag builds nothing (:441 the angle guard)");
-    want(s.tbMsg && strcmp(s.tbMsg, "bad angle") == 0,
+    want(s.tbMsg && strcmp(s.tbMsg, "BAD ANGLE") == 0,
          "...and says `bad angle` ON SCREEN");
 
     // --- T5 WALL (:459-512) + DEVIATION D54 --------------------------------
@@ -705,7 +837,7 @@ int main(int argc, char **argv) {
     drag(&s, 60.0, -20.0, 60.0, 30.0);
     want(tb_lines(&s, FOH_TB_H_WALLL) == wl1,
          "an L wall ON an R wall refuses (:484 lineDistanceToLines < 2)");
-    want(s.tbMsg && strcmp(s.tbMsg, "walls too close") == 0,
+    want(s.tbMsg && strcmp(s.tbMsg, "WALLS TOO CLOSE") == 0,
          "...and says `walls too close` ON SCREEN");
 
     // --- T6 LEDGE (:513-541) -----------------------------------------------
@@ -751,7 +883,7 @@ int main(int argc, char **argv) {
     PRESS(&s, a);
     pane_row(&s, 5);
     PRESS(&s, a);
-    want(s.tbMsg && strcmp(s.tbMsg, "saved") == 0,
+    want(s.tbMsg && strcmp(s.tbMsg, "SAVED") == 0,
          "SAVE accepts a DAMAGING stage (A45 T6 — golden t03 discharged it)");
     want(s.tbSlot == 5, "...into the slot it was aimed at");
     want(s.screen == FOH_TBUILD, "...and stays in the builder");
@@ -858,7 +990,7 @@ int main(int argc, char **argv) {
     want(s.tbDrawMode == 0, "the collision plane is the default");
     PRESS(&s, a);
     want(s.tbDrawMode == 1, "A switches to the background plane");
-    want(s.tbMsg && strstr(s.tbMsg, "background") != NULL,
+    want(s.tbMsg && strstr(s.tbMsg, "BACKGROUND") != NULL,
          "...and SAYS SO — an invisible mode switch is a trap at 240px");
     // :226-227 and :269-273 — while drawMode is on, WALL/LEDGE/DAMAGE are
     // unreachable: cycling FORWARD out of PLATFORM skips straight to MOVE,
@@ -888,6 +1020,130 @@ int main(int argc, char **argv) {
     PRESS(&s, a);
     want(s.tbDrawMode == 0, "A switches back to the collision plane");
   }
+
+  // --- [11] THE PAUSE MENU IS LEGIBLE ---------------------------------------
+  //
+  // The builder's pause menu drew the SELECTED row's text in kAccent over a
+  // kAccent FILL, so whichever option was selected was the one option the
+  // player could not read; the slot list underneath had the same defect, and
+  // its status column drew a slot that holds a stage in the identical ink as
+  // a slot that refused. All three are read out of the FRAME here, not out of
+  // the source: what is asserted is what a player would see.
+  {
+    static FohState s;
+    to_builder(&s);
+    PRESS(&s, start); // :774-777 — the pause menu
+    want(s.tbPaused, "[11] START opens the pause menu");
+
+    // Every row, not just the one that happens to start selected: the defect
+    // is per-row and a check that only ever looked at row 0 would have found
+    // it just as invisible as the player did.
+    int rowsLegible = 0;
+    for (int r = 0; r < FOH_TB_PAUSE_ROWS; r++) {
+      pause_row(&s, r);
+      neutral_frame(&s);
+      // 2826/2829: the highlight is rrect(56, y-4, 128, 18) and the label is
+      // centred inside it, at most 71 px wide, so (58, y-2) is fill and never
+      // glyph. Ink is whatever differs from it.
+      const int y = 84 + r * 22;
+      if (ink_on(&g_rz, 56, y - 4, 128, 18, 58, y - 2) >= 20) rowsLegible++;
+    }
+    want(rowsLegible == FOH_TB_PAUSE_ROWS,
+         "the SELECTED pause row is readable against its own highlight "
+         "(all rows)");
+
+    // ...and the slot list, which has the same highlight and had the same bug.
+    pause_row(&s, FOH_TB_PAUSE_LOAD);
+    PRESS(&s, a);
+    want(s.tbPane == FOH_TB_PANE_LOAD, "LOAD opens the slot list");
+    int slotsLegible = 0;
+    for (int i = 0; i < FOH_TB_SLOTS; i++) {
+      pane_row(&s, i);
+      neutral_frame(&s);
+      // 2845: rrect(6, y-3, RAST_W-12, 15). The two texts sit on rows y..y+6,
+      // so (8, y + 10) is inside the fill and below every glyph.
+      const int y = 44 + i * 17;
+      if (ink_on(&g_rz, 6, y - 3, RAST_W - 12, 15, 8, y + 10) >= 20) {
+        slotsLegible++;
+      }
+    }
+    want(slotsLegible == FOH_TB_SLOTS,
+         "...and the SELECTED slot row is readable against its highlight");
+
+    // The status column. Which slots hold a stage by now depends on what the
+    // legs above saved and deleted, so ASK rather than assume, then park the
+    // cursor on a third row so neither of the two read below is highlighted.
+    {
+      bool present[FOH_TB_SLOTS];
+      const char *reason[FOH_TB_SLOTS];
+      foh_tbuild_ops->slots(present, reason);
+      int iStage = -1, iEmpty = -1;
+      for (int i = 0; i < FOH_TB_SLOTS; i++) {
+        if (present[i] && iStage < 0) iStage = i;
+        if (!present[i] && reason[i] && strcmp(reason[i], "EMPTY") == 0 &&
+            iEmpty < 0) {
+          iEmpty = i;
+        }
+      }
+      want(iStage >= 0 && iEmpty >= 0,
+           "the slot list holds both a saved stage and an empty slot to "
+           "compare");
+      if (iStage >= 0 && iEmpty >= 0) {
+        int park = 0;
+        while (park == iStage || park == iEmpty) park++;
+        pane_row(&s, park);
+        neutral_frame(&s);
+        const long inkStage =
+            ink_of(&g_rz, RAST_W - 12 - foh_text_width("STAGE", 1),
+                   44 + iStage * 17, "STAGE");
+        const long inkEmpty =
+            ink_of(&g_rz, RAST_W - 12 - foh_text_width("EMPTY", 1),
+                   44 + iEmpty * 17, "EMPTY");
+        want(inkStage >= 0, "a slot holding a stage draws STAGE in one ink");
+        want(inkEmpty >= 0, "an empty slot draws EMPTY in one ink");
+        want(inkStage != inkEmpty,
+             "...and the two are NOT the same ink — the one distinction this "
+             "list exists to make");
+      }
+    }
+    PRESS(&s, b); // leave the pane rather than end mid-menu
+  }
+
+  // --- [10] the rendering leg's own verdict ---------------------------------
+  printf("== [10] every simulated frame was drawn (ticket #21)\n");
+  // A count, not a boolean: `> 0` would pass if the macro were quietly
+  // reduced to one drawn frame, and this witness runs thousands. The floor is
+  // the startup wait alone (380 frames) plus the journey, so it is nowhere
+  // near the real number and still catches a rendering leg that stopped
+  // running. The exact figure is printed so a change in it is visible.
+  {
+    char what[96];
+    snprintf(what, sizeof what, "foh_render ran on all %ld simulated frames",
+             g_framesDrawn);
+    want(g_framesDrawn >= 1000, what);
+  }
+  if (g_domainBad) {
+    char what[160];
+    snprintf(what, sizeof what,
+             "a drawn string left the face domain: '%c' (0x%02x) in \"%s\"",
+             g_domainBadCh >= 32 && g_domainBadCh < 127 ? g_domainBadCh : '.',
+             (unsigned)(unsigned char)g_domainBadCh, g_domainBad);
+    bad(what);
+  } else {
+    ok("every string the builder wrote to the screen is inside the face "
+       "domain");
+  }
+  // The watch above is only worth its line if it can actually see a miss:
+  // prove the predicate it rests on against this face's own known hole.
+  // foh_font.c's note explains why face 1 must never gain '?'.
+  want(foh_face_undrawable("COMPLETE?", 1) == '?' &&
+           foh_face_undrawable("COMPLETE!", 1) == 0,
+       "...and the domain predicate still sees face 1's missing '?'");
+  // Loudness is the DEFAULT and this is a check build, so it must be off
+  // here. If it were ever on, every assertion above about a drawn string
+  // would be riding on a placeholder box instead of a glyph.
+  want(!foh_font_placeholder_enabled(),
+       "...and this check build kept the LOUD missing-glyph failure");
 
   if (g_fails) {
     printf("TBUILD FAIL: %d assertion(s) failed\n", g_fails);

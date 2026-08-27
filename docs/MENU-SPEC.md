@@ -639,8 +639,10 @@ port toward half-remembered Melee behaviour and call it faithfulness.
 *BLOCKING CONSTRAINT — the font cannot draw the data (measured 2026-08-04).*
 Both halves of D8 are blocked on the A14 glyph-atlas swap, and the attempt that
 proved it is why this paragraph exists. Coverage read directly from
-`port/foh/foh_font.c`: face 1 = 49 glyphs (space, `!'()+,-./`, `0-9`, `:<>`,
-`A-Z`), face 2 = 51 (same plus `&?`). **Neither face has a single lowercase
+`port/foh/foh_font.c`: face 1 = 50 glyphs (space, `!'()+,-./&`, `0-9`, `:<>`,
+`A-Z`), face 2 = 51 (the same plus `?`). The counts here are a reading, not the
+source: the FACE DOMAIN is those glyph tables, and `foh_face_domain` hands the
+set out so a caller never has to restate it. **Neither face has a single lowercase
 letter.** Against the 54 characters `randomTags` spans, **25 are unrenderable**
 — all 22 lowercase plus `$`, `[`, `]`. A tag widget built today `gfx_fatal`s on
 the first `Panda` (reproduced: `SIM FATAL frame 0: foh_font: no glyph for
@@ -1755,9 +1757,11 @@ STRING changed (`ctl_style_name`). The `CtlStyle` enum values are a FROZEN
 WIRE FORMAT stored verbatim in `FohPersist.ctlStyle`; renumbering would
 silently remap every save on disk, so nothing was renumbered or removed.
 
-**Font gotcha, measured not guessed:** `foh_font.c`'s face 1 has 49 glyphs
-(A-Z, 0-9, and `- + . : / ' > < ! , ( )`) and **no lowercase at all**, and an
-unknown glyph is a hard `gfx_fatal`, not a blank. `ctl_style_name` returns
+**Font gotcha, measured not guessed:** `foh_font.c`'s face 1 has **no lowercase
+at all**, and a character outside the FACE DOMAIN is a hard `gfx_fatal`, not a
+blank, in every check build. (Since ticket #21 the PRODUCT build draws a
+visible placeholder box instead — a player mid-stage should lose a glyph, not
+the session — but checks stay loud, which is where this guard did its work.) `ctl_style_name` returns
 mixed case, so the render site folds to uppercase before `foh_text`. The
 f04-nav flow found this immediately as a frame-0 fatal — the guard works.
 

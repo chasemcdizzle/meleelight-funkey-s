@@ -1605,6 +1605,11 @@ static bool parse_int_strict(const char *s, int *out) {
 // --- main --------------------------------------------------------------------------
 
 int main(int argc, char **argv) {
+  // PRODUCT BUILD. A character outside the face domain draws a placeholder
+  // box here instead of killing the app (spec #20; foh_font.c's header has
+  // the polarity argument). This call and foh_app.c's are the ONLY two in
+  // the tree — every check build keeps the loud gfx_fatal by leaving it out.
+  foh_font_enable_placeholder();
   // keymap SSOT dump arm (iter 95 H2; iter 97 M-b): emits THE compiled
   // platform_keymap.h table — the array the device poll arm indexes —
   // byte-exact against port/foh/keymap-frozen.txt (cmp'd every run).

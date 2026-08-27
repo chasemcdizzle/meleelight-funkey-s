@@ -1302,7 +1302,7 @@ static void step_sss(FohState *s, const PlatformInput *in,
 void foh_tss_refresh_slots(FohState *s) {
   for (int i = 0; i < FOH_TB_SLOT_CACHE; i++) {
     s->tssSlotPresent[i] = false;
-    s->tssSlotReason[i] = "unavailable in this build";
+    s->tssSlotReason[i] = "UNAVAILABLE IN THIS BUILD";
   }
   if (foh_tbuild_ops) {
     foh_tbuild_ops->slots(s->tssSlotPresent, s->tssSlotReason);

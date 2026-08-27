@@ -298,6 +298,42 @@ static bool hexdigit(char c) {
   return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
 }
 
+// --- THE FACE DOMAIN, AT THE SEAM (ticket #21) ------------------------------
+//
+// Every refusal this screen shows is drawn with foh_font.c's face 1, which
+// carries digits, uppercase and a dozen marks and NO LOWERCASE AT ALL. A
+// character outside that set used to kill the app inside the glyph lookup, so
+// every lowercase refusal string was a crash at the moment the player most
+// needed to read why — eight of them shipped in one build.
+//
+// The strings themselves come from THREE translation units: this one, whose
+// literals are now authored in the domain; port/foh/foh_persist.c, whose
+// publish failures reach the screen verbatim; and port/sim/stage_code.c,
+// whose mlk_parse refusals are forwarded verbatim by named_read. The other
+// two cannot reasonably be asked to know what a 5x7 bitmap face can draw —
+// the domain is a property of the RENDERER, and this is the seam where the
+// FOH takes ownership of foreign words. So it is enforced HERE, once, for
+// every string that becomes screen text, which is what makes it a rule rather
+// than a habit: a refusal added to stage_code.c next month is drawable
+// without anyone remembering that this font exists.
+//
+// Case is folded (the face's letters ARE the uppercase ones) and anything
+// still outside the domain becomes '-'. Both are visible and neither can end
+// the session. What CANNOT be reached from here is the placeholder box: that
+// stays for characters nobody normalised, which is the loud-in-checks half.
+#define TB_MSG_MAX 64
+static void tb_domain_copy(char *dst, size_t cap, const char *src) {
+  size_t j = 0;
+  if (cap == 0) return;
+  for (const char *p = src ? src : ""; *p && j + 1 < cap; p++) {
+    char c = *p;
+    if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+    if (!foh_face_has(c, 1)) c = '-';
+    dst[j++] = c;
+  }
+  dst[j] = '\0';
+}
+
 // --- playability ------------------------------------------------------------
 
 // A surface carries damage exactly when the SIM says it does. Physics reads
@@ -320,15 +356,15 @@ static bool hexdigit(char c) {
 // are shorter because these ones have to fit on a 240 px line.
 static const char *doc_unplayable(const MlkStage *st) {
   // (1) R2 — the codec's 20 against the sim's 10. Refuse, never truncate.
-  if (st->targetCount < 1) return "place at least 1 target";
-  if (st->targetCount > FOH_TB_PLAYABLE_TARGETS) return "10 targets max";
+  if (st->targetCount < 1) return "PLACE AT LEAST 1 TARGET";
+  if (st->targetCount > FOH_TB_PLAYABLE_TARGETS) return "10 TARGETS MAX";
   // (2) the CONCATENATION cap: five lists that each pass their own 64 cap
   //     can still overflow runCollisionRoutine's single 96-entry list.
   {
     const long total = (long)st->s.wallL.count + st->s.wallR.count +
                        st->s.ground.count + st->s.ceiling.count +
                        st->s.platform.count;
-    if (total > ML_MAX_LABELLED_SURFACES) return "too many surfaces";
+    if (total > ML_MAX_LABELLED_SURFACES) return "TOO MANY SURFACES";
   }
   // (3) THE DAMAGE RULE IS GONE, because the sim's is (A45 T6, 2026-08-26).
   //     It refused any stage carrying a truthy damageType while
@@ -344,7 +380,7 @@ static const char *doc_unplayable(const MlkStage *st) {
   //     it differentially against the sim's UNMODIFIED mlk_slot_load over
   //     the same corpus — including the corpus's re-SUMmed DAMAGE entry,
   //     whose expected verdict moves from REFUSED to OK in the same change.
-  if (st->startingPointCount < 1) return "no starting point";
+  if (st->startingPointCount < 1) return "NO STARTING POINT";
   return 0;
 }
 
@@ -376,45 +412,45 @@ static bool named_read(const char *name, MlkStage *out, const char **why) {
   } while (0)
   FILE *f = 0;
   char path[512];
-  if (!named_path(name, path, sizeof path)) RD_FAIL("path too long");
+  if (!named_path(name, path, sizeof path)) RD_FAIL("PATH TOO LONG");
   f = fopen(path, "rb");
-  if (!f) RD_FAIL("empty");
+  if (!f) RD_FAIL("EMPTY");
   // BOUNDED READ. One byte more than the cap is asked for on purpose: a
   // short read then proves the file fits, without a seek/stat race.
   static char buf[TB_FILE_MAX + 1];
   const size_t n = fread(buf, 1, sizeof buf, f);
-  if (ferror(f)) RD_FAIL("unreadable");
-  if (n > TB_FILE_MAX) RD_FAIL("file too large");
+  if (ferror(f)) RD_FAIL("UNREADABLE");
+  if (n > TB_FILE_MAX) RD_FAIL("FILE TOO LARGE");
   fclose(f);
   f = 0;
   // GRAMMAR. Exactly three LF-terminated lines, nothing after the third.
   const char kHdr[] = "MLSTAGE1\n";
   const size_t hdr = sizeof kHdr - 1;
-  if (n < hdr || memcmp(buf, kHdr, hdr) != 0) RD_FAIL("not a .mlstage file");
+  if (n < hdr || memcmp(buf, kHdr, hdr) != 0) RD_FAIL("NOT A .MLSTAGE FILE");
   // The SUM line is the LAST 69 bytes: "SUM " + 64 hex + "\n".
   const size_t sumLen = 4 + 64 + 1;
-  if (n < hdr + 1 + sumLen) RD_FAIL("truncated");
+  if (n < hdr + 1 + sumLen) RD_FAIL("TRUNCATED");
   const size_t sumAt = n - sumLen;
-  if (memcmp(buf + sumAt, "SUM ", 4) != 0) RD_FAIL("no SUM line");
+  if (memcmp(buf + sumAt, "SUM ", 4) != 0) RD_FAIL("NO SUM LINE");
   for (int i = 0; i < 64; i++) {
-    if (!hexdigit(buf[sumAt + 4 + (size_t)i])) RD_FAIL("bad SUM digits");
+    if (!hexdigit(buf[sumAt + 4 + (size_t)i])) RD_FAIL("BAD SUM DIGITS");
   }
-  if (buf[n - 1] != '\n') RD_FAIL("bad SUM line");
+  if (buf[n - 1] != '\n') RD_FAIL("BAD SUM LINE");
   // The code line is everything between the header and the SUM line, and it
   // must be ONE line: exactly one '\n', at its end.
   const size_t codeAt = hdr, codeLen = sumAt - hdr;
-  if (codeLen < 2 || buf[sumAt - 1] != '\n') RD_FAIL("bad code line");
-  if (memchr(buf + codeAt, '\n', codeLen - 1) != 0) RD_FAIL("bad code line");
+  if (codeLen < 2 || buf[sumAt - 1] != '\n') RD_FAIL("BAD CODE LINE");
+  if (memchr(buf + codeAt, '\n', codeLen - 1) != 0) RD_FAIL("BAD CODE LINE");
   // SUM BEFORE PARSE. A corrupt file must never reach the parser.
   {
     char hex[65];
     ml_sha256_hex(buf, sumAt, hex);
-    if (memcmp(hex, buf + sumAt + 4, 64) != 0) RD_FAIL("SUM mismatch");
+    if (memcmp(hex, buf + sumAt + 4, 64) != 0) RD_FAIL("SUM MISMATCH");
   }
   // NUL-terminate the code in place (over its own '\n') and parse.
   buf[sumAt - 1] = '\0';
   if (!mlk_parse(buf + codeAt, out, why)) {
-    if (why && !*why) *why = "invalid code";
+    if (why && !*why) *why = "INVALID CODE";
     return false;
   }
   // AND THE PLAYABILITY RULES, HERE, at the read. A slot that the sim will
@@ -446,7 +482,7 @@ static bool named_write(const char *name, const MlkStage *st,
   static char code[MLK_CODE_MAX];
   const int cn = mlk_encode(st, code, sizeof code);
   if (cn < 0) {
-    if (why) *why = "stage too large to encode";
+    if (why) *why = "STAGE TOO LARGE TO ENCODE";
     return false;
   }
   static char file[TB_FILE_MAX];
@@ -455,7 +491,7 @@ static bool named_write(const char *name, const MlkStage *st,
   // header + code + '\n' + "SUM " + 64 + '\n'
   const size_t body = hdr + (size_t)cn + 1;
   if (body + 69 > sizeof file) {
-    if (why) *why = "stage too large to encode";
+    if (why) *why = "STAGE TOO LARGE TO ENCODE";
     return false;
   }
   memcpy(file, kHdr, hdr);
@@ -468,7 +504,7 @@ static bool named_write(const char *name, const MlkStage *st,
   file[body + 68] = '\n';
   const char *pubWhy = 0;
   if (!foh_persist_publish(name, file, body + 69, &pubWhy)) {
-    if (why) *why = pubWhy ? pubWhy : "save failed";
+    if (why) *why = pubWhy ? pubWhy : "SAVE FAILED";
     return false;
   }
   // A publish that landed but could not prove its directory entry durable
@@ -490,10 +526,21 @@ static void slots_scan(bool present[FOH_TB_SLOTS],
   // AS refused and stays in its own place; nothing shifts up to fill it,
   // which is the whole shape of the owner's ruling.
   static MlkStage scratch; // 45 KB — never on the stack
+  // The reasons are DRAWN — target-select puts the hovered slot's reason on
+  // screen (foh_render.c's render_tss) — and most of them are stage_code.c's
+  // words, not ours, so they go through the domain like every other message.
+  // Ten buffers because all ten reasons are live at once: the cache is read
+  // by index, whichever slot the hand later lands on.
+  static char reasonBuf[FOH_TB_SLOTS][TB_MSG_MAX];
   for (int i = 0; i < FOH_TB_SLOTS; i++) {
     const char *why = 0;
     present[i] = slot_read(i, &scratch, &why);
-    reason[i] = present[i] ? 0 : (why ? why : "empty");
+    if (present[i]) {
+      reason[i] = 0;
+      continue;
+    }
+    tb_domain_copy(reasonBuf[i], sizeof reasonBuf[i], why ? why : "EMPTY");
+    reason[i] = reasonBuf[i];
   }
 }
 
@@ -781,8 +828,14 @@ static void center_item(const FohState *s, int kind, int idx) {
 // implements exists because a refusal was a `deny` sound the owner could not
 // hear, so "played a sound" is not an acceptable way to say no anywhere in
 // this file. 120 frames == upstream's own toast life (:224 toolInfoTimer).
+// The message is COPIED, through the domain, into a buffer this TU owns —
+// `msg` is often a foreign literal (foh_persist.c, stage_code.c) and always a
+// string about to be drawn, so this is the chokepoint where it is made
+// drawable. One buffer, because one message is shown at a time.
 static void say(FohState *s, const char *msg) {
-  s->tbMsg = msg;
+  static char buf[TB_MSG_MAX];
+  tb_domain_copy(buf, sizeof buf, msg);
+  s->tbMsg = buf;
   s->tbMsgTimer = 120;
 }
 
@@ -801,12 +854,12 @@ static void tb_enter(FohState *s, int slot) {
     if (slot_read(slot, &g_doc, &why)) {
       map_all_null();
       s->tbSlot = slot;
-      say(s, "loaded");
+      say(s, "LOADED");
     } else {
       doc_template(&g_doc);
       map_all_null();
       s->tbSlot = -1;
-      say(s, why ? why : "could not load");
+      say(s, why ? why : "COULD NOT LOAD");
     }
   }
   // menu.js:87-90 enters with editingStage = -1 and does NOT reset
@@ -872,10 +925,10 @@ static FohTbVerdict step_paused(FohState *s, const PlatformInput *in,
           s->tbPane = FOH_TB_PANE_NONE;
           s->tbPaused = false;
           foh_snd_push(s, "menuForward");
-          say(s, "loaded");
+          say(s, "LOADED");
         } else {
           foh_snd_push(s, "deny");
-          say(s, why ? why : "empty");
+          say(s, why ? why : "EMPTY");
         }
         break;
       case FOH_TB_PANE_SAVE: {
@@ -892,12 +945,12 @@ static FohTbVerdict step_paused(FohState *s, const PlatformInput *in,
           s->tbPane = FOH_TB_PANE_NONE;
           s->tbPaused = false;
           foh_snd_push(s, "menuForward");
-          say(s, "saved");
+          say(s, "SAVED");
         } else {
           // The named publish failure, ON SCREEN: "disk full",
           // "cannot open the temp file", "rename publish failed"...
           foh_snd_push(s, "deny");
-          say(s, why ? why : "save failed");
+          say(s, why ? why : "SAVE FAILED");
         }
         break;
       }
@@ -905,7 +958,7 @@ static FohTbVerdict step_paused(FohState *s, const PlatformInput *in,
         char path[512];
         if (!slot_path(slot, path, sizeof path)) {
           foh_snd_push(s, "deny");
-          say(s, "path too long");
+          say(s, "PATH TOO LONG");
           break;
         }
         // D43: deleting slot i removes slot i's FILE and touches nothing
@@ -916,10 +969,10 @@ static FohTbVerdict step_paused(FohState *s, const PlatformInput *in,
         if (remove(path) == 0) {
           if (s->tbSlot == slot) s->tbSlot = -1;
           foh_snd_push(s, "menuBack");
-          say(s, "deleted");
+          say(s, "DELETED");
         } else {
           foh_snd_push(s, "deny");
-          say(s, "empty");
+          say(s, "EMPTY");
         }
         break;
       }
@@ -1017,18 +1070,18 @@ static void poly_close(FohState *s) {
   }
   const double direction = (area > 0.0 ? 1.0 : (area < 0.0 ? -1.0 : area)) * -1.0;
   if (direction == 0.0) { // a flat line: upstream's "Too small" (:399-400)
-    say(s, "too small");
+    say(s, "TOO SMALL");
     return;
   }
   MlkPolygonList *plist = s->tbDrawMode ? &g_doc.bgPolygon : &g_doc.polygon;
   if (plist->count >= MLK_MAX_POLYGONS) {
     foh_snd_push(s, "deny");
-    say(s, "16 polygons max in this build");
+    say(s, "16 POLYGONS MAX IN THIS BUILD");
     return;
   }
   if (n > MLK_MAX_POLY_POINTS) {
     foh_snd_push(s, "deny");
-    say(s, "32 points max in this build");
+    say(s, "32 POINTS MAX IN THIS BUILD");
     return;
   }
   // Count the collision surfaces this loop would add BEFORE adding any, so
@@ -1040,7 +1093,7 @@ static void poly_close(FohState *s) {
                        g_doc.s.platform.count;
     if (total + n > ML_MAX_LABELLED_SURFACES) {
       foh_snd_push(s, "deny");
-      say(s, "too many surfaces for this build");
+      say(s, "TOO MANY SURFACES FOR THIS BUILD");
       return;
     }
   }
@@ -1097,7 +1150,7 @@ static void poly_close(FohState *s) {
         l->count++;
       } else {
         // Only reachable if ONE list overflows while the total does not.
-        say(s, "too many surfaces of one kind");
+        say(s, "TOO MANY SURFACES OF ONE KIND");
       }
     }
     curIndex = nextIndex;
@@ -1122,7 +1175,7 @@ static void tool_polygon(FohState *s, bool aE, bool bE) {
         foh_snd_push(s, "blunthit");
       } else {
         foh_snd_push(s, "deny");
-        say(s, "16 polygons max in this build");
+        say(s, "16 POLYGONS MAX IN THIS BUILD");
       }
       return;
     }
@@ -1143,7 +1196,7 @@ static void tool_polygon(FohState *s, bool aE, bool bE) {
     if (intersectsAny(next, &rel) ||
         (next.a.x == next.b.x && next.a.y == next.b.y)) { // :298
       foh_snd_push(s, "deny");
-      say(s, "that edge crosses the outline");
+      say(s, "THAT EDGE CROSSES THE OUTLINE");
       s->tbDenied = true;
       return;
     }
@@ -1155,7 +1208,7 @@ static void tool_polygon(FohState *s, bool aE, bool bE) {
       if (s->tbPolyN >= 3) {
         poly_close(s);
       } else {
-        say(s, "too small"); // :401-402
+        say(s, "TOO SMALL"); // :401-402
       }
       s->tbPolyN = 0;
       s->tbPolyLinesN = 0;
@@ -1163,7 +1216,7 @@ static void tool_polygon(FohState *s, bool aE, bool bE) {
     }
     if (s->tbPolyN >= FOH_TB_MAX_POLY_PTS) { // upstream is unbounded
       foh_snd_push(s, "deny");
-      say(s, "32 points max in this build");
+      say(s, "32 POINTS MAX IN THIS BUILD");
       return;
     }
     s->tbPolyX[s->tbPolyN] = rx; // :393 push
@@ -1231,7 +1284,7 @@ static bool push_surface(FohState *s, int kind, Vec2D a, Vec2D b) {
   if (l->count >= ML_MAX_SURFACES ||
       (!bg && total >= ML_MAX_LABELLED_SURFACES)) {
     foh_snd_push(s, "deny");
-    say(s, "too many surfaces for this build");
+    say(s, "TOO MANY SURFACES FOR THIS BUILD");
     return false;
   }
   memset(&l->items[l->count], 0, sizeof l->items[0]);
@@ -1269,11 +1322,11 @@ static void tool_platform(FohState *s, bool aE, bool aHeld) {
       if (aa <= ML_TB_PI / 6.0 && aa >= -ML_TB_PI / 6.0) {
         push_surface(s, FOH_TB_H_PLATFORM, l, r);
       } else {
-        say(s, "bad angle"); // :443-445
+        say(s, "BAD ANGLE"); // :443-445
       }
     }
   } else {
-    say(s, "too small"); // :449-451
+    say(s, "TOO SMALL"); // :449-451
   }
   s->tbHoldA = false;
   foh_snd_push(s, "blunthit"); // :453 — plays on EVERY release, refused too
@@ -1317,7 +1370,7 @@ static void tool_wall(FohState *s, bool aE, bool aHeld) {
       tooClose = lineDistanceToLines(mine, &others) < 2.0;
     }
     if (tooClose) {
-      say(s, "walls too close"); // :487-490
+      say(s, "WALLS TOO CLOSE"); // :487-490
     } else if (((kind == FOH_TB_H_GROUND || kind == FOH_TB_H_CEILING) &&
                 aa <= ML_TB_PI / 6.0) ||
                ((kind == FOH_TB_H_WALLL || kind == FOH_TB_H_WALLR) &&
@@ -1326,10 +1379,10 @@ static void tool_wall(FohState *s, bool aE, bool aHeld) {
       // a wall one ulp off horizontal is legal upstream and is legal here.
       push_surface(s, kind, l, r);
     } else {
-      say(s, "bad angle"); // :500-503
+      say(s, "BAD ANGLE"); // :500-503
     }
   } else {
-    say(s, "too small"); // :506-508
+    say(s, "TOO SMALL"); // :506-508
   }
   s->tbHoldA = false;
   foh_snd_push(s, "blunthit");
@@ -1367,7 +1420,7 @@ static void tool_ledge(FohState *s, bool aE) {
   }
   if (g_doc.ledgeCount >= ML_MAX_LEDGES) { // upstream is unbounded (:535)
     foh_snd_push(s, "deny");
-    say(s, "16 ledges max in this build");
+    say(s, "16 LEDGES MAX IN THIS BUILD");
     return;
   }
   g_doc.ledge[g_doc.ledgeCount].list = letter;
@@ -1423,7 +1476,7 @@ static void tool_target(FohState *s, bool aE) {
     foh_snd_push(s, "blunthit"); // :566
   } else {
     foh_snd_push(s, "deny"); // :568
-    say(s, "10 targets max");
+    say(s, "10 TARGETS MAX");
   }
 }
 
@@ -1623,7 +1676,7 @@ static void tool_drawmode(FohState *s, bool aE) {
   s->tbDrawMode = 1 - s->tbDrawMode;
   // Upstream plays nothing here and shows nothing; on a 240px screen an
   // invisible mode switch is a trap, so the status line names the plane.
-  say(s, s->tbDrawMode ? "background plane" : "collision plane");
+  say(s, s->tbDrawMode ? "BACKGROUND PLANE" : "COLLISION PLANE");
 }
 
 // --- the editor -------------------------------------------------------------
@@ -1858,7 +1911,7 @@ static bool tb_suspend(const char **why) {
     // Nothing has ever been edited this process. There is no work to keep,
     // and arming a resume for it would restore the D51 template as though
     // it were something the player made.
-    if (why) *why = "no document";
+    if (why) *why = "NO DOCUMENT";
     return false;
   }
   return named_write(TB_DOC_NAME, &g_doc, why);
