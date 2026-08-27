@@ -605,14 +605,32 @@ static void a31_v4_migrates(void) {
   // loader rightly refuses it. That is what broke all four v4 assertions
   // after A49 — a STALE FIXTURE, not a migration defect: a real v4 file from
   // a real old device never had either row and still migrates.
+  // ticket #25 appended eight more v7 rows (the CSS machine plane), stripped
+  // by the same rule and counted by the same kind of assertion: this
+  // constructor's whole failure mode is going STALE, so every row is named
+  // and every name has to be found.
+  static const char *const kCssRows[] = {
+      "ptype ", "cpudiff ",  "vsmode ",   "hand ",
+      "slider ", "carry ",   "cpucarry ", "handtype "};
+  const int kNCssRows = (int)(sizeof kCssRows / sizeof *kCssRows);
   static char out[8192];
   size_t m = 0;
-  int stripped = 0, strippedSel = 0, strippedResume = 0;
+  int stripped = 0, strippedSel = 0, strippedResume = 0, strippedCss = 0;
   for (size_t i = 0; i < n;) {
     size_t e = i;
     while (e < n && buf[e] != '\n') e++;
     const size_t len = e - i + 1;
-    if (len > 5 && memcmp(buf + i, "bind ", 5) == 0) {
+    bool isCss = false;
+    for (int c = 0; c < kNCssRows; c++) {
+      const size_t kl = strlen(kCssRows[c]);
+      if (len > kl && memcmp(buf + i, kCssRows[c], kl) == 0) {
+        isCss = true;
+        break;
+      }
+    }
+    if (isCss) {
+      strippedCss++; /* ticket #25's CSS rows (v7) — v4 never had them */
+    } else if (len > 5 && memcmp(buf + i, "bind ", 5) == 0) {
       stripped++;
     } else if (len > 4 && memcmp(buf + i, "sel ", 4) == 0) {
       strippedSel++; /* v6's selection row — v4 never had it */
@@ -637,6 +655,10 @@ static void a31_v4_migrates(void) {
   want(strippedResume == 1,
        "the synthetic v4 fixture dropped v7's resume row (same rule: every "
        "format bump has to be stripped here or the fixture stops being v4)");
+  want(strippedCss == kNCssRows,
+       "the synthetic v4 fixture dropped all eight of ticket #25's CSS rows "
+       "(same rule again, and now it is APPENDED ROWS rather than version "
+       "bumps that go stale here)");
   {
     char hex[65];
     ml_sha256_hex(out, m, hex);

@@ -27,7 +27,7 @@
 #define FP_FILE "mlfk-persist.dat"
 #define FP_TMP "mlfk-persist.tmp"
 #define FP_DEFAULT_DIR "/mnt/mlfk-data"
-// 70 lines, ~1.6 KB canonical — anything larger is not ours.
+// 78 lines, ~1.8 KB canonical — anything larger is not ours.
 #define FP_CAP 4096
 // MLFKPERSIST2's ctlstyle domain was {0 normal, 1 box} — CTL_STYLE_NATURAL
 // did not exist yet. FROZEN: never re-point this at CTL_STYLE_COUNT.
@@ -35,6 +35,11 @@
 #define FP_NEG1_BITS UINT64_C(0xbff0000000000000)
 // matchTimer cap (targetplay.js:282: capped < 6000 seconds)
 #define FP_TIME_CAP 6000.0
+// The logical canvas, on its longer axis — the bound the CSS hand and the
+// CPU knobs are clamped to (foh_hand_step's `w`/`h`, css_rail_x0's rail).
+// Written as a max rather than as RAST_W so it stays true if the raster ever
+// stops being square; both axes share the one FP_DOM_SCREEN domain.
+#define FP_SCREEN_MAX ((double)(RAST_W > RAST_H ? RAST_W : RAST_H))
 
 const char *foh_persist_dir(void) {
   static const char *dir = 0;
@@ -91,6 +96,27 @@ void foh_persist_defaults(FohPersist *p) {
   // anywhere but the boot screen, and that must not be true only because
   // FOH_STARTUP happens to be the zero of the enum.
   p->resumeScreen = (int)FOH_STARTUP;
+  // ticket #25 (owner ruling 2026-08-27): the CSS machine plane.
+  //
+  // EVERY VALUE HERE IS foh.h's CSS COLD-START PLANE, ASKED RATHER THAN
+  // RETYPED. foh_persist_apply overwrites FohState with this record on every
+  // boot, so a machine that has never been saved must get back EXACTLY what
+  // foh_init gives it — and the way that promise breaks is not a wrong
+  // constant, it is a right constant copied into a second place and then
+  // edited in only one of them (CONTEXT.md). There is one definition of each
+  // of these and foh.c asks the same one; the provenance citations live
+  // there with them.
+  for (int k = 0; k < FOH_CSS_PORTS; k++) {
+    p->portType[k] = foh_css_type_home(k);
+    p->cpuDifficulty[k] = FOH_CSS_DIFF_HOME;
+    p->cssSliderX[k] = foh_css_slider_home(k);
+  }
+  p->versusMode = 0; // stock (main.js:140) — upstream's own `= 0`
+  p->cssHand[0] = FOH_CSS_HAND_HOME_X;
+  p->cssHand[1] = FOH_CSS_HAND_HOME_Y;
+  p->cssCarry = -1;    // holding nothing (css.js:68)
+  p->cssCpuCarry = -1; // holding nothing (css.js:75)
+  p->cssHandType = 0;  // handPoint (css.js:63)
 }
 
 // A26/D53. The contract, and the reason for every non-identity row, is at
@@ -104,7 +130,17 @@ FohScreen foh_persist_resume_target(FohScreen sc) {
     // match's own exit lands on instead (foh_dev.c's MEX_CSS/MEX_TSS arm)
     case FOH_MATCH: return FOH_CSS;
     case FOH_TMATCH: return FOH_TSS;
-    // launches with port types the CSS arms, and those are not persisted
+    // THE STATED REASON FOR THIS ROW IS SPENT, AND THE ROW IS STILL HERE.
+    // It read "launches with port types the CSS arms, and those are not
+    // persisted" — true when it was written, false since ticket #25 (owner
+    // ruling 2026-08-27) put `ptype` and `cpudiff` on the card. A stage
+    // select restored now WOULD launch the configuration the player left.
+    // Removing the redirect is ticket #27's, not this one's: it is a
+    // behaviour change with its own resume trace to freeze, and doing it
+    // here would ship it under a ticket that never judged it. What must not
+    // happen is this comment continuing to assert the opposite of the code
+    // it sits next to, which is the defect class that cost three days on
+    // getConnected.
     case FOH_SSS: return FOH_CSS;
     // its reticle is placed by the entering transition, which a resume
     // never runs; this is the screen its own B-exit goes to (foh.c:1701)
@@ -188,7 +224,8 @@ typedef enum {
   FP_DOM_PHANTOM, // finite, non-negative, <= 1000.0 (the checksum surface)
   FP_DOM_UNIT,    // finite, non-negative, <= 1.0 (audiomenu's clamp)
   FP_DOM_PERM,    // the LINE's values are a permutation of 0..vals-1
-  FP_DOM_RESUME   // a screen foh_persist_resume_target() maps to itself
+  FP_DOM_RESUME,  // a screen foh_persist_resume_target() maps to itself
+  FP_DOM_SCREEN   // finite, non-negative, <= FP_SCREEN_MAX (a canvas coord)
 } FpDomain;
 
 typedef struct {
@@ -206,6 +243,14 @@ typedef struct {
   int vals;   // values per line
   int dmax;   // FP_FLAG: the digit domain is [0, dmax)
   int dmaxV2; // FROZEN historical override used ONLY when ver == 2
+  // INT KINDS ONLY. The file column is an UNSIGNED decimal digit, but some
+  // fields are not: playerType's own domain is {-1, 0, 1} and the CPU level's
+  // is 1..4. `wireBias` is what the field's value is SHIFTED BY to become the
+  // column, in ONE place — file digit == value + wireBias, value == digit -
+  // wireBias — so FohPersist keeps the field's real value, the machine glue
+  // stays a plain copy, and the encoding lives with the format instead of
+  // being re-derived at each end. Zero for every row that does not need it.
+  int wireBias;
   FpDomain dom;
   // FP_FLAG only: an out-of-range digit reports `domain` instead of
   // `grammar`. One row (`sel`) has always done so; the detail token is part
@@ -264,7 +309,23 @@ typedef struct {
   X(selChar, .key = "sel", .kind = FP_FLAG, .vals = FOH_CSS_PORTS,             \
     .dmax = FOH_PERSIST_CHARS, .rangeIsDomain = true, .since = 6)              \
   X(resumeScreen, .key = "resume", .kind = FP_U2, .vals = 1,                   \
-    .dom = FP_DOM_RESUME, .since = 7)
+    .dom = FP_DOM_RESUME, .since = 7)                                          \
+  X(portType, .key = "ptype", .kind = FP_FLAG, .vals = FOH_CSS_PORTS,          \
+    .dmax = 3, .wireBias = 1, .since = 7)                                      \
+  X(cpuDifficulty, .key = "cpudiff", .kind = FP_FLAG, .vals = FOH_CSS_PORTS,   \
+    .dmax = 4, .wireBias = -1, .since = 7)                                     \
+  X(versusMode, .key = "vsmode", .kind = FP_FLAG, .vals = 1, .dmax = 2,        \
+    .since = 7)                                                                \
+  X(cssHand, .key = "hand", .kind = FP_HEX64, .vals = 2,                       \
+    .dom = FP_DOM_SCREEN, .since = 7)                                          \
+  X(cssSliderX, .key = "slider", .kind = FP_HEX64, .vals = FOH_CSS_PORTS,      \
+    .dom = FP_DOM_SCREEN, .since = 7)                                          \
+  X(cssCarry, .key = "carry", .kind = FP_FLAG, .vals = 1,                      \
+    .dmax = FOH_CSS_PORTS + 1, .wireBias = 1, .since = 7)                      \
+  X(cssCpuCarry, .key = "cpucarry", .kind = FP_FLAG, .vals = 1,                \
+    .dmax = FOH_CSS_PORTS + 1, .wireBias = 1, .since = 7)                      \
+  X(cssHandType, .key = "handtype", .kind = FP_FLAG, .vals = 1, .dmax = 3,     \
+    .since = 7)
 
 #define FP_ROW(nm, ...)                                                        \
   {.off = offsetof(FohPersist, nm),                                            \
@@ -293,20 +354,24 @@ enum { FP_TABLE_BYTES = 0 FP_FIELDS(FP_ROW_BYTES) };
 //
 // INTERNAL ALIGNMENT PADDING is declared here as well, and there is none
 // today (MEASURED: the eight leading ints are exactly 32 bytes, so the
-// doubles that follow need no gap). A field that RAISES the struct's
-// alignment — a double or a pointer placed among the ints — opens a hole
-// that belongs in this number with a comment saying where it is. That is a
-// real cost and it is meant to be visible; it is not a reason to reorder
-// the struct behind the reader's back.
+// doubles that follow need no gap; ticket #25's CSS block is placed to keep
+// that true of its own two double arrays, and foh_persist.h says so where
+// the block starts). A field that RAISES the struct's alignment — a double or a
+// pointer placed among the ints — opens a hole that belongs in this number
+// with a comment saying where it is. That is a real cost and it is meant to
+// be visible; it is not a reason to reorder the struct behind the reader's
+// back — but WHERE A NEW MEMBER GOES among its own siblings is a free
+// choice, and choosing it so that no hole opens is not the same thing.
 #define FP_UNPERSISTED_BYTES (sizeof(int) /* layoutGuard */)
 
 // ROUNDED UP TO THE STRUCT'S OWN ALIGNMENT, and the rounding is not a
 // loosening — it is what makes the guard cost EXACTLY ONE ROW.
 //
-// MEASURED (2026-08-27): the persisted fields are 620 bytes and layoutGuard
-// makes 624, which is already a multiple of 8, so today the rounding does
-// nothing. But the int count is odd, so the NEXT int field takes the total
-// to 628 and the compiler pads the struct to 632. Asserting raw equality
+// MEASURED (2026-08-27, RE-MEASURED after ticket #25's eight rows): the
+// persisted fields are 716 bytes and layoutGuard makes 720, which is already
+// a multiple of 8, so today the rounding does nothing. But the int count is
+// odd (61), so the NEXT int field takes the total
+// to 724 and the compiler pads the struct to 728. Asserting raw equality
 // would then fail even though the author did everything right — the field
 // AND its row — and the fix would be to bump FP_UNPERSISTED_BYTES, i.e. to
 // pay for a field twice and to grow the "deliberately not persisted"
@@ -413,10 +478,29 @@ static void fp_table_check(void) {
     }
     if (f->kind == FP_RECON) {
       // never in the file, so it may not claim any of the file's shape
-      if (f->dims || f->vals || f->dom || f->hasAbsent) {
+      if (f->dims || f->vals || f->dom || f->hasAbsent || f->wireBias) {
         gfx_fatal("foh_persist: a reconstructed row claims file shape");
       }
       continue;
+    }
+    // `wireBias` shifts an INT cell into its unsigned column, so it can only
+    // sit on an int kind, it cannot coexist with a domain that reads the
+    // digits as values (FP_DOM_PERM's slot numbers are the permutation), and
+    // an absent value must still land inside the column it would be written
+    // to — otherwise a migration would produce a file this build refuses.
+    if (f->wireBias != 0) {
+      if (f->kind != FP_FLAG && f->kind != FP_U2) {
+        gfx_fatal("foh_persist: wireBias on a non-integer row");
+      }
+      if (f->dom == FP_DOM_PERM) {
+        gfx_fatal("foh_persist: wireBias on a permutation row");
+      }
+    }
+    if (f->kind == FP_FLAG && f->hasAbsent) {
+      const int d = f->absent + f->wireBias;
+      if (d < 0 || d >= f->dmax) {
+        gfx_fatal("foh_persist: a row's absent value is outside its column");
+      }
     }
     if (f->dims < 0 || f->dims > 2 || f->vals < 1) {
       gfx_fatal("foh_persist: table row shape out of range");
@@ -484,8 +568,23 @@ static size_t fp_serialize(const FohPersist *p, char *buf, size_t cap) {
       for (int i = 0; i < f->vals; i++) {
         const void *cell = fp_cell(p, f, L * f->vals + i);
         switch (f->kind) {
-          case FP_FLAG: n = fp_addf(buf, cap, n, " %d", *(const int *)cell); break;
-          case FP_U2:
+          case FP_FLAG: {
+            // A VALUE THIS BUILD WOULD REFUSE TO READ MUST NEVER BE WRITTEN.
+            // That was already the rule for FP_DOM_RESUME below; it is the
+            // rule for every flag column, because the alternative is a file
+            // that saves cleanly and resets loudly on the next boot, which
+            // reads to the player as "it lost my settings" with nothing in
+            // the log naming the write that did it. FohState.portType has a
+            // NET(2) value in its domain (DEVIATION D5) that this build can
+            // never reach, and this is where reaching it would be caught.
+            const int d = *(const int *)cell + f->wireBias;
+            if (d < 0 || d >= f->dmax) {
+              gfx_fatal("foh_persist: field value outside its file column");
+            }
+            n = fp_addf(buf, cap, n, " %d", d);
+            break;
+          }
+          case FP_U2: {
             // A screen this build would refuse to RESTORE must never be
             // WRITTEN either — the domain is one function, checked on both
             // sides of the file. (The only FP_U2 row is `resume`; the
@@ -496,8 +595,22 @@ static size_t fp_serialize(const FohPersist *p, char *buf, size_t cap) {
                 gfx_fatal("foh_persist: resumeScreen is not a resume target");
               }
             }
-            n = fp_addf(buf, cap, n, " %02d", *(const int *)cell);
+            // …and the column's own bound, for the same reason the flag arm
+            // above has one: TWO decimal digits is the whole width, so a
+            // value outside [0,99] would produce a line the reader cannot
+            // parse. No row reaches it today; it is here so that the first
+            // one that could cannot do it silently. (Named `nn` for the
+            // format's own `<NN>`, and NOT `d` like the flag arm above: the
+            // two lines would otherwise be textually identical, and
+            // check-rebind.sh's T5 perturbs one of them BY EXACT LINE and
+            // hard-fails on an ambiguous anchor.)
+            const int nn = *(const int *)cell + f->wireBias;
+            if (nn < 0 || nn > 99) {
+              gfx_fatal("foh_persist: field value outside its file column");
+            }
+            n = fp_addf(buf, cap, n, " %02d", nn);
             break;
+          }
           case FP_HEX64:
             n = fp_addf(buf, cap, n, " %016llx",
                         (unsigned long long)fp_bits(*(const double *)cell));
@@ -620,8 +733,12 @@ static bool fp_parse_field(FpParse *ps, const FpField *f, FohPersist *v) {
           if (c < '0' || c >= (char)('0' + dmax)) {
             return fp_die(ps, f->rangeIsDomain ? "domain" : "grammar");
           }
+          // `line` holds the COLUMN's digits, not the field's values —
+          // FP_DOM_PERM judges the permutation in column space, and
+          // fp_table_check forbids a bias on a permutation row so the two
+          // can never mean different things at once.
           line[i] = c - '0';
-          *(int *)cell = line[i];
+          *(int *)cell = line[i] - f->wireBias;
           break;
         }
         case FP_U2: {
@@ -641,7 +758,7 @@ static bool fp_parse_field(FpParse *ps, const FpField *f, FohPersist *v) {
               return fp_die(ps, "domain");
             }
           }
-          *(int *)cell = line[i];
+          *(int *)cell = line[i] - f->wireBias;
           break;
         }
         case FP_HEX64: {
@@ -660,6 +777,14 @@ static bool fp_parse_field(FpParse *ps, const FpField *f, FohPersist *v) {
               break;
             case FP_DOM_UNIT:
               if (!fp_in_range(d, 1.0)) return fp_die(ps, "domain");
+              break;
+            case FP_DOM_SCREEN:
+              // A canvas coordinate. The hand and the knobs are CLAMPED to
+              // this box every frame, so a value outside it never came from
+              // this program — and a restored cursor at NaN or at 1e300 hit-
+              // tests nothing at all, which is a screen the player cannot
+              // use rather than a screen that looks wrong.
+              if (!fp_in_range(d, FP_SCREEN_MAX)) return fp_die(ps, "domain");
               break;
             default: break;
           }
@@ -1032,6 +1157,29 @@ void foh_persist_apply(const FohPersist *p, FohState *s) {
     s->selChar[k] = p->selChar[k];
     s->cssChar[k] = p->selChar[k];
   }
+  // ticket #25: the CSS MACHINE plane, restored beside the selection.
+  //
+  // THE RE-HOME ABOVE IS UNCHANGED AND MUST STAY THAT WAY. `cssChar[k]` is
+  // still written from `p->selChar[k]` and from nothing else — not from a
+  // token's own position (there is none on disk), not from `k`, and not from
+  // anything below. Everything here is the MACHINE plane; the token plane
+  // has exactly one source and it is the line above.
+  //
+  // `portType` and `cpuDifficulty` are written through the PLANE names, not
+  // through FohState's p1Type/difficulty union aliases: same storage, and
+  // naming the alias is how a four-port loop becomes a one-port loop by
+  // accident (foh.h says so at both unions).
+  for (int k = 0; k < FOH_CSS_PORTS; k++) {
+    s->portType[k] = p->portType[k];
+    s->cpuDifficulty[k] = p->cpuDifficulty[k];
+    s->cssSliderX[k] = p->cssSliderX[k];
+  }
+  s->versusMode = p->versusMode;
+  s->cssHandX = p->cssHand[0];
+  s->cssHandY = p->cssHand[1];
+  s->cssCarry = p->cssCarry;
+  s->cssCpuCarry = p->cssCpuCarry;
+  s->cssHandType = p->cssHandType;
   g_bound = s; // review-100 M1: bind for the record-time refresh
 }
 
@@ -1049,6 +1197,26 @@ void foh_persist_collect(FohPersist *p, const FohState *s) {
   // A49/D45: the SELECTION plane. `cssChar` is NOT collected — it is a view
   // of this one (foh.h), and storing a view is how two representations drift.
   for (int k = 0; k < FOH_CSS_PORTS; k++) p->selChar[k] = s->selChar[k];
+  // ticket #25: the CSS MACHINE plane. `cssTokenRest` is deliberately absent
+  // for the same reason `cssChar` is — it is token-plane bookkeeping that
+  // nothing computes a position from (foh_css_token_pos, DEVIATION D46: all
+  // three rest paths home on the SELECTION), so it records a history rather
+  // than holding state, and the D21/D35/D46 witnesses are its only readers.
+  // `cssReady` is absent because it is DERIVED: foh_tick recomputes it after
+  // every tick that ends on this screen, so a stored copy could only be a
+  // stale one. `bHold` is absent because it counts frames a button has been
+  // held, and on the boot after a lid close no button is held.
+  for (int k = 0; k < FOH_CSS_PORTS; k++) {
+    p->portType[k] = s->portType[k];
+    p->cpuDifficulty[k] = s->cpuDifficulty[k];
+    p->cssSliderX[k] = s->cssSliderX[k];
+  }
+  p->versusMode = s->versusMode;
+  p->cssHand[0] = s->cssHandX;
+  p->cssHand[1] = s->cssHandY;
+  p->cssCarry = s->cssCarry;
+  p->cssCpuCarry = s->cssCpuCarry;
+  p->cssHandType = s->cssHandType;
   // records are chokepoint-owned: they change ONLY through
   // foh_persist_record_update (the finishGame arm), never collected
   // back from the display copy.

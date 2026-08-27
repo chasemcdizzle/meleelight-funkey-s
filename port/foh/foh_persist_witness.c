@@ -74,6 +74,34 @@ static void seed(FohPersist *p) {
   p->selChar[2] = 3;
   p->selChar[3] = 4;
   p->resumeScreen = (int)FOH_TSS;
+  // ticket #25's CSS machine plane. Every value is BOTH non-default AND at a
+  // different point of its column than its neighbours, so a row that landed
+  // on the wrong member cannot still compare equal: the four port types
+  // cover all three of N/A/HMN/CPU, the four levels are all distinct, and
+  // `carry` and `cpucarry` differ from each other so the two one-digit rows
+  // that sit next to each other in the file cannot be swapped unnoticed.
+  p->portType[0] = 0;
+  p->portType[1] = 1;
+  p->portType[2] = -1;
+  p->portType[3] = 1;
+  p->cpuDifficulty[0] = 3;
+  p->cpuDifficulty[1] = 1;
+  p->cpuDifficulty[2] = 4;
+  p->cpuDifficulty[3] = 2;
+  p->versusMode = 1;
+  p->cssHand[0] = 33.25;
+  p->cssHand[1] = 240.0; // the INCLUSIVE top of FP_DOM_SCREEN, on purpose
+  for (int k = 0; k < FOH_CSS_PORTS; k++) p->cssSliderX[k] = 10.5 + 7.25 * k;
+  // BOTH grabs are set, which the SCREEN can never produce — a held knob
+  // pins the hand to the rail, so it can never also be in the roster band.
+  // This record is a COLUMN test, not a screen state: the file's domain is
+  // per row and the loader has no cross-field rule, so seeding both is what
+  // proves the two adjacent one-digit rows cannot be swapped for each other.
+  // (The reachable combinations are what check-hibernate.sh's round trip
+  // drives, through the real screen.)
+  p->cssCarry = 2;
+  p->cssCpuCarry = 3;
+  p->cssHandType = 2;
 }
 
 static const char *status_token(FohPersistStatus st) {
@@ -117,6 +145,23 @@ static void dump(const FohPersist *p) {
   }
   for (int k = 0; k < FOH_CSS_PORTS; k++) printf("sel %d %d\n", k, p->selChar[k]);
   printf("resume %d\n", p->resumeScreen);
+  // ticket #25. These print the FIELD's value, not the file's column — the
+  // wire bias is the table's business and a dump that echoed the biased
+  // digit would let a bias applied on only one side of the file pass.
+  for (int k = 0; k < FOH_CSS_PORTS; k++) {
+    printf("ptype %d %d\n", k, p->portType[k]);
+  }
+  for (int k = 0; k < FOH_CSS_PORTS; k++) {
+    printf("cpudiff %d %d\n", k, p->cpuDifficulty[k]);
+  }
+  printf("vsmode %d\n", p->versusMode);
+  printf("hand %016llx %016llx\n", BITS(p->cssHand[0]), BITS(p->cssHand[1]));
+  for (int k = 0; k < FOH_CSS_PORTS; k++) {
+    printf("slider %d %016llx\n", k, BITS(p->cssSliderX[k]));
+  }
+  printf("carry %d\n", p->cssCarry);
+  printf("cpucarry %d\n", p->cssCpuCarry);
+  printf("handtype %d\n", p->cssHandType);
 #undef BITS
 }
 

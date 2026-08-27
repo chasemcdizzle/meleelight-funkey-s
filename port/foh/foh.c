@@ -266,28 +266,28 @@ void foh_init(FohState *s) {
   // channel, not decoration.
   // A44: ports 2/3 join ports 1's N/A rather than being pinned there — the
   // difference is that the type box can now walk them to HMN (D40).
-  for (int k = 0; k < FOH_CSS_PORTS; k++) s->portType[k] = -1;
-  s->portType[0] = 0;
-  // cpuDifficulty = [3,3,3,3] (main.js:109). A49 made this four wide because
-  // every port can now be CPU; upstream's own literal was always four long.
-  for (int k = 0; k < FOH_CSS_PORTS; k++) s->cpuDifficulty[k] = 3;
+  //
+  // EVERY COLD VALUE ON THIS SCREEN NOW COMES FROM foh.h's CSS COLD-START
+  // PLANE (ticket #25) rather than from a literal here. foh_persist_defaults()
+  // is the second reader: the CSS machine plane is persisted now, so a fresh
+  // install's record must reproduce THIS state exactly, and two copies of
+  // these formulas in two TUs is the drift CONTEXT.md names as this project's
+  // costliest defect class. The provenance citations moved with them.
+  for (int k = 0; k < FOH_CSS_PORTS; k++) s->portType[k] = foh_css_type_home(k);
+  // A49 made this four wide because every port can now be CPU; upstream's own
+  // literal was always four long.
+  for (int k = 0; k < FOH_CSS_PORTS; k++) {
+    s->cpuDifficulty[k] = FOH_CSS_DIFF_HOME;
+  }
   s->cssCarry = -1;    // whichTokenGrabbed (css.js:68)
   s->cssCpuCarry = -1; // whichCpuGrabbed (css.js:75)
-  // cpuSlider[k] init, css.js:72: x = 152+15+166+225k-50 = 283+225k on a rail
-  // running [167+225k, 333+225k], i.e. 116/166 = 0.6988 of the way along —
-  // NOT the level-3 stop at 2/3, though it reads back as level 3
-  // (round(0.6988*3)+1 == 3). Carried as the same fraction of our rail.
   // FOH_CSS_PORTS, not 2: `cpuSlider` is a four-element literal upstream
   // (css.js:72) and A49 gave ports 2/3 a CPU type to draw a knob for.
   for (int k = 0; k < FOH_CSS_PORTS; k++) {
-    s->cssSliderX[k] = (double)(foh_css_panel_x(k) + FOH_CSS_RAIL_X0) +
-                       (116.0 / 166.0) * (double)FOH_CSS_RAIL_LEN;
+    s->cssSliderX[k] = foh_css_slider_home(k);
   }
-  // handPos[0] = (140,700) on upstream's 1200x750 canvas (css.js:64) — the
-  // same fraction of this screen. Module scope upstream: set ONCE here and
-  // never re-initialised on CSS entry (MENU-SPEC §2.2 property 4).
-  s->cssHandX = 140.0 * RAST_W / 1200.0;
-  s->cssHandY = 700.0 * RAST_H / 750.0;
+  s->cssHandX = FOH_CSS_HAND_HOME_X;
+  s->cssHandY = FOH_CSS_HAND_HOME_Y;
   // The TSS hand (D29) is re-homed on every entry to that screen, so this is
   // only the cold value — but memset's (0,0) would leave a boot-time state
   // whose hand hovers nothing while tssCursor reads 0, and nothing in the FOH
@@ -1204,6 +1204,20 @@ static void step_css(FohState *s, const PlatformInput *in,
     // REPLAY a CPU golden, not what makes the AI run. The real ground was
     // VERIFICATION COVERAGE, which is a scope call the owner owns and has now
     // made. Refusing here again would be re-deciding it.
+    //
+    // TICKET #25 (owner ruling 2026-08-27) WIDENED THAT CONSEQUENCE, and it
+    // is restated here rather than left for the reader to infer, because
+    // this guard is where a reader arrives asking "how does the machine end
+    // up in that configuration?" — and the answer changed:
+    //
+    //   *** THE PORT TYPES AND CPU LEVELS ARE NOW PERSISTED TO SD. So the
+    //   *** unverified configuration above is no longer only something a
+    //   *** player assembles during a session. It can be the state the
+    //   *** device BOOTS INTO: close the lid on a 3-or-4-port CPU match's
+    //   *** character select and the next power-on comes back to it, armed,
+    //   *** possibly reading READY TO FIGHT before anything is touched.
+    //   *** The ruling was made knowing that; foh_persist.h's CSS machine
+    //   *** plane carries the full statement and the reasons it overrode.
     {
       int participants = 0;
       for (int j = 0; j < FOH_CSS_PORTS; j++) {

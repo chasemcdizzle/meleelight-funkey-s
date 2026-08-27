@@ -30,13 +30,20 @@
 //     truth (medal DISPLAY = the registered iter-99 pipeline-extension
 //     deferral).
 //
-// FILE FORMAT `MLFKPERSIST7` (versioned + checksummed; exactly 70 LF
+// FILE FORMAT `MLFKPERSIST7` (versioned + checksummed; exactly 78 LF
 // lines, deterministic bytes — twin checks cmp host vs device). v2
 // added the `ctlstyle` line, v3 the `modonr` line (fix_plan A4), v4
 // the seven options lines below (MENU-SPEC §3/§4 — the completed
 // gameplay + audio screens), v5 the four `bind` rows (fix_plan A31 /
 // DEVIATION D26 — the Controls screen's real rebinder), v6 the `sel`
 // row and v7 the `resume` row (fix_plan A26 / DEVIATION D53 — hibernate).
+//
+// THE LINE COUNT WENT 70 -> 78 WITHOUT THE VERSION MOVING, which is ticket
+// #22's whole point rather than an inconsistency: MLFKPERSIST7 is the LAST
+// header this build will ever write (see the field-table note below).
+// Ticket #25 appended the eight CSS rows — `ptype` through `handtype` — as
+// eight table rows, and a v7 file written before they existed still loads,
+// because an absent row takes its default.
 //
 // WHY v4 AND NOT v2-WITH-MORE-LINES (cross-lane collision, resolved at
 // the iter-13x merge — read this before renumbering anything): the menus
@@ -98,6 +105,26 @@
 //                                 each row a PERMUTATION of 0..7
 //   sel <c> <c> <c> <c>           [0-4] x4, port-major (fix_plan A49, D45)
 //   resume <NN>                   TWO digits, a FohScreen (fix_plan A26, D53)
+//   --- the CSS machine plane (ticket #25; owner ruling 2026-08-27) --------
+//   ptype <t> <t> <t> <t>         [0-2] x4, port-major. WIRE-BIASED: the
+//                                 digit is playerType + 1, so 0 = N/A(-1),
+//                                 1 = HMN(0), 2 = CPU(1). playerType's own
+//                                 domain has a -1 in it and a file column is
+//                                 one unsigned digit; the bias lives in the
+//                                 table's `wireBias` column, in ONE place,
+//                                 not in the caller.
+//   cpudiff <d> <d> <d> <d>       [0-3] x4, port-major. WIRE-BIASED the other
+//                                 way: the digit is cpuDifficulty - 1, so the
+//                                 slider's 1..4 maps onto the column exactly
+//                                 and 0 is not a legal level by construction.
+//   vsmode [01]                   0 stock | 1 endless (main.js:140)
+//   hand <hex16> <hex16>          cssHandX, cssHandY — the free cursor, in
+//                                 doubles, [0, 240] on each axis
+//   slider <hex16> x4             cpuSlider[k].x, port-major, [0, 240]
+//   carry <c>                     [0-4], WIRE-BIASED: digit is
+//                                 whichTokenGrabbed + 1 (0 = holding nothing)
+//   cpucarry <c>                  [0-4], same bias, whichCpuGrabbed + 1
+//   handtype <h>                  [0-2] handPoint | handOpen | handGrab
 //   SUM <sha256-lowercase-hex of ALL preceding bytes>
 // The v4, v5, v6 and v7 blocks are APPENDED after the 50 rec rows on purpose:
 // it keeps every older version a strict PREFIX through the rec block, so the
@@ -297,23 +324,108 @@ typedef struct {
   //     "one thing having two representations that drifted apart" — the
   //     class that has already cost this screen D21, D35 and D46.
   //
-  //   * the PORT TYPES (FohState.portType) and the CPU LEVELS are NOT
-  //     persisted. Restoring them would boot the machine with ports already
-  //     switched on — a CSS that is READY TO FIGHT before the player has
-  //     touched it, off a configuration he last saw in another session. Two
-  //     reasons beyond taste: (1) upstream's fresh state is
-  //     `playerType = [-1,-1,-1,-1]` (main.js:107) with addPlayer arming
-  //     port 0 (main.js:495), which is what foh_init reproduces, so not
-  //     persisting types is the FAITHFUL answer as well as the quiet one;
-  //     (2) A49 also made CPU reachable on ports 2/3, and a 3-or-4-port CPU
-  //     match is playable but NOT checksum-verified (the launch guard in
-  //     foh.c carries that consequence in full) — persisting types would
-  //     make that unverified configuration a device's DEFAULT BOOT STATE
-  //     rather than something the player chose this session. The character
-  //     survives; arming a port stays an explicit act. If the owner wants
-  //     types too it is one more appended row and one more `ver >= 7` block,
-  //     which is exactly what the migration rule above makes cheap.
+  //   * the PORT TYPES and the CPU LEVELS were not persisted either, and
+  //     THAT PART HAS BEEN REVERSED — see `portType` below, which states the
+  //     new rule, the ruling that made it and what it costs. This bullet is
+  //     kept as a stub rather than deleted so that a reader who arrives from
+  //     a citation of the old text finds the reversal instead of silence.
   int selChar[FOH_CSS_PORTS];
+
+  // --- THE CSS MACHINE PLANE (ticket #25; OWNER RULING 2026-08-27) --------
+  //
+  // THE RULE, FIRST. The character select comes back set up the way it was
+  // left: port types, CPU levels, the stock/endless mode, where the hand is
+  // and what it is holding. Owner report: closing the lid on the CSS gave
+  // back a screen with the opponent gone, the mode reverted and the cursor
+  // at the top. Only the character survived, because only the character had
+  // a row. Each of these is now a row.
+  //
+  // THIS REVERSES A JUDGEMENT WRITTEN AT `selChar` ABOVE, and the reversal
+  // is recorded rather than quietly overwritten. That text refused to
+  // persist portType and the CPU levels for two stated reasons, and the
+  // owner was asked to choose between (A) persist them anyway, (B) persist
+  // presence and difficulty but leave every port disarmed on boot, and (C)
+  // persist only the mode and difficulty. He chose A — "persist them
+  // anyway". So:
+  //
+  //   * REASON 1 — "upstream's fresh state is playerType = [-1,-1,-1,-1],
+  //     so not persisting is the faithful answer" — is now answered the way
+  //     `selChar` itself already answers it. Upstream cookies no CSS state
+  //     at all, so faithfulness cannot decide between persisting one CSS
+  //     field and persisting six; the deviation was taken at `selChar` and
+  //     this is the same deviation, not a new one. What foh_init reproduces
+  //     is still upstream's fresh state, and a machine that has never been
+  //     saved still gets exactly it (foh_persist_defaults, which now reads
+  //     foh.h's CSS COLD-START PLANE so the two cannot drift).
+  //
+  //   * REASON 2 — the unverified-configuration argument — was NOT wrong
+  //     and has NOT been argued away. It has been overruled, and its
+  //     consequence is carried here in full:
+  //
+  //     THE CONSEQUENCE, STATED. This device can now BOOT INTO AN ALREADY
+  //     ARMED CHARACTER SELECT — possibly one reading READY TO FIGHT before
+  //     the player has touched anything — off a configuration he last saw in
+  //     another session. If that session left a 3-or-4-port CPU match set
+  //     up, the machine now WAKES INTO A CONFIGURATION NO GOLDEN COVERS: CPU
+  //     on ports 2/3 is playable (live ai.c, check-ai-live.sh) but no
+  //     recorded trace verifies it, and the launch guard in foh.c carries
+  //     that in full. It is a device DEFAULT BOOT STATE now, not something
+  //     chosen this session. This is a ruled cost, not a defect report
+  //     waiting to be filed: anyone who meets it here has already been told.
+  //
+  // The token plane is STILL not here and still must not be — see `selChar`.
+  // What is persisted below is the MACHINE plane (CONTEXT.md: what the
+  // player was doing), and foh_persist_apply re-homes the token FROM the
+  // selection exactly as it did before, never from these fields.
+  //
+  // STRUCT ORDER IS LAYOUT, FILE ORDER IS THE TABLE, and this block sits
+  // where it does for TWO layout reasons that are worth a paragraph because
+  // neither is visible from the declarations themselves. The file's own
+  // order is FP_FIELDS' order in foh_persist.c and is unaffected by either;
+  // read the format block at the top of this header for that.
+  //
+  //   * IT STARTS ON THE DOUBLES. `selChar` ends at an offset that is a
+  //     multiple of 8, so putting the two double arrays first opens no
+  //     alignment hole. Start with the ints instead and there is a four-byte
+  //     gap before them that FP_UNPERSISTED_BYTES would have to declare —
+  //     paying for the field twice, and growing the "deliberately not
+  //     persisted" number for something that IS persisted, which is the one
+  //     edit foh_persist.c's guard comment asks nobody to make casually.
+  //
+  //   * IT ENDS BEFORE `resumeScreen`, WHICH STAYS THE LAST PERSISTED
+  //     MEMBER. check-persist-table.sh leg [9] proves layoutGuard is not
+  //     cargo by DELETING it and requiring a newly appended int to become
+  //     invisible in the tail padding — and it appends that int after
+  //     `int resumeScreen;`, because that member was the tail. Land this
+  //     block after it and the anchor is no longer the tail, the
+  //     counterfactual stops modelling what it claims to model, and the leg
+  //     fails. The tooth is a hostage of this ordering; that is stated here
+  //     rather than discovered by whoever moves it next.
+  //
+  // cssHandX, cssHandY as one row (css.js:64 handPos). DOUBLES, never
+  // integers: rounding happens at draw time only, and a hand restored to a
+  // rounded pixel would drift its own hit tests by up to half a cell.
+  double cssHand[2];
+  // cpuSlider[k].x (css.js:72). CONTINUOUS and NOT derivable from
+  // cpuDifficulty: upstream's knob keeps the raw hand x it was released at,
+  // and re-deriving it from the level would snap it to one of four stops and
+  // move where the next grab has to aim. That is why it is a row of its own
+  // rather than something foh_persist_apply recomputes.
+  double cssSliderX[FOH_CSS_PORTS];
+  // playerType[0..3] (main.js:107): -1 N/A, 0 HMN, 1 CPU. FohState overlays
+  // this array with p1Type..p4Type in a union; the table names the ARRAY,
+  // and naming both would serialise the same storage twice.
+  int portType[FOH_CSS_PORTS];
+  // cpuDifficulty[0..3] (main.js:109), domain 1..4 (css.js:325-327). Same
+  // union caveat as portType: one name, the per-port array.
+  int cpuDifficulty[FOH_CSS_PORTS];
+  int versusMode;  // FohState.versusMode — 0 stock | 1 endless (main.js:140)
+  int cssCarry;    // whichTokenGrabbed[0] (css.js:68), -1 = holding nothing
+  int cssCpuCarry; // whichCpuGrabbed[0] (css.js:75), -1 = holding nothing
+  // handType[0] (css.js:63): 0 handPoint, 1 handOpen, 2 handGrab. STORED,
+  // not derived — upstream's three assignment sites genuinely disagree, so
+  // recomputing it at load would draw a sprite the player never saw.
+  int cssHandType;
 
   // --- v7 (fix_plan A26; DEVIATION D53) ---------------------------------
   // HIBERNATE/RESUME. Owner: *"closing screen and opening it doesn't come
@@ -338,6 +450,7 @@ typedef struct {
   // foh_persist_resume_target() below and it is also the file's DOMAIN,
   // so a screen the driver would refuse to restore cannot be stored.
   int resumeScreen;
+
 
   // --- LAYOUT GUARD (ticket #22 / ADR 0001) — NOT DATA, NOT PERSISTED ----
   // Persistence is driven by a DECLARATIVE FIELD TABLE (foh_persist.c's
@@ -394,10 +507,10 @@ void foh_persist_defaults(FohPersist *p);
 //   FOH_MATCH  -> FOH_CSS   mid-match state is out of scope (see the struct
 //   FOH_TMATCH -> FOH_TSS   field); these are the screens the match's own
 //                           exit lands on (foh_dev.c's MEX_CSS/MEX_TSS arm).
-//   FOH_SSS    -> FOH_CSS   stage select launches with the PORT TYPES the
-//                           CSS arms, and those are deliberately not
-//                           persisted — landing on SSS would offer to
-//                           launch a match the player never configured.
+//   FOH_SSS    -> FOH_CSS   the port types ARE persisted now (ticket #25),
+//                           so this row's stated reason is spent; the row
+//                           survives it and ticket #27 owns the removal.
+//                           foh_persist.c's own arm carries the whole note.
 //   FOH_CREDITS-> FOH_MENU_OPTIONS  the credits reticle is placed by the
 //                           ENTERING transition (foh.c credX/credY), which a
 //                           resume never runs; MENU_OPTIONS is its B-exit.

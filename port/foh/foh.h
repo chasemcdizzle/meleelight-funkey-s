@@ -450,6 +450,39 @@ static inline int foh_css_panel_x(int k) {
   return FOH_CSS_PANEL_X0 + FOH_CSS_PANEL_PITCH * k;
 }
 
+// --- THE CSS COLD-START PLANE (ticket #25) ----------------------------------
+// The values foh_init gives this screen on a machine that has never run.
+//
+// THEY ARE HERE, AND NOT INLINE IN foh_init, BECAUSE THEY NOW HAVE A SECOND
+// READER. Ticket #25 persists the CSS machine plane, so
+// foh_persist_defaults() must produce EXACTLY what foh_init produces — a
+// fresh install has to boot the screen it has always booted. Two copies of
+// `140.0 * RAST_W / 1200.0` in two TUs is CONTEXT.md's costliest defect
+// class ("one thing having two representations that drifted apart") with a
+// silent failure mode: the drift would show up as a cursor that starts
+// somewhere else after the first save, months later, in a bug report.
+// So there is ONE definition and both callers ask it — the same shape
+// FOH_TSS_HOME_X/Y already has for the target-select hand.
+//
+// handPos[0] = (140,700) on upstream's 1200x750 canvas (css.js:64), taken
+// as the same FRACTION of this screen. Module scope upstream: set once at
+// boot and never re-initialised on CSS entry (MENU-SPEC §2.2 property 4).
+#define FOH_CSS_HAND_HOME_X (140.0 * RAST_W / 1200.0)
+#define FOH_CSS_HAND_HOME_Y (700.0 * RAST_H / 750.0)
+// cpuDifficulty = [3,3,3,3] (main.js:109).
+#define FOH_CSS_DIFF_HOME 3
+// playerType = [-1,-1,-1,-1] (main.js:107) with addPlayer arming port 0
+// (main.js:495) — upstream's own fresh state, port by port.
+static inline int foh_css_type_home(int k) { return k == 0 ? 0 : -1; }
+// cpuSlider[k] (css.js:72): x = 152+15+166+225k-50 = 283+225k on a rail
+// running [167+225k, 333+225k], i.e. 116/166 of the way along — NOT the
+// level-3 stop at 2/3, though it reads back as level 3
+// (round(0.6988*3)+1 == 3). Carried as the same fraction of our rail.
+static inline double foh_css_slider_home(int k) {
+  return (double)(foh_css_panel_x(k) + FOH_CSS_RAIL_X0) +
+         (116.0 / 166.0) * (double)FOH_CSS_RAIL_LEN;
+}
+
 // DEVIATION D3 — cursor speed, the one calibration knob in this whole spec —
 // moved to port/foh/foh_hand.h with the cursor itself (A25c), which foh.h
 // includes above, so FOH_CURSOR_SPEED / _VX / _VY still resolve here.
@@ -773,12 +806,19 @@ typedef struct {
   // drift. WRITE THROUGH `selChar[k]` in new code — a per-port `if (k == 0)
   // ... else ...` chain is how D21 and D35 were both written.
   //
-  // A49/DEVIATION D45: this plane, and ONLY this plane, is PERSISTED to SD
-  // (`MLFKPERSIST6`, foh_persist.h). Upstream cookies no character at all, so
-  // persisting is the deviation; the owner asked for it in as many words
-  // (*"i want to MAKE it persistent ... I want it to be last character"*).
+  // A49/DEVIATION D45: this plane is PERSISTED to SD (foh_persist.h).
+  // Upstream cookies no character at all, so persisting is the deviation;
+  // the owner asked for it in as many words (*"i want to MAKE it persistent
+  // ... I want it to be last character"*).
   // The TOKEN plane below is NOT persisted and must never be: it is re-homed
   // FROM this one at load, which is D21/D35's rule applied to boot.
+  //
+  // "AND ONLY THIS PLANE" USED TO STAND HERE AND NO LONGER DOES. Ticket #25
+  // persists the rest of the CSS machine plane too — port types, CPU levels,
+  // the mode, the hand, what the hand is holding — so the sentence that told
+  // a reader "the character is the only CSS state on the card" would now be
+  // false. The token plane's exclusion is unchanged and is the sentence
+  // above; it is a rule about VIEWS, not a rule about how much is saved.
   union {
     int selChar[FOH_CSS_PORTS]; // 0 marth 1 puff 2 fox 3 falco 4 falcon
     struct {
@@ -814,6 +854,13 @@ typedef struct {
   // CONFORMS`), so a CPU on port 2 or 3 plays. What AIBRIDGE1's single slot
   // actually limits is VERIFICATION, not capability — see the ACCEPTED
   // CONSEQUENCE written at the launch guard in foh.c.
+  //
+  // PERSISTED TO SD as of ticket #25 (OWNER RULING 2026-08-27, option A —
+  // the argument, the reversal and the consequence are written out at
+  // foh_persist.h's `portType` field). Write through `portType[k]`, never
+  // through the union aliases: foh_persist.c's field table addresses this
+  // plane BY OFFSET under ONE of the two names, and a table that named both
+  // would serialise the same sixteen bytes twice.
   union {
     int portType[FOH_CSS_PORTS];
     struct {
@@ -830,7 +877,10 @@ typedef struct {
   // and every frozen LAUNCH line already mean by port 1's level, and two
   // fields kept in sync by hand is CONTEXT.md's costliest defect class.
   // Overlaid storage cannot drift. WRITE THROUGH `cpuDifficulty[k]` in new
-  // code.
+  // code — and now for a second reason: ticket #25 PERSISTS this plane
+  // (`cpudiff` in foh_persist.c's field table), and that table addresses it
+  // by offset under ONE name. A row per union alias would write the same
+  // four ints four times.
   union {
     int cpuDifficulty[FOH_CSS_PORTS];
     struct {
@@ -842,9 +892,23 @@ typedef struct {
   // mode ribbon's `setVersusMode(1 - versusMode)` (css.js:393; A27). It is
   // PAGE state upstream, not match state: startGame never resets it, so it
   // lives here beside the other page-scoped CSS fields, is initialised once
-  // by foh_init's memset (upstream's own `= 0`), survives a match and the
-  // MEX_CSS re-entry, and is NOT persisted to SD — upstream keeps no cookie
-  // for it, so a power cycle is the page reload that clears it.
+  // by foh_init's memset (upstream's own `= 0`), and survives a match and
+  // the MEX_CSS re-entry.
+  //
+  // IT IS PERSISTED TO SD. OWNER RULING 2026-08-27 (ticket #25, option A),
+  // and this comment is a REVERSAL: it used to end "and is NOT persisted to
+  // SD — upstream keeps no cookie for it, so a power cycle is the page
+  // reload that clears it." The owner reported that as a defect in as many
+  // words — an endless KO fest reverts to VS Melee across a lid close — and
+  // ruled that the mode comes back. Upstream's absent cookie is therefore
+  // evidence about UPSTREAM, not a rule about this port: this device has no
+  // page reload, it has a lid, and the two are not the same event. The row
+  // is `vsmode` in foh_persist.c's field table.
+  //
+  // A power cycle no longer clears it, so a machine can boot into ENDLESS
+  // with nothing on screen saying the player chose it in another session.
+  // That is the ruled consequence and it is stated, not softened; the mode
+  // ribbon draws the current mode, which is the whole of the feedback.
   int versusMode;
   // sss
   int sssCursor; // 0..5 == oracle stage ids; 6 = the refusing RANDOM slot

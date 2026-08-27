@@ -459,6 +459,196 @@ cmp "$BUILD/tbdoc.before" "$TBDIR/tbdoc.mlstage" \
   builder with someone else's stage is worse than not resuming at all."
 echo "   builder resumed with the SAME document, byte for byte; file consumed"
 
+# --- [5c] the CHARACTER SELECT resumes SET UP THE WAY IT WAS LEFT -----------
+# Ticket #25 / owner ruling 2026-08-27. The owner's report was that closing
+# the lid on the CSS gave back a screen with the opponent gone, the mode
+# reverted and the cursor at the top: only the character survived, because
+# only the character had a row. Eight rows later, this leg is what says so.
+#
+# IT IS SHAPED EXACTLY LIKE [5b], because [5b] already learnt the two things
+# that make a resume round trip mean anything:
+#
+#   * THE ASSERTION IS BYTE-IDENTITY ACROSS THE ROUND TRIP, not a log line. A
+#     resume that silently reset the CSS to a fresh screen would still print
+#     `resumed screen=css` and would still hibernate again cleanly; what it
+#     cannot do is publish the same bytes the second time.
+#
+#   * AND THE PARKED STATE MUST DIFFER FROM A FRESH ONE, per row, or the
+#     round trip is a round trip on nothing. A field that was never set sits
+#     at its default, survives trivially, and proves only that the default is
+#     stable. So the flow below really works the screen — arms port 1 as CPU,
+#     drags its level knob to the bottom of the rail, flips the mode ribbon,
+#     moves the hand and picks a token up — and every new row is then
+#     required to DIFFER from the row the same binary writes on a screen
+#     nobody touched. [5b] proves the same thing with its `tbdoc.template`
+#     comparison; this is that guard, made per field.
+echo "=== [5c] the CSS resumes as it was left (ticket #25)"
+
+# The flow is written in CLAMP-THEN-COUNT form: hold up+left long enough to
+# pin the cursor at (0,0) — foh_hand_step clamps, so "long enough" is exact —
+# and then count frames out from there. FOH_CURSOR_VX/VY are 2.40 and 3.84
+# px/frame (foh_hand.h), so every position below is an exact multiple and no
+# step lands on a boundary. Frame budget: the CSS is reached at tick 381 and
+# everything here finishes by 801, well inside the 3 s (1500 tick) wait.
+#
+#   500  hand at (0, 0)                     clamped
+#   550  hand at (120.0, 0)                 50 frames right
+#   553  hand at (120.0, 11.52)             3 frames down -> inside the mode
+#                                           ribbon (x 104..178, y 4..22)
+#   555  A                                  versusMode 0 -> 1
+#   620  hand at (0, 0)                     clamped again
+#   647  hand at (64.8, 103.68)             27 frames down+right -> inside
+#                                           port 1's type tab (x 61..97,
+#                                           y 96..107)
+#   650  A, 654 A                           portType[1] N/A -> HMN -> CPU
+#   683  hand at (98.4, 192.0)              onto port 1's knob, which sits at
+#                                           (97.156, 189) with a +/-6 box
+#   685  A                                  grab the knob
+#   720  hand dragged to the rail's left end (x0 = 72) -> level 1
+#   722  A                                  release the knob
+#   790  hand at (0, 0)                     clamped
+#   798  hand at (0, 30.72)                 8 frames down -> inside the roster
+#                                           band (26..62) but ABOVE the cells
+#                                           (32..62), so nothing is hovered
+#                                           and no selection can change
+#   800  B                                  grab port 0's token (css.js:209)
+CSSPARK=$BUILD/csspark.flow
+cat > "$CSSPARK" <<'CSSEOF'
+FLOW1
+I 1 -
+I 375 S
+I 376 -
+I 380 A
+I 381 -
+I 400 UL
+I 500 R
+I 550 D
+I 553 -
+I 555 A
+I 556 -
+I 560 UL
+I 620 RD
+I 647 -
+I 650 A
+I 651 -
+I 654 A
+I 655 -
+I 660 RD
+I 674 D
+I 683 -
+I 685 A
+I 686 -
+I 690 L
+I 720 -
+I 722 A
+I 723 -
+I 730 U
+I 790 D
+I 798 -
+I 800 B
+I 801 -
+END 20000
+CSSEOF
+made "$CSSPARK"
+
+# park <flow> <dir> <label> — run to the wall clock, SIGUSR1, require a clean
+# hibernate, leave the published record at <dir>/mlfk-persist.dat.
+css_park() { # <flow> <dir> <label>
+  local flow="$1" dir="$2" label="$3" pid n
+  rm -rf "$dir"; mkdir -p "$dir"
+  rm -f "$BUILD/$label.err" "$BUILD/$label.trace"
+  MLFK_PERSIST_DIR="$dir" "$BUILD/foh_dev_headless" \
+    --flow "$flow" --input flow --flow-out "$BUILD/$label.trace" \
+    --pace 1 --budget-ns "$BUDGET" > "$BUILD/$label.err" 2>&1 &
+  pid=$!
+  sleep 3
+  kill -0 "$pid" 2>/dev/null \
+    || { relay_lines < "$BUILD/$label.err"
+         fail "[5c] $label: app exited before the signal"; }
+  kill -USR1 "$pid"
+  n=0
+  while kill -0 "$pid" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+  kill -9 "$pid" 2>/dev/null || true
+  set +e; wait "$pid" >/dev/null 2>&1; set -e
+  grep -qxF 'foh_dev: hibernate from=css resume=css' "$BUILD/$label.err" \
+    || { relay_lines < "$BUILD/$label.err"
+         fail "[5c] $label: did not hibernate ON THE CSS — the flow no longer
+  parks where this leg thinks it does, so everything below judges the wrong
+  screen"; }
+  made "$dir/mlfk-persist.dat"
+}
+
+# the WORKED screen, and the UNTOUCHED one from the same binary and the same
+# navigation — the fresh-state reference every row below is compared against.
+CSSDIR=$BUILD/css-persist
+css_park "$CSSPARK" "$CSSDIR" cssw
+CSSFRESH=$BUILD/css-fresh
+css_park "$PARK" "$CSSFRESH" cssf
+
+# THE GUARD, PER ROW. Each of ticket #25's eight rows must have been MOVED by
+# the flow above. A row that matches the untouched screen was never set, and
+# the byte-identity assertion below would then pass on it for free.
+css_row() { # <key> <file>
+  local r
+  r="$(grep -m1 "^$1 " "$2")" || return 1
+  printf '%s\n' "$r"
+}
+for k in ptype cpudiff vsmode hand slider carry cpucarry handtype; do
+  a="$(css_row "$k" "$CSSDIR/mlfk-persist.dat")" \
+    || grammar_die "[5c] the parked record carries no '$k' row"
+  b="$(css_row "$k" "$CSSFRESH/mlfk-persist.dat")" \
+    || grammar_die "[5c] the untouched record carries no '$k' row"
+  case "$k" in
+    cpucarry)
+      # THE ONE ROW THIS FLOW CANNOT MOVE, and the reason is a fact about the
+      # screen rather than a gap in the flow: a held knob PINS the hand to the
+      # rail (css.js:317 forces its y every frame), so a run that ends holding
+      # a knob cannot also end holding a token, and the token is what the
+      # ticket names. It is parked at its own default here and covered as a
+      # value by check-persist-table.sh's seeded fixture instead. Asserted as
+      # EQUAL rather than skipped, so that a flow which starts moving it
+      # arrives here as a failure to re-read, not as a silent change.
+      [ "$a" = "$b" ] \
+        || fail "[5c] the parked '$k' row now differs from the untouched one
+  ('$a' vs '$b') — the flow reaches a held knob after all, so move this row
+  into the guard above instead of exempting it";;
+    *)
+      [ "$a" != "$b" ] \
+        || fail "[5c] the parked '$k' row is IDENTICAL to the untouched one
+  ('$a') — the flow did not actually change it, so the round trip below would
+  pass on a field that was never set (dead leg)";;
+  esac
+done
+echo "   parked CSS differs from an untouched one on every row the flow moves"
+
+# ...now boot again on the same dir, let the resume restore the screen, and
+# hibernate a second time. Byte-identical or a row was dropped on the way.
+CSSRESFLOW=$BUILD/cssres.flow
+printf 'FLOW1\nI 1 -\nEND 20000\n' > "$CSSRESFLOW"
+cp "$CSSDIR/mlfk-persist.dat" "$BUILD/css.before"
+rm -f "$BUILD/cssres.err" "$BUILD/cssres.trace"
+MLFK_PERSIST_DIR="$CSSDIR" "$BUILD/foh_dev_headless" \
+  --flow "$CSSRESFLOW" --input flow --flow-out "$BUILD/cssres.trace" \
+  --pace 1 --budget-ns "$BUDGET" > "$BUILD/cssres.err" 2>&1 &
+CSSPID2=$!
+sleep 2
+grep -qxF 'foh_dev: resumed screen=css' "$BUILD/cssres.err" \
+  || { kill -9 "$CSSPID2" 2>/dev/null || true
+       relay_lines < "$BUILD/cssres.err"
+       fail "[5c] the next boot did not resume the CSS"; }
+kill -USR1 "$CSSPID2"
+n=0
+while kill -0 "$CSSPID2" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+kill -9 "$CSSPID2" 2>/dev/null || true
+set +e; wait "$CSSPID2" >/dev/null 2>&1; set -e
+made "$CSSDIR/mlfk-persist.dat"
+cmp "$BUILD/css.before" "$CSSDIR/mlfk-persist.dat" \
+  || { fail "[5c] the CSS did NOT survive the round trip: the record published
+  by the second hibernate differs from the first. Every difference is a field
+  the resume dropped, re-derived or overwrote — which is the owner's original
+  report, restated in bytes."; }
+echo "   CSS resumed with the SAME machine plane, byte for byte"
+
 # --- [6] teeth ---------------------------------------------------------------
 echo "=== [6] teeth"
 
@@ -503,7 +693,17 @@ node -e '
   const rIdx = b.findIndex((l) => l.startsWith("resume "));
   if (sumIdx < 0 || rIdx < 0) throw new Error("no SUM/resume row to remove");
   b[0] = "MLFKPERSIST6";           // the version that had no resume row
-  b.splice(rIdx, 1);
+  // ...nor any of ticket #25s CSS rows, which are v7 rows too. A v6 file
+  // carrying one is corrupt rather than migratable, so leaving them here
+  // would make this tooth refuse for the wrong reason and stop testing the
+  // migration it names.
+  const v7 = ["resume ", "ptype ", "cpudiff ", "vsmode ", "hand ",
+              "slider ", "carry ", "cpucarry ", "handtype "];
+  for (const k of v7) {
+    const i = b.findIndex((l) => l.startsWith(k));
+    if (i < 0) throw new Error("no " + k + "row to remove");
+    b.splice(i, 1);
+  }
   const s2 = b.findIndex((l) => l.startsWith("SUM "));
   const body = b.slice(0, s2).join("\n") + "\n";
   b[s2] = "SUM " + crypto.createHash("sha256").update(body).digest("hex");
@@ -608,8 +808,8 @@ for anchor in 'hex_lt() ( LC_ALL=C; [[ "$1" < "$2" ]]; ) # fixed 16-hex: byte or
   the anchor '$anchor' (want 1) — the extracted whitelist moved"
 done
 {
-  grep -xF 'PERSIST_BYTES=1624' "$DEVP" \
-    || grammar_die "[7] check-device-persist.sh does not pin PERSIST_BYTES=1624"
+  grep -xF 'PERSIST_BYTES=1807' "$DEVP" \
+    || grammar_die "[7] check-device-persist.sh does not pin PERSIST_BYTES=1807"
   awk '
     /^hex_lt\(\) \( LC_ALL=C; \[\[ "\$1" < "\$2" \]\]; \)/ { inr = 1 }
     inr { print }
@@ -620,6 +820,10 @@ made "$WL"
 grep -qF 'sed -n 69p' "$WL" \
   || grammar_die "[7] the extracted whitelist does not read line 69 — it was
   not bumped for the v7 resume row"
+grep -qF 'sed -n 77p' "$WL" \
+  || grammar_die "[7] the extracted whitelist does not read line 77 — it was
+  not bumped for ticket #25's CSS machine plane, so a persistence change is
+  about to reach hardware with the device check judging the wrong lines"
 # shellcheck disable=SC1090 — derived above, not tracked
 . "$WL"
 verify_persist_file "$PDIR/mlfk-persist.dat" "[7] the v7 file leg [4] published"

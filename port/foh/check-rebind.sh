@@ -362,12 +362,18 @@ echo "   T4: a reset that resets nothing fails (rc 1)"
 # BUILD such a tree, which perturb_build reads as a broken tooth rather than
 # a caught defect; check-persist-table.sh leg [9] is where that is proven.
 echo "=== [8] T5: bindings dropped from the persisted record must fail"
+# RE-POINTED AGAIN (ticket #25), by the same rule and for the same reason: the
+# flag writer gained a wire-bias column and an out-of-column guard, so it is no
+# longer one line. The perturbation is unchanged in EFFECT — the one row whose
+# domain is a permutation emits its index instead of its cell, i.e. the
+# identity for `bind` and nothing else — and it deliberately goes THROUGH the
+# bias and the guard rather than around them, so the perturbed build still
+# writes a file the loader accepts. A tooth that made the writer die instead
+# would prove nothing about whether a binding survives a round trip.
 perturb_build t5-nopersist "$FOH/foh_persist.c" \
-  '          case FP_FLAG: n = fp_addf(buf, cap, n, " %d", *(const int *)cell); break;' \
-  '          case FP_FLAG: // T5
-            n = fp_addf(buf, cap, n, " %d",
-                        f->dom == FP_DOM_PERM ? i : *(const int *)cell);
-            break;'
+  '            const int d = *(const int *)cell + f->wireBias;' \
+  '            const int d = // T5
+                (f->dom == FP_DOM_PERM ? i : *(const int *)cell) + f->wireBias;'
 must_fail t5-nopersist 'REBIND FAIL: the binding SURVIVED the save/load round trip' \
   "the round-trip assertion did not fail — a rebind that vanishes on the next
   boot would ship"

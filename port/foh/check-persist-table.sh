@@ -101,13 +101,15 @@ nser="$(grep -c 'fp_addf(buf, cap' "$SRC")" || true
    the writer is no longer walking the table"
 # every FP_FIELDS row, counted, so a dropped row is loud
 nrows="$(grep -cE '^  X\([A-Za-z]' "$SRC")" || true
-[ "$nrows" = 16 ] \
-  || grammar_die "[0] FP_FIELDS has $nrows rows (want 16: turbo, lcancel,
+[ "$nrows" = 24 ] \
+  || grammar_die "[0] FP_FIELDS has $nrows rows (want 24: turbo, lcancel,
    tapjump, ctlstyle, modonr, rec, flash, walljump, blastzone, dustless,
-   phantom, soundslevel, musiclevel, bind, sel, resume). A row was added or
-   removed — if that was deliberate, this number moves WITH the format and
-   the fixture builder in leg [1] moves with it too"
-echo "    [0] OK: table, static assertion, layout guard and 16 rows all present"
+   phantom, soundslevel, musiclevel, bind, sel, resume, then ticket #25's
+   CSS machine plane — ptype, cpudiff, vsmode, hand, slider, carry, cpucarry,
+   handtype). A row was added or removed — if that was deliberate, this
+   number moves WITH the format and the fixture builder in leg [1] moves
+   with it too"
+echo "    [0] OK: table, static assertion, layout guard and 24 rows all present"
 
 # --- [1] the fixture builder (INDEPENDENT of the C under test) ---------------
 # Builds a canonical MLFKPERSIST7 file from the FORMAT — the grammar written
@@ -156,8 +158,36 @@ function record(mode) {
     ],
     sel: seeded ? [1, 2, 3, 4] : [0, 0, 0, 0],
     resume: seeded ? 14 : 0, // FOH_TSS / FOH_STARTUP
+    // ticket #25's CSS machine plane. The DEFAULTS side is restated from
+    // foh.h's CSS COLD-START PLANE — the formulas, not the numbers they
+    // happen to produce today — because that is what makes this an
+    // INDEPENDENT expectation: if foh_persist_defaults() ever stops asking
+    // foh.h and starts carrying its own copy, the two drift and leg [3]
+    // says so. RAST_W/RAST_H are 240 (port/gfx/raster.h), the CSS panel is
+    // at 1 + 60k with its rail at +11 and 36 long (foh.h).
+    ptype: seeded ? [0, 1, -1, 1] : [0, -1, -1, -1],
+    cpudiff: seeded ? [3, 1, 4, 2] : [3, 3, 3, 3],
+    vsmode: seeded ? 1 : 0,
+    hand: seeded ? [33.25, 240.0]
+                 : [(140.0 * 240) / 1200.0, (700.0 * 240) / 750.0],
+    slider: seeded
+      ? [10.5, 17.75, 25.0, 32.25]
+      : [0, 1, 2, 3].map((k) => 1 + 60 * k + 11 + (116 / 166) * 36),
+    // both grabs set in the seed — a state the screen cannot produce (a held
+    // knob pins the hand to the rail), which is the point: the file's domain
+    // is per row, so two adjacent one-digit rows must be distinguishable by
+    // value or a swap between them would round-trip unnoticed.
+    carry: seeded ? 2 : -1,
+    cpucarry: seeded ? 3 : -1,
+    handtype: seeded ? 2 : 0,
   };
 }
+// The WIRE BIAS, restated from the format (foh_persist.h) rather than read
+// out of the table: the file column is an unsigned digit and three of these
+// fields are not, so the column is `value + bias`. A bias applied on only
+// one side of foh_persist.c would round-trip its own file perfectly and
+// still be wrong; this is the side that notices.
+const BIAS = { ptype: 1, cpudiff: -1, carry: 1, cpucarry: 1 };
 function lines(r) {
   const L = ["MLFKPERSIST7"];
   L.push("turbo " + r.turbo);
@@ -180,6 +210,14 @@ function lines(r) {
   for (let k = 0; k < 4; k++) L.push("bind " + k + " " + r.bind[k].join(" "));
   L.push("sel " + r.sel.join(" "));
   L.push("resume " + String(r.resume).padStart(2, "0"));
+  L.push("ptype " + r.ptype.map((t) => t + BIAS.ptype).join(" "));
+  L.push("cpudiff " + r.cpudiff.map((d) => d + BIAS.cpudiff).join(" "));
+  L.push("vsmode " + r.vsmode);
+  L.push("hand " + r.hand.map(bits).join(" "));
+  L.push("slider " + r.slider.map(bits).join(" "));
+  L.push("carry " + (r.carry + BIAS.carry));
+  L.push("cpucarry " + (r.cpucarry + BIAS.cpucarry));
+  L.push("handtype " + r.handtype);
   return L;
 }
 // The record dump foh_persist_witness.c prints, derived from the SAME
@@ -209,6 +247,17 @@ function dump(r) {
   }
   for (let k = 0; k < 4; k++) D.push("sel " + k + " " + r.sel[k]);
   D.push("resume " + r.resume);
+  // UNBIASED here, biased in lines() above: the dump is the FIELD's value
+  // and the file is the COLUMN. Printing the same number in both would let
+  // a bias that is applied on neither side, or on both, pass unnoticed.
+  for (let k = 0; k < 4; k++) D.push("ptype " + k + " " + r.ptype[k]);
+  for (let k = 0; k < 4; k++) D.push("cpudiff " + k + " " + r.cpudiff[k]);
+  D.push("vsmode " + r.vsmode);
+  D.push("hand " + r.hand.map(bits).join(" "));
+  for (let k = 0; k < 4; k++) D.push("slider " + k + " " + bits(r.slider[k]));
+  D.push("carry " + r.carry);
+  D.push("cpucarry " + r.cpucarry);
+  D.push("handtype " + r.handtype);
   return D.join("\n") + "\n";
 }
 function seal(L) {
@@ -228,8 +277,8 @@ node "$BUILD/fixture.js" dump seed "$BUILD/seed.dump"
 node "$BUILD/fixture.js" file defaults "$BUILD/defaults.dat"
 node "$BUILD/fixture.js" dump defaults "$BUILD/defaults.dump"
 made "$BUILD/seed.dat" "$BUILD/seed.dump" "$BUILD/defaults.dat" "$BUILD/defaults.dump"
-[ "$(grep -c "" "$BUILD/seed.dat")" = 70 ] \
-  || grammar_die "[1] the independently built fixture is not 70 LF lines —
+[ "$(grep -c "" "$BUILD/seed.dat")" = 78 ] \
+  || grammar_die "[1] the independently built fixture is not 78 LF lines —
    fixture construction is broken, so every leg below would be vacuous"
 cmp -s "$BUILD/seed.dat" "$BUILD/defaults.dat" \
   && fail "[1] the seeded and default fixtures are identical (dead tooth: a
@@ -308,13 +357,22 @@ variant() { # <name> <ops...>
 mkdir -p "$BUILD/v"
 V4_ROWS=(drop=flash drop=walljump drop=blastzone drop=dustless drop=phantom
          drop=soundslevel drop=musiclevel)
-variant v6 hdr=6 drop=resume
-variant v5 hdr=5 drop=resume drop=sel
-variant v4 hdr=4 drop=resume drop=sel dropall=bind
-variant v3 hdr=3 drop=resume drop=sel dropall=bind "${V4_ROWS[@]}"
-variant v2 hdr=2 drop=resume drop=sel dropall=bind "${V4_ROWS[@]}" drop=modonr
-variant v1 hdr=1 drop=resume drop=sel dropall=bind "${V4_ROWS[@]}" drop=modonr \
-  drop=ctlstyle
+# EVERY row whose `since` is 7 — the hibernate row plus ticket #25's eight CSS
+# rows. Named once, because "the rows a v6 file cannot have" is one fact and
+# six call sites: the previous shape spelt `drop=resume` inline six times, and
+# adding a v7 row would then have needed six edits with nothing failing if one
+# were missed (the v6 fixture would simply have carried a row no v6 writer
+# could produce, and the migration leg would have passed on it).
+V7_ROWS=(drop=resume drop=ptype drop=cpudiff drop=vsmode drop=hand
+         drop=slider drop=carry drop=cpucarry drop=handtype)
+variant v6 hdr=6 "${V7_ROWS[@]}"
+variant v5 hdr=5 "${V7_ROWS[@]}" drop=sel
+variant v4 hdr=4 "${V7_ROWS[@]}" drop=sel dropall=bind
+variant v3 hdr=3 "${V7_ROWS[@]}" drop=sel dropall=bind "${V4_ROWS[@]}"
+variant v2 hdr=2 "${V7_ROWS[@]}" drop=sel dropall=bind "${V4_ROWS[@]}" \
+  drop=modonr
+variant v1 hdr=1 "${V7_ROWS[@]}" drop=sel dropall=bind "${V4_ROWS[@]}" \
+  drop=modonr drop=ctlstyle
 
 # --- [2] the witness, built against the REAL tree ----------------------------
 echo "=== [2] the persist witness against the real tree"
@@ -383,7 +441,7 @@ tail -n +2 "$D/out.txt" > "$D/fields.txt"
 cmp "$D/fields.txt" "$BUILD/seed.dump" \
   || fail "[4] a loaded field value differs from the format-derived record —
    a table row is pointed at the wrong member, or silently dropped one"
-echo "    [4] OK: re-saved byte-identical, and all 84 field values match"
+echo "    [4] OK: re-saved byte-identical, and every field value matches"
 
 # --- [5] forward compatible: an UNKNOWN row is skipped (acceptance 4) --------
 echo "=== [5] an unknown row loads and is ignored"
@@ -447,6 +505,13 @@ miss miss-turbo turbo '^turbo 0$' "turbo is not the authored default"
 miss miss-ctlstyle ctlstyle '^ctlstyle 1$' \
   "ctlStyle is not BOX — the absent-value ruling for a file with no style" \
   'set=ctlstyle:ctlstyle 0'
+# ticket #25: a v7 file written before the CSS rows existed is the case the
+# owner's own device will present on the first boot after this ships, so it is
+# checked as itself and not left to leg [11]'s synthetic row. `vsmode` and
+# `ptype` are picked because they are the two the player would SEE come back
+# wrong: the mode ribbon and whether a port is switched on.
+miss miss-vsmode vsmode '^vsmode 0$' "versusMode is not stock"
+miss miss-carry carry '^carry -1$' "cssCarry is not 'holding nothing'"
 # a whole multi-line block may go missing too
 variant miss-rec dropall=rec
 run dump "$BUILD/v/miss-rec.dat" miss-rec
@@ -481,8 +546,20 @@ hist_ok() { # <name> <from-version>
 # The expectations: the seeded record with exactly the fields that version
 # could not carry replaced by their documented absent values. Built by
 # editing the FIXTURE, so they are independent of the loader.
+#
+# Ticket #25's eight rows take their FRESH-INSTALL values on a migration, and
+# those are lifted from the DEFAULTS fixture rather than typed here — the
+# defaults fixture builds them from foh.h's formulas (leg [1]), so there is
+# still exactly one independent statement of what a fresh CSS looks like and
+# this leg cannot quietly disagree with leg [3] about it.
+V7_DEFAULT_OPS=()
+for k in ptype cpudiff vsmode hand slider carry cpucarry handtype; do
+  dline="$(grep -m1 "^$k " "$BUILD/defaults.dat")" \
+    || fail "[7] the defaults fixture carries no '$k' row"
+  V7_DEFAULT_OPS+=("set=$k:$dline")
+done
 node "$BUILD/variant.js" "$BUILD/seed.dat" "$BUILD/expect-v6.dat" \
-  'set=resume:resume 00'
+  'set=resume:resume 00' "${V7_DEFAULT_OPS[@]}"
 node "$BUILD/variant.js" "$BUILD/expect-v6.dat" "$BUILD/expect-v5.dat" \
   'set=sel:sel 0 0 0 0'
 node "$BUILD/variant.js" "$BUILD/expect-v5.dat" "$BUILD/expect-v4.dat" \
@@ -514,24 +591,35 @@ hist_grammar() { # <name> <ops...>
   want_event "[7] $n" "foh_persist: reset cause=corrupt detail=grammar"
   teeth=$((teeth + 1))
 }
+# EVERY case below drops "${V7_ROWS[@]}", not just `drop=resume`. Each tooth
+# names ONE deviation and requires the refusal to come from it; leaving a v7
+# row in a v3 fixture would make the file corrupt for a second reason, the
+# refusal would arrive anyway, and the tooth would have stopped biting while
+# still going green. That is exactly the disarmed-tooth failure CONTEXT.md
+# records twice.
 # T-H10: a v1 header WITH the newer lines is not a v1 file
-hist_grammar v1-plus-ctlstyle hdr=1 drop=resume drop=sel dropall=bind \
+hist_grammar v1-plus-ctlstyle hdr=1 "${V7_ROWS[@]}" drop=sel dropall=bind \
   "${V4_ROWS[@]}" drop=modonr
 # T-H15: a v2 header WITH a modonr line
-hist_grammar v2-plus-modonr hdr=2 drop=resume drop=sel dropall=bind \
+hist_grammar v2-plus-modonr hdr=2 "${V7_ROWS[@]}" drop=sel dropall=bind \
   "${V4_ROWS[@]}"
 # T-H17: a v3 header WITH the v4 options block
-hist_grammar v3-plus-v4 hdr=3 drop=resume drop=sel dropall=bind
+hist_grammar v3-plus-v4 hdr=3 "${V7_ROWS[@]}" drop=sel dropall=bind
 # T-H11: a v3 header WITHOUT its ctlstyle line
-hist_grammar v3-no-ctlstyle hdr=3 drop=resume drop=sel dropall=bind \
+hist_grammar v3-no-ctlstyle hdr=3 "${V7_ROWS[@]}" drop=sel dropall=bind \
   "${V4_ROWS[@]}" drop=ctlstyle
 # T-H12: a v3 header WITHOUT its modonr line
-hist_grammar v3-no-modonr hdr=3 drop=resume drop=sel dropall=bind \
+hist_grammar v3-no-modonr hdr=3 "${V7_ROWS[@]}" drop=sel dropall=bind \
   "${V4_ROWS[@]}" drop=modonr
 # T-H14 (review-ctl n1): a v2 file may not claim the v3-era ctlstyle 2
-hist_grammar v2-style2 hdr=2 drop=resume drop=sel dropall=bind \
+hist_grammar v2-style2 hdr=2 "${V7_ROWS[@]}" drop=sel dropall=bind \
   "${V4_ROWS[@]}" drop=modonr 'set=ctlstyle:ctlstyle 2'
-echo "    [7b] OK: six frozen-grammar refusals (a historical version neither
+# ticket #25: a v6 header carrying one of the NEW v7 rows is corrupt for the
+# same reason a v3 header carrying a v4 row is. Without this, "the CSS rows
+# are v7-only" would be true only of the writer.
+hist_grammar v6-plus-ptype hdr=6 drop=resume drop=cpudiff drop=vsmode \
+  drop=hand drop=slider drop=carry drop=cpucarry drop=handtype
+echo "    [7b] OK: seven frozen-grammar refusals (a historical version neither
     skips a newer row nor defaults one of its own)"
 
 # --- [8] the guards that are still guards -----------------------------------
@@ -566,6 +654,22 @@ refuse v8           "reset cause=version" hdr=8
 refuse v0           "reset cause=version" hdr=0
 refuse v01          "reset cause=version" hdr=01
 refuse bad-header   "reset cause=corrupt detail=header" hdr=7x
+# ticket #25's rows, each judged in its OWN column. `ptype`'s digit is
+# playerType + 1 with three legal values, so a 3 is out of column; `cpudiff`'s
+# is the level - 1 with four, so a 4 is; `carry` has five (nothing, or one of
+# four ports). The two `hand` cases matter most: a NaN or an off-canvas cursor
+# hit-tests nothing at all, which is a CSS the player cannot use, so they are
+# corruption rather than something to clamp back onto the screen.
+refuse ptype-bad    "reset cause=corrupt detail=grammar" 'set=ptype:ptype 1 3 0 2'
+refuse cpudiff-bad  "reset cause=corrupt detail=grammar" 'set=cpudiff:cpudiff 2 4 3 1'
+refuse carry-bad    "reset cause=corrupt detail=grammar" 'set=carry:carry 5'
+refuse handtype-bad "reset cause=corrupt detail=grammar" 'set=handtype:handtype 3'
+refuse hand-nan     "reset cause=corrupt detail=domain" \
+  'set=hand:hand 7ff8000000000000 406e000000000000'
+refuse hand-offscreen "reset cause=corrupt detail=domain" \
+  'set=hand:hand 406e200000000000 406e000000000000'
+refuse slider-neg   "reset cause=corrupt detail=domain" \
+  'set=slider:slider bff0000000000000 4031c00000000000 4039000000000000 4040200000000000'
 run roundtrip - missing
 want_event "[8] missing" "foh_persist: reset cause=missing"
 teeth=$((teeth + 1))
@@ -580,6 +684,11 @@ refuse_not() { # <name> <ops...>
 }
 refuse_not phantom-cap 'set=phantom:phantom 408f400000000000'
 refuse_not level-one   'set=soundslevel:soundslevel 3ff0000000000000'
+# the hand's own inclusive ends — foh_hand_step clamps TO 0 and TO the canvas
+# width, so both are positions the player can actually park the cursor at and
+# a gate that rejected either would reset a legitimate save.
+refuse_not hand-zero   'set=hand:hand 0000000000000000 0000000000000000'
+refuse_not hand-cap    'set=hand:hand 406e000000000000 406e000000000000'
 echo "    [8] OK: order, domain, permutation, seal, version and header
     refusals all still bite; the inclusive caps still load"
 

@@ -104,11 +104,13 @@ WORSE_BITS=4030000000000000
 # phantom 25 + soundslevel 29 + musiclevel 28; MENU-SPEC §3/§4) + the v5
 # bind block 92 (4 rows x23; fix_plan A31) + the v6 sel row 12
 # (`sel c c c c` + LF; fix_plan A49, DEVIATION D45) + the v7 resume row 10
-# (`resume NN` + LF; fix_plan A26, DEVIATION D53) + SUM 69
-# = 1624). A dropped/added byte — including an embedded NUL that command
+# (`resume NN` + LF; fix_plan A26, DEVIATION D53) + ticket #25's CSS machine
+# plane 183 (ptype 14 + cpudiff 16 + vsmode 9 + hand 39 + slider 75 +
+# carry 8 + cpucarry 11 + handtype 11) + SUM 69
+# = 1807). A dropped/added byte — including an embedded NUL that command
 # substitution silently swallows through the per-line sed reads — breaks
 # this reconciliation.
-PERSIST_BYTES=1624
+PERSIST_BYTES=1807
 
 DEADMAN_S="${MLFK_DEADMAN_S:-900}"
 READY_TRIES=60
@@ -611,16 +613,27 @@ run_host() {
 # EXACT POSITIONAL MLFKPERSIST7 whitelist verification, INDEPENDENT of
 # the C loader (review-100 M2 + the whitelist-grammar rule, PROCESS §3).
 # The format is a FIXED shape — so this asserts it BY POSITION:
-# final byte LF, exactly 68 lines, each line matched at its exact index
+# final byte LF, exactly 78 lines, each line matched at its exact index
 # by an anchored full-line pattern, the 50 rec rows carrying the
 # canonical c-major (c 0..4, s 0..9) progression at their exact
 # position (uniqueness by position, not a global count), each rec bit
 # pattern in the C loader's domain (== the -1.0 sentinel or finite in
 # [0,6000)), the four v5 bind rows carrying the port-major progression and
 # each being a PERMUTATION of 0..7, and a shasum recompute of the SUM seal
-# over lines 1..69 (the whole body; the SUM line itself is line 70).
+# over lines 1..77 (the whole body; the SUM line itself is line 78).
 # Binary outcome: exact match -> pass; resembles-but-doesn't -> fail
 # closed (grammar_die). NO global counts, NO permissive scan.
+#
+# A POSITIONAL WHITELIST AND AN EXTENSIBLE FORMAT (ticket #22/#25). The
+# loader SKIPS rows it does not know, because that is what retired the
+# version bump — but this whitelist deliberately does not, and the two are
+# not in conflict. The loader's job is to survive a file from a build it has
+# never met; this function's job is to say exactly what THIS build writes, on
+# hardware, independently of the C that wrote it. So appending a row is still
+# one row in the table AND an edit here, and that is on purpose: the edit that
+# gets skipped is the one that ships a format change to a device blind. That
+# is not hypothetical — A49 moved the SUM line and left the body recompute two
+# lines short, and this file rejected every genuine save until it was found.
 hex_lt() ( LC_ALL=C; [[ "$1" < "$2" ]]; ) # fixed 16-hex: byte order == numeric order
 verify_persist_file() { # <file> <ctx>
   local f="$1" ctx="$2" nl L sum want ln c s bits
@@ -637,7 +650,7 @@ verify_persist_file() { # <file> <ctx>
   nbytes="$(wc -c < "$f" | tr -d ' ')"
   [ "$nbytes" = "$PERSIST_BYTES" ] || grammar_die "$ctx: file is $nbytes bytes != $PERSIST_BYTES (MLFKPERSIST7 fixed size; byte-count reconciliation failed — dropped/added/NUL byte)"
   nl="$(grep -c "" "$f")" || grammar_die "$ctx: cannot count lines"
-  [ "$nl" = 70 ] || grammar_die "$ctx: $nl lines != 70 (MLFKPERSIST7 is exactly 70 LF lines)"
+  [ "$nl" = 78 ] || grammar_die "$ctx: $nl lines != 78 (MLFKPERSIST7 is exactly 78 LF lines)"
   L="$(sed -n 1p "$f")"; [ "$L" = "MLFKPERSIST7" ] || grammar_die "$ctx: line 1 is not the exact header ('$L')"
   L="$(sed -n 2p "$f")"; [[ "$L" =~ ^turbo\ [01]$ ]] || grammar_die "$ctx: line 2 turbo grammar ('$L')"
   L="$(sed -n 3p "$f")"; [[ "$L" =~ ^lcancel\ [0-2]$ ]] || grammar_die "$ctx: line 3 lcancel grammar ('$L')"
@@ -743,9 +756,59 @@ verify_persist_file() { # <file> <ctx>
     || grammar_die "$ctx: line 69 is not a v7 resume row in the resumable
   domain ('$L') — a screen the driver would refuse to restore must never
   reach the file either"
-  ln=70
+  # ticket #25 (owner ruling 2026-08-27): the CSS machine plane, lines 70-77.
+  # Positional and domain-checked like everything above, and restated from the
+  # FORMAT (foh_persist.h) rather than from the table: three of these columns
+  # are WIRE-BIASED — `ptype` is playerType + 1 and `cpudiff` is the level - 1
+  # — and a bias applied on only one side of foh_persist.c would round-trip
+  # its own file perfectly. The column bounds below are what catch it here.
   L="$(sed -n 70p "$f")"
-  [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 70 is not the SUM line ('$L')"
+  [[ "$L" =~ ^ptype\ [0-2]\ [0-2]\ [0-2]\ [0-2]$ ]] \
+    || grammar_die "$ctx: line 70 is not the ptype row, [0-2] x4 ('$L') — the
+  column is playerType + 1, so a 3 here means an unbiased write"
+  L="$(sed -n 71p "$f")"
+  [[ "$L" =~ ^cpudiff\ [0-3]\ [0-3]\ [0-3]\ [0-3]$ ]] \
+    || grammar_die "$ctx: line 71 is not the cpudiff row, [0-3] x4 ('$L') — the
+  column is the level - 1, so a 4 here means an unbiased write"
+  L="$(sed -n 72p "$f")"
+  [[ "$L" =~ ^vsmode\ [01]$ ]] || grammar_die "$ctx: line 72 vsmode grammar ('$L')"
+  # the hand and the knobs are CLAMPED to the canvas every frame, so both
+  # coordinates are finite, non-negative and <= 240.0 (406e000000000000).
+  # INCLUSIVE at the cap for the same reason phantom is: foh_hand_step clamps
+  # TO the width, so exactly 240.0 is a position the player can park at and
+  # rejecting it would reject a legitimate save.
+  local hb
+  L="$(sed -n 73p "$f")"
+  [[ "$L" =~ ^hand\ ([0-9a-f]{16})\ ([0-9a-f]{16})$ ]] \
+    || grammar_die "$ctx: line 73 is not 'hand <hex16> <hex16>' ('$L')"
+  for hb in "${BASH_REMATCH[@]:1:2}"; do
+    [ "$hb" = 406e000000000000 ] || hex_lt "$hb" 406e000000000000 \
+      || grammar_die "$ctx: line 73 hand bits $hb are off the canvas (want
+  finite non-negative <= 240.0) — a cursor there hit-tests nothing at all"
+  done
+  L="$(sed -n 74p "$f")"
+  [[ "$L" =~ ^slider\ ([0-9a-f]{16})\ ([0-9a-f]{16})\ ([0-9a-f]{16})\ ([0-9a-f]{16})$ ]] \
+    || grammar_die "$ctx: line 74 is not 'slider <hex16> x4' ('$L')"
+  for hb in "${BASH_REMATCH[@]:1:4}"; do
+    [ "$hb" = 406e000000000000 ] || hex_lt "$hb" 406e000000000000 \
+      || grammar_die "$ctx: line 74 slider bits $hb are off the canvas (want
+  finite non-negative <= 240.0)"
+  done
+  # carry / cpucarry: the column is the grabbed PORT + 1, so 0 is "holding
+  # nothing" and 1..4 name ports 0..3. Five values, never more — CONTEXT.md's
+  # "a port is a player slot, never an index into the roster", which is five
+  # wide for a different reason and is the confusion this bound refuses.
+  L="$(sed -n 75p "$f")"
+  [[ "$L" =~ ^carry\ [0-4]$ ]] || grammar_die "$ctx: line 75 carry grammar ('$L')"
+  L="$(sed -n 76p "$f")"
+  [[ "$L" =~ ^cpucarry\ [0-4]$ ]] || grammar_die "$ctx: line 76 cpucarry grammar ('$L')"
+  L="$(sed -n 77p "$f")"
+  [[ "$L" =~ ^handtype\ [0-2]$ ]] \
+    || grammar_die "$ctx: line 77 handtype grammar ('$L') — handPoint, handOpen
+  or handGrab, and nothing else"
+  ln=78
+  L="$(sed -n 78p "$f")"
+  [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 78 is not the SUM line ('$L')"
   sum="${BASH_REMATCH[1]}"
   # review-102 M-b: validate the COMPLETE recomputed shasum line grammar
   # (`<64hex>  -` on stdin), never a `cut -d' ' -f1` first-field scrape —
