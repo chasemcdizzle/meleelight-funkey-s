@@ -9,6 +9,7 @@
 #include "foh_tbuild.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "../gfx/raster.h"    // gfx_fatal
@@ -357,7 +358,16 @@ static const char *doc_unplayable(const MlkStage *st) {
 // not a hypothetical one. The read is BOUNDED (a file over the cap is
 // refused unread rather than truncated into a parse), the grammar is exact,
 // and SUM is verified BEFORE mlk_parse ever sees a byte.
-static bool slot_read(int slot, MlkStage *out, const char **why) {
+// A26/D53 (2026-08-26): the same reader and the same writer, addressed by
+// NAME, so the resume document is the same artifact as a slot rather than a
+// second file format. `tbdoc.mlstage` is the ONLY other name in use.
+static bool named_path(const char *name, char *buf, size_t cap) {
+  const char *dir = foh_persist_dir();
+  const int n = snprintf(buf, cap, "%s/%s", dir, name);
+  return n > 0 && (size_t)n < cap;
+}
+
+static bool named_read(const char *name, MlkStage *out, const char **why) {
 #define RD_FAIL(m)                                                             \
   do {                                                                         \
     if (why) *why = (m);                                                       \
@@ -366,7 +376,7 @@ static bool slot_read(int slot, MlkStage *out, const char **why) {
   } while (0)
   FILE *f = 0;
   char path[512];
-  if (!slot_path(slot, path, sizeof path)) RD_FAIL("path too long");
+  if (!named_path(name, path, sizeof path)) RD_FAIL("path too long");
   f = fopen(path, "rb");
   if (!f) RD_FAIL("empty");
   // BOUNDED READ. One byte more than the cap is asked for on purpose: a
@@ -422,10 +432,17 @@ static bool slot_read(int slot, MlkStage *out, const char **why) {
 #undef RD_FAIL
 }
 
+static bool slot_read(int slot, MlkStage *out, const char **why) {
+  char name[TB_NAME_MAX];
+  slot_name(slot, name);
+  return named_read(name, out, why);
+}
+
 // Serialise + publish. The ONLY writer. Goes through foh_persist_publish,
 // which is foh_persist_save's own atomic publish generalised for exactly
 // this caller (A45 T2's instruction, quoted in foh_tbuild.h).
-static bool slot_write(int slot, const MlkStage *st, const char **why) {
+static bool named_write(const char *name, const MlkStage *st,
+                        const char **why) {
   static char code[MLK_CODE_MAX];
   const int cn = mlk_encode(st, code, sizeof code);
   if (cn < 0) {
@@ -449,8 +466,6 @@ static bool slot_write(int slot, const MlkStage *st, const char **why) {
   memcpy(file + body, "SUM ", 4);
   memcpy(file + body + 4, hex, 64);
   file[body + 68] = '\n';
-  char name[TB_NAME_MAX];
-  slot_name(slot, name);
   const char *pubWhy = 0;
   if (!foh_persist_publish(name, file, body + 69, &pubWhy)) {
     if (why) *why = pubWhy ? pubWhy : "save failed";
@@ -461,6 +476,12 @@ static bool slot_write(int slot, const MlkStage *st, const char **why) {
   // surfaced to the player: the bytes are on the card.
   if (why) *why = 0;
   return true;
+}
+
+static bool slot_write(int slot, const MlkStage *st, const char **why) {
+  char name[TB_NAME_MAX];
+  slot_name(slot, name);
+  return named_write(name, st, why);
 }
 
 static void slots_scan(bool present[FOH_TB_SLOTS],
@@ -1823,7 +1844,52 @@ static void tb_view(const FohState *s, FohTbView *out) {
 
 // --- the seam ---------------------------------------------------------------
 
-static const FohTbuildOps kOps = {tb_enter, tb_step, tb_view, slots_scan};
+// --- A26/D53: the unsaved document survives a lid close ---------------------
+//
+// See foh_tbuild.h for why this exists. The short version: the resume used
+// to redirect the builder to menu-top because resuming into an empty editor
+// would have lied about the player's work. This makes the statement true
+// instead of removing it.
+#define TB_DOC_NAME "tbdoc.mlstage"
+
+static bool tb_suspend(const char **why) {
+  if (why) *why = 0;
+  if (!g_docReady) {
+    // Nothing has ever been edited this process. There is no work to keep,
+    // and arming a resume for it would restore the D51 template as though
+    // it were something the player made.
+    if (why) *why = "no document";
+    return false;
+  }
+  return named_write(TB_DOC_NAME, &g_doc, why);
+}
+
+static bool tb_resume(void) {
+  MlkStage *tmp = (MlkStage *)malloc(sizeof *tmp);
+  if (tmp == 0) return false;
+  const char *why = 0;
+  const bool ok = named_read(TB_DOC_NAME, tmp, &why);
+  if (ok) {
+    g_doc = *tmp;
+    g_docReady = true;
+    // The map cannot survive the code (upstream BUG 2 — encode.js:244), and
+    // saying so is the point: a polygon restored from a resume behaves
+    // exactly like one loaded from a slot, which is what upstream does too.
+    map_all_null();
+  }
+  free(tmp);
+  // CONSUMED either way. The file means "the work you had when the lid
+  // closed"; leaving it would resurrect it into a later ordinary visit, and
+  // leaving an UNREADABLE one would retry the same failure every boot.
+  {
+    char path[512];
+    if (named_path(TB_DOC_NAME, path, sizeof path)) remove(path);
+  }
+  return ok;
+}
+
+static const FohTbuildOps kOps = {tb_enter,   tb_step,    tb_view,
+                                  slots_scan, tb_suspend, tb_resume};
 
 // Constructor-installed, the tp_custom_setup / ml_sim_runai_live shape
 // (foh_tbuild.h). A build that does not link this TU leaves the pointer

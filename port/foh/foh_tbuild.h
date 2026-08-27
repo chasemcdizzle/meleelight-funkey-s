@@ -227,6 +227,33 @@ typedef struct {
   // Slot presence for the TARGET-SELECT custom page (T3). Same data as
   // FohTbView.present, without materialising a whole view.
   void (*slots)(bool present[FOH_TB_SLOTS], const char *reason[FOH_TB_SLOTS]);
+
+  // --- A26/D53 resume: the UNSAVED document survives a lid close --------
+  //
+  // WHY THIS EXISTS. `foh_persist_resume_target` used to map FOH_TBUILD to
+  // FOH_MENU_TOP with a good reason: the builder holds a document that was
+  // not persisted, so resuming INTO it would present an empty editor and
+  // read as "my work is still here" when it was gone — worse than not
+  // resuming at all. That was a refusal to lie, not a limitation, and the
+  // honest way to remove it is to make the statement TRUE.
+  //
+  // The document is an MlkStage and A45 T1's `mlk_encode` already turns one
+  // into a share code, so persisting it is the SAME artifact the SD slots
+  // hold: A45 T2's three-line contract, published through
+  // `foh_persist_publish`, validated on read with its SUM. No new format,
+  // no persist-record version bump, and nothing added to the owner's
+  // settings file.
+  //
+  // suspend(): publish the live document as `tbdoc.mlstage`. False + a
+  // reason if it cannot be written — and the CALLER must then NOT arm a
+  // TBUILD resume, because an armed resume with no document is exactly the
+  // lie the old redirect existed to prevent.
+  bool (*suspend)(const char **why);
+  // resume(): load `tbdoc.mlstage` back into the live document and CONSUME
+  // it (the file is removed). True iff a document was restored. Consuming
+  // is deliberate: the file means "the work you had when the lid closed",
+  // so a later ordinary visit must not resurrect it.
+  bool (*resume)(void);
 } FohTbuildOps;
 
 // NULL unless foh_tbuild.c is linked. Read it, never assume it.

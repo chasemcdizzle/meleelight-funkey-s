@@ -369,11 +369,18 @@ nfails() { grep -c '^TBUILD FAIL: ' "$BUILD/$1/wit.out" || true; }
 # this tooth makes every save land on ONE fixed slot the way upstream's does.
 # Witness leg [9] must notice that slot 0 changed when slot 3 was saved.
 echo "=== [T1] tooth: upstream's clobbering save (D43 reverted)"
+# Re-anchored 2026-08-26: D57 generalised the writer by NAME (so the resume
+# document is the same artifact as a slot), which moved slot_name's call into
+# the thin slot_write wrapper. The tooth is unchanged in what it does — every
+# save lands in slot 0 — and the anchor now names the wrapper's three lines,
+# which is unique where a bare `slot_name(slot, name);` no longer is.
 perturb t1-clobber foh_tbuild.c \
-  '  slot_name(slot, name);
-  const char *pubWhy = 0;' \
-  '  (void)slot; slot_name(0, name); // T1: upstream'"'"'s clobber — one slot
-  const char *pubWhy = 0;'
+  '  char name[TB_NAME_MAX];
+  slot_name(slot, name);
+  return named_write(name, st, why);' \
+  '  char name[TB_NAME_MAX];
+  (void)slot; slot_name(0, name); // T1: upstream'"'"'s clobber — one slot
+  return named_write(name, st, why);'
 build_tooth t1-clobber foh_tbuild.c
 bites t1-clobber '...and custom0.mlstage is BYTE-IDENTICAL (no clobber, no shift)'
 

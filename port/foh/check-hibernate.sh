@@ -331,6 +331,134 @@ grep -qxF 'foh_dev: resumed screen=css' "$BUILD/res.err" \
   the boot screen, which is exactly the symptom this row exists to fix"; }
 echo "   resumed on the CSS; the cold boot's startup walk is absent"
 
+# --- [5b] the TARGET BUILDER resumes into ITSELF, with the work ------------
+#
+# A45-T4 sent the builder to the menu top on resume, and it was right to:
+# the document was not persisted, so resuming into an empty editor would
+# have claimed the player's work was still there. 2026-08-26 makes the claim
+# TRUE instead of removing it — FohTbuildOps.suspend publishes the document
+# as `tbdoc.mlstage` through A45 T2's contract and the same atomic publish
+# the SD slots use.
+#
+# THE ASSERTION IS BYTE-IDENTITY ACROSS THE ROUND TRIP, not a log line. Park
+# in the builder, EDIT (place a target, so the document is the player's and
+# not D51's template), hibernate, keep the published file; boot again, let
+# the resume restore it, hibernate a second time, and require the two
+# published documents to be BYTE-IDENTICAL. A resume that silently reset to
+# the template passes every log check and fails this one.
+echo "=== [5b] the builder resumes into itself, with the document"
+TBPARK=$BUILD/tbpark.flow
+cat > "$TBPARK" <<'TBEOF'
+FLOW1
+I 1 -
+I 375 S
+I 376 -
+I 380 D
+I 381 -
+I 385 D
+I 386 -
+I 390 A
+I 391 -
+I 400 N
+I 401 -
+I 405 N
+I 406 -
+I 410 N
+I 411 -
+I 415 N
+I 416 -
+I 420 N
+I 421 -
+I 430 A
+I 431 -
+END 20000
+TBEOF
+TBDIR=$BUILD/tb-persist
+rm -rf "$TBDIR"; mkdir -p "$TBDIR"
+rm -f "$BUILD/tbhib.err" "$BUILD/tbhib.trace"
+MLFK_PERSIST_DIR="$TBDIR" "$BUILD/foh_dev_headless" \
+  --flow "$TBPARK" --input flow --flow-out "$BUILD/tbhib.trace" \
+  --pace 1 --budget-ns "$BUDGET" > "$BUILD/tbhib.err" 2>&1 &
+TBPID=$!
+sleep 3
+kill -0 "$TBPID" 2>/dev/null \
+  || { cat "$BUILD/tbhib.err" >&2
+       fail "[5b] the app exited before the signal"; }
+kill -USR1 "$TBPID"
+n=0
+while kill -0 "$TBPID" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+if kill -0 "$TBPID" 2>/dev/null; then
+  kill -9 "$TBPID" 2>/dev/null || true
+  set +e; wait "$TBPID" >/dev/null 2>&1; set -e
+  cat "$BUILD/tbhib.err" >&2
+  fail "[5b] the app did not exit within 5 s of SIGUSR1"
+fi
+set +e; wait "$TBPID"; TBRC=$?; set -e
+[ "$TBRC" = 0 ] || { cat "$BUILD/tbhib.err" >&2
+  fail "[5b] the hibernate arm exited $TBRC, want 0"; }
+grep -qxF 'foh_dev: hibernate from=target-builder resume=target-builder' \
+  "$BUILD/tbhib.err" \
+  || { cat "$BUILD/tbhib.err" >&2
+       fail "[5b] the builder did not arm a TARGET-BUILDER resume — either the
+  flow did not park there, or suspend() failed and it downgraded"; }
+made "$TBDIR/tbdoc.mlstage"
+cp "$TBDIR/tbdoc.mlstage" "$BUILD/tbdoc.before"
+# THE EDIT MUST BE REAL, or the round trip proves nothing: a document that is
+# still D51's template would round-trip just as byte-identically.
+TPL=$BUILD/tbdoc.template
+rm -rf "$BUILD/tb-tpl"; mkdir -p "$BUILD/tb-tpl"
+TPLFLOW=$BUILD/tbtpl.flow
+sed '/^I 4[0-3][0-9] /d' "$TBPARK" > "$TPLFLOW"
+rm -f "$BUILD/tbtpl.err"
+MLFK_PERSIST_DIR="$BUILD/tb-tpl" "$BUILD/foh_dev_headless" \
+  --flow "$TPLFLOW" --input flow --flow-out "$BUILD/tbtpl.trace" \
+  --pace 1 --budget-ns "$BUDGET" > "$BUILD/tbtpl.err" 2>&1 &
+TPLPID=$!
+sleep 3
+kill -USR1 "$TPLPID" 2>/dev/null || true
+n=0
+while kill -0 "$TPLPID" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+kill -9 "$TPLPID" 2>/dev/null || true
+set +e; wait "$TPLPID" >/dev/null 2>&1; set -e
+made "$BUILD/tb-tpl/tbdoc.mlstage"
+cp "$BUILD/tb-tpl/tbdoc.mlstage" "$TPL"
+cmp -s "$TPL" "$BUILD/tbdoc.before" \
+  && fail "[5b] the edited document is byte-identical to the UNEDITED one —
+  the flow's tool walk or its A press did not change the document, so the
+  round-trip assertion below would hold for a resume that reset to the
+  template (dead leg)"
+echo "   the parked document differs from the untouched template"
+# ...now boot again on the same dir and let the resume restore it
+rm -f "$BUILD/tbres.err" "$BUILD/tbres.trace"
+TBRESFLOW=$BUILD/tbres.flow
+printf 'FLOW1\nI 1 -\nEND 20000\n' > "$TBRESFLOW"
+MLFK_PERSIST_DIR="$TBDIR" "$BUILD/foh_dev_headless" \
+  --flow "$TBRESFLOW" --input flow --flow-out "$BUILD/tbres.trace" \
+  --pace 1 --budget-ns "$BUDGET" > "$BUILD/tbres.err" 2>&1 &
+TBPID2=$!
+sleep 2
+grep -qxF 'foh_dev: resumed screen=target-builder' "$BUILD/tbres.err" \
+  || { kill -9 "$TBPID2" 2>/dev/null || true; cat "$BUILD/tbres.err" >&2
+       fail "[5b] the boot did not resume to the target builder"; }
+grep -qxF 'foh_dev: builder document restored' "$BUILD/tbres.err" \
+  || { kill -9 "$TBPID2" 2>/dev/null || true; cat "$BUILD/tbres.err" >&2
+       fail "[5b] the resume did not restore the document"; }
+[ -e "$TBDIR/tbdoc.mlstage" ] \
+  && { kill -9 "$TBPID2" 2>/dev/null || true
+       fail "[5b] tbdoc.mlstage survived the resume — it must be CONSUMED, or
+  a later ordinary visit resurrects work the player already got back"; }
+kill -USR1 "$TBPID2"
+n=0
+while kill -0 "$TBPID2" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+kill -9 "$TBPID2" 2>/dev/null || true
+set +e; wait "$TBPID2" >/dev/null 2>&1; set -e
+made "$TBDIR/tbdoc.mlstage"
+cmp "$BUILD/tbdoc.before" "$TBDIR/tbdoc.mlstage" \
+  || fail "[5b] the document did NOT survive the round trip: the file published
+  by the second hibernate differs from the first. A resume that lands on the
+  builder with someone else's stage is worse than not resuming at all."
+echo "   builder resumed with the SAME document, byte for byte; file consumed"
+
 # --- [6] teeth ---------------------------------------------------------------
 echo "=== [6] teeth"
 

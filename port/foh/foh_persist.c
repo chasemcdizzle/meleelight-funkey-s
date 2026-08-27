@@ -109,14 +109,21 @@ FohScreen foh_persist_resume_target(FohScreen sc) {
     case FOH_CREDITS: return FOH_MENU_OPTIONS;
     // unreachable at FOH_NETPLAY 0 (foh.h); its B-exit is the menu top
     case FOH_MENU_BATTLE: return FOH_MENU_TOP;
-    // A45-T4. The builder holds an UNSAVED DOCUMENT that is not persisted, so
-    // resuming INTO it would present an empty editor and read as "my work is
-    // still here" when it is not — worse than not resuming at all. Its own
-    // B/Quit exit is the menu top (targetbuilder.js:832-835), so land there.
-    // This case exists because A26 made the switch EXHAUSTIVE on purpose: the
-    // two lanes merged textually clean and the COMPILER caught the gap, which
-    // is exactly what the comment below promised it would do.
-    case FOH_TBUILD: return FOH_MENU_TOP;
+    // A45-T4 sent the builder to the menu top, because it holds an UNSAVED
+    // DOCUMENT that was not persisted and resuming INTO it would present an
+    // empty editor and read as "my work is still here" when it was not.
+    //
+    // 2026-08-26: the document IS persisted now. FohTbuildOps.suspend
+    // publishes it as `tbdoc.mlstage` through the same contract and the same
+    // atomic publish the SD slots use, so the statement the old redirect
+    // refused to make is now TRUE and the builder resumes into itself.
+    //
+    // THE REFUSAL IS NOT GONE, IT MOVED TO WHERE IT CAN BE CHECKED: this
+    // function is a pure domain map, so it cannot know whether the write
+    // SUCCEEDED. tdev_hibernate_check calls suspend() first and downgrades
+    // this to FOH_MENU_TOP when it fails — which is why MENU_TOP must also
+    // remain a legal value here, and it does (it maps to itself below).
+    case FOH_TBUILD: return FOH_TBUILD;
     // Everything else opens with NO entry-time initialisation beyond what
     // foh_init already gives (measured over every ev_trans site in foh.c:
     // the only entry arms that write state are TSS's cursor/hand re-home,

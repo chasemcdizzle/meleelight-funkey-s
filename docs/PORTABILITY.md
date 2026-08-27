@@ -298,7 +298,9 @@ A new device = write one new backend TU (+ audio open params).
   poll window). FunKey-OS `/proc` + `cat cmdline | tr` shapes; the
   scan-then-kill-by-pid PATTERN and the "teardown on every exit path,
   never trust a cancel racing a wipe" rule are the portable parts.
-- **Hibernate/resume** (fix_plan A26, DEVIATION D53 — the SIGUSR1 arm in
+- **Hibernate/resume** (fix_plan A26, DEVIATIONS D53 + **D57** — the
+  builder document travels as a `.mlstage`, so the editor resumes into
+  itself; SIGUSR1 arm in
   `port/foh/foh_dev.c` + the background/`wait`/forward idiom in
   `port/gfx/opk/mlfk-foh.sh`). FunKey-BOUND, all of it MEASURED on this
   device and none of it a portable constant: closing the lid is `fkgpiod`

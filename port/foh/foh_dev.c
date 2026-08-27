@@ -171,6 +171,7 @@
 #include "foh.h"
 #include "foh_pause.h"   // A11/A12: the in-match pause overlay (live only)
 #include "foh_persist.h"
+#include "foh_tbuild.h" // A26/D53: the builder document across a hibernate
 #include "../sim/target/custom_stage.h" // A45 T3: custom target slots
 #include "foh_launch.h"  // A44: the ONE FohState -> 4-port match config
 
@@ -1422,6 +1423,28 @@ static void tdev_hibernate_install(void) {
 static void tdev_hibernate_check(FohScreen sc, const FohState *f) {
   if (!g_hibernate) return;
   g_persist.resumeScreen = (int)foh_persist_resume_target(sc);
+  // A26/D53 + A45: the TARGET BUILDER resumes into ITSELF, which is only
+  // honest if the document it holds actually reached the card. Publish it
+  // FIRST and downgrade the resume to the menu top if that fails — an armed
+  // TBUILD resume with no document is precisely the lie the original
+  // redirect existed to prevent, and a full card or a read-only remount is
+  // a MEASURED risk on this journal-less vfat, not a hypothetical.
+  //
+  // The write costs ~22-33 ms measured on this device (2 KB and 160 KB
+  // both), inside a ~100 ms grace window that already carries the settings
+  // save, so it fits — but "fits" is why it is ordered first rather than
+  // last: if the window is ever missed, the thing lost is the document,
+  // and the resume that would have pointed at it is not armed.
+  if (sc == FOH_TBUILD) {
+    const char *tbWhy = 0;
+    if (!foh_tbuild_ops || !foh_tbuild_ops->suspend ||
+        !foh_tbuild_ops->suspend(&tbWhy)) {
+      fprintf(stderr, "foh_dev: builder document NOT kept (%s) — resuming to "
+                      "the menu top instead\n",
+              tbWhy ? tbWhy : "no builder in this build");
+      g_persist.resumeScreen = (int)FOH_MENU_TOP;
+    }
+  }
   // the player's settings go with it — a hibernate is an exit like any other
   foh_persist_collect(&g_persist, f);
   tdev_persist_save();
@@ -2166,6 +2189,18 @@ int main(int argc, char **argv) {
     foh.screen = (FohScreen)g_persist.resumeScreen;
     g_persist.resumeScreen = (int)FOH_STARTUP;
     fprintf(stderr, "foh_dev: resumed screen=%s\n", foh_screen_token(foh.screen));
+    // ...and the builder's document with it. enter() FIRST so the view
+    // state is initialised the way an ordinary entry leaves it, then the
+    // saved document replaces the template. A resume that finds no document
+    // says so and leaves the template: the screen is still honest, it just
+    // has nothing of the player's in it, which can only happen if the file
+    // was lost between the write and this read.
+    if (foh.screen == FOH_TBUILD && foh_tbuild_ops) {
+      foh_tbuild_ops->enter(&foh, -1);
+      const bool got = foh_tbuild_ops->resume && foh_tbuild_ops->resume();
+      fprintf(stderr, "foh_dev: builder document %s\n",
+              got ? "restored" : "NOT FOUND (empty editor)");
+    }
     // The menu loop is playing wherever upstream plays it. The boot has
     // already programmed track 0 SILENT (:1974), so this is the same
     // lock-bracketed flag flip the title->menu-top arm makes below — not a

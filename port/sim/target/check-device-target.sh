@@ -161,8 +161,8 @@ f420723433b19166b53a80aedf54931ffdfbc6d2505c773fd73b7a13bbcdf60e oracle/harness/
 4b68fba5a804b281a73003b29eac1a0290707f2b6260ee39c900a0262962f421 port/gfx/judge-render-timing.js
 452b6e41cbd7d692d35e1f89e0a8f4554c5af964b01bb87631cf01322de255ee port/foh/keymap-frozen.txt
 2cf5c5a532207372b70c4cee57412c7ac65643ac4f4066c745d9eb7fe4aa0e9b port/goldens-m4/wrap-target.js
-415335239fcc04df97eba07298a1fa521602d5ea45b087aa8d7d40bd740c122a port/goldens-m4/verify-target-stream.js
-6b1b6b5be3700c51dfae8c0c4cb1f012e5b61239394ae4146c2e5e19cc4fcc47 port/goldens-m4/validate-target-manifest.js
+8065b272a005609d5058ea49d3b372800f127eb9ae94fc92ab30c29c337fa937 port/goldens-m4/verify-target-stream.js
+86429a572e719e04cc58f95f0fd25833876afd8982cec5a7d358198f9b7f0111 port/goldens-m4/validate-target-manifest.js
 624956898890e749170a4768af0f8ef86e05ce4dd75046d084701747c9d9121f port/goldens-m4/json-dup-key-scan.js"
 N_PINS_WANT=13
 # audio artifact pins: sndpack + menu.pcm are TWIN-PINNED to the
