@@ -1,60 +1,80 @@
-# ▶ RESUME HERE (rewritten 2026-08-24 — read this first, then §rulings)
+# ▶ RESUME HERE (rewritten 2026-08-26 — read this first, then §rulings)
 
-**Branch `agent/auto`, tree clean. 50 commits this session.**
+**Branch `agent/auto`, tree clean.**
 **M4 IS OWNER-DEFERRED** (2026-08-23: *"skip m4 for now and just do all my
 features"*). Feature work runs from **`docs/FEATURES-SPEC.md`**; vocabulary is
-pinned in **`/CONTEXT.md`** — read that second, it exists because almost every
-defect below was a NAMING failure, not a logic failure.
+pinned in **`/CONTEXT.md`** — read that second.
 
-## Owner-reported bugs — ALL FIXED
-| Bug | Cause |
-|---|---|
-| Back button did nothing | wedge drawn but never hit-tested (D22) |
-| Character picks reset to marth/puff | endGame token snap indexed by PORT (D21) |
-| Backing out re-selected falcon | the token GRAB leaked across back-out (D35) |
-| Constant audio buzz | 512-frame period = **0.70 of one frame** — starved forever |
-| L did nothing | keymap said `k`; the button emits **`m`** |
-| X didn't grab | **`z` is not grab in this engine** — it is alt-attack + lCancel |
-| Shieldbreaker sound ran on | menu clicks and sim shared one play-id counter |
-| Controls unusable | all 9 rows now rebindable (D26), `mod`/`rebind:N/A` gone |
-| "TAPJUMP OFF: ON" | double negative; relabelled + inverted (D23) |
-| No mode switch | ribbon toggles stock/endless, reaching the sim (D28+A37) |
+## What is true on HARDWARE right now (2026-08-26, all re-run this day)
 
-## Also landed
-4-port match setup **verified by a 4-port golden** (A46) · the stage-code codec
-proven against upstream's executed encoder (T1/D39) · credits — **a Star Fox
-shooting gallery**, not a roll (D38) · target-select free cursor (D29) ·
-control scheme re-ratified: L-only shield, R C-stick, **X grabs on BOX** (D31-33)
+`DEVICE FOH OK` · `PERSIST OK` · `FULLGAME CONFORMS 12/12` (p99 15.786 ms) ·
+`LIVE ARMS OK` · `S1 INPUT OK` · `DEVICE TARGET CONFORMS` ·
+`DEVICE CONFORMS g01` · `SIM P99 OK` · `DEVICE RENDER OK` · `DEVICE MUSIC OK` ·
+`OPK LAUNCH OK` · `SKIP ATTRIB OK`.
 
-## IN FLIGHT (3 lanes)
-- **M** P3/P4 at the CSS — sim half done; **A14 QUEUES BEHIND IT** (same file)
-- **S** T2 custom stages playable + the clobber fix (owner ruled: FIX it)
-- **P** crash-safe harness -> A34 power-off -> A26 hibernate probe
+**ONE RED, KNOWN AND OWNER-DEFERRED:** `check-device-audio.sh` full-frame p99
+**17.274 ms** vs the 16.67 ms bar. This is the iter-118 M3 audio class
+(17.444 ms then) reproduced, not a regression. **The bar was not moved and
+must not be.** The PRODUCT path is green — fullgame runs the real
+`foh_device` with render + sfx + music live at 15.786 ms.
+
+## The zoom-out that explains most of this session
+
+**Nine of thirteen device checks refused stale evidence, and NOT ONE was a
+regression.** Every stale thing was the second half of a paired change whose
+first half had shipped. A pin only refuses when someone runs the check, and
+these need hardware — so they are last to run and first to rot. Full table +
+the three-part class fix: `docs/AGENT-LOG.md`, driver 2026-08-26.
+**Standing consequence:** stop pinning DERIVED facts (an audio period lives in
+`platform.h`; a callback count is `rate*seconds/PERIOD`), make inventories
+self-check against their source, and make evidence hermetic.
+
+## A45 target builder — T1..T8 SHIPPED, T6 half
+
+- **T5-T8 landed**: all ten upstream tools, at upstream's own indices.
+  `TBUILD CHECK OK` — 139 assertions, 8 teeth. New deviations **D54** (type
+  cycle -> X+shoulder), **D55** (SCALE keeps the d-pad; upstream already
+  freezes the crosshair), **D56** (B pops a polygon vertex while drawing).
+- **`getConnected` was a LIVE DEFECT**, found while specifying T5 — custom
+  stages have had no `connected` plane since T2 and no check could see it.
+  Fixed at upstream's own site with a 1500-code differential against
+  upstream's executed `getConnected`.
+- **T6 IS HALF-SHIPPED, DELIBERATELY.** The DAMAGE tool works; the sim still
+  REFUSES to load a damaging stage because that physics plane has never
+  executed, so the builder refuses to SAVE one and names the rule. Un-gating
+  needs one recorded browser golden — spec §5 of
+  `docs/research/target-builder-t5-t8-spec.md`, confirmed reachable without
+  touching `oracle/`. **This is the next A45 piece.**
 
 ## OWED / OPEN
-- **A33 rung 3** (host-mode fork) — owner: after the ready-now list. It now
-  unlocks BOTH the GC adapter and **A47 two-device link play** (`g_ether`
-  already ships on the device; no wifi/BT exists).
-- **Device legs stacked**: keymap re-measure, `DEVICE FOH OK`, persist reboot,
-  `check-device-input` legs [4]-[9], 4-port gate wiring. **And the credits
-  screen has NEVER rendered on hardware.**
-- **Freeze manifest: 85 pins OK, 31 stale.** §A-par.5 batched pass, driver-only,
-  **when M4 resumes — NOT now.**
-- T1's cap ruling (refuse at load vs raise caps) owed before T2 finishes.
+- **A45 T6's damage golden** (above) — the only thing between here and T1-T8
+  complete.
+- **A33 rung 3** (host-mode fork) — owner: after the ready-now list. Unlocks
+  BOTH the GC adapter and **A47 two-device link play**.
+- **The credits screen has still never rendered on hardware.**
+- **Freeze manifest: 31 stale pins.** §A-par.5 batched pass, driver-only,
+  **when M4 resumes — NOT now** (owner instruction, 2026-08-26). Deliberately
+  untouched all session; the repo-wide producer-pin audit excludes it.
+- **A26/D53 resume is a SCREEN, not a state.** Owner asked 2026-08-26 whether
+  an exact restore is possible. Measured answer: `sizeof(GameState)` = 158.9
+  KB, `sizeof(MlSim)` = 71.9 KB — small. The binding constraint is the
+  **~100 ms SIGUSR1 grace window**, and that write time is UNMEASURED. The
+  cheap half is persisting the BUILDER's document (an `MlkStage`, and
+  `mlk_encode` already serialises it) so TBUILD can resume into itself
+  instead of bouncing to menu-top.
 
-## STANDING HAZARDS (all paid for this session)
-- **A comment is not evidence.** `z` was documented as grab for months.
-- **A name is not evidence about its plane.** A sound was nearly reported as a
-  missing visual effect.
+## STANDING HAZARDS (all paid for)
+- **A comment is not evidence.** `z` was documented as grab for months;
+  `custom_stage.c` said "no connected field in the code grammar" and was right
+  about the grammar and wrong about the behaviour.
+- **A name is not evidence about its plane.**
 - **A green check is not evidence a change is safe — measure the CONSUMERS.**
-  A 4-port golden passed its own check and would have broken the M4 gate.
-- **Teeth go vacuous silently.** FOUR found disarmed; two by unrelated changes.
-- **A tool that cannot run reports everything as broken.** A driver audit
-  claimed 116 stale pins; the real number was 31.
-- **Deviation numbers are DRIVER-allocated** — two lanes collided on D29.
-- **Never leave a device marker that outlives the test** — one stranded the
-  owner's device at a splash screen. Lane P is making the class impossible.
-- **Twelve filed premises falsified by running the code; five were mine.**
+- **Teeth go vacuous silently.** Also: a witness loop that waits on state a
+  tooth can freeze must be BOUNDED, or the check hangs instead of failing.
+- **A tool that cannot run reports everything as broken.**
+- **Deviation numbers are DRIVER-allocated** (D54/D55/D56 taken 2026-08-26).
+- **Never leave a device marker that outlives the test** — D44's boot-unpark
+  line makes the class impossible; verified again this session.
 
 ---
 

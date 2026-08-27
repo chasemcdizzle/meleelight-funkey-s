@@ -22430,3 +22430,115 @@ ships as a loud refusal and the recommendation is to KEEP it, because raising
 
 **Gates:** `CUSTOM STAGE PLAYS` · `SIM CONFORMS` 8/8 · `STAGECODE MATCH` ·
 `TARGET SIM CONFORMS` · `oracle/` untouched · `port/foh/` untouched.
+
+
+## driver — 2026-08-26 — A45 T5-T8 + the device backlog. ZOOM-OUT: nine of thirteen device checks refused stale evidence, and not one of them was a regression
+
+**Every stale thing found today was the SECOND HALF of a paired change whose
+first half had shipped.** That is the class, and it is worth naming precisely
+because the individual fixes look like unrelated chores:
+
+| check | what was stale | the change it was paired with |
+|---|---|---|
+| device-foh | 3 producer pins | 5440cf1 (T3/T4), 74ce8d1 (L keysym) |
+| device-foh | `samples=512` | 22a46db (A28 raised the audio period) |
+| device-foh | non-hermetic persist dir | de165bb (A26/D53 hibernate resume) |
+| device-persist | judge pin | 5440cf1 |
+| device-persist | one migration expectation for two rules | d60505e (D29/D30 modonr default) |
+| fullgame | `samples=512` + a callback-count window | 22a46db |
+| device-input | missing `--vfxdata`/`--glyphs` | M4 task 1 (vfx seam) |
+| device-target | 3 producer pins, a TU list, an SFX pin, a shot name | 5440cf1 (D52), A45 T3/T4 |
+| device-target | `"a":true` | D33 (A->jump, B->attack) |
+| device-audio | `AUDIO_SAMPLES=512` (a self-registered gap) | 22a46db |
+
+**THE SYSTEMATIC CAUSE is not carelessness, it is ORDERING.** A pin only
+refuses when someone runs the check, and these checks need hardware — so they
+are the last to run and therefore the first to rot. Every one of them worked
+exactly as designed the moment it ran. The lesson is not "update the pins".
+
+**THE CLASS FIX, in three parts, all applied:**
+
+1. **Stop restating DERIVED facts.** An audio period lives in
+   `platform.h`; a callback count is `rate*seconds/PERIOD`. Neither is an
+   independent fact, so pinning a literal guarantees staleness the moment the
+   real thing legitimately moves. Five sites now READ the SSOT or derive from
+   it, carrying the original measured TOLERANCE across unchanged so no bar is
+   weakened. `check-device-audio.sh` and `check-device-music.sh` keep their
+   literal ON PURPOSE — they PASS `--audio-samples`, so they pin what they
+   supplied, and that distinction is the whole point.
+
+2. **Make inventories self-checking against their source.** `check-device-target.sh`
+   pulled a shot named `tss-addcode` that the flow had renamed; it surfaced
+   three legs later as adb "remote object does not exist", which reads as a
+   device problem and is not one. The inventory is now compared against the
+   flow's own `SHOT` rows and dies at its source with both lists printed.
+
+3. **Make evidence HERMETIC.** The OPK evidence leg had no
+   `MLFK_PERSIST_DIR`, so it fell through to `/mnt/mlfk-data` — THE OWNER'S
+   REAL SAVE — and A26/D53 resumed it into the CSS. Its verdict depended on
+   what the owner last did with his device. Every other leg passes one.
+
+**AND THE DEEPER ONE, which /CONTEXT.md already says about teeth and which
+turns out to apply to ordinary assertions too:** *"A tooth should assert the
+outcome protected, never an error string or an implementation detail that
+happens to produce it today."* Three of today's failures were assertions on a
+REPRESENTATION rather than an outcome — the field name `"a":true`, the shot
+name `tss-addcode`, the literal `samples=512`. All three representations moved
+for good reasons while the outcome they stood for did not.
+
+**THE ONE THAT WAS NOT STALE, AND THE MEASUREMENT THAT SAVED IT FROM LOOKING
+LIKE ONE.** `check-device-audio.sh` is RED: full-frame p99 17.274 ms against
+the 16.67 ms bar. That is the KNOWN M3 audio class deferred at iter 118 where
+it measured 17.444 ms — the same standing red, reproduced, 0.17 ms better. It
+first measured 18.480 ms, and closing its own self-registered "needs the
+device" gap (it forced 512, a period A28 had already found unworkable) took
+1.2 ms off the MEASUREMENT without touching the bar. The product path is not
+red: `check-device-fullgame.sh` runs the real `foh_device` with render, sfx
+and music live and measured 15.786 ms green over all 12 legs. **The bar was
+not moved and must not be.**
+
+## Scoreboard, hardware, 2026-08-26
+
+GREEN: `DEVICE FOH OK` · `PERSIST OK` · `FULLGAME CONFORMS 12/12` ·
+`LIVE ARMS OK` · `S1 INPUT OK` · `DEVICE TARGET CONFORMS` ·
+`DEVICE CONFORMS g01` · `SIM P99 OK` · `DEVICE RENDER OK` ·
+`DEVICE MUSIC OK` · `OPK LAUNCH OK` · `SKIP ATTRIB OK`.
+RED (known, owner-deferred): `check-device-audio.sh` p99 17.274 ms.
+
+## A45 T5-T8, and the finding that came before the tools
+
+**`getConnected` was a LIVE DEFECT, not T7's helper.** `parseStageCode`
+DERIVES `connected` (encode.js:237); `custom_stage.c` wrote
+`hasConnected = false` with a comment true about the grammar and wrong about
+the behaviour. **No check could see it**: both sides of every differential
+were `false`, the authored corpus yields zero links (measured, all ten
+stages), and an all-null plane takes the same physics arm as an absent one.
+It becomes observable the instant a player draws — a polygon shares vertices
+between its floor and its walls by construction, and upstream turns that into
+`disableFall`. Proved by a new connectivity corpus (1500 codes, 6611 links,
+all four link types required BY NAME) against upstream's own executed
+`getConnected`.
+
+**Three teeth taught something each:** tightening `getConnected`'s 0.001
+threshold is a provable NO-OP (share codes are hundredths, so a chain shares
+endpoints EXACTLY — the razor-thin-nudge class, 6th instance); generating a
+platform AND a wall at a chain end yields ZERO `l` links because the four
+inner loops are `!broke`-guarded and the platform masks the wall arm; and for
+a VERTICAL wall `extremePoint` returns v2 for BOTH "l" and "r", so which end
+can connect is decided by AUTHORED POINT ORDER, not geometry.
+
+**T5-T8 shipped the other seven tools** at upstream's own indices, using the
+already-replay-verified geometry rather than a second copy.
+`TBUILD CHECK OK`, 76 -> 139 assertions, 6 -> 8 teeth. Four things building
+it corrected are in `docs/research/target-builder-t5-t8-spec.md` §9 — the
+sharpest being that calling `foh_tb_tool_name()` from `foh_render.c` gave that
+TU a LINK dependency on the builder and broke ELEVEN witnesses that
+deliberately do not link it, which is the exact coupling `foh_tbuild_ops`
+exists to prevent.
+
+**T6 IS HALF-SHIPPED AND SAYS SO.** The DAMAGE tool works; `mlk_stage_playable`
+still refuses a damaging stage at load because that physics plane has never
+executed, so the builder lets you paint fire and then REFUSES TO SAVE, naming
+the rule. The witness asserts that refusal. Un-gating it needs one recorded
+browser golden (spec §5, confirmed reachable without touching `oracle/`).
+
