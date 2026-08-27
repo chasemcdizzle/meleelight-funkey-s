@@ -1309,6 +1309,32 @@ v6_defaults() {
 v7_defaults() {
   printf 'resume 00\n'
 }
+# The CSS block appended by ticket #25 under the 2026-08-27 owner ruling
+# (persist the port types and CPU levels). Written here as LITERAL defaults
+# rather than read back from the code, so this expectation stays INDEPENDENT
+# of the writer it is judging — which is the whole point of building it by
+# hand. The values are foh_persist_defaults()'s, which the same ticket made
+# reproduce foh_init exactly:
+#   ptype     wire-biased portType[] — port 0 HMN (0 -> 1), 1..3 absent (-1 -> 0)
+#   cpudiff   the fresh CPU level, biased
+#   vsmode    0 = stock
+#   hand      the CSS free cursor's cold-start position, IEEE-754 bit patterns
+#   slider    the four CPU knob x positions, likewise
+#   carry     -1 -> 0, holding no token
+#   cpucarry  -1 -> 0, holding no knob
+#   handtype  0
+# If any of these drift, the DEVICE check fails here rather than the file
+# quietly gaining a row nobody judged.
+v8_defaults() {
+  printf 'ptype 1 0 0 0\n'
+  printf 'cpudiff 2 2 2 2\n'
+  printf 'vsmode 0\n'
+  printf 'hand 403c000000000000 406c000000000000\n'
+  printf 'slider 4042940c565c87b6 40584a062b2e43db 4063a503159721ee 406b2503159721ee\n'
+  printf 'carry 0\n'
+  printf 'cpucarry 0\n'
+  printf 'handtype 0\n'
+}
 mk_pdir "$HP/th9" -
 { printf 'MLFKPERSIST1\n'; sed -n '2,4p' "$FILE_P01"; th9_rows "$WORSE_BITS"; } \
   > "$HP/th9/body"
@@ -1338,7 +1364,7 @@ rm -f "$HP/th9/body"
 mk_expect() { # <out> <modonr>
   { printf 'MLFKPERSIST7\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 1\n';
     printf 'modonr %s\n' "$2"; th9_rows "$REC_BITS"; v4_defaults; v5_defaults;
-    v6_defaults; v7_defaults; } > "$HP/expect.body"
+    v6_defaults; v7_defaults; v8_defaults; } > "$HP/expect.body"
   { cat "$HP/expect.body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/expect.body" | cut -d' ' -f1)"; } \
     > "$1"
   rm -f "$HP/expect.body"
