@@ -66,11 +66,19 @@ self-check against their source, and make evidence hermetic.
   SSS -> CSS, CREDITS -> options. The match one is the real ticket, and TIME
   IS NOT WHAT BLOCKS IT: measured on the device, a write+fsync to `/mnt`
   costs 22 ms at 2 KB and **33 ms at 160 KB**, inside a ~100 ms grace that
-  already carries the settings save — and `sizeof(GameState)` is 158.9 KB.
-  What blocks it is that GameState holds function pointers (move tables,
-  hooks) so it needs a canonical form rather than a raw write, and
-  CHECKSUM.md deliberately excludes some timing-dependent fields, so
-  "checksum-equal" and "byte-equal" are a decision to make, not a given.
+  already carries the settings save — and `sizeof(GameState)` is 162,752 bytes
+  (MEASURED; an earlier note in this file and in spec #20 said 158,912 — the
+  33 ms write figure stands, it was taken at 160 KB, but the number quoted
+  beside it was wrong).
+  What blocked it turned out NOT to be what I wrote here.
+  MEASURED by #28: GameState holds NO function pointers — its only pointers
+  are inside MlAiBridge. The move tables, tp_finish_hook and the AI live seam
+  live OUTSIDE it as module and global state, so what makes a snapshot safe is
+  a MODULE-STATE LEDGER (a frozen enumeration of every mutable file-scope
+  static in the sim, 30 entries, each classified), not the field table alone.
+  **#28 is DONE**: all 8 goldens continue bit-exactly across a snapshot taken
+  in one process and restored into another, judged by the unchanged
+  verify-stream.js.
 
 ## STANDING HAZARDS (all paid for)
 - **A comment is not evidence.** `z` was documented as grab for months;
