@@ -120,7 +120,8 @@ FRAMES_PIN=3600             # task-4 literal pin; manifest cross-asserted
 WALL_MIN_MS=58000           # task-4 measured paced-run wall window
 WALL_MAX_MS=66000
 AUDIO_RATE=44100            # the measured spike verdict (PLAN §7);
-AUDIO_SAMPLES=512           # pinned into the judge's grammar — a
+AUDIO_SAMPLES="$(grep -oE '^#define PLATFORM_AUDIO_SAMPLES_DEFAULT [0-9]+$' \
+  port/gfx/platform.h | awk '{print $3}')" # THE SHIPPED SIZE — see below
 AUDIO_CHANNELS=2            # renegotiated device cannot even parse
 # ...and now REQUESTED, not inherited (A28, 2026-08-24). This leg used to
 # pin 512 while passing no --audio-samples, i.e. it pinned a number it
@@ -129,28 +130,47 @@ AUDIO_CHANNELS=2            # renegotiated device cannot even parse
 # a shorter refill deadline than one 16.67 ms frame and cannot work), so
 # the pin and the run would have silently parted company. The flag on the
 # device invocation below makes this leg mean what it says.
-# GAP, REGISTERED (needs the device, which this lane did not have): the
-# cadence pins below — AUDIO_SAMPLES, CBS_MIN/CBS_MAX — are measured at
-# 512, so this leg no longer exercises the size the app SHIPS. Re-pinning
-# it to the shipped default needs a device re-measurement of the callback
-# window (period 46.44 ms instead of 11.61 ms => ~1/4 the callbacks); the
-# arithmetic is in the CBS comment below. Until then the shipped size is
-# guarded host-side by port/gfx/check-alsa-headroom.sh, whose [4/4] case
-# fails if PLATFORM_AUDIO_SAMPLES_DEFAULT ever drops under one frame again.
+# GAP CLOSED 2026-08-26 — the device was available. The gap read:
+#   "the cadence pins below — AUDIO_SAMPLES, CBS_MIN/CBS_MAX — are measured
+#    at 512, so this leg no longer exercises the size the app SHIPS.
+#    Re-pinning it to the shipped default needs a device re-measurement of
+#    the callback window (period 46.44 ms instead of 11.61 ms => ~1/4 the
+#    callbacks)."
+# It is closed the way it asked to be. AUDIO_SAMPLES is now READ from the
+# SSOT and still PASSED explicitly, so this leg exercises what ships and
+# says so; CBS_MIN/CBS_MAX are re-derived from it below.
+#
+# AND THE GAP WAS NOT COSMETIC. Running this leg at 512 measured a
+# full-frame p99 of 18.480 ms against the 16.67 ms bar — a red produced by
+# forcing a period A28 had already found unworkable ("512 is a shorter
+# refill deadline than one 16.67 ms frame and cannot work"). The same
+# device on the same day, at the SHIPPED period, measures 15.786 ms
+# through check-device-fullgame.sh with render + sfx + music all live.
+# The bar was measuring a configuration the product does not ship.
+# port/gfx/check-alsa-headroom.sh [4/4] still guards the shipped size
+# host-side; that stays.
 SND_COUNT_PIN=180           # SND1 sfx map size (pipeline/expected.json)
 # Pack identity (measured-then-frozen, iter 57): sha256 of the SNDPACK1
 # built from the pinned pipeline audio artifacts (ffmpeg 8.1.1 triple
 # pin upstream of this). Content pin only — freshness is rm-before-
 # produce + the x2 cmp below.
 SNDPACK_SHA256=f69579082fe569249879faa5ceccb7a810d94d8092695ddc8bb543f3bda3ccb4
-# Callback-cadence window (measured-then-frozen, iter 57): nominal
-# 512/44100 = 11.61 ms -> ~86.13 cb/s; the audio device is open from
-# just before the frame loop to just after it (~60.3 s measured), so a
-# healthy run sits near 5190. Window = the task-4 wall window mapped to
-# callbacks with margin; a stalled/dead callback thread (cbs ~ 0) or a
-# renegotiated cadence lands far outside.
-CBS_MIN=4900
-CBS_MAX=5900
+# Callback-cadence window. Originally measured-then-frozen at iter 57 for
+# 512 samples: nominal 512/44100 = 11.61 ms -> ~86.13 cb/s over the ~60.3 s
+# the audio device is open, so a healthy run sat near 5190, window
+# [4900,5900]. That is [-5.6%, +13.7%] around the nominal 5168.
+#
+# DERIVED now, for the same reason the sibling checks derive theirs: a
+# callback count is rate*seconds/PERIOD, so it is not an independent fact
+# and re-freezing it by hand is how it goes stale. The iter-57 tolerance is
+# carried across unchanged and applied to the nominal for whatever period
+# ships. A stalled or dead callback thread (cbs ~ 0) and a renegotiated
+# cadence both still land far outside.
+CBS_NOMINAL=$(( AUDIO_RATE * 60 / AUDIO_SAMPLES ))
+CBS_MIN=$(( CBS_NOMINAL * 944 / 1000 ))
+CBS_MAX=$(( CBS_NOMINAL * 1137 / 1000 ))
+[ "$CBS_MIN" -gt 0 ] && [ "$CBS_MAX" -gt "$CBS_MIN" ] \
+  || { echo "DEVICE FAIL: derived callback window [$CBS_MIN,$CBS_MAX] is degenerate (rate=$AUDIO_RATE samples=$AUDIO_SAMPLES)" >&2; exit 2; }
 ATTEMPTS_MAX=2              # retry policy (header) — pre-registered
 # T5 STANDING STARVATION PROBE (iter 59, review-57 M1 — frozen at the
 # iter-57 measured probe config, which counted 16-17 underruns): a
