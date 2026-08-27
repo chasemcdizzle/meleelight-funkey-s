@@ -164,7 +164,13 @@ eval cc "${CFLAGS[@]}" -o '"$WORK/sim_host_snap"' "$SIM/sim_snapshot.c" \
 # The frozen binary: the gate's TUs and nothing else — the witness for
 # "check-sim.sh builds what it always built".
 eval cc "${CFLAGS[@]}" -o '"$WORK/sim_host_frozen"' "$TU_BLOCK"
-echo "  [1] OK: sim_host_snap + sim_host_frozen (cc -O2 -ffp-contract=off)"
+# A DIFFERENT BUILD, in the only sense the identity claims to know about: the
+# same sources with a different build tag. Leg [5] makes the two refuse each
+# other's snapshots. Nothing here fakes the refusal — the tag is a real
+# compile-time input to the identity, and this really is a second binary.
+eval cc "${CFLAGS[@]}" -DMLSNAP_BUILD_TAG='"\"t28-other-build\""' \
+  -o '"$WORK/sim_host_other"' "$SIM/sim_snapshot.c" "$TU_BLOCK"
+echo "  [1] OK: sim_host_snap + sim_host_frozen + sim_host_other"
 
 # --- [2] the module-state ledger ---------------------------------------------
 # GameState's completeness is a compile-time assertion (leg [0](c)). The state
@@ -367,6 +373,170 @@ uninterrupted run — something in the sim state was not carried"
 done
 [ "$conf" -ge 1 ] || fail "[4] no golden was covered"
 echo "  [4] OK: $conf golden(s) continued across a process boundary"
+
+# --- [5] refusals -------------------------------------------------------------
+# A snapshot is a resume token, and the read path is where a corrupt one, a
+# truncated one or one from another build gets its chance to become a wrong
+# game. So the contract is custom_stage.c's .mlstage contract, inherited whole:
+# bounded read, exact anchored grammar, checksum verified BEFORE anything is
+# parsed, and EVERY refusal names its rule.
+#
+# The ordering matters as much as the refusals do, and case (g) is what proves
+# it: a snapshot whose BUILD line has been edited without re-sealing must be
+# refused as CORRUPT, not as "from a different build". Integrity first,
+# meaning second.
+echo "=== [5] refusals"
+node "$SIM/trace-to-txt.js" oracle/goldens/g01-fox-marth-battlefield.trace.json \
+  "$WORK/r.trace.txt" > /dev/null
+G1=(--trace "$WORK/r.trace.txt" --simdata "$WORK/simdata.txt" --seed 1337
+    --p1 2 --p2 0 --stage 0 --frames 120)
+
+env "MLFK_SNAP_OUT=$WORK/r.snap" MLFK_SNAP_AT=100 MLFK_SNAP_STOP=1 \
+  "$WORK/sim_host_snap" "${G1[@]}" > /dev/null 2> "$WORK/r.save.err" \
+  || { cat "$WORK/r.save.err" >&2; fail "[5] could not write the fixture"; }
+test -s "$WORK/r.snap" || fail "[5] the fixture snapshot is empty"
+
+# Byte surgery, in node so the edits are exact and readable.
+edit() { # <src> <dst> <op> [args]
+  node -e '
+    const fs = require("fs");
+    const [src, dst, op, a] = process.argv.slice(1);
+    let b = fs.readFileSync(src);
+    if (op === "truncate") b = b.subarray(0, b.length - 1);
+    else if (op === "grow") b = Buffer.concat([b, Buffer.from("x")]);
+    else if (op === "flip") { const i = Number(a); b = Buffer.from(b); b[i] ^= 0x01; }
+    else throw new Error("bad op " + op);
+    fs.writeFileSync(dst, b);
+  ' "$1" "$2" "$3" "${4:-}"
+}
+
+refuse() { # <label> <snapshot> <expected reason substring>
+  local rc=0
+  env "MLFK_SNAP_IN=$2" "$WORK/sim_host_snap" "${G1[@]}" \
+    > /dev/null 2> "$WORK/r.err" || rc=$?
+  [ "$rc" -ne 0 ] \
+    || fail "[5] $1: the snapshot was ACCEPTED. A read path that guesses is \
+how a corrupt file becomes a wrong game."
+  grep -qF "$3" "$WORK/r.err" \
+    || { cat "$WORK/r.err" >&2
+         fail "[5] $1: refused, but not by the rule under test (wanted \
+|$3|). Every refusal names its rule, and the name is what a caller acts on."; }
+  echo "     $1 -> refused: $(sed -n 's/^SNAP FAIL: restore: //p' "$WORK/r.err")"
+}
+
+# (a) absent
+refuse "absent file" "$WORK/nothing-here.snap" "no such snapshot file"
+# (b) truncated by one byte — refused for its LENGTH, before any parse
+edit "$WORK/r.snap" "$WORK/r-short.snap" truncate
+refuse "truncated (one byte short)" "$WORK/r-short.snap" "truncated snapshot"
+# (c) one byte too long
+edit "$WORK/r.snap" "$WORK/r-long.snap" grow
+refuse "one byte too long" "$WORK/r-long.snap" "snapshot file too large"
+# (d) the magic line — the structural anchor, checked before the checksum so
+#     that a wrong FILE is not reported as a corrupt snapshot
+edit "$WORK/r.snap" "$WORK/r-magic.snap" flip 0
+refuse "wrong magic" "$WORK/r-magic.snap" "not a snapshot file"
+# (e) a corrupt payload byte
+plen=$(node -e '
+  const fs=require("fs"); const b=fs.readFileSync(process.argv[1]);
+  console.log(String(b.length));' "$WORK/r.snap")
+edit "$WORK/r.snap" "$WORK/r-payload.snap" flip $(( plen / 2 ))
+refuse "corrupt payload byte" "$WORK/r-payload.snap" "SUM mismatch"
+# (f) a corrupt SUM digit
+edit "$WORK/r.snap" "$WORK/r-sum.snap" flip $(( plen - 10 ))
+refuse "corrupt SUM digit" "$WORK/r-sum.snap" "SUM"
+# (g) THE ORDERING PROOF: edit the BUILD line and do NOT re-seal. The identity
+#     is wrong AND the checksum is wrong; the reason must be the checksum.
+edit "$WORK/r.snap" "$WORK/r-build.snap" flip 20
+refuse "edited BUILD line (unsealed)" "$WORK/r-build.snap" \
+  "SUM mismatch (snapshot corrupt or edited)"
+# (h) a genuinely different build, both directions.
+env "MLFK_SNAP_OUT=$WORK/r-other.snap" MLFK_SNAP_AT=100 MLFK_SNAP_STOP=1 \
+  "$WORK/sim_host_other" "${G1[@]}" > /dev/null 2>&1 \
+  || fail "[5] the other build could not write its own snapshot"
+refuse "snapshot from a different build" "$WORK/r-other.snap" \
+  "build identity mismatch"
+rc=0
+env "MLFK_SNAP_IN=$WORK/r.snap" "$WORK/sim_host_other" "${G1[@]}" \
+  > /dev/null 2> "$WORK/r.err" || rc=$?
+[ "$rc" -ne 0 ] && grep -qF "build identity mismatch" "$WORK/r.err" \
+  || fail "[5] the other build ACCEPTED this build's snapshot — the identity \
+is not doing anything"
+
+# (i) and the M2-gate binary does not have a read path at all: the snapshot
+#     environment is inert there, which is what "the frozen build is
+#     unchanged" has to mean in practice rather than in principle.
+"$WORK/sim_host_frozen" "${G1[@]}" > "$WORK/r-frozen-plain.txt"
+env "MLFK_SNAP_IN=$WORK/r.snap" "MLFK_SNAP_OUT=$WORK/r-frozen.snap" \
+  MLFK_SNAP_AT=50 "$WORK/sim_host_frozen" "${G1[@]}" \
+  > "$WORK/r-frozen-env.txt" 2>/dev/null \
+  || fail "[5] the frozen build died when the snapshot environment was set"
+cmp "$WORK/r-frozen-plain.txt" "$WORK/r-frozen-env.txt" \
+  || fail "[5] the snapshot environment changed the frozen build's stream"
+[ ! -e "$WORK/r-frozen.snap" ] \
+  || fail "[5] the frozen build wrote a snapshot — its TU list does not carry \
+sim_snapshot.c and its hooks must stay NULL"
+echo "  [5] OK: 9 refusals, each by name; integrity is checked before identity;"
+echo "         the M2-gate binary ignores the snapshot environment entirely"
+
+# --- [6] the tooth ------------------------------------------------------------
+# A check that cannot fail is not a check (CONTEXT.md, "Tooth"). MLFK_SNAP_SKIP
+# names a row that ss_load reads past WITHOUT applying — exactly the shape of
+# the bug leg [4] exists to catch, a field that was never carried. The
+# continuation must then fail, and it must fail where it is JUDGED (the
+# verifier), not only where it is convenient (the cmp).
+#
+# WHICH ROW, MEASURED (2026-08-27, on g01 resuming at frame 1800): `rng` bites
+# at frame 1195 OF THE TAIL, not at the first frame — which is the honest
+# shape of a completeness bug and the reason a delayed golden trace is worth
+# more than a spot check. `sim` bites on the first frame. MEASURED NOT TO BITE
+# on this golden: prevBuf, curBuf, inp, hq, arts, matchTimer, bridge, and all
+# four module rows — g01 fields no puff and no falcon, its article queue is
+# empty at 1800, and matchTimer is off the checksum surface. That is the
+# CONTEXT.md razor-thin-nudge lesson again: a tooth has to perturb the domain
+# that OCCURS, so this leg uses a row measured to bite rather than a row that
+# looks important.
+echo "=== [6] tooth"
+TOOTH_ID=g01
+tsnap="$WORK/$TOOTH_ID.snap"
+tuninter="$WORK/$TOOTH_ID.frames-a.txt"
+if [ ! -f "$tsnap" ] || [ ! -f "$tuninter" ]; then
+  echo "  [6] SKIP: leg [4] did not cover $TOOTH_ID (SNAP_GOLDENS narrowed it)"
+else
+  eval "$(node -e "
+    const m=require('./oracle/goldens/manifest.json');
+    const g=m.goldens.find(x=>x.id==='$TOOTH_ID');
+    console.log('name='+g.name); console.log('seed='+g.seed);
+    console.log('p1='+g.p1); console.log('p2='+g.p2);
+    console.log('stage='+g.stage); console.log('frames='+g.frames);
+  ")"
+  at=$(( frames / 2 ))
+  env "MLFK_SNAP_IN=$tsnap" MLFK_SNAP_SKIP=rng "$WORK/sim_host_snap" \
+    --trace "$WORK/$TOOTH_ID.trace.txt" --simdata "$WORK/simdata.txt" \
+    --seed "$seed" --p1 "$p1" --p2 "$p2" --stage "$stage" --frames "$frames" \
+    > "$WORK/tooth.txt" 2>/dev/null \
+    || fail "[6] the toothed run died — it is supposed to run and DIVERGE, so \
+that what fails is the judgement and not the process"
+  grep '^F ' "$WORK/tooth.txt" > "$WORK/tooth-tail.txt"
+  if cmp -s "$WORK/tooth-tail.txt" "$WORK/$TOOTH_ID.tail-c.txt"; then
+    fail "[6] dropping the 'rng' row on restore changed NOTHING. Leg [4] is \
+vacuous: it would pass whatever the snapshot carried."
+  fi
+  {
+    head -n "$at" "$WORK/$TOOTH_ID.frames-a.txt"
+    cat "$WORK/tooth-tail.txt"
+    grep -E '^(RNG |SIM OK$)' "$WORK/tooth.txt"
+  } > "$WORK/tooth-spliced.txt"
+  node "$SIM/wrap-run.js" "$TOOTH_ID" "$WORK/tooth-spliced.txt" \
+    "$WORK/tooth-spliced.json" > /dev/null
+  if node oracle/harness/verify-stream.js "$WORK/tooth-spliced.json" \
+       "oracle/goldens/$name.sha256.json" > "$WORK/tooth-verify.txt" 2>&1; then
+    fail "[6] the VERIFIER passed a stream produced by a state that dropped \
+the 'rng' row. Leg [4]'s verdict is not judging what it claims to judge."
+  fi
+  echo "  [6] OK: dropping one row makes the continuation diverge AND makes"
+  echo "         the unchanged verifier reject the spliced stream"
+fi
 
 # --- no-commit guard ---------------------------------------------------------
 dirty_after="$(tree_fingerprint)" \
