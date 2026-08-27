@@ -22,10 +22,18 @@ Two obvious alternatives:
 
 1. **Keep adding fields by hand.** Cheapest per field. It is also what
    produced the current gap, and the gap grows with every screen added.
-2. **A `save()`/`load()` pair on each screen.** The conventional answer.
-   Twelve screens times two methods is twenty-four places a future author
-   must remember to update. It relocates the problem rather than removing
-   it, and nothing fails when someone forgets.
+2. **A `save()`/`load()` pair on each screen.** The conventional answer,
+   and the owner's first proposal. Twelve screens times two methods is
+   twenty-four places a future author must remember to update, and nothing
+   fails when someone forgets — the same silent omission that produced the
+   gap, relocated from one place to twelve.
+
+   It also models the domain wrongly. Per-screen save/load treats the
+   *screen* as the unit that owns state, but the state is one flat struct
+   every screen shares: the character-select hand position does not belong
+   to that screen in any enforced sense. The interface would invent an
+   ownership boundary the data does not have and then require it to be
+   maintained by hand.
 
 ## Decision
 
@@ -49,6 +57,21 @@ It converts "someone must remember" into "the compiler will not let you
 forget", which is the same mechanism this project already relies on for its
 capacity limits and for the exhaustive resume-target map — a map whose
 exhaustiveness caught a real gap when two lanes merged.
+
+**One half of the rejected alternative is kept, because it was right.** Some
+state should not be saved at all — it should be *recomputed*. Target select
+must re-scan the slot files on entry, because the card may have changed while
+the lid was shut; credits must place its reticle. That is genuinely
+per-screen, genuinely a procedure, and a field table cannot express it. So a
+screen may also carry a **resume hook**, called once after the fields land.
+Not `save`/`load` — only the re-derivation. The builder's document resume
+already has this shape, entering the screen first and restoring over the top.
+
+That hook extends a mechanism the project already has rather than adding a
+parallel one: the resume-target map is an exhaustive switch whose comment
+states that a new screen must be a compile error there, "the one place that
+must think about it", and its exhaustiveness has already caught a real gap
+when two lanes merged. The hook lives with it.
 
 Fields holding pointers are marked in the table as reconstructed rather than
 copied. A raw byte image would restore stale pointers that happen to be
