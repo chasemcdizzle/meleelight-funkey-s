@@ -117,19 +117,54 @@ void foh_persist_defaults(FohPersist *p) {
   p->cssCarry = -1;    // holding nothing (css.js:68)
   p->cssCpuCarry = -1; // holding nothing (css.js:75)
   p->cssHandType = 0;  // handPoint (css.js:63)
+  // ticket #26: the target-select view plane. Both values are what an ENTRY
+  // to that screen produces — `tssCursor = 0` is upstream's own
+  // targetPointerPos reset (menu.js:77-84, carried at foh.c's TARGETTEST
+  // arm) and page 0 is the AUTHORED grid, which is the only page upstream
+  // opens on. Written out rather than left to the memset for the reason
+  // every default above is: a value that is right only because it happens
+  // to be zero breaks silently the day the zero moves.
+  p->tssCursor = 0;
+  p->tssPage = 0;
+  // ...and the hand at slot 0's centre, which is the same entry (foh.h's
+  // FOH_TSS_HOME_{X,Y}, asked rather than retyped — the ticket #25 rule).
+  // The two must agree: the hand writes the cursor every frame, so a
+  // fresh install whose hand and cursor disagreed would correct itself on
+  // the first tick and make one of these two lines a lie.
+  p->tssHand[0] = FOH_TSS_HOME_X;
+  p->tssHand[1] = FOH_TSS_HOME_Y;
 }
 
-// A26/D53. The contract, and the reason for every non-identity row, is at
-// foh_persist.h. This function is BOTH the driver's mapping and the file's
-// domain check, so the two can never disagree by editing.
-FohScreen foh_persist_resume_target(FohScreen sc) {
+// A26/D53 + ticket #26. The contract, and the reason for every non-identity
+// row, is at foh_persist.h. This function is BOTH the driver's mapping and
+// the file's domain check, so the two can never disagree by editing.
+//
+// TICKET #26 WIDENED IT TO TWO COLUMNS RATHER THAN ADDING A SECOND MAP.
+// Every arm now names a resume TARGET and a resume HOOK — the procedure that
+// re-derives what a field table cannot carry (ADR 0001's kept half). The
+// switch is still enumerated screen by screen with nothing defaulted and
+// `case FOH_SCREEN_COUNT:` closing it, so a new screen is still a compile
+// error HERE and its author must answer both questions in the same row.
+// That property is the reason the hook lives here instead of in a table of
+// its own: it is the one place that must think about a new screen, and its
+// exhaustiveness has already caught a real gap when two lanes merged.
+//
+// `MAP(to, hk)` is only to keep an arm on one line; it introduces no
+// indirection and hides no decision — every arm still states both columns.
+#define MAP(to, hk) ((FohResumePlan){(to), (hk)})
+FohResumePlan foh_persist_resume_plan(FohScreen sc) {
   switch (sc) {
     // out of scope / not a place: nothing is armed
-    case FOH_STARTUP: return FOH_STARTUP;
+    case FOH_STARTUP: return MAP(FOH_STARTUP, FOH_RESUME_HOOK_NONE);
     // mid-match is a separate serialization surface — record the screen the
     // match's own exit lands on instead (foh_dev.c's MEX_CSS/MEX_TSS arm)
-    case FOH_MATCH: return FOH_CSS;
-    case FOH_TMATCH: return FOH_TSS;
+    case FOH_MATCH: return MAP(FOH_CSS, FOH_RESUME_HOOK_NONE);
+    // ...and a target match lands on target select, so it picks up that
+    // screen's hook through the target it is redirected to — which is why
+    // the driver asks for the plan of the screen it LANDED on, not of the
+    // screen the file recorded. A target match resumed onto a stale slot
+    // list would be the same defect one indirection further away.
+    case FOH_TMATCH: return MAP(FOH_TSS, FOH_RESUME_HOOK_TSS_SLOTS);
     // THE STATED REASON FOR THIS ROW IS SPENT, AND THE ROW IS STILL HERE.
     // It read "launches with port types the CSS arms, and those are not
     // persisted" — true when it was written, false since ticket #25 (owner
@@ -141,12 +176,17 @@ FohScreen foh_persist_resume_target(FohScreen sc) {
     // happen is this comment continuing to assert the opposite of the code
     // it sits next to, which is the defect class that cost three days on
     // getConnected.
-    case FOH_SSS: return FOH_CSS;
+    case FOH_SSS: return MAP(FOH_CSS, FOH_RESUME_HOOK_NONE);
     // its reticle is placed by the entering transition, which a resume
-    // never runs; this is the screen its own B-exit goes to (foh.c:1701)
-    case FOH_CREDITS: return FOH_MENU_OPTIONS;
+    // never runs; this is the screen its own B-exit goes to (foh.c:1701).
+    // ADR 0001 names the credits reticle as the OTHER candidate for a hook;
+    // it does not get one, because the redirect already answers it — a
+    // screen we never land on has nothing to re-derive. If ticket #27 or a
+    // later arc makes the credits resumable, THIS is the row that has to
+    // grow a hook, and the redirect is the thing standing in for one now.
+    case FOH_CREDITS: return MAP(FOH_MENU_OPTIONS, FOH_RESUME_HOOK_NONE);
     // unreachable at FOH_NETPLAY 0 (foh.h); its B-exit is the menu top
-    case FOH_MENU_BATTLE: return FOH_MENU_TOP;
+    case FOH_MENU_BATTLE: return MAP(FOH_MENU_TOP, FOH_RESUME_HOOK_NONE);
     // A45-T4 sent the builder to the menu top, because it holds an UNSAVED
     // DOCUMENT that was not persisted and resuming INTO it would present an
     // empty editor and read as "my work is still here" when it was not.
@@ -161,13 +201,24 @@ FohScreen foh_persist_resume_target(FohScreen sc) {
     // SUCCEEDED. tdev_hibernate_check calls suspend() first and downgrades
     // this to FOH_MENU_TOP when it fails — which is why MENU_TOP must also
     // remain a legal value here, and it does (it maps to itself below).
-    case FOH_TBUILD: return FOH_TBUILD;
+    // The builder's document is restored by the driver's enter()+resume()
+    // pair, which is the SHAPE this ticket's hook copies but not the same
+    // mechanism: that restoration reads a file the suspend WROTE, so it is
+    // a load, not a re-derivation, and it belongs to FohTbuildOps.
+    case FOH_TBUILD: return MAP(FOH_TBUILD, FOH_RESUME_HOOK_NONE);
+    // TARGET SELECT — THE ONE SCREEN WITH A HOOK (ticket #26). Its two
+    // persisted fields (`tsscur`, `tsspage`) come back off the card like any
+    // other row; its SLOT LIST cannot, because the list describes the card
+    // itself and the card may have been changed while the machine was off.
+    // So it is recomputed, once, after the fields land. It is listed here on
+    // its own rather than in the group below for exactly that reason.
+    case FOH_TSS: return MAP(FOH_TSS, FOH_RESUME_HOOK_TSS_SLOTS);
     // Everything else opens with NO entry-time initialisation beyond what
     // foh_init already gives (measured over every ev_trans site in foh.c:
-    // the only entry arms that write state are TSS's cursor/hand re-home,
-    // which lands on the same FOH_TSS_HOME_X/Y foh_init does, and the two
-    // excluded above). Listed rather than defaulted so a NEW screen is a
-    // compile error here — the one place that must think about it.
+    // the only entry arms that write state are TSS's — now the row above —
+    // and the two excluded further up). Listed rather than defaulted so a
+    // NEW screen is a compile error here — the one place that must think
+    // about it, and since ticket #26 it must think about the hook too.
     case FOH_TITLE:
     case FOH_MENU_TOP:
     case FOH_MENU_OPTIONS:
@@ -176,11 +227,15 @@ FohScreen foh_persist_resume_target(FohScreen sc) {
     case FOH_OPT_GAMEPLAY:
     case FOH_OPT_AUDIO:
     case FOH_CTRL_PAD:
-    case FOH_CTRL_KEY:
-    case FOH_TSS: return sc;
+    case FOH_CTRL_KEY: return MAP(sc, FOH_RESUME_HOOK_NONE);
     case FOH_SCREEN_COUNT: break;
   }
-  return FOH_STARTUP;
+  return MAP(FOH_STARTUP, FOH_RESUME_HOOK_NONE);
+}
+#undef MAP
+
+FohScreen foh_persist_resume_target(FohScreen sc) {
+  return foh_persist_resume_plan(sc).target;
 }
 
 // --- THE FIELD TABLE (ticket #22 / ADR 0001) --------------------------------
@@ -325,7 +380,13 @@ typedef struct {
   X(cssCpuCarry, .key = "cpucarry", .kind = FP_FLAG, .vals = 1,                \
     .dmax = FOH_CSS_PORTS + 1, .wireBias = 1, .since = 7)                      \
   X(cssHandType, .key = "handtype", .kind = FP_FLAG, .vals = 1, .dmax = 3,     \
-    .since = 7)
+    .since = 7)                                                                \
+  X(tssCursor, .key = "tsscur", .kind = FP_U2, .vals = 1,                      \
+    .dmax = FOH_TSS_SLOTS, .since = 7)                                         \
+  X(tssPage, .key = "tsspage", .kind = FP_FLAG, .vals = 1, .dmax = 2,          \
+    .since = 7)                                                                \
+  X(tssHand, .key = "tsshand", .kind = FP_HEX64, .vals = 2,                    \
+    .dom = FP_DOM_SCREEN, .since = 7)
 
 #define FP_ROW(nm, ...)                                                        \
   {.off = offsetof(FohPersist, nm),                                            \
@@ -367,10 +428,10 @@ enum { FP_TABLE_BYTES = 0 FP_FIELDS(FP_ROW_BYTES) };
 // ROUNDED UP TO THE STRUCT'S OWN ALIGNMENT, and the rounding is not a
 // loosening — it is what makes the guard cost EXACTLY ONE ROW.
 //
-// MEASURED (2026-08-27, RE-MEASURED after ticket #25's eight rows): the
-// persisted fields are 716 bytes and layoutGuard makes 720, which is already
+// MEASURED (2026-08-27, RE-MEASURED after ticket #26's two rows): the
+// persisted fields are 724 bytes and layoutGuard makes 728, which is already
 // a multiple of 8, so today the rounding does nothing. But the int count is
-// odd (61), so the NEXT int field takes the total
+// odd (63), so the NEXT int field takes the total
 // to 724 and the compiler pads the struct to 728. Asserting raw equality
 // would then fail even though the author did everything right — the field
 // AND its row — and the fix would be to bump FP_UNPERSISTED_BYTES, i.e. to
@@ -442,6 +503,23 @@ static size_t fp_stride(FpKind k) {
   return k == FP_HEX64 ? sizeof(double) : sizeof(int);
 }
 
+// The COLUMN's value bound for an integer row: legal values are [0, cap).
+//
+// FP_FLAG: `dmax` is MANDATORY and is at most 10 — one decimal digit is the
+// whole column, so the domain and the width are the same fact.
+//
+// FP_U2: two digits hold 100 values, and `dmax` is OPTIONAL. 0 means "the
+// whole column", which is what `resume` takes — its domain is a FUNCTION
+// (FP_DOM_RESUME, which is not an interval) and giving it a redundant bound
+// would be a second statement of the same rule, i.e. a thing that can drift.
+// `tsscur` states one, because eleven slots is exactly the case the FP_U2
+// arm's own comment anticipated when it said "no row reaches it today; it is
+// here so that the first one that could cannot do it silently".
+static int fp_dcap(const FpField *f) {
+  if (f->kind == FP_FLAG) return f->dmax;
+  return f->dmax ? f->dmax : 100;
+}
+
 // The exact byte length of one of f's lines, trailing LF included.
 static size_t fp_line_len(const FpField *f) {
   return strlen(f->key) + 1 + 2 * (size_t)f->dims +
@@ -496,9 +574,12 @@ static void fp_table_check(void) {
         gfx_fatal("foh_persist: wireBias on a permutation row");
       }
     }
-    if (f->kind == FP_FLAG && f->hasAbsent) {
+    // Both INT kinds, not just FP_FLAG: FP_U2 rows can carry a bounded
+    // domain since ticket #26, so the same rule has to reach them or the
+    // first two-digit migration default would go unchecked.
+    if ((f->kind == FP_FLAG || f->kind == FP_U2) && f->hasAbsent) {
       const int d = f->absent + f->wireBias;
-      if (d < 0 || d >= f->dmax) {
+      if (d < 0 || d >= fp_dcap(f)) {
         gfx_fatal("foh_persist: a row's absent value is outside its column");
       }
     }
@@ -513,6 +594,12 @@ static void fp_table_check(void) {
     }
     if (f->kind == FP_FLAG && (f->dmax < 1 || f->dmax > 10)) {
       gfx_fatal("foh_persist: a flag row's digit domain is not one digit");
+    }
+    // FP_U2's `dmax` is optional (0 == the whole two-digit column), but a
+    // stated one must still FIT in two digits, or the row would demand
+    // values the format cannot print.
+    if (f->kind == FP_U2 && (f->dmax < 0 || f->dmax > 100)) {
+      gfx_fatal("foh_persist: a two-digit row's domain is not two digits");
     }
     // fp_parse_field holds one LINE's values in a fixed local (the
     // permutation check needs them together); the bound is asserted here so
@@ -598,14 +685,15 @@ static size_t fp_serialize(const FohPersist *p, char *buf, size_t cap) {
             // …and the column's own bound, for the same reason the flag arm
             // above has one: TWO decimal digits is the whole width, so a
             // value outside [0,99] would produce a line the reader cannot
-            // parse. No row reaches it today; it is here so that the first
-            // one that could cannot do it silently. (Named `nn` for the
-            // format's own `<NN>`, and NOT `d` like the flag arm above: the
-            // two lines would otherwise be textually identical, and
-            // check-rebind.sh's T5 perturbs one of them BY EXACT LINE and
-            // hard-fails on an ambiguous anchor.)
+            // parse. TICKET #26 REACHED IT: `tsscur` narrows the bound to
+            // its own eleven slots through fp_dcap(), which is the "first
+            // row that could" this comment used to be waiting for. (Named
+            // `nn` for the format's own `<NN>`, and NOT `d` like the flag
+            // arm above: the two lines would otherwise be textually
+            // identical, and check-rebind.sh's T5 perturbs one of them BY
+            // EXACT LINE and hard-fails on an ambiguous anchor.)
             const int nn = *(const int *)cell + f->wireBias;
-            if (nn < 0 || nn > 99) {
+            if (nn < 0 || nn >= fp_dcap(f)) {
               gfx_fatal("foh_persist: field value outside its file column");
             }
             n = fp_addf(buf, cap, n, " %02d", nn);
@@ -758,6 +846,12 @@ static bool fp_parse_field(FpParse *ps, const FpField *f, FohPersist *v) {
               return fp_die(ps, "domain");
             }
           }
+          // …and the row's own column bound (ticket #26): `tsscur` may name
+          // eleven slots and nothing else. Two digits are always
+          // GRAMMATICAL, so a value the screen cannot hold is `domain`, and
+          // it resets loudly like every other out-of-domain value rather
+          // than being clamped onto a slot the player never chose.
+          if (line[i] >= fp_dcap(f)) return fp_die(ps, "domain");
           *(int *)cell = line[i] - f->wireBias;
           break;
         }
@@ -1180,6 +1274,15 @@ void foh_persist_apply(const FohPersist *p, FohState *s) {
   s->cssCarry = p->cssCarry;
   s->cssCpuCarry = p->cssCpuCarry;
   s->cssHandType = p->cssHandType;
+  // ticket #26: the TARGET-SELECT view plane. Three fields, and the list
+  // they describe is NOT one of them — `tssSlotPresent`/`tssSlotReason` are
+  // re-derived (FOH_RESUME_HOOK_TSS_SLOTS, and foh.c's entry arm for every
+  // ordinary arrival). Restoring `tssPage` without that re-derivation would
+  // put the player on the CUSTOM grid describing a card nobody had read.
+  s->tssCursor = p->tssCursor;
+  s->tssPage = p->tssPage;
+  s->tssHandX = p->tssHand[0];
+  s->tssHandY = p->tssHand[1];
   g_bound = s; // review-100 M1: bind for the record-time refresh
 }
 
@@ -1217,6 +1320,16 @@ void foh_persist_collect(FohPersist *p, const FohState *s) {
   p->cssCarry = s->cssCarry;
   p->cssCpuCarry = s->cssCpuCarry;
   p->cssHandType = s->cssHandType;
+  // ticket #26: the TARGET-SELECT view plane. The HAND goes with the cursor
+  // and the page, because on this screen it is what HOLDS them (D29: the
+  // slot the hand is over writes the selection every frame) — collecting the
+  // cursor without it stores a value the next boot overwrites on tick one.
+  // The slot cache is absent because it is re-derived, not restored — see
+  // the apply side.
+  p->tssCursor = s->tssCursor;
+  p->tssPage = s->tssPage;
+  p->tssHand[0] = s->tssHandX;
+  p->tssHand[1] = s->tssHandY;
   // records are chokepoint-owned: they change ONLY through
   // foh_persist_record_update (the finishGame arm), never collected
   // back from the display copy.

@@ -102,6 +102,19 @@ static void seed(FohPersist *p) {
   p->cssCarry = 2;
   p->cssCpuCarry = 3;
   p->cssHandType = 2;
+  // ticket #26's target-select view plane. The cursor takes the TOP of its
+  // own domain — 10 is the page-flip slot, the eleventh value, and it is the
+  // one value a single decimal column could NOT have held. A seed of, say,
+  // 3 would round-trip identically through a row mistyped as FP_FLAG.
+  p->tssCursor = 10;
+  p->tssPage = 1;
+  // ...and a hand that is NOT where the cursor implies, on purpose: this
+  // record is a COLUMN test and the loader has no cross-field rule, so a
+  // seed whose hand happened to sit in slot 10 would let a row wired to the
+  // wrong member still compare equal. (The reachable, self-consistent
+  // combinations are what check-hibernate.sh's round trip drives.)
+  p->tssHand[0] = 12.5;
+  p->tssHand[1] = 205.75;
 }
 
 static const char *status_token(FohPersistStatus st) {
@@ -162,6 +175,11 @@ static void dump(const FohPersist *p) {
   printf("carry %d\n", p->cssCarry);
   printf("cpucarry %d\n", p->cssCpuCarry);
   printf("handtype %d\n", p->cssHandType);
+  // ticket #26
+  printf("tsscur %d\n", p->tssCursor);
+  printf("tsspage %d\n", p->tssPage);
+  printf("tsshand %016llx %016llx\n", BITS(p->tssHand[0]),
+         BITS(p->tssHand[1]));
 #undef BITS
 }
 

@@ -2206,6 +2206,59 @@ int main(int argc, char **argv) {
       fprintf(stderr, "foh_dev: builder document %s\n",
               got ? "restored" : "NOT FOUND (empty editor)");
     }
+    // THE RESUME HOOK (ticket #26; ADR 0001's kept half of the rejected
+    // per-screen interface). The persisted fields have landed — apply()
+    // ran well above — so this is the one call that re-derives what a field
+    // table cannot carry. It is NOT a load: there is no save side.
+    //
+    // THE DECISION IS NOT HERE. Which screens have a hook is a column of
+    // foh_persist_resume_plan()'s exhaustive screen switch, so a new screen
+    // fails the build THERE, in the one place that already has to think
+    // about a new screen. What is here is the CALL, and this switch is
+    // exhaustive over the hook enum for the mirror reason: a hook nobody
+    // dispatches does not build either.
+    //
+    // The plan is asked for the screen we LANDED on. Those map to
+    // themselves by construction, and it is what gives the redirected arms
+    // their hook — a FOH_TMATCH record resumes onto target select and must
+    // re-read the card exactly as a FOH_TSS record does.
+    //
+    // Shape borrowed verbatim from the builder arm above: ENTER FIRST (the
+    // fields are the entry here), then restore over the top.
+    switch (foh_persist_resume_plan(foh.screen).hook) {
+      case FOH_RESUME_HOOK_NONE:
+        break;
+      case FOH_RESUME_HOOK_TSS_SLOTS: {
+        // The ordinary entry to target select runs this same scan (foh.c's
+        // TARGETTEST arm); a resume is the arrival that skips the entry.
+        foh_tss_refresh_slots(&foh);
+        // The re-read is the whole point of the hook, so it says what it
+        // FOUND rather than that it ran: `1` present, `0` absent, slot 0
+        // leftmost, BY INDEX (D43 — nothing shifts up to fill a hole). A
+        // stage added to the card while the lid was shut appears in this
+        // line, and one removed disappears from it.
+        char mask[FOH_TB_SLOT_CACHE + 1];
+        for (int k = 0; k < FOH_TB_SLOT_CACHE; k++) {
+          mask[k] = foh.tssSlotPresent[k] ? '1' : '0';
+        }
+        mask[FOH_TB_SLOT_CACHE] = '\0';
+        fprintf(stderr, "foh_dev: resume hook tss-slots re-read %s\n", mask);
+        // …and an absent slot SAYS WHY, in the words the screen would draw
+        // under it (foh_tbuild.c's slots_scan puts every reason through the
+        // face domain, so these are drawable strings, not internal codes).
+        // A slot that vanished off the card while the lid was shut is a
+        // thing the player has to be able to understand, and "gone with no
+        // reason" is the outcome this line exists to make impossible.
+        for (int k = 0; k < FOH_TB_SLOT_CACHE; k++) {
+          if (foh.tssSlotPresent[k]) continue;
+          fprintf(stderr, "foh_dev: resume hook tss-slot %d absent %s\n", k,
+                  foh.tssSlotReason[k] ? foh.tssSlotReason[k] : "(no reason)");
+        }
+        break;
+      }
+      case FOH_RESUME_HOOK_COUNT: // not a hook (foh_persist.h)
+        break;
+    }
     // The menu loop is playing wherever upstream plays it. The boot has
     // already programmed track 0 SILENT (:1974), so this is the same
     // lock-bracketed flag flip the title->menu-top arm makes below — not a

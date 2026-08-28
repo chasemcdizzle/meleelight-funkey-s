@@ -30,7 +30,7 @@
 //     truth (medal DISPLAY = the registered iter-99 pipeline-extension
 //     deferral).
 //
-// FILE FORMAT `MLFKPERSIST7` (versioned + checksummed; exactly 78 LF
+// FILE FORMAT `MLFKPERSIST7` (versioned + checksummed; exactly 81 LF
 // lines, deterministic bytes — twin checks cmp host vs device). v2
 // added the `ctlstyle` line, v3 the `modonr` line (fix_plan A4), v4
 // the seven options lines below (MENU-SPEC §3/§4 — the completed
@@ -38,12 +38,13 @@
 // DEVIATION D26 — the Controls screen's real rebinder), v6 the `sel`
 // row and v7 the `resume` row (fix_plan A26 / DEVIATION D53 — hibernate).
 //
-// THE LINE COUNT WENT 70 -> 78 WITHOUT THE VERSION MOVING, which is ticket
-// #22's whole point rather than an inconsistency: MLFKPERSIST7 is the LAST
-// header this build will ever write (see the field-table note below).
+// THE LINE COUNT WENT 70 -> 78 -> 81 WITHOUT THE VERSION MOVING, which is
+// ticket #22's whole point rather than an inconsistency: MLFKPERSIST7 is the
+// LAST header this build will ever write (see the field-table note below).
 // Ticket #25 appended the eight CSS rows — `ptype` through `handtype` — as
-// eight table rows, and a v7 file written before they existed still loads,
-// because an absent row takes its default.
+// eight table rows, and ticket #26 the three target-select rows — `tsscur`,
+// `tsspage` and `tsshand` — as three more. A v7 file written before any of
+// them existed still loads, because an absent row takes its default.
 //
 // WHY v4 AND NOT v2-WITH-MORE-LINES (cross-lane collision, resolved at
 // the iter-13x merge — read this before renumbering anything): the menus
@@ -125,6 +126,25 @@
 //                                 whichTokenGrabbed + 1 (0 = holding nothing)
 //   cpucarry <c>                  [0-4], same bias, whichCpuGrabbed + 1
 //   handtype <h>                  [0-2] handPoint | handOpen | handGrab
+//   --- target select (ticket #26) ----------------------------------------
+//   tsscur <NN>                   TWO digits, [00-10]: the SELECTED slot.
+//                                 0..9 are the tstage ids and 10 is the
+//                                 page-flip slot, eleven values — one more
+//                                 than a single decimal column holds, which
+//                                 is why this row is FP_U2 and not a flag.
+//   tsspage <p>                   [01] 0 = the ten AUTHORED stages, 1 = the
+//                                 ten CUSTOM slots (foh.h's tssPage).
+//   tsshand <hex16> <hex16>       tssHandX, tssHandY — the free cursor, in
+//                                 doubles, [0, 240] on each axis. It is here
+//                                 because it CARRIES the selection: the slot
+//                                 the hand is over writes tssCursor every
+//                                 frame (D29), so a restored cursor without
+//                                 a restored hand lasts exactly one tick.
+//                                 The slot LIST is NOT here and never can
+//                                 be: it is read from the card by
+//                                 foh_tss_refresh_slots() and its reasons
+//                                 are `const char *` into four TUs. It is
+//                                 RE-DERIVED by the resume hook below.
 //   SUM <sha256-lowercase-hex of ALL preceding bytes>
 // The v4, v5, v6 and v7 blocks are APPENDED after the 50 rec rows on purpose:
 // it keeps every older version a strict PREFIX through the rec block, so the
@@ -427,6 +447,68 @@ typedef struct {
   // recomputing it at load would draw a sprite the player never saw.
   int cssHandType;
 
+  // --- THE TARGET-SELECT VIEW PLANE (ticket #26) -------------------------
+  //
+  // Which slot is selected and which of the two grids is on show. Both are
+  // CONTEXT.md's "screen-local state": not settings, not sim state, just
+  // where the player had got to — and the plane that survived nothing.
+  //
+  // TWO INTS, AND THE PLACEMENT IS THE SAME RULE TICKET #25 WROTE DOWN. The
+  // block sits AFTER the CSS block and BEFORE `resumeScreen`, so:
+  //
+  //   * `resumeScreen` STAYS THE LAST PERSISTED MEMBER. check-persist-
+  //     table.sh leg [9]'s counterfactual appends its int after
+  //     `int resumeScreen;` and requires it to vanish into the tail padding
+  //     once `layoutGuard` is removed; put a block after that member and
+  //     the anchor is no longer the tail and the leg stops modelling what
+  //     it claims to. (Ticket #25 states this at its own block; it is
+  //     restated here because it is the constraint a third block breaks.)
+  //
+  //   * NO ALIGNMENT HOLE OPENS. These are ints among ints — the doubles
+  //     are all above — so unlike #25's block this one needs no "start on
+  //     the doubles" argument. Both together move the member total by 8 and
+  //     the int count from 61 to 63 (still ODD, so `layoutGuard` still
+  //     carries the tail padding and the static assertion is still an
+  //     equality with no slack).
+  //
+  // WHAT IS DELIBERATELY NOT HERE, and it is the whole of ticket #26's
+  // second half: `tssSlotPresent[]` / `tssSlotReason[]`, the ten custom
+  // slots' presence and the words that say why one is missing. They are
+  // READ FROM THE CARD, and the card may have been changed while the lid
+  // was shut — a restored list would describe a directory that no longer
+  // exists. `tssSlotReason[]` is additionally an array of `const char *`
+  // into string literals in four different translation units, so a byte
+  // image would restore ADDRESSES valid only for the binary that wrote
+  // them, which is the trap ADR 0001 marks FP_RECON for. A field table
+  // cannot express "recompute this", so this plane is re-derived by the
+  // RESUME HOOK — see FohResumeHookId / foh_persist_resume_plan() below.
+  //
+  // THE HAND IS HERE, AND IT HAD TO BE — MEASURED, not reasoned. The first
+  // shape of this block persisted the cursor and the page and left the hand
+  // to foh_init's FOH_TSS_HOME_{X,Y}, on the argument that upstream re-homes
+  // targetPointerPos on every entry (menu.js:77-84, cited at
+  // FohState.tssHandX) so a resume may as well arrive where an entry would.
+  // That argument is WRONG ON THIS SCREEN, and check-hibernate.sh leg [5d]'s
+  // round trip is what said so: FOH_TSS_HOME is the CENTRE OF SLOT 0, the
+  // hand is hit-tested every frame, and D29 made the slot the hand is over
+  // WRITE the selection. So the restored cursor survived exactly zero ticks
+  // — the first frame put the hand on slot 0 and the selection followed it.
+  // "The cursor comes back" is not a property the cursor can have on its own
+  // here; the hand is what holds it.
+  //
+  // DOUBLES, never integers, for the CSS hand's reason verbatim: rounding
+  // happens at draw time only, and a hand restored to a rounded pixel would
+  // drift its own hit tests by up to half a cell — which on THIS screen
+  // moves the selection with it.
+  //
+  // THE BLOCK STARTS ON THE DOUBLES, ticket #25's rule applied again: the
+  // eight CSS ints above end at an 8-aligned offset, so putting this pair
+  // first opens no hole; put it after the two ints below and there is a gap
+  // FP_UNPERSISTED_BYTES would have to declare.
+  double tssHand[2]; // FohState.tssHandX, tssHandY
+  int tssCursor;     // FohState.tssCursor — 0..9 tstage ids, 10 the page slot
+  int tssPage;       // FohState.tssPage — 0 authored | 1 custom
+
   // --- v7 (fix_plan A26; DEVIATION D53) ---------------------------------
   // HIBERNATE/RESUME. Owner: *"closing screen and opening it doesn't come
   // back to the game though. i want it to."* Closing the lid does NOT
@@ -516,7 +598,64 @@ void foh_persist_defaults(FohPersist *p);
 //                           resume never runs; MENU_OPTIONS is its B-exit.
 //   FOH_MENU_BATTLE -> FOH_MENU_TOP  unreachable at FOH_NETPLAY 0.
 //   FOH_STARTUP-> FOH_STARTUP  the boot animation is not a place.
+//
+// This is now the TARGET HALF of foh_persist_resume_plan() below, kept as a
+// function of its own because it is the file's domain check and every
+// existing caller wants only the screen.
 FohScreen foh_persist_resume_target(FohScreen sc);
+
+// --- THE RESUME HOOK (ticket #26; ADR 0001) ---------------------------------
+//
+// ADR 0001 rejected a per-screen save()/load() pair as the PRIMARY mechanism
+// and kept exactly one half of it, because that half was right: some state
+// must not be restored, it must be RECOMPUTED, and a field table cannot
+// express that. Target select is the case — its slot list is read from the
+// SD card, which may have changed while the lid was shut, and its reasons
+// are pointers. So a screen may carry a HOOK: a procedure run ONCE after the
+// persisted fields land, which re-derives what cannot be saved. It is NOT a
+// save/load pair; there is no save side and there never will be.
+//
+// IT HANGS OFF THE EXISTING EXHAUSTIVE SWITCH RATHER THAN FORMING A SECOND
+// INTERFACE. foh_persist_resume_plan() IS foh_persist_resume_target()'s
+// switch, widened to yield both columns: every screen is enumerated, nothing
+// is defaulted, and `case FOH_SCREEN_COUNT:` closes it, so A NEW SCREEN IS A
+// COMPILE ERROR THERE and its author must name a target AND a hook in the
+// same row. That exhaustiveness has already caught a real gap when two lanes
+// merged; the hook inherits it instead of asking to be remembered.
+//
+// WHY AN ID AND NOT A FUNCTION POINTER. A `void (*)(FohState *)` column would
+// name a symbol — `foh_tss_refresh_slots` lives in foh.c — and taking its
+// address in foh_persist.c would give this TU its first FOH link dependency.
+// foh_persist.c deliberately has none: check-persist-table.sh builds it with
+// its witness AND NOTHING ELSE OF THE FOH, which is what lets that check
+// negative-build a perturbed copy of the persist pair in isolation. The id
+// keeps the DECISION in the one screen switch and puts only the CALL at the
+// driver, whose own dispatch is exhaustive over this enum for the same
+// reason — a new hook that nobody dispatches does not build either.
+typedef enum {
+  // The screen needs nothing beyond the fields. This is most of them, and
+  // it is a stated answer rather than a silence: the resume-target map's
+  // grouped tail arm already records that those screens open with no
+  // entry-time initialisation at all.
+  FOH_RESUME_HOOK_NONE = 0,
+  // Target select: re-read the ten custom slots from the card
+  // (foh_tss_refresh_slots). The ordinary ENTRY to that screen does the
+  // same scan; a resume is the arrival that skips the entry, which is the
+  // whole reason this exists.
+  FOH_RESUME_HOOK_TSS_SLOTS,
+  FOH_RESUME_HOOK_COUNT // not a hook — the dispatch's own exhaustiveness
+} FohResumeHookId;
+
+typedef struct {
+  FohScreen target;     // what foh_persist_resume_target() returns
+  FohResumeHookId hook; // what to re-derive once the fields have landed
+} FohResumePlan;
+
+// The one map. `sc` is the screen being resolved; for the hook the caller
+// passes the screen it LANDED on (which maps to itself by construction), so
+// a FOH_TMATCH origin picks up FOH_TSS's hook through the target it was
+// redirected to, which is the behaviour that arm exists for.
+FohResumePlan foh_persist_resume_plan(FohScreen sc);
 
 // Load <dir>/mlfk-persist.dat. On ANY reset arm, *p holds the defaults
 // on return. Emits exactly one TERMINAL stderr event line (`loaded` or

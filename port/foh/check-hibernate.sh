@@ -649,6 +649,193 @@ cmp "$BUILD/css.before" "$CSSDIR/mlfk-persist.dat" \
   report, restated in bytes."; }
 echo "   CSS resumed with the SAME machine plane, byte for byte"
 
+# --- [5d] TARGET SELECT resumes, and its slot list is RE-READ (ticket #26) --
+#
+# Two halves, and the second is the one that needed a new mechanism.
+#
+#   HALF 1 — the FIELDS. `tsscur`, `tsspage` and `tsshand` are three more
+#   rows through ticket #22's table, so the page the player was on and the
+#   slot he had selected come back. The HAND is one of them because this
+#   round trip is what proved it had to be: FOH_TSS_HOME is the centre of
+#   slot 0 and D29 makes the slot under the hand write the selection, so a
+#   resume that restored the cursor and left the hand at home lost the
+#   cursor on its FIRST TICK and failed the cmp below at the `tsscur` line.
+#   Judged exactly as [5b] and [5c] judge theirs: BYTE IDENTITY across
+#   park -> hibernate -> resume -> hibernate, with a per-row dead-tooth guard
+#   proving the parked record really differs from the one the same binary
+#   writes on an untouched screen.
+#
+#   HALF 2 — the LIST, which a field table CANNOT carry (ADR 0001). The ten
+#   custom slots live on the SD card and the card can be changed while the
+#   machine is off; their refusal strings are `const char *` into other
+#   translation units. So they are RE-DERIVED by the resume hook, and the
+#   only way to prove a re-derivation is to make the saved answer WRONG:
+#   this leg edits the slot files between the hibernate and the resume and
+#   requires the resumed screen to describe the DISK. A resume that restored
+#   a remembered list would satisfy every other assertion here and fail this
+#   one, which is the whole reason it is written this way round.
+echo "=== [5d] target select resumes and RE-READS its slots (ticket #26)"
+
+# CLAMP-THEN-COUNT, the [5c] idiom. FOH_CURSOR_VX/VY are 2.40/3.84 px/frame
+# and the target-select rects are foh_tss_slots(): slot k at
+# x = 8 + (k/5)*124, y = 30 + (k%5)*22, 100x19; the page-flip slot 10 at
+# (70,142) 100x17. Target select is entered at tick ~391 (S at 375, one D to
+# the TARGET TEST row, A at 390) and everything below finishes by 607, well
+# inside the 3 s (1500 tick) wait.
+#
+#   400-459  UL            hand clamped to (0, 0)
+#   460-498  RD  39 frames (93.6, 149.76)
+#   499-509  R   11 frames (120.0, 149.76) — inside slot 10's box
+#   512      A             flip to the CUSTOM page (tssPage 0 -> 1)
+#   520-579  UL            clamped to (0, 0) again
+#   580-599  RD  20 frames (48.0, 76.8)
+#   600-606  D    7 frames (48.0, 103.68) — inside slot 3 (y 96..115)
+#
+# The A at 512 is the ONLY A on this screen: an A over a real custom slot
+# LAUNCHES it, and a match is a different screen with a different record.
+TSSPARK=$BUILD/tsspark.flow
+cat > "$TSSPARK" <<'TSSEOF'
+FLOW1
+I 1 -
+I 375 S
+I 376 -
+I 380 D
+I 381 -
+I 390 A
+I 391 -
+I 400 UL
+I 460 RD
+I 499 R
+I 510 -
+I 512 A
+I 513 -
+I 520 UL
+I 580 RD
+I 600 D
+I 607 -
+END 20000
+TSSEOF
+made "$TSSPARK"
+
+# A REAL .mlstage, produced by the REAL writer. [5b] published this document
+# through foh_persist_publish under A45 T2's three-line contract, and
+# foh_tbuild.c states that a slot and the resume document are the SAME
+# artifact addressed by a different name — so copying it into a slot is not a
+# hand-authored fixture, it is that claim being used.
+made "$BUILD/tbdoc.before"
+
+TSSDIR=$BUILD/tss-persist
+rm -rf "$TSSDIR"; mkdir -p "$TSSDIR"
+# The card AS THE LID CLOSES: slots 3 and 7 carry a stage, everything else is
+# empty.
+cp "$BUILD/tbdoc.before" "$TSSDIR/custom3.mlstage"
+cp "$BUILD/tbdoc.before" "$TSSDIR/custom7.mlstage"
+rm -f "$BUILD/tsshib.err" "$BUILD/tsshib.trace"
+MLFK_PERSIST_DIR="$TSSDIR" "$BUILD/foh_dev_headless" \
+  --flow "$TSSPARK" --input flow --flow-out "$BUILD/tsshib.trace" \
+  --pace 1 --budget-ns "$BUDGET" > "$BUILD/tsshib.err" 2>&1 &
+TSSPID=$!
+sleep 3
+kill -0 "$TSSPID" 2>/dev/null \
+  || { relay_lines < "$BUILD/tsshib.err"
+       fail "[5d] the app exited before the signal"; }
+kill -USR1 "$TSSPID"
+n=0
+while kill -0 "$TSSPID" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+kill -9 "$TSSPID" 2>/dev/null || true
+set +e; wait "$TSSPID" >/dev/null 2>&1; set -e
+grep -qxF 'foh_dev: hibernate from=target-select resume=target-select' \
+  "$BUILD/tsshib.err" \
+  || { relay_lines < "$BUILD/tsshib.err"
+       fail "[5d] the flow did not hibernate ON TARGET SELECT — it no longer
+  parks where this leg thinks it does, so everything below judges the wrong
+  screen"; }
+made "$TSSDIR/mlfk-persist.dat"
+
+# THE PARKED RECORD SAYS WHERE HE WAS. Exact rows, not "differs": the flow
+# above computes both values, so an off-by-one in the hand arithmetic must
+# fail here rather than silently park somewhere else and round-trip fine.
+for want in 'tsscur 03' 'tsspage 1'; do
+  grep -qxF "$want" "$TSSDIR/mlfk-persist.dat" \
+    || { grep -nE '^tss' "$TSSDIR/mlfk-persist.dat" >&2 || true
+         fail "[5d] the parked record does not carry '$want' — the flow did
+  not leave target select on the custom page with slot 3 selected"; }
+done
+# ...and both rows must DIFFER from the ones the same binary writes on a
+# screen nobody worked, or the round trip below is a round trip on defaults.
+# [5c]'s untouched CSS record is exactly that reference: it never visits
+# target select, so its two rows are the cold-start pair.
+for k in tsscur tsspage tsshand; do
+  a="$(grep -m1 "^$k " "$TSSDIR/mlfk-persist.dat")" \
+    || grammar_die "[5d] the parked record carries no '$k' row"
+  b="$(grep -m1 "^$k " "$CSSFRESH/mlfk-persist.dat")" \
+    || grammar_die "[5d] the untouched record carries no '$k' row"
+  [ "$a" != "$b" ] \
+    || fail "[5d] the parked '$k' row is IDENTICAL to the untouched one
+  ('$a') — the flow did not actually change it (dead leg)"
+done
+echo "   parked on the CUSTOM page with slot 3 selected, all three rows moved"
+
+# THE CARD CHANGES WHILE THE MACHINE IS OFF. Slot 3 — the SELECTED one — is
+# taken away, slot 5 appears, and slot 7 is left alone so that "the list was
+# re-read" cannot be satisfied by everything simply going absent.
+cp "$BUILD/tbdoc.before" "$TSSDIR/custom5.mlstage"
+rm -f "$TSSDIR/custom3.mlstage"
+DISK_MASK=0000010100   # slots 5 and 7, BY INDEX (D43 — nothing shifts up)
+PARK_MASK=0001000100   # what the lid closed on; a RESTORED list would say this
+[ "$DISK_MASK" != "$PARK_MASK" ] \
+  || grammar_die "[5d] the two masks are equal — the disk edit is a no-op and
+  the re-read assertion below would pass for a resume that restored the list"
+
+cp "$TSSDIR/mlfk-persist.dat" "$BUILD/tss.before"
+TSSRESFLOW=$BUILD/tssres.flow
+printf 'FLOW1\nI 1 -\nEND 20000\n' > "$TSSRESFLOW"
+rm -f "$BUILD/tssres.err" "$BUILD/tssres.trace"
+MLFK_PERSIST_DIR="$TSSDIR" "$BUILD/foh_dev_headless" \
+  --flow "$TSSRESFLOW" --input flow --flow-out "$BUILD/tssres.trace" \
+  --pace 1 --budget-ns "$BUDGET" > "$BUILD/tssres.err" 2>&1 &
+TSSPID2=$!
+sleep 2
+tss_die() { kill -9 "$TSSPID2" 2>/dev/null || true
+            relay_lines < "$BUILD/tssres.err"; fail "$1"; }
+grep -qxF 'foh_dev: resumed screen=target-select' "$BUILD/tssres.err" \
+  || tss_die "[5d] the next boot did not resume target select"
+# THE HOOK RAN, AND WHAT IT FOUND IS THE DISK. This is the assertion the
+# ticket exists for: a resume that restored the remembered list would print
+# $PARK_MASK here and would still pass every other line in this leg.
+grep -qxF "foh_dev: resume hook tss-slots re-read $DISK_MASK" \
+  "$BUILD/tssres.err" \
+  || { grep -F 'resume hook' "$BUILD/tssres.err" >&2 || true
+       tss_die "[5d] the resumed slot list is not the one on the card (want
+  $DISK_MASK). If it says $PARK_MASK the list was RESTORED rather than
+  re-read, which is the defect ADR 0001 keeps the hook for; if it says
+  0000000000 nothing was readable and the fixture is wrong."; }
+# the stage that APPEARED and the one that was left alone, named individually
+# so a mask that is right by coincidence cannot pass
+! grep -qxF 'foh_dev: resume hook tss-slot 5 absent EMPTY' "$BUILD/tssres.err" \
+  || tss_die "[5d] the stage added to the card while the lid was shut did not
+  appear after the resume"
+! grep -qxF 'foh_dev: resume hook tss-slot 7 absent EMPTY' "$BUILD/tssres.err" \
+  || tss_die "[5d] the untouched slot 7 went missing — the re-read is not
+  reading, it is guessing"
+# ...and the one that was REMOVED is gone AND SAYS WHY, in words the screen
+# can draw. "Gone with no reason" is the outcome the reason plane prevents.
+grep -qxF 'foh_dev: resume hook tss-slot 3 absent EMPTY' "$BUILD/tssres.err" \
+  || tss_die "[5d] the stage removed from the card is still reported present,
+  or is absent with no reason under it"
+kill -USR1 "$TSSPID2"
+n=0
+while kill -0 "$TSSPID2" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+kill -9 "$TSSPID2" 2>/dev/null || true
+set +e; wait "$TSSPID2" >/dev/null 2>&1; set -e
+made "$TSSDIR/mlfk-persist.dat"
+cmp "$BUILD/tss.before" "$TSSDIR/mlfk-persist.dat" \
+  || fail "[5d] target select did NOT survive the round trip: the record
+  published by the second hibernate differs from the first. The slot list is
+  not in that record, so every difference is a field the resume dropped."
+echo "   target select resumed on the same page and slot, byte for byte;
+   the slot list came from the CARD, not from the record"
+
 # --- [6] teeth ---------------------------------------------------------------
 echo "=== [6] teeth"
 
@@ -698,7 +885,8 @@ node -e '
   // would make this tooth refuse for the wrong reason and stop testing the
   // migration it names.
   const v7 = ["resume ", "ptype ", "cpudiff ", "vsmode ", "hand ",
-              "slider ", "carry ", "cpucarry ", "handtype "];
+              "slider ", "carry ", "cpucarry ", "handtype ",
+              "tsscur ", "tsspage ", "tsshand "];
   for (const k of v7) {
     const i = b.findIndex((l) => l.startsWith(k));
     if (i < 0) throw new Error("no " + k + "row to remove");
@@ -786,6 +974,46 @@ fi
 # fix answers both.
 echo "   T4 (foreground form: the signal never reaches the app) bites"
 
+# T5 — THE HOOK. The re-derivation itself removed from a foh_dev.c COPY, so
+# the resume restores its fields and never asks the card. This is the
+# perturbation that makes [5d]'s re-read assertion a measurement rather than
+# a description: without it, a resume that quietly kept whatever the boot's
+# memset left behind would satisfy every log line [5d] greps for except one.
+# The tree is never edited (T3's pattern).
+echo "   T5: the resume hook stops re-reading the card"
+mkdir -p "$BUILD/t5/foh"
+sed 's|^        foh_tss_refresh_slots(&foh);$|        // T5: the hook no longer re-reads the card|' \
+  "$FOH/foh_dev.c" > "$BUILD/t5/foh/foh_dev.c"
+made "$BUILD/t5/foh/foh_dev.c"
+cmp -s "$BUILD/t5/foh/foh_dev.c" "$FOH/foh_dev.c" \
+  && grammar_die "T5: the perturbation matched nothing — the hook's call moved
+  or was reverted, so this tooth would be vacuous"
+build_foh_headless "$BUILD/t5/foh/foh_dev.c" "$BUILD/t5/foh_dev_t5" "-I$FOH" \
+  || fail "T5 build failed"
+# the SAME card [5d] resumed against: slots 5 and 7 present, and a record
+# armed for target select.
+T5DIR=$BUILD/t5-persist
+rm -rf "$T5DIR"; mkdir -p "$T5DIR"
+cp "$TSSDIR/mlfk-persist.dat" "$T5DIR/mlfk-persist.dat"
+cp "$TSSDIR/custom5.mlstage" "$T5DIR/custom5.mlstage"
+cp "$TSSDIR/custom7.mlstage" "$T5DIR/custom7.mlstage"
+rm -f "$BUILD/t5.err"
+MLFK_PERSIST_DIR="$T5DIR" "$BUILD/t5/foh_dev_t5" \
+  --flow "$TSSRESFLOW" --input flow --flow-out "$BUILD/t5.trace" \
+  --pace 1 --budget-ns "$BUDGET" > "$BUILD/t5.err" 2>&1 &
+t5p=$!
+sleep 2
+kill -9 "$t5p" 2>/dev/null || true
+set +e; wait "$t5p" >/dev/null 2>&1; set -e
+grep -qxF 'foh_dev: resumed screen=target-select' "$BUILD/t5.err" \
+  || { relay_lines < "$BUILD/t5.err"
+       fail "T5 build did not reach the resume at all — the tooth is measuring
+  a broken build, not the hook"; }
+! grep -qxF "foh_dev: resume hook tss-slots re-read $DISK_MASK" "$BUILD/t5.err" \
+  || fail "T5 DID NOT BITE: with the re-derivation removed the resumed screen
+  still described the card, so [5d]'s assertion is not measuring the hook"
+echo "   T5 (hook stops re-reading -> the card is not described) bites"
+
 # --- [7] the DEVICE check's format whitelist, run against this real file ----
 # check-device-persist.sh carries an EXACT POSITIONAL whitelist for the persist
 # format, restated independently of the C loader. A version bump has to move it
@@ -808,8 +1036,8 @@ for anchor in 'hex_lt() ( LC_ALL=C; [[ "$1" < "$2" ]]; ) # fixed 16-hex: byte or
   the anchor '$anchor' (want 1) — the extracted whitelist moved"
 done
 {
-  grep -xF 'PERSIST_BYTES=1807' "$DEVP" \
-    || grammar_die "[7] check-device-persist.sh does not pin PERSIST_BYTES=1807"
+  grep -xF 'PERSIST_BYTES=1869' "$DEVP" \
+    || grammar_die "[7] check-device-persist.sh does not pin PERSIST_BYTES=1869"
   awk '
     /^hex_lt\(\) \( LC_ALL=C; \[\[ "\$1" < "\$2" \]\]; \)/ { inr = 1 }
     inr { print }
@@ -824,6 +1052,11 @@ grep -qF 'sed -n 77p' "$WL" \
   || grammar_die "[7] the extracted whitelist does not read line 77 — it was
   not bumped for ticket #25's CSS machine plane, so a persistence change is
   about to reach hardware with the device check judging the wrong lines"
+grep -qF 'sed -n 80p' "$WL" \
+  || grammar_die "[7] the extracted whitelist does not read line 80 — it was
+  not bumped for ticket #26's target-select trio, so the same blindness one
+  ticket later: the device would judge a file two rows shorter than the one
+  this build writes"
 # shellcheck disable=SC1090 — derived above, not tracked
 . "$WL"
 verify_persist_file "$PDIR/mlfk-persist.dat" "[7] the v7 file leg [4] published"
