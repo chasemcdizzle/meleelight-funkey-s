@@ -258,15 +258,21 @@ else
   # protection, which exists for markers that CANNOT self-consume.
   if command -v instant_play >/dev/null 2>&1 && command -v pid >/dev/null 2>&1; then
     pid record "$APP" >/dev/null 2>&1 || true
-    instant_play save "$DIR/foh_device" --flow "$DIR/f01-vs-g01.flow" \
-      --input poll --flow-out "$EV/foh-trace.txt" \
-      --pace 1 --budget-ns 16666667 \
-      --bridge live --simdata "$DATA/simdata.txt" --seed "$SEED" \
-      --bstate-out "$EV/bstate.txt" \
-      --gfxdata "$DATA/gfxdata-frozen.txt" \
-      --vfxdata "$DATA/vfxdata-frozen.txt" \
-      --glyphs "$DATA/vfxglyphs-frozen.txt" --legible \
-      --anim-dir "$DATA" --tapjump-off-p1 --system-menu $SND $MUS \
+    # SAVE THIS SCRIPT, NOT THE BINARY — and that is the difference between
+    # a resume that works once and one that keeps working. MEASURED on the
+    # device: recording the binary made the first lid close come back
+    # correctly, and then `ps` showed ZERO mlfk-foh.sh processes in the
+    # resumed session, because `instant_play load` sources the recorded
+    # command directly. Nothing re-armed the record, so a SECOND lid close
+    # went back to the launcher. Recording the launcher makes every resumed
+    # session arm the next one, and it inherits the USR1 trap and the
+    # clean-exit removal below rather than losing both.
+    #
+    # The args go away with it: this script reconstructs them, including a
+    # FRESH per-session RNG seed. Replaying a recorded argv would have
+    # pinned one seed across every resumed match for the life of the record
+    # — the punch-list C7 defect, reintroduced through the back door.
+    instant_play save "$DIR/mlfk-foh.sh" \
       >> "$LOG" 2>&1 || echo "mlfk-foh.sh: instant_play save failed" >> "$LOG"
   fi
   wait "$APP"; rc=$?

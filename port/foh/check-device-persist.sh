@@ -1001,9 +1001,41 @@ mk_pdir() { # <dst-dir> <src-file|-> : fresh persist dir, optional seed file
   mkdir -p "$1"
   if [ "$2" != - ]; then cp "$2" "$1/mlfk-persist.dat"; fi
 }
+
+# HOME THE MENU CURSOR IN THE SEED, and the reason is a real interaction
+# ticket #27 introduced rather than a fixture nicety.
+#
+# The p02 flow reaches the options screen by pressing DOWN three times from
+# menu-top's row 0 — an assumption that held for as long as foh_init was the
+# only thing that set `menuSelected`. #27 persists it, so the cursor now
+# arrives from the FILE, and the seed carries 1: three DOWNs then land on row
+# 4, which wraps to 0, and the session walked into the character select
+# instead. MEASURED on the device, not reasoned: the trace read
+# `T 395 menu-top css a` and the B-exit resave this leg judges never
+# happened.
+#
+# The flow is left alone deliberately. A relative walk cannot home a wrapping
+# cursor without knowing the row count, and teaching every committed flow the
+# count would spread #27's change across the whole corpus. Seeding the
+# cursor states the precondition where the fixture is built, which is also
+# the honest place: this leg is about the OPTIONS values and the resave, not
+# about where the cursor happened to be.
+seed_menusel_home() { # <persist-file> : set menusel 0 and re-seal the SUM
+  local f="$1" body
+  body="$(dirname "$f")/.homing"
+  grep -v '^SUM ' "$f" | sed 's/^menusel .*/menusel 0/' > "$body"
+  grep -qx 'menusel 0' "$body" \
+    || fail "seed_menusel_home: no menusel row in $f — #27's row moved or
+   vanished, and this fixture would silently stop homing the cursor"
+  { cat "$body"; printf 'SUM %s\n' "$(shasum -a 256 "$body" | cut -d' ' -f1)"; } > "$f"
+  rm -f "$body"
+}
+
 mk_pdir "$HP/twin-persist" "$FILE_REC"
+seed_menusel_home "$HP/twin-persist/mlfk-persist.dat"
 run_host p02-persist-verify "$HP/p02twin" "$PWD/$HP/twin-persist"
 mk_pdir "$HP/twin-persist2" "$FILE_REC"
+seed_menusel_home "$HP/twin-persist2/mlfk-persist.dat"
 run_host p02-persist-verify "$HP/p02twin2" "$PWD/$HP/twin-persist2"
 for s in opt-persisted tss-record; do
   made "$HP/p02twin/shots/$s.ppm" "$HP/p02twin2/shots/$s.ppm"
