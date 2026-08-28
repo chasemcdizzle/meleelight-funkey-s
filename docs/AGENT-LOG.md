@@ -22717,3 +22717,80 @@ The lesson stated plainly: this feature has now produced four defects, and the
 three found by reading the port were the small ones. The one that actually
 kept the game from coming back was in a script the port merely calls, and it
 took ten minutes of ADB to find. Read the platform, not just the port.
+
+## driver — 2026-08-28 (later) — the match resume was never in the shipped app. ZOOM-OUT: two builders, one product, and a pointer seam that fails silently
+
+The owner played a match, closed the lid, opened it, and landed on the
+CHARACTER SELECT. Every host check was green. The code was right.
+
+### What the device said
+
+```
+foh_persist: loaded
+foh_dev: resumed screen=css
+```
+and `/mnt/mlfk-data/` held **no `mlfk-match.hdr` and no `mlfk-match.sim`**. The
+writer had never run.
+
+### Cause, MEASURED
+
+Three TUs — `port/foh/foh_match_snap.c`, `port/foh/foh_target_snap.c` and
+`port/sim/sim/sim_snapshot.c` — were listed in `check-device-foh.sh`'s
+`build_foh_headless` and **in no other builder**. `riglib.sh`'s `foh_device`
+recipe is the one `install-play-opk.sh` packages into the OPK, and it had none
+of them. So every check compiled the feature and the game the owner plays did
+not contain it.
+
+The #30 lane REPORTED this, in its finding 4, and called it an owner call
+outside its lane. It was right to flag it and I did not act on it. That is on
+the driver.
+
+### Why nothing caught it
+
+`foh_match_snap.c` and `foh_target_snap.c` install themselves through POINTER
+SEAMS — the same device that let #29 and #30 land without touching any other
+build. The price is a failure mode with no symptom: leave the TU out and there
+is no link error, no warning and no crash. The ops pointer is NULL, the
+hibernate arm quietly records `resume=css`, and the player loses their match.
+
+**An absent seam is indistinguishable from a seam that decided not to fire.**
+That is precisely the shape HARD RULE 2 forbids, arriving through the build
+system rather than through the source.
+
+### The class fix
+
+`check-device-foh.sh` now compares the two recipes MECHANICALLY on the plane
+where they must agree — every `port/foh` TU plus the snapshot writer — reading
+both scripts' bytes, never a compiled artifact. It fails naming the TUs that
+are in one list and not the other, and it refuses to pass if either extraction
+yields zero (an anchor that moved must not silently disable the guard).
+MEASURED green after the fix: **10 FOH TUs, identical in both recipes**.
+
+### A second thing the arm compiler found, because this TU had never met it
+
+`MS_FRAME_MAX`/`TS_FRAME_MAX` were `999999999999L` with a comment claiming it
+"still fits a 32-bit long". It does not. armv7 gcc 10.2 rejected
+`frame > MS_FRAME_MAX` under `-Werror=type-limits` as provably vacuous, since a
+32-bit long tops out at 10 digits. Both bounds are real, so neither was
+dropped: where `long` is the wider type the 12-digit format ceiling stays a
+live refusal, and where it is the narrower one the comparison is compiled out
+rather than written and ignored. A comment that had never been compiled for the
+target was simply false for three tickets.
+
+### Evidence
+
+- `DEVICE FOH OK` on hardware, with the parity guard live
+  (flows=5 shots=15 fbwit=21 p99=13.923 ms skips=0 underruns=0 starves=0,
+  16 teeth).
+- The shipped arm binary now carries `MLMATCH1`, `MLTMATCH1`, `MLSIM1` and both
+  header-refusal strings; the OPK is installed and sha-verified host == device.
+
+### And a rig lesson worth more than it looks
+
+Two runs during this session showed an app dying OF SIGUSR1 (`rc=138`, no
+save). The handler is installed unconditionally and early, so that reads like a
+product bug. It is not: with the FRONTEND STILL RUNNING the app blocks inside
+`platform_init` fighting for the framebuffer and never reaches the install. The
+stderr tell is the ABSENCE of `platform_sdl1: SetVideoMode ok`. Park the
+frontend before signalling anything, and read the log for what is missing
+rather than only for what is there.

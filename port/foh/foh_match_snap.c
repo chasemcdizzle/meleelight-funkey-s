@@ -34,6 +34,7 @@
 // stale or foreign card costs one small read.
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -54,10 +55,21 @@
 #define MS_HDR_SUM ((size_t)(4 + 64 + 1))
 #define MS_HDR_BYTES (MS_HDR_BODY + MS_HDR_SUM)
 
-// A match frame count is bounded by the same long the loop runs on, but the
-// wire form is fixed-width so the grammar can be anchored; 12 digits is
-// ~2.3 million years at 60 fps and still fits a 32-bit long.
-#define MS_FRAME_MAX 999999999999L
+// The FRAME field is 12 zero-padded digits, so the FORMAT's ceiling is
+// 999999999999 — about 2.3 million years at 60 fps.
+//
+// The comment that stood here claimed that "still fits a 32-bit long". It does
+// not, and nobody found out because this TU had never been compiled for the
+// device at all: it was missing from riglib.sh's foh_device recipe, so the
+// whole resume feature was absent from the shipped app. MEASURED 2026-08-28,
+// armv7 gcc 10.2 — `frame > MS_FRAME_MAX` is a comparison the compiler can
+// PROVE vacuous (-Werror=type-limits), a 32-bit long topping out at 10 digits.
+//
+// Both bounds are real and neither is dropped. Where `long` is the wider type
+// the format ceiling is a live refusal; where it is the narrower one the
+// ceiling is unreachable and the comparison is compiled out rather than
+// written and ignored.
+#define MS_FRAME_MAX 999999999999LL
 
 static void ms_hex32(const uint8_t d[32], char out[65]) {
   static const char *H = "0123456789abcdef";
@@ -95,7 +107,11 @@ static bool ms_arm(const GameState *g, int stageSel, const char **why) {
     if (why) *why = "stage outside the header's domain";
     return false;
   }
+#if LONG_MAX > MS_FRAME_MAX
   if (g->frame < 0 || g->frame > MS_FRAME_MAX) {
+#else
+  if (g->frame < 0) { // the ceiling is unreachable by the type on this target
+#endif
     if (why) *why = "frame outside the header's domain";
     return false;
   }

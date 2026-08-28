@@ -68,8 +68,21 @@
 _Static_assert(TS_OFF_BUILD + 71 == TS_HDR_BODY,
                "the MLTMATCH1 field offsets do not add up to the body length");
 
-// Twelve digits is ~2.3 million years at 60 fps and still fits a 32-bit long.
-#define TS_FRAME_MAX 999999999999L
+// The FRAME field is 12 zero-padded digits, so the FORMAT's ceiling is
+// 999999999999 — about 2.3 million years at 60 fps.
+//
+// The comment that stood here claimed that "still fits a 32-bit long". It does
+// not, and nobody found out because this TU had never been compiled for the
+// device at all: it was missing from riglib.sh's foh_device recipe, so the
+// whole resume feature was absent from the shipped app. MEASURED 2026-08-28,
+// armv7 gcc 10.2 — `frame > TS_FRAME_MAX` is a comparison the compiler can
+// PROVE vacuous (-Werror=type-limits), a 32-bit long topping out at 10 digits.
+//
+// Both bounds are real and neither is dropped. Where `long` is the wider type
+// the format ceiling is a live refusal; where it is the narrower one the
+// ceiling is unreachable and the comparison is compiled out rather than
+// written and ignored.
+#define TS_FRAME_MAX 999999999999LL
 
 // The tstage domain, restated from the ONE place that owns it rather than
 // retyped: 0..MLK_MAX_SLOTS-1 are the authored stages and
@@ -159,7 +172,11 @@ static bool ts_arm(const GameState *g, int tstage, int charId,
     if (why) *why = "character outside the header's domain";
     return false;
   }
+#if LONG_MAX > TS_FRAME_MAX
   if (g->frame < 0 || g->frame > TS_FRAME_MAX) {
+#else
+  if (g->frame < 0) { // the ceiling is unreachable by the type on this target
+#endif
     if (why) *why = "frame outside the header's domain";
     return false;
   }

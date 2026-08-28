@@ -710,6 +710,66 @@ build_foh_headless "$FOH/foh_dev.c" "$BUILD/foh_dev_headless"
 made "$BUILD/foh_dev_headless"
 echo "   host twin built (raster -O3, all else -O2; -ffp-contract=off everywhere)"
 
+# --- THE TWIN MUST BE A TWIN: both FOH builds link the same TUs -------------
+#
+# MEASURED ON THE OWNER DEVICE, 2026-08-28, and it cost a shipped feature. A
+# match was played, the lid was closed, and the console came back to the
+# CHARACTER SELECT. No mlfk-match.hdr, no mlfk-match.sim, and the app log read
+# `foh_dev: resumed screen=css`. The code was right. Every host check was
+# green. The three TUs that make a match survive a lid — foh_match_snap.c,
+# foh_target_snap.c and sim/sim_snapshot.c — were in THIS recipe and not in
+# riglib.sh's, which is the one that builds the binary the owner plays.
+#
+# The seams install themselves through POINTER SEAMS so that #29 and #30 could
+# land without touching any other build. The price of that is a failure with
+# no symptom: leave the TU out and there is no link error and no crash, the
+# ops pointer is simply NULL and the hibernate arm quietly records `resume=css`.
+# An absent seam is INDISTINGUISHABLE from a seam that chose not to fire, which
+# is exactly the shape HARD RULE 2 exists to forbid.
+#
+# So the two recipes are compared, mechanically, on the plane where they must
+# agree: every port/foh TU and the snapshot writer. This is a check about the
+# BUILD, so it reads the two scripts' bytes and never a compiled artifact.
+echo "=== FOH TU parity: this recipe vs riglib.sh's foh_device (the OPK binary)"
+TUP=$BUILD/tu-parity
+rm -rf "$TUP"; mkdir -p "$TUP"
+# THIS recipe: the argument list of build_foh_headless.
+sed -n '/^build_foh_headless() {/,/^}/p' "$0" \
+  | grep -oE '(\$FOH|port/foh)/foh[a-z_]*\.c|port/sim/sim/sim_snapshot\.c' \
+  | sed 's#^\$FOH/#port/foh/#' | sort -u > "$TUP/host.txt"
+# riglib.sh: the argument list of the arm foh_device link, bounded by its own
+# `-o "$DEVB/foh_device"` line and the first line that ends the command.
+RIGLIB=port/sim/device/riglib.sh
+sed -n '/-o "\$DEVB\/foh_device"/,/^ *\$(\$SDLCFG --libs) -lm$/p' "$RIGLIB" \
+  | grep -oE 'port/foh/foh[a-z_]*\.c|port/sim/sim/sim_snapshot\.c' \
+  | sort -u > "$TUP/arm.txt"
+# SIM_TUS is a separate array here, so the snapshot TU is added from it.
+grep -qE '^ *port/sim/sim/sim_snapshot\.c$' "$0" \
+  && echo port/sim/sim/sim_snapshot.c >> "$TUP/host.txt"
+sort -u -o "$TUP/host.txt" "$TUP/host.txt"
+[ -s "$TUP/host.txt" ] && [ -s "$TUP/arm.txt" ] \
+  || fail "FOH TU parity: one of the two recipes extracted ZERO TUs, so this
+  guard is comparing nothing. The extraction anchors moved — fix them; do NOT
+  delete the guard, it is the only thing standing between a pointer seam and a
+  silently featureless product."
+# foh_dev.c reaches the host recipe as "$src", so it is asserted separately
+# rather than pretended into the extraction.
+grep -qE '^ *port/foh/foh_dev\.c' "$RIGLIB" \
+  || fail "FOH TU parity: riglib.sh's foh_device does not link foh_dev.c"
+echo port/foh/foh_dev.c >> "$TUP/host.txt"
+sort -u -o "$TUP/host.txt" "$TUP/host.txt"
+if ! cmp -s "$TUP/host.txt" "$TUP/arm.txt"; then
+  echo "   only in this recipe (MISSING FROM THE SHIPPED APP):" >&2
+  comm -23 "$TUP/host.txt" "$TUP/arm.txt" | sed 's/^/     /' >&2
+  echo "   only in riglib.sh:" >&2
+  comm -13 "$TUP/host.txt" "$TUP/arm.txt" | sed 's/^/     /' >&2
+  fail "FOH TU parity: the host twin and the OPK binary do not link the same
+  FOH plane. A TU listed only here is a feature that passes every check and is
+  ABSENT from the game the owner plays — measured, 2026-08-28, for the whole
+  match/target resume feature. Add it to riglib.sh's foh_device recipe."
+fi
+echo "   $(wc -l < "$TUP/host.txt" | tr -d ' ') FOH TUs, identical in both recipes"
+
 # --- keymap SSOT asserts (iter 95 H2; compiled-table proof iter 97, M-b) --------
 teeth=0
 # (1) the COMPILED table == the frozen file, byte-exact. Since iter 97
