@@ -846,9 +846,18 @@ refuse_not menusel-vs-resume-ok 'set=resume:resume 05' 'set=menusel:menusel 1'
 # OUTSIDE — no C is read, and a redirect added later shows up here as a
 # screen that stopped loading.
 #
-# EXPECTED: every screen 0..16 loads EXCEPT 13 (match) and 15 (target
-# match), which are the two the ticket leaves redirected because a mid-match
-# snapshot is #29 and #30's job. 17 is FOH_SCREEN_COUNT and beyond the enum.
+# EXPECTED: every screen 0..16 loads EXCEPT 15 (target match). 17 is
+# FOH_SCREEN_COUNT and beyond the enum.
+#
+# 13 (FOH_MATCH) MOVED, and the move is the merge of two tickets rather than
+# either one: #27 wrote this leg expecting 13 and 15 both redirected, which
+# was true when it was written, and #29 landed the mid-match snapshot that
+# makes 13 a fixed point. Textually the two merged clean; SEMANTICALLY this
+# leg then asserted the pre-#29 rule and failed on the merged tree, which is
+# exactly what PROCESS §12's cold re-run exists to catch and why a lane's
+# green is evidence about its worktree and not about HEAD.
+# 15 stays redirected on purpose: a target match is a different serialization
+# surface and #30 owes it its own frozen trace.
 # The enum's own order is restated here as the reason for each number, so a
 # screen inserted in the middle of FohScreen shifts these and is caught.
 #
@@ -859,7 +868,7 @@ refuse_not menusel-vs-resume-ok 'set=resume:resume 05' 'set=menusel:menusel 1'
 # reason [8]'s menusel-vs-resume tooth already proves, and the map's shape
 # would be reported wrongly.
 echo "=== [8b] the resume map's fixed points, every screen value"
-RESUME_REDIRECTED="13 15" # FOH_MATCH, FOH_TMATCH — the only two left
+RESUME_REDIRECTED="15" # FOH_TMATCH — the only one left (see the note above)
 rmap_ok=0; rmap_no=0
 for sc in $(seq 0 17); do
   nn="$(printf '%02d' "$sc")"
@@ -881,10 +890,11 @@ for sc in $(seq 0 17); do
       rmap_ok=$((rmap_ok + 1)) ;;
   esac
 done
-[ "$rmap_ok" = 15 ] && [ "$rmap_no" = 3 ] \
+[ "$rmap_ok" = 16 ] && [ "$rmap_no" = 2 ] \
   || grammar_die "[8b] drove $rmap_ok accepted and $rmap_no refused screen
-   values (want 15 and 3: seventeen screens, of which FOH_MATCH and
-   FOH_TMATCH are redirected, plus the out-of-enum 17). The loop's own
+   values (want 16 and 2: seventeen screens, of which only FOH_TMATCH is
+   redirected since #29 made FOH_MATCH a fixed point, plus the out-of-enum
+   17). The loop's own
    arithmetic moved, so its verdict is not about the map"
 echo "    [8b] OK: 15 screens resume into THEMSELVES; only match (13) and
     target match (15) are redirected, and 17 is off the enum"
