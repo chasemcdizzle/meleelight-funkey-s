@@ -223,63 +223,88 @@ else
     --anim-dir "$DATA" --tapjump-off-p1 --system-menu $SND $MUS \
     >> "$LOG" 2>&1 &
   APP=$!
-  trap 'kill -USR1 "$APP" 2>/dev/null' USR1
-  # A45/#23 — OPENING THE LID BRINGS THE GAME BACK, with no manual launch.
+  # (the USR1 trap is installed below, once arm_resume_and_die is defined —
+  # it both forwards the signal and arms the relaunch, so there is exactly
+  # ONE trap for this signal and no ordering to get wrong)
+  # A45/#23 — OPENING THE LID BRINGS THE GAME BACK.
   #
-  # /root/.profile:89 runs `instant_play load` at boot, FOUR LINES BEFORE
-  # `frontend init` on :93: it mounts whatever /mnt/last_opk names, and if
-  # /mnt/instant_play exists it moves it to /mnt/resume_play, SOURCES it, and
-  # deletes it. Nothing in /usr/local or /etc/init.d calls the `save` verb —
-  # MEASURED, the only file on the device that mentions it is the script that
-  # implements it. The burden is deliberately on the APPLICATION, and we had
-  # never opted in. That is the whole of the owner's "it doesn't come back".
+  # REVERTED TO AN ARM-AT-SHUTDOWN DESIGN 2026-08-28, after the launch-time
+  # version bricked the owner's device into a boot loop. The bug and the
+  # reason it was catastrophic are both worth keeping written down.
   #
-  # WRITTEN HERE, AT LAUNCH, NOT IN THE TRAP. The lid gives us ~100 ms
-  # (`powerdown schedule 0.1`) and the trap already spends 20-60 ms of it
-  # forwarding the signal so the app can publish its own state. Two more
-  # script execs and an SD write in that window would be spending the
-  # player's state budget on a convenience. At launch it costs nothing.
+  # `instant_play save` IS NOT A RECORD-THIS VERB. Its last statement is
+  #     exec powerdown now
+  # (/usr/local/sbin/instant_play, the `save` arm). It writes the resume
+  # record AND POWERS THE DEVICE OFF, because the platform calls it AT
+  # shutdown, not at launch. Calling it at launch — which is what the first
+  # version did, to keep the ~100 ms lid grace free — meant starting the game
+  # powered the console off. I read that script's `save` arm down to the
+  # heredoc and stopped one line short of the only line that mattered.
   #
-  # `pid record "$APP"` FIRST, and it is not decoration: `instant_play save`
-  # ignores the path it is handed and rebuilds it as
-  # `$(cat /var/run/pid_path)/$(basename "$1")`, where pid_path is
-  # `dirname(readlink /proc/PID/exe)` of whatever pid was last recorded.
-  # gmenu2x execs into opkrun and then into THIS SCRIPT, so the recorded pid
-  # is the SHELL's (measured, and the reason the USR1 trap above exists at
-  # all) — leaving it would resolve foh_device against /bin. Recording the
-  # APP's pid points it at the mounted OPK, which is where `instant_play
-  # load` re-mounts it.
+  # It became a LOOP rather than a nuisance because of the second change: the
+  # record was pointed at THIS SCRIPT (so a resumed session would re-arm the
+  # next resume, fixing a real works-only-once gap). Boot -> load -> this
+  # script -> save -> power off -> boot. And the code comment that had said
+  # the record "needs none of D44's boot-unpark protection, which exists for
+  # markers that CANNOT self-consume" was written for the one-shot design and
+  # never revisited when the design stopped being one-shot. The justification
+  # outlived the thing it justified — the same class as the `getConnected`
+  # comment this project spent three days on.
   #
-  # The record is REMOVED on a clean exit below, so only a session that died
-  # without reaching that line — which is exactly what a lid close is — comes
-  # back. And it is one-shot by construction even then: `load` renames it
-  # before sourcing it, so a launch that dies mid-resume cannot relaunch on
-  # every boot afterwards. It therefore needs none of D44's boot-unpark
-  # protection, which exists for markers that CANNOT self-consume.
-  if command -v instant_play >/dev/null 2>&1 && command -v pid >/dev/null 2>&1; then
-    pid record "$APP" >/dev/null 2>&1 || true
-    # SAVE THIS SCRIPT, NOT THE BINARY — and that is the difference between
-    # a resume that works once and one that keeps working. MEASURED on the
-    # device: recording the binary made the first lid close come back
-    # correctly, and then `ps` showed ZERO mlfk-foh.sh processes in the
-    # resumed session, because `instant_play load` sources the recorded
-    # command directly. Nothing re-armed the record, so a SECOND lid close
-    # went back to the launcher. Recording the launcher makes every resumed
-    # session arm the next one, and it inherits the USR1 trap and the
-    # clean-exit removal below rather than losing both.
-    #
-    # The args go away with it: this script reconstructs them, including a
-    # FRESH per-session RNG seed. Replaying a recorded argv would have
-    # pinned one seed across every resumed match for the life of the record
-    # — the punch-list C7 defect, reintroduced through the back door.
-    instant_play save "$DIR/mlfk-foh.sh" \
-      >> "$LOG" 2>&1 || echo "mlfk-foh.sh: instant_play save failed" >> "$LOG"
-  fi
+  # SO: the record is armed in the USR1 TRAP, where the platform intends it.
+  # That is a lid close and nothing else. It costs the grace window one exec,
+  # measured at 20-60 ms for the forward+save+exit path this replaces, and
+  # `powerdown now` is where that path was going anyway — the trap no longer
+  # needs to fall through to the shutdown, because `save` performs it.
+  #
+  # ORDER INSIDE THE TRAP IS NOT NEGOTIABLE: forward SIGUSR1 to the app FIRST
+  # so it publishes the player's state, and only then arm the relaunch. If the
+  # window is missed, what is lost is the convenience, never the state.
+  # CRASH-LOOP BREAKER, and it exists because the loop actually happened.
+  #
+  # The relaunch record is a file on SD that survives a power cut, and
+  # `instant_play load` runs BEFORE the frontend — so D44's boot-unpark line
+  # cannot protect it the way it protects the park marker (deleting it at boot
+  # would delete the feature). The protection has to be that a session which
+  # DIES YOUNG never arms the next one.
+  #
+  # A breadcrumb is dropped now and cleared once the app has survived
+  # RESUME_MIN_UP seconds. The trap refuses to arm while it is still there.
+  # So a launch that powers off, crashes, or is killed in its first seconds
+  # leaves nothing armed, and the next boot goes to the launcher — which is
+  # the outcome a player can act on, instead of a console that will not stay
+  # on. A healthy session pays one file write and clears it.
+  RESUME_MIN_UP=20
+  RESUME_YOUNG=/mnt/mlfk-resume-young
+  : > "$RESUME_YOUNG" 2>/dev/null || true
+  ( sleep "$RESUME_MIN_UP"; rm -f "$RESUME_YOUNG" 2>/dev/null ) &
+  RESUME_TIMER=$!
+
+  arm_resume_and_die() {
+    kill -USR1 "$APP" 2>/dev/null
+    # Give the app the grace it was already given before this line existed.
+    # `wait` is not usable here: the trap is running, and the app is being
+    # asked to exit on its own.
+    sleep 0.06
+    # `pid record` first, because `instant_play save` ignores the path handed
+    # to it and rebuilds it as $(cat /var/run/pid_path)/$(basename "$1").
+    # The recorded pid is this SHELL's, so without it the resume would resolve
+    # against /bin. Recording the APP's pid points it at the mounted OPK.
+    if [ -f "$RESUME_YOUNG" ]; then
+      echo "mlfk-foh.sh: session died young, NOT arming a relaunch" >> "$LOG"
+    elif command -v instant_play >/dev/null 2>&1 && command -v pid >/dev/null 2>&1; then
+      pid record "$APP" >/dev/null 2>&1 || true
+      # NOTE: this execs `powerdown now` and does not return.
+      instant_play save "$DIR/mlfk-foh.sh" >> "$LOG" 2>&1
+    fi
+  }
+  trap arm_resume_and_die USR1
   wait "$APP"; rc=$?
   if [ "$rc" -gt 128 ]; then wait "$APP"; rc=$?; fi
-  # A CLEAN EXIT IS NOT A RESUME. Reaching here means the player quit, so the
-  # relaunch record is spent. A lid close never reaches this line.
-  rm -f /mnt/instant_play 2>/dev/null || true
+  # A clean exit spends the breadcrumb and its timer. Nothing else needs
+  # removing: the record is armed only by the trap, and the trap never returns.
+  kill "$RESUME_TIMER" 2>/dev/null || true
+  rm -f "$RESUME_YOUNG" 2>/dev/null || true
 fi
 echo "RC=$rc" > "$EV/opk.rc"
 exit "$rc"
