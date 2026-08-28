@@ -1,97 +1,73 @@
-# ▶ RESUME HERE (rewritten 2026-08-26 — read this first, then §rulings)
+# ▶ RESUME HERE (rewritten 2026-08-27 — read this first, then §rulings)
 
-**Branch `agent/auto`, tree clean.**
-**M4 IS OWNER-DEFERRED** (2026-08-23: *"skip m4 for now and just do all my
-features"*). Feature work runs from **`docs/FEATURES-SPEC.md`**; vocabulary is
-pinned in **`/CONTEXT.md`** — read that second.
+**Branch `spec/20-crashes-and-resume`, PR #31 (draft) against `agent/auto`.**
+Spec **#20**; ten tickets **#21-#30**. **NINE DONE, ONE PARTIAL.**
 
-## What is true on HARDWARE right now (2026-08-26, all re-run this day)
+## What a player gets that they did not have this morning
 
-`DEVICE FOH OK` · `PERSIST OK` · `FULLGAME CONFORMS 12/12` (p99 15.786 ms) ·
-`LIVE ARMS OK` · `S1 INPUT OK` · `DEVICE TARGET CONFORMS` ·
-`DEVICE CONFORMS g01` · `SIM P99 OK` · `DEVICE RENDER OK` · `DEVICE MUSIC OK` ·
-`OPK LAUNCH OK` · `SKIP ATTRIB OK`.
+- The **target builder no longer crashes.** Eight reported crashes, one cause:
+  the font has NO lowercase and a missing glyph was a hard kill. Device-verified
+  by running the witness on the FunKey itself (154 assertions, rc 0).
+- **Power on goes straight into the game** — no launcher, no manual start (#23).
+- **Closing the lid keeps what you were doing**: character select with the CPU
+  opponent, its difficulty and endless KO fest (#25); target select's page and
+  cursor (#26); every menu row, stage select and credits (#27); and **a match in
+  progress** (#28/#29).
 
-**ONE RED, KNOWN AND OWNER-DEFERRED:** `check-device-audio.sh` full-frame p99
-**17.274 ms** vs the 16.67 ms bar. This is the iter-118 M3 audio class
-(17.444 ms then) reproduced, not a regression. **The bar was not moved and
-must not be.** The PRODUCT path is green — fullgame runs the real
-`foh_device` with render + sfx + music live at 15.786 ms.
+## Ticket state
 
-## The zoom-out that explains most of this session
+| # | what | verified |
+|---|---|---|
+| 21 | crashes + the check draws | host + **device** |
+| 22 | persist is a field table | host cold |
+| 23 | lid auto-relaunch | **device** |
+| 24 | face-domain lint | host cold |
+| 25 | CSS resumes | host + **device** |
+| 26 | target select + resume hook | host cold |
+| 27 | every screen resumes | host cold |
+| 28 | sim snapshot, all 8 goldens | host cold |
+| 29 | match resumes across a lid close | host cold + `DEVICE FOH OK` |
+| 30 | target runs resume | **PARTIAL — step 1 only** |
 
-**Nine of thirteen device checks refused stale evidence, and NOT ONE was a
-regression.** Every stale thing was the second half of a paired change whose
-first half had shipped. A pin only refuses when someone runs the check, and
-these need hardware — so they are last to run and first to rot. Full table +
-the three-part class fix: `docs/AGENT-LOG.md`, driver 2026-08-26.
-**Standing consequence:** stop pinning DERIVED facts (an audio period lives in
-`platform.h`; a callback count is `rate*seconds/PERIOD`), make inventories
-self-check against their source, and make evidence hermetic.
+## TWO THINGS OWED, both stated on their tickets
 
-## A45 target builder — T1..T8 COMPLETE
+1. **`check-device-persist.sh` leg M1 is RED and deliberately not worked
+   around.** It compares a same-process session against a PERSISTED TWIN and
+   requires the shots identical — a frozen refutation shape whose text says
+   STOP. #26 persists `tssCursor` and #27 persists the menu rows, so a resumed
+   session now legitimately arrives with screen-local state a freshly-navigated
+   one lacks. **The leg's premise is what this spec changed on purpose.** Either
+   something restores state it should re-derive, or the leg should compare
+   resumed-against-resumed. **Owner/driver call, not a fixture patch.**
+2. **#30 owes** the hibernate/boot seam for a target run, its continuation check
+   over t01/t02/t03, a tooth that bites the TARGET plane specifically, and how a
+   CUSTOM stage is re-found when the card may have changed. `lane/t30`'s
+   worktree holds the uncommitted start.
 
-- **T5-T8 landed**: all ten upstream tools, at upstream's own indices.
-  `TBUILD CHECK OK` — 139 assertions, 8 teeth. New deviations **D54** (type
-  cycle -> X+shoulder), **D55** (SCALE keeps the d-pad; upstream already
-  freezes the crosshair), **D56** (B pops a polygon vertex while drawing),
-  **D57** (the builder resumes into itself with its document).
-- **`getConnected` was a LIVE DEFECT**, found while specifying T5 — custom
-  stages have had no `connected` plane since T2 and no check could see it.
-  Fixed at upstream's own site with a 1500-code differential against
-  upstream's executed `getConnected`.
-- **T6 IS DONE — the damage plane EXECUTES.** `dealWithDamagingStageCollision`
-  had five translated call sites and had never run; the routing from physics'
-  queue into the hitQueue had never been written, because nothing could reach
-  it. Golden **t03** (fox, custom stage, fire ground) discharged the refusal:
-  MEASURED sim frame 263 WALK percent 0 -> frame 264 DAMAGEFLYN percent 10,
-  and the C sim reproduces both frozen browser streams exactly. The traps are
-  NARROWED, not removed (a damage row on a stage with no damaging surface is
-  still fatal), and `check-custom-stage.sh` leg [5] fails by name if no golden
-  covers the plane.
+## Process lessons this run paid for
 
-## OWED / OPEN
-- **A33 rung 3** (host-mode fork) — owner: after the ready-now list. Unlocks
-  BOTH the GC adapter and **A47 two-device link play**.
-- **Freeze manifest: 31 stale pins.** §A-par.5 batched pass, driver-only,
-  **when M4 resumes — NOT now** (owner instruction, 2026-08-26). Deliberately
-  untouched all session; the repo-wide producer-pin audit excludes it.
-- **A26 resume: the builder half is DONE (D57), the match half is not.**
-  Closing the lid in the target builder now comes back to it WITH the stage
-  you were drawing — the document travels as a `tbdoc.mlstage` through A45
-  T2's contract, and the resume is downgraded to the menu top if that write
-  fails, so it can never claim work it does not have. Proved by byte-identity
-  across park->hibernate->resume->hibernate (`check-hibernate.sh` [5b]).
-  **The remaining redirects** are MATCH -> CSS, TMATCH -> target-select,
-  SSS -> CSS, CREDITS -> options. The match one is the real ticket, and TIME
-  IS NOT WHAT BLOCKS IT: measured on the device, a write+fsync to `/mnt`
-  costs 22 ms at 2 KB and **33 ms at 160 KB**, inside a ~100 ms grace that
-  already carries the settings save — and `sizeof(GameState)` is 162,752 bytes
-  (MEASURED; an earlier note in this file and in spec #20 said 158,912 — the
-  33 ms write figure stands, it was taken at 160 KB, but the number quoted
-  beside it was wrong).
-  What blocked it turned out NOT to be what I wrote here.
-  MEASURED by #28: GameState holds NO function pointers — its only pointers
-  are inside MlAiBridge. The move tables, tp_finish_hook and the AI live seam
-  live OUTSIDE it as module and global state, so what makes a snapshot safe is
-  a MODULE-STATE LEDGER (a frozen enumeration of every mutable file-scope
-  static in the sim, 30 entries, each classified), not the field table alone.
-  **#28 is DONE**: all 8 goldens continue bit-exactly across a snapshot taken
-  in one process and restored into another, judged by the unchanged
-  verify-stream.js.
+- **"Affected checks" is not a list you curate.** I ran a chosen subset after
+  #22 and again after #25 and under-scoped it both times; `check-foh-flows.sh`
+  sat red for two tickets. Every merge since used the FULL sweep (23 checks).
+- **A lane's green is evidence about its worktree, not about HEAD.** #27 and #29
+  merged textually clean and left `check-persist-table.sh` leg [8b] asserting
+  the pre-#29 rule. Only the cold re-run saw it.
+- **Tell lanes to commit as they go.** Two lanes died to session limits. The
+  first left 8 modified files, nothing committed — unmergeable. The second, told
+  to commit each self-contained step, left a real merged commit.
+- **The device catches what no host check can.** It found a stale migration
+  expectation, two whitelist gaps, and a flow whose `DOWN x3` walk assumed a
+  cursor that #27 made persistent.
 
-## STANDING HAZARDS (all paid for)
-- **A comment is not evidence.** `z` was documented as grab for months;
-  `custom_stage.c` said "no connected field in the code grammar" and was right
-  about the grammar and wrong about the behaviour.
-- **A name is not evidence about its plane.**
-- **A green check is not evidence a change is safe — measure the CONSUMERS.**
-- **Teeth go vacuous silently.** Also: a witness loop that waits on state a
-  tooth can freeze must be BOUNDED, or the check hangs instead of failing.
-- **A tool that cannot run reports everything as broken.**
-- **Deviation numbers are DRIVER-allocated** (D54/D55/D56 taken 2026-08-26).
-- **Never leave a device marker that outlives the test** — D44's boot-unpark
-  line makes the class impossible; verified again this session.
+## Defects found that nobody was looking for
+
+- `ss_save` never **fsynced** — `rename()` gives atomicity, not durability, and
+  this device powers off ~100 ms after the lid, so a snapshot could sit in page
+  cache and simply not exist. Found by #29 in #28's work.
+- `ctl_style_name`'s fallback returned `"?"`, drawn through a face with no `?`
+  glyph. Unreachable today; nothing had ever looked at that arm.
+- **#23 worked exactly once**: the resume record pointed at the binary, so the
+  resumed session bypassed the launcher that arms the next resume.
 
 ---
 
