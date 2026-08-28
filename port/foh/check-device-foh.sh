@@ -651,7 +651,11 @@ SIM_TUS=(
   # match survive the lid. It is NOT on the M2 EXIT GATE's frozen TU list and
   # does not need to be — sim_main.c's two hooks stay NULL there — but the
   # binary that PLAYS a match links it, and port/foh/foh_match_snap.c is the
-  # FOH seam that calls it.
+  # FOH seam that calls it. TICKET #30 adds the SECOND consumer of the same
+  # writer — port/foh/foh_target_snap.c, the seam for a TARGET RUN, whose
+  # extra plane (MlTargets: which targets are broken, how many, and the
+  # pending finish edge) rides the same MLSIM1 payload as its `mod:targets`
+  # row. One snapshot format, two front-of-house seams.
   port/sim/sim/sim_snapshot.c
   port/sim/calib/canon.c port/sim/calib/player_canon.c
   port/sim/ai.c
@@ -687,7 +691,7 @@ build_foh_headless() { # <foh_dev_src> <out> [extra cc args...]
     "$BUILD/raster.o" "$src" "$FOH/foh.c" "$FOH/foh_font.c" \
     "$FOH/foh_render.c" "$FOH/foh_persist.c" "$FOH/foh_pause.c" \
     "$FOH/foh_tbuild.c" port/sim/stage_code.c port/sim/target/custom_stage.c \
-    "$FOH/foh_match_snap.c" \
+    "$FOH/foh_match_snap.c" "$FOH/foh_target_snap.c" \
     "$GFX/ctl_style.c" "$GFX/img1.c" \
     "$GFX/platform_headless.c" \
     "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_target.c" \

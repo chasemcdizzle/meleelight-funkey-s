@@ -1002,40 +1002,116 @@ mk_pdir() { # <dst-dir> <src-file|-> : fresh persist dir, optional seed file
   if [ "$2" != - ]; then cp "$2" "$1/mlfk-persist.dat"; fi
 }
 
-# HOME THE MENU CURSOR IN THE SEED, and the reason is a real interaction
-# ticket #27 introduced rather than a fixture nicety.
+# HOME THE SCREEN-LOCAL CURSORS IN EVERY p02 SEED, and the reason is a real
+# interaction tickets #26/#27 introduced rather than a fixture nicety.
 #
 # The p02 flow reaches the options screen by pressing DOWN three times from
 # menu-top's row 0 — an assumption that held for as long as foh_init was the
 # only thing that set `menuSelected`. #27 persists it, so the cursor now
 # arrives from the FILE, and the seed carries 1: three DOWNs then land on row
 # 4, which wraps to 0, and the session walked into the character select
-# instead. MEASURED on the device, not reasoned: the trace read
-# `T 395 menu-top css a` and the B-exit resave this leg judges never
-# happened.
+# instead. MEASURED, not reasoned: the trace read `T 395 menu-top css a` and
+# the B-exit resave this leg judges never happened.
+#
+# THE CLASS, not the instance (HARD RULE 8). `menusel` was the first row to do
+# this and it is not the only one that could: #26 put `tsscur`/`tsspage`/
+# `tsshand` on the card and #27 added `ssscur`/`optrow`/`optcol`/`audiorow`/
+# `ctlrow`, and every one of them is state a RESUMED session carries and a
+# freshly-navigated one does not. So this is a TABLE of cursor rows rather
+# than one sed, and adding a row to it is one line.
+#
+# WIDTH-PRESERVING, and derived from the file rather than from a constant: the
+# home value of every row in the table is zero, and the row's own digits say
+# how many. Nothing here re-types a value that lives in foh.h.
+#
+# NOT IN THE TABLE, deliberately: `optrow`/`optcol` (which the p01 session
+# leaves at 4/1 and which the opt-persisted SHOT renders — homing them would
+# change what this leg pictures, and both p02 fixtures carry the same values
+# because they share one file lineage) and `tsshand` (whose home is a pair of
+# doubles that only foh.h owns; re-typing it here would be exactly the
+# duplication this project keeps paying for). Those rows are covered instead
+# by assert_p02_comparable below, which is the general statement and needs no
+# constant at all.
 #
 # The flow is left alone deliberately. A relative walk cannot home a wrapping
 # cursor without knowing the row count, and teaching every committed flow the
-# count would spread #27's change across the whole corpus. Seeding the
-# cursor states the precondition where the fixture is built, which is also
-# the honest place: this leg is about the OPTIONS values and the resave, not
-# about where the cursor happened to be.
-seed_menusel_home() { # <persist-file> : set menusel 0 and re-seal the SUM
-  local f="$1" body
+# count would spread #27's change across the whole corpus. Seeding the cursors
+# states the precondition where the fixture is built, which is also the honest
+# place: this leg is about the OPTIONS values and the resave, not about where
+# the cursor happened to be.
+P02_HOME_ROWS="menusel tsscur tsspage ssscur audiorow ctlrow"
+seed_p02_cursors() { # <persist-file> : home the cursor rows, re-seal the SUM
+  local f="$1" body row
   body="$(dirname "$f")/.homing"
-  grep -v '^SUM ' "$f" | sed 's/^menusel .*/menusel 0/' > "$body"
-  grep -qx 'menusel 0' "$body" \
-    || fail "seed_menusel_home: no menusel row in $f — #27's row moved or
-   vanished, and this fixture would silently stop homing the cursor"
+  awk -v rows="$P02_HOME_ROWS" '
+    BEGIN { n = split(rows, r, " "); for (i = 1; i <= n; i++) want[r[i]] = 1 }
+    /^SUM / { next }
+    {
+      if ($1 in want) {
+        line = $1
+        for (i = 2; i <= NF; i++) {
+          z = $i; gsub(/[0-9]/, "0", z); line = line " " z
+        }
+        print line
+        next
+      }
+      print
+    }
+  ' "$f" > "$body"
+  # Every row in the table must have BEEN there. A row that was renamed or
+  # dropped would otherwise leave this fixture silently un-homed, which is
+  # exactly the failure this function exists to prevent.
+  for row in $P02_HOME_ROWS; do
+    grep -qE "^$row( 0+)+\$" "$body" \
+      || fail "seed_p02_cursors: no '$row' row (all-zero) in $f after homing —
+   a #26/#27 persisted cursor row moved or vanished, and this fixture would
+   silently stop homing it"
+  done
   { cat "$body"; printf 'SUM %s\n' "$(shasum -a 256 "$body" | cut -d' ' -f1)"; } > "$f"
   rm -f "$body"
 }
 
+# ...AND THE GENERAL STATEMENT THE TABLE CANNOT MAKE. Two p02 sessions are
+# only comparable shot-for-shot if they START from the same screen-local
+# state; the table above homes the rows we know about, and this asserts the
+# outcome for EVERY row, including ones nobody has thought of yet.
+#
+# The two fixtures differ by design in exactly one thing — the RECORD the
+# session is supposed to be about (M1 boots with the records fresh and earns
+# one mid-flow; the twin boots with it already on disk) — so `rec` rows and
+# the SUM seal are the only permitted difference and everything else must be
+# byte-identical.
+assert_p02_comparable() { # <fileA> <fileB> <ctx>
+  local a="$1" b="$2" ctx="$3" sa sb
+  # both scratch files under $HP, never beside a persist file: a stray file
+  # in a persist dir is a file the next boot's directory scan can see.
+  sa="$HP/.cmpA"; sb="$HP/.cmpB"
+  grep -vE '^(rec |SUM )' "$a" > "$sa"
+  grep -vE '^(rec |SUM )' "$b" > "$sb"
+  if ! cmp -s "$sa" "$sb"; then
+    diff "$sa" "$sb" >&2 || true
+    rm -f "$sa" "$sb"
+    fail "$ctx: the two p02 fixtures do not start from the same screen-local
+   state (rows above). A byte-identity comparison between their shots would
+   then be judging WHERE THE SESSION WENT and not what it rendered. State the
+   precondition in the fixture — add the row to P02_HOME_ROWS — never relax
+   the comparison."
+  fi
+  rm -f "$sa" "$sb"
+}
+
 mk_pdir "$HP/twin-persist" "$FILE_REC"
-seed_menusel_home "$HP/twin-persist/mlfk-persist.dat"
+seed_p02_cursors "$HP/twin-persist/mlfk-persist.dat"
+# KEPT AS A SEPARATE COPY because the session about to run RESAVES the file at
+# its options B-exit, writing the cursor rows back from the SESSION and not
+# from the seed (that resave is what the idempotence assertion below is for).
+# The M1 fixture's comparability is a statement about the two SEEDS, so it has
+# to be made against the seed and never against the post-run file.
+TWIN_SEED=$HP/twin-seed-want.dat
+cp "$HP/twin-persist/mlfk-persist.dat" "$TWIN_SEED"
 run_host p02-persist-verify "$HP/p02twin" "$PWD/$HP/twin-persist"
 mk_pdir "$HP/twin-persist2" "$FILE_REC"
-seed_menusel_home "$HP/twin-persist2/mlfk-persist.dat"
+seed_p02_cursors "$HP/twin-persist2/mlfk-persist.dat"
 run_host p02-persist-verify "$HP/p02twin2" "$PWD/$HP/twin-persist2"
 for s in opt-persisted tss-record; do
   made "$HP/p02twin/shots/$s.ppm" "$HP/p02twin2/shots/$s.ppm"
@@ -1259,9 +1335,37 @@ echo "   L-b OK: twin shot decodes to '$dec_twin' == derived; control '$dec_ctrl
 # SAME-PROCESS frame-440 tss-record shot renders the NEW record and is
 # BYTE-IDENTICAL to the persisted-twin shot (which BOOTS with the record
 # already on disk). Under the shipped bug that shot shows the stale
-# "--:--:--" (proven in this iteration's smoke: an unfixed build's shot
-# DIFFERS) — the tooth discriminates by construction.
+# "--:--:--" — the tooth discriminates by construction.
+#
+# THE PRECONDITION THIS LEG NEEDS, ADDED 2026-08-28 (ticket #30's lane).
+# This leg went RED, and not because the product bug came back: it seeded its
+# fixture WITHOUT the cursor homing the twin has had since the p02 flow was
+# written. #26 and #27 made the menu cursor persistent, so an un-homed session
+# takes three DOWNs from row 1 and lands on the CHARACTER SELECT — MEASURED:
+# its trace read `T 395 menu-top css a` and it never reached target select at
+# all, so the shot it was compared against was of a different screen. The two
+# sessions were incomparable for a reason that has nothing to do with the bug
+# this leg guards.
+#
+# THE FIX IS THE PRECONDITION, NOT THE COMPARISON. The byte-identity cmp below
+# is untouched and must stay untouched; what changed is that the fixture now
+# says what it assumes. `seed_p02_cursors` is the same function the twin uses,
+# and `assert_p02_comparable` makes the assumption MECHANICAL for every row
+# rather than for the ones anyone remembered.
+#
+# AND THE TOOTH STILL BITES, proven by construction rather than argued: with
+# the fixture seeded, a build whose foh_persist.c is the tree's own MINUS the
+# one line `if (g_bound) g_bound->targetRecords[ch][tstage] = matchTimer;` —
+# i.e. the stale-PB bug re-introduced — produces a tss-record shot that
+# DIFFERS from the twin's while its trace stays byte-identical, so the shot is
+# the only signal and it is the personal-best line that moves. (Measured on
+# the host, ticket #30's lane: the fixed build's shot is identical; the
+# perturbed build's first differing byte is inside the PB line rather than at
+# the top of the image, which is where the un-homed session used to differ.)
 mk_pdir "$HP/m1-persist" "$FILE_P01"
+seed_p02_cursors "$HP/m1-persist/mlfk-persist.dat"
+assert_p02_comparable "$HP/m1-persist/mlfk-persist.dat" "$TWIN_SEED" \
+  "M1 fixture"
 run_host p02-persist-verify "$HP/p02m1" "$PWD/$HP/m1-persist" \
   --tooth-finish-at 100 "$REC_CHAR" "$REC_TSTAGE" "$REC_BITS"
 made "$HP/p02m1/shots/tss-record.ppm"

@@ -187,12 +187,44 @@ FohResumePlan foh_persist_resume_plan(FohScreen sc) {
     // file, before the first tick, by foh_dev.c's launch path — a load, not a
     // re-derivation, exactly as the builder's document is.
     case FOH_MATCH: return MAP(FOH_MATCH, FOH_RESUME_HOOK_NONE);
-    // ...and a target match lands on target select, so it picks up that
-    // screen's hook through the target it is redirected to — which is why
-    // the driver asks for the plan of the screen it LANDED on, not of the
-    // screen the file recorded. A target match resumed onto a stale slot
-    // list would be the same defect one indirection further away.
-    case FOH_TMATCH: return MAP(FOH_TSS, FOH_RESUME_HOOK_TSS_SLOTS);
+    // ...AND SO DOES A TARGET RUN (ticket #30). This row read "a target match
+    // lands on target select", and the row above it explained that a target
+    // match was "a different serialization surface" that #30 owed its own
+    // frozen trace. This is that ticket, and the trace is
+    // port/foh/check-target-resume.sh: a run that continues across a real lid
+    // close on three goldens — including a CUSTOM stage carrying a damaging
+    // surface — judged frame for frame against an uninterrupted run and then
+    // spliced and judged whole by BOTH unchanged verifiers, the sim's
+    // (oracle/harness/verify-stream.js) and the target plane's own
+    // (port/goldens-m4/verify-target-stream.js).
+    //
+    // THE SEPARATE SURFACE IS REAL AND IT IS WHY THIS IS ITS OWN ROW: which
+    // targets are broken, how many, and the pending finish edge live in
+    // MlTargets, not in GameState, and they are NOT on the CHECKSUM.md §2
+    // surface. Ticket #30 step 1 classified every field of that struct at the
+    // struct and carries the persisted half as the snapshot's `mod:targets`
+    // row; port/foh/foh_target_snap.c is the state this screen comes back to.
+    //
+    // THE REFUSAL IS NOT GONE, IT MOVED TO WHERE IT CAN BE CHECKED — the
+    // sentence FOH_MATCH's row above carries, and the same mechanism. This
+    // function is a pure domain map and cannot know whether the snapshot was
+    // WRITTEN; foh_dev.c's tdev_hibernate_check arms it first and downgrades
+    // this to FOH_TSS when that fails (which is why FOH_TSS must remain a
+    // legal value here, and it does). The resume side refuses a second time,
+    // by name, on any of: no header, bad grammar, bad SUM, another build's
+    // identity, a missing or corrupt snapshot, a header and snapshot that
+    // disagree, or — the refusal only this screen has — a CUSTOM STAGE ON THE
+    // CARD THAT IS NO LONGER THE ONE THE RUN WAS PLAYED ON.
+    //
+    // NO HOOK, and losing one is the visible change here. A target run being
+    // restored does not open target select, so it has no slot list to
+    // re-derive; it re-reads the ONE stage it is played on, by name, through
+    // the same mlk_slot_load the launch uses, and refuses if that stage has
+    // changed. A REFUSED resume lands on FOH_TSS and takes that screen's hook
+    // through the target it is redirected to — which is exactly why the driver
+    // asks for the plan of the screen it LANDED on rather than of the screen
+    // the file recorded.
+    case FOH_TMATCH: return MAP(FOH_TMATCH, FOH_RESUME_HOOK_NONE);
     // STAGE SELECT — REDIRECT REMOVED (ticket #27). The row read "launches
     // with the port types the CSS arms, and those are not persisted"; that
     // was true when it was written and false from ticket #25 (owner ruling
