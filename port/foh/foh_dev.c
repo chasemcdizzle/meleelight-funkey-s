@@ -2240,7 +2240,6 @@ int main(int argc, char **argv) {
   if (!direct && g_persist.resumeScreen != (int)FOH_STARTUP) {
     foh.screen = (FohScreen)g_persist.resumeScreen;
     g_persist.resumeScreen = (int)FOH_STARTUP;
-    fprintf(stderr, "foh_dev: resumed screen=%s\n", foh_screen_token(foh.screen));
     // ...and THE MATCH with it (ticket #29). Only the ~150-byte header is read
     // here: the launch needs the STAGE before gfx_init and sim_setup_match can
     // run, and both of those run long before the sim state can be put back, so
@@ -2285,6 +2284,13 @@ int main(int argc, char **argv) {
         }
       }
     }
+    // ...and ONLY NOW is the screen announced. Ticket #29 moved this line
+    // below the arm above rather than leaving it at the top: the match arm can
+    // still send the player to the character select, and a log that said
+    // "resumed screen=match" and then contradicted itself two lines later is
+    // the class of half-true statement this project keeps paying for. What is
+    // printed is the screen the boot actually lands on.
+    fprintf(stderr, "foh_dev: resumed screen=%s\n", foh_screen_token(foh.screen));
     // ...and the builder's document with it. enter() FIRST so the view
     // state is initialised the way an ordinary entry leaves it, then the
     // saved document replaces the template. A resume that finds no document
