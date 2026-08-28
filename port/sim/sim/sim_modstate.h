@@ -106,6 +106,51 @@ extern size_t (*ml_ai_live_snap_bytes)(void);
 extern void (*ml_ai_live_snap_save)(void *dst);
 extern void (*ml_ai_live_snap_load)(const void *src);
 
+// --- target/target_play.c: the TARGET PLANE (MlTargets TP) ------------------
+// TICKET #30. A target run's state is not in GameState at all: upstream keeps
+// targetplay.js's module `let`s in module scope and the port is
+// structure-parallel, so `MlTargets TP` (target_play.h) sits beside the sim
+// exactly as they do. It is the plane the ticket is about — which targets are
+// broken, how many, and whether the run has ended — and a resume that
+// restored the sim and lost it would pass every assertion ticket #29 wrote
+// (CHECKSUM.md's §2 surface is players + articles; the target plane has its
+// OWN frozen stream and its OWN verifier, port/goldens-m4/
+// verify-target-stream.js).
+//
+// A HOLE THIS LEDGER CANNOT SEE, said plainly. `TP` is a file-scope NON-static
+// global, so check-sim-snapshot.sh leg [2] — which derives its list by
+// grepping `^static` — is structurally incapable of noticing a field added to
+// it. The guard for that is therefore where the struct is: target_play.c
+// carries a `_Static_assert` over sizeof(MlTargets) against the byte totals of
+// its PERSISTED and DERIVED row lists plus its named alignment holes, so
+// adding a member to MlTargets without classifying it does not compile. That
+// is the same mechanism sim_snapshot.c uses on GameState, applied to the one
+// struct this file cannot otherwise reach.
+//
+// THE PER-FIELD CLASSIFICATION lives beside the lists in target_play.c (one
+// line each, with its reason). In summary, and the split is the ticket's whole
+// point:
+//   PERSISTED  targetDestroyed[10], targetsDestroyed, endTargetGame, gameEnd
+//              — the RUN. Nothing rebuilds these; they are what the player
+//              did.
+//   DERIVED    targetTesting, targetPlayer, targetStagePlaying, target[],
+//              targetCount, stageHasDamage — the STAGE and the entry
+//              arguments. tp_setup_target_core rebuilds all six from the
+//              geometry before the snapshot is read back, so restoring them
+//              would at best be redundant and at worst would let a snapshot
+//              disagree with the stage the renderer is drawing. They are
+//              rebuilt, never restored, and the pair's header pins the source
+//              they are rebuilt FROM (port/foh/foh_target_snap.h's SRC line).
+//
+// THE LINK SEAM is the live-AI trio's, verbatim and for the same reason:
+// sim_snapshot.c is built by rigs that never link target_play.c, so the
+// pointers are DEFINED (NULL) in sim_tick.c and installed by a constructor in
+// target_play.c. NULL is a row of zero bytes, i.e. a different build identity,
+// so a VS-only build refuses a target build's snapshot by name.
+extern size_t (*ml_targets_snap_bytes)(void);
+extern void (*ml_targets_snap_save)(void *dst);
+extern void (*ml_targets_snap_load)(const void *src);
+
 // NOT module state, named here so the next reader does not have to re-derive
 // it: ai.c's `ml_ai_cov[]` is a non-static GLOBAL arm-coverage counter array
 // (ai.h:82), written by AI_COV() and read only by --ai-cover's stderr dump.
