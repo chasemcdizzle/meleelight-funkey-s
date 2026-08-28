@@ -27,7 +27,7 @@
 #define FP_FILE "mlfk-persist.dat"
 #define FP_TMP "mlfk-persist.tmp"
 #define FP_DEFAULT_DIR "/mnt/mlfk-data"
-// 78 lines, ~1.8 KB canonical — anything larger is not ours.
+// 87 lines, ~1.9 KB canonical — anything larger is not ours.
 #define FP_CAP 4096
 // MLFKPERSIST2's ctlstyle domain was {0 normal, 1 box} — CTL_STYLE_NATURAL
 // did not exist yet. FROZEN: never re-point this at CTL_STYLE_COUNT.
@@ -133,6 +133,13 @@ void foh_persist_defaults(FohPersist *p) {
   // the first tick and make one of these two lines a lie.
   p->tssHand[0] = FOH_TSS_HOME_X;
   p->tssHand[1] = FOH_TSS_HOME_Y;
+  // ticket #27's six cursors are ALL ZERO on a fresh install, and the
+  // memset above is the whole of it — stated here rather than assigned,
+  // because "zero happens to be right" and "zero was never considered" look
+  // identical in the code. Each is the top/leftmost row of its screen,
+  // which is where an untouched machine opens it (menu.js:31's cursor,
+  // stageselect's battlefield, gameplaymenu's first row and column,
+  // audiomenu's SOUNDS row, and the controls screen's d-pad row).
 }
 
 // A26/D53 + ticket #26. The contract, and the reason for every non-identity
@@ -186,28 +193,48 @@ FohResumePlan foh_persist_resume_plan(FohScreen sc) {
     // screen the file recorded. A target match resumed onto a stale slot
     // list would be the same defect one indirection further away.
     case FOH_TMATCH: return MAP(FOH_TSS, FOH_RESUME_HOOK_TSS_SLOTS);
-    // THE STATED REASON FOR THIS ROW IS SPENT, AND THE ROW IS STILL HERE.
-    // It read "launches with port types the CSS arms, and those are not
-    // persisted" — true when it was written, false since ticket #25 (owner
-    // ruling 2026-08-27) put `ptype` and `cpudiff` on the card. A stage
-    // select restored now WOULD launch the configuration the player left.
-    // Removing the redirect is ticket #27's, not this one's: it is a
-    // behaviour change with its own resume trace to freeze, and doing it
-    // here would ship it under a ticket that never judged it. What must not
-    // happen is this comment continuing to assert the opposite of the code
-    // it sits next to, which is the defect class that cost three days on
-    // getConnected.
-    case FOH_SSS: return MAP(FOH_CSS, FOH_RESUME_HOOK_NONE);
-    // its reticle is placed by the entering transition, which a resume
-    // never runs; this is the screen its own B-exit goes to (foh.c:1701).
-    // ADR 0001 names the credits reticle as the OTHER candidate for a hook;
-    // it does not get one, because the redirect already answers it — a
-    // screen we never land on has nothing to re-derive. If ticket #27 or a
-    // later arc makes the credits resumable, THIS is the row that has to
-    // grow a hook, and the redirect is the thing standing in for one now.
-    case FOH_CREDITS: return MAP(FOH_MENU_OPTIONS, FOH_RESUME_HOOK_NONE);
-    // unreachable at FOH_NETPLAY 0 (foh.h); its B-exit is the menu top
-    case FOH_MENU_BATTLE: return MAP(FOH_MENU_TOP, FOH_RESUME_HOOK_NONE);
+    // STAGE SELECT — REDIRECT REMOVED (ticket #27). The row read "launches
+    // with the port types the CSS arms, and those are not persisted"; that
+    // was true when it was written and false from ticket #25 (owner ruling
+    // 2026-08-27), which put `ptype` and `cpudiff` on the card. Ticket #26
+    // corrected the comment and left the behaviour, deliberately, because
+    // removing a redirect is a behaviour change and belonged to a ticket
+    // that would judge it. This is that ticket. A stage select restored now
+    // launches the configuration the player left, and its cursor comes back
+    // too (`ssscur` below). Nothing else on this screen is set by the
+    // ENTERING transition — foh.c's CSS `start` arm only validates the port
+    // config and transitions — so there is nothing to re-derive and no hook.
+    case FOH_SSS: return MAP(FOH_SSS, FOH_RESUME_HOOK_NONE);
+    // CREDITS — REDIRECT REMOVED (ticket #27), AND IT TAKES NO HOOK.
+    //
+    // The redirect's reason was that the reticle is placed by the entering
+    // transition, which a resume never runs. ADR 0001 and ticket #26 both
+    // expected that to become the second hook. IT MUST NOT BE ONE, and the
+    // reason is measured rather than argued: a resume arrives on a state
+    // foh_init has just built, and foh_init ALREADY places the reticle at
+    // the identical home (foh.c, FOH_CRED_HOME_X/Y — one macro since this
+    // ticket, precisely so the two placements cannot drift apart). A hook
+    // that placed it again would be a provable no-op, and a no-op hook is
+    // worse than none: its tooth could not bite, so it would assert a
+    // dependency that is not there and quietly weaken the one mechanism
+    // ADR 0001 kept.
+    //
+    // The rest of the screen is module-lifetime state that foh_init cold-
+    // starts exactly as a first visit finds it — `credInit` true, so
+    // cred_reset runs on the first tick; the star field built once; the D38
+    // generator seeded. So a resumed credits screen IS a first visit, which
+    // is what the entering transition would have produced.
+    case FOH_CREDITS: return MAP(FOH_CREDITS, FOH_RESUME_HOOK_NONE);
+    // REDIRECT REMOVED (ticket #27), AND IT CHANGES NOTHING TODAY. This
+    // screen is unreachable at FOH_NETPLAY 0 (foh.h), so no hibernate can
+    // ever arm the row and neither mapping is observable now. It maps to
+    // itself because the ticket's rule is that resume means the same thing
+    // on every screen: leaving a redirect here would mean that turning the
+    // netplay flag on silently reintroduces the one exception, with nothing
+    // failing to say so. Its cursor comes back through `menusel` like every
+    // other menu's, and its count is 4 (foh_menu_count), so a restored
+    // cursor is always in range for it.
+    case FOH_MENU_BATTLE: return MAP(FOH_MENU_BATTLE, FOH_RESUME_HOOK_NONE);
     // A45-T4 sent the builder to the menu top, because it holds an UNSAVED
     // DOCUMENT that was not persisted and resuming INTO it would present an
     // empty editor and read as "my work is still here" when it was not.
@@ -236,10 +263,13 @@ FohResumePlan foh_persist_resume_plan(FohScreen sc) {
     case FOH_TSS: return MAP(FOH_TSS, FOH_RESUME_HOOK_TSS_SLOTS);
     // Everything else opens with NO entry-time initialisation beyond what
     // foh_init already gives (measured over every ev_trans site in foh.c:
-    // the only entry arms that write state are TSS's — now the row above —
-    // and the two excluded further up). Listed rather than defaulted so a
-    // NEW screen is a compile error here — the one place that must think
-    // about it, and since ticket #26 it must think about the hook too.
+    // the only entry arms that write state at all are TSS's — the row above
+    // — and CREDITS', whose write is foh_init's own value, argued at that
+    // arm). Their cursors come back as ordinary rows (`menusel`, `optrow`,
+    // `optcol`, `audiorow`, `ctlrow`, ticket #27), which is a FIELD answer,
+    // not a hook one. Listed rather than defaulted so a NEW screen is a
+    // compile error here — the one place that must think about it, and
+    // since ticket #26 it must think about the hook too.
     case FOH_TITLE:
     case FOH_MENU_TOP:
     case FOH_MENU_OPTIONS:
@@ -301,7 +331,25 @@ typedef enum {
   FP_DOM_UNIT,    // finite, non-negative, <= 1.0 (audiomenu's clamp)
   FP_DOM_PERM,    // the LINE's values are a permutation of 0..vals-1
   FP_DOM_RESUME,  // a screen foh_persist_resume_target() maps to itself
-  FP_DOM_SCREEN   // finite, non-negative, <= FP_SCREEN_MAX (a canvas coord)
+  FP_DOM_SCREEN,  // finite, non-negative, <= FP_SCREEN_MAX (a canvas coord)
+  // THE FILE'S ONE CROSS-ROW RULE (ticket #27). Every other domain judges a
+  // value on its own; this one judges `menusel` against `resume`, because
+  // the menu cursor is ONE field shared by four screens whose row counts
+  // differ (foh_menu_count) and the screen it will be drawn on is named by
+  // a DIFFERENT row. The pairing matters: foh_render.c gfx_fatals on a
+  // cursor outside the mode it is drawing, deliberately, so a file pairing
+  // `resume 05` (menu-controls, two rows) with `menusel 3` would kill the
+  // app at boot. That is CORRUPTION by the same rule every out-of-domain
+  // value is, and it resets loudly rather than being clamped onto a row the
+  // player never chose.
+  //
+  // It is legitimate ONLY because the file is ordered and the table is
+  // walked in file order, so `resume` is always resolved — parsed, or
+  // defaulted by fp_absent — before `menusel` is reached. fp_table_check()
+  // asserts that ordering rather than trusting it, since a row moved above
+  // `resume` would silently start judging against the previous boot's
+  // default and nothing else would notice.
+  FP_DOM_MENUROW
 } FpDomain;
 
 typedef struct {
@@ -407,7 +455,19 @@ typedef struct {
   X(tssPage, .key = "tsspage", .kind = FP_FLAG, .vals = 1, .dmax = 2,          \
     .since = 7)                                                                \
   X(tssHand, .key = "tsshand", .kind = FP_HEX64, .vals = 2,                    \
-    .dom = FP_DOM_SCREEN, .since = 7)
+    .dom = FP_DOM_SCREEN, .since = 7)                                          \
+  X(menuSelected, .key = "menusel", .kind = FP_FLAG, .vals = 1,                \
+    .dmax = FOH_MENU_ROWS_MAX, .dom = FP_DOM_MENUROW, .since = 7)              \
+  X(sssCursor, .key = "ssscur", .kind = FP_FLAG, .vals = 1,                    \
+    .dmax = FOH_SSS_SLOTS, .since = 7)                                         \
+  X(optRow, .key = "optrow", .kind = FP_FLAG, .vals = 1,                       \
+    .dmax = FOH_OPT_ROWS, .since = 7)                                          \
+  X(optCol, .key = "optcol", .kind = FP_FLAG, .vals = 1,                       \
+    .dmax = FOH_OPT_COLS, .since = 7)                                          \
+  X(audioRow, .key = "audiorow", .kind = FP_FLAG, .vals = 1,                   \
+    .dmax = FOH_AUDIO_ROWS, .since = 7)                                        \
+  X(ctlRow, .key = "ctlrow", .kind = FP_U2, .vals = 1,                         \
+    .dmax = FOH_CTL_ROWS, .since = 7)
 
 #define FP_ROW(nm, ...)                                                        \
   {.off = offsetof(FohPersist, nm),                                            \
@@ -641,6 +701,28 @@ static void fp_table_check(void) {
   if (total != (size_t)FP_TABLE_BYTES) {
     gfx_fatal("foh_persist: table byte total disagrees with FP_TABLE_BYTES");
   }
+  // THE CROSS-ROW RULE'S PRECONDITION (ticket #27), asserted rather than
+  // assumed. FP_DOM_MENUROW judges `menusel` against the ALREADY-PARSED
+  // `resume`, which is only sound while `resume` comes first in the table —
+  // the walk is in file order for both the current and the frozen historical
+  // policies. Reorder the two and the rule would silently start judging
+  // against whatever the previous step left in the record, and every check
+  // in the tree would still pass: the pairing it refuses is one no writer
+  // produces. So it is a startup death, next to the other table invariants.
+  {
+    int iResume = -1, iMenuRow = -1;
+    for (int j = 0; j < FP_COUNT; j++) {
+      if (FP_TABLE[j].dom == FP_DOM_RESUME) iResume = j;
+      if (FP_TABLE[j].dom == FP_DOM_MENUROW) iMenuRow = j;
+      // it reads an INT cell of the record, so it may not sit on a double
+      if (FP_TABLE[j].dom == FP_DOM_MENUROW && FP_TABLE[j].kind == FP_HEX64) {
+        gfx_fatal("foh_persist: the menu-row domain is not a double's");
+      }
+    }
+    if (iMenuRow >= 0 && (iResume < 0 || iResume >= iMenuRow)) {
+      gfx_fatal("foh_persist: the menu-row domain reads a row not yet parsed");
+    }
+  }
 }
 
 // Appends one printf-formatted piece, with the buffer contract enforced.
@@ -847,6 +929,15 @@ static bool fp_parse_field(FpParse *ps, const FpField *f, FohPersist *v) {
           // fp_table_check forbids a bias on a permutation row so the two
           // can never mean different things at once.
           line[i] = c - '0';
+          if (f->dom == FP_DOM_MENUROW) {
+            // …AND against the screen the file will restore (ticket #27).
+            // `resume` precedes this row, so v->resumeScreen is already
+            // resolved (fp_table_check asserts that ordering). A non-menu
+            // screen constrains nothing — the count is 0 — and a menu
+            // constrains the cursor to the rows it actually draws.
+            const int mc = foh_menu_count((FohScreen)v->resumeScreen);
+            if (mc > 0 && line[i] >= mc) return fp_die(ps, "domain");
+          }
           *(int *)cell = line[i] - f->wireBias;
           break;
         }
@@ -1304,6 +1395,18 @@ void foh_persist_apply(const FohPersist *p, FohState *s) {
   s->tssPage = p->tssPage;
   s->tssHandX = p->tssHand[0];
   s->tssHandY = p->tssHand[1];
+  // ticket #27: the remaining screen cursors. Plain copies — every one of
+  // these is a highlight index the screen reads and nothing derives, which
+  // is why they cost a row each and not a hook. `menuSelected` is written
+  // for the same reason its exit arms leave it alone: a screen's cursor is
+  // where the player was, and a boot that lands him on it is the whole
+  // ticket.
+  s->menuSelected = p->menuSelected;
+  s->sssCursor = p->sssCursor;
+  s->optRow = p->optRow;
+  s->optCol = p->optCol;
+  s->audioRow = p->audioRow;
+  s->ctlRow = p->ctlRow;
   g_bound = s; // review-100 M1: bind for the record-time refresh
 }
 
@@ -1351,6 +1454,19 @@ void foh_persist_collect(FohPersist *p, const FohState *s) {
   p->tssPage = s->tssPage;
   p->tssHand[0] = s->tssHandX;
   p->tssHand[1] = s->tssHandY;
+  // ticket #27: the remaining screen cursors. Collected UNCONDITIONALLY,
+  // not only on the screen that owns each one — every one of them is module
+  // -lifetime state upstream (menu.js's `menuSelected`, audiomenu's row,
+  // ctl_style's row, all kept across screen changes), so its current value
+  // is meaningful wherever the hibernate happens to catch the machine.
+  // Collecting one only "on its own screen" would publish a stale value on
+  // every other, which is a worse lie than not saving it at all.
+  p->menuSelected = s->menuSelected;
+  p->sssCursor = s->sssCursor;
+  p->optRow = s->optRow;
+  p->optCol = s->optCol;
+  p->audioRow = s->audioRow;
+  p->ctlRow = s->ctlRow;
   // records are chokepoint-owned: they change ONLY through
   // foh_persist_record_update (the finishGame arm), never collected
   // back from the display copy.

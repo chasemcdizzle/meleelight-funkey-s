@@ -29,13 +29,11 @@
 // unavailable notice instead. foh_tbuild.h explains why it is a pointer.
 const FohTbuildOps *foh_tbuild_ops = 0;
 
-static const int kMenuCount[FOH_SCREEN_COUNT] = {
-    // menuCount = [4, 4, 4, 2] (menu.js:31), indexed here by screen
-    [FOH_MENU_TOP] = 4,
-    [FOH_MENU_OPTIONS] = 4,
-    [FOH_MENU_BATTLE] = 4,
-    [FOH_MENU_CONTROLS] = 2,
-};
+// menuCount = [4, 4, 4, 2] (menu.js:31) MOVED to foh.h as foh_menu_count()
+// (ticket #27). It was a table here, a second copy in foh_render.c's range
+// guard, and ticket #27 needed a third reader in foh_persist.c, which cannot
+// link this TU — so it is one inline function all three ask. Nothing about
+// the values changed.
 
 // --- A7: the credits (upstream menus/credits.js; MENU-SPEC §8) -------------
 //
@@ -317,8 +315,15 @@ void foh_init(FohState *s) {
   // entry, because upstream's absolute map re-centres it whenever the stick
   // is neutral and losing that would be a behaviour change D12 never asked
   // for.
-  s->credX = RAST_W / 2.0;
-  s->credY = RAST_H / 2.0;
+  //
+  // TICKET #27 MADE THIS LINE LOAD-BEARING BEYOND THE COLD BOOT. Credits now
+  // resumes into itself, and a resume never runs the entering transition —
+  // so THIS is what places the reticle on a resumed credits screen. It is
+  // the same macro the entry writes (foh.h's FOH_CRED_HOME_X/Y), which is
+  // what makes "the resume arrives where an entry would" true by
+  // construction instead of by two copies of a literal agreeing.
+  s->credX = FOH_CRED_HOME_X;
+  s->credY = FOH_CRED_HOME_Y;
   // targetRecords fresh state is -1, NOT 0 (targetplay.js:40) — 0 would
   // read as a valid 0-second record (task 13).
   for (int c = 0; c < 5; c++) {
@@ -409,7 +414,7 @@ static int clampi(int v, int lo, int hi) {
 static void step_menu(FohState *s, const PlatformInput *in,
                       const PlatformInput *pv) {
   const FohScreen sc = s->screen;
-  const int count = kMenuCount[sc];
+  const int count = foh_menu_count(sc);
   const bool aE = in->a && !pv->a;
   const bool bE = in->b && !pv->b;
   const bool uE = in->up && !pv->up;
@@ -575,8 +580,10 @@ static void step_menu(FohState *s, const PlatformInput *in,
           // Upstream's absolute map parks it dead centre whenever the stick
           // is neutral (credits.js:169-173), and that is the observable
           // being preserved. The tssHandX re-home above is the precedent.
-          s->credX = RAST_W / 2.0;
-          s->credY = RAST_H / 2.0;
+          // Ticket #27: the SAME macro foh_init writes, so a resumed credits
+          // screen (which skips this transition) is placed identically.
+          s->credX = FOH_CRED_HOME_X;
+          s->credY = FOH_CRED_HOME_Y;
           ev_trans(s, sc, FOH_CREDITS, "a"); // changeGamemode(13), :147
         }
         break;
@@ -1449,8 +1456,13 @@ static void step_tss(FohState *s, const PlatformInput *in,
 
 // menuVOptions / menuHOptions (gameplaymenu.js:11-12). BOTH are MAX
 // INDICES, not counts: five rows, and only the last one has columns.
-#define FOH_OPT_ROWMAX 4
-static const int kOptColMax[FOH_OPT_ROWMAX + 1] = {0, 0, 0, 0, 3};
+// The COUNTS are foh.h's FOH_OPT_ROWS / FOH_OPT_COLS since ticket #27 (the
+// persist table needs them as column bounds and cannot link this TU), so
+// they are derived here rather than restated — one fact, two spellings of
+// it, and the -1 says which spelling this one is.
+#define FOH_OPT_ROWMAX (FOH_OPT_ROWS - 1)
+static const int kOptColMax[FOH_OPT_ROWMAX + 1] = {0, 0, 0, 0,
+                                                   FOH_OPT_COLS - 1};
 
 static void step_opt_gameplay(FohState *s, const PlatformInput *in,
                               const PlatformInput *pv) {

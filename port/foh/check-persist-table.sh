@@ -101,15 +101,17 @@ nser="$(grep -c 'fp_addf(buf, cap' "$SRC")" || true
    the writer is no longer walking the table"
 # every FP_FIELDS row, counted, so a dropped row is loud
 nrows="$(grep -cE '^  X\([A-Za-z]' "$SRC")" || true
-[ "$nrows" = 27 ] \
-  || grammar_die "[0] FP_FIELDS has $nrows rows (want 26: turbo, lcancel,
+[ "$nrows" = 33 ] \
+  || grammar_die "[0] FP_FIELDS has $nrows rows (want 33: turbo, lcancel,
    tapjump, ctlstyle, modonr, rec, flash, walljump, blastzone, dustless,
    phantom, soundslevel, musiclevel, bind, sel, resume, then ticket #25's
    CSS machine plane — ptype, cpudiff, vsmode, hand, slider, carry, cpucarry,
    handtype — then ticket #26's target-select trio, tsscur, tsspage and
-   tsshand). A row was added or removed — if that was deliberate, this number moves WITH
+   tsshand — then ticket #27's six remaining screen cursors, menusel, ssscur,
+   optrow, optcol, audiorow and ctlrow).
+   A row was added or removed — if that was deliberate, this number moves WITH
    the format and the fixture builder in leg [1] moves with it too"
-echo "    [0] OK: table, static assertion, layout guard and 27 rows all present"
+echo "    [0] OK: table, static assertion, layout guard and 33 rows all present"
 
 # --- [1] the fixture builder (INDEPENDENT of the C under test) ---------------
 # Builds a canonical MLFKPERSIST7 file from the FORMAT — the grammar written
@@ -190,6 +192,21 @@ function record(mode) {
     // reason the CSS block's defaults are formulas: an expectation that
     // copied the numbers could not notice the definition moving.
     tsshand: seeded ? [12.5, 205.75] : [8 + 100 / 2, 30 + 19 / 2],
+    // ticket #27's six screen cursors. Every seeded value is the TOP of its
+    // own domain, which is the only value that catches a column narrowed by
+    // one — the failure mode a persisted cursor actually has. `menusel` 3
+    // is the last row of a four-row menu (and legal beside `resume 14`,
+    // which is not a menu at all — the cross-row rule is driven on its own
+    // in leg [8]); `ssscur` 6 is the refused RANDOM slot; `optrow` 4 with
+    // `optcol` 3 is the tap-jump row's last column, the only row that has
+    // columns; `ctlrow` 10 is RESET, the eleventh row, which is why that
+    // row is two digits.
+    menusel: seeded ? 3 : 0,
+    ssscur: seeded ? 6 : 0,
+    optrow: seeded ? 4 : 0,
+    optcol: seeded ? 3 : 0,
+    audiorow: seeded ? 1 : 0,
+    ctlrow: seeded ? 10 : 0,
   };
 }
 // The WIRE BIAS, restated from the format (foh_persist.h) rather than read
@@ -231,6 +248,12 @@ function lines(r) {
   L.push("tsscur " + String(r.tsscur).padStart(2, "0")); // TWO digits
   L.push("tsspage " + r.tsspage);
   L.push("tsshand " + r.tsshand.map(bits).join(" "));
+  L.push("menusel " + r.menusel);
+  L.push("ssscur " + r.ssscur);
+  L.push("optrow " + r.optrow);
+  L.push("optcol " + r.optcol);
+  L.push("audiorow " + r.audiorow);
+  L.push("ctlrow " + String(r.ctlrow).padStart(2, "0")); // TWO digits
   return L;
 }
 // The record dump foh_persist_witness.c prints, derived from the SAME
@@ -276,6 +299,14 @@ function dump(r) {
   D.push("tsscur " + r.tsscur);
   D.push("tsspage " + r.tsspage);
   D.push("tsshand " + r.tsshand.map(bits).join(" "));
+  // ticket #27. `ctlrow` is the second two-digit COLUMN and, like `tsscur`,
+  // a plain integer here.
+  D.push("menusel " + r.menusel);
+  D.push("ssscur " + r.ssscur);
+  D.push("optrow " + r.optrow);
+  D.push("optcol " + r.optcol);
+  D.push("audiorow " + r.audiorow);
+  D.push("ctlrow " + r.ctlrow);
   return D.join("\n") + "\n";
 }
 function seal(L) {
@@ -295,8 +326,8 @@ node "$BUILD/fixture.js" dump seed "$BUILD/seed.dump"
 node "$BUILD/fixture.js" file defaults "$BUILD/defaults.dat"
 node "$BUILD/fixture.js" dump defaults "$BUILD/defaults.dump"
 made "$BUILD/seed.dat" "$BUILD/seed.dump" "$BUILD/defaults.dat" "$BUILD/defaults.dump"
-[ "$(grep -c "" "$BUILD/seed.dat")" = 81 ] \
-  || grammar_die "[1] the independently built fixture is not 81 LF lines —
+[ "$(grep -c "" "$BUILD/seed.dat")" = 87 ] \
+  || grammar_die "[1] the independently built fixture is not 87 LF lines —
    fixture construction is broken, so every leg below would be vacuous"
 cmp -s "$BUILD/seed.dat" "$BUILD/defaults.dat" \
   && fail "[1] the seeded and default fixtures are identical (dead tooth: a
@@ -375,15 +406,18 @@ variant() { # <name> <ops...>
 mkdir -p "$BUILD/v"
 V4_ROWS=(drop=flash drop=walljump drop=blastzone drop=dustless drop=phantom
          drop=soundslevel drop=musiclevel)
-# EVERY row whose `since` is 7 — the hibernate row plus ticket #25's eight CSS
-# rows. Named once, because "the rows a v6 file cannot have" is one fact and
+# EVERY row whose `since` is 7 — the hibernate row, ticket #25's eight CSS
+# rows, ticket #26's target-select trio and ticket #27's six screen cursors.
+# Named once, because "the rows a v6 file cannot have" is one fact and
 # six call sites: the previous shape spelt `drop=resume` inline six times, and
 # adding a v7 row would then have needed six edits with nothing failing if one
 # were missed (the v6 fixture would simply have carried a row no v6 writer
 # could produce, and the migration leg would have passed on it).
 V7_ROWS=(drop=resume drop=ptype drop=cpudiff drop=vsmode drop=hand
          drop=slider drop=carry drop=cpucarry drop=handtype
-         drop=tsscur drop=tsspage drop=tsshand)
+         drop=tsscur drop=tsspage drop=tsshand
+         drop=menusel drop=ssscur drop=optrow drop=optcol drop=audiorow
+         drop=ctlrow)
 variant v6 hdr=6 "${V7_ROWS[@]}"
 variant v5 hdr=5 "${V7_ROWS[@]}" drop=sel
 variant v4 hdr=4 "${V7_ROWS[@]}" drop=sel dropall=bind
@@ -583,10 +617,15 @@ hist_ok() { # <name> <from-version>
 # still exactly one independent statement of what a fresh CSS looks like and
 # this leg cannot quietly disagree with leg [3] about it.
 # ticket #26's two rows join the same list for the same reason: a migrated
-# file must come back on the screen an ENTRY would have opened.
+# file must come back on the screen an ENTRY would have opened. Ticket #27's
+# six cursors join it for the third time: a migrated file opens every screen
+# on the row a fresh install opens it on, which is the row it would have
+# opened on before those rows existed — so a migration changes nothing the
+# player can see, which is what makes it safe to do silently.
 V7_DEFAULT_OPS=()
 for k in ptype cpudiff vsmode hand slider carry cpucarry handtype \
-         tsscur tsspage tsshand; do
+         tsscur tsspage tsshand \
+         menusel ssscur optrow optcol audiorow ctlrow; do
   dline="$(grep -m1 "^$k " "$BUILD/defaults.dat")" \
     || fail "[7] the defaults fixture carries no '$k' row"
   V7_DEFAULT_OPS+=("set=$k:$dline")
@@ -652,14 +691,24 @@ hist_grammar v2-style2 hdr=2 "${V7_ROWS[@]}" drop=sel dropall=bind \
 # are v7-only" would be true only of the writer.
 hist_grammar v6-plus-ptype hdr=6 drop=resume drop=cpudiff drop=vsmode \
   drop=hand drop=slider drop=carry drop=cpucarry drop=handtype \
-  drop=tsscur drop=tsspage
+  drop=tsscur drop=tsspage \
+  drop=menusel drop=ssscur drop=optrow drop=optcol drop=audiorow drop=ctlrow
 # ticket #26, same rule aimed at THIS ticket's own rows: keep `tsspage` and
 # strip everything else v7. Sharing the leg above would have let both new
 # rows ride on `ptype` being the one actually refused.
 hist_grammar v6-plus-tsspage hdr=6 drop=resume drop=ptype drop=cpudiff \
   drop=vsmode drop=hand drop=slider drop=carry drop=cpucarry \
-  drop=handtype drop=tsscur drop=tsshand
-echo "    [7b] OK: eight frozen-grammar refusals (a historical version neither
+  drop=handtype drop=tsscur drop=tsshand \
+  drop=menusel drop=ssscur drop=optrow drop=optcol drop=audiorow drop=ctlrow
+# ticket #27, third instance of the same rule, aimed at the LAST row in the
+# file: keep `ctlrow` and strip every other v7 row. The last row is the one
+# worth naming — a parser that stopped checking after the rows it knew would
+# refuse `tsspage` above and accept this one.
+hist_grammar v6-plus-ctlrow hdr=6 drop=resume drop=ptype drop=cpudiff \
+  drop=vsmode drop=hand drop=slider drop=carry drop=cpucarry \
+  drop=handtype drop=tsscur drop=tsspage drop=tsshand \
+  drop=menusel drop=ssscur drop=optrow drop=optcol drop=audiorow
+echo "    [7b] OK: nine frozen-grammar refusals (a historical version neither
     skips a newer row nor defaults one of its own)"
 
 # --- [8] the guards that are still guards -----------------------------------
@@ -738,6 +787,31 @@ refuse hand-offscreen "reset cause=corrupt detail=domain" \
   'set=hand:hand 406e200000000000 406e000000000000'
 refuse slider-neg   "reset cause=corrupt detail=domain" \
   'set=slider:slider bff0000000000000 4031c00000000000 4039000000000000 4040200000000000'
+# ticket #27's six cursors, each judged in ITS OWN column: one past the last
+# row of each screen. These are the failures a persisted cursor really has —
+# a column narrowed or widened by one — and every one of them would otherwise
+# put the highlight on a row the screen does not draw.
+refuse menusel-bad  "reset cause=corrupt detail=grammar" 'set=menusel:menusel 4'
+refuse ssscur-bad   "reset cause=corrupt detail=grammar" 'set=ssscur:ssscur 7'
+refuse optrow-bad   "reset cause=corrupt detail=grammar" 'set=optrow:optrow 5'
+refuse optcol-bad   "reset cause=corrupt detail=grammar" 'set=optcol:optcol 4'
+refuse audiorow-bad "reset cause=corrupt detail=grammar" 'set=audiorow:audiorow 2'
+# `ctlrow` is the second TWO-DIGIT row, so it fails the two ways `tsscur`
+# does: 11 is grammatical and outside the eleven rows (`domain`), and a
+# one-digit value makes the line short (`grammar`) — the tooth that would
+# notice the row being demoted to a flag and losing RESET, its last row.
+refuse ctlrow-bad    "reset cause=corrupt detail=domain"  'set=ctlrow:ctlrow 11'
+refuse ctlrow-narrow "reset cause=corrupt detail=grammar" 'set=ctlrow:ctlrow 5'
+# THE FILE'S ONE CROSS-ROW RULE (ticket #27, FP_DOM_MENUROW). ONLY `resume`
+# is edited here: the seed already carries `menusel 3`, which is in its own
+# column and is a row menu-TOP really has. Paired with a `resume` naming
+# MENU-CONTROLS (screen 5, which draws TWO rows) it becomes a cursor that
+# screen cannot draw, and foh_render.c gfx_fatals on exactly that — so the
+# file is refused at load instead of killing the app at boot. BOTH rows are
+# individually legal, which is the whole point: neither column alone catches
+# it, and [8b] below drives `resume 05` on its own and requires it to LOAD.
+refuse menusel-vs-resume "reset cause=corrupt detail=domain" \
+  'set=resume:resume 05'
 run roundtrip - missing
 want_event "[8] missing" "foh_persist: reset cause=missing"
 teeth=$((teeth + 1))
@@ -757,6 +831,64 @@ refuse_not level-one   'set=soundslevel:soundslevel 3ff0000000000000'
 # a gate that rejected either would reset a legitimate save.
 refuse_not hand-zero   'set=hand:hand 0000000000000000 0000000000000000'
 refuse_not hand-cap    'set=hand:hand 406e000000000000 406e000000000000'
+# the same cross-row pairing, the way round that is LEGAL: menu-controls has
+# two rows, so cursor 1 is one of them. Without this the refusal above could
+# be `resume 05` being rejected for some other reason entirely.
+refuse_not menusel-vs-resume-ok 'set=resume:resume 05' 'set=menusel:menusel 1'
+
+# --- [8b] THE RESUME MAP HAS NO REDIRECT LEFT BUT THE MATCH SCREENS -------
+#
+# Ticket #27's acceptance criterion, asserted EXHAUSTIVELY rather than by
+# spot-checking the three rows that changed. The `resume` column's domain IS
+# foh_persist_resume_target()'s fixed points (FP_DOM_RESUME asks the map
+# itself), so driving every screen value through a real file and recording
+# which ones load is a complete statement of the map's shape from the
+# OUTSIDE — no C is read, and a redirect added later shows up here as a
+# screen that stopped loading.
+#
+# EXPECTED: every screen 0..16 loads EXCEPT 13 (match) and 15 (target
+# match), which are the two the ticket leaves redirected because a mid-match
+# snapshot is #29 and #30's job. 17 is FOH_SCREEN_COUNT and beyond the enum.
+# The enum's own order is restated here as the reason for each number, so a
+# screen inserted in the middle of FohScreen shifts these and is caught.
+#
+# EVERY fixture here also sets `menusel 1`, and it has to: the seed carries
+# 3, which the cross-row rule refuses beside the two-row menu-controls. This
+# leg is about the resume COLUMN's domain, so it holds the other row at a
+# value legal on every menu — otherwise screen 05 would fail here for the
+# reason [8]'s menusel-vs-resume tooth already proves, and the map's shape
+# would be reported wrongly.
+echo "=== [8b] the resume map's fixed points, every screen value"
+RESUME_REDIRECTED="13 15" # FOH_MATCH, FOH_TMATCH — the only two left
+rmap_ok=0; rmap_no=0
+for sc in $(seq 0 17); do
+  nn="$(printf '%02d' "$sc")"
+  if [ "$sc" = 14 ]; then
+    # the SEED already carries FOH_TSS, so a `set=resume` here would be a
+    # no-op the fixture builder refuses. Only the menusel op is applied.
+    variant "rmap$nn" 'set=menusel:menusel 1'
+  else
+    variant "rmap$nn" "set=resume:resume $nn" 'set=menusel:menusel 1'
+  fi
+  run roundtrip "$BUILD/v/rmap$nn.dat" "rmap-$nn"
+  case " $RESUME_REDIRECTED 17 " in
+    *" $sc "*)
+      want_event "[8b] screen $nn" "foh_persist: reset cause=corrupt detail=domain"
+      rmap_no=$((rmap_no + 1))
+      teeth=$((teeth + 1)) ;;
+    *)
+      want_event "[8b] screen $nn" "foh_persist: loaded"
+      rmap_ok=$((rmap_ok + 1)) ;;
+  esac
+done
+[ "$rmap_ok" = 15 ] && [ "$rmap_no" = 3 ] \
+  || grammar_die "[8b] drove $rmap_ok accepted and $rmap_no refused screen
+   values (want 15 and 3: seventeen screens, of which FOH_MATCH and
+   FOH_TMATCH are redirected, plus the out-of-enum 17). The loop's own
+   arithmetic moved, so its verdict is not about the map"
+echo "    [8b] OK: 15 screens resume into THEMSELVES; only match (13) and
+    target match (15) are redirected, and 17 is off the enum"
+
 echo "    [8] OK: order, domain, permutation, seal, version and header
     refusals all still bite; the inclusive caps still load"
 

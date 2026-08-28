@@ -605,15 +605,16 @@ static void a31_v4_migrates(void) {
   // loader rightly refuses it. That is what broke all four v4 assertions
   // after A49 — a STALE FIXTURE, not a migration defect: a real v4 file from
   // a real old device never had either row and still migrates.
-  // ticket #25 appended eight more v7 rows (the CSS machine plane) and
-  // ticket #26 two more (target select), stripped by the same rule and
-  // counted by the same kind of assertion: this constructor's whole failure
-  // mode is going STALE, so every row is named and every name has to be
-  // found.
+  // ticket #25 appended eight more v7 rows (the CSS machine plane), ticket
+  // #26 three more (target select) and ticket #27 six more (the remaining
+  // screen cursors), stripped by the same rule and counted by the same kind
+  // of assertion: this constructor's whole failure mode is going STALE, so
+  // every row is named and every name has to be found.
   static const char *const kCssRows[] = {
-      "ptype ",  "cpudiff ", "vsmode ",   "hand ",
-      "slider ", "carry ",   "cpucarry ", "handtype ",
-      "tsscur ", "tsspage ", "tsshand "};
+      "ptype ",   "cpudiff ",  "vsmode ",   "hand ",    "slider ",
+      "carry ",   "cpucarry ", "handtype ", "tsscur ",  "tsspage ",
+      "tsshand ", "menusel ",  "ssscur ",   "optrow ",  "optcol ",
+      "audiorow ", "ctlrow "};
   const int kNCssRows = (int)(sizeof kCssRows / sizeof *kCssRows);
   static char out[8192];
   size_t m = 0;
@@ -658,9 +659,10 @@ static void a31_v4_migrates(void) {
        "the synthetic v4 fixture dropped v7's resume row (same rule: every "
        "format bump has to be stripped here or the fixture stops being v4)");
   want(strippedCss == kNCssRows,
-       "the synthetic v4 fixture dropped all eight of ticket #25's CSS rows "
-       "(same rule again, and now it is APPENDED ROWS rather than version "
-       "bumps that go stale here)");
+       "the synthetic v4 fixture dropped every appended v7 row — ticket #25's "
+       "eight CSS ones, ticket #26's three target-select ones and ticket "
+       "#27's six screen cursors (same rule again, and now it is APPENDED "
+       "ROWS rather than version bumps that go stale here)");
   {
     char hex[65];
     ml_sha256_hex(out, m, hex);

@@ -145,6 +145,27 @@
 //                                 foh_tss_refresh_slots() and its reasons
 //                                 are `const char *` into four TUs. It is
 //                                 RE-DERIVED by the resume hook below.
+//   --- the remaining screen cursors (ticket #27) -------------------------
+//   menusel <n>                   [0-3] the menu cursor, ONE field for four
+//                                 menu screens (upstream keeps one too).
+//                                 CROSS-ROW DOMAIN: it is additionally
+//                                 judged against `resume` above, because
+//                                 menu-controls draws only TWO rows and a
+//                                 cursor past its last one is a boot crash
+//                                 in foh_render.c's own range guard. That
+//                                 is the file's ONE cross-row rule and the
+//                                 reason this row must stay BELOW `resume`.
+//   ssscur <n>                    [0-6] stage select: 0..5 are the oracle
+//                                 stage ids, 6 is the refused RANDOM slot.
+//   optrow <n>                    [0-4] options > gameplay, five rows.
+//   optcol <n>                    [0-3] its column — only the tap-jump row
+//                                 has more than one, and the pair is what
+//                                 "where you were" means on that screen.
+//   audiorow <n>                  [01] options > audio, two rows.
+//   ctlrow <NN>                   TWO digits, [00-10]: controls > handheld
+//                                 has ELEVEN rows (nine actions, the style
+//                                 row, RESET) — the second row in the file
+//                                 that does not fit one decimal column.
 //   SUM <sha256-lowercase-hex of ALL preceding bytes>
 // The v4, v5, v6 and v7 blocks are APPENDED after the 50 rec rows on purpose:
 // it keeps every older version a strict PREFIX through the rec block, so the
@@ -509,6 +530,52 @@ typedef struct {
   int tssCursor;     // FohState.tssCursor — 0..9 tstage ids, 10 the page slot
   int tssPage;       // FohState.tssPage — 0 authored | 1 custom
 
+  // --- THE REMAINING SCREEN CURSORS (ticket #27) ------------------------
+  //
+  // "Resume means the same thing on every screen, so the player does not
+  // have to learn which ones are exceptions." Tickets #25 and #26 brought
+  // back the two screens whose state was rich; these six ints are the rest
+  // of the FOH, and each is one row through ticket #22's table — which is
+  // the ADR's point restated as an invoice: none of these would ever have
+  // been worth a version bump and a migration arm on its own, and that is
+  // exactly why none of them was ever saved.
+  //
+  //   menuSelected  the menu cursor. ONE field for FOUR screens, because
+  //                 upstream has one (menu.js's module-scope `menuSelected`,
+  //                 kept across menuMode changes — which is what makes a
+  //                 B-exit land back on the row that opened the screen).
+  //                 Its column is the WIDEST menu (FOH_MENU_ROWS_MAX), and
+  //                 the narrower one is handled by FP_DOM_MENUROW, the
+  //                 file's one CROSS-ROW rule: see foh_persist.c.
+  //   sssCursor     stage select, 0..5 plus the refused RANDOM slot. Ticket
+  //                 #27 also removes that screen's resume redirect, so this
+  //                 row is what it comes back to.
+  //   optRow/optCol options > gameplay, a row and a column (the tap-jump
+  //                 row is the only one with columns). BOTH, because the
+  //                 pair is what "where you were" means on that screen and
+  //                 restoring one without the other lands the highlight
+  //                 somewhere the player never left it.
+  //   audioRow      options > audio, two rows.
+  //   ctlRow        controls > handheld, ELEVEN rows (nine actions, the
+  //                 style row, RESET) — so it is a TWO-DIGIT row, the same
+  //                 case `tsscur` opened.
+  //
+  // PLACEMENT, by the rule tickets #25 and #26 each wrote down: this block
+  // sits AFTER theirs and BEFORE `resumeScreen`, so that member stays the
+  // LAST PERSISTED ONE — check-persist-table.sh leg [9] appends its
+  // counterfactual int after `int resumeScreen;` and requires it to vanish
+  // into the tail padding. All six are ints among ints (the doubles are all
+  // above), so no alignment hole opens. Six more ints takes the persisted
+  // int count 63 -> 69: still ODD, which is what leaves the four-byte tail
+  // gap `layoutGuard` accounts for, so leg [9]'s counterfactual keeps
+  // working. Moving any of this without re-reading that leg breaks it.
+  int menuSelected; // FohState.menuSelected — menu.js:31's cursor
+  int sssCursor;    // FohState.sssCursor — 0..5 stage ids, 6 = RANDOM
+  int optRow;       // FohState.optRow — gameplaymenu.js:11
+  int optCol;       // FohState.optCol — gameplaymenu.js:12
+  int audioRow;     // FohState.audioRow — audiomenu.js:15
+  int ctlRow;       // FohState.ctlRow — A31's eleven-row controls screen
+
   // --- v7 (fix_plan A26; DEVIATION D53) ---------------------------------
   // HIBERNATE/RESUME. Owner: *"closing screen and opening it doesn't come
   // back to the game though. i want it to."* Closing the lid does NOT
@@ -584,20 +651,27 @@ void foh_persist_defaults(FohPersist *p);
 // is exactly what makes it usable as the persisted row's domain check —
 // the file can only ever hold a screen the driver would restore.
 //
-// The non-identity rows, each because restoring the literal screen would be
-// WORSE THAN NOT RESUMING:
+// AFTER TICKET #27 THERE ARE EXACTLY TWO NON-IDENTITY ROWS, AND BOTH ARE
+// MATCH SCREENS. That is the whole of the ticket's rule — resume means the
+// same thing on every screen — and it is enforceable by reading this list:
 //   FOH_MATCH  -> FOH_CSS   mid-match state is out of scope (see the struct
 //   FOH_TMATCH -> FOH_TSS   field); these are the screens the match's own
 //                           exit lands on (foh_dev.c's MEX_CSS/MEX_TSS arm).
-//   FOH_SSS    -> FOH_CSS   the port types ARE persisted now (ticket #25),
-//                           so this row's stated reason is spent; the row
-//                           survives it and ticket #27 owns the removal.
-//                           foh_persist.c's own arm carries the whole note.
-//   FOH_CREDITS-> FOH_MENU_OPTIONS  the credits reticle is placed by the
-//                           ENTERING transition (foh.c credX/credY), which a
-//                           resume never runs; MENU_OPTIONS is its B-exit.
-//   FOH_MENU_BATTLE -> FOH_MENU_TOP  unreachable at FOH_NETPLAY 0.
-//   FOH_STARTUP-> FOH_STARTUP  the boot animation is not a place.
+//                           #29 and #30 own making a match resume itself.
+//   FOH_STARTUP-> FOH_STARTUP  identity, not a redirect: the boot animation
+//                           is not a place, so nothing can be armed on it.
+//
+// THE THREE THAT WENT (ticket #27), because a redirect that outlives its
+// reason reads to the player as an arbitrary exception:
+//   FOH_SSS          the port types it launches with ARE persisted now
+//                    (ticket #25), and its cursor is `ssscur`.
+//   FOH_CREDITS      its reticle is placed by foh_init at the same home the
+//                    entering transition writes (foh.h FOH_CRED_HOME_X/Y),
+//                    so a resumed credits screen IS a first visit. It takes
+//                    NO hook — foh_persist.c's arm says why at length.
+//   FOH_MENU_BATTLE  unreachable at FOH_NETPLAY 0, so the change is not
+//                    observable today; it maps to itself so that turning
+//                    the flag on cannot silently restore the exception.
 //
 // This is now the TARGET HALF of foh_persist_resume_plan() below, kept as a
 // function of its own because it is the file's domain check and every
