@@ -253,15 +253,31 @@ else
   # long before a lid can close on it. It is deleted on a clean exit, so only
   # a session that DIED comes back.
   #
-  # `pid record "$APP"` first: `instant_play load` re-mounts the OPK named by
-  # /mnt/last_opk (opkrun writes it at launch and the frontend loop clears it
-  # afterwards, so it is live for exactly the window we care about), and the
-  # recorded path must resolve inside that mount rather than against /bin.
+  # The path written is ABSOLUTE ($DIR is the OPK mount point), so nothing
+  # here needs /var/run/pid_path and nothing calls `pid record` — see the
+  # note at the write itself, where that call turned out to be defect 5.
+  # `instant_play load` re-mounts the OPK named by /mnt/last_opk, which
+  # opkrun writes at launch and the frontend loop clears afterwards, so it is
+  # live for exactly the window a lid close falls in.
   RESUME_ARM_AFTER=5
   (
     sleep "$RESUME_ARM_AFTER"
     if kill -0 "$APP" 2>/dev/null; then
-      pid record "$APP" >/dev/null 2>&1 || true
+      # NO `pid record` HERE, and its absence is the fix for defect 5.
+      #
+      # v1/v2 called it because `instant_play save` ignores the path handed
+      # to it and rebuilds it from /var/run/pid_path. v3 writes the record
+      # itself with an absolute path, so nothing needs pid_path any more —
+      # and leaving the call in was actively harmful.
+      #
+      # MEASURED BY READING, after three failed device tests: `powerdown
+      # schedule` sends SIGUSR1 to `pid print`, i.e. the pid last RECORDED.
+      # frontend:106 records the launcher, which is why the launcher can have
+      # a USR1 trap at all (A26). Recording the APP's pid re-aims the lid
+      # signal AT THE APP, so the launcher's trap never fires, HIBERNATING
+      # stays 0, and the clean-exit path deletes the record that was armed
+      # correctly seconds earlier. Every symptom fits: the player's state
+      # saved (`resume 06` was right on the card) and the relaunch vanished.
       # The shape `instant_play save` emits, minus its `exec powerdown now`.
       # Recording THIS SCRIPT rather than the binary is deliberate: a resumed
       # session then re-arms the next one, and inherits the USR1 trap and the
@@ -275,6 +291,10 @@ else
       } > /mnt/instant_play 2>/dev/null || true
       sync 2>/dev/null || true
       echo "mlfk-foh.sh: relaunch armed" >> "$LOG"
+      # AND ON THE CARD. $LOG lives in /tmp, which is tmpfs, so a lid close
+      # erases exactly the evidence a lid-close bug needs. Three diagnoses in
+      # this feature were guesses for want of this one line.
+      echo "armed $(date +%s)" >> /mnt/mlfk-resume.log 2>/dev/null || true
     fi
   ) &
   RESUME_TIMER=$!
@@ -292,14 +312,16 @@ else
   # simply wrong, and it is the third time in this feature that a claim in a
   # comment outlived the code it described.
   HIBERNATING=0
-  trap 'HIBERNATING=1; kill -USR1 "$APP" 2>/dev/null' USR1
+  trap 'HIBERNATING=1; echo "trap $(date +%s)" >> /mnt/mlfk-resume.log 2>/dev/null; kill -USR1 "$APP" 2>/dev/null' USR1
   wait "$APP"; rc=$?
   if [ "$rc" -gt 128 ]; then wait "$APP"; rc=$?; fi
   # A PLAYER QUITTING IS NOT A LID CLOSE. Only the former spends the record.
   kill "$RESUME_TIMER" 2>/dev/null || true
   if [ "$HIBERNATING" = 0 ]; then
+    echo "quit rc=$rc $(date +%s) — record spent" >> /mnt/mlfk-resume.log 2>/dev/null || true
     rm -f /mnt/instant_play 2>/dev/null || true
   else
+    echo "hibernate rc=$rc $(date +%s) — record kept" >> /mnt/mlfk-resume.log 2>/dev/null || true
     echo "mlfk-foh.sh: hibernating — relaunch record kept" >> "$LOG"
   fi
 fi
