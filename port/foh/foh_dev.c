@@ -173,6 +173,7 @@
 #include "foh_persist.h"
 #include "foh_tbuild.h" // A26/D53: the builder document across a hibernate
 #include "foh_match_snap.h" // #29: the MATCH across a hibernate
+#include "foh_target_snap.h" // #30: the TARGET RUN across a hibernate
 #include "../sim/target/custom_stage.h" // A45 T3: custom target slots
 #include "foh_launch.h"  // A44: the ONE FohState -> 4-port match config
 
@@ -1410,6 +1411,21 @@ static void tdev_persist_load(void) {
 // arm below takes its "no match snapshot in this build" branch, which is the
 // pre-#29 behaviour verbatim.
 const FohMatchSnapOps *foh_match_snap_ops = 0;
+// TICKET #30 — the TARGET-run resume seam's NULL definition, beside its VS
+// twin above and for the same reason (this interface needs GameState, and
+// foh.c deliberately does not see the sim). foh_target_snap.c's constructor
+// installs the real ops; a build without that TU links, and every arm below
+// takes its "no target snapshot in this build" branch, which is the pre-#30
+// behaviour verbatim.
+const FohTargetSnapOps *foh_target_snap_ops = 0;
+
+// THE STAGE THE CURRENT TARGET RUN IS BEING PLAYED ON, as a digest
+// (foh_target_snap.h's SRC). Computed ONCE at the launch seam, where the
+// stage has just been loaded and there is time to encode it, and read by the
+// hibernate arm, which is inside the ~100 ms grace window and does two writes
+// and no work. Empty until a target run launches, which is exactly when the
+// hibernate arm can be reached with sc == FOH_TMATCH.
+static char g_tgtSrcHex[65];
 
 static volatile sig_atomic_t g_hibernate;
 static void tdev_hibernate_signal(int sig) {
@@ -1482,6 +1498,45 @@ static void tdev_hibernate_check(FohScreen sc, const FohState *f) {
                       "character select instead\n",
               msWhy ? msWhy : "no match snapshot in this build");
       g_persist.resumeScreen = (int)FOH_CSS;
+    }
+  }
+  // TICKET #30 — THE TARGET RUN, the same shape a third time. The plane being
+  // kept is different (MlTargets: which targets are broken, how many, and the
+  // pending finish edge — a plane with its OWN frozen stream and its OWN
+  // verifier), which is why it is a ticket of its own, but the RULE is the
+  // one the two arms above already follow: publish the state FIRST, and
+  // downgrade the resume when the publish fails.
+  //
+  // THE DOWNGRADE IS TO FOH_TSS, not to the character select and not to the
+  // menu top: target select is where a target run's own exit lands
+  // (foh_persist_resume_plan's own comment, and it is what that row mapped
+  // FOH_TMATCH to before this ticket), so a run whose state did not reach the
+  // card leaves the player exactly where the port put him before #30.
+  //
+  // ONE REFUSAL HERE IS NOT A FAILURE, and it is this ticket's own rule: a
+  // run that has already FINISHED is not armed (foh_target_snap.h). Its
+  // record went through the improve-or-first chokepoint when it finished, the
+  // settings save two lines below carries it, and re-entering the finish path
+  // on a resume is the one way this feature could double-count one.
+  if (sc == FOH_TMATCH) {
+    const char *tsWhy = 0;
+    if (!foh_target_snap_ops || !foh_target_snap_ops->arm ||
+        !foh_target_snap_ops->arm(&G, f->tssStage, f->p1Char, g_tgtSrcHex,
+                                  &tsWhy)) {
+      fprintf(stderr, "foh_dev: target state NOT kept (%s) — resuming to "
+                      "target select instead\n",
+              tsWhy ? tsWhy : "no target snapshot in this build");
+      g_persist.resumeScreen = (int)FOH_TSS;
+    } else {
+      // WHAT WAS KEPT, said in the numbers the ticket is about. `destroyed`
+      // is the whole point of the plane: a resume that came back with it at
+      // zero would be a run thrown away, and this line is what makes that
+      // visible in a log rather than only in a checksum.
+      fprintf(stderr,
+              "foh_dev: target resume armed tstage=%d char=%d frame=%ld "
+              "destroyed=%d/%d\n",
+              f->tssStage, f->p1Char, (long)G.frame, (int)TP.targetsDestroyed,
+              TP.targetCount);
     }
   }
   // the player's settings go with it — a hibernate is an exit like any other
@@ -2246,6 +2301,16 @@ int main(int argc, char **argv) {
   // not by placement.
   bool matchResume = false;
   long matchResumeFrom = 0;
+  // TICKET #30 — the TARGET resume's carried values, declared here for the
+  // identical reason (a backward goto re-executes declarations it jumps over,
+  // and a second run in the same process must not inherit the first one's
+  // resume). `tmatchHdr` is what the header said; it is handed back to
+  // `restore` so the run that was set up can be checked against the run that
+  // was armed.
+  bool tmatchResume = false;
+  long tmatchResumeFrom = 0;
+  FohTmatchHdr tmatchHdr;
+  memset(&tmatchHdr, 0, sizeof tmatchHdr);
   if (!direct && g_persist.resumeScreen != (int)FOH_STARTUP) {
     foh.screen = (FohScreen)g_persist.resumeScreen;
     g_persist.resumeScreen = (int)FOH_STARTUP;
@@ -2290,6 +2355,57 @@ int main(int argc, char **argv) {
         // the same refusal again.
         if (foh_match_snap_ops && foh_match_snap_ops->disarm) {
           foh_match_snap_ops->disarm();
+        }
+      }
+    }
+    // ...AND THE TARGET RUN (ticket #30), the same shape and the same
+    // ordering argument: only the ~255-byte header is read here, because the
+    // launch needs the STAGE and the CHARACTER before gfx_target_init, the
+    // .mlstage load and tp_setup_target_core can run, and all of those run
+    // long before the sim state can be put back.
+    //
+    // A REFUSAL LANDS ON TARGET SELECT, which is exactly where the pre-#30
+    // redirect put the player, and it SAYS WHY.
+    if (foh.screen == FOH_TMATCH) {
+      const char *tsWhy = 0;
+      if (foh_target_snap_ops && foh_target_snap_ops->peek &&
+          foh_target_snap_ops->peek(&tmatchHdr, &tsWhy)) {
+        tmatchResume = true;
+        tmatchResumeFrom = tmatchHdr.frame;
+        // The launch plane. The character is on the card with the settings
+        // record too, and it is taken from the HEADER here so that the pair
+        // decides which run is resumed and a settings record edited in
+        // between cannot re-aim it at a different character; `restore`
+        // checks the snapshot agrees. The stage is the launch field the
+        // record does not carry at all.
+        //
+        // `tssCursor` and `tssPage` are set to MATCH the stage rather than
+        // left as the card found them: the player who backs out of this run
+        // arrives on target select with the hand over the slot he was
+        // playing, which is where the ordinary exit leaves it.
+        foh.p1Char = tmatchHdr.charId;
+        foh.tssStage = tmatchHdr.tstage;
+        if (tmatchHdr.tstage >= MLK_PLAYING_BASE) {
+          foh.tssPage = 1;
+          foh.tssCursor = tmatchHdr.tstage - MLK_PLAYING_BASE;
+        } else {
+          foh.tssPage = 0;
+          foh.tssCursor = tmatchHdr.tstage;
+        }
+        foh.targetMode = true;
+        foh.launched = true;
+        fprintf(stderr,
+                "foh_dev: target resume armed tstage=%d char=%d frame=%ld\n",
+                tmatchHdr.tstage, tmatchHdr.charId, tmatchHdr.frame);
+      } else {
+        fprintf(stderr,
+                "foh_dev: target run NOT resumed (%s) — target select "
+                "instead\n",
+                tsWhy ? tsWhy : "no target snapshot in this build");
+        foh.screen = FOH_TSS;
+        // Nothing half-armed survives this boot.
+        if (foh_target_snap_ops && foh_target_snap_ops->disarm) {
+          foh_target_snap_ops->disarm();
         }
       }
     }
@@ -2437,9 +2553,11 @@ int main(int argc, char **argv) {
   // `matchResume` joins `direct` here for the same reason direct is here: a
   // resumed match has no FOH phase to serve. The player closed the lid inside
   // a match and opens it inside that match — walking him through the menus
-  // first would be a different feature.
+  // first would be a different feature. `tmatchResume` (ticket #30) joins
+  // both for the identical reason, on the identical sentence: a target run is
+  // still a run he was inside.
   const long fohLimit =
-      (direct || matchResume) ? 0
+      (direct || matchResume || tmatchResume) ? 0
              : (inPoll ? ((brLive && !fohMaxGiven) ? LONG_MAX - 1 : fohMax)
                        : g_flow_frames);
   // MATCH-SUMMARY STATE — declared ABOVE the re-entry label on purpose.
@@ -2902,6 +3020,19 @@ foh_phase:;
       } else {
         tp_setup_target(&G, foh.p1Char, foh.tssStage);
       }
+      // TICKET #30 — THE STAGE'S SOURCE IDENTITY, computed HERE and nowhere
+      // else. This is the one moment at which the stage the run is about to be
+      // played on is in hand: for a custom slot `g_tdevCustom` has just come
+      // off the SD card and been validated, and for an authored one the id is
+      // all there is. It is computed at LAUNCH rather than at the lid because
+      // the hibernate arm lives inside a ~100 ms grace window that already
+      // carries two writes, and because both the write side and the read side
+      // must derive it the same way from the same place — which is what makes
+      // "the card changed while the lid was shut" a named refusal instead of a
+      // run played on ground it never saw (foh_target_snap.h).
+      foh_tmatch_src(foh.tssStage,
+                     foh.tssStage >= MLK_PLAYING_BASE ? &g_tdevCustom : 0,
+                     g_tgtSrcHex);
       // tp_setup_target installs the harness cookie-domain gameSettings
       // DEFAULTS (target_play.c:319-325 zeroes lCancelType/turbo and all
       // four tapJumpOff slots). On the PLAY path those are the player's
@@ -2921,6 +3052,51 @@ foh_phase:;
         G.sim.everyCharWallJump = foh.everyCharWallJump != 0;
       }
       G.rngStateAtFrame1 = G.rng.a;
+
+      // TICKET #30 — THE RESTORE. Here, and not one line earlier, because
+      // ss_load's precondition is a run that is already SET UP: the page has
+      // booted, the stage has been loaded (off the card, for a custom slot),
+      // tp_setup_target_core has rebuilt every DERIVED row of the target plane
+      // from that geometry, and the options plane has been applied. What the
+      // restore then does is put the played run back OVER that fresh one —
+      // the sim, the RNG counters, and the target plane's PERSISTED rows (the
+      // `mod:targets` snapshot row: which targets are broken, how many, and
+      // the pending finish edge).
+      //
+      // `liveSrc` is the identity of the stage the launch ACTUALLY loaded,
+      // recomputed a line above from the same one definition the arm used. It
+      // is what refuses a card whose custom slot was edited while the machine
+      // was off, and it is checked BEFORE the snapshot is opened.
+      //
+      // It is CONSUMED here: `tmatchResume` is cleared whichever way this
+      // goes, so the in-process return (a second run in the same session) can
+      // never inherit it.
+      if (tmatchResume) {
+        const char *tsWhy = 0;
+        tmatchResume = false;
+        if (!foh_target_snap_ops || !foh_target_snap_ops->restore ||
+            !foh_target_snap_ops->restore(&G, &tmatchHdr, g_tgtSrcHex,
+                                          &tsWhy)) {
+          // The header promised a run the card cannot deliver. The set-up run
+          // sitting in G and TP is a legal, freshly started one, so the honest
+          // thing is to say so and play it from the top rather than to die
+          // holding the player's evening hostage to a bad file.
+          fprintf(stderr,
+                  "foh_dev: target state NOT restored (%s) — starting a fresh "
+                  "run instead\n",
+                  tsWhy ? tsWhy : "no target snapshot in this build");
+          tmatchResumeFrom = 0;
+        } else {
+          // The numbers the ticket is about, on the way back in. `destroyed`
+          // here must equal `destroyed` in the arm's line: that is "broken
+          // targets stay broken", stated in the log as well as in the stream.
+          fprintf(stderr,
+                  "foh_dev: target run restored frame=%ld destroyed=%d/%d\n",
+                  (long)G.frame, (int)TP.targetsDestroyed, TP.targetCount);
+        }
+      } else {
+        tmatchResumeFrom = 0;
+      }
       // TBRIDGE-STATE witness (read back from GameState + the target
       // module — foh_app.c's exact emission; frozen-cmp'd by the check)
       {
@@ -2962,6 +3138,14 @@ foh_phase:;
         if (brTVerify) {
           tim = malloc((size_t)frames * sizeof *tim);
           if (!tim) sim_fatal("oom (timing buffer)");
+          // ZEROED since ticket #30, for the reason the VS arm's buffer is
+          // zeroed since #29: a run that RESUMED starts its loop part way in,
+          // so the rows for the frames it did not tick are never written, and
+          // without this the --timing artifact would carry whatever malloc
+          // handed back. Zero is honest ("this process did not run that
+          // frame"), and for every non-resumed run it is dead weight over
+          // bytes that are all written anyway.
+          memset(tim, 0, (size_t)frames * sizeof *tim);
         }
         // live may tick a bounded post-finish tail; buffers cover it.
         // No --frames => no bound (C6): LONG_MAX - 1, never LONG_MAX, so the
@@ -3029,10 +3213,29 @@ foh_phase:;
         memset(&prevPause, 0, sizeof prevPause);
         if (foh_pause_hook) poll_bound(&prevPause); // VS arm's note
         uint64_t tStart = now_ns(); // NOT const: the overlay shifts it
-        for (long f = 0; f < loopMax; f++) {
+        // The checks' lid, the VS arm's device verbatim (ticket #29's note
+        // there): MLFK_HIBERNATE_AT raises a real SIGUSR1 at a known frame so
+        // that a continuation has a splice point. The SENDER is the only thing
+        // simulated — the signal, the handler and the whole hibernate arm are
+        // the product's. It is never set by any product path.
+        long tHibAt = 0;
+        {
+          const char *hv = getenv("MLFK_HIBERNATE_AT");
+          if (hv && *hv) tHibAt = strtol(hv, 0, 10);
+        }
+        // TICKET #30 — WHERE A RESUMED TARGET RUN STARTS. `tmatchResumeFrom`
+        // is the frame the snapshot was taken AFTER (G.frame is 1-based and
+        // this index is 0-based, so frame K restored means the next index is
+        // K), and it is 0 for every other run — so this loop is bit-for-bit
+        // the loop it was unless a lid actually closed. The trace-fed arm
+        // indexes g_trace by `f`, so starting at K keeps the input aligned
+        // with the frame numbers BOTH streams carry, which is what makes a
+        // spliced stream meaningful rather than merely contiguous.
+        for (long f = tmatchResumeFrom; f < loopMax; f++) {
           poll_bound(&pin); // live: THE input; tverify: backend pump
           // A26/D53. FOH_TMATCH literally, not foh.screen: --direct-match
           // never runs a transition, so that field can still be FOH_STARTUP.
+          if (tHibAt > 0 && f == tHibAt) raise(SIGUSR1); // #30: the check's lid
           tdev_hibernate_check(FOH_TMATCH, &foh); // exits iff the lid closed
           // A12: MENU opens the same overlay here. START does NOT — in
           // target mode it is upstream's own endGame quit (main.js:1013
