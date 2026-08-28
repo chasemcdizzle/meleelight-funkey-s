@@ -209,6 +209,22 @@ static void mod_playcount_load(const void *src) {
   ml_events_play_count_set(v);
 }
 
+// TICKET #29 — the LIVE C AI's slice, through the NULL-by-default pointers
+// sim_tick.c defines (sim_modstate.h says why they exist and what the class
+// of each MlAiSim field is). This TU is built by rigs that never link ai.c,
+// so it cannot name a sim_ai_live.c symbol; NULL therefore means a row of
+// ZERO bytes, which lands in the payload total and so in the build identity —
+// a snapshot from a build WITH the live AI is refused BY NAME by one without
+// it, instead of short-reading into a plausible wrong game.
+static size_t mod_ailive_bytes(void) {
+  return ml_ai_live_snap_bytes ? ml_ai_live_snap_bytes() : 0;
+}
+static void mod_ailive_save(void *dst) {
+  if (ml_ai_live_snap_save) ml_ai_live_snap_save(dst);
+}
+static void mod_ailive_load(const void *src) {
+  if (ml_ai_live_snap_load) ml_ai_live_snap_load(src);
+}
 static size_t mod_ssg_bytes(void) { return sizeof(uint8_t); }
 static void mod_ssg_save(void *dst) {
   const uint8_t v = mv_falcon_ssg_get_canEdgeCancel() ? 1u : 0u;
@@ -241,6 +257,9 @@ static const SsModule SS_MODULES[] = {
     // falcon SIDESPECIALGROUND's `this.canEdgeCancel` — a move-object scalar,
     // i.e. module state, read back by physics' edge-cancel arm.
     {"mod:falconSsgEdgeCancel", mod_ssg_bytes, mod_ssg_save, mod_ssg_load},
+    // The live C AI's curentAction slice (ticket #29). Zero bytes wide in
+    // builds that do not link sim_ai_live.c — see mod_ailive_bytes.
+    {"mod:aiLive", mod_ailive_bytes, mod_ailive_save, mod_ailive_load},
 };
 #define SS_MOD_COUNT ((int)(sizeof SS_MODULES / sizeof SS_MODULES[0]))
 

@@ -1,7 +1,13 @@
 # port/sim/sim/sim-modstate.frozen.txt — ticket #28.
 #
 # EVERY mutable file-scope `static` in the sim's translation units, with what
-# a snapshot does about it. This is the module-state twin of the
+# a snapshot does about it. SCOPE (widened by ticket #29): the M2 gate's TU
+# list PLUS sim_snapshot.c PLUS the LIVE-AI TUs (port/sim/ai.c and
+# port/sim/sim/sim_ai_live.c). The live-AI pair is not on the gate's list and
+# so was invisible to #28 — but the FOH binary that plays a real match links
+# both, and a resumed CPU match that lost their state resumes into a different
+# opponent. ai.c contributes no row: its only mutable file-scope object is the
+# non-static diagnostic counter array ml_ai_cov (ai.h:82). This is the module-state twin of the
 # _Static_assert in sim_snapshot.c: that assertion makes adding a member to
 # GameState a build failure, and this file makes adding a module static a
 # CHECK failure (port/sim/check-sim-snapshot.sh leg [2] re-derives the list
@@ -40,6 +46,9 @@ port/sim/characters/falcon/moves/SIDESPECIALGROUND.c g_ssg_canEdgeCancel persist
 port/sim/characters/shared/moves_index.c g_char_module reconstructed — sim_data_register(). A table of FUNCTION POINTERS: valid only inside the process that registered them.
 port/sim/characters/shared/moves_index.c g_special_phases reconstructed — sim_data_register(). Function pointers, as above.
 port/sim/ml_events.c g_snd_play_count persisted — mod:playcount. ml_howl_play_id derives play ids from this count and those ids are stored in players; restarting it would re-issue an id a live voice holds.
+port/sim/sim/sim_ai_live.c g_ai persisted — mod:aiLive, IN PART. runai_live repopulates every other field (the three POINTER fields, playerType/cS/multiJump/multiJumpUndef/turbo) from the live GameState and CTAB1 before ml_runAI reads them; what nothing repopulates is hasCurentAction/curentAction (ai.js:1254's typo field, modeled as slice state), and that is what the row carries.
+port/sim/sim/sim_ai_live.c g_ai_bound reconstructed — runai_live's own bind arm. It gates the POINTER fields of g_ai, whose values are addresses in this process; ai_live_snap_load clears it so a restore rebinds.
+port/sim/sim/sim_ai_live.c g_stage transient — ai_stage_refresh(), called at the top of every runai_live before ml_runAI reads aS. The whole MlAiStage view is rebuilt from STAB1 plus the live stage plane, so nothing crosses a frame boundary.
 port/sim/sim/sim_data.c g_arr reconstructed — sim_data_load(). SIMDATA1's executed move-data arrays; immutable after load.
 port/sim/sim/sim_data.c g_arr_count reconstructed — sim_data_load().
 port/sim/sim/sim_data.c g_arr_loaded reconstructed — sim_data_load().

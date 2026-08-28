@@ -37,6 +37,7 @@
 #include <string.h>
 
 #include "sim.h"
+#include "sim_modstate.h" // ticket #29: the live-AI snapshot seam
 #include "../characters/shared/moves.h"
 #include "../characters/fox/moves.h"
 #include "../characters/falco/moves.h"
@@ -70,6 +71,17 @@ void (*ml_sim_finish_hook)(void) = 0;
 // it always was.
 long (*ml_sim_snap_boot)(GameState *g) = 0;
 void (*ml_sim_snap_frame)(GameState *g, long frame) = 0;
+
+// live-AI SNAPSHOT seam (sim_modstate.h; ticket #29): NULL unless
+// sim_ai_live.c is linked, and defined HERE for the same reason the two
+// pointers above are — sim_snapshot.c is built by rigs that never link ai.c,
+// so it cannot name a symbol that TU owns, while sim_tick.c is on every list.
+// NULL is not "skip the row": it is a row of ZERO bytes, which changes the
+// payload total and therefore the build identity, so a snapshot written by a
+// build WITH the live AI is refused by name by a build without it.
+size_t (*ml_ai_live_snap_bytes)(void) = 0;
+void (*ml_ai_live_snap_save)(void *dst) = 0;
+void (*ml_ai_live_snap_load)(const void *src) = 0;
 
 void mv_out_of_domain(const char *what) { sim_fatal(what); }
 void ml_phys_out_of_domain(const char *what) { sim_fatal(what); }
