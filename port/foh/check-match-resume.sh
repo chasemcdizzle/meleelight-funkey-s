@@ -685,6 +685,69 @@ grep '^F ' "$BUILD/t2-c.stream.txt" > "$BUILD/t2.tail-c.txt"
   same tail as one that continued from $AT"
 echo "   T2 (a resumed match that restarts) bites"
 
+# --- [6] THE RESUMED MATCH PLAYS AT ONCE, NOT K FRAMES FROM NOW --------------
+#
+# WHY THIS LEG EXISTS, and why every other leg here was blind to it. Everything
+# above runs with `--pace 0`, because a checksum stream must not depend on a
+# clock. So the whole resume feature was proven correct and NOBODY HAD EVER RUN
+# A RESUMED MATCH ON THE PACED PATH — which is the only path the owner plays.
+#
+# MEASURED on the device, 2026-08-28: a match resumed at frame 4549 sat on a
+# frozen READY screen for 76 SECONDS with the music playing and the timer
+# stopped, then ran perfectly. `f` is an ABSOLUTE frame index and the pace
+# deadline is `tStart + (f + 1) * budgetNs`, so entering the loop at f=K with
+# an epoch of "now" puts the first deadline K frames in the future. The state
+# restore was right; the clock was not.
+#
+# The assertion is about WALL CLOCK, so it is stated with a wide margin and
+# judged against the shape of the defect (K frames of budget), never against a
+# tight expectation of how fast this machine is.
+echo "=== [6] a resumed match starts playing immediately (the PACED path)"
+P6=$BUILD/p6-persist
+rm -rf "$P6"; mkdir -p "$P6"
+# 8 ms/frame: the defect costs AT * 8 ms (14.4 s at AT=1800), a margin no host
+# jitter can forge, while a CORRECT run owes only P6_TAIL frames of it.
+P6_BUDGET=8000000
+P6_TAIL=40
+play "$BUILD/foh_dev_headless" "$P6" p6-a "MLFK_HIBERNATE_AT=$AT" \
+  || fail "[6] could not arm a paced-resume card"
+made "$P6/mlfk-match.hdr" "$P6/mlfk-match.sim"
+# The resumed boot, PACED, bounded to a short tail so the run's wall clock is
+# dominated by whatever the epoch does rather than by the match itself.
+p6_t0=$(date +%s)
+env MLFK_PERSIST_DIR="$PWD/$P6" "$BUILD/foh_dev_headless" \
+  --flow "$IDLE" --input flow --flow-out "$BUILD/p6-b.trace" \
+  --pace 1 --budget-ns "$P6_BUDGET" ${CPUARG[@]+"${CPUARG[@]}"} \
+  --bridge verify --simdata "$BUILD/simdata.txt" --seed "$SEED" \
+  --trace "$BUILD/$ID.trace.txt" --frames "$(( AT + P6_TAIL ))" \
+  --out "$BUILD/p6-b.stream.txt" --timing "$BUILD/p6-b.timing.txt" \
+  --bstate-out "$BUILD/p6-b.bstate.txt" "${GD[@]}" \
+  > "$BUILD/p6-b.out.txt" 2> "$BUILD/p6-b.err.txt" \
+  || { relay_lines < "$BUILD/p6-b.err.txt" >&2
+       fail "[6] the paced resumed boot exited nonzero"; }
+p6_wall=$(( $(date +%s) - p6_t0 ))
+grep -qxF "foh_dev: match restored frame=$AT" "$BUILD/p6-b.err.txt" \
+  || { relay_lines < "$BUILD/p6-b.err.txt" >&2
+       fail "[6] the paced boot did not restore the match, so its wall clock
+  says nothing about a resumed pace epoch"; }
+# The defect's own cost, in seconds, derived rather than typed: AT frames of
+# budget. The bound sits at half of it, which no correct run can reach (it owes
+# only P6_TAIL frames = 0.04 s of pacing) and no defective one can beat.
+p6_defect_s=$(( AT * P6_BUDGET / 1000000000 ))
+p6_bound=$(( p6_defect_s / 2 ))
+[ "$p6_bound" -ge 2 ] \
+  || fail "[6] the fixture is too small to distinguish the defect
+  (AT=$AT frames at ${P6_BUDGET}ns = ${p6_defect_s}s); raise P6_BUDGET"
+[ "$p6_wall" -lt "$p6_bound" ] \
+  || fail "[6] the resumed match took ${p6_wall}s of WALL CLOCK for
+  $P6_TAIL frames of play. The pace epoch was not back-dated by the $AT frames
+  already behind it, so the first deadline lands $p6_defect_s s in the future
+  and the player watches a frozen screen for exactly as long as they had
+  already played. MEASURED on the device 2026-08-28: 76 s of a still READY
+  screen at frame 4549."
+echo "   resumed + played $P6_TAIL frames in ${p6_wall}s (the un-back-dated
+   epoch would have cost ${p6_defect_s}s before the first frame)"
+
 # --- no-commit guard ----------------------------------------------------------
 git_dirty_after="$(tree_fingerprint)" \
   || fail "could not fingerprint the working tree after the run"

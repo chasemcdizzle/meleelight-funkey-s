@@ -3296,6 +3296,31 @@ foh_phase:;
         // indexes g_trace by `f`, so starting at K keeps the input aligned
         // with the frame numbers BOTH streams carry, which is what makes a
         // spliced stream meaningful rather than merely contiguous.
+        // TICKETS #29/#30 — THE PACE EPOCH OWES A RESUMED RUN ITS PAST.
+        //
+        // `f` is an ABSOLUTE frame index (that is what makes a spliced
+        // checksum stream meaningful) and the deadline below is
+        // `tStart + (f + 1) * budgetNs`. A resumed run enters this loop with
+        // `f` already at K, so an epoch of "now" puts the very first deadline
+        // K FRAMES IN THE FUTURE and the loop sleeps through all of it.
+        //
+        // MEASURED on the owner device, 2026-08-28 (the VS arm below; this
+        // loop has the identical shape and the identical defect): a match
+        // resumed at frame
+        // 4549 sat on a frozen READY screen for 76 seconds — music playing,
+        // timer stopped, 1.7% CPU asleep in hrtimer_nanosleep — and then ran
+        // perfectly. The state restore was right; the clock was not.
+        //
+        // So the epoch is back-dated by the frames already behind us, which
+        // is the same correction `tStart += pausedNs` makes for the pause
+        // overlay, in the other direction. Clamped, because now_ns() is
+        // monotonic-since-boot and a long match resumed seconds after a cold
+        // boot could otherwise underflow an unsigned epoch into the far
+        // future — the very freeze this removes.
+        {
+          const uint64_t behind = (uint64_t)tmatchResumeFrom * budgetNs;
+          tStart = (tStart > behind) ? tStart - behind : 0;
+        }
         for (long f = tmatchResumeFrom; f < loopMax; f++) {
           poll_bound(&pin); // live: THE input; tverify: backend pump
           // A26/D53. FOH_TMATCH literally, not foh.screen: --direct-match
@@ -3964,6 +3989,29 @@ foh_phase:;
       // `f`, so starting at K keeps the input aligned with the frame numbers
       // the checksum stream carries: this is what makes a spliced stream
       // meaningful rather than merely contiguous.
+      // TICKETS #29/#30 — THE PACE EPOCH OWES A RESUMED RUN ITS PAST.
+      //
+      // `f` is an ABSOLUTE frame index (that is what makes a spliced
+      // checksum stream meaningful) and the deadline below is
+      // `tStart + (f + 1) * budgetNs`. A resumed run enters this loop with
+      // `f` already at K, so an epoch of "now" puts the very first deadline
+      // K FRAMES IN THE FUTURE and the loop sleeps through all of it.
+      //
+      // MEASURED on the owner device, 2026-08-28: a match resumed at frame
+      // 4549 sat on a frozen READY screen for 76 seconds — music playing,
+      // timer stopped, 1.7% CPU asleep in hrtimer_nanosleep — and then ran
+      // perfectly. The state restore was right; the clock was not.
+      //
+      // So the epoch is back-dated by the frames already behind us, which
+      // is the same correction `tStart += pausedNs` makes for the pause
+      // overlay, in the other direction. Clamped, because now_ns() is
+      // monotonic-since-boot and a long match resumed seconds after a cold
+      // boot could otherwise underflow an unsigned epoch into the far
+      // future — the very freeze this removes.
+      {
+        const uint64_t behind = (uint64_t)matchResumeFrom * budgetNs;
+        tStart = (tStart > behind) ? tStart - behind : 0;
+      }
       for (long f = matchResumeFrom; f < matchMax; f++) {
         // FIRST statement of the body, i.e. OUTSIDE the t0..t3 brackets
         // below: the instrument can consume pacing slack but can never

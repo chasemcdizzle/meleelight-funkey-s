@@ -22794,3 +22794,74 @@ product bug. It is not: with the FRONTEND STILL RUNNING the app blocks inside
 stderr tell is the ABSENCE of `platform_sdl1: SetVideoMode ok`. Park the
 frontend before signalling anything, and read the log for what is missing
 rather than only for what is there.
+
+## driver — 2026-08-28 (later still) — the restore was right and the CLOCK was wrong. ZOOM-OUT: every resume check ran unpaced, so nobody had run the feature on the path the owner plays
+
+The owner closed the lid mid-match, opened it, and the game came back into the
+match — and sat frozen on a READY screen with the music playing and the timer
+stopped.
+
+### What the device said
+
+```
+foh_dev: match resume armed stage=3 frame=4549
+foh_dev: resumed screen=match
+foh_dev: match restored frame=4549
+foh_dev mustrack: from=menu to=dreamland on=1
+```
+
+Every line of the resume was correct. So the freeze was measured instead of
+guessed at: `/proc/<pid>/wchan` read `hrtimer_nanosleep` and utime advanced 5
+jiffies in 3 s — **1.7 % CPU, asleep in the pace sleep**, not spinning and not
+deadlocked. A later sample read 89 % with `wchan` 0: it had UNFROZEN by itself.
+The freeze lasted about 76 seconds, which is 4549 frames at 60 fps — the exact
+length of the match that had already been played.
+
+### Cause
+
+`f` is an ABSOLUTE frame index (that is what makes a spliced checksum stream
+meaningful) and the pace deadline is `tStart + (f + 1) * budgetNs`. A resumed
+run enters the loop with `f` already at K and an epoch of `now_ns()`, so the
+FIRST deadline lands K frames in the future and the loop sleeps through all of
+it. The state restore was right; the clock was not.
+
+The fix is the same correction `tStart += pausedNs` already makes for the pause
+overlay, in the other direction: back-date the epoch by the frames already
+behind us, clamped, because now_ns() is monotonic-since-boot and a long match
+resumed seconds after a cold boot could otherwise underflow an unsigned epoch
+into the far future — the very freeze being removed. Applied to BOTH resumed
+loops, #29's match and #30's target run, which have the identical shape and had
+the identical defect.
+
+### ZOOM-OUT: why nine legs and three device checks were blind to it
+
+**Every leg of check-match-resume.sh runs `--pace 0`**, and correctly so: a
+checksum stream must not depend on a clock. The consequence is that the whole
+resume feature was proven correct and NOBODY HAD EVER RUN A RESUMED MATCH ON
+THE PACED PATH — which is the only path the owner plays. The unpaced-by-default
+rule that makes the conformance evidence sound is exactly what hid a defect
+that lives only in the pacing.
+
+New leg **[6]**: arm a card, then resume it with `--pace 1 --budget-ns 8000000`
+bounded to a 40-frame tail, and assert the WALL CLOCK. The bound is DERIVED
+from the defect's own cost (AT frames of budget) rather than typed, and sits at
+half of it — no correct run can reach it (it owes 40 frames = 0.32 s) and no
+defective one can beat it. The fixture refuses to run at all if AT is too small
+to separate the two, so it can never pass by being unable to tell.
+
+Tooth, proven by deleting the fix and re-running: **15 s vs 0 s**, and the
+failure prints the defect's shape rather than a bare number. foh_dev.c restored
+byte-identical (sha compared).
+
+### The pattern across today
+
+Three defects, three different places, one shape between them: the thing that
+was verified and the thing that ships were not the same thing.
+
+1. The TU was in the check's build and not the product's.
+2. The bound was compiled on a 64-bit host and never on the 32-bit target.
+3. The loop was exercised unpaced and never on the clock the player runs.
+
+Every one of them passed every check that existed. A check is evidence about
+what it ran, and what it ran is a choice worth re-reading whenever a feature
+reaches hardware and misbehaves anyway.
