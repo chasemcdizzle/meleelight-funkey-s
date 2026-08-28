@@ -495,6 +495,74 @@ static void every_string_renders(void) {
      "gfx_fatal, and two blurbs carry the '&' A7 added for them)");
 }
 
+// --- [#27] A RESUMED CREDITS SCREEN IS AN ENTERED ONE ----------------------
+//
+// Ticket #27 removes this screen's resume redirect, and the redirect's stated
+// reason was that the reticle is placed by the ENTERING TRANSITION, which a
+// resume never runs. ADR 0001 and ticket #26 both expected that to become the
+// second resume hook. IT MUST NOT BE ONE: foh_init already places the reticle
+// at the identical home (foh.h's FOH_CRED_HOME_X/Y — ONE macro since this
+// ticket, exactly so the two placements cannot drift), so a hook would be a
+// provable no-op, and a no-op hook is worse than none because its tooth
+// cannot bite.
+//
+// That is a claim about behaviour, so it is measured here rather than argued
+// in a comment. The two arrivals are built side by side — one walks the menu,
+// one is foh_dev.c's resume arm (a freshly initialised state whose `screen`
+// is SET, with no transition run) — and they are required to agree, first on
+// the reticle and then, two hundred frames later, ON THE PIXELS. The pixel
+// half is what makes this an assertion about the SCREEN rather than about one
+// pair of doubles: anything the entering transition sets up and a resume
+// misses would show there.
+//
+// check-credits.sh's T4 moves foh_init's placement in a COPY of foh.c and
+// requires this to fail, which is what stops the claim from resting on two
+// literals that agree today.
+static void resume_is_an_entry(void) {
+  FohState entered;
+  open_credits(&entered); // ...having run ZERO credits ticks (see open_credits)
+
+  FohState resumed;
+  foh_init(&resumed);
+  resumed.screen = FOH_CREDITS;
+  // ...and the menu cursor, which a real resume restores from the record's
+  // `menusel` row (ticket #27's own field). It is set here because
+  // foh_look_canonical derives the menu HUE from menuSelected, so leaving it
+  // at zero would make the two shots differ for a reason that has nothing to
+  // do with the credits screen. This witness does not link foh_persist.c, so
+  // the driver's one line is modelled rather than called.
+  resumed.menuSelected = entered.menuSelected;
+
+  want(resumed.credX == entered.credX && resumed.credY == entered.credY,
+       "a RESUMED credits screen finds its reticle exactly where an ENTERED "
+       "one does — which is why the resume redirect could go, and why this "
+       "screen needs no resume hook (ticket #27)");
+  want(resumed.credX == (double)RAST_W / 2.0 &&
+           resumed.credY == (double)RAST_H / 2.0,
+       "and that place is the canvas centre (credits.js:23-24), not merely "
+       "some value the two happen to share");
+
+  for (int i = 0; i < 200; i++) {
+    neutral(&entered);
+    neutral(&resumed);
+  }
+  want(entered.screen == FOH_CREDITS && resumed.screen == FOH_CREDITS,
+       "both are still the credits after 200 frames (the 2500-frame timer has "
+       "not fired, so what follows compares two LIVE screens)");
+  render_shot(&entered, &g_a);
+  render_shot(&resumed, &g_probe);
+  {
+    char buf[240];
+    const int d = fb_diff(&g_a, &g_probe);
+    snprintf(buf, sizeof buf,
+             "and 200 frames in, the resumed screen and the entered one are "
+             "the SAME PIXELS (%d differ) — reticle, warp field, scrolling "
+             "names and all",
+             d);
+    want(d == 0, buf);
+  }
+}
+
 int main(void) {
   FohState s;
   open_credits(&s);
@@ -504,6 +572,7 @@ int main(void) {
   timer_exit();
   table_shape();
   every_string_renders();
+  resume_is_an_entry();
   if (g_fails) {
     printf("CREDITS: %d assertion(s) failed\n", g_fails);
     return 1;

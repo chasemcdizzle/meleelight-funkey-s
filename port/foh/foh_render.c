@@ -1052,10 +1052,16 @@ static void render_menu(const FohState *s, Raster *rz) {
     case FOH_MENU_CONTROLS: mm = 3; break;
     default: gfx_fatal("foh_render: menu render on a non-menu screen");
   }
-  const int count = mm == 3 ? 2 : 4;
+  // menuCount (menu.js:31). This WAS `mm == 3 ? 2 : 4` — a second copy of
+  // foh.c's table, and ticket #27 needed a third reader in the persist
+  // table, so all three now ask foh.h's foh_menu_count(). The guard below
+  // is what makes the agreement load-bearing.
+  const int count = foh_menu_count(s->screen);
   // PASS 2 below indexes the label tables by menuSelected directly (the old
   // code only ever indexed inside k < count), and kMenuText[3] has just two
-  // initialisers. foh.c keeps the cursor in range; make that loud, not lucky.
+  // initialisers. foh.c keeps the cursor in range and, since ticket #27, so
+  // does the persist loader (FP_DOM_MENUROW — a restored cursor is judged
+  // against the screen it will be drawn on). Make it loud, not lucky.
   if (s->menuSelected < 0 || s->menuSelected >= count) {
     gfx_fatal("foh_render: menu cursor out of range for this menu mode");
   }

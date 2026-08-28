@@ -804,15 +804,18 @@ int main(void) {
       }
       // Splice out every post-v5 row, LAST FIRST so the earlier pointers stay
       // valid, then restamp the header to v5.
-      // ticket #25 appended eight more v7 rows and ticket #26 two more; a v5
-      // file carries none of them either, and leaving one in would make this
-      // file CORRUPT rather than migratable — the leg would then refuse for a
-      // reason that has nothing to do with the migration it is named after.
+      // ticket #25 appended eight more v7 rows, ticket #26 three more and
+      // ticket #27 six more; a v5 file carries none of them either, and
+      // leaving one in would make this file CORRUPT rather than migratable —
+      // the leg would then refuse for a reason that has nothing to do with
+      // the migration it is named after. LAST FIRST, so this list is in
+      // REVERSE file order and ticket #27's six lead it.
       static const char *const kPostV5[] = {
-          "\ntsshand ",  "\ntsspage ",  "\ntsscur ",   "\nhandtype ",
-          "\ncpucarry ", "\ncarry ",    "\nslider ",   "\nhand ",
-          "\nvsmode ",   "\ncpudiff ",  "\nptype ",    "\nresume ",
-          "\nsel "};
+          "\nctlrow ",   "\naudiorow ", "\noptcol ",   "\noptrow ",
+          "\nssscur ",   "\nmenusel ",  "\ntsshand ",  "\ntsspage ",
+          "\ntsscur ",   "\nhandtype ", "\ncpucarry ", "\ncarry ",
+          "\nslider ",   "\nhand ",     "\nvsmode ",   "\ncpudiff ",
+          "\nptype ",    "\nresume ",   "\nsel "};
       for (size_t r = 0; r < sizeof kPostV5 / sizeof *kPostV5; r++) {
         char *row = strstr(buf, kPostV5[r]);
         sum = strstr(buf, "\nSUM ");

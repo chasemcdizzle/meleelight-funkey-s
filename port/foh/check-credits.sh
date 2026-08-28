@@ -405,6 +405,46 @@ grep -qF 'CREDITS FAIL: B leaves the credits for Options' \
        fail "T3: the EXIT assertion failed too — same reason as above"; }
 echo "   T3: a panel that names the wrong person is caught (rc 1)"
 
+# --- [7b] T4: the RESUMED reticle, and the tooth that proves it (#27) -------
+# Ticket #27 removes the credits resume redirect. Its whole argument is that
+# foh_init places the reticle at the SAME home the entering transition writes,
+# so a resume arrives where an entry would and no resume hook is needed. That
+# is exactly the kind of claim that is true by coincidence until someone moves
+# one of the two — so the witness compares an ENTERED screen with a RESUMED
+# one (reticle, then two hundred frames of PIXELS), and this tooth moves
+# foh_init's placement in a COPY of foh.c and requires the comparison to fail.
+#
+# The two placement sites are distinguished by INDENTATION: foh_init's is at
+# two spaces, the menu-options entry arm's is inside a nested block at ten.
+# perturb_build refuses a substitution that is not unique, so this cannot
+# silently hit the other one.
+echo "=== [7b] T4: a resumed reticle that is NOT where an entry puts it"
+perturb_build t4-resume-reticle "$FOH/foh.c" \
+  '
+  s->credX = FOH_CRED_HOME_X;
+  s->credY = FOH_CRED_HOME_Y;' \
+  '
+  s->credX = FOH_CRED_HOME_X + 20.0; // T4: foh_init no longer agrees
+  s->credY = FOH_CRED_HOME_Y;'
+grep -qF 'CREDITS FAIL: a RESUMED credits screen finds its reticle exactly' \
+  "$BUILD/t4-resume-reticle/cred.out" \
+  || { relay_lines < "$BUILD/t4-resume-reticle/cred.out"
+       fail "T4: moving foh_init's reticle placement did NOT fail the
+  resumed-vs-entered assertion. The claim ticket #27 removed the credits
+  redirect on is then not being measured at all, and the screen could resume
+  with its reticle anywhere with nothing to say so."; }
+grep -qF 'the SAME PIXELS' "$BUILD/t4-resume-reticle/cred.out" \
+  || { relay_lines < "$BUILD/t4-resume-reticle/cred.out"
+       fail "T4: the pixel half of the comparison never reported — the
+  witness stopped earlier, so this tooth is crediting the wrong failure"; }
+grep -qF 'CREDITS FAIL: the score is exactly 1' \
+  "$BUILD/t4-resume-reticle/cred.out" \
+  && { relay_lines < "$BUILD/t4-resume-reticle/cred.out"
+       fail "T4: the SCORE assertion failed too. The ENTERED path re-homes the
+  reticle itself, so moving foh_init's copy must disturb no other leg — the
+  copy differs from foh.c by more than the one placement"; }
+echo "   T4: a foh_init that places the reticle elsewhere is caught (rc 1)"
+
 # --- [8] no-commit guard -----------------------------------------------------
 git_dirty_after="$(tree_fingerprint)" \
   || fail "could not fingerprint the working tree after the run (fails CLOSED)"

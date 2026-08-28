@@ -2170,9 +2170,18 @@ int main(int argc, char **argv) {
   // recorded — the same shape the post-match return uses (the `foh.screen =`
   // arm further down), i.e. KEEP the state machine and move only the screen.
   // Everything the resumed screen needs beyond foh_init is already in place:
-  // the persisted settings, the control plane and the CSS selection all came
-  // from the apply above, and foh_persist_resume_target() has already
-  // excluded the screens whose ENTERING TRANSITION is what sets them up.
+  // the persisted settings, the control plane, the CSS selection and — since
+  // ticket #27 — every remaining screen cursor all came from the apply above,
+  // and anything that must be RE-DERIVED rather than restored is the resume
+  // hook's job (below).
+  //
+  // TICKET #27 RETIRED THE OLD SECOND SENTENCE HERE, which said the map "has
+  // already excluded the screens whose ENTERING TRANSITION is what sets them
+  // up". Two of the three it excluded are gone: stage select's port types are
+  // persisted (#25) and the credits' reticle is placed by foh_init at the
+  // same home the transition writes (foh.h FOH_CRED_HOME_X/Y). What the map
+  // still excludes is the two MATCH screens, and that is a scope decision
+  // about mid-match state, not an entry-transition one.
   //
   // NOT gated on the input mode, deliberately. The obvious guard — "only on
   // the real-input play path" — is REDUNDANT and would have made this arm

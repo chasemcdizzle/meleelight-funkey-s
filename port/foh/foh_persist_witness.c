@@ -95,7 +95,8 @@ static void seed(FohPersist *p) {
   // BOTH grabs are set, which the SCREEN can never produce — a held knob
   // pins the hand to the rail, so it can never also be in the roster band.
   // This record is a COLUMN test, not a screen state: the file's domain is
-  // per row and the loader has no cross-field rule, so seeding both is what
+  // per row (with ONE cross-row exception since ticket #27, `menusel`, and
+  // this seed stays clear of it — see there), so seeding both is what
   // proves the two adjacent one-digit rows cannot be swapped for each other.
   // (The reachable combinations are what check-hibernate.sh's round trip
   // drives, through the real screen.)
@@ -109,12 +110,34 @@ static void seed(FohPersist *p) {
   p->tssCursor = 10;
   p->tssPage = 1;
   // ...and a hand that is NOT where the cursor implies, on purpose: this
-  // record is a COLUMN test and the loader has no cross-field rule, so a
-  // seed whose hand happened to sit in slot 10 would let a row wired to the
-  // wrong member still compare equal. (The reachable, self-consistent
+  // record is a COLUMN test and no rule pairs these two, so a seed whose
+  // hand happened to sit in slot 10 would let a row wired to the wrong
+  // member still compare equal. (The reachable, self-consistent
   // combinations are what check-hibernate.sh's round trip drives.)
   p->tssHand[0] = 12.5;
   p->tssHand[1] = 205.75;
+  // ticket #27's six screen cursors. Every one takes a DISTINCT value, and
+  // none is its default, for the reason the whole seed exists: six adjacent
+  // one-and-two-digit rows are exactly the shape in which a row wired to the
+  // neighbouring member still round-trips.
+  //
+  // `menusel` is 3 — the LAST row of a four-row menu, which is also the
+  // value the file's ONE cross-row rule (FP_DOM_MENUROW) refuses when
+  // `resume` names menu-controls. It is legal here because `resume` above
+  // is FOH_TSS, which is not a menu at all, and that is deliberate: a seed
+  // that quietly avoided the widest value would agree with a row whose
+  // column had been narrowed. check-persist-table.sh drives the refusal
+  // itself, with a file that pairs the two.
+  p->menuSelected = 3;
+  // 6 is the RANDOM slot — the TOP of ssscur's domain, so a column narrowed
+  // to the six real stages would be caught here rather than on the device.
+  p->sssCursor = 6;
+  p->optRow = 4;   // the tap-jump row: the only one with columns
+  p->optCol = 3;   // ...and its last column, the top of that domain
+  p->audioRow = 1; // MUSIC — a two-row screen has exactly one non-default
+  // 10 is RESET, the eleventh row: the value a one-digit column could not
+  // have held, which is why `ctlrow` is FP_U2. Same argument as `tsscur`.
+  p->ctlRow = 10;
 }
 
 static const char *status_token(FohPersistStatus st) {
@@ -180,6 +203,13 @@ static void dump(const FohPersist *p) {
   printf("tsspage %d\n", p->tssPage);
   printf("tsshand %016llx %016llx\n", BITS(p->tssHand[0]),
          BITS(p->tssHand[1]));
+  // ticket #27
+  printf("menusel %d\n", p->menuSelected);
+  printf("ssscur %d\n", p->sssCursor);
+  printf("optrow %d\n", p->optRow);
+  printf("optcol %d\n", p->optCol);
+  printf("audiorow %d\n", p->audioRow);
+  printf("ctlrow %d\n", p->ctlRow);
 #undef BITS
 }
 

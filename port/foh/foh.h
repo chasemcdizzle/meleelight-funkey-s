@@ -662,6 +662,56 @@ typedef struct {
 #define FOH_CTL_ROW_RESET 10
 #define FOH_CTL_ROWS 11
 
+// --- THE CURSOR DOMAINS (ticket #27) ----------------------------------------
+//
+// Every one of these numbers already existed; what did not exist was ONE
+// place to read it from. Ticket #27 persists the four remaining screen
+// cursors, so foh_persist.c's field table needs each cursor's domain as its
+// column bound — and foh_persist.c may not link foh.c (foh_persist.h's
+// isolation note: check-persist-table.sh builds the persist pair with its
+// witness and NOTHING ELSE OF THE FOH). A header constant costs nothing and
+// keeps the number a single fact; a second copy inside foh_persist.c would
+// be CONTEXT.md's costliest defect class with the quietest failure mode — a
+// persisted cursor whose file column is one short of the screen's last row.
+//
+// gameplaymenu.js:11-12: `menuVOptions = 4` is a MAX INDEX, so FIVE rows,
+// and `menuHOptions = [0,0,0,0,3]` gives the tap-jump row four columns.
+#define FOH_OPT_ROWS 5
+#define FOH_OPT_COLS 4
+// audiomenu.js:96-99 wraps between exactly two rows (sounds, music).
+#define FOH_AUDIO_ROWS 2
+// stageselect: 0..5 are the oracle stage ids, 6 is the RANDOM slot this port
+// refuses (the seeded-stream exclusion argued at FohState.sssCursor).
+#define FOH_SSS_SLOTS 7
+
+// THE MENU CURSOR'S DOMAIN, PER MENU SCREEN — upstream's `menuCount`
+// (menu.js:31 `[4, 4, 4, 2]`), indexed by screen rather than by menuMode.
+//
+// It is a function, and it is in this header, because the number had grown
+// THREE representations and ticket #27 was about to add a fourth: foh.c's
+// `kMenuCount[]` drove the cursor wrap, foh_render.c carried it a second
+// time as `mm == 3 ? 2 : 4` for its range guard, and the persist table now
+// needs it to judge a RESTORED cursor. Those three may not disagree:
+// foh_render.c gfx_fatals on a cursor outside the mode it is drawing (its
+// own note: "foh.c keeps the cursor in range; make that loud, not lucky"),
+// so a count that drifted low on any one side is a boot crash.
+//
+// 0 means "not a menu screen". That is a stated answer, not a silence: the
+// persist table's cross-row rule reads it as "this row does not constrain
+// that one", and the render guard never asks about a non-menu screen.
+static inline int foh_menu_count(FohScreen sc) {
+  switch (sc) {
+    case FOH_MENU_TOP: return 4;
+    case FOH_MENU_OPTIONS: return 4;
+    case FOH_MENU_BATTLE: return 4;
+    case FOH_MENU_CONTROLS: return 2;
+    default: return 0;
+  }
+}
+// The widest of the four — the `menusel` row's own one-digit column bound.
+// The NARROWER menus are exactly what the cross-row rule exists for.
+#define FOH_MENU_ROWS_MAX 4
+
 // --- CREDITS (upstream menus/credits.js, 422 lines; MENU-SPEC §8; A7) ------
 //
 // WHAT THE SCREEN IS. Not a roll — a Star Fox shooting gallery. Fourteen
@@ -698,6 +748,23 @@ typedef struct {
 // ever be live. 16 is that bound doubled; foh.c traps on overflow rather than
 // dropping a laser silently.
 #define FOH_CRED_SHOTS 16
+
+// THE RETICLE'S HOME — cPlayerXPos/cPlayerYPos = the canvas centre
+// (credits.js:23-24), in raster pixels because D12 makes the reticle a
+// relative cursor (MENU-SPEC §8.3).
+//
+// IT IS A MACRO FOR THE REASON FOH_CSS_HAND_HOME_X IS ONE, and ticket #27 is
+// what made the reason bite. Credits now RESUMES INTO ITSELF, and it does so
+// with no persisted reticle and no resume hook — because a resume arrives on
+// a freshly initialised FohState and foh_init writes the reticle home there,
+// which is the very value the ENTERING transition (foh.c's menu-options arm)
+// writes. That is the whole argument for the redirect's removal, and until
+// this line it was two independent copies of `RAST_W / 2.0` in one file
+// agreeing by luck: move the entry's placement and the resumed screen would
+// silently keep the other one. ONE definition, both callers ask it, so the
+// argument holds by construction rather than by inspection.
+#define FOH_CRED_HOME_X (RAST_W / 2.0)
+#define FOH_CRED_HOME_Y (RAST_H / 2.0)
 
 // One ScrollingText's authored content (credits.js:41-45,115-132).
 typedef struct {
