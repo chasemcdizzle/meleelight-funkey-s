@@ -7,7 +7,24 @@
 # so was invisible to #28 — but the FOH binary that plays a real match links
 # both, and a resumed CPU match that lost their state resumes into a different
 # opponent. ai.c contributes no row: its only mutable file-scope object is the
-# non-static diagnostic counter array ml_ai_cov (ai.h:82). This is the module-state twin of the
+# non-static diagnostic counter array ml_ai_cov (ai.h:82).
+#
+# SCOPE widened AGAIN by ticket #30, one step further out and for the same
+# reason: PLUS the TARGET TUs (port/sim/target/target_play.c and
+# port/sim/target/custom_stage.c), which the FOH binary links and the gate's
+# list does not carry. Neither contributes a row — MEASURED: neither has a
+# mutable file-scope static at all.
+#
+# AND A HOLE THIS FILE CANNOT COVER, stated rather than left to be discovered.
+# The target plane itself is `MlTargets TP` (port/sim/target/target_play.h) —
+# a file-scope NON-STATIC global, so the derivation below, which greps
+# `^static`, is structurally incapable of seeing a field added to it. That
+# guard lives where the struct does: target_play.c carries a _Static_assert
+# over sizeof(MlTargets) against its PERSISTED and DERIVED row lists plus its
+# named alignment holes, so an unclassified member does not compile. The
+# snapshot row that carries the persisted half is `mod:targets`.
+#
+# This is the module-state twin of the
 # _Static_assert in sim_snapshot.c: that assertion makes adding a member to
 # GameState a build failure, and this file makes adding a module static a
 # CHECK failure (port/sim/check-sim-snapshot.sh leg [2] re-derives the list

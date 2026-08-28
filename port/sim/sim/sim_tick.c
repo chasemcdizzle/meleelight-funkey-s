@@ -83,6 +83,19 @@ size_t (*ml_ai_live_snap_bytes)(void) = 0;
 void (*ml_ai_live_snap_save)(void *dst) = 0;
 void (*ml_ai_live_snap_load)(const void *src) = 0;
 
+// TARGET-PLANE SNAPSHOT seam (sim_modstate.h; ticket #30): NULL unless
+// port/sim/target/target_play.c is linked, and defined HERE for exactly the
+// reason the live-AI trio above is — sim_snapshot.c is built by rigs that
+// never link the target plane (check-sim-snapshot.sh derives its TU list from
+// the M2 gate, which has no target TU), so it cannot name a target_play.c
+// symbol, while sim_tick.c is on every list there is. NULL is a row of ZERO
+// bytes, so a VS-only build and a build that can play target stages have
+// different payload totals and therefore different build identities: neither
+// can load the other's snapshot by accident.
+size_t (*ml_targets_snap_bytes)(void) = 0;
+void (*ml_targets_snap_save)(void *dst) = 0;
+void (*ml_targets_snap_load)(const void *src) = 0;
+
 void mv_out_of_domain(const char *what) { sim_fatal(what); }
 void ml_phys_out_of_domain(const char *what) { sim_fatal(what); }
 void ml_hd_out_of_domain(const char *what) { sim_fatal(what); }

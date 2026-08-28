@@ -227,6 +227,23 @@ static void mod_ailive_save(void *dst) {
 static void mod_ailive_load(const void *src) {
   if (ml_ai_live_snap_load) ml_ai_live_snap_load(src);
 }
+
+// TICKET #30 — the TARGET PLANE (MlTargets TP), through the same device for
+// the same reason: this TU is built by rigs that never link target_play.c, so
+// it cannot name that TU's symbols. The row carries only the PERSISTED half of
+// the struct — which targets are broken, how many, the pending finish edge and
+// whether the run has ended — because the other half is rebuilt from the stage
+// by tp_setup_target_core before this ever runs. target_play.c's own
+// _Static_assert is what makes that split a build failure to get wrong.
+static size_t mod_targets_bytes(void) {
+  return ml_targets_snap_bytes ? ml_targets_snap_bytes() : 0;
+}
+static void mod_targets_save(void *dst) {
+  if (ml_targets_snap_save) ml_targets_snap_save(dst);
+}
+static void mod_targets_load(const void *src) {
+  if (ml_targets_snap_load) ml_targets_snap_load(src);
+}
 static size_t mod_ssg_bytes(void) { return sizeof(uint8_t); }
 static void mod_ssg_save(void *dst) {
   const uint8_t v = mv_falcon_ssg_get_canEdgeCancel() ? 1u : 0u;
@@ -262,6 +279,10 @@ static const SsModule SS_MODULES[] = {
     // The live C AI's curentAction slice (ticket #29). Zero bytes wide in
     // builds that do not link sim_ai_live.c — see mod_ailive_bytes.
     {"mod:aiLive", mod_ailive_bytes, mod_ailive_save, mod_ailive_load},
+    // The TARGET PLANE's persisted half (ticket #30). Zero bytes wide in
+    // builds that do not link target_play.c — see mod_targets_bytes. Last in
+    // the list because it is the newest row and the order is the wire.
+    {"mod:targets", mod_targets_bytes, mod_targets_save, mod_targets_load},
 };
 #define SS_MOD_COUNT ((int)(sizeof SS_MODULES / sizeof SS_MODULES[0]))
 

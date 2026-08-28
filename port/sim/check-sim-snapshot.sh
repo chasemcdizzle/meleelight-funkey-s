@@ -197,11 +197,17 @@ TU_FILES="$(eval "printf '%s\n' $TU_BLOCK" | grep -E '\.c$' | sort -u)"
 # adding a THIRD unlisted TU to the FOH build is still a decision someone has
 # to make here.
 AI_TUS="port/sim/ai.c $SIM/sim_ai_live.c"
-for f in $AI_TUS; do
-  [ -f "$f" ] || fail "[2] $f is missing — the live-AI slice's classification \
+# TICKET #30 widened it again, for the same reason one step further out: the
+# gate's TU list has no TARGET plane either, and the FOH binary links it
+# (check-device-foh.sh's target block), so a resumed TARGET run that lost its
+# module state resumes into a run whose broken targets came back. Named
+# explicitly for the same reason the pair above is.
+TGT_TUS="port/sim/target/target_play.c port/sim/target/custom_stage.c"
+for f in $AI_TUS $TGT_TUS; do
+  [ -f "$f" ] || fail "[2] $f is missing — its module-state classification \
 in $LEDGER would go unchecked"
 done
-for f in $TU_FILES "$SIM/sim_snapshot.c" $AI_TUS; do
+for f in $TU_FILES "$SIM/sim_snapshot.c" $AI_TUS $TGT_TUS; do
   case "$f" in
     "$TABLES"/*) continue ;;   # generated CTAB1/STAB1 data planes
     oracle/qjs/*|port/fdlibm/*) continue ;;  # vendored
