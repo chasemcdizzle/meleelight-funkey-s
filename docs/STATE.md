@@ -35,7 +35,21 @@ AGENT-LOG rather than explained away. See §resume-defects below.
 | 29 | match resumes across a lid close | host cold + `DEVICE FOH OK` |
 | 30 | target runs resume | host cold (`TARGET RESUME OK`) |
 
-## TWO THINGS OWED, both stated on their tickets
+## THINGS OWED, all stated on their tickets
+
+0. **`check-device-persist.sh` is RED at `dp02`, and it is the SAME question
+   as M1 was — one level deeper. MEASURED on hardware 2026-08-28**, not
+   inferred: the device's session B walks `menu-top -> css` where the host twin
+   walks `menu-top -> menu-options`, because the twin's seed is HOMED by the
+   lane's `seed_p02_cursors` and the device loads its own un-homed session-A
+   file. Homing the device copy too would fix the trace and then break the leg
+   below it: `cmp pull3 pull2` asserts a session round-trips the file
+   BYTE-IDENTICALLY, which was true only while no cursor was persistent. #26
+   and #27 made that premise false. **This is a design decision about what the
+   device leg asserts, not a fixture patch, and it is deliberately left for the
+   owner** — the same ruling as M1, which the lane resolved for the host side
+   only. Nothing else in the check is red; it reached leg [8] of 10, the boot
+   identity judged, and the pre-existing card was restored by the trap.
 
 1. **`check-device-persist.sh` leg M1 is RED and deliberately not worked
    around.** It compares a same-process session against a PERSISTED TWIN and
