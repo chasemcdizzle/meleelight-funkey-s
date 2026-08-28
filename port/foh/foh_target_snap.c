@@ -94,26 +94,26 @@ static void ts_hex32(const uint8_t d[32], char out[65]) {
 // describes the STAGE rather than the file's incidental bytes; for an authored
 // stage it digests a deterministic descriptor, because that geometry is the
 // compiled TTAB1 table and the header's BUILD line is what pins it.
-void foh_tmatch_src(int tstage, const MlkStage *custom, char out[65]) {
+static void ts_src(int tstage, const MlkStage *custom, char out[65]) {
   uint8_t dig[32];
   if (tstage >= MLK_PLAYING_BASE) {
     if (!custom) {
       // Unreachable from foh_dev.c, which loads the slot before it asks — and
       // a silent digest of nothing would be a resume that accepted any stage.
-      gfx_fatal("foh_tmatch_src: a custom slot with no loaded stage");
+      gfx_fatal("foh_target_snap: a custom slot with no loaded stage");
     }
     // MLK_CODE_MAX is 128 KB, which is far too large for a stack frame on this
     // device; the buffer is static for the same reason mlk_slot_load's is, and
     // this is called twice per process at most.
     static char code[MLK_CODE_MAX + 1];
     const int n = mlk_encode(custom, code, sizeof code);
-    if (n <= 0) gfx_fatal("foh_tmatch_src: the loaded stage does not encode");
+    if (n <= 0) gfx_fatal("foh_target_snap: the loaded stage does not encode");
     sha256((const uint8_t *)code, (size_t)n, dig);
   } else {
     char desc[32];
     const int n = snprintf(desc, sizeof desc, "authored:%d", tstage);
     if (n <= 0 || (size_t)n >= sizeof desc) {
-      gfx_fatal("foh_tmatch_src: authored descriptor overflow");
+      gfx_fatal("foh_target_snap: authored descriptor overflow");
     }
     sha256((const uint8_t *)desc, (size_t)n, dig);
   }
@@ -360,7 +360,7 @@ static bool ts_restore(GameState *g, const FohTmatchHdr *want,
 
   // THE STAGE COMES FIRST, and it is checked BEFORE the snapshot is opened,
   // because it is the one thing that could have changed while the machine was
-  // off. `liveSrc` is foh_tmatch_src recomputed from the stage the launch
+  // off. `liveSrc` is `src` recomputed from the stage the launch
   // actually loaded off the card; if it disagrees with the header, the run the
   // player left is not the run this card would now play, and there is no
   // honest way to continue it.
@@ -416,6 +416,7 @@ static bool ts_restore(GameState *g, const FohTmatchHdr *want,
 #undef TS_REFUSE
 
 static const FohTargetSnapOps ts_ops = {
+    .src = ts_src,
     .arm = ts_arm,
     .peek = ts_peek,
     .restore = ts_restore,

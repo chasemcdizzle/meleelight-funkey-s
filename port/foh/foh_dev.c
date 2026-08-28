@@ -1433,7 +1433,7 @@ static char g_tgtSrcHex[65];
 // was off: the player can pull it out and edit it on a PC. So the resume does
 // not trust the header's word for the stage — it goes and RE-FINDS it, through
 // the same mlk_slot_load the launch uses (its full grammar / SUM / mlk_parse /
-// mlk_stage_playable chain), and recomputes foh_tmatch_src from what came back.
+// mlk_stage_playable chain), and recomputes the seam.s own SRC digest from it.
 //
 // IT IS HERE, NOT AT THE LAUNCH, FOR TWO REASONS.
 //
@@ -1471,8 +1471,9 @@ static bool tdev_tmatch_stage_refound(const FohTmatchHdr *h, const char **why) {
     }
   }
   char liveSrc[65];
-  foh_tmatch_src(h->tstage, h->tstage >= MLK_PLAYING_BASE ? &g_tdevCustom : 0,
-                 liveSrc);
+  // Reached only after `peek` succeeded, so the ops are installed.
+  foh_target_snap_ops->src(
+      h->tstage, h->tstage >= MLK_PLAYING_BASE ? &g_tdevCustom : 0, liveSrc);
   if (memcmp(liveSrc, h->src, 64) != 0) {
     *why = "the target stage on the card is not the one this run was played on";
     return false;
@@ -3084,9 +3085,19 @@ foh_phase:;
       // must derive it the same way from the same place — which is what makes
       // "the card changed while the lid was shut" a named refusal instead of a
       // run played on ground it never saw (foh_target_snap.h).
-      foh_tmatch_src(foh.tssStage,
-                     foh.tssStage >= MLK_PLAYING_BASE ? &g_tdevCustom : 0,
-                     g_tgtSrcHex);
+      // GUARDED, because this line is on the path EVERY build takes: a build
+      // without foh_target_snap.c has no seam, cannot arm a resume, and must
+      // still launch a target run exactly as the port did before #30. The
+      // empty digest it leaves behind is never read (ts_arm is unreachable).
+      if (foh_target_snap_ops && foh_target_snap_ops->src) {
+        foh_target_snap_ops->src(foh.tssStage,
+                                 foh.tssStage >= MLK_PLAYING_BASE
+                                     ? &g_tdevCustom
+                                     : 0,
+                                 g_tgtSrcHex);
+      } else {
+        g_tgtSrcHex[0] = 0;
+      }
       // tp_setup_target installs the harness cookie-domain gameSettings
       // DEFAULTS (target_play.c:319-325 zeroes lCancelType/turbo and all
       // four tapJumpOff slots). On the PLAY path those are the player's

@@ -81,7 +81,7 @@
 // game that lies about its own ground. Both sides therefore come from one
 // place, and SRC is what proves it is the same place as last time.
 //
-// SRC is `foh_tmatch_src` below, and it is ONE definition used by both the
+// SRC is the ops `src` member below, and it is ONE definition used by both the
 // arm and the restore. For a CUSTOM slot it is the sha256 of the stage's
 // canonical share code (`mlk_encode`, which A45 T1 proved is a fixed point of
 // the codec), so it is a digest of the STAGE and not of the file's incidental
@@ -108,13 +108,19 @@ typedef struct {
   char src[65]; // the stage source identity, lowercase hex, NUL terminated
 } FohTmatchHdr;
 
-// THE ONE definition of the stage source identity (SRC above). `custom` is
-// the parsed slot for tstage >= MLK_PLAYING_BASE and is ignored (may be NULL)
-// otherwise. Deterministic, and computed at LAUNCH time on the write side —
-// never inside the grace window, which does two writes and no work.
-void foh_tmatch_src(int tstage, const MlkStage *custom, char out[65]);
-
 typedef struct {
+  // THE ONE definition of the stage source identity (SRC above). `custom` is
+  // the parsed slot for tstage >= MLK_PLAYING_BASE and is ignored (may be
+  // NULL) otherwise. Deterministic, and computed at LAUNCH time on the write
+  // side — never inside the grace window, which does two writes and no work.
+  //
+  // IT IS AN OPS MEMBER RATHER THAN A FREE FUNCTION, and that is not a style
+  // choice: foh_dev.c calls it at the launch seam, which every build reaches,
+  // so a free symbol would make the app fail to LINK without this TU and the
+  // "a build without it behaves exactly as the port did before #30" claim
+  // would be false. Everything this seam owns crosses the same pointer.
+  void (*src)(int tstage, const MlkStage *custom, char out[65]);
+
   // Write the run's state, then arm. Returns false with *why naming the rule
   // that stopped it, and on false NOTHING is armed: the caller must downgrade
   // the resume, and foh_dev.c does. Called from the hibernate path, i.e.
@@ -128,7 +134,7 @@ typedef struct {
   bool (*peek)(FohTmatchHdr *out, const char **why);
 
   // Put the state back over an ALREADY SET UP run (the ss_load precondition).
-  // `want` is what `peek` returned; `liveSrc` is `foh_tmatch_src` recomputed
+  // `want` is what `peek` returned; `liveSrc` is `src` recomputed
   // from the stage the launch ACTUALLY loaded, which is what makes a changed
   // card a named refusal instead of a wrong game. Verifies that what came back
   // is the run the header described — same stage, same character, same frame,
