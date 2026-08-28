@@ -224,8 +224,56 @@ else
     >> "$LOG" 2>&1 &
   APP=$!
   trap 'kill -USR1 "$APP" 2>/dev/null' USR1
+  # A45/#23 — OPENING THE LID BRINGS THE GAME BACK, with no manual launch.
+  #
+  # /root/.profile:89 runs `instant_play load` at boot, FOUR LINES BEFORE
+  # `frontend init` on :93: it mounts whatever /mnt/last_opk names, and if
+  # /mnt/instant_play exists it moves it to /mnt/resume_play, SOURCES it, and
+  # deletes it. Nothing in /usr/local or /etc/init.d calls the `save` verb —
+  # MEASURED, the only file on the device that mentions it is the script that
+  # implements it. The burden is deliberately on the APPLICATION, and we had
+  # never opted in. That is the whole of the owner's "it doesn't come back".
+  #
+  # WRITTEN HERE, AT LAUNCH, NOT IN THE TRAP. The lid gives us ~100 ms
+  # (`powerdown schedule 0.1`) and the trap already spends 20-60 ms of it
+  # forwarding the signal so the app can publish its own state. Two more
+  # script execs and an SD write in that window would be spending the
+  # player's state budget on a convenience. At launch it costs nothing.
+  #
+  # `pid record "$APP"` FIRST, and it is not decoration: `instant_play save`
+  # ignores the path it is handed and rebuilds it as
+  # `$(cat /var/run/pid_path)/$(basename "$1")`, where pid_path is
+  # `dirname(readlink /proc/PID/exe)` of whatever pid was last recorded.
+  # gmenu2x execs into opkrun and then into THIS SCRIPT, so the recorded pid
+  # is the SHELL's (measured, and the reason the USR1 trap above exists at
+  # all) — leaving it would resolve foh_device against /bin. Recording the
+  # APP's pid points it at the mounted OPK, which is where `instant_play
+  # load` re-mounts it.
+  #
+  # The record is REMOVED on a clean exit below, so only a session that died
+  # without reaching that line — which is exactly what a lid close is — comes
+  # back. And it is one-shot by construction even then: `load` renames it
+  # before sourcing it, so a launch that dies mid-resume cannot relaunch on
+  # every boot afterwards. It therefore needs none of D44's boot-unpark
+  # protection, which exists for markers that CANNOT self-consume.
+  if command -v instant_play >/dev/null 2>&1 && command -v pid >/dev/null 2>&1; then
+    pid record "$APP" >/dev/null 2>&1 || true
+    instant_play save "$DIR/foh_device" --flow "$DIR/f01-vs-g01.flow" \
+      --input poll --flow-out "$EV/foh-trace.txt" \
+      --pace 1 --budget-ns 16666667 \
+      --bridge live --simdata "$DATA/simdata.txt" --seed "$SEED" \
+      --bstate-out "$EV/bstate.txt" \
+      --gfxdata "$DATA/gfxdata-frozen.txt" \
+      --vfxdata "$DATA/vfxdata-frozen.txt" \
+      --glyphs "$DATA/vfxglyphs-frozen.txt" --legible \
+      --anim-dir "$DATA" --tapjump-off-p1 --system-menu $SND $MUS \
+      >> "$LOG" 2>&1 || echo "mlfk-foh.sh: instant_play save failed" >> "$LOG"
+  fi
   wait "$APP"; rc=$?
   if [ "$rc" -gt 128 ]; then wait "$APP"; rc=$?; fi
+  # A CLEAN EXIT IS NOT A RESUME. Reaching here means the player quit, so the
+  # relaunch record is spent. A lid close never reaches this line.
+  rm -f /mnt/instant_play 2>/dev/null || true
 fi
 echo "RC=$rc" > "$EV/opk.rc"
 exit "$rc"
