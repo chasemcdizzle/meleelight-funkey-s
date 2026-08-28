@@ -223,88 +223,85 @@ else
     --anim-dir "$DATA" --tapjump-off-p1 --system-menu $SND $MUS \
     >> "$LOG" 2>&1 &
   APP=$!
-  # (the USR1 trap is installed below, once arm_resume_and_die is defined —
-  # it both forwards the signal and arms the relaunch, so there is exactly
-  # ONE trap for this signal and no ordering to get wrong)
   # A45/#23 — OPENING THE LID BRINGS THE GAME BACK.
   #
-  # REVERTED TO AN ARM-AT-SHUTDOWN DESIGN 2026-08-28, after the launch-time
-  # version bricked the owner's device into a boot loop. The bug and the
-  # reason it was catastrophic are both worth keeping written down.
+  # THIRD DESIGN, and the two it replaces are both recorded because each was
+  # wrong in a way the next one had to answer.
   #
-  # `instant_play save` IS NOT A RECORD-THIS VERB. Its last statement is
-  #     exec powerdown now
-  # (/usr/local/sbin/instant_play, the `save` arm). It writes the resume
-  # record AND POWERS THE DEVICE OFF, because the platform calls it AT
-  # shutdown, not at launch. Calling it at launch — which is what the first
-  # version did, to keep the ~100 ms lid grace free — meant starting the game
-  # powered the console off. I read that script's `save` arm down to the
-  # heredoc and stopped one line short of the only line that mattered.
+  # v1 called `instant_play save` AT LAUNCH, to keep the ~100 ms lid grace
+  # free. That verb's last statement is `exec powerdown now` — it IS the
+  # shutdown, not a record-this verb — so starting the game powered the
+  # console off, and because v2 pointed the record at this script the next
+  # boot did it again. A loop.
   #
-  # It became a LOOP rather than a nuisance because of the second change: the
-  # record was pointed at THIS SCRIPT (so a resumed session would re-arm the
-  # next resume, fixing a real works-only-once gap). Boot -> load -> this
-  # script -> save -> power off -> boot. And the code comment that had said
-  # the record "needs none of D44's boot-unpark protection, which exists for
-  # markers that CANNOT self-consume" was written for the one-shot design and
-  # never revisited when the design stopped being one-shot. The justification
-  # outlived the thing it justified — the same class as the `getConnected`
-  # comment this project spent three days on.
+  # v2 moved the call into the USR1 trap, where the platform intends it. That
+  # fixed the loop and lost the feature to two things at once, both MEASURED
+  # on the owner's device: a 20 s "has this session survived" guard refused to
+  # arm a lid close that came at ~15 s (startup alone is 370 frames, ~6 s), and
+  # even past it the trap has ~40 ms left after forwarding the signal, against
+  # two script execs.
   #
-  # SO: the record is armed in the USR1 TRAP, where the platform intends it.
-  # That is a lid close and nothing else. It costs the grace window one exec,
-  # measured at 20-60 ms for the forward+save+exit path this replaces, and
-  # `powerdown now` is where that path was going anyway — the trap no longer
-  # needs to fall through to the shutdown, because `save` performs it.
+  # v3: WRITE THE RECORD DIRECTLY. `instant_play save` does two separable
+  # things and we only want one of them. The file it produces is a shell
+  # snippet in a documented shape, so this writes that shape itself and never
+  # invokes the verb — no shutdown at launch, and nothing to race at the lid
+  # because the file is already there when the signal arrives.
   #
-  # ORDER INSIDE THE TRAP IS NOT NEGOTIABLE: forward SIGUSR1 to the app FIRST
-  # so it publishes the player's state, and only then arm the relaunch. If the
-  # window is missed, what is lost is the convenience, never the state.
-  # CRASH-LOOP BREAKER, and it exists because the loop actually happened.
+  # The crash-loop guard stays but becomes a LIVENESS check rather than a
+  # stopwatch: the record is written 5 s in, and only if the app is still
+  # running. An instant death arms nothing, and every real session passes 5 s
+  # long before a lid can close on it. It is deleted on a clean exit, so only
+  # a session that DIED comes back.
   #
-  # The relaunch record is a file on SD that survives a power cut, and
-  # `instant_play load` runs BEFORE the frontend — so D44's boot-unpark line
-  # cannot protect it the way it protects the park marker (deleting it at boot
-  # would delete the feature). The protection has to be that a session which
-  # DIES YOUNG never arms the next one.
-  #
-  # A breadcrumb is dropped now and cleared once the app has survived
-  # RESUME_MIN_UP seconds. The trap refuses to arm while it is still there.
-  # So a launch that powers off, crashes, or is killed in its first seconds
-  # leaves nothing armed, and the next boot goes to the launcher — which is
-  # the outcome a player can act on, instead of a console that will not stay
-  # on. A healthy session pays one file write and clears it.
-  RESUME_MIN_UP=20
-  RESUME_YOUNG=/mnt/mlfk-resume-young
-  : > "$RESUME_YOUNG" 2>/dev/null || true
-  ( sleep "$RESUME_MIN_UP"; rm -f "$RESUME_YOUNG" 2>/dev/null ) &
+  # `pid record "$APP"` first: `instant_play load` re-mounts the OPK named by
+  # /mnt/last_opk (opkrun writes it at launch and the frontend loop clears it
+  # afterwards, so it is live for exactly the window we care about), and the
+  # recorded path must resolve inside that mount rather than against /bin.
+  RESUME_ARM_AFTER=5
+  (
+    sleep "$RESUME_ARM_AFTER"
+    if kill -0 "$APP" 2>/dev/null; then
+      pid record "$APP" >/dev/null 2>&1 || true
+      # The shape `instant_play save` emits, minus its `exec powerdown now`.
+      # Recording THIS SCRIPT rather than the binary is deliberate: a resumed
+      # session then re-arms the next one, and inherits the USR1 trap and the
+      # clean-exit removal instead of losing both.
+      {
+        printf "'%s' \n" "$DIR/mlfk-foh.sh"
+        printf '&\n'
+        printf 'pid record $!\n'
+        printf 'wait $!\n'
+        printf 'pid erase\n'
+      } > /mnt/instant_play 2>/dev/null || true
+      sync 2>/dev/null || true
+      echo "mlfk-foh.sh: relaunch armed" >> "$LOG"
+    fi
+  ) &
   RESUME_TIMER=$!
 
-  arm_resume_and_die() {
-    kill -USR1 "$APP" 2>/dev/null
-    # Give the app the grace it was already given before this line existed.
-    # `wait` is not usable here: the trap is running, and the app is being
-    # asked to exit on its own.
-    sleep 0.06
-    # `pid record` first, because `instant_play save` ignores the path handed
-    # to it and rebuilds it as $(cat /var/run/pid_path)/$(basename "$1").
-    # The recorded pid is this SHELL's, so without it the resume would resolve
-    # against /bin. Recording the APP's pid points it at the mounted OPK.
-    if [ -f "$RESUME_YOUNG" ]; then
-      echo "mlfk-foh.sh: session died young, NOT arming a relaunch" >> "$LOG"
-    elif command -v instant_play >/dev/null 2>&1 && command -v pid >/dev/null 2>&1; then
-      pid record "$APP" >/dev/null 2>&1 || true
-      # NOTE: this execs `powerdown now` and does not return.
-      instant_play save "$DIR/mlfk-foh.sh" >> "$LOG" 2>&1
-    fi
-  }
-  trap arm_resume_and_die USR1
+  # The trap is a plain forward again: the record is already on the card by
+  # the time any lid close can happen, so the grace window buys the PLAYER's
+  # state and nothing else competes for it.
+  # HIBERNATING marks WHY the app is about to exit, and it is load-bearing.
+  # MEASURED: a lid close DOES reach the clean-exit path below. The app takes
+  # SIGUSR1, publishes the player's state and `_exit(0)`s — a clean exit — so
+  # `wait` returns normally and the launcher walks straight into the `rm` that
+  # is meant for "the player quit". Without this flag the lid deletes the
+  # relaunch record it just armed, which is exactly what the first v3 test
+  # measured. The comment that said "a lid close never reaches this line" was
+  # simply wrong, and it is the third time in this feature that a claim in a
+  # comment outlived the code it described.
+  HIBERNATING=0
+  trap 'HIBERNATING=1; kill -USR1 "$APP" 2>/dev/null' USR1
   wait "$APP"; rc=$?
   if [ "$rc" -gt 128 ]; then wait "$APP"; rc=$?; fi
-  # A clean exit spends the breadcrumb and its timer. Nothing else needs
-  # removing: the record is armed only by the trap, and the trap never returns.
+  # A PLAYER QUITTING IS NOT A LID CLOSE. Only the former spends the record.
   kill "$RESUME_TIMER" 2>/dev/null || true
-  rm -f "$RESUME_YOUNG" 2>/dev/null || true
+  if [ "$HIBERNATING" = 0 ]; then
+    rm -f /mnt/instant_play 2>/dev/null || true
+  else
+    echo "mlfk-foh.sh: hibernating — relaunch record kept" >> "$LOG"
+  fi
 fi
 echo "RC=$rc" > "$EV/opk.rc"
 exit "$rc"
