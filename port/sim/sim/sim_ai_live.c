@@ -33,11 +33,14 @@
 //
 // RNG: ml_runAI draws through the logged ml_random() on ml_active_rng —
 // the SAME seeded chain the whole sim runs on. No bridge draw-burn.
+#include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "../ai.h"
 #include "ml_tables.h" // CTAB1 (generated; -I pipeline build dir)
 #include "sim.h"
+#include "sim_modstate.h" // ticket #29: the live-AI snapshot seam
 
 void ml_ai_out_of_domain(const char *what) { sim_fatal(what); }
 
@@ -108,7 +111,66 @@ static void cov_dump(void) {
   fprintf(stderr, "AICOV-END\n");
 }
 
+// --- ticket #29: the live-AI slice's snapshot row ----------------------------
+//
+// WHAT IS CARRIED, and why it is exactly this. runai_live above repopulates
+// player[k], bank, aS, playerType[k], cS[k], multiJump[k], multiJumpUndef[k]
+// and turbo on EVERY call, from the live GameState and the M1 tables, before
+// ml_runAI reads any of them — so every one of those is reconstructed and
+// copying it would at best be redundant and (for the three POINTER fields)
+// a stored address, i.e. the trap ADR 0001 exists to refuse.
+//
+// What NOTHING repopulates is the pair below: `hasCurentAction` and
+// `curentAction`, ai.js:1254's upstream typo field, which this port models as
+// MlAiSim slice state (ai.h's header note). It is written by CPULedge's
+// TOURNAMENTWINNER arm and survives from one frame to the next, so it is
+// match state by the ledger's own definition and it rides in the snapshot.
+// It is carried even though no upstream READER has been found: "write-only"
+// is a claim about upstream that a later cluster could falsify, and the row
+// is 4 * (1 + ML_STR_CAP) bytes.
+//
+// g_stage is transient (rebuilt per call, above) and g_ai_bound is the bind
+// flag for the pointer fields — which is why LOADING clears it: a restore in
+// a process that had already bound would otherwise keep pointers into
+// whatever GameState it bound to first. Clearing costs one rebind on the next
+// call, which is exactly what a fresh process does anyway.
+typedef struct {
+  uint8_t has[4];
+  char act[4][ML_STR_CAP];
+} AiLiveSnap;
+
+static size_t ai_live_snap_bytes(void) { return sizeof(AiLiveSnap); }
+
+static void ai_live_snap_save(void *dst) {
+  AiLiveSnap s;
+  memset(&s, 0, sizeof s);
+  for (int k = 0; k < 4; k++) {
+    s.has[k] = g_ai.hasCurentAction[k] ? 1u : 0u;
+    memcpy(s.act[k], g_ai.curentAction[k], (size_t)ML_STR_CAP);
+  }
+  memcpy(dst, &s, sizeof s);
+}
+
+static void ai_live_snap_load(const void *src) {
+  AiLiveSnap s;
+  memcpy(&s, src, sizeof s);
+  for (int k = 0; k < 4; k++) {
+    g_ai.hasCurentAction[k] = s.has[k] != 0;
+    memcpy(g_ai.curentAction[k], s.act[k], (size_t)ML_STR_CAP);
+    // The strings are fixed-width and come off a file: terminate rather than
+    // trust. A capture that lost its NUL would otherwise read past the row.
+    g_ai.curentAction[k][ML_STR_CAP - 1] = '\0';
+  }
+  g_ai_bound = false; // rebind the pointer fields on the next call
+}
+
 __attribute__((constructor)) static void sim_ai_live_install(void) {
   ml_sim_runai_live = runai_live;
   ml_sim_ai_cov_dump = cov_dump;
+  // ticket #29 — the snapshot row for the slice above. Installed HERE, next
+  // to the driver it belongs to, and read through sim_tick.c's NULL-by-
+  // default pointers by sim_snapshot.c, which never links this TU.
+  ml_ai_live_snap_bytes = ai_live_snap_bytes;
+  ml_ai_live_snap_save = ai_live_snap_save;
+  ml_ai_live_snap_load = ai_live_snap_load;
 }

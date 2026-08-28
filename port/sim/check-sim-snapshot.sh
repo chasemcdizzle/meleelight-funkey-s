@@ -189,7 +189,19 @@ TU_FILES="$(eval "printf '%s\n' $TU_BLOCK" | grep -E '\.c$' | sort -u)"
 [ -n "$TU_FILES" ] || fail "[2] no TUs derived from the gate's build command"
 
 : > "$WORK/modstate.derived"
-for f in $TU_FILES "$SIM/sim_snapshot.c"; do
+# TICKET #29 widened the scope. The gate's TU list does not carry the LIVE-AI
+# pair, so #28's derivation never saw port/sim/ai.c or sim_ai_live.c — but the
+# binary that plays a real match links both (port/foh/check-device-foh.sh's
+# SIM_TUS), and a resumed CPU match that lost their state resumes into a
+# different opponent. They are named explicitly rather than globbed so that
+# adding a THIRD unlisted TU to the FOH build is still a decision someone has
+# to make here.
+AI_TUS="port/sim/ai.c $SIM/sim_ai_live.c"
+for f in $AI_TUS; do
+  [ -f "$f" ] || fail "[2] $f is missing — the live-AI slice's classification \
+in $LEDGER would go unchecked"
+done
+for f in $TU_FILES "$SIM/sim_snapshot.c" $AI_TUS; do
   case "$f" in
     "$TABLES"/*) continue ;;   # generated CTAB1/STAB1 data planes
     oracle/qjs/*|port/fdlibm/*) continue ;;  # vendored

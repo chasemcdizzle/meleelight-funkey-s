@@ -156,9 +156,30 @@ FohResumePlan foh_persist_resume_plan(FohScreen sc) {
   switch (sc) {
     // out of scope / not a place: nothing is armed
     case FOH_STARTUP: return MAP(FOH_STARTUP, FOH_RESUME_HOOK_NONE);
-    // mid-match is a separate serialization surface — record the screen the
-    // match's own exit lands on instead (foh_dev.c's MEX_CSS/MEX_TSS arm)
-    case FOH_MATCH: return MAP(FOH_CSS, FOH_RESUME_HOOK_NONE);
+    // THE MATCH RESUMES INTO ITSELF (ticket #29). This row read
+    // "mid-match is a separate serialization surface — record the screen the
+    // match's own exit lands on instead", and that was true until ticket #28
+    // built the surface: port/sim/sim/sim_snapshot.{c,h} writes the whole sim
+    // state out and reads it back, proven by CONTINUATION on every golden —
+    // snapshot half way through, restore into another process, and the frames
+    // after the restore point are identical to an uninterrupted run under the
+    // unchanged oracle/harness/verify-stream.js.
+    //
+    // THE REFUSAL IS NOT GONE, IT MOVED TO WHERE IT CAN BE CHECKED — the same
+    // sentence FOH_TBUILD's row below carries, and the same mechanism. This
+    // function is a pure domain map and cannot know whether the snapshot was
+    // WRITTEN; foh_dev.c's tdev_hibernate_check arms the snapshot first and
+    // downgrades this to FOH_CSS when that fails, which is why FOH_CSS must
+    // remain a legal value here, and it does (it maps to itself below). The
+    // resume side refuses a second time, by name, on any of: no header, bad
+    // grammar, bad SUM, another build's identity, a missing or corrupt
+    // snapshot, or a header and snapshot that disagree.
+    //
+    // NO HOOK. A hook re-derives what the FIELD TABLE cannot carry, after the
+    // fields land (ticket #26). A match is not that: it is restored from a
+    // file, before the first tick, by foh_dev.c's launch path — a load, not a
+    // re-derivation, exactly as the builder's document is.
+    case FOH_MATCH: return MAP(FOH_MATCH, FOH_RESUME_HOOK_NONE);
     // ...and a target match lands on target select, so it picks up that
     // screen's hook through the target it is redirected to — which is why
     // the driver asks for the plan of the screen it LANDED on, not of the

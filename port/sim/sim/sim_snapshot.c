@@ -3,10 +3,12 @@
 // hand-written serialiser.
 #include "sim_snapshot.h"
 
+#include <fcntl.h>  // ticket #29: the publish fsyncs (see ss_save)
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h> // ticket #29: fsync/close on the publish path
 
 #include "sha256.h" // oracle/qjs/sha256.c (-Ioracle/qjs) — the same SUM
                     // primitive foh_persist.c and custom_stage.c use.
@@ -209,6 +211,22 @@ static void mod_playcount_load(const void *src) {
   ml_events_play_count_set(v);
 }
 
+// TICKET #29 — the LIVE C AI's slice, through the NULL-by-default pointers
+// sim_tick.c defines (sim_modstate.h says why they exist and what the class
+// of each MlAiSim field is). This TU is built by rigs that never link ai.c,
+// so it cannot name a sim_ai_live.c symbol; NULL therefore means a row of
+// ZERO bytes, which lands in the payload total and so in the build identity —
+// a snapshot from a build WITH the live AI is refused BY NAME by one without
+// it, instead of short-reading into a plausible wrong game.
+static size_t mod_ailive_bytes(void) {
+  return ml_ai_live_snap_bytes ? ml_ai_live_snap_bytes() : 0;
+}
+static void mod_ailive_save(void *dst) {
+  if (ml_ai_live_snap_save) ml_ai_live_snap_save(dst);
+}
+static void mod_ailive_load(const void *src) {
+  if (ml_ai_live_snap_load) ml_ai_live_snap_load(src);
+}
 static size_t mod_ssg_bytes(void) { return sizeof(uint8_t); }
 static void mod_ssg_save(void *dst) {
   const uint8_t v = mv_falcon_ssg_get_canEdgeCancel() ? 1u : 0u;
@@ -241,6 +259,9 @@ static const SsModule SS_MODULES[] = {
     // falcon SIDESPECIALGROUND's `this.canEdgeCancel` — a move-object scalar,
     // i.e. module state, read back by physics' edge-cancel arm.
     {"mod:falconSsgEdgeCancel", mod_ssg_bytes, mod_ssg_save, mod_ssg_load},
+    // The live C AI's curentAction slice (ticket #29). Zero bytes wide in
+    // builds that do not link sim_ai_live.c — see mod_ailive_bytes.
+    {"mod:aiLive", mod_ailive_bytes, mod_ailive_save, mod_ailive_load},
 };
 #define SS_MOD_COUNT ((int)(sizeof SS_MODULES / sizeof SS_MODULES[0]))
 
@@ -509,10 +530,20 @@ bool ss_save(const GameState *g, const char *path, const char **reason) {
     return false;
   }
   const size_t got = fwrite(buf, 1, total, f);
-  const bool wrote = got == total;
+  // DURABILITY, not just atomicity (ticket #29). rename() makes the publish
+  // atomic against a half-written file; it does NOT make the BYTES reach the
+  // card. That distinction is the whole point here: the FunKey-S does not
+  // suspend when the lid closes, it POWERS OFF about 100 ms later, so a
+  // snapshot still sitting in the page cache is a snapshot that never
+  // existed. This is foh_persist_publish's discipline — flush, fsync the
+  // file, rename, fsync the directory — reproduced because port/sim cannot
+  // call into port/foh, and it is what the ticket's measured ~33 ms for
+  // 160 KB is a measurement OF.
+  const bool flushed = fflush(f) == 0;
+  const bool synced = flushed && fsync(fileno(f)) == 0;
   const bool closed = fclose(f) == 0;
   free(buf);
-  if (!wrote || !closed) {
+  if (got != total || !flushed || !synced || !closed) {
     remove(tmp);
     *reason = "snapshot write failed";
     return false;
@@ -521,6 +552,31 @@ bool ss_save(const GameState *g, const char *path, const char **reason) {
     remove(tmp);
     *reason = "snapshot publish (rename) failed";
     return false;
+  }
+  // The directory entry, best-effort for the FAT class — EINVAL/ENOTSUP are
+  // tolerated exactly as foh_persist_publish tolerates them (vfat has no
+  // directory fsync to give), and a directory that cannot even be OPENED is
+  // not fatal either: the rename landed, and real durability is proven end to
+  // end by a reboot rather than by a return code.
+  {
+    char dir[1024];
+    const int wd = snprintf(dir, sizeof dir, "%s", path);
+    if (wd > 0 && (size_t)wd < sizeof dir) {
+      char *slash = strrchr(dir, '/');
+      if (slash == dir) {
+        dir[1] = 0;
+      } else if (slash) {
+        *slash = 0;
+      } else {
+        dir[0] = '.';
+        dir[1] = 0;
+      }
+      const int dfd = open(dir, O_RDONLY);
+      if (dfd >= 0) {
+        (void)fsync(dfd);
+        close(dfd);
+      }
+    }
   }
   return true;
 }

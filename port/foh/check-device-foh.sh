@@ -647,6 +647,12 @@ CFLAGS_COMMON=(-ffp-contract=off -Wall -Wextra -Werror
 SIM_TUS=(
   port/sim/sim/sim_boot.c port/sim/sim/sim_tick.c port/sim/sim/sim_ser.c
   port/sim/sim/sim_data.c port/sim/sim/sim_ai_live.c
+  # TICKET #29: the sim snapshot (#28's writer and reader) is what makes a
+  # match survive the lid. It is NOT on the M2 EXIT GATE's frozen TU list and
+  # does not need to be — sim_main.c's two hooks stay NULL there — but the
+  # binary that PLAYS a match links it, and port/foh/foh_match_snap.c is the
+  # FOH seam that calls it.
+  port/sim/sim/sim_snapshot.c
   port/sim/calib/canon.c port/sim/calib/player_canon.c
   port/sim/ai.c
   port/sim/physics.c port/sim/interpolated_collision.c
@@ -681,6 +687,7 @@ build_foh_headless() { # <foh_dev_src> <out> [extra cc args...]
     "$BUILD/raster.o" "$src" "$FOH/foh.c" "$FOH/foh_font.c" \
     "$FOH/foh_render.c" "$FOH/foh_persist.c" "$FOH/foh_pause.c" \
     "$FOH/foh_tbuild.c" port/sim/stage_code.c port/sim/target/custom_stage.c \
+    "$FOH/foh_match_snap.c" \
     "$GFX/ctl_style.c" "$GFX/img1.c" \
     "$GFX/platform_headless.c" \
     "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_target.c" \

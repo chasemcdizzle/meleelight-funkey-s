@@ -63,4 +63,53 @@ void ml_events_play_count_set(unsigned long long v);
 // here. It is named in this comment so every owner is findable from one
 // place; sim_snapshot.c wraps those two functions as its module row.
 
+// --- sim/sim_ai_live.c: the LIVE C AI's god-module slice ---------------------
+// TICKET #29. The live-AI TUs (port/sim/ai.c, port/sim/sim/sim_ai_live.c) are
+// NOT on the M2 EXIT GATE's frozen TU list, so ticket #28's ledger never saw
+// them — but the FOH binary that plays a real match links both
+// (port/foh/check-device-foh.sh's SIM_TUS), and a resumed CPU match that lost
+// their state would resume into a different opponent. Classified by reading
+// every write site:
+//
+//   g_stage   TRANSIENT   — ai_stage_refresh() rebuilds the whole MlAiStage
+//                           view from STAB1 + the live stage plane at the top
+//                           of EVERY runai_live call, before ml_runAI reads
+//                           it. Nothing crosses a frame boundary.
+//   g_ai_bound RECONSTRUCTED — the bind-once flag for the POINTER fields
+//                           (player[k], bank, aS). Those are addresses inside
+//                           this process's GameState, so a restored one would
+//                           be a trap; a fresh process rebinds them on its
+//                           first call, and ss_load's module row clears the
+//                           flag so a same-process restore rebinds too.
+//   g_ai      SPLIT        — runai_live REPOPULATES player/bank/aS/playerType/
+//                           cS/multiJump/multiJumpUndef/turbo on every call,
+//                           so all of those are reconstructed. What it does
+//                           NOT repopulate is `hasCurentAction[4]` and
+//                           `curentAction[4][]` — ai.js:1254's upstream typo
+//                           field, which the port models as slice state — and
+//                           THAT is the persisted part. It is carried rather
+//                           than dropped even though no upstream reader for it
+//                           has been found: "no reader today" is a claim about
+//                           upstream that a later cluster could falsify, and
+//                           the row costs 4 * (1 + ML_STR_CAP) bytes.
+//
+// THE LINK SEAM. sim_snapshot.c is built by rigs that do NOT link ai.c (the
+// gate's TU list plus sim_snapshot.c — check-sim-snapshot.sh leg [1]), so it
+// cannot name a symbol from sim_ai_live.c. These three pointers are the same
+// device as ml_sim_runai_live itself: DEFINED (NULL) in sim_tick.c, which is
+// on every TU list, and installed by sim_ai_live.c's existing constructor.
+// NULL means the row contributes ZERO bytes, so a build without the live AI
+// has a different payload total and therefore a different build identity —
+// which is correct: a snapshot from the FOH binary is not loadable by the
+// bridge-fed one and must say so rather than silently short-read.
+extern size_t (*ml_ai_live_snap_bytes)(void);
+extern void (*ml_ai_live_snap_save)(void *dst);
+extern void (*ml_ai_live_snap_load)(const void *src);
+
+// NOT module state, named here so the next reader does not have to re-derive
+// it: ai.c's `ml_ai_cov[]` is a non-static GLOBAL arm-coverage counter array
+// (ai.h:82), written by AI_COV() and read only by --ai-cover's stderr dump.
+// It is diagnostic instrumentation, never an input to sim logic, so it is
+// outside the snapshot by the same rule that keeps frame timings out.
+
 #endif // ML_SIM_MODSTATE_H
