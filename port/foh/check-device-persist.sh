@@ -751,10 +751,26 @@ verify_persist_file() { # <file> <ctx>
   # domain above is. 00 = FOH_STARTUP = nothing armed; the rest are the
   # resumable screens (title 01, menu-top 02, menu-options 03, menu-controls
   # 05, css 06, opt-gameplay 08, opt-audio 09, ctrl-pad 10, ctrl-key 11,
-  # tss 14). NOT here, and that is the point: 04 menu-battle, 07 sss,
-  # 12 credits, 13 match, 15 tmatch — screens a resume must never restore.
+  # MATCH 13, tss 14). NOT here, and that is the point: 04 menu-battle,
+  # 07 sss, 12 credits, 15 tmatch — screens a resume must never restore.
+  #
+  # 13 JOINED THE DOMAIN IN TICKET #29, and it is the reason this list has to
+  # be maintained rather than admired: a card written by a lid close DURING A
+  # MATCH now carries `resume 13`, and this whitelist would have rejected the
+  # real, correct file. foh_persist_resume_plan maps FOH_MATCH to itself and
+  # port/foh/foh_match_snap.c is the state it comes back to; the refusal that
+  # used to live in this number moved to the WRITE side (a failed snapshot
+  # downgrades the row to 06) and to the read side (six named refusals), where
+  # port/foh/check-match-resume.sh proves it.
+  #
+  # STILL MISSING, named rather than quietly fixed under another ticket:
+  # 16 = FOH_TBUILD, which foh_persist_resume_plan has mapped to ITSELF since
+  # A45 T4 (the builder resumes into itself with its document). A card parked
+  # in the builder therefore carries `resume 16` and this whitelist would
+  # reject it. That is a pre-existing gap, not one #29 opened, and changing a
+  # device whitelist for a screen this ticket does not touch is an owner call.
   L="$(sed -n 69p "$f")"
-  [[ "$L" =~ ^resume\ (00|01|02|03|05|06|08|09|10|11|14)$ ]] \
+  [[ "$L" =~ ^resume\ (00|01|02|03|05|06|08|09|10|11|13|14)$ ]] \
     || grammar_die "$ctx: line 69 is not a v7 resume row in the resumable
   domain ('$L') — a screen the driver would refuse to restore must never
   reach the file either"

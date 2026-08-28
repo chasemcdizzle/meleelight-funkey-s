@@ -683,7 +683,15 @@ refuse phantom-big  "reset cause=corrupt detail=domain"  'set=phantom:phantom 40
 refuse level-big    "reset cause=corrupt detail=domain"  'set=soundslevel:soundslevel 3ff0000000000001'
 refuse sel-bad      "reset cause=corrupt detail=domain"  'set=sel:sel 1 2 3 5'
 refuse bind-dup     "reset cause=corrupt detail=domain"  'set=bind 0:bind 0 3 1 0 2 5 4 7 7'
-refuse resume-match "reset cause=corrupt detail=domain"  'set=resume:resume 13'
+# RETARGETED by ticket #29 (CONTEXT.md "Frozen": the behaviour legitimately
+# changed, and the number stays on the page). This named FOH_MATCH (13), which
+# is now a resume target — foh_persist_resume_plan maps it to itself and
+# port/foh/foh_match_snap.c is the state it comes back to — so asserting its
+# refusal would have asserted the opposite of the shipped feature. FOH_TMATCH
+# (15) is the same shape for this row's purpose: a real, reachable screen that
+# the map sends somewhere ELSE (FOH_TSS), so a file naming it is still a domain
+# violation. FP_DOM_RESUME is untested by nothing and the tooth is as strong.
+refuse resume-tmatch "reset cause=corrupt detail=domain" 'set=resume:resume 15'
 refuse bind-slot8   "reset cause=corrupt detail=grammar" 'set=bind 0:bind 0 3 1 0 2 5 4 7 8'
 refuse turbo-2      "reset cause=corrupt detail=grammar" 'set=turbo:turbo 2'
 refuse lcancel-3    "reset cause=corrupt detail=grammar" 'set=lcancel:lcancel 3'
