@@ -732,15 +732,25 @@ refuse phantom-big  "reset cause=corrupt detail=domain"  'set=phantom:phantom 40
 refuse level-big    "reset cause=corrupt detail=domain"  'set=soundslevel:soundslevel 3ff0000000000001'
 refuse sel-bad      "reset cause=corrupt detail=domain"  'set=sel:sel 1 2 3 5'
 refuse bind-dup     "reset cause=corrupt detail=domain"  'set=bind 0:bind 0 3 1 0 2 5 4 7 7'
-# RETARGETED by ticket #29 (CONTEXT.md "Frozen": the behaviour legitimately
-# changed, and the number stays on the page). This named FOH_MATCH (13), which
-# is now a resume target — foh_persist_resume_plan maps it to itself and
-# port/foh/foh_match_snap.c is the state it comes back to — so asserting its
-# refusal would have asserted the opposite of the shipped feature. FOH_TMATCH
-# (15) is the same shape for this row's purpose: a real, reachable screen that
-# the map sends somewhere ELSE (FOH_TSS), so a file naming it is still a domain
-# violation. FP_DOM_RESUME is untested by nothing and the tooth is as strong.
-refuse resume-tmatch "reset cause=corrupt detail=domain" 'set=resume:resume 15'
+# RETARGETED A SECOND TIME, by ticket #30 (CONTEXT.md "Frozen": the behaviour
+# legitimately changed, and the number stays on the page). #29 moved this row
+# off FOH_MATCH (13) onto FOH_TMATCH (15) because 13 had become a resume
+# target and 15 had not. #30 makes 15 one too, so the same sentence applies
+# again: asserting its refusal would assert the opposite of the shipped
+# feature.
+#
+# AND THE ZOOM-OUT THIS SECOND MOVE FORCES (HARD RULE 8), stated rather than
+# quietly absorbed: FP_DOM_RESUME is TWO conditions — "in the enum" and "a
+# fixed point of foh_persist_resume_plan" — and #27, #29 and #30 between them
+# have made EVERY screen in the enum a fixed point, so the second condition
+# is now dead by construction and only the first can refuse anything. That is
+# not this ticket weakening the row; it is the row's own domain having become
+# a pure range check because the port no longer redirects any resume. The
+# tooth therefore aims at the condition that is still live, and 17 is chosen
+# rather than 99 because it is FOH_SCREEN_COUNT itself: the off-by-one an
+# `>` instead of a `>=` would let through. [8b] below drives the whole
+# column and is what would notice a redirect coming BACK.
+refuse resume-offenum "reset cause=corrupt detail=domain" 'set=resume:resume 17'
 refuse bind-slot8   "reset cause=corrupt detail=grammar" 'set=bind 0:bind 0 3 1 0 2 5 4 7 8'
 refuse turbo-2      "reset cause=corrupt detail=grammar" 'set=turbo:turbo 2'
 refuse lcancel-3    "reset cause=corrupt detail=grammar" 'set=lcancel:lcancel 3'
@@ -836,7 +846,7 @@ refuse_not hand-cap    'set=hand:hand 406e000000000000 406e000000000000'
 # be `resume 05` being rejected for some other reason entirely.
 refuse_not menusel-vs-resume-ok 'set=resume:resume 05' 'set=menusel:menusel 1'
 
-# --- [8b] THE RESUME MAP HAS NO REDIRECT LEFT BUT THE MATCH SCREENS -------
+# --- [8b] THE RESUME MAP HAS NO REDIRECT LEFT AT ALL ----------------------
 #
 # Ticket #27's acceptance criterion, asserted EXHAUSTIVELY rather than by
 # spot-checking the three rows that changed. The `resume` column's domain IS
@@ -844,20 +854,26 @@ refuse_not menusel-vs-resume-ok 'set=resume:resume 05' 'set=menusel:menusel 1'
 # itself), so driving every screen value through a real file and recording
 # which ones load is a complete statement of the map's shape from the
 # OUTSIDE — no C is read, and a redirect added later shows up here as a
-# screen that stopped loading.
+# screen that stopped loading. THAT is what this leg is for now: it is the
+# only assertion left that would notice a redirect coming back, because the
+# map has run out of them.
 #
-# EXPECTED: every screen 0..16 loads EXCEPT 15 (target match). 17 is
-# FOH_SCREEN_COUNT and beyond the enum.
+# EXPECTED: every screen 0..16 loads. 17 is FOH_SCREEN_COUNT and beyond the
+# enum, and is the only refusal.
 #
-# 13 (FOH_MATCH) MOVED, and the move is the merge of two tickets rather than
-# either one: #27 wrote this leg expecting 13 and 15 both redirected, which
-# was true when it was written, and #29 landed the mid-match snapshot that
-# makes 13 a fixed point. Textually the two merged clean; SEMANTICALLY this
-# leg then asserted the pre-#29 rule and failed on the merged tree, which is
-# exactly what PROCESS §12's cold re-run exists to catch and why a lane's
-# green is evidence about its worktree and not about HEAD.
-# 15 stays redirected on purpose: a target match is a different serialization
-# surface and #30 owes it its own frozen trace.
+# THE TWO MOVES, IN ORDER, because the shape of this leg is the history of
+# the spec:
+#   * #27 wrote it expecting 13 (match) and 15 (target match) redirected;
+#   * #29 landed the mid-match snapshot and made 13 a fixed point. Textually
+#     the two merged clean; SEMANTICALLY this leg then asserted the pre-#29
+#     rule and failed on the merged tree, which is exactly what PROCESS §12's
+#     cold re-run exists to catch and why a lane's green is evidence about
+#     its worktree and not about HEAD;
+#   * #30 landed the target-run snapshot (port/foh/foh_target_snap.c) and
+#     made 15 one as well. "15 stays redirected on purpose: a target match is
+#     a different serialization surface and #30 owes it its own frozen trace"
+#     is the sentence that stood here, and the trace it named is
+#     port/foh/check-target-resume.sh.
 # The enum's own order is restated here as the reason for each number, so a
 # screen inserted in the middle of FohScreen shifts these and is caught.
 #
@@ -868,7 +884,12 @@ refuse_not menusel-vs-resume-ok 'set=resume:resume 05' 'set=menusel:menusel 1'
 # reason [8]'s menusel-vs-resume tooth already proves, and the map's shape
 # would be reported wrongly.
 echo "=== [8b] the resume map's fixed points, every screen value"
-RESUME_REDIRECTED="15" # FOH_TMATCH — the only one left (see the note above)
+# EMPTY since ticket #30 — there is no redirected screen left (see the note
+# above). It stays as a NAMED, SEPARATE list rather than being folded into
+# the `17` below, because it is the variable a future redirect would be
+# added back to, and an empty one says "none" out loud where a deleted one
+# would say nothing at all.
+RESUME_REDIRECTED=""
 rmap_ok=0; rmap_no=0
 for sc in $(seq 0 17); do
   nn="$(printf '%02d' "$sc")"
@@ -890,14 +911,13 @@ for sc in $(seq 0 17); do
       rmap_ok=$((rmap_ok + 1)) ;;
   esac
 done
-[ "$rmap_ok" = 16 ] && [ "$rmap_no" = 2 ] \
+[ "$rmap_ok" = 17 ] && [ "$rmap_no" = 1 ] \
   || grammar_die "[8b] drove $rmap_ok accepted and $rmap_no refused screen
-   values (want 16 and 2: seventeen screens, of which only FOH_TMATCH is
-   redirected since #29 made FOH_MATCH a fixed point, plus the out-of-enum
-   17). The loop's own
-   arithmetic moved, so its verdict is not about the map"
-echo "    [8b] OK: 15 screens resume into THEMSELVES; only match (13) and
-    target match (15) are redirected, and 17 is off the enum"
+   values (want 17 and 1: seventeen screens, EVERY one of them a fixed point
+   since #30 made FOH_TMATCH the last of them, plus the out-of-enum 17). The
+   loop's own arithmetic moved, so its verdict is not about the map"
+echo "    [8b] OK: all 17 screens resume into THEMSELVES — the map has no
+    redirect left — and only the out-of-enum 17 is refused"
 
 echo "    [8] OK: order, domain, permutation, seal, version and header
     refusals all still bite; the inclusive caps still load"

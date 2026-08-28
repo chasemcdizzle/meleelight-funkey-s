@@ -651,15 +651,32 @@ void foh_persist_defaults(FohPersist *p);
 // is exactly what makes it usable as the persisted row's domain check —
 // the file can only ever hold a screen the driver would restore.
 //
-// AFTER TICKET #27 THERE ARE EXACTLY TWO NON-IDENTITY ROWS, AND BOTH ARE
-// MATCH SCREENS. That is the whole of the ticket's rule — resume means the
-// same thing on every screen — and it is enforceable by reading this list:
-//   FOH_MATCH  -> FOH_CSS   mid-match state is out of scope (see the struct
-//   FOH_TMATCH -> FOH_TSS   field); these are the screens the match's own
-//                           exit lands on (foh_dev.c's MEX_CSS/MEX_TSS arm).
-//                           #29 and #30 own making a match resume itself.
+// AFTER TICKET #30 THERE ARE NO NON-IDENTITY ROWS AT ALL. That is the whole
+// of ticket #27's rule — resume means the same thing on every screen — now
+// carried to its end, and it is enforceable by reading this list:
+//   FOH_MATCH  -> FOH_MATCH   ticket #29. The two match screens were the last
+//   FOH_TMATCH -> FOH_TMATCH  redirects, and both stood on "mid-match state
+//                             is out of scope". #28 built the state
+//                             (sim_snapshot), #29 wired the VS seam
+//                             (foh_match_snap.c) and #30 the target-run one
+//                             (foh_target_snap.c), which additionally carries
+//                             the target plane and re-finds a custom stage on
+//                             the card. Both refuse at the SEAM when the
+//                             snapshot is missing or refused, and the
+//                             downgrade — FOH_CSS and FOH_TSS, where each
+//                             match's own exit lands (foh_dev.c's
+//                             MEX_CSS/MEX_TSS arm) — is why those two must
+//                             stay legal values here, and they are.
 //   FOH_STARTUP-> FOH_STARTUP  identity, not a redirect: the boot animation
 //                           is not a place, so nothing can be armed on it.
+//
+// A CONSEQUENCE WORTH SAYING OUT LOUD, because it is easy to keep believing
+// the old sentence: FP_DOM_RESUME is two conditions — "in the enum" and "a
+// fixed point of this map" — and the second is now dead by construction.
+// Only an off-enum value can be refused. The list above is therefore the
+// mechanism that would have to change first for a redirect to come back, and
+// check-persist-table.sh [8b] drives every value through a real file so that
+// such a change cannot be silent.
 //
 // THE THREE THAT WENT (ticket #27), because a redirect that outlives its
 // reason reads to the player as an arbitrary exception:
@@ -727,8 +744,10 @@ typedef struct {
 
 // The one map. `sc` is the screen being resolved; for the hook the caller
 // passes the screen it LANDED on (which maps to itself by construction), so
-// a FOH_TMATCH origin picks up FOH_TSS's hook through the target it was
-// redirected to, which is the behaviour that arm exists for.
+// a FOH_TMATCH resume whose snapshot was REFUSED — the driver having already
+// downgraded the row to FOH_TSS — picks up FOH_TSS's slot-rescan hook, which
+// is the behaviour that arm exists for. Since #29/#30 the downgrade rather
+// than the map is what produces those two crossings.
 FohResumePlan foh_persist_resume_plan(FohScreen sc);
 
 // Load <dir>/mlfk-persist.dat. On ANY reset arm, *p holds the defaults

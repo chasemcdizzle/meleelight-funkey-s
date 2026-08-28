@@ -1163,18 +1163,27 @@ echo "   the credits resumed into themselves, byte for byte"
 echo "=== [6] teeth"
 
 # T1 — DOMAIN. A structurally perfect file (checksum RECOMPUTED, so the seal
-# passes) whose resume row names FOH_TMATCH: a real screen that is not a resume
-# target. It must be refused, and refused with a REASON, never half-applied.
+# passes) whose resume row names a screen that is not a resume target. It must
+# be refused, and refused with a REASON, never half-applied.
 #
-# IT USED TO NAME FOH_MATCH (13), and it was retargeted by ticket #29, which is
-# the case CONTEXT.md's "Frozen" entry describes: the behaviour legitimately
-# changed and the number stays on the page. FOH_MATCH is now a resume target —
-# foh_persist_resume_plan maps it to itself and port/foh/foh_match_snap.c is
-# the state it comes back to — so asserting its refusal would have asserted the
-# opposite of the shipped feature. FOH_TMATCH (15) is the same shape of screen
-# for this tooth's purpose: real, reachable, and mapped somewhere ELSE
-# (FOH_TSS), so a file naming it is still a domain violation. The MECHANISM
-# under test is untouched and the tooth is exactly as strong.
+# IT HAS BEEN RETARGETED TWICE, and both moves are the case CONTEXT.md's
+# "Frozen" entry describes: the behaviour legitimately changed and the number
+# stays on the page.
+#   * It named FOH_MATCH (13) until ticket #29 made a match resume into
+#     itself (port/foh/foh_match_snap.c), at which point asserting its refusal
+#     would have asserted the opposite of the shipped feature.
+#   * It then named FOH_TMATCH (15) until ticket #30 did the same for a target
+#     run (port/foh/foh_target_snap.c), for the same reason.
+# WITH THAT SECOND MOVE THE PORT RAN OUT OF REDIRECTED SCREENS: #27, #29 and
+# #30 between them made every value in FohScreen a fixed point of
+# foh_persist_resume_plan, so the only value FP_DOM_RESUME can still refuse is
+# one OFF the enum. 17 is FOH_SCREEN_COUNT itself — two digits, so the line is
+# still perfectly GRAMMATICAL and the refusal is still a `domain` one, and it
+# is the exact off-by-one an `>` instead of a `>=` would let through. The
+# MECHANISM under test — a sealed, well-formed file refused for its VALUE and
+# never half-applied — is untouched, which is the property the tooth is for.
+# The map's own shape is asserted exhaustively elsewhere
+# (check-persist-table.sh [8b], which drives all eighteen values).
 T1DIR=$BUILD/t1-persist
 rm -rf "$T1DIR"; mkdir -p "$T1DIR"
 node -e '
@@ -1184,21 +1193,22 @@ node -e '
   const sumIdx = b.findIndex((l) => l.startsWith("SUM "));
   const rIdx = b.findIndex((l) => l.startsWith("resume "));
   if (sumIdx < 0 || rIdx < 0) throw new Error("no SUM/resume row to perturb");
-  b[rIdx] = "resume 15";  // FOH_TMATCH
+  b[rIdx] = "resume 17";  // FOH_SCREEN_COUNT — off the enum
   const body = b.slice(0, sumIdx).join("\n") + "\n";
   b[sumIdx] = "SUM " + crypto.createHash("sha256").update(body).digest("hex");
   fs.writeFileSync(dst, b.join("\n"));
 ' "$PDIR/mlfk-persist.dat" "$T1DIR/mlfk-persist.dat"
 made "$T1DIR/mlfk-persist.dat"
-grep -qxF 'resume 15' "$T1DIR/mlfk-persist.dat" || fail "T1 was not applied"
+grep -qxF 'resume 17' "$T1DIR/mlfk-persist.dat" || fail "T1 was not applied"
 run_foh "$IDLE" "$T1DIR" "$BUILD/t1.err" "$BUILD/t1.trace"
 grep -qxF 'foh_persist: reset cause=corrupt detail=domain' "$BUILD/t1.err" \
   || { cat "$BUILD/t1.err" >&2
-       fail "T1 DID NOT BITE: a resume row naming FOH_TMATCH was not refused as
-  a domain violation. A screen the driver would not restore must never load."; }
+       fail "T1 DID NOT BITE: a resume row naming a screen off the FohScreen
+  enum was not refused as a domain violation. A screen the driver would not
+  restore must never load."; }
 ! grep -q 'foh_dev: resumed' "$BUILD/t1.err" \
   || fail "T1 DID NOT BITE: the refused record was applied anyway"
-echo "   T1 (domain: resume 15 = FOH_TMATCH) bites"
+echo "   T1 (domain: resume 17 = off the FohScreen enum) bites"
 
 # T2 — ABSENCE. The SAME session as a v6 file: no resume row at all. Must boot
 # cold and loudly, and — the half that actually matters — must keep the

@@ -1427,6 +1427,59 @@ const FohTargetSnapOps *foh_target_snap_ops = 0;
 // hibernate arm can be reached with sc == FOH_TMATCH.
 static char g_tgtSrcHex[65];
 
+// TICKET #30 — THE CUSTOM-STAGE RE-FIND, RUN AT BOOT AND BEFORE ANYTHING IS
+// LAUNCHED. A custom target stage is played from `custom<N>.mlstage` on the SD
+// card, and the card is the ONE thing that can have changed while the machine
+// was off: the player can pull it out and edit it on a PC. So the resume does
+// not trust the header's word for the stage — it goes and RE-FINDS it, through
+// the same mlk_slot_load the launch uses (its full grammar / SUM / mlk_parse /
+// mlk_stage_playable chain), and recomputes foh_tmatch_src from what came back.
+//
+// IT IS HERE, NOT AT THE LAUNCH, FOR TWO REASONS.
+//
+//  1. A MISSING SLOT WOULD OTHERWISE BE FATAL. The launch bridge's own
+//     mlk_slot_load failure arm `return 1`s — correct on the PLAY path, where
+//     target-select only offers slots its scan just accepted, and WRONG here,
+//     where the header names a slot the card may no longer carry. Without this
+//     pre-flight, a player who deleted a stage from his card while the lid was
+//     shut would get an app that dies at boot.
+//
+//  2. "DISARM RATHER THAN LAUNCH SOMETHING ELSE." If the check ran only inside
+//     `restore` — which it also does, as the second line of defence, against
+//     the stage the launch ACTUALLY loaded — then a changed card would have
+//     already set the run up, and the honest fallback there is to play the
+//     fresh run that is sitting in G. That is still launching something the
+//     player did not ask for. Refusing HERE lands him on target select with his
+//     record intact, which is where he can choose.
+//
+// AN AUTHORED STAGE IS CHECKED TOO, and it costs no card access: its geometry
+// is the compiled TTAB1 table (pinned by the header's BUILD line, already
+// verified by `peek`), so its SRC is a digest of the descriptor alone. It is
+// checked because the ONE definition being called on both sides is what makes
+// the custom case trustworthy, and a path that is only exercised by one family
+// of stages is a path nobody notices breaking.
+static bool tdev_tmatch_stage_refound(const FohTmatchHdr *h, const char **why) {
+  if (h->tstage >= MLK_PLAYING_BASE) {
+    const char *slotWhy = 0;
+    if (!mlk_slot_load(foh_persist_dir(), h->tstage - MLK_PLAYING_BASE,
+                       &g_tdevCustom, &slotWhy)) {
+      // The slot's own refusal name is relayed verbatim — "no such slot file",
+      // "SUM mismatch", whatever the loader said — because "the card changed"
+      // is not one failure but a family, and the player's log should name his.
+      *why = slotWhy ? slotWhy : "the custom stage on the card cannot be read";
+      return false;
+    }
+  }
+  char liveSrc[65];
+  foh_tmatch_src(h->tstage, h->tstage >= MLK_PLAYING_BASE ? &g_tdevCustom : 0,
+                 liveSrc);
+  if (memcmp(liveSrc, h->src, 64) != 0) {
+    *why = "the target stage on the card is not the one this run was played on";
+    return false;
+  }
+  return true;
+}
+
 static volatile sig_atomic_t g_hibernate;
 static void tdev_hibernate_signal(int sig) {
   (void)sig;
@@ -2369,7 +2422,8 @@ int main(int argc, char **argv) {
     if (foh.screen == FOH_TMATCH) {
       const char *tsWhy = 0;
       if (foh_target_snap_ops && foh_target_snap_ops->peek &&
-          foh_target_snap_ops->peek(&tmatchHdr, &tsWhy)) {
+          foh_target_snap_ops->peek(&tmatchHdr, &tsWhy) &&
+          tdev_tmatch_stage_refound(&tmatchHdr, &tsWhy)) {
         tmatchResume = true;
         tmatchResumeFrom = tmatchHdr.frame;
         // The launch plane. The character is on the card with the settings
