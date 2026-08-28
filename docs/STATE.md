@@ -1,7 +1,13 @@
-# ▶ RESUME HERE (rewritten 2026-08-27 — read this first, then §rulings)
+# ▶ RESUME HERE (rewritten 2026-08-28 — read this first, then §rulings)
 
 **Branch `spec/20-crashes-and-resume`, PR #31 (draft) against `agent/auto`.**
-Spec **#20**; ten tickets **#21-#30**. **NINE DONE, ONE PARTIAL.**
+Spec **#20**; ten tickets **#21-#30**. **ALL TEN DONE.**
+
+**#23 is device-verified end to end as of 2026-08-28**, over nine generations
+driven entirely from the host: `opkrun` (as the frontend launches),
+`kill -USR1 $(pid print)` (as the lid does), `instant_play load` (as the next
+boot does). Eight of nine clean, one unresolved anomaly recorded in
+AGENT-LOG rather than explained away. See §resume-defects below.
 
 ## What a player gets that they did not have this morning
 
@@ -27,7 +33,7 @@ Spec **#20**; ten tickets **#21-#30**. **NINE DONE, ONE PARTIAL.**
 | 27 | every screen resumes | host cold |
 | 28 | sim snapshot, all 8 goldens | host cold |
 | 29 | match resumes across a lid close | host cold + `DEVICE FOH OK` |
-| 30 | target runs resume | **PARTIAL — step 1 only** |
+| 30 | target runs resume | host cold (`TARGET RESUME OK`) |
 
 ## TWO THINGS OWED, both stated on their tickets
 
@@ -39,10 +45,11 @@ Spec **#20**; ten tickets **#21-#30**. **NINE DONE, ONE PARTIAL.**
    one lacks. **The leg's premise is what this spec changed on purpose.** Either
    something restores state it should re-derive, or the leg should compare
    resumed-against-resumed. **Owner/driver call, not a fixture patch.**
-2. **#30 owes** the hibernate/boot seam for a target run, its continuation check
-   over t01/t02/t03, a tooth that bites the TARGET plane specifically, and how a
-   CUSTOM stage is re-found when the card may have changed. `lane/t30`'s
-   worktree holds the uncommitted start.
+2. ~~#30 owes the hibernate/boot seam for a target run.~~ **DONE 2026-08-28**
+   (`check-target-resume.sh` -> `TARGET RESUME OK`). A custom stage is
+   RE-LOADED from the card, never carried; the header's `SRC` line pins which
+   stage it must be, and the boot disarms the pair and lands on target select
+   when the card no longer holds it.
 
 ## Process lessons this run paid for
 
@@ -68,6 +75,51 @@ Spec **#20**; ten tickets **#21-#30**. **NINE DONE, ONE PARTIAL.**
   glyph. Unreachable today; nothing had ever looked at that arm.
 - **#23 worked exactly once**: the resume record pointed at the binary, so the
   resumed session bypassed the launcher that arms the next resume.
+
+## §resume-defects — #23 took SEVEN fixes, and the last two were not in our code
+
+Read this before touching the lid path. The three defects found by READING the
+port were the small ones; the two that actually kept the game from coming back
+live in the platform's own scripts, and ten minutes of ADB found both.
+
+1. `instant_play save` ends in `exec powerdown now` — it IS the shutdown, not a
+   record-this verb. Calling it at launch powered the console off, and because
+   the record pointed here, every boot did it again. A loop.
+2. Moving that call into the USR1 trap lost the feature to a 20 s liveness
+   guard and to having ~40 ms left after forwarding the signal.
+3. A lid close DOES reach the launcher's clean-exit path (the app takes the
+   signal, saves and `_exit(0)`s), so the `rm` meant for "the player quit" was
+   deleting the record it had just armed. Hence `HIBERNATING`.
+4. `pid record "$APP"` re-aimed the lid's SIGUSR1 AT THE APP, so the launcher's
+   trap never fired. `powerdown schedule` signals `pid print`, and the frontend
+   records the LAUNCHER — that is the only reason a USR1 trap works here.
+5. **A `\n` before the `&`** put the ampersand alone on line 2 — a shell syntax
+   error. MEASURED: `source` on such a file does NOT abandon it; the shell runs
+   line 1 and then errors. The game came back in the FOREGROUND, never reached
+   `pid record`, and wedged the frontend behind it.
+6. **The mount belongs to opkrun.** `/opk` exists only while `instant_play
+   load` has mounted it, and it mounts only if `/mnt/last_opk` is readable —
+   a file opkrun owns and `instant_play load` deletes after every resume.
+   MEASURED both arms. The record now mounts its own OPK.
+
+**`/mnt/mlfk-resume.log`** carries `armed` / `no-opkfile` / `trap` / `quit` /
+`hibernate` with timestamps. `$LOG` is tmpfs; a lid close erases exactly the
+evidence a lid-close bug needs, and three of the diagnoses above were guesses
+for want of that one line.
+
+## §fixture-noop — a perturbation that perturbs nothing is worse than no tooth
+
+The cold post-merge sweep turned `check-match-resume.sh` red at its `sum`
+tooth. The code was right. The fixture was `sed 's/^SUM \(.\)/SUM 0/'` — flip
+the first hex digit to `0` — and #30's TU change happened to produce a header
+whose SUM already began `0e4fb0…`. One header in sixteen. It edited nothing,
+the loader correctly believed a valid card, and the check accused the feature.
+
+All five host checks that edit a file in place now route their 13 sites through
+one `perturb <file> <sed-arg>…` helper that hashes before and after and fails
+LOUDLY naming the FIXTURE. The SUM/BUILD flips are unconditional AND
+length-preserving, so they can never shorten a header into the "wrong length"
+refusal instead of the SUM refusal they exist to prove.
 
 ---
 
