@@ -716,6 +716,18 @@ int main(int argc, char **argv) {
   PRESS(&s, a);
   want(s.screen == FOH_TSS, "TARGET TEST opens target-select");
   want(s.tssPage == 0, "...on the AUTHORED page");
+  // ticket #26 — THE ENTRY ITSELF RE-READS THE CARD, before any page flip.
+  // `tssPage` is persisted now, so an entry can land straight on the CUSTOM
+  // grid; until this ticket the cache was filled only BY the flip, and a
+  // restored page would have drawn ten dead slots with no reason under them.
+  // Asserted HERE rather than after the flip below, because the flip's own
+  // refresh would otherwise answer for both and this arm could be deleted
+  // without anything noticing. [6] left slot 0 saved and slot 3 deleted, so
+  // the card genuinely distinguishes the two.
+  want(s.tssSlotPresent[0],
+       "...and the ENTRY has already re-read the card (slot 0 present)");
+  want(!s.tssSlotPresent[3], "...with the deleted slot 3 absent");
+  want(s.tssSlotReason[3] != 0, "...and naming why, without a flip");
   // walk the hand onto slot 10 and press A
   {
     FohHandRect slot[FOH_TSS_SLOTS];

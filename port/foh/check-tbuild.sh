@@ -710,6 +710,29 @@ grep -qF 'ok  the SELECTED pause row is readable against its own highlight' \
   || fail "T12: the pause-row assertion broke too — T11 and T12 are not
    orthogonal"
 
+# --- [T13] entering target-select stops re-reading the card (ticket #26) ----
+# `tssPage` is persisted now, so an ENTRY can land straight on the CUSTOM
+# grid without the page flip that used to be the only thing filling the slot
+# cache. Take the entry's scan away and the restored page draws ten dead
+# slots with no reason under them — the defect the row would otherwise have
+# shipped. Orthogonal to T6, which breaks the FLIP and leaves the entry
+# alone; the two arms are distinguished here by their indentation, which is
+# why `perturb`'s exactly-one-match rule can tell them apart.
+echo "=== [T13] tooth: entering target-select stops re-reading the card"
+perturb t13-noentryscan foh.c \
+  '          foh_tss_refresh_slots(s);
+          snd_push(s, "menuForward"); // menu.js:70' \
+  '          // T13: the entry no longer re-reads the card
+          snd_push(s, "menuForward"); // menu.js:70'
+build_tooth t13-noentryscan foh.c
+bites t13-noentryscan '...and the ENTRY has already re-read the card (slot 0 present)'
+# ...and it must be the ENTRY that broke, not the flip: the page-flip refresh
+# is a different arm and T6 is the tooth that owns it.
+grep -qF 'ok  A flips to the CUSTOM page (was: refused addcode)' \
+  "$BUILD/t13-noentryscan/wit.out" \
+  || fail "T13: the page flip broke too — T6 and T13 are not orthogonal, so
+   one of them is not measuring the arm it names"
+
 # The two T5-T8 teeth must be orthogonal to each other AND to the T4 legs:
 # a tooth that breaks the whole editor proves only that the build broke.
 grep -qF 'ok  A places one target' "$BUILD/t7-scalefreeze/wit.out" \
@@ -728,7 +751,7 @@ grep -qF 'ok  TARGET BUILDER -> the target-builder screen' \
   || fail "T6 also broke the BUILDER entry — T5 and T6 are not orthogonal"
 grep -qF 'ok  A flips to the CUSTOM page' "$BUILD/t1-clobber/wit.out" \
   || fail "T1 also broke the custom page — the clobber tooth is not orthogonal"
-echo "  teeth are orthogonal (T1 $(nfails t1-clobber), T2 $(nfails t2-silent), T5 $(nfails t5-refuse), T6 $(nfails t6-addcode), T7 $(nfails t7-scalefreeze), T8 $(nfails t8-orphan), T10 $(nfails t10-blind), T11 $(nfails t11-invisible), T12 $(nfails t12-sameink) failure(s) each)"
+echo "  teeth are orthogonal (T1 $(nfails t1-clobber), T2 $(nfails t2-silent), T5 $(nfails t5-refuse), T6 $(nfails t6-addcode), T7 $(nfails t7-scalefreeze), T8 $(nfails t8-orphan), T10 $(nfails t10-blind), T11 $(nfails t11-invisible), T12 $(nfails t12-sameink), T13 $(nfails t13-noentryscan) failure(s) each)"
 
 # --- [5] hygiene -------------------------------------------------------------
 git_dirty_after="$(tree_fingerprint)" \

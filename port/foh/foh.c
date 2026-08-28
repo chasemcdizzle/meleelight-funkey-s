@@ -447,6 +447,25 @@ static void step_menu(FohState *s, const PlatformInput *in,
           // opens hovering tstage 0 exactly as `tssCursor = 0` opened it.
           s->tssHandX = FOH_TSS_HOME_X;
           s->tssHandY = FOH_TSS_HOME_Y;
+          // ...and RE-READ THE CARD (ticket #26). `tssPage` is persisted
+          // now, so this entry can land on the CUSTOM grid, and the cache
+          // behind that grid describes ten files on an SD card the player
+          // may have edited on a PC since the last visit. Before this line
+          // the only refresh was the page-flip arm in step_tss — which is
+          // exactly the arrival a restored page SKIPS, so every custom slot
+          // would have drawn dead with no reason under it.
+          //
+          // Same re-derivation the RESUME HOOK performs
+          // (FOH_RESUME_HOOK_TSS_SLOTS, foh_persist.h): entry and resume are
+          // the two ways to arrive here without flipping, and they call the
+          // same function rather than growing a second answer.
+          //
+          // It is I/O in a file whose header promises none, and that promise
+          // was already qualified — the page-flip arm has opened these ten
+          // files since A45 T3. The seam is foh_tbuild_ops (NULL when the
+          // builder TU is unlinked, where this becomes a memset), and it
+          // fires on entry and flip only, never per frame.
+          foh_tss_refresh_slots(s);
           snd_push(s, "menuForward"); // menu.js:70
           ev_trans(s, sc, FOH_TSS, "a"); // changeGamemode(7), menu.js:84
         } else if (s->menuSelected == 2) {

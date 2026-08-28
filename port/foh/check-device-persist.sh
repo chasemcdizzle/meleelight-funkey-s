@@ -106,11 +106,13 @@ WORSE_BITS=4030000000000000
 # (`sel c c c c` + LF; fix_plan A49, DEVIATION D45) + the v7 resume row 10
 # (`resume NN` + LF; fix_plan A26, DEVIATION D53) + ticket #25's CSS machine
 # plane 183 (ptype 14 + cpudiff 16 + vsmode 9 + hand 39 + slider 75 +
-# carry 8 + cpucarry 11 + handtype 11) + SUM 69
-# = 1807). A dropped/added byte — including an embedded NUL that command
+# carry 8 + cpucarry 11 + handtype 11) + ticket #26's target-select trio 62
+# (tsscur 10 — `tsscur NN` + LF, TWO digits because the eleventh slot does not
+# fit in one — plus tsspage 10 + tsshand 42) + SUM 69
+# = 1869). A dropped/added byte — including an embedded NUL that command
 # substitution silently swallows through the per-line sed reads — breaks
 # this reconciliation.
-PERSIST_BYTES=1807
+PERSIST_BYTES=1869
 
 DEADMAN_S="${MLFK_DEADMAN_S:-900}"
 READY_TRIES=60
@@ -613,14 +615,14 @@ run_host() {
 # EXACT POSITIONAL MLFKPERSIST7 whitelist verification, INDEPENDENT of
 # the C loader (review-100 M2 + the whitelist-grammar rule, PROCESS §3).
 # The format is a FIXED shape — so this asserts it BY POSITION:
-# final byte LF, exactly 78 lines, each line matched at its exact index
+# final byte LF, exactly 81 lines, each line matched at its exact index
 # by an anchored full-line pattern, the 50 rec rows carrying the
 # canonical c-major (c 0..4, s 0..9) progression at their exact
 # position (uniqueness by position, not a global count), each rec bit
 # pattern in the C loader's domain (== the -1.0 sentinel or finite in
 # [0,6000)), the four v5 bind rows carrying the port-major progression and
 # each being a PERMUTATION of 0..7, and a shasum recompute of the SUM seal
-# over lines 1..77 (the whole body; the SUM line itself is line 78).
+# over lines 1..80 (the whole body; the SUM line itself is line 81).
 # Binary outcome: exact match -> pass; resembles-but-doesn't -> fail
 # closed (grammar_die). NO global counts, NO permissive scan.
 #
@@ -650,7 +652,7 @@ verify_persist_file() { # <file> <ctx>
   nbytes="$(wc -c < "$f" | tr -d ' ')"
   [ "$nbytes" = "$PERSIST_BYTES" ] || grammar_die "$ctx: file is $nbytes bytes != $PERSIST_BYTES (MLFKPERSIST7 fixed size; byte-count reconciliation failed — dropped/added/NUL byte)"
   nl="$(grep -c "" "$f")" || grammar_die "$ctx: cannot count lines"
-  [ "$nl" = 78 ] || grammar_die "$ctx: $nl lines != 78 (MLFKPERSIST7 is exactly 78 LF lines)"
+  [ "$nl" = 81 ] || grammar_die "$ctx: $nl lines != 81 (MLFKPERSIST7 is exactly 81 LF lines)"
   L="$(sed -n 1p "$f")"; [ "$L" = "MLFKPERSIST7" ] || grammar_die "$ctx: line 1 is not the exact header ('$L')"
   L="$(sed -n 2p "$f")"; [[ "$L" =~ ^turbo\ [01]$ ]] || grammar_die "$ctx: line 2 turbo grammar ('$L')"
   L="$(sed -n 3p "$f")"; [[ "$L" =~ ^lcancel\ [0-2]$ ]] || grammar_die "$ctx: line 3 lcancel grammar ('$L')"
@@ -806,9 +808,36 @@ verify_persist_file() { # <file> <ctx>
   [[ "$L" =~ ^handtype\ [0-2]$ ]] \
     || grammar_die "$ctx: line 77 handtype grammar ('$L') — handPoint, handOpen
   or handGrab, and nothing else"
-  ln=78
+  # ticket #26: the target-select view plane, lines 78-79. `tsscur` is TWO
+  # digits and its domain is ELEVEN values — the ten target stages plus the
+  # page-flip slot — restated here, independently of the C loader, exactly as
+  # every domain above is. 00..10 and nothing else: 11 is grammatical and is
+  # not a slot this screen has, and a resume that rings a slot which is not
+  # there is the failure this bound refuses.
   L="$(sed -n 78p "$f")"
-  [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 78 is not the SUM line ('$L')"
+  [[ "$L" =~ ^tsscur\ (0[0-9]|10)$ ]] \
+    || grammar_die "$ctx: line 78 is not the tsscur row in [00-10] ('$L') — a
+  one-digit value here means the row was demoted to a flag and the eleventh
+  slot can no longer be written"
+  L="$(sed -n 79p "$f")"
+  [[ "$L" =~ ^tsspage\ [01]$ ]] \
+    || grammar_die "$ctx: line 79 tsspage grammar ('$L') — 0 authored or
+  1 custom, and nothing else"
+  # the hand that CARRIES that selection (D29). Same canvas bound as the CSS
+  # hand on line 73, inclusive at 240.0 for the same reason: foh_hand_step
+  # clamps TO the width, so exactly 240.0 is a position the player can park at.
+  L="$(sed -n 80p "$f")"
+  [[ "$L" =~ ^tsshand\ ([0-9a-f]{16})\ ([0-9a-f]{16})$ ]] \
+    || grammar_die "$ctx: line 80 is not 'tsshand <hex16> <hex16>' ('$L')"
+  for hb in "${BASH_REMATCH[@]:1:2}"; do
+    [ "$hb" = 406e000000000000 ] || hex_lt "$hb" 406e000000000000 \
+      || grammar_die "$ctx: line 80 tsshand bits $hb are off the canvas (want
+  finite non-negative <= 240.0) — a cursor there hit-tests nothing, and on
+  this screen that freezes the selection wherever it last was"
+  done
+  ln=81
+  L="$(sed -n 81p "$f")"
+  [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 81 is not the SUM line ('$L')"
   sum="${BASH_REMATCH[1]}"
   # review-102 M-b: validate the COMPLETE recomputed shasum line grammar
   # (`<64hex>  -` on stdin), never a `cut -d' ' -f1` first-field scrape —
@@ -1335,6 +1364,22 @@ v8_defaults() {
   printf 'cpucarry 0\n'
   printf 'handtype 0\n'
 }
+# The target-select pair appended by ticket #26, written as LITERAL defaults
+# for the same reason as the block above. Both are what an ENTRY to target
+# select produces — slot 0 on the AUTHORED grid, upstream's own
+# targetPointerPos reset (menu.js:77-84) — so a v1..v7 file that predates
+# them migrates onto the screen it would have opened anyway.
+#   tsscur   TWO digits, so a fresh file says `00`, not `0`
+#   tsspage  0 = the ten authored stages
+#   tsshand  slot 0's centre — x 58.0, y 39.5 — which is where `tsscur 00`
+#            has to put it: the hand writes the cursor every frame, so a
+#            migrated file whose two disagreed would correct itself on tick
+#            one and make one of these rows a lie
+v9_defaults() {
+  printf 'tsscur 00\n'
+  printf 'tsspage 0\n'
+  printf 'tsshand 404d000000000000 4043c00000000000\n'
+}
 mk_pdir "$HP/th9" -
 { printf 'MLFKPERSIST1\n'; sed -n '2,4p' "$FILE_P01"; th9_rows "$WORSE_BITS"; } \
   > "$HP/th9/body"
@@ -1364,7 +1409,7 @@ rm -f "$HP/th9/body"
 mk_expect() { # <out> <modonr>
   { printf 'MLFKPERSIST7\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 1\n';
     printf 'modonr %s\n' "$2"; th9_rows "$REC_BITS"; v4_defaults; v5_defaults;
-    v6_defaults; v7_defaults; v8_defaults; } > "$HP/expect.body"
+    v6_defaults; v7_defaults; v8_defaults; v9_defaults; } > "$HP/expect.body"
   { cat "$HP/expect.body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/expect.body" | cut -d' ' -f1)"; } \
     > "$1"
   rm -f "$HP/expect.body"

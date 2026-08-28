@@ -605,13 +605,15 @@ static void a31_v4_migrates(void) {
   // loader rightly refuses it. That is what broke all four v4 assertions
   // after A49 — a STALE FIXTURE, not a migration defect: a real v4 file from
   // a real old device never had either row and still migrates.
-  // ticket #25 appended eight more v7 rows (the CSS machine plane), stripped
-  // by the same rule and counted by the same kind of assertion: this
-  // constructor's whole failure mode is going STALE, so every row is named
-  // and every name has to be found.
+  // ticket #25 appended eight more v7 rows (the CSS machine plane) and
+  // ticket #26 two more (target select), stripped by the same rule and
+  // counted by the same kind of assertion: this constructor's whole failure
+  // mode is going STALE, so every row is named and every name has to be
+  // found.
   static const char *const kCssRows[] = {
-      "ptype ", "cpudiff ",  "vsmode ",   "hand ",
-      "slider ", "carry ",   "cpucarry ", "handtype "};
+      "ptype ",  "cpudiff ", "vsmode ",   "hand ",
+      "slider ", "carry ",   "cpucarry ", "handtype ",
+      "tsscur ", "tsspage ", "tsshand "};
   const int kNCssRows = (int)(sizeof kCssRows / sizeof *kCssRows);
   static char out[8192];
   size_t m = 0;

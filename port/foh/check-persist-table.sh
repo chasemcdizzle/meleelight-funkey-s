@@ -101,15 +101,15 @@ nser="$(grep -c 'fp_addf(buf, cap' "$SRC")" || true
    the writer is no longer walking the table"
 # every FP_FIELDS row, counted, so a dropped row is loud
 nrows="$(grep -cE '^  X\([A-Za-z]' "$SRC")" || true
-[ "$nrows" = 24 ] \
-  || grammar_die "[0] FP_FIELDS has $nrows rows (want 24: turbo, lcancel,
+[ "$nrows" = 27 ] \
+  || grammar_die "[0] FP_FIELDS has $nrows rows (want 26: turbo, lcancel,
    tapjump, ctlstyle, modonr, rec, flash, walljump, blastzone, dustless,
    phantom, soundslevel, musiclevel, bind, sel, resume, then ticket #25's
    CSS machine plane — ptype, cpudiff, vsmode, hand, slider, carry, cpucarry,
-   handtype). A row was added or removed — if that was deliberate, this
-   number moves WITH the format and the fixture builder in leg [1] moves
-   with it too"
-echo "    [0] OK: table, static assertion, layout guard and 24 rows all present"
+   handtype — then ticket #26's target-select trio, tsscur, tsspage and
+   tsshand). A row was added or removed — if that was deliberate, this number moves WITH
+   the format and the fixture builder in leg [1] moves with it too"
+echo "    [0] OK: table, static assertion, layout guard and 27 rows all present"
 
 # --- [1] the fixture builder (INDEPENDENT of the C under test) ---------------
 # Builds a canonical MLFKPERSIST7 file from the FORMAT — the grammar written
@@ -180,6 +180,16 @@ function record(mode) {
     carry: seeded ? 2 : -1,
     cpucarry: seeded ? 3 : -1,
     handtype: seeded ? 2 : 0,
+    // ticket #26. The seeded cursor is 10 — the ELEVENTH value, which is
+    // the whole reason `tsscur` is a two-digit row: a fixture that only
+    // ever wrote 0..9 would agree with a row mistyped as a one-digit flag.
+    tsscur: seeded ? 10 : 0,
+    tsspage: seeded ? 1 : 0,
+    // the DEFAULTS side is foh.h's FOH_TSS_HOME_{X,Y} restated as its own
+    // formula — slot 0's centre, x = 8 + 100/2, y = 30 + 19/2 — for the
+    // reason the CSS block's defaults are formulas: an expectation that
+    // copied the numbers could not notice the definition moving.
+    tsshand: seeded ? [12.5, 205.75] : [8 + 100 / 2, 30 + 19 / 2],
   };
 }
 // The WIRE BIAS, restated from the format (foh_persist.h) rather than read
@@ -218,6 +228,9 @@ function lines(r) {
   L.push("carry " + (r.carry + BIAS.carry));
   L.push("cpucarry " + (r.cpucarry + BIAS.cpucarry));
   L.push("handtype " + r.handtype);
+  L.push("tsscur " + String(r.tsscur).padStart(2, "0")); // TWO digits
+  L.push("tsspage " + r.tsspage);
+  L.push("tsshand " + r.tsshand.map(bits).join(" "));
   return L;
 }
 // The record dump foh_persist_witness.c prints, derived from the SAME
@@ -258,6 +271,11 @@ function dump(r) {
   D.push("carry " + r.carry);
   D.push("cpucarry " + r.cpucarry);
   D.push("handtype " + r.handtype);
+  // the DUMP prints the field's value, not the file's column: `tsscur` is
+  // padded to two digits on the wire and is a plain integer here.
+  D.push("tsscur " + r.tsscur);
+  D.push("tsspage " + r.tsspage);
+  D.push("tsshand " + r.tsshand.map(bits).join(" "));
   return D.join("\n") + "\n";
 }
 function seal(L) {
@@ -277,8 +295,8 @@ node "$BUILD/fixture.js" dump seed "$BUILD/seed.dump"
 node "$BUILD/fixture.js" file defaults "$BUILD/defaults.dat"
 node "$BUILD/fixture.js" dump defaults "$BUILD/defaults.dump"
 made "$BUILD/seed.dat" "$BUILD/seed.dump" "$BUILD/defaults.dat" "$BUILD/defaults.dump"
-[ "$(grep -c "" "$BUILD/seed.dat")" = 78 ] \
-  || grammar_die "[1] the independently built fixture is not 78 LF lines —
+[ "$(grep -c "" "$BUILD/seed.dat")" = 81 ] \
+  || grammar_die "[1] the independently built fixture is not 81 LF lines —
    fixture construction is broken, so every leg below would be vacuous"
 cmp -s "$BUILD/seed.dat" "$BUILD/defaults.dat" \
   && fail "[1] the seeded and default fixtures are identical (dead tooth: a
@@ -364,7 +382,8 @@ V4_ROWS=(drop=flash drop=walljump drop=blastzone drop=dustless drop=phantom
 # were missed (the v6 fixture would simply have carried a row no v6 writer
 # could produce, and the migration leg would have passed on it).
 V7_ROWS=(drop=resume drop=ptype drop=cpudiff drop=vsmode drop=hand
-         drop=slider drop=carry drop=cpucarry drop=handtype)
+         drop=slider drop=carry drop=cpucarry drop=handtype
+         drop=tsscur drop=tsspage drop=tsshand)
 variant v6 hdr=6 "${V7_ROWS[@]}"
 variant v5 hdr=5 "${V7_ROWS[@]}" drop=sel
 variant v4 hdr=4 "${V7_ROWS[@]}" drop=sel dropall=bind
@@ -512,6 +531,17 @@ miss miss-ctlstyle ctlstyle '^ctlstyle 1$' \
 # wrong: the mode ribbon and whether a port is switched on.
 miss miss-vsmode vsmode '^vsmode 0$' "versusMode is not stock"
 miss miss-carry carry '^carry -1$' "cssCarry is not 'holding nothing'"
+# ticket #26: same case, one ticket later. The owner's device will present a
+# file with the CSS rows and WITHOUT these two on the first boot after this
+# ships, and the answer has to be the screen an entry produces: slot 0 on the
+# authored grid (menu.js:77-84's targetPointerPos reset).
+miss miss-tsscur tsscur '^tsscur 0$' "tssCursor is not slot 0"
+miss miss-tsspage tsspage '^tsspage 0$' "tssPage is not the AUTHORED grid"
+# ...and the hand with them, at slot 0's centre — 58.0 (4834000000000000) and
+# 39.5 (4043c00000000000). A migrated file whose hand and cursor disagreed
+# would correct itself on tick one, so this is not cosmetic.
+miss miss-tsshand tsshand '^tsshand 404d000000000000 4043c00000000000$' \
+  "the target-select hand is not at slot 0's centre"
 # a whole multi-line block may go missing too
 variant miss-rec dropall=rec
 run dump "$BUILD/v/miss-rec.dat" miss-rec
@@ -552,8 +582,11 @@ hist_ok() { # <name> <from-version>
 # defaults fixture builds them from foh.h's formulas (leg [1]), so there is
 # still exactly one independent statement of what a fresh CSS looks like and
 # this leg cannot quietly disagree with leg [3] about it.
+# ticket #26's two rows join the same list for the same reason: a migrated
+# file must come back on the screen an ENTRY would have opened.
 V7_DEFAULT_OPS=()
-for k in ptype cpudiff vsmode hand slider carry cpucarry handtype; do
+for k in ptype cpudiff vsmode hand slider carry cpucarry handtype \
+         tsscur tsspage tsshand; do
   dline="$(grep -m1 "^$k " "$BUILD/defaults.dat")" \
     || fail "[7] the defaults fixture carries no '$k' row"
   V7_DEFAULT_OPS+=("set=$k:$dline")
@@ -618,8 +651,15 @@ hist_grammar v2-style2 hdr=2 "${V7_ROWS[@]}" drop=sel dropall=bind \
 # same reason a v3 header carrying a v4 row is. Without this, "the CSS rows
 # are v7-only" would be true only of the writer.
 hist_grammar v6-plus-ptype hdr=6 drop=resume drop=cpudiff drop=vsmode \
-  drop=hand drop=slider drop=carry drop=cpucarry drop=handtype
-echo "    [7b] OK: seven frozen-grammar refusals (a historical version neither
+  drop=hand drop=slider drop=carry drop=cpucarry drop=handtype \
+  drop=tsscur drop=tsspage
+# ticket #26, same rule aimed at THIS ticket's own rows: keep `tsspage` and
+# strip everything else v7. Sharing the leg above would have let both new
+# rows ride on `ptype` being the one actually refused.
+hist_grammar v6-plus-tsspage hdr=6 drop=resume drop=ptype drop=cpudiff \
+  drop=vsmode drop=hand drop=slider drop=carry drop=cpucarry \
+  drop=handtype drop=tsscur drop=tsshand
+echo "    [7b] OK: eight frozen-grammar refusals (a historical version neither
     skips a newer row nor defaults one of its own)"
 
 # --- [8] the guards that are still guards -----------------------------------
@@ -664,6 +704,26 @@ refuse ptype-bad    "reset cause=corrupt detail=grammar" 'set=ptype:ptype 1 3 0 
 refuse cpudiff-bad  "reset cause=corrupt detail=grammar" 'set=cpudiff:cpudiff 2 4 3 1'
 refuse carry-bad    "reset cause=corrupt detail=grammar" 'set=carry:carry 5'
 refuse handtype-bad "reset cause=corrupt detail=grammar" 'set=handtype:handtype 3'
+# ticket #26's two rows, each judged in ITS OWN column and by its own rule.
+#   * `tsscur 11` is GRAMMATICAL — two digits is two digits — and outside the
+#     eleven slots the screen has, so it is `domain`. That distinction is the
+#     point of giving FP_U2 a bound at all: without one, 11 would have been
+#     accepted and the resumed screen would ring a slot that is not there.
+#   * `tsscur 5` is the WIDTH failing: a one-digit value makes the line short
+#     and the anchored parse never reaches a domain question. It is the tooth
+#     that would notice `tsscur` being demoted to a one-digit flag row.
+#   * `tsspage 2` is a flag outside its digit domain, i.e. `grammar`, exactly
+#     like `handtype 3` above.
+refuse tsscur-bad "reset cause=corrupt detail=domain" 'set=tsscur:tsscur 11'
+refuse tsscur-narrow "reset cause=corrupt detail=grammar" 'set=tsscur:tsscur 5'
+refuse tsspage-bad "reset cause=corrupt detail=grammar" 'set=tsspage:tsspage 2'
+# and the hand takes FP_DOM_SCREEN like the CSS one: a NaN or an off-canvas
+# cursor hit-tests nothing, and on THIS screen that also freezes the
+# selection wherever it last was.
+refuse tsshand-nan "reset cause=corrupt detail=domain" \
+  'set=tsshand:tsshand 7ff8000000000000 4043c00000000000'
+refuse tsshand-offscreen "reset cause=corrupt detail=domain" \
+  'set=tsshand:tsshand 404d000000000000 406e200000000000'
 refuse hand-nan     "reset cause=corrupt detail=domain" \
   'set=hand:hand 7ff8000000000000 406e000000000000'
 refuse hand-offscreen "reset cause=corrupt detail=domain" \
@@ -913,6 +973,84 @@ cmp "$D2/mlfk-persist.dat" "$BUILD/seed.dat" \
 teeth=$((teeth + 1))
 echo "    [11] OK: one field + one row, both directions read both files, no
     migration arm and no version bump"
+
+# --- [12] a NEW SCREEN must decide about the RESUME HOOK (ticket #26) -------
+#
+# ADR 0001 keeps one half of the rejected per-screen interface: a screen may
+# carry a HOOK that re-derives what a field table cannot hold. The whole
+# argument for putting it on foh_persist_resume_plan()'s switch rather than
+# in a registry of its own is that THAT switch already fails the build when a
+# screen arrives without a decision — "the one place that must think about
+# it", and its exhaustiveness has already caught a real gap when two lanes
+# merged. An inherited property is worth exactly as much as the check that
+# proves it still holds, so this leg adds a screen to a COPY of foh.h and
+# requires the build to fail naming that screen. The tree is untouched.
+echo "=== [12] adding a screen without deciding about the hook must FAIL"
+FOHH=port/foh/foh.h
+made "$FOHH"
+mkcopy_screen() { # <dir> — the persist pair PLUS a private copy of foh.h
+  mkcopy "$1"
+  cp "$FOHH" "$BUILD/$1/"
+}
+# The control: the same copy set, unperturbed, must build. Without this every
+# "did not build" below could be the copied foh.h failing to resolve its own
+# relative includes.
+mkcopy_screen c-screen-base
+build_copy c-screen-base
+[ "$RC" = 0 ] || { relay_lines < "$BUILD/c-screen-base/cc.log"
+  fail "[12] the UNPERTURBED copy (with foh.h copied in) did not build — the
+   negative below would pass for the wrong reason"; }
+mkcopy_screen c-screen
+node -e '
+  const fs = require("fs");
+  const f = process.argv[1];
+  const raw = fs.readFileSync(f, "utf8");
+  const anchor = "  FOH_SCREEN_COUNT\n";
+  if (raw.split(anchor).length - 1 !== 1) {
+    console.error("anchor |" + anchor.trim() + "| is not unique in foh.h");
+    process.exit(1);
+  }
+  fs.writeFileSync(f, raw.replace(anchor, "  FOH_SCREEN_NOBODY_DECIDED,\n" + anchor));
+' "$BUILD/c-screen/foh.h" || fail "[12] could not add a screen to the copy"
+cmp -s "$BUILD/c-screen/foh.h" "$FOHH" \
+  && fail "[12] the perturbed foh.h is byte-identical (dead tooth)"
+build_copy c-screen
+[ "$RC" != 0 ] \
+  || fail "[12] adding a screen to FohScreen COMPILED. The resume map is no
+   longer exhaustive, so a new screen would silently take a default target
+   and NO hook — the gap ADR 0001 puts the hook here to prevent."
+grep -q 'FOH_SCREEN_NOBODY_DECIDED' "$BUILD/c-screen/cc.log" \
+  || { relay_lines < "$BUILD/c-screen/cc.log"
+       fail "[12] the build failed for some OTHER reason than the unhandled
+   screen — an unrelated failure is being credited as the guard biting"; }
+teeth=$((teeth + 1))
+# THE COUNTERFACTUAL: it is the ENUMERATED arms that bite, not the compiler
+# being clever. Give the switch a `default:` and the same added screen becomes
+# invisible — which is precisely the shape a per-screen registry would have
+# had, and the reason the hook is a column here instead.
+mkcopy_screen c-screen-default
+node -e '
+  const fs = require("fs");
+  const [h, c] = process.argv.slice(1);
+  let H = fs.readFileSync(h, "utf8");
+  const anchor = "  FOH_SCREEN_COUNT\n";
+  if (H.split(anchor).length - 1 !== 1) { console.error("no enum anchor"); process.exit(1); }
+  fs.writeFileSync(h, H.replace(anchor, "  FOH_SCREEN_NOBODY_DECIDED,\n" + anchor));
+  let C = fs.readFileSync(c, "utf8");
+  const a = "    case FOH_SCREEN_COUNT: break;\n";
+  if (C.split(a).length - 1 !== 1) { console.error("no switch anchor"); process.exit(1); }
+  fs.writeFileSync(c, C.replace(a, a + "    default: break;\n"));
+' "$BUILD/c-screen-default/foh.h" "$BUILD/c-screen-default/foh_persist.c" \
+  || fail "[12] could not build the defaulted counterfactual"
+build_copy c-screen-default
+[ "$RC" = 0 ] \
+  || { relay_lines < "$BUILD/c-screen-default/cc.log"
+       fail "[12] the defaulted counterfactual REFUSED the added screen, so
+   the enumerated arms are not what makes the map bite — re-derive this leg"; }
+teeth=$((teeth + 1))
+echo "    [12] OK: a new screen fails the build in the resume map; with a
+    default arm the same screen is INVISIBLE, which is what the enumeration
+    is for"
 
 # --- no-commit guard ---------------------------------------------------------
 git_dirty_after="$(tree_fingerprint)" || fail "post-run fingerprint failed"
