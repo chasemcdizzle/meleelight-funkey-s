@@ -565,22 +565,49 @@ refuse() { # <label> <mutate-fn> <expected substring> [expect-fresh-match]
   echo "     $label -> refused: $want"
 }
 
+
+# PERTURB: EVERY EDIT BELOW MUST ACTUALLY EDIT SOMETHING.
+#
+# MEASURED, and it cost a red sweep: `s/^SUM \(.\)/SUM 0/` flips the SUM's
+# first hex digit — unless that digit is already `0`, which is one header in
+# sixteen, and #30's TU change happened to produce one (`SUM 0e4fb0...`). The
+# fixture then edited NOTHING, the loader correctly believed a valid card, and
+# the check reported the CODE as broken. Its siblings are the same shape:
+# `BUILD .` -> `BUILD 0` has the same one-in-sixteen dud, `STAGE 00` and the
+# 4-digit FRAME both assume a value this flow happens to produce today.
+#
+# A perturbation that silently perturbs nothing is worse than no tooth at all:
+# it reads green forever and then, one build in sixteen, accuses the code. So
+# every in-place edit goes through here, and a no-op is a LOUD failure that
+# names the fixture rather than the feature.
+perturb() { # <file> <sed-expr>... — apply, and prove the bytes moved
+  local f="$1"; shift
+  local before after
+  before="$(shasum -a 256 < "$f")"
+  sed -i.bak "$@" "$f"
+  rm -f "$f.bak"
+  after="$(shasum -a 256 < "$f")"
+  [ "$before" != "$after" ] || fail "FIXTURE NO-OP: the perturbation
+  $* did not change $f. The tooth it feeds cannot fail, so a green run here
+  proves nothing. Fix the fixture (the file's contents moved out from under
+  it); do NOT relax whatever assertion just failed downstream."
+}
+
 m_nohdr() { rm -f "$1/mlfk-match.hdr"; }
 m_trunc() { local f=$1/mlfk-match.hdr; local t; t=$(head -c 100 "$f"); printf '%s' "$t" > "$f"; }
-m_sumbad() { sed -i.bak 's/^SUM \(.\)/SUM 0/' "$1/mlfk-match.hdr"; rm -f "$1"/*.bak; }
+m_sumbad() { perturb "$1/mlfk-match.hdr" -e 's/^SUM 0/SUM 1/' -e t -e 's/^SUM ./SUM 0/'; }
 m_stage_unsealed() {
   # A field edited WITHOUT resealing: the SUM must catch it, and it must be
   # reported as CORRUPT and not as "from a different build". Integrity before
   # meaning — the .mlstage rule, inherited whole.
-  sed -i.bak 's/^STAGE 00$/STAGE 03/' "$1/mlfk-match.hdr"; rm -f "$1"/*.bak
+  perturb "$1/mlfk-match.hdr" 's/^STAGE 00$/STAGE 03/'
 }
 m_build_sealed() {
-  sed -i.bak 's/^BUILD ./BUILD 0/' "$1/mlfk-match.hdr"; rm -f "$1"/*.bak
+  perturb "$1/mlfk-match.hdr" -e 's/^BUILD 0/BUILD 1/' -e t -e 's/^BUILD ./BUILD 0/'
   reseal "$1/mlfk-match.hdr"
 }
 m_frame_sealed() {
-  sed -i.bak 's/^FRAME 0*[0-9]\{4\}$/FRAME 000000001799/' "$1/mlfk-match.hdr"
-  rm -f "$1"/*.bak
+  perturb "$1/mlfk-match.hdr" 's/^FRAME 0*[0-9]\{4\}$/FRAME 000000001799/'
   reseal "$1/mlfk-match.hdr"
 }
 m_nosim() { rm -f "$1/mlfk-match.sim"; }

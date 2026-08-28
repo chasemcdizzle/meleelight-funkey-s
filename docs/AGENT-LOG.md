@@ -22609,3 +22609,111 @@ executed, so the builder lets you paint fire and then REFUSES TO SAVE, naming
 the rule. The witness asserts that refusal. Un-gating it needs one recorded
 browser golden (spec §5, confirmed reachable without touching `oracle/`).
 
+
+## driver — 2026-08-28 — #23 resume, found on the device instead of guessed at. ZOOM-OUT: a fixture that perturbs nothing is worse than no tooth
+
+The lid-close resume failed on the owner's hardware three times. Each failed
+diagnosis was made by reading source and reasoning; each was wrong or
+incomplete; each cost a device round trip and a message asking for another
+test. This entry records the fourth attempt, which was made by MEASURING the
+device, and it found two more defects — one of which no amount of reading the
+port would have revealed, because it lives in the platform's own scripts.
+
+### What was actually wrong
+
+`instant_play load` (`/root/.profile` runs it BEFORE `frontend init`) does two
+things in order: it mounts the OPK named by `/mnt/last_opk`, then it `source`s
+`/mnt/instant_play`. Everything under `/opk` — the launcher, the binary, the
+data — exists only while that mount is live.
+
+**Defect 6 — the `&` on its own line.** v3 wrote the relaunch record itself
+rather than calling `instant_play save` (that verb ends in `exec powerdown
+now`; it IS the shutdown). It emitted the path with a trailing `\n`, so the
+`&` landed alone on line 2. That is a shell SYNTAX ERROR. MEASURED, on both
+hosts: sourcing such a file does NOT abandon it — the shell runs line 1, then
+errors — so the malformed record started the game in the FOREGROUND and never
+reached `pid record`. A resumed session that cannot hibernate again, with the
+frontend wedged behind it forever. `instant_play save` avoids this by building
+its args with a trailing SPACE and no newline; the port had not copied that
+detail because nobody had read the file it was imitating.
+
+**Defect 7 — the mount belongs to somebody else.** MEASURED on the device,
+both arms: with `/mnt/last_opk` present the resume works end to end; with it
+absent, the boot prints `/opk/mlfk-foh.sh: not found` and walks on to the
+frontend, having done nothing a player can see. That file is opkrun's
+bookkeeping, and MEASURED again, `instant_play load` itself deletes it after
+every resume. Depending on another process's bookkeeping to survive a power
+cut is the fragile half of the feature. The record now MOUNTS ITS OWN OPK and
+re-writes `last_opk` so the platform's own trailing `umount; rm` still tidies
+up. If the boot already mounted it, the mount fails and is discarded; the
+record is correct either way.
+
+### The evidence, and how it was obtained
+
+The whole journey runs over ADB without the owner touching anything:
+`opkrun` (exactly as the frontend launches), `kill -USR1 $(pid print)`
+(exactly what `powerdown schedule` does at the lid), `instant_play load`
+(exactly what the next boot does). NINE generations were run.
+
+| | outcome |
+|---|---|
+| launch, arm | record written, `sh -n` clean, `last_opk` present |
+| lid | trap fired, `HIBERNATING=1`, record KEPT, app exit 0, /opk unmounted |
+| boot with `last_opk` DELETED | record self-mounted, app up, launcher re-recorded, session re-armed |
+| 5 back-to-back generations | 5/5 rc=0, state saved each time, record re-armed each time |
+
+ONE ANOMALY, HONESTLY UNRESOLVED: the second manual generation reported
+`rc=138` (128+SIGUSR1) and did NOT update the persist file — a lost save. It
+did not reproduce in the eight generations that followed, including one that
+deliberately matched its ~210 s session length. It is recorded here rather
+than explained away; if it returns, `/mnt/mlfk-resume.log` now carries the
+timestamps to bound it.
+
+### Breadcrumbs, because three diagnoses were guesses for want of one line
+
+`$LOG` lives in `/tmp`, which is tmpfs, so a lid close erases exactly the
+evidence a lid-close bug needs. `/mnt/mlfk-resume.log` now records
+`armed` / `no-opkfile` / `trap` / `quit` / `hibernate` with timestamps, and
+says `armed` only where something was actually armed.
+
+### ZOOM-OUT: the fixture class
+
+The cold post-merge sweep turned `check-match-resume.sh` red at the `sum`
+tooth: a corrupted SUM was accepted. The code was correct. The FIXTURE was
+`sed 's/^SUM \(.\)/SUM 0/'` — flip the first hex digit to `0` — and #30's TU
+change had produced a header whose SUM already began `0e4fb0…`. One header in
+sixteen. The fixture edited nothing, the loader correctly believed a valid
+card, and the check accused the feature.
+
+Its siblings were the same shape: `BUILD .` -> `BUILD 0` carries the identical
+one-in-sixteen dud; `STAGE 00`, `TSTAGE 00` and the 4-digit `FRAME` all assume
+a value today's flow happens to produce; `TFIN 9`, `RNG 9007…` are no-ops if
+the value is already the replacement.
+
+A perturbation that silently perturbs nothing is worse than no tooth at all:
+it reads green forever, and then one build in sixteen it accuses the code. The
+class fix is one helper, `perturb <file> <sed-arg>…`, which hashes before and
+after and fails LOUDLY naming the FIXTURE — added to all five checks that do
+in-place edits, and all 13 sites routed through it. The SUM/BUILD flips are
+now unconditional AND length-preserving (`-e 's/^SUM 0/SUM 1/' -e t -e 's/^SUM
+./SUM 0/'`), so they can never silently shorten a header into the "wrong
+length" refusal instead of the SUM refusal they exist to prove. Guard proven
+to bite by pointing a fixture at a pattern that cannot match: `FIXTURE NO-OP`,
+exit 1, file restored byte-identical.
+
+### And the check that should have existed from the start
+
+`check-hibernate.sh` gained leg **[3b]**: the relaunch record is not compared
+to a shape someone typed twice — it is EXTRACTED from the launcher's own bytes
+(only paths retargeted), then `sh -n`'d, then SOURCED in a fresh `/bin/sh`
+(the platform does not run `.profile` under `set -e`) against stand-ins for
+`mlfk-foh.sh` and the `pid` verb. It asserts the record mounts its own OPK,
+re-writes `last_opk`, launches the launcher and records its pid. Its tooth is
+defect 6 exactly, and it asserts the consequence that is REAL rather than the
+one that is obvious: the malformed record still runs its first line, and never
+reaches `pid record`.
+
+The lesson stated plainly: this feature has now produced four defects, and the
+three found by reading the port were the small ones. The one that actually
+kept the game from coming back was in a script the port merely calls, and it
+took ten minutes of ADB to find. Read the platform, not just the port.

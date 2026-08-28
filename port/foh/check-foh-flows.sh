@@ -130,6 +130,24 @@ GFX=port/gfx
 M4G=port/goldens-m4
 
 fail() { echo "FOH FLOWS FAIL: $1" >&2; exit 1; }
+
+# A PERTURBATION THAT PERTURBS NOTHING IS WORSE THAN NO TOOTH: it reads green
+# forever and then accuses the code the day the data moves. MEASURED in this
+# feature — check-match-resume.sh's `s/^SUM \(.\)/SUM 0/` flipped the SUM's
+# first hex digit unless it was already `0`, and one build in sixteen it is.
+# Every in-place edit below goes through here, and a no-op fails LOUDLY,
+# naming the fixture instead of the feature.
+perturb() { # <file> <sed-arg>... — apply, and prove the bytes moved
+  local f="$1"; shift
+  local before after
+  before="$(shasum -a 256 < "$f")"
+  sed -i.bak "$@" "$f"
+  rm -f "$f.bak"
+  after="$(shasum -a 256 < "$f")"
+  [ "$before" != "$after" ] || fail "FIXTURE NO-OP: the perturbation
+  $* did not change $f. The tooth it feeds cannot fail, so a green run here
+  proves nothing. Fix the fixture; do NOT relax the assertion downstream."
+}
 grammar_die() { echo "FOH FLOWS FAIL: $1" >&2; exit 2; }
 
 made() {
@@ -2217,7 +2235,7 @@ echo "    [5b] OK: gfx_target_banner_text renders COMPLETE! + FAILURE (both non-
 # against the perturbed copy. (-Iport/gfx lets the build-dir copy resolve
 # its "gfx.h"/"../foh/foh.h" quoted includes.)
 cp "$GFX/gfx_target.c" "$B/gt-banner-tooth.c"
-sed -i.bak 's/"COMPLETE!"/"COMPLETE?"/' "$B/gt-banner-tooth.c"; rm -f "$B/gt-banner-tooth.c.bak"
+perturb "$B/gt-banner-tooth.c" 's/"COMPLETE!"/"COMPLETE?"/'
 grep -q '"COMPLETE?"' "$B/gt-banner-tooth.c" || fail "banner tooth — the missing-glyph perturb did not take"
 cc -O2 "${CFLAGS_COMMON[@]}" -Iport/gfx -c "$B/gt-banner-tooth.c" -o "$B/gt-banner-tooth.o"
 cc -O2 -Wl,-dead_strip -o "$B/foh_banner_witness_tooth" \

@@ -282,19 +282,44 @@ else
       # Recording THIS SCRIPT rather than the binary is deliberate: a resumed
       # session then re-arms the next one, and inherits the USR1 trap and the
       # clean-exit removal instead of losing both.
-      {
-        printf "'%s' \n" "$DIR/mlfk-foh.sh"
-        printf '&\n'
-        printf 'pid record $!\n'
-        printf 'wait $!\n'
-        printf 'pid erase\n'
-      } > /mnt/instant_play 2>/dev/null || true
-      sync 2>/dev/null || true
-      echo "mlfk-foh.sh: relaunch armed" >> "$LOG"
-      # AND ON THE CARD. $LOG lives in /tmp, which is tmpfs, so a lid close
-      # erases exactly the evidence a lid-close bug needs. Three diagnoses in
-      # this feature were guesses for want of this one line.
-      echo "armed $(date +%s)" >> /mnt/mlfk-resume.log 2>/dev/null || true
+      # THE RECORD MOUNTS ITS OWN OPK. Everything below /opk — this script,
+      # the binary, the data — exists only while that squashfs is mounted, and
+      # `instant_play load` mounts it ONLY if /mnt/last_opk is readable at boot.
+      # That file belongs to opkrun, not to us. MEASURED on the device, both
+      # arms: with it present the resume works end to end; with it absent the
+      # boot prints `/opk/mlfk-foh.sh: not found` and walks on to the frontend,
+      # having done nothing a player can see. Depending on another process's
+      # bookkeeping to survive a power cut is the fragile half of this feature,
+      # so the record stops depending on it and mounts the OPK itself. If the
+      # boot already mounted it the mount fails and is discarded; the record is
+      # correct either way. It also re-writes /mnt/last_opk so `instant_play
+      # load`'s own trailing `umount /opk; rm last_opk` still tidies up after
+      # the resumed session, exactly as it does after a normal one.
+      #
+      # AND THE `&` STAYS ON THE ARGS LINE. `instant_play save` builds its args
+      # with a trailing SPACE and no newline before appending its heredoc, so
+      # its `&` lands on line 1: `'/opk/mlfk-foh.sh' &`. Putting a \n there
+      # instead leaves `&` alone on the next line, which is a shell SYNTAX
+      # ERROR — and since `instant_play load` consumes this with `source`, the
+      # shell runs line 1 in the FOREGROUND, then errors, then never reaches
+      # `pid record`. The game comes back unable to hibernate again and with
+      # the frontend stuck behind it. That was defect 6.
+      OPKFILE="$(cat /mnt/last_opk 2>/dev/null)"
+      if [ -n "$OPKFILE" ]; then
+        printf "mount -t squashfs '%s' /opk 2>/dev/null\necho -n '%s' > /mnt/last_opk\n'%s' &\npid record \$!\nwait \$!\npid erase\n" \
+          "$OPKFILE" "$OPKFILE" "$DIR/mlfk-foh.sh" > /mnt/instant_play 2>/dev/null || true
+        sync 2>/dev/null || true
+        echo "mlfk-foh.sh: relaunch armed" >> "$LOG"
+        # AND ON THE CARD. $LOG lives in /tmp, which is tmpfs, so a lid close
+        # erases exactly the evidence a lid-close bug needs. Three diagnoses in
+        # this feature were guesses for want of this one line, and the fourth
+        # was found by reading a device instead. It says "armed" only where
+        # something was actually armed.
+        echo "armed $(date +%s)" >> /mnt/mlfk-resume.log 2>/dev/null || true
+      else
+        # Nothing to arm and nothing to blame later: say so on the card.
+        echo "no-opkfile $(date +%s)" >> /mnt/mlfk-resume.log 2>/dev/null || true
+      fi
     fi
   ) &
   RESUME_TIMER=$!

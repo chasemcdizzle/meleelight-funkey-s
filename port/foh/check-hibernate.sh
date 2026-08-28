@@ -179,8 +179,9 @@ echo "=== [3] launcher signal route (lines extracted from $LAUNCHER)"
 made "$LAUNCHER"
 IDIOM=$BUILD/idiom.sh
 # Anchored, single-match: the four lines that make hibernate reachable at all.
+TRAPLINE="  trap 'HIBERNATING=1; echo \"trap \$(date +%s)\" >> /mnt/mlfk-resume.log 2>/dev/null; kill -USR1 \"\$APP\" 2>/dev/null' USR1"
 for pat in '    >> "$LOG" 2>&1 &' '  APP=$!' \
-           "  trap 'kill -USR1 \"\$APP\" 2>/dev/null' USR1" \
+           "$TRAPLINE" \
            '  wait "$APP"; rc=$?' \
            '  if [ "$rc" -gt 128 ]; then wait "$APP"; rc=$?; fi'; do
   n="$(grep -cxF "$pat" "$LAUNCHER")" || true
@@ -193,11 +194,12 @@ done
   echo '#!/bin/sh'
   echo 'LOG=$1'
   echo 'CHILD=$2'
+  echo 'HIBERNATING=0'
   echo ': > "$LOG"'
   echo '"$CHILD" \'
   grep -xF '    >> "$LOG" 2>&1 &' "$LAUNCHER"
   grep -xF '  APP=$!' "$LAUNCHER"
-  grep -xF "  trap 'kill -USR1 \"\$APP\" 2>/dev/null' USR1" "$LAUNCHER"
+  grep -xF "$TRAPLINE" "$LAUNCHER"
   grep -xF '  wait "$APP"; rc=$?' "$LAUNCHER"
   grep -xF '  if [ "$rc" -gt 128 ]; then wait "$APP"; rc=$?; fi' "$LAUNCHER"
   echo 'echo "RC=$rc" > "$LOG.rc"'
@@ -250,6 +252,130 @@ grep -qxF 'RC=42' "$BUILD/idiom.log.rc" \
   || fail "[3] the trap took >3 s to fire — that is the DEFERRED-trap failure
   the background+wait form exists to avoid (the grace is 0.1 s)"
 echo "   trap fired immediately, child rc 42 reached opk.rc"
+
+# --- [3b] the relaunch record is RUNNABLE, not merely written ---------------
+# WHY THIS LEG EXISTS. v3 of the resume wrote /mnt/instant_play itself instead
+# of calling `instant_play save` (that verb ends in `exec powerdown now` — it
+# IS the shutdown). The file it wrote was byte-plausible and its log said
+# "relaunch armed", and it never once relaunched on hardware, because a `\n`
+# before the `&` puts the ampersand alone on line 2 and that is a shell SYNTAX
+# ERROR. `instant_play load` consumes the record with `source`, so the error
+# goes to a console nobody reads and the boot walks on to the frontend. Three
+# device tests failed identically and looked, from the player's chair, exactly
+# like "nothing was armed".
+#
+# So the record is not checked by comparing it to a shape someone typed twice.
+# It is checked BY RUNNING IT, the way the platform runs it.
+echo "=== [3b] the relaunch record parses and runs (source, as the boot does)"
+REC=$BUILD/rec.d
+rm -rf "$REC"; mkdir -p "$REC/opk" "$REC/bin"
+# The emitter, EXTRACTED from the launcher's own bytes. Only the destination
+# path is rewritten; the format string — the thing under test — is never
+# retyped, so a future edit to it is what this leg sees.
+EMITF='        printf "mount -t squashfs '"'"'%s'"'"' /opk 2>/dev/null\necho -n '"'"'%s'"'"' > /mnt/last_opk\n'"'"'%s'"'"' &\npid record \$!\nwait \$!\npid erase\n" \'
+EMITA='          "$OPKFILE" "$OPKFILE" "$DIR/mlfk-foh.sh" > /mnt/instant_play 2>/dev/null || true'
+for pat in "$EMITF" "$EMITA"; do
+  n="$(grep -cxF "$pat" "$LAUNCHER")" || true
+  [ "$n" = 1 ] || grammar_die "mlfk-foh.sh has $n copies of the line
+  '$pat' (want exactly 1) — the relaunch-record emitter moved or was reverted"
+done
+# The record names /opk and /mnt/last_opk, neither of which exists on a Mac,
+# so the emitter is retargeted at the sandbox. Only PATHS are rewritten; the
+# format string — the thing under test — is carried verbatim.
+{
+  echo '#!/bin/sh'
+  echo 'DIR=$1'
+  echo 'OPKFILE=$3'
+  grep -xF "$EMITF" "$LAUNCHER" | sed -e "s#/opk 2#$REC/opk 2#" \
+                                      -e "s#> /mnt/last_opk#> $REC/last_opk#"
+  grep -xF "$EMITA" "$LAUNCHER" | sed 's#> /mnt/instant_play#> "$2"#'
+} > "$REC/emit.sh"
+chmod +x "$REC/emit.sh"
+made "$REC/emit.sh"
+/bin/sh "$REC/emit.sh" "$REC/opk" "$REC/instant_play" "$REC/fake.opk"
+made "$REC/instant_play"
+
+# THE MOUNT IS THE POINT. MEASURED on the device: `instant_play load` mounts
+# the OPK only when /mnt/last_opk is readable, that file belongs to opkrun,
+# and without it the boot prints `/opk/mlfk-foh.sh: not found` and goes to the
+# frontend. A record that assumes someone else left the squashfs mounted is a
+# record that silently does nothing.
+grep -q "^mount -t squashfs '$REC/fake.opk' " "$REC/instant_play" \
+  || { cat "$REC/instant_play" >&2
+       fail "[3b] the record does not mount its own OPK — it would resume only
+  when /mnt/last_opk happened to survive the power cut"; }
+grep -q "^echo -n '$REC/fake.opk' > $REC/last_opk\$" "$REC/instant_play" \
+  || { cat "$REC/instant_play" >&2
+       fail "[3b] the record does not re-write last_opk, so instant_play load
+  would leave /opk mounted after the resumed session ends"; }
+
+# (1) it parses. This is the defect-6 assertion, stated directly.
+/bin/sh -n "$REC/instant_play" 2>"$REC/parse.err" \
+  || { cat "$REC/parse.err" >&2; od -c "$REC/instant_play" >&2
+       fail "[3b] the relaunch record is not valid shell, so instant_play
+  load would source it, fail silently and boot to the frontend — the app would
+  never come back and its own log would still say 'relaunch armed'"; }
+
+# (2) it runs, and it runs the LAUNCHER. Stand-ins for the two things the
+# record names: the script it relaunches, and the platform's pid verb.
+cat > "$REC/opk/mlfk-foh.sh" <<'EOF'
+#!/bin/sh
+echo "relaunched" > "$MLFK_REC_MARK"
+exit 7
+EOF
+cat > "$REC/bin/pid" <<'EOF'
+#!/bin/sh
+echo "$@" >> "$MLFK_REC_PIDLOG"
+EOF
+chmod +x "$REC/opk/mlfk-foh.sh" "$REC/bin/pid"
+rm -f "$REC/mark" "$REC/pidlog"
+# A FRESH /bin/sh, deliberately: the platform sources this from .profile,
+# which is not running under `set -e`. Sourcing it in THIS shell would inherit
+# the check's -e and abort at `wait $!` on the stand-in's non-zero exit — a
+# harness artefact that would look like a missing `pid erase`.
+PATH="$REC/bin:$PATH" MLFK_REC_MARK="$REC/mark" MLFK_REC_PIDLOG="$REC/pidlog" \
+  /bin/sh -c '. "$1"' sh "$REC/instant_play" >"$REC/src.out" 2>&1 || true
+[ -f "$REC/mark" ] \
+  || { cat "$REC/src.out" >&2
+       fail "[3b] sourcing the record did not start the launcher it names"; }
+grep -q '^record ' "$REC/pidlog" \
+  || fail "[3b] the record never called 'pid record' — the lid's SIGUSR1 is
+  sent to 'pid print', so a resumed session that skips this cannot hibernate a
+  second time"
+grep -qx 'erase' "$REC/pidlog" \
+  || fail "[3b] the record never called 'pid erase'"
+
+# (3) TOOTH: the exact defect, re-emitted with a newline before the &.
+#
+# And it is worth being precise about what that defect DOES, because the
+# obvious guess is wrong and this leg was written on the guess first. Sourcing
+# a file with a syntax error does not abandon the file: the shell runs line 1,
+# THEN reports the error. So the malformed record does start the app — in the
+# FOREGROUND, since its & was orphaned — and then stops, having never reached
+# `pid record`. The player gets a game that cannot hibernate a second time
+# (the lid's signal goes to `pid print`, which now names whatever ran last)
+# with the frontend wedged behind it forever. The tooth asserts THAT, not a
+# missing launch.
+printf "'%s' \n&\npid record \$!\nwait \$!\npid erase\n" "$REC/opk/mlfk-foh.sh" \
+  > "$REC/instant_play.bad"
+if /bin/sh -n "$REC/instant_play.bad" 2>/dev/null; then
+  fail "[3b] TOOTH DEAD: a standalone & line parsed clean, so this leg cannot
+  see the defect it was written for"
+fi
+rm -f "$REC/mark" "$REC/pidlog"
+PATH="$REC/bin:$PATH" MLFK_REC_MARK="$REC/mark" MLFK_REC_PIDLOG="$REC/pidlog" \
+  /bin/sh -c '. "$1"' sh "$REC/instant_play.bad" >/dev/null 2>&1 || true
+[ -f "$REC/mark" ] \
+  || fail "[3b] TOOTH MISREAD: the malformed record did not run its first line
+  at all. The tooth's premise (parse error after line 1) no longer holds on
+  this shell, so rewrite the tooth rather than trusting it"
+[ ! -f "$REC/pidlog" ] \
+  || { cat "$REC/pidlog" >&2
+       fail "[3b] TOOTH DEAD: the malformed record reached 'pid record', so a
+  syntax error in this file is no longer observable here"; }
+echo "   record mounts its OPK, parses, sources, relaunches and records its pid"
+echo "   tooth: the &-on-its-own-line shape fails to parse and never reaches"
+echo "          'pid record', leaving a game that cannot hibernate again"
 
 # --- [4] hibernate: a real SIGUSR1 to a real run -----------------------------
 echo "=== [4] hibernate (real SIGUSR1 -> the foh_persist chokepoint)"
