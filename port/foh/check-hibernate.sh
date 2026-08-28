@@ -840,8 +840,18 @@ echo "   target select resumed on the same page and slot, byte for byte;
 echo "=== [6] teeth"
 
 # T1 — DOMAIN. A structurally perfect file (checksum RECOMPUTED, so the seal
-# passes) whose resume row names FOH_MATCH: a real screen that is not a resume
+# passes) whose resume row names FOH_TMATCH: a real screen that is not a resume
 # target. It must be refused, and refused with a REASON, never half-applied.
+#
+# IT USED TO NAME FOH_MATCH (13), and it was retargeted by ticket #29, which is
+# the case CONTEXT.md's "Frozen" entry describes: the behaviour legitimately
+# changed and the number stays on the page. FOH_MATCH is now a resume target —
+# foh_persist_resume_plan maps it to itself and port/foh/foh_match_snap.c is
+# the state it comes back to — so asserting its refusal would have asserted the
+# opposite of the shipped feature. FOH_TMATCH (15) is the same shape of screen
+# for this tooth's purpose: real, reachable, and mapped somewhere ELSE
+# (FOH_TSS), so a file naming it is still a domain violation. The MECHANISM
+# under test is untouched and the tooth is exactly as strong.
 T1DIR=$BUILD/t1-persist
 rm -rf "$T1DIR"; mkdir -p "$T1DIR"
 node -e '
@@ -851,21 +861,21 @@ node -e '
   const sumIdx = b.findIndex((l) => l.startsWith("SUM "));
   const rIdx = b.findIndex((l) => l.startsWith("resume "));
   if (sumIdx < 0 || rIdx < 0) throw new Error("no SUM/resume row to perturb");
-  b[rIdx] = "resume 13";  // FOH_MATCH
+  b[rIdx] = "resume 15";  // FOH_TMATCH
   const body = b.slice(0, sumIdx).join("\n") + "\n";
   b[sumIdx] = "SUM " + crypto.createHash("sha256").update(body).digest("hex");
   fs.writeFileSync(dst, b.join("\n"));
 ' "$PDIR/mlfk-persist.dat" "$T1DIR/mlfk-persist.dat"
 made "$T1DIR/mlfk-persist.dat"
-grep -qxF 'resume 13' "$T1DIR/mlfk-persist.dat" || fail "T1 was not applied"
+grep -qxF 'resume 15' "$T1DIR/mlfk-persist.dat" || fail "T1 was not applied"
 run_foh "$IDLE" "$T1DIR" "$BUILD/t1.err" "$BUILD/t1.trace"
 grep -qxF 'foh_persist: reset cause=corrupt detail=domain' "$BUILD/t1.err" \
   || { cat "$BUILD/t1.err" >&2
-       fail "T1 DID NOT BITE: a resume row naming FOH_MATCH was not refused as
+       fail "T1 DID NOT BITE: a resume row naming FOH_TMATCH was not refused as
   a domain violation. A screen the driver would not restore must never load."; }
 ! grep -q 'foh_dev: resumed' "$BUILD/t1.err" \
   || fail "T1 DID NOT BITE: the refused record was applied anyway"
-echo "   T1 (domain: resume 13 = FOH_MATCH) bites"
+echo "   T1 (domain: resume 15 = FOH_TMATCH) bites"
 
 # T2 — ABSENCE. The SAME session as a v6 file: no resume row at all. Must boot
 # cold and loudly, and — the half that actually matters — must keep the

@@ -172,6 +172,7 @@
 #include "foh_pause.h"   // A11/A12: the in-match pause overlay (live only)
 #include "foh_persist.h"
 #include "foh_tbuild.h" // A26/D53: the builder document across a hibernate
+#include "foh_match_snap.h" // #29: the MATCH across a hibernate
 #include "../sim/target/custom_stage.h" // A45 T3: custom target slots
 #include "foh_launch.h"  // A44: the ONE FohState -> 4-port match config
 
@@ -1401,6 +1402,15 @@ static void tdev_persist_load(void) {
 // (foh_pause.c's pause and system menus run their own loops), nothing
 // notices until it returns — which is after the power is gone. That degrades
 // to the pre-A26 behaviour; it can never land the player on a wrong screen.
+// TICKET #29 — the match-resume seam's NULL definition. It lives in this
+// file, not in foh.c where foh_tbuild_ops' twin lives, because the interface
+// needs GameState and foh.c deliberately does not see the sim (foh_launch.h
+// makes the same argument about the same header). foh_match_snap.c's
+// constructor installs the real ops; a build without that TU links, and every
+// arm below takes its "no match snapshot in this build" branch, which is the
+// pre-#29 behaviour verbatim.
+const FohMatchSnapOps *foh_match_snap_ops = 0;
+
 static volatile sig_atomic_t g_hibernate;
 static void tdev_hibernate_signal(int sig) {
   (void)sig;
@@ -1443,6 +1453,35 @@ static void tdev_hibernate_check(FohScreen sc, const FohState *f) {
                       "the menu top instead\n",
               tbWhy ? tbWhy : "no builder in this build");
       g_persist.resumeScreen = (int)FOH_MENU_TOP;
+    }
+  }
+  // TICKET #29 — THE MATCH, and the SAME shape for the same reason. The
+  // builder's arm above is the precedent this follows line for line: publish
+  // the state FIRST, and downgrade the resume when the publish fails, because
+  // an armed resume with nothing behind it is the exact lie the old
+  // FOH_MATCH -> FOH_CSS redirect existed to prevent.
+  //
+  // ORDERING, MEASURED, NOT ASSUMED (issue #29): the grace window is ~100 ms
+  // and already carries the ~22 ms settings save below; a 160 KB snapshot
+  // with an fsync costs ~33 ms on this device, so the pair fits. It is
+  // ordered first ANYWAY — if the window is ever missed, what is lost is the
+  // snapshot, and the settings the player actually changed still reach the
+  // card. Overrunning stays safe for the same reason it already was: both
+  // writes publish by rename(), so a kill mid-write leaves a stale .tmp and
+  // the previous file untouched.
+  //
+  // THE DOWNGRADE IS TO FOH_CSS, not to the menu top: that is where a match
+  // exit lands (foh_persist_resume_plan's own comment), so a match whose
+  // state did not reach the card leaves the player exactly where the port put
+  // him before this ticket.
+  if (sc == FOH_MATCH) {
+    const char *msWhy = 0;
+    if (!foh_match_snap_ops || !foh_match_snap_ops->arm ||
+        !foh_match_snap_ops->arm(&G, f->stageSel, &msWhy)) {
+      fprintf(stderr, "foh_dev: match state NOT kept (%s) — resuming to the "
+                      "character select instead\n",
+              msWhy ? msWhy : "no match snapshot in this build");
+      g_persist.resumeScreen = (int)FOH_CSS;
     }
   }
   // the player's settings go with it — a hibernate is an exit like any other
@@ -2190,10 +2229,62 @@ int main(int argc, char **argv) {
   // save later in the session (an options B-exit, a CSS exit) republishes it
   // as "nothing armed" rather than silently re-arming a screen the player
   // has since left.
+  // TICKET #29 — the MATCH resume's three carried values. Declared here, ABOVE
+  // the `foh_phase:` re-entry label, for the same reason the match-summary
+  // counters are: a backward goto re-executes declarations it jumps over, and
+  // a second match in the same process must not inherit the first one's
+  // resume. They are cleared where the resume is CONSUMED (the restore site),
+  // not by placement.
+  bool matchResume = false;
+  long matchResumeFrom = 0;
   if (!direct && g_persist.resumeScreen != (int)FOH_STARTUP) {
     foh.screen = (FohScreen)g_persist.resumeScreen;
     g_persist.resumeScreen = (int)FOH_STARTUP;
     fprintf(stderr, "foh_dev: resumed screen=%s\n", foh_screen_token(foh.screen));
+    // ...and THE MATCH with it (ticket #29). Only the ~150-byte header is read
+    // here: the launch needs the STAGE before gfx_init and sim_setup_match can
+    // run, and both of those run long before the sim state can be put back, so
+    // the stage cannot come out of the snapshot it precedes. The 160 KB
+    // snapshot itself is not opened until the match is set up.
+    //
+    // A REFUSAL LANDS ON THE CHARACTER SELECT, which is exactly where the
+    // pre-#29 redirect put the player, and it SAYS WHY. The card is the one
+    // thing that can have changed while the machine was off, so "the header is
+    // gone", "it is from another build" and "it is corrupt" are all outcomes
+    // this has to be able to describe rather than crash on.
+    if (foh.screen == FOH_MATCH) {
+      int msStage = 0;
+      long msFrame = 0;
+      const char *msWhy = 0;
+      if (foh_match_snap_ops && foh_match_snap_ops->peek &&
+          foh_match_snap_ops->peek(&msStage, &msFrame, &msWhy)) {
+        matchResume = true;
+        matchResumeFrom = msFrame;
+        // The launch plane. Characters, port types and CPU levels came off the
+        // card with the settings record (ticket #25) and foh_persist_apply has
+        // already put them on this FohState; the STAGE is the one launch field
+        // the record does not carry, and it comes from the header. Everything
+        // here is overwritten in the sim by the restore below — this is what
+        // the RENDERER and the launch path need, not what the match plays.
+        foh.stageSel = msStage;
+        foh.sssCursor = msStage;
+        foh.targetMode = false;
+        foh.launched = true;
+        fprintf(stderr, "foh_dev: match resume armed stage=%d frame=%ld\n",
+                msStage, msFrame);
+      } else {
+        fprintf(stderr,
+                "foh_dev: match NOT resumed (%s) — character select instead\n",
+                msWhy ? msWhy : "no match snapshot in this build");
+        foh.screen = FOH_CSS;
+        // Nothing half-armed survives this boot: whatever is left of the pair
+        // is removed, so the next boot is honestly empty rather than trying
+        // the same refusal again.
+        if (foh_match_snap_ops && foh_match_snap_ops->disarm) {
+          foh_match_snap_ops->disarm();
+        }
+      }
+    }
     // ...and the builder's document with it. enter() FIRST so the view
     // state is initialised the way an ordinary entry leaves it, then the
     // saved document replaces the template. A resume that finds no document
@@ -2328,8 +2419,12 @@ int main(int argc, char **argv) {
   // one path that is supposed to end cleanly is the one the compiler is free
   // to miscompile. Capping one short means the final increment lands exactly
   // on LONG_MAX, the test fails, and the loop exits defined.
+  // `matchResume` joins `direct` here for the same reason direct is here: a
+  // resumed match has no FOH phase to serve. The player closed the lid inside
+  // a match and opens it inside that match — walking him through the menus
+  // first would be a different feature.
   const long fohLimit =
-      direct ? 0
+      (direct || matchResume) ? 0
              : (inPoll ? ((brLive && !fohMaxGiven) ? LONG_MAX - 1 : fohMax)
                        : g_flow_frames);
   // MATCH-SUMMARY STATE — declared ABOVE the re-entry label on purpose.
@@ -3387,7 +3482,7 @@ foh_phase:;
       // level-based (SDL_GetKeyState) so no key state is lost; the only
       // edge it consumes is SDL_QUIT, which the FunKey has no window
       // manager to send (review-109-10 L4, dispositioned).
-      if (direct) { // the FOH phase warms these on a flow launch
+      if (direct || matchResume) { // the FOH phase warms these on a flow launch
         PlatformInput warm;
         platform_poll(&warm);
         if (platform_present(g_gfx.rz.fb) != 0) matchPresentFails++;
@@ -3420,6 +3515,39 @@ foh_phase:;
     // finish hook NULL there the expiry would still be the loud trap.
     if (brLive && matchTimerSec > 0.0) G.matchTimer = matchTimerSec;
     G.rngStateAtFrame1 = G.rng.a;
+
+    // TICKET #29 — THE RESTORE. Here, and not one line earlier, because
+    // ss_load's precondition is a match that is already SET UP: boot has run,
+    // sim_setup_match_ports has run, the options plane has been applied and
+    // the AI-bridge RECON row (if any) has been reloaded. What the restore
+    // then does is put the played match back OVER that fresh one — every
+    // persisted row, every module-state row, the RNG counters included — so
+    // the next tick continues instead of starting.
+    //
+    // It is CONSUMED here: `matchResume` is cleared whichever way this goes,
+    // so the A19 in-process return (a second match in the same session) can
+    // never inherit it.
+    if (matchResume) {
+      const char *msWhy = 0;
+      const long want = matchResumeFrom;
+      matchResume = false;
+      if (!foh_match_snap_ops || !foh_match_snap_ops->restore ||
+          !foh_match_snap_ops->restore(&G, foh.stageSel, want, &msWhy)) {
+        // The header promised a match the snapshot cannot deliver. The set-up
+        // match sitting in G is a legal, freshly started one, so the honest
+        // thing is to say so and play it from frame 0 rather than to die
+        // holding the player's evening hostage to a bad file.
+        fprintf(stderr,
+                "foh_dev: match state NOT restored (%s) — starting a fresh "
+                "match instead\n",
+                msWhy ? msWhy : "no match snapshot in this build");
+        matchResumeFrom = 0;
+      } else {
+        fprintf(stderr, "foh_dev: match restored frame=%ld\n", G.frame);
+      }
+    } else {
+      matchResumeFrom = 0;
+    }
 
     // BRIDGE-STATE witness (read back FROM GameState; foh_app.c verbatim)
     {
@@ -3468,6 +3596,13 @@ foh_phase:;
       if (brVerify) {
         tim = malloc((size_t)frames * sizeof *tim);
         if (!tim) sim_fatal("oom (timing buffer)");
+        // ZEROED since ticket #29. A run that RESUMED starts its loop part
+        // way in, so the rows for the frames it did not tick are never
+        // written; without this the --timing artifact would carry whatever
+        // malloc handed back. Zero is honest ("this process did not run that
+        // frame") and, for every non-resumed run, this memset is dead weight
+        // over bytes that are all written anyway.
+        memset(tim, 0, (size_t)frames * sizeof *tim);
       }
       // --attrib buffer (M4 task 14 increment 3a): frames+1 rows, one
       // per frame START plus one tail row. RAM-only until the post-run
@@ -3522,13 +3657,38 @@ foh_phase:;
       // whole rest of the match "late" and the catch-up arm would skip
       // every render (matchSkips == frames, a black screen).
       uint64_t tStart = now_ns();
-      for (long f = 0; f < matchMax; f++) {
+      // TICKET #29 — THE DETERMINISTIC LID, for checks and nothing else.
+      // MLFK_HIBERNATE_AT=<K> raises the REAL SIGUSR1 at the top of the
+      // iteration that follows K played frames, so the flag is set by the real
+      // handler and consumed by the real tdev_hibernate_check arm: the only
+      // thing this replaces is the SENDER. It exists because a continuation
+      // proof has to splice at a KNOWN frame, and an external `kill -USR1`
+      // races the wall clock. The external route keeps its own proof —
+      // check-hibernate.sh leg [4] signals a real running process and this
+      // env var is not set anywhere in it, and port/foh/check-match-resume.sh
+      // drives BOTH. Unset (every product launch, every other rig) the two
+      // lines below are one strtol at match start and one comparison a frame.
+      long hibAt = 0;
+      {
+        const char *hv = getenv("MLFK_HIBERNATE_AT");
+        if (hv && *hv) hibAt = strtol(hv, 0, 10);
+      }
+      // TICKET #29 — WHERE A RESUMED MATCH STARTS. `matchResumeFrom` is the
+      // frame the snapshot was taken AFTER (G.frame is 1-based and this index
+      // is 0-based, so frame K restored means the next index is K), and it is
+      // 0 for every other run — so this loop is bit-for-bit the loop it was
+      // unless a lid actually closed. The trace-fed arm indexes g_trace by
+      // `f`, so starting at K keeps the input aligned with the frame numbers
+      // the checksum stream carries: this is what makes a spliced stream
+      // meaningful rather than merely contiguous.
+      for (long f = matchResumeFrom; f < matchMax; f++) {
         // FIRST statement of the body, i.e. OUTSIDE the t0..t3 brackets
         // below: the instrument can consume pacing slack but can never
         // inflate a number judge-render-timing.js computes.
         if (attrib) attrib_sample(&attrib[f]);
         poll_bound(&pin);
         // A26/D53. FOH_MATCH literally — see the target loop's note.
+        if (hibAt > 0 && f == hibAt) raise(SIGUSR1); // #29: the checks' lid
         tdev_hibernate_check(FOH_MATCH, &foh); // exits iff the lid closed
         // A11/A12: START opens the modal pause overlay. MENU does NOT — since
         // A12b it opens the FunKey SYSTEM menu, dispatched by the arm just
