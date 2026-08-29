@@ -3158,6 +3158,13 @@ foh_phase:;
           fprintf(stderr,
                   "foh_dev: target run restored frame=%ld destroyed=%d/%d\n",
                   (long)G.frame, (int)TP.targetsDestroyed, TP.targetCount);
+          // ...AND THE FRESH RUN'S VFX GO WITH IT — the VS arm's note
+          // verbatim, for the identical reason: the set-up ss_load requires
+          // spawns dVfx/start.js, that banner lives in the RENDERER, and a
+          // sim restore does not reach it. A target run resumed mid-way would
+          // otherwise count down from READY over its own broken targets.
+          fprintf(stderr, "%s: vfx of the discarded match dropped=%d\n",
+                  "foh_dev", gfx_vfx_drop_all());
         }
       } else {
         tmatchResumeFrom = 0;
@@ -3852,6 +3859,16 @@ foh_phase:;
         matchResumeFrom = 0;
       } else {
         fprintf(stderr, "foh_dev: match restored frame=%ld\n", G.frame);
+        // ...AND THE FRESH MATCH'S VFX GO WITH IT. The set-up that ss_load
+        // requires is not silent: it spawns dVfx/start.js, the Ready--Go!
+        // banner, which lives in the RENDERER and so is untouched by a sim
+        // restore. Without this the player resumes a match 6562 frames old
+        // and watches it count down from READY. Reported by the owner,
+        // 2026-08-28. Zero dropped would mean the set-up stopped spawning and
+        // this line had become dead, so the count is stated rather than
+        // assumed.
+        fprintf(stderr, "%s: vfx of the discarded match dropped=%d\n",
+                "foh_dev", gfx_vfx_drop_all());
       }
     } else {
       matchResumeFrom = 0;

@@ -505,6 +505,23 @@ for id in t01 t02 t03; do
          fail "[2] $id: the run did not come back at frame $AT with $armed.
   BROKEN TARGETS STAY BROKEN is the acceptance criterion, and this line is
   where the two sides of the lid state the same number."; }
+  # NOR DOES IT REPLAY READY--GO! The set-up ss_load requires spawns
+  # dVfx/start.js, whose instance lives in the RENDERER and so survives a sim
+  # restore. Without the drop the player resumes a run already in progress and
+  # watches it count down over their own broken targets. The count is read and
+  # required non-zero, so a seam that silently stops dropping fails here rather
+  # than passing by doing nothing. (check-match-resume.sh leg [7] is the twin.)
+  tv_line="$(grep -m1 '^foh_dev: vfx of the discarded match dropped=' \
+    "$BUILD/$id-c.err.txt")" \
+    || { relay_lines < "$BUILD/$id-c.err.txt" >&2
+         fail "[2] $id: the resumed run never dropped the set-up's vfx, so the
+  Ready--Go! banner counts down over a run already in progress"; }
+  tv_n="${tv_line##*=}"
+  case "$tv_n" in ''|*[!0-9]*) fail "[2] $id: unparsable '$tv_line'";; esac
+  [ "$tv_n" -ge 1 ] \
+    || fail "[2] $id: dropped $tv_n vfx. The set-up spawns the Ready--Go!
+  banner, so zero means the set-up stopped spawning and this seam now guards
+  nothing — find out what changed rather than lowering the bound."
   # CONSUMED: a resumed run must not be resumable a second time.
   [ ! -e "$PB/mlfk-tmatch.hdr" ] && [ ! -e "$PB/mlfk-tmatch.sim" ] \
     || fail "[2] $id: the pair survived the resume. The player is playing that

@@ -777,6 +777,50 @@ n="$(grep -c 'tStart + (uint64_t)(f + 1) \* budgetNs' "$FOH/foh_dev.c")" || true
   it has already played"
 echo "   both paced loops count their deadline from the resume point, not frame 0"
 
+# --- [7] a resumed match does not replay READY--GO! ---------------------------
+#
+# The set-up that ss_load requires is not silent: it spawns dVfx/start.js, the
+# Ready--Go! banner. That instance lives in the RENDERER, so writing the played
+# sim state over the fresh match does not touch it, and the player resumes a
+# match thousands of frames old and watches it count down from READY. Reported
+# by the owner, 2026-08-28, on the first build where the resume otherwise
+# worked end to end.
+#
+# The assertion is in TWO halves on purpose. That the drop HAPPENED is worth
+# little on its own — a seam that drops nothing also "passes". So the count is
+# read, and required to be non-zero on a resumed boot: that is the statement
+# that the set-up really does spawn something, and it is what turns this leg
+# into a tripwire if the set-up ever stops.
+echo "=== [7] a resumed match does not replay the Ready--Go! banner"
+P7=$BUILD/p7-persist
+rm -rf "$P7"; mkdir -p "$P7"
+play "$BUILD/foh_dev_headless" "$P7" p7-a "MLFK_HIBERNATE_AT=$AT" \
+  || fail "[7] could not arm a card for the banner leg"
+resume "$BUILD/foh_dev_headless" "$P7" p7-b \
+  || { relay_lines < "$BUILD/p7-b.err.txt" >&2
+       fail "[7] the resumed boot exited nonzero"; }
+grep -qxF "foh_dev: match restored frame=$AT" "$BUILD/p7-b.err.txt" \
+  || fail "[7] the boot did not restore, so its vfx line says nothing"
+p7_line="$(grep -m1 '^foh_dev: vfx of the discarded match dropped=' \
+  "$BUILD/p7-b.err.txt")" \
+  || { relay_lines < "$BUILD/p7-b.err.txt" >&2
+       fail "[7] a resumed match never dropped the set-up's vfx. dVfx/start.js
+  is spawned by the set-up ss_load requires and lives in the RENDERER, so it
+  survives the sim restore and counts down from READY over a match already in
+  progress."; }
+p7_n="${p7_line##*=}"
+case "$p7_n" in ''|*[!0-9]*) fail "[7] unparsable vfx drop count '$p7_line'";; esac
+[ "$p7_n" -ge 1 ] \
+  || fail "[7] the resumed match dropped $p7_n vfx. The set-up spawns the
+  Ready--Go! banner, so a zero here means the set-up stopped spawning and this
+  seam is now dead code guarding nothing — find out what changed rather than
+  lowering this bound."
+# A FRESH match must NOT be touched: its banner is the one upstream draws.
+grep -q '^foh_dev: vfx of the discarded match dropped=' "$BUILD/p7-a.err.txt" \
+  && fail "[7] a FRESH match dropped its vfx. The Ready--Go! banner is
+  upstream's own (dVfx/start.js) and a match that nobody resumed must show it."
+echo "   resumed: $p7_n set-up vfx dropped; fresh: banner left alone"
+
 # --- no-commit guard ----------------------------------------------------------
 git_dirty_after="$(tree_fingerprint)" \
   || fail "could not fingerprint the working tree after the run"

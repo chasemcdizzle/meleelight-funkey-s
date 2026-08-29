@@ -605,6 +605,32 @@ static void vspawn(const VSpawn *c) {
   }
 }
 
+// TICKETS #29/#30 — DROP THE VFX OF A MATCH THAT IS BEING DISCARDED.
+//
+// A resumed match is set up FRESH first (boot, sim_setup_match_ports, the
+// options plane) and only then has the played state written over it, because
+// that is ss_load's precondition. The setup is not silent: it spawns vfx, and
+// among them dVfx/start.js — the Ready--Go! banner. Overwriting the sim state
+// does not reach into the RENDERER, so the banner instance survives into a
+// match that is already 6562 frames old and counts down over it.
+//
+// MEASURED, reported by the owner: "it works now, but it says READY GO — I
+// don't want that because it's a match already in progress."
+//
+// Everything in the queue at that moment belongs to the discarded match, so
+// this drops the queue rather than hunting for one instance by name: an
+// instance the setup spawned is wrong on a resumed match whatever it is, and
+// naming "start" here would leave the next one to be found by a player.
+//
+// The count is returned so the caller can SAY what it dropped — a resumed
+// match that drops zero means the setup stopped spawning and this seam has
+// quietly become dead code.
+int gfx_vfx_drop_all(void) {
+  const int n = g_qn;
+  g_qn = 0;
+  return n;
+}
+
 void gfx_vfx_spawn(const MlVfx *cfg) {
   VSpawn c;
   memset(&c, 0, sizeof c);
