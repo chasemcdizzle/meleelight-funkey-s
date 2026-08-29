@@ -22865,3 +22865,76 @@ was verified and the thing that ships were not the same thing.
 Every one of them passed every check that existed. A check is evidence about
 what it ran, and what it ran is a choice worth re-reading whenever a feature
 reaches hardware and misbehaves anyway.
+
+## driver — 2026-08-28 (fourth pass) — the same freeze, a second time, because the first fix was measured only where it could not fail
+
+The pacing fix shipped and the owner reported the identical symptom. They also
+added the detail that solved it: they were seeing the SPAWN PLATFORMS. That is
+a frame-0 image, so the screen was holding a freshly set-up match while the
+loop slept — the diagnosis was right and the fix was not.
+
+### What the first fix did, and why it did nothing on the device
+
+It back-dated `tStart` by K frames and CLAMPED the subtraction at zero:
+
+```c
+const uint64_t behind = (uint64_t)matchResumeFrom * budgetNs;
+tStart = (tStart > behind) ? tStart - behind : 0;
+```
+
+`now_ns()` is CLOCK_MONOTONIC — seconds since BOOT. A resume happens ~40 s into
+a boot, and the owner's match was 6562 frames = 109 s. **The match was older
+than the clock it was being measured against**, so the clamp fired, `tStart`
+became 0, and the absolute deadline came straight back. MEASURED: device uptime
+168 s when read, resume at frame 6562 = 109.4 s of play.
+
+A host whose uptime is measured in days can never reproduce that, which is why
+the new leg [6] went green while the device did not move. The check was sound
+and the environment it ran in could not contain the defect.
+
+### The actual fix
+
+The epoch is not adjusted at all. The deadline counts frames SINCE THE RESUME —
+`tStart + (f - paceBase + 1) * budgetNs` — which is what pacing has always
+meant, and it has no opinion about where the clock zero is. Both loops.
+
+### Measured ON HARDWARE this time, under the owner condition
+
+Rebooted the device so uptime was small, armed a snapshot at frame 1800 (30 s of
+match) into a directory on /mnt so it survived a second reboot, rebooted again,
+and resumed PACED at the real 16.666667 ms budget with **uptime 33 s against a
+30 s match** — the clock-origin case exactly.
+
+```
+match restored frame=1800
+WALL=1s
+foh_dev match: 1840 frames, 0 render skips, 0 failed presents, wall 666 ms, pace=1
+```
+
+The defect costs >= 30 s before the first frame. This run cost 1.
+
+### Leg [6] gained the half a host clock cannot exercise
+
+A wall-clock assertion on a host can never see the clock-origin variant, so the
+SHAPE is pinned too: both deadlines must read `(f - paceBase + 1)`, and any
+surviving `(f + 1)` deadline fails the leg by name. That is the only statement
+available about a defect whose reproduction needs a machine that booted a
+minute ago.
+
+### Rig finding, recorded so the next person does not lose an hour to it
+
+A run that ends through the hibernate `_exit(0)` leaves the console VT owned, so
+the NEXT SDL app on the device blocks forever in SDL_Init at
+`__vt_event_wait`. Harmless in real use — the device powers off immediately
+after a hibernate — but it means ONE hibernate per boot when driving the device
+by hand. The tell is an app with no `platform_sdl1: SetVideoMode ok` line at
+all. Reboot between arm and resume.
+
+### ZOOM-OUT, and it is the same one as this morning, sharpened
+
+A check is evidence about the environment it ran in. Today that boundary moved
+three times — the check's build vs the product's, the host word size vs the
+target's, the unpaced clock vs the player's — and a fourth time WITHIN a fix,
+where a host's uptime vs a device's decided whether the fix worked at all. When
+a defect reaches hardware and a green check disagrees, the question is not
+whether the check is correct. It is what the check could not have seen.

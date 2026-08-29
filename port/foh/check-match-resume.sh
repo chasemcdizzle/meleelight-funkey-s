@@ -748,6 +748,35 @@ p6_bound=$(( p6_defect_s / 2 ))
 echo "   resumed + played $P6_TAIL frames in ${p6_wall}s (the un-back-dated
    epoch would have cost ${p6_defect_s}s before the first frame)"
 
+# ...AND THE HALF A HOST CLOCK CANNOT EXERCISE.
+#
+# The first fix for this back-dated the epoch by K frames and CLAMPED the
+# subtraction at zero. The leg above went green and the device did not move,
+# because now_ns() is CLOCK_MONOTONIC — seconds since BOOT — and a resume
+# happens ~40 s into a boot. A 109 s match is older than the clock it is being
+# measured against, so the clamp fired and the absolute deadline came straight
+# back. A host with days of uptime can never reproduce that, and no wall-clock
+# assertion here can either.
+#
+# So the shape is pinned as well: the deadline must count frames SINCE THE
+# RESUME. A deadline written against the absolute `f` is the defect whatever
+# the epoch was set to, and this is the only place that can say so.
+for pat in '            tStart + (uint64_t)(f - paceBase + 1) * budgetNs;' \
+           '              tStart + (uint64_t)(f - paceBase + 1) * budgetNs;'; do
+  n="$(grep -cxF "$pat" "$FOH/foh_dev.c")" || true
+  [ "$n" = 1 ] || fail "[6] foh_dev.c has $n copies of
+  '$pat' (want exactly 1). The pace deadline must be relative to the resume
+  point. Writing it against the absolute frame index re-introduces a freeze
+  the length of the match already played, and NO wall-clock assertion on a
+  host can see the clock-origin half of that defect."
+done
+n="$(grep -c 'tStart + (uint64_t)(f + 1) \* budgetNs' "$FOH/foh_dev.c")" || true
+[ "$n" = 0 ] \
+  || fail "[6] foh_dev.c still computes a pace deadline from the ABSOLUTE
+  frame index in $n place(s) — a resumed run there sleeps through every frame
+  it has already played"
+echo "   both paced loops count their deadline from the resume point, not frame 0"
+
 # --- no-commit guard ----------------------------------------------------------
 git_dirty_after="$(tree_fingerprint)" \
   || fail "could not fingerprint the working tree after the run"

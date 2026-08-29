@@ -3296,31 +3296,30 @@ foh_phase:;
         // indexes g_trace by `f`, so starting at K keeps the input aligned
         // with the frame numbers BOTH streams carry, which is what makes a
         // spliced stream meaningful rather than merely contiguous.
-        // TICKETS #29/#30 — THE PACE EPOCH OWES A RESUMED RUN ITS PAST.
+        // TICKETS #29/#30 — THE PACE EPOCH BELONGS TO THIS RUN, NOT TO FRAME 0.
         //
-        // `f` is an ABSOLUTE frame index (that is what makes a spliced
-        // checksum stream meaningful) and the deadline below is
-        // `tStart + (f + 1) * budgetNs`. A resumed run enters this loop with
-        // `f` already at K, so an epoch of "now" puts the very first deadline
-        // K FRAMES IN THE FUTURE and the loop sleeps through all of it.
+        // `f` is an ABSOLUTE frame index (that is what makes a spliced checksum
+        // stream meaningful), so the deadline below CANNOT be `(f + 1) * budgetNs`
+        // past the epoch: a run resumed at frame K would owe K frames of pacing it
+        // has already lived through, and would sleep through every one of them.
         //
-        // MEASURED on the owner device, 2026-08-28 (the VS arm below; this
-        // loop has the identical shape and the identical defect): a match
-        // resumed at frame
-        // 4549 sat on a frozen READY screen for 76 seconds — music playing,
-        // timer stopped, 1.7% CPU asleep in hrtimer_nanosleep — and then ran
-        // perfectly. The state restore was right; the clock was not.
+        // MEASURED on the owner device, 2026-08-28: a match resumed at frame 4549
+        // held a frame-0 image — READY, spawn platforms — for 76 s with the music
+        // playing, 1.7 %% CPU asleep in hrtimer_nanosleep, and then ran perfectly.
+        // The state restore was right; the clock was not.
         //
-        // So the epoch is back-dated by the frames already behind us, which
-        // is the same correction `tStart += pausedNs` makes for the pause
-        // overlay, in the other direction. Clamped, because now_ns() is
-        // monotonic-since-boot and a long match resumed seconds after a cold
-        // boot could otherwise underflow an unsigned epoch into the far
-        // future — the very freeze this removes.
-        {
-          const uint64_t behind = (uint64_t)tmatchResumeFrom * budgetNs;
-          tStart = (tStart > behind) ? tStart - behind : 0;
-        }
+        // The FIRST attempt at this back-dated `tStart` by K frames and clamped the
+        // subtraction at zero. It fixed the host and did NOTHING on the device, for
+        // a reason worth keeping: now_ns() is CLOCK_MONOTONIC, i.e. seconds since
+        // BOOT, and a resume happens ~40 s into a boot. A 109 s match is older than
+        // the clock it is being measured against, the clamp fired, and the absolute
+        // deadline came straight back. A host whose uptime is measured in days
+        // never sees it.
+        //
+        // So the epoch is not adjusted at all. The deadline counts frames SINCE THE
+        // RESUME, which is what pacing has always meant, and it no longer has any
+        // opinion about where the clock's zero is.
+        const long paceBase = tmatchResumeFrom;
         for (long f = tmatchResumeFrom; f < loopMax; f++) {
           poll_bound(&pin); // live: THE input; tverify: backend pump
           // A26/D53. FOH_TMATCH literally, not foh.screen: --direct-match
@@ -3354,7 +3353,8 @@ foh_phase:;
             poll_bound(&pin);
           }
           prevPause = pin;
-          const uint64_t deadline = tStart + (uint64_t)(f + 1) * budgetNs;
+          const uint64_t deadline =
+              tStart + (uint64_t)(f - paceBase + 1) * budgetNs;
           const MlInput *row0;
           if (tgtLive) {
             // C30(a): the PLAYER'S chosen control style, not the pinned BOX
@@ -3989,29 +3989,30 @@ foh_phase:;
       // `f`, so starting at K keeps the input aligned with the frame numbers
       // the checksum stream carries: this is what makes a spliced stream
       // meaningful rather than merely contiguous.
-      // TICKETS #29/#30 — THE PACE EPOCH OWES A RESUMED RUN ITS PAST.
+      // TICKETS #29/#30 — THE PACE EPOCH BELONGS TO THIS RUN, NOT TO FRAME 0.
       //
-      // `f` is an ABSOLUTE frame index (that is what makes a spliced
-      // checksum stream meaningful) and the deadline below is
-      // `tStart + (f + 1) * budgetNs`. A resumed run enters this loop with
-      // `f` already at K, so an epoch of "now" puts the very first deadline
-      // K FRAMES IN THE FUTURE and the loop sleeps through all of it.
+      // `f` is an ABSOLUTE frame index (that is what makes a spliced checksum
+      // stream meaningful), so the deadline below CANNOT be `(f + 1) * budgetNs`
+      // past the epoch: a run resumed at frame K would owe K frames of pacing it
+      // has already lived through, and would sleep through every one of them.
       //
-      // MEASURED on the owner device, 2026-08-28: a match resumed at frame
-      // 4549 sat on a frozen READY screen for 76 seconds — music playing,
-      // timer stopped, 1.7% CPU asleep in hrtimer_nanosleep — and then ran
-      // perfectly. The state restore was right; the clock was not.
+      // MEASURED on the owner device, 2026-08-28: a match resumed at frame 4549
+      // held a frame-0 image — READY, spawn platforms — for 76 s with the music
+      // playing, 1.7 %% CPU asleep in hrtimer_nanosleep, and then ran perfectly.
+      // The state restore was right; the clock was not.
       //
-      // So the epoch is back-dated by the frames already behind us, which
-      // is the same correction `tStart += pausedNs` makes for the pause
-      // overlay, in the other direction. Clamped, because now_ns() is
-      // monotonic-since-boot and a long match resumed seconds after a cold
-      // boot could otherwise underflow an unsigned epoch into the far
-      // future — the very freeze this removes.
-      {
-        const uint64_t behind = (uint64_t)matchResumeFrom * budgetNs;
-        tStart = (tStart > behind) ? tStart - behind : 0;
-      }
+      // The FIRST attempt at this back-dated `tStart` by K frames and clamped the
+      // subtraction at zero. It fixed the host and did NOTHING on the device, for
+      // a reason worth keeping: now_ns() is CLOCK_MONOTONIC, i.e. seconds since
+      // BOOT, and a resume happens ~40 s into a boot. A 109 s match is older than
+      // the clock it is being measured against, the clamp fired, and the absolute
+      // deadline came straight back. A host whose uptime is measured in days
+      // never sees it.
+      //
+      // So the epoch is not adjusted at all. The deadline counts frames SINCE THE
+      // RESUME, which is what pacing has always meant, and it no longer has any
+      // opinion about where the clock's zero is.
+      const long paceBase = matchResumeFrom;
       for (long f = matchResumeFrom; f < matchMax; f++) {
         // FIRST statement of the body, i.e. OUTSIDE the t0..t3 brackets
         // below: the instrument can consume pacing slack but can never
@@ -4062,7 +4063,8 @@ foh_phase:;
           poll_bound(&pin); // post-overlay state, not the stale edge
         }
         prevPause = pin;
-        const uint64_t deadline = tStart + (uint64_t)(f + 1) * budgetNs;
+        const uint64_t deadline =
+            tStart + (uint64_t)(f - paceBase + 1) * budgetNs;
         const MlInput *rows[4];
         if (brLive) {
           // START is the PORT-LOCAL pause button (foh_pause.h), so it never
