@@ -3,7 +3,11 @@
 **Branch `spec/20-crashes-and-resume`, PR #31 (draft) against `agent/auto`.**
 Spec **#20**; ten tickets **#21-#30**. **ALL TEN DONE.**
 
-**#23 is device-verified end to end as of 2026-08-28**, over nine generations
+**THE RESUME IS DEVICE-VERIFIED END TO END as of 2026-08-28**, after four
+defects that every green check had missed. Read `§what-a-check-cannot-see`
+before adding a check to this feature.
+
+**#23's relaunch is device-verified**, over nine generations
 driven entirely from the host: `opkrun` (as the frontend launches),
 `kill -USR1 $(pid print)` (as the lid does), `instant_play load` (as the next
 boot does). Eight of nine clean, one unresolved anomaly recorded in
@@ -89,6 +93,30 @@ AGENT-LOG rather than explained away. See §resume-defects below.
   glyph. Unreachable today; nothing had ever looked at that arm.
 - **#23 worked exactly once**: the resume record pointed at the binary, so the
   resumed session bypassed the launcher that arms the next resume.
+
+## §what-a-check-cannot-see — the four defects of 2026-08-28, and their one shape
+
+Every one of these passed every check that existed, and reached the owner's
+hands anyway. The shape is the same each time: **the thing verified and the
+thing that ships were not the same thing**, and the difference lived in the
+ENVIRONMENT the check ran in rather than in the check's logic.
+
+| # | verified in | shipped in | symptom |
+|---|---|---|---|
+| 1 | `check-device-foh.sh`'s TU list | riglib's OPK recipe, missing 3 TUs | the whole match/target resume was ABSENT; lid -> character select |
+| 2 | a 64-bit host | a 32-bit target | `frame > 999999999999L` provably vacuous; the arm build refused |
+| 3 | `--pace 0` (correct: a checksum stream must not depend on a clock) | the player's paced clock | resumed match froze for as long as it had been played |
+| 4 | a host with days of uptime | a device 40 s past boot | the pacing FIX's `tStart` clamp fired; the freeze came straight back |
+
+Guards added, in the same order: a mechanical FOH TU-set comparison between the
+two build recipes (`check-device-foh.sh`); the bound compiled on both word
+sizes; `check-match-resume.sh` leg [6], a PACED resume judged on wall clock with
+its bound derived from the defect's cost; and, because no host clock can
+reproduce #4, a SHAPE pin in that same leg requiring both deadlines to read
+`(f - paceBase + 1)`.
+
+**When hardware misbehaves and a green check disagrees, do not ask whether the
+check is correct. Ask what it could not have seen.**
 
 ## §resume-defects — #23 took SEVEN fixes, and the last two were not in our code
 
