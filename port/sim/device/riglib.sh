@@ -1929,6 +1929,7 @@ rig_arm_build() {
         port/foh/foh_tbuild.c \
         port/sim/stage_code.c port/sim/target/custom_stage.c \
         port/foh/foh_match_snap.c port/foh/foh_target_snap.c \
+        port/foh/foh_viewfile.c port/foh/foh_credits_view.c \
         port/sim/sim/sim_snapshot.c \
         port/gfx/ctl_style.c \
         port/gfx/img1.c \

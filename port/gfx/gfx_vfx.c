@@ -1420,6 +1420,12 @@ static void dv_draw(VInst *v) {
       // review-65 r2 M2: finiteness no-op check BEFORE the int cast (a
       // NaN face — the omitted-face sentinel — hit UB first).
       if (!isfinite(v->face)) break;
+      // shineloop.js:11 sets globalCompositeOperation = "screen" before its
+      // hexagons and restores it after. Without that the LARGEST hexagon —
+      // drawn last, rgb(52,0,0) — is an opaque near-black disc over the blue
+      // and green, which is exactly what the owner saw: blue for the 3-frame
+      // `shine` burst, then black for the whole reflector.
+      rast_screen_enable(1);
       const int p = vfx_cfg_int(v->face, "shineloop face");
       const MlPlayer *pl = live_player(p);
       const double tX = (pl->phys.pos.x * S) + OX;
@@ -1439,6 +1445,7 @@ static void dv_draw(VInst *v) {
         draw_hexagon(8.5 * S, tX, tY, 15, vcol(52, 0, 0, 1.0));
       }
       // else: upstream console.log only
+      rast_screen_enable(0); // fg2.restore()
       break;
     }
     case V_TECH: {
