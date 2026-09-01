@@ -326,7 +326,13 @@ void foh_init(FohState *s) {
   s->credY = FOH_CRED_HOME_Y;
   // targetRecords fresh state is -1, NOT 0 (targetplay.js:40) — 0 would
   // read as a valid 0-second record (task 13).
+  // BOTH halves (D59). foh_state_record reads 0.0 as a valid ZERO-SECOND
+  // record, so leaving the custom plane memset-zero here would make a fresh
+  // FohState claim a perfect time on every custom slot. The product masks it
+  // via foh_persist_apply, which is exactly why it went unnoticed — this is
+  // the PUBLIC initialiser and it has to be right on its own.
   for (int c = 0; c < 5; c++) {
+    for (int t = 0; t < 10; t++) s->targetRecordsCustom[c][t] = -1.0;
     for (int t = 0; t < 10; t++) s->targetRecords[c][t] = -1.0;
   }
   // LOOK plane (A1 restyle Phase 0; foh.h). menuColours / menuCurColour
@@ -778,9 +784,14 @@ static int css_level_at(int k, double x) {
 // identity — proven bit for bit by check-hand.sh's differential, not asserted.
 void foh_css_cells(FohHandRect out[FOH_CSS_CHARS]) {
   // Adding a character means moving FOH_CSS_CHARS, and every walker of the
-  // roster — this table and its two hit tests — moves with it because they all
-  // read the constant. The signature is part of that: a caller's
-  // `FohHandRect cells[5]` no longer matches, so the build says so.
+  // roster — this table and its two hit tests — moves with it because they
+  // all read the constant.
+  //
+  // The parameter's `[FOH_CSS_CHARS]` is DOCUMENTATION, not enforcement: C
+  // adjusts an array parameter to a pointer, so a caller passing `cells[5]`
+  // still compiles. Said plainly because the comment here used to claim the
+  // build would catch it, which is the kind of false comment that costs a
+  // later reader an hour.
   for (int c = 0; c < FOH_CSS_CHARS; c++) {
     out[c].x = foh_css_cell_x(c);
     out[c].y = FOH_CSS_CELL_Y;

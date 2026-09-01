@@ -19,8 +19,13 @@
 //     surface).
 //   - targetRecords[5][10] doubles (seconds; -1 = no record) — the
 //     upstream fresh state, targetplay.js:40. WRITE semantics =
-//     main.js:1442-1445 (improve-or-first). Custom slots (>= 10) are
-//     scope-excluded (the addcode refusal); chars 0..4 all persist —
+//     main.js:1442-1445 (improve-or-first). CUSTOM SLOTS (10-19) PERSIST
+//     TOO, in the `crec` rows below — upstream's array is [5][20] and its
+//     cookie loop walks j<20 (targetplay.js:40, :156-158). They used to be
+//     scope-excluded here, from before D52 gave the port a custom half to
+//     launch at all; that stale exclusion is how the record plane came to be
+//     ten wide while the launch domain was twenty, which crashed the app on
+//     a finished custom stage (D59). Chars 0..4 all persist —
 //     a REGISTERED DEVIATION from upstream's getTargetCookies i<3
 //     read-loop quirk (targetplay.js:156: chars 3/4 are cookied but
 //     never re-loaded upstream; ours is a rewritten surface per the
@@ -30,7 +35,7 @@
 //     truth (medal DISPLAY = the registered iter-99 pipeline-extension
 //     deferral).
 //
-// FILE FORMAT `MLFKPERSIST7` (versioned + checksummed; exactly 81 LF
+// FILE FORMAT `MLFKPERSIST7` (versioned + checksummed; exactly 137 LF
 // lines, deterministic bytes — twin checks cmp host vs device). v2
 // added the `ctlstyle` line, v3 the `modonr` line (fix_plan A4), v4
 // the seven options lines below (MENU-SPEC §3/§4 — the completed
@@ -267,7 +272,7 @@
 //   foh_persist: saved
 //   foh_persist: saved-nodirsync   (review-100 M3: dir open failed —
 //                the rename published, its dir entry not proven durable)
-//   foh_persist: record char=<0-4> tstage=<0-9> improved=<01>
+//   foh_persist: record char=<0-4> tstage=<0-19> improved=<01>
 #ifndef FOH_FOH_PERSIST_H
 #define FOH_FOH_PERSIST_H
 
@@ -324,7 +329,7 @@ typedef struct {
   // grammar, resetting the player's settings and records to defaults. The
   // format's OWN extensibility rule is a new key: absent in an old file and
   // defaulted, unknown to an older build and skipped (see the version note
-  // above). So the on-disk plane splits and `foh_record_get`/the update
+  // above). So the on-disk plane splits and `foh_persist_record_get`/the update
   // chokepoint put it back together; upstream's single index is preserved
   // where it is observable, which is in the API rather than on the wire.
   double targetRecordsCustom[FOH_PERSIST_CHARS][FOH_PERSIST_TSTAGES]; // -1

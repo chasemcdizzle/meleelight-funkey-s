@@ -1681,7 +1681,7 @@ static void render_css(const FohState *s, Raster *rz) {
     FohHandRect cells[FOH_CSS_CHARS];
     foh_css_cells(cells);
     const int hotCell = foh_hand_hit(cells, FOH_CSS_CHARS, hx, hy);
-    for (int k = 0; k < 5; k++) css_cell(rz, k, k == hotCell);
+    for (int k = 0; k < FOH_CSS_CHARS; k++) css_cell(rz, k, k == hotCell);
   }
   // Tokens, carried-on-top: the carried one rides the hand, so it must draw
   // over the resting one when they overlap. A port with no type has no token

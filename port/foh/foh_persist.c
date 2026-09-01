@@ -27,7 +27,9 @@
 #define FP_FILE "mlfk-persist.dat"
 #define FP_TMP "mlfk-persist.tmp"
 #define FP_DEFAULT_DIR "/mnt/mlfk-data"
-// 87 lines, ~1.9 KB canonical — anything larger is not ours.
+// 137 lines, ~3.2 KB canonical (D59 appended fifty `crec` rows) — anything
+// larger is not ours. The cap has headroom for the next appended key; a file
+// that outgrows it is refused rather than truncated.
 #define FP_CAP 4096
 // MLFKPERSIST2's ctlstyle domain was {0 normal, 1 box} — CTL_STYLE_NATURAL
 // did not exist yet. FROZEN: never re-point this at CTL_STYLE_COUNT.

@@ -8,6 +8,7 @@
 // spike's T5-T8 and are simply not here.
 #include "foh_tbuild.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1950,7 +1951,7 @@ static void tb_view(const FohState *s, FohTbView *out) {
   X(I, tbDrawMode, 0, 1) X(I, tbScaleScroll, -4096, 4096)                      \
   X(D, tbDragX0, 0, 0) X(D, tbDragY0, 0, 0)                                    \
   X(D, tbDragX1, 0, 0) X(D, tbDragY1, 0, 0)                                    \
-  X(B, tbDrawingPoly, 0, 1)                                                    \
+  X(B, tbDrawingPoly, 0, 1) X(B, tbDenied, 0, 1)                               \
   X(I, tbPolyN, 0, FOH_TB_MAX_POLY_PTS)                                        \
   X(I, tbPolyLinesN, 0, FOH_TB_MAX_POLY_PTS)
 
@@ -2151,10 +2152,33 @@ static bool tb_suspend(const FohState *s, const char **why) {
     if (why) *why = "NO DOCUMENT";
     return false;
   }
+  // THE OLD VIEW GOES FIRST, AND ITS REMOVAL IS CHECKED.
+  //
+  // Found in review. The view write is allowed to fail without failing the
+  // document (below) — but if an EARLIER session's tbview.dat is still on the
+  // card when that happens, the resume pairs a NEW document with an OLD view.
+  // A stale grab or MOVE state then relocates an object on the first resumed
+  // tick: the player's work silently altered, which is worse than the lost
+  // crosshair this arm was willing to tolerate.
+  //
+  // Removing it BEFORE the document is published makes the bad pair
+  // unreachable rather than unlikely: from here on, either both files are
+  // this session's or the view is simply absent. ENOENT is the normal case
+  // and is success; anything else is loud, because a card that will not let
+  // us unlink is a card the next write is about to fail on too.
+  {
+    char vpath[512];
+    if (named_path(TB_VIEW_NAME, vpath, sizeof vpath) && remove(vpath) != 0 &&
+        errno != ENOENT) {
+      if (why) *why = "STALE VIEW COULD NOT BE REMOVED";
+      return false;
+    }
+  }
   if (!named_write(TB_DOC_NAME, &g_doc, why)) return false;
   // D62: the view rides along, and its failure is NOT the document's. A
   // resume with the document and a default crosshair is worth having; one
-  // that was refused because the crosshair could not be written is not.
+  // that was refused because the crosshair could not be written is not. That
+  // is only safe because the stale one is already gone, above.
   {
     const char *vWhy = 0;
     if (!tb_view_write(s, &vWhy)) {
@@ -2196,7 +2220,13 @@ static bool tb_resume(FohState *s) {
   // would retry the same failure every boot.
   {
     char vpath[512];
-    if (named_path(TB_VIEW_NAME, vpath, sizeof vpath)) remove(vpath);
+    if (named_path(TB_VIEW_NAME, vpath, sizeof vpath) && remove(vpath) != 0 &&
+        errno != ENOENT) {
+      // Not fatal — the player is already back in the builder — but SAID,
+      // because a view that outlives its consumption is the stale-pair
+      // hazard the suspend arm now removes ahead of itself.
+      fprintf(stderr, "foh_tbuild: stale tbview.dat could not be removed\n");
+    }
   }
   // CONSUMED either way. The file means "the work you had when the lid
   // closed"; leaving it would resurrect it into a later ordinary visit, and

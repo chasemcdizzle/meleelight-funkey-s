@@ -623,7 +623,7 @@ run_host() {
 # EXACT POSITIONAL MLFKPERSIST7 whitelist verification, INDEPENDENT of
 # the C loader (review-100 M2 + the whitelist-grammar rule, PROCESS §3).
 # The format is a FIXED shape — so this asserts it BY POSITION:
-# final byte LF, exactly 87 lines, each line matched at its exact index
+# final byte LF, exactly 137 lines, each line matched at its exact index
 # by an anchored full-line pattern, the 50 rec rows carrying the
 # canonical c-major (c 0..4, s 0..9) progression at their exact
 # position (uniqueness by position, not a global count), each rec bit

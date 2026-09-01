@@ -351,7 +351,7 @@ node "$BUILD/fixture.js" file defaults "$BUILD/defaults.dat"
 node "$BUILD/fixture.js" dump defaults "$BUILD/defaults.dump"
 made "$BUILD/seed.dat" "$BUILD/seed.dump" "$BUILD/defaults.dat" "$BUILD/defaults.dump"
 [ "$(grep -c "" "$BUILD/seed.dat")" = 137 ] \
-  || grammar_die "[1] the independently built fixture is not 87 LF lines —
+  || grammar_die "[1] the independently built fixture is not 137 LF lines —
    fixture construction is broken, so every leg below would be vacuous"
 cmp -s "$BUILD/seed.dat" "$BUILD/defaults.dat" \
   && fail "[1] the seeded and default fixtures are identical (dead tooth: a
