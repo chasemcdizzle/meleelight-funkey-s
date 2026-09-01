@@ -10,8 +10,9 @@ Across 8 recorded matches × 3600 frames, 5 characters, 6 stages, on the device
 itself. The interface is a rewrite, because a 240×240 screen and a d-pad are
 not a 1200×750 canvas and a keyboard.
 
-**Personal hobby project. No binaries, no ROMs, no game assets are distributed
-here — see [Assets and provenance](#assets-and-provenance).**
+**Personal hobby project.** What is and is not published here is set out under
+[Assets and provenance](#assets-and-provenance) — worth reading before you
+download the release.
 
 ## What "frame-exact" means
 
@@ -101,10 +102,23 @@ Upstream's licence is carried verbatim as
 
 ## Assets and provenance
 
-**No game assets are distributed here.** Audio is converted from an upstream
-build at runtime into gitignored files that never enter this repository, and
-no sprite or sound is committed. The only images in the tree are an
-application icon and screenshots of the author's own device.
+**In this repository:** no game assets. No sprite, sound or music file is
+committed; the converted audio is gitignored build output produced on the
+machine that runs the pipeline. The only images in the tree are an application
+icon and screenshots of the author's own device.
+
+**In the release:** the data pack (`mlfk-data.tar.gz`) **does** contain
+converted game audio — 8 music tracks and the sound-effect pack — because the
+application cannot run without them, and regenerating them needs Docker, a
+built copy of upstream and ffmpeg. They are converted from
+[meleelight](https://github.com/schmooblidon/meleelight)'s own published
+`dist/` directory, which ships the same material.
+
+That is a deliberate decision, not an oversight, and the reasoning — including
+the part that argues against it — is in [`docs/LICENSING.md`](docs/LICENSING.md).
+Upstream publishing this material does not make it upstream's to license, and
+does not make it ours.
 
 Characters and concepts are © Nintendo / HAL Laboratory, as upstream's licence
-states. This is a personal project for use with software you build yourself.
+states. Non-commercial hobby project. If you hold the rights and want this
+gone, open an issue and it goes.
