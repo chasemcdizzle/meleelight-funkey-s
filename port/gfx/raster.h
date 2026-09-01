@@ -55,6 +55,13 @@ void rast_ink_enable(int on);
 // the ink-enable flag; used by the glyph/sprite blitter (gfx_overlay.c).
 void rast_blend_px(Raster *rz, int x, int y, RastCol col, unsigned a256);
 
+// Canvas `globalCompositeOperation = "screen"` for the four upstream vfx that
+// set it (shineloop, laser, illusion, phantasm). OFF by default; switch it on
+// around the draw and off again, the way upstream saves and restores the
+// canvas field. See the note beside screen565 in raster.c for why shineloop
+// could not keep drawing source-over.
+void rast_screen_enable(int on);
+
 // Batch blend primitives (M4 task 3, measured-hotspot class fix — see
 // raster.c): pixel loops moved into this -O3 TU, arithmetic EXACTLY
 // rast_blend_px's (bit-identical by construction).

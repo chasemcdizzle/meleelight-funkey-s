@@ -92,6 +92,42 @@ static inline uint16_t blend565(uint16_t dst, uint16_t col, unsigned a) {
   return (uint16_t)((r << 11) | (g << 5) | b);
 }
 
+// --- SCREEN COMPOSITING (2026-09-01) --------------------------------------
+//
+// Canvas `globalCompositeOperation = "screen"`, which four upstream vfx set
+// (shineloop, laser, illusion, phantasm) and which this renderer used to draw
+// source-over instead. That simplification was REGISTERED and defensible —
+// the render check judges silhouette IoU, i.e. ink coverage, and screen does
+// not change which pixels are covered — but it is not defensible for
+// shineloop, and the owner found it by playing:
+//
+//   "when fox and falco do shine it shows as blue appropriately for a frame
+//    or two but then goes black"
+//
+// shineloop draws THREE concentric hexagons and the LARGEST IS LAST, in
+// `rgb(52,0,0)`. Under screen that near-black adds a faint red glow to the
+// blue and green beneath it. Source-over it is simply an opaque near-black
+// disc drawn on top, so the reflector went black the instant the 3-frame
+// `shine` burst ended and `shineloop` took over. The colour was never the
+// approximation the note claimed; for this effect it was an erasure.
+//
+// screen(s,d) = s + d - s*d, per channel, in each field's own range.
+static inline uint16_t screen565(uint16_t dst, uint16_t col) {
+  const unsigned sr = (col >> 11) & 0x1Fu, dr = (dst >> 11) & 0x1Fu;
+  const unsigned sg = (col >> 5) & 0x3Fu, dg = (dst >> 5) & 0x3Fu;
+  const unsigned sb = col & 0x1Fu, db = dst & 0x1Fu;
+  const unsigned r = sr + dr - ((sr * dr) / 31u);
+  const unsigned g = sg + dg - ((sg * dg) / 63u);
+  const unsigned b = sb + db - ((sb * db) / 31u);
+  return (uint16_t)((r << 11) | (g << 5) | b);
+}
+
+// Source-over is the default and stays the fast path; `screen` is switched on
+// around the few draws that ask for it and switched off again, mirroring
+// upstream's save/restore of the canvas field.
+static int g_screen_on = 0;
+void rast_screen_enable(int on) { g_screen_on = on ? 1 : 0; }
+
 static int g_ink_on = 1; // M4 task 2 (raster.h note): bg art suppresses ink
 
 void rast_ink_enable(int on) { g_ink_on = on ? 1 : 0; }
@@ -103,7 +139,14 @@ void rast_blend_px(Raster *rz, int x, int y, RastCol col, unsigned a256) {
   if (a > 256) a = 256;
   const uint16_t c565 = pack565(col.r, col.g, col.b);
   const size_t idx = (size_t)y * RAST_W + (size_t)x;
-  rz->fb[idx] = (a >= 256) ? c565 : blend565(rz->fb[idx], c565, a);
+  if (g_screen_on) {
+    // Alpha still selects between the screened result and the destination,
+    // so a partially-covered edge pixel behaves as it does source-over.
+    const uint16_t sc = screen565(rz->fb[idx], c565);
+    rz->fb[idx] = (a >= 256) ? sc : blend565(rz->fb[idx], sc, a);
+  } else {
+    rz->fb[idx] = (a >= 256) ? c565 : blend565(rz->fb[idx], c565, a);
+  }
   if (g_ink_on) rz->ink[idx] = 1;
 }
 
@@ -178,6 +221,19 @@ void rast_fill_run(Raster *rz, int y, int xa, int xb, RastCol col,
   const size_t base = (size_t)y * RAST_W;
   uint16_t *const fb = &rz->fb[base];
   uint8_t *const ink = &rz->ink[base];
+  // SCREEN: routed per pixel through the same helper the single-pixel path
+  // uses, so the two cannot disagree. Deliberately BEFORE the opaque fast
+  // path below, whose whole premise — "the destination cannot influence the
+  // result" — is false under screen.
+  if (g_screen_on) {
+    const uint16_t c565 = pack565(col.r, col.g, col.b);
+    for (int x = xa; x < xb; x++) {
+      const uint16_t sc = screen565(fb[x], c565);
+      fb[x] = (a >= 256) ? sc : blend565(fb[x], sc, a);
+    }
+    if (g_ink_on) memset(&ink[xa], 1, (size_t)(xb - xa));
+    return;
+  }
   if (a == 256) {
     // px8_over's opaque fast path: the destination cannot influence the
     // result, so this is the same store, not an approximation.
