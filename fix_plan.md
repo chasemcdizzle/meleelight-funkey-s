@@ -8378,11 +8378,34 @@ NOT MEASURED, and this is the gap: **that any of the above causes the platform
 the owner saw.** The chain is plausible and was presented as a finding before
 it had been checked, which it should not have been.
 
-THE PROOF: reproduce a 4-port match in the BROWSER ORACLE with a character on
-port 3/4 and watch the first frames. If the browser does it too, the port is
-faithful and this is upstream's bug. If the browser does NOT, the port has a
-real defect and the ECB theory is dead — a different answer entirely, and the
-reason this has to be proven before anything is written.
+**PROVEN 2026-09-01, AND THE THEORY IS DEAD.** A four-port browser match
+(`port/goldens-m4/run-4p.js`, fox/falco/falcon/marth on battlefield,
+`--capture-frames 1,2,3`) shows that at frame 1 the ECBs hold REAL VALUES:
+
+    p0 grounded=F  ECB1[0] = -50,50
+    p2 grounded=F  ECB1[0] = -25,5
+    p3 grounded=F  ECB1[0] =  25,5
+
+...i.e. exactly `startingPoint`, recomputed from position before anything
+observes them, and NOBODY IS GROUNDED at spawn. The undefined pair written at
+main.js:1298 never survives to be read: the checksum stream begins at frame 1
+and the values are already correct there, which is also why the port's
+"undefined at rest in frame-1 PRE-states" model is consistent — pre-state is
+before the step, the capture is after it.
+
+So the undefined ECB is a real source-level bug with NO observable effect, and
+it is NOT the cause of the owner's invisible platform. The chain was plausible,
+was stated as a finding before it was checked, and is now refuted. Nothing
+should be re-recorded and no deviation is warranted; the three ranked options
+below are moot for THIS cause.
+
+**THE OWNER'S BUG IS STILL UNEXPLAINED.** What is left, unproven and not to be
+repeated as fact: a four-player match zooms the camera out further than any
+2-port golden, and a platform that fails to DRAW at that zoom while remaining
+solid would look exactly like an invisible platform. That is a RENDER
+hypothesis, not a physics one, and it wants the same treatment — reproduce
+before writing anything. The next step is a repro: which stage, which port
+number, and was it at match start or after a death.
 
 IF IT CONFIRMS UPSTREAM, the options, ranked:
 1. **Carry it.** Upstream is ground truth (HARD RULE 5); this is the project's
