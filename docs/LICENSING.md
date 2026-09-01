@@ -34,12 +34,28 @@ Attributions: [`NOTICES`](../NOTICES) at the repo root.
 2. `NOTICES` gains an entry BEFORE any third-party code is copied in-tree.
 3. **No distribution of anything from this repo** — that is a project goal
    (locked goal #4), and it is also what keeps the Nintendo-derived asset
-   question moot. **The SOURCE is public** (`chasemcdizzle/meleelight-funkey-s`,
-   owner ruling 2026-08-31) — code, docs and checks, which are this project's
-   own work plus an MIT derivative, both publishable. What stays unpublished
-   is unchanged and is the part that matters: no OPKs, no binaries, no
-   converted audio, no ripped or recreated assets, no uploaded video of them,
-   and no fork of upstream.
+   question moot. **The SOURCE is public and RELEASES are published**
+   (`chasemcdizzle/meleelight-funkey-s`; owner rulings 2026-08-31 and
+   2026-09-01) — code, docs, checks, the OPK, and the data pack.
+
+   The previous position here was "no OPKs, no binaries, no converted audio",
+   justified as "private personal use: no practical exposure". That
+   justification stopped being true when the repo went public, and the
+   remaining argument did not survive a check: **MEASURED 2026-09-01, upstream
+   publishes 212 audio files itself**, including all 8 music tracks as ogg in
+   `dist/music/`. This project was being more conservative about Nintendo's
+   material than the project that material came from, while depending on that
+   same project as its oracle.
+
+   That does NOT make the audio ours to license — upstream cannot grant rights
+   it does not hold, and the rider says so plainly. What it changes is the
+   exposure argument, which was the actual basis for the rule. The owner has
+   ruled on the residual risk; it is recorded here as a decision, not as a
+   legal conclusion.
+
+   Still binding, and unchanged: no fork of upstream, no PR or issue against
+   it, no generated audio committed to this repo, and every release carries
+   the attribution and `LICENSE-meleelight`.
 4. Never push to, or open PRs against, `schmooblidon/meleelight` or any
    other upstream remote. Upstream clones live OUTSIDE the tree (scratch /
    `vendor/`, both untracked).

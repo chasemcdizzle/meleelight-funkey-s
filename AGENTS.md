@@ -27,12 +27,17 @@ Loop: [`docs/LOOP.md`](./docs/LOOP.md) · Checker:
    delete branches; `main` receives only human/spec commits. **NEVER add,
    push to, or open PRs against `schmooblidon/meleelight` or any upstream
    remote** — upstream clones live outside the tree.
-   **THIS REPOSITORY IS PUBLIC** (owner ruling, 2026-08-31); its SOURCE and
-   docs are published deliberately. Nothing else is: **never distribute
-   binaries, OPKs, or game assets**, and never fork or open a PR/issue against
-   upstream. The converted audio is Nintendo-derived, gitignored build output
-   and must never be committed — the licence rider in `LICENSE-meleelight` and
-   `docs/LICENSING.md` are why, and `.gitignore` is the mechanical half.
+   **THIS REPOSITORY IS PUBLIC AND RELEASES ARE PUBLISHED** (owner rulings,
+   2026-08-31 and 2026-09-01): source, docs, the OPK, and the data pack it
+   needs. The earlier "never distribute binaries, OPKs, or assets" line was
+   written when the project was private and rested on an argument that did not
+   survive checking — MEASURED 2026-09-01, upstream `schmooblidon/meleelight`
+   itself publishes 212 audio files including all 8 music tracks, so this
+   project was being stricter than the origin about the origin's own material.
+   Still binding: **never fork or open a PR/issue against upstream**; never
+   commit generated audio to the repo (it stays gitignored build output —
+   `.gitignore` is the mechanical half); and every release carries the upstream
+   attribution and `LICENSE-meleelight`. See `docs/LICENSING.md`.
 5. **Faithfulness:** the browser original is ground truth; a behavioral
    deviation is a bug even when it "feels better". Engine values (physics
    constants, frame data, thresholds) come from the executed-data pipeline,
