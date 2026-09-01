@@ -42,6 +42,14 @@
 //   D(field)          double, stored as its exact bit pattern and required
 //                     finite on read (a NaN cursor is not a cursor)
 #define CV_SCALARS(I, B, D)                                                    \
+  /* credInit FIRST, and it is the field this whole file turns on. foh.c:1684
+     is `if (s->credInit) cred_reset(s);` on the first credits tick, and
+     foh_init sets it TRUE (foh.c:309). Omit it and the restore lands, the log
+     says "credits view restored", and the very next tick wipes every field
+     back to a fresh screen — which is exactly what the owner saw and what I
+     shipped. A view that restores everything except the flag saying "you are
+     already initialised" restores nothing. */                                 \
+  B(credInit)                                                                  \
   I(credScore, 0, FOH_CRED_NAMES)                                              \
   I(credCool, 0, 4096)                                                         \
   B(credShootBuf)                                                              \
