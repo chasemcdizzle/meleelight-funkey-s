@@ -1,0 +1,1158 @@
+# CLAUDE.md — always-loaded rules for the meleelight → FunKey-S port
+
+Faithful C port of browser meleelight (upstream pin `27af171`) to the
+FunKey-S, verified by deterministic input-replay + per-frame state
+checksums against the browser original. Spec: [`PLAN.md`](./PLAN.md) ·
+Loop: [`docs/LOOP.md`](./docs/LOOP.md) · Checker:
+[`docs/loop/CHECKER.md`](./docs/loop/CHECKER.md) · Replanner:
+[`docs/loop/REPLAN.md`](./docs/loop/REPLAN.md) · Licensing:
+[`docs/LICENSING.md`](./docs/LICENSING.md) · Evidence:
+`docs/research/`, `spikes/`, `prototypes/`.
+
+## HARD RULES (non-negotiable; every iteration)
+
+1. **Behavior > compiles.** Code must do what's asked, validated against
+   the oracle (checksum conformance), never "it builds".
+2. **No stubs / placeholders / hardcoded outputs / "TODO later"** as a
+   stand-in for real work. Deferrals go under `BLOCKERS` in
+   `docs/AGENT-LOG.md`, never buried in code.
+3. **Never edit/delete/weaken** any test, the oracle (`oracle/` once it
+   exists, `spikes/determinism/` harness + committed golden checksum
+   streams), the gates, this file's rules, `docs/LOOP.md`, `docs/loop/*`,
+   the caps, or git hooks. Exact-equality checksums NEVER become
+   epsilon comparisons. Only M0 tasks may write `oracle/`.
+4. **Git safety:** the autonomous run lives on ONE branch, **`agent/auto`**
+   (the loop aborts anywhere else); ONE atomic commit per completed
+   iteration, clean tree between; **never** force-push, `reset --hard`, or
+   delete branches; `main` receives only human/spec commits. **NEVER add,
+   push to, or open PRs against `schmooblidon/meleelight` or any upstream
+   remote** — upstream clones live outside the tree. **No distribution of
+   anything** (binaries, OPKs, assets, forks): private project.
+5. **Faithfulness:** the browser original is ground truth; a behavioral
+   deviation is a bug even when it "feels better". Engine values (physics
+   constants, frame data, thresholds) come from the executed-data pipeline,
+   never retyped by hand. Sim math is doubles-only, vendored fdlibm for
+   transcendentals, `-ffp-contract=off` on every TU (PLAN §2).
+6. **One task per iteration.** Command output → `.loop/*.log`, never into
+   the conversation.
+7. **Writer ≠ checker.** Completion is confirmed by the CHECKER
+   ([`docs/loop/CHECKER.md`](./docs/loop/CHECKER.md)) gating on
+   artifacts/exit-codes, never self-claims.
+8. **ZOOM OUT (Chase, 2026-07-14).** Before and after fixing anything, ask
+   whether it is an instance of a CLASS with a systematic cause; prefer the
+   class-level fix when tractable. Hierarchy: **instrument > class fix >
+   registered one-off > silent one-off (never)**. One-offs are acceptable
+   late-stage/perf only AFTER measurement attributes the hotspot. Every
+   root-cause/fix session ends with an explicit zoom-out note in
+   `docs/AGENT-LOG.md`.
+
+## SDL / platform seam (single source of truth)
+
+**Thin platform API, three backends, exactly ONE TU linked per target**
+(lifted from ssb64's `port/gfx` pattern): SDL 1.2 for the FunKey device ·
+SDL2 for host dev · headless for CI/the loop. The renderer knows nothing
+about SDL; it exposes a framebuffer the backend presents. Seam:
+`platform_init / platform_present / platform_poll / platform_quit` + an
+input struct. The headless backend is what makes the autonomous loop
+possible — it lands in M2 with the first C build.
+
+## Licensing / provenance rule
+
+Upstream meleelight LICENSE carried **verbatim** (incl. its Nintendo-IP
+rider) as `LICENSE-meleelight` — never edit it. `NOTICES` gains an entry
+BEFORE any third-party code lands in-tree. No Nintendo-derived asset is
+ever distributed (moot privately; kept as hygiene). SDL 1.2 is LGPL:
+dynamic linking only. Details: `docs/LICENSING.md`.
+
+## §Gates — MILESTONE EXIT gates only
+
+Run via CHECKER **only on a phase-advance iteration**, never per task.
+Per-iteration verification uses the in-progress `fix_plan.md` item's exact
+`done-check:` instead. Cells marked *(REPLAN)* are precise definitions
+whose runnable command is milestone output — REPLAN concretizes the exact
+command into §Commands when the milestone becomes current; the definitions
+live in PLAN §4 and are binding.
+
+| Phase | Gate command | Pass condition |
+|---|---|---|
+| M0 | seed (spike-era, runnable today): `cd spikes/determinism && bash run-experiments.sh "$MELEELIGHT_CLONE"` — final form *(REPLAN)*: `bash oracle/verify_goldens.sh` | every golden trace: two fresh browser runs bit-identical, streams match committed checksums, fdlibm-patched QuickJS runtime reproduces them (5 chars / 6 stages covered) |
+| M1 | *(REPLAN)* — two fresh pipeline runs + manifest hash check | byte-stable reruns; coverage = 754 anim files / ~27.9k paths / 5 chars / 6 stages / ~180 SFX + 8 tracks |
+| M2-CAL | *(REPLAN)* — slice replay: C `environmental_collision` vs JS over the 3800-frame golden trace | bit-identical full trace + converged burn-down + recorded metrics (div/KLOC, fix-rate, projection). NO-GO → `LOOP STOP: m2-entry-no-go` (a blocker list is NOT a pass) |
+| M2 | *(REPLAN)* — headless C sim replays all golden traces | every frame checksum == browser oracle stream, full match length, all goldens |
+| M3 | *(REPLAN)* — device conformance + perf run over ADB | device checksums conform; p99 frame < 16.67 ms full match w/ audio; OPK launches from frontend. **HUMAN ESCALATION**: needs the physical device when absent (`LOOP STOP: m3-device`) + Chase's S1 ratification playtest |
+| M4 | *(REPLAN)* — full-game trace suite on device | menu-flow scripts + match + target-test traces conform at 60 fps with audio; then **Chase acceptance playthrough** (`LOOP STOP: m4-complete`) |
+
+**Gate concretization (enforced):** when a phase becomes current, REPLAN
+turns two distinct things into exact runnable commands (no `…`): (a) each
+task's `done-check:` (proves ONE item; every task iteration) and (b) the
+phase EXIT gate above, recorded into §Commands (proves the WHOLE phase;
+phase-advance only). CHECKER rejects any non-runnable/placeholder check.
+
+## §Commands (verified; the loop appends as each phase defines them)
+
+- **M0 EXIT GATE (concretized by REPLAN, iter 1):**
+  `bash oracle/verify_goldens.sh` — for EVERY golden in
+  `oracle/goldens/manifest.json`: two fresh browser runs
+  (`oracle/harness/run.js`, fdlibm JS shim active) produce checksum
+  streams bit-identical to each other AND to the committed
+  `oracle/goldens/*.sha256.json`; the fdlibm-patched QuickJS runtime
+  (`oracle/qjs/replay.sh`) reproduces the same stream; manifest coverage
+  asserts all 5 characters, all 6 VS stages, and ≥1 CPU trace.
+  Exact-equality per frame hash, full trace length; any mismatch,
+  missing artifact, or coverage shortfall → nonzero exit.
+- **M1 EXIT GATE (concretized by REPLAN, iter 9):**
+  `bash pipeline/verify_pipeline.sh` — runs the FULL executed-JS data
+  pipeline (`pipeline/run.js`, every registered stage) twice fresh into
+  `pipeline/build/gate-{a,b}`, asserts the two `manifest.json` are
+  byte-identical, re-hashes every artifact against its manifest entry,
+  and asserts the pinned coverage contract `pipeline/expected.json`
+  (PLAN §4 M1's counts in exact measured-then-frozen form: 754 animation
+  files reconciled = 744 executed states + 5 index.js + 5 dead falco
+  files; 27,808 paths; 5 chars; 6 stages; 204 SFX wavs with 180 mapped
+  sounds; 8 music tracks). Prints `PIPELINE OK`, exit 0; any byte diff,
+  hash mismatch, or coverage shortfall → nonzero.
+- **Pipeline run (M1 task 1 committed form):**
+  `node pipeline/run.js --out pipeline/build/dev [--only animations]
+  [--dist "$MELEELIGHT_CLONE"]` — executed-JS serialization of the data
+  plane. The animations stage `require`s the BUILT
+  `dist/js/animations.js` under a `window` shim in plain node (the
+  bundle is pure data construction — Int16Array literals, no DOM, no
+  Math — so node vs browser is engine-neutral; verified identical
+  counts), emits per-char `ANIM1` binaries (spec `pipeline/FORMATS.md`,
+  little-endian pinned, decoder `pipeline/lib/animbin.js` round-trips
+  every coord in-run) + one deterministic manifest (sorted keys, no
+  timestamps/abs paths). Task-level check:
+  `bash pipeline/check-animations.sh` → `ANIMATIONS OK`, exit 0.
+- **Engine-table extractor + generated C tables (M1 task 2 committed
+  form):** `bash pipeline/extractor/build-extractor.sh` (idempotent,
+  stamp-cached; `--force` rebuilds) copies
+  `pipeline/extractor/extractor.{entry,config}.js` into the clone and
+  webpacks `dist/js/extractor.js` under docker node:8 with upstream's own
+  toolchain (babel query mirrors the game build's happypack loader); the
+  entry imports ONLY the per-char attributes/ecb data modules (no
+  characters/<char>/index.js — that's the god-module boundary) and assigns
+  the live `src/main/characters.js` registries to `window.__tables`.
+  Stage `tables` (in `node pipeline/run.js`) executes it under a window
+  shim and emits `ml_tables.{h,c}` + `tables.json` (format CTAB1,
+  FORMATS.md §3): doubles as `UINT64_C(0x…)` bit patterns + shortest
+  round-trip decimal comment, decoded via `ml_f64()` memcpy; ints as
+  int32/int16 with generator hard-throws on typing violations. Task
+  check: `bash pipeline/check-tables.sh` → `TABLES OK` (byte-stability ×2,
+  artifact hashes, expected.json coverage, framesData/ECB↔ANIM1 pinned
+  reconciliation via `lib/tables-anim-xref.js`, and the round-trip gate:
+  `cc -ffp-contract=off` compiles `lib/tables_check.c` + generated
+  `ml_tables.c`, its canonical leaf dump must be byte-identical to
+  `lib/tables-dump.js`'s fresh executed-JS walk — 38,832 leaf values).
+  Gotcha class: framesData/ECB vs animation frame counts is NOT uniform
+  equality upstream (26+27 differ, 4+13 no-anim states incl. puff DEAD*
+  empty ECBs kept verbatim as frameCount 0/NULL) — cross-checks against
+  executed data must be measured-then-frozen reconciliations, never
+  assumed identities.
+- **Stage geometry → generated C tables (M1 task 3 committed form):** the
+  extractor bundle additionally exposes `window.__stages` (upstream's own
+  `src/stages/vs-stages/vs-stages.js` aggregator). Stage `stages` (in
+  `node pipeline/run.js`) emits `ml_stages.{h,c}` + `stages.json` (format
+  STAB1, FORMATS.md §4): 6 VS stages in oracle `--stage` id order, doubles
+  as `UINT64_C(0x…)` bit patterns (decode `ml_stage_f64()` — distinct name
+  so ml_tables.h can share a TU), ints int32 with hard-throws, empty
+  surface lists kept verbatim (fdest platforms, ystory ceilings: count
+  0/NULL). Task check: `bash pipeline/check-stages.sh` → `STAGES OK`
+  (byte-stability ×2, artifact hashes, expected.json per-stage pins, and
+  the compiled-C vs fresh executed-JS dual-dump round trip, 412 leaves).
+  Gotcha class (god-module boundary, 2nd instance): ystory/fountain
+  top-level-import `main/main`/`stages/activeStage`/
+  `physics/environmentalCollision` but only dereference them inside
+  their movingPlatforms/updatePlatform bodies (M2 sim logic) — webpack
+  `externals` stubs those EXACT request strings (`"var {}"`, incl. the
+  RELATIVE forms `../activeStage` etc., matched pre-resolve), and
+  build-extractor.sh hard-fails on any `document.` in the bundle (leak
+  guard; beware: a `document.` in an entry-file COMMENT trips it —
+  comments are bundled verbatim). Upstream renders VS stages from the
+  SAME structures physics collides against (one source of truth) —
+  `box`/`target`/`background`/`polygonMap` are target-stage machinery,
+  pinned empty/absent, schema hard-throws on drift. fdest `ledgePos`
+  x=±68.4 while its ground runs ±85.6 — authored upstream quirk
+  (battlefield copy-paste), carried verbatim: faithfulness > plausibility.
+- **Audio conversion + sound map (M1 task 4 committed form):** the
+  extractor bundle additionally executes upstream's own `main/sfx` +
+  `main/music` (Howl capture shim + browser-parity `window === global`
+  shim in `tables-schema.js loadExtractor` — sfx.js reads back its own
+  `window.changeVolume` as a bare global, a detached window object breaks
+  it) → `window.__sounds`. Stage `audio` (in `node pipeline/run.js`)
+  ffmpeg-converts all 204 `dist/sfx/*.wav` → `audio/sfx/*.pcm` (22050 Hz
+  MONO S16LE raw) and all 8 `dist/music/*.ogg` → `audio/music/*.pcm`
+  (22050 Hz STEREO S16LE raw; device streams from SD per PLAN §7) and
+  emits `sounds.json` (format SND1, FORMATS.md §5): 180 Howl names →
+  blob + effective volume (post-load `changeVolume` value; authored
+  cfgVolume kept as provenance) + loop, 8 music tracks with sprite
+  Start/Loop windows, per-char `actionSounds` state→[[frame,sound]]
+  schedules (referential integrity hard-throw). ffmpeg pinned three ways
+  in expected.json audio (version — stage hard-fails on mismatch BEFORE
+  converting; exact argv; aggregate artifact sha256): a different ffmpeg
+  build fails loudly, never drifts. C emission deferred to the M4 mixer
+  task BY JUDGMENT (FORMATS.md §5.4 — no C consumer until then). Task
+  check: `bash pipeline/check-audio.sh` → `AUDIO OK` (byte-stability ×2,
+  artifact hashes, expected.json pins incl. blob shape bytes ≡ 0 mod
+  frame size, no-commit guard). PROVENANCE: blobs are Nintendo-derived,
+  PRIVATE USE ONLY, gitignored build output only — never distributed,
+  never committed. Gotcha class (browser-global identity, 3rd god-module
+  cousin): upstream modules assign `window.X` then read bare `X` —
+  works in browsers where window IS the global; any node-side shim must
+  be `global.window = global`, not a plain object (qjs shim class:
+  parity of paths, not just survival).
+- **M2-CAL EXIT GATE (concretized by REPLAN, iter 15):**
+  `bash port/sim/check-envcoll.sh` — implements PLAN §4/M2-CAL: builds the
+  structure-parallel C `port/sim/environmental_collision.c` (+ util slice)
+  with `cc -ffp-contract=off`, ensures module-boundary captures exist for
+  g01/g04/g06 (records them via `port/sim/calib/run-capture.js` when
+  absent — each capture run's checksum stream MUST verify against the
+  frozen golden via the unchanged `oracle/harness/verify-stream.js`, so
+  instrumentation cannot perturb the sim), then replays EVERY captured
+  call of ALL three captures through the C module comparing canon-v1
+  serializations (IEEE-754 bit-pattern hex — exact equality, a single ulp
+  fails) and asserts `docs/M2CAL-REPORT.md` carries the burn-down metrics
+  (div/KLOC, fix-rate, projection, go/no-go). Prints `ENVCOLL MATCH`,
+  exit 0; any divergence, stream mismatch, or missing metric → nonzero.
+  NO-GO handling per LOOP §H: sentinel `LOOP STOP: m2-entry-no-go`.
+- **M2 EXIT GATE (concretized by REPLAN, iter 19):**
+  `bash port/sim/check-sim.sh` — implements PLAN §4/M2's EXIT verbatim:
+  builds the headless C sim (every TU `cc -O2 -ffp-contract=off -Wall
+  -Wextra -Werror`; vendored fdlibm; doubles only), loads the M1 pipeline
+  data it consumes (generated `ml_tables.c`/`ml_stages.c` + ANIM1 frame
+  counts), then for EVERY golden in `oracle/goldens/manifest.json` (all
+  8: g01–g06 human traces, g07–g08 CPU via the recorded AI-input bridge,
+  fix_plan §M2 task 16) replays the trace end-to-end and emits a
+  verify-stream-compatible run JSON, judged by the UNCHANGED
+  `oracle/harness/verify-stream.js` against the frozen
+  `oracle/goldens/*.sha256.json` — exact per-frame hash equality over the
+  FULL 3600-frame length, plus rngCalls + rngCallsOutsideStep equality
+  and the specVersion/trace pins. Prints `SIM CONFORMS`, exit 0; any
+  mismatch, length shortfall, or missing golden → nonzero. (Script is
+  built by fix_plan §M2 task 17; per-cluster `done-check:`s replay module
+  captures and never substitute for this gate.)
+- **Module-boundary capture + replay (M2 task 1 committed form; the
+  M2-CAL rig generalized):** `node port/sim/calib/run-capture.js
+  --spec <envcoll|util> --golden <id>` records a spec's module boundaries
+  over a golden (canon v1.1: CHECKSUM.md structure, bit-pattern numbers,
+  ALL NaNs collapsed to d:7ff8… — FORMAT.md; every run STREAM-MATCH
+  guarded). Task check: `bash port/sim/calib/check-util-replay.sh` →
+  `UTIL MATCH`, exit 0 (×2 byte-stable captures, pins via
+  check-spec-pins.js incl. the rule-8 undef-ret accessor allowlist,
+  strict 0-divergence C replay of every record). New cluster = new
+  `spec-<name>.js` + `replay_<name>.c` + `expected-capture-<name>.json` +
+  a `check-<name>-replay.sh` composed the same way. Gotcha classes (now
+  fix_plan §M2 rules 8/9): accessor fns echo undefined verbatim (model
+  undef-at-rest; per-function no-undef-ret pins); NaN PAYLOADS are
+  unreproducible V8/C artifacts — canon collapses them, never chase
+  payloads by reordering C arithmetic.
+- **Player value model + mutation-capture rig upgrade (M2 task 2
+  committed form):** `node port/sim/calib/run-capture.js --spec player
+  --golden <id>` records per-frame post-update(i) player snapshots as
+  5-field records (5th = POST-STATE canon of the projected player[i];
+  FORMAT.md — projections: charAttributes/charHitboxes are M1-table
+  data, percentShake is CHECKSUM.md §7's timing-dependent exclusion).
+  Value model `port/sim/ml_player.h` (MlPlayer/MlPhysics/MlHitboxes/
+  MlHitboxSpec; JsBool undef-at-rest; presence flags for 13
+  runtime-added fields; type-specialized ml_player_copy +
+  ml_hitboxes_merge_from — the sim's 3-arg deepObjectMerge ALIASES, see
+  fix_plan §M2 rule 10); canon bridge `port/sim/calib/player_canon.{h,c}`
+  is reusable by later clusters' pre/post player states. Task check:
+  `bash port/sim/calib/check-player-model.sh` → `PLAYER MODEL MATCH`.
+  Capture-FIRST instrument: `node port/sim/calib/survey-shapes.js
+  <capture.jsonl>` — per-path type/key-set/length survey; run it on a
+  fresh capture BEFORE finalizing any C value model. Gotcha class:
+  round-trip model checks are SELF-REFERENTIAL for value edits (a
+  corrupted capture nibble round-trips cleanly) — negative tests must
+  perturb the C model/serializer (key order, presence flag, merge rule)
+  or inject out-of-domain shapes (marshal hard-fail), never the data
+  bytes.
+- **Input cluster: interpretInputs + 8-deep buffer + meleeInputs (M2
+  task 3 committed form):** `node port/sim/calib/run-capture.js --spec
+  input --golden <id>` — wraps the input module + all 6 meleeInputs
+  exports + physics args-projected to `[i, inputBuffers[i]]`
+  (interpretInputs is main.js-internal to gameTick, NOT
+  namespace-wrappable — the physics projection is its output boundary;
+  same trick as task 2's post-state). C: `port/sim/ml_input.h` (plain
+  bool/double — survey-measured, no undef-at-rest in this domain),
+  `port/sim/input/{melee_inputs,input}.h` +
+  `interpret_inputs.{c,h}` (MlInputSimState = the god-module's
+  input-globals slice; ml_input_out_of_domain traps for
+  lifecycle/AI/network arms), bridge `port/sim/calib/input_canon.{h,c}`.
+  Replay is a full-trace CHAIN (C output feeds next frame's input —
+  never the capture's bytes). Task check:
+  `bash port/sim/calib/check-input-replay.sh` → `INPUT MATCH`. NEW rig
+  facility: spec-defined deterministic `sweep()` (FORMAT.md; fix_plan
+  §M2 rule 11) records synthetic-domain calls at frame 0 for boundaries
+  with zero live records but a real future domain — sweep teeth proven
+  via js_round perturbation (73 sweep-only divergences). ml_js.h gained
+  `js_round` (ECMAScript Math.round: ties toward +Inf, -0 preserved —
+  V8's Float64Round algorithm; naive floor(x+0.5) is WRONG at
+  0.49999999999999994 and at every negative tie).
+- **actionStateShortcuts + scaffolding + mulberry32 + sound-event seam
+  (M2 task 4 committed form):** `node port/sim/calib/run-capture.js
+  --spec asshort --golden <id>` — wraps all 29 exports of
+  src/physics/actionStateShortcuts.js with per-function READ-SET arg
+  projections + a {dsp,mut,rng,snd} post-state envelope (owner-stack
+  event attribution; FORMAT.md "asshort"), records the seeded-RNG stream
+  (frame-0 `rngBoot` [seed, 465 boot draws — browser == qjs boot pin] +
+  every draw as a standalone `Math.random` record or a post `rng` entry).
+  C: `port/sim/action_state_shortcuts.{c,h}` (attributes/intangibility
+  from generated CTAB1 ml_tables — first M1-data consumer; actionStates
+  registry scaffolding with opaque MlMoveDef until tasks 7-12),
+  `port/sim/ml_rng.h` (mulberry32), `port/sim/ml_events.{c,h}`
+  (sound-event queue seam the M4 mixer consumes + dispatch notes +
+  logged ml_random). Replay chains ONE C mulberry32 draw-for-draw
+  across the whole file (off-step startGame draw asserted == 1).
+  Task check: `bash port/sim/calib/check-asshort-replay.sh` →
+  `ASSHORT MATCH` (regenerates ml_tables via `node pipeline/run.js
+  --only animations,tables --out pipeline/build/asshort-tables`).
+  Gotcha classes: sweep purity is NET (rule 12 — swapped-RNG KO-shout
+  sweep + restored player[3] injection, guarded by ×2 byte-stability +
+  STREAM MATCH); threshold-nudge negative tests can be no-ops on
+  keyboard-quantized traces — perturb constants/events/RNG instead.
+- **physics.js core + interpolatedCollision (M2 task 5 committed form):**
+  `node port/sim/calib/run-capture.js --spec physics --golden <id>` —
+  mutation-captures `physics(i, inputBuffers)` with a full PRE-state args
+  envelope (players/stage/globals/alias probes; stage captured per record
+  so fountain's moving platforms are faithful) and a
+  {alias,hq,players,snd} POST envelope; ORACLE-FED SEAMS for the
+  not-yet-translated surfaces: every top-level move dispatch (tasks 7-12)
+  records site+args+post-state and the replay verifies-then-RESYNCS; the
+  5 hitDetection launch getters (task 6) record args+ret and the replay
+  verifies args bit-exactly and injects the ret. interpolatedCollision's
+  2 exports replay pure (live + a 35-call rule-11 sweep). C:
+  `port/sim/physics.{c,h}` (MlSim god-module slice; rule-10 alias sites:
+  prevFrameHitboxes merge + the land() pos===ECB1[0] alias, probe-driven;
+  ecbSquashData chained as module state — the shared nullSquashDatum is
+  provably never written) + `port/sim/interpolated_collision.{c,h}`.
+  Task check: `bash port/sim/calib/check-physics-replay.sh` →
+  `PHYSICS MATCH`. run-capture.js gained an optional spec `finalCheck()`
+  post-run hook (the physics spec re-dumps the frame-0 asFlags
+  actionStates flag table and hard-fails on in-match drift). Gotcha
+  classes (now fix_plan §M2 rule 13): JS COMPOUND ASSIGNMENT groups its
+  whole RHS (`a += b + c` is `a = a + (b + c)`) — left-flattening cost 22
+  one-ulp live divergences; domain traps must sit at upstream's exact
+  lazy dereference (hoisting a canGrabLedge[0] trap above its snap-box
+  guard falsely aborts). Rule-8 extension: ECB1/ECBp COMPONENTS hold
+  undefined at rest in frame-1 pre-states (undef masks in ml_player.h;
+  `phys.passing` became presence-modeled for the same reason). Oracle-fed
+  seams BOUND sensitivity: a corrupted pre field that a dispatch resync
+  overwrites before any read is mechanically masked (measured) — corrupt
+  POST fields for nibble teeth.
+- **hitDetection + hitQueue + hitbox value model (M2 task 6 committed
+  form):** `node port/sim/calib/run-capture.js --spec hitdet --golden
+  <id>` — wraps all 29 hitDetection exports: hitDetect/executeHits/
+  checkPhantoms mutation-captured with the uniform pre {alias,
+  characterSelections, gameMode, gameSettings, hq, phq, playerType,
+  players} / post {alias,hq,phq,players,rng,snd} envelopes (hq/phq = the
+  FULL exported queues, marshalled per record — rows enter from THROW
+  moves/physics windows, never chained); resetHitQueue/setPhantonQueue
+  lean; launch getters + getKnockback/getHitstun/segmentSegmentCollision
+  pure (getLaunchAngle's args projected with the LAZILY-read
+  player[v].phys.grounded — null iff knockback >= 80); knockbackSounds
+  {rng,snd}; 15 internal-only exports pinned ZERO records; move
+  dispatches = oracle-fed seams (post {alias,hq,players}); frame-0
+  hdFlags dump (canBeGrabbed/crouch/downed/specialClank/specialOnHit/
+  vCancel, finalCheck drift-guarded). C: `port/sim/hit_detection.{c,h}`
+  (task 5's 5 launch-getter seams are REAL bodies here; screenShake = 4
+  logged ml_random draws per regular hit; ml_sound_stop "furaloop.stop";
+  hitList push/splice write through the rule-10 alias; both
+  MlHitboxSpec shapes' undefined-key reads via hb_* helpers). Task
+  check: `bash port/sim/calib/check-hitdet-replay.sh` → `HITDET MATCH`.
+  Gotcha classes: (rule 14) owner-draw vs dispatch-window-draw chain
+  order is unrecoverable — record window draws as `Math.randomW`, pin
+  the measured 0, replay hard-fails; node's ~512 MB readFileSync string
+  cap (ERR_STRING_TOO_LONG — g06 hitdet capture is 542 MB):
+  check-spec-pins.js STREAMS the JSONL; held object references across
+  seam resyncs (executeHits' `hitbox = player[a].hitboxes.id[h]`) read
+  the ORIGINAL object under reassignment — model with a by-value copy;
+  razor-thin threshold nudges (hurtWidth +0.5, the 0.01 phantom band)
+  are no-op teeth on occurring hit margins (rule-12 corollary, 2nd
+  measured instance).
+- **characters/shared moves (M2 task 7 committed form):** `node
+  port/sim/calib/run-capture.js --spec moves-shared --golden <id>` —
+  wraps every SHARED-ORIGIN actionStates entry's phase fns (1212 incl.
+  the shared JUMPAERIALB/F modules; origin MEASURED by fn identity —
+  deepCopyObject deep-copies data but copies functions by reference, and
+  puff overrides FURAFURA/JUMPAERIALB/JUMPAERIALF) as mutation-captured
+  "move" records ([phase,name,[slot,...extras],inputs(8-deep ×4),pre]
+  args; {alias4,hq,players,rng,snd,vfx} post; hq carried OPAQUE — no
+  shared move imports the hitQueue), non-shared entries as "mdispatch"
+  seams (post {alias,hq,players,rng} — seam rng lists strengthen rule 14:
+  window draws replay chain-exact at the seam point; measured 0), and a
+  frame-0 mvData dump of the EXECUTED move-data plane (state→name,
+  sharedOrigin registry, index.js setVelocities/posOffset patches,
+  CAPTUREDAMAGE setPositions, actionSounds rows, palettes — fix_plan §M2
+  rule 15). C: `port/sim/characters/shared/moves/*.c` (79 files) +
+  `moves_index.c`/`moves.h` — MlMoveDef completed with real phase fn
+  pointers (AsTri returns: several upstream interrupt arms FALL THROUGH
+  and return undefined — control-flow fallthrough is part of the
+  expression shape, rule 13 family); mv_dispatch resolves via the task-4
+  as_lookup registry, unregistered states cross mv_seam; ml_events
+  gained the vfx queue (drawVfx names; "circleDust" = 4 seeded draws —
+  drawVfx.js:15); MlStageX gained respawnPoints/respawnFace. Sweep
+  (rules 11/12, 44 calls): a REAL `new playerObject(0, [10,20], 1)` in
+  restored slot 3 — NOTE pos is an ARRAY [x,y] (physicsObject reads
+  pos[0]/pos[1]); Math.random swapped for a sweep mulberry32
+  (0x0badf00d) that the replay mirrors for ALL frame-0 move records.
+  Task check: `bash port/sim/calib/check-moves-shared-replay.sh` →
+  `MOVES SHARED MATCH`. Gotcha classes: recording shared moves under
+  TOP-LEVEL per-char windows is chain-safe (window draws are standalone
+  records pushed at draw time) but recording them under an attributing
+  record's seam window is NOT (would misorder the chain) — the wrapper's
+  scope condition is inScope==0, not stack-empty; razor-thin threshold
+  teeth again no-op on keyboard-quantized axes (DJ direction flip bit
+  only where neutral double-jumps occur — rule-12 corollary, 3rd
+  instance).
+- **characters/fox moves (M2 task 8 committed form):** `node
+  port/sim/calib/run-capture.js --spec moves-fox --golden <id>` — wraps
+  every FOX-ORIGIN actionStates entry's phase fns (192, all on table 2 —
+  fn identity vs the characters/fox/moves module index, rule 15's
+  instrument extended) + the LASER/ILLUSION article inits (194 wrapped)
+  over goldens **g01/g03/g08** (the fox carriers — PROVISIONAL deviation
+  from g01/g04/g06, which field no fox; g08 = FIRST CPU-golden capture,
+  AI JS-side, its seeded draws chain-verify as standalone records).
+  Shared entries stay UNWRAPPED (top level: chain-safe silent surface;
+  under a fox record: the transparent nested C tree — task 7's bodies
+  linked in); non-fox per-char entries are mdispatch seams (THROWNFOX* on
+  victims; zero live, teeth negative-test-proven); articles are 4-field
+  FIFO seams (task-13 boundary — inits only READ player state, no RNG:
+  args verified bit-exactly, no resync). C: `port/sim/characters/fox/
+  moves/*.c` (61 files) + fox moves_index/moves.h — direct MODULE calls
+  mirror upstream's import graph (fox→shared, fox→fox, MOVES[payload]);
+  TABLE dispatch (mv_dispatch) only at upstream actionStates sites
+  (THROW* victim arms; THROWBACK/THROWDOWN dispatch 1-arg, no input).
+  hitQueue.push modeled as canon-row append on the opaque hq
+  (mv_hq_push6); mv_checkForIASA = checkForIASA with REAL dispatch
+  (shared JUMPAERIALB/F MODULE objects — puff's table overrides do NOT
+  apply — plus a registered per-char module index); fox move-object data
+  arrays (setVelocities*/offsets incl. authored expressions) come from
+  the mvData fox dump (rule 15). Task check: `bash
+  port/sim/calib/check-moves-fox-replay.sh` → `MOVES fox MATCH`. Gotcha
+  classes: charHitboxes entries are ALWAYS 12-key createHitbox objects
+  but their offset may be a SINGLE Vec2D (fox throw hitboxes) — the
+  hitbox value model gained offsetSingle, and the old CONSTRUCTOR
+  fallback for chars data was unreached-wrong (class-fixed in
+  mv_assign_hitbox_id); CPU goldens widen VALUE domains (fix_plan §M2
+  rule 16: ai.js writes NUMBER buttons into aiInputBank — buttons are
+  truthiness-only upstream, marshal by JS truthiness); SIDESPECIALAIR.
+  init's grounded arm infinitely recurses UPSTREAM (unsweepable by
+  construction); CLIFF*'s onLedge===-1 arm WRITES the move table
+  (`this.canGrabLedge = false`) — C traps at the site and the mvData
+  finalCheck would catch the drift.
+- **characters/falco moves (M2 task 9 committed form):** `node
+  port/sim/calib/run-capture.js --spec moves-falco --golden <id>` — task
+  8's fox recipe followed exactly over goldens **g02/g05/g07** (the falco
+  carriers; g07 = second CPU golden): 214 falco-origin fns (69 module
+  keys, table 3) + LASER/ILLUSION inits = 216 wrapped; falco article
+  options carry isFox:false (+ partOfThrow:true on THROWDOWN lasers,
+  ILLUSION always type 0). C: `port/sim/characters/falco/moves/*.c` (69
+  files) + falco moves_index/moves.h; NO char-module registration
+  (upstream checkForIASA has no char-3 branch — a falco IASA aerial
+  payload dispatches nothing, verbatim). Falco structure deltas (measured
+  per-file diffs, carried verbatim): THROW* inits unguarded
+  (interrupt-only grabbing===-1 bare return), THROWN* without -1
+  guards/offset clamps, CLIFF* without the canGrabLedge table-write arm
+  (upstream throws — the mv_player/mv_falco_pair/mv_ledge_point traps),
+  shine = 4-sub-state machine per environment with actionState-write
+  land/platform-drop arms. Task check: `bash
+  port/sim/calib/check-moves-falco-replay.sh` → `MOVES falco MATCH`.
+  Gotcha class (rule 16 EXTENDED): ANY new golden widens the player-plane
+  value domain for all four slots — g05's marth fired NEUTRALSPECIAL for
+  the first time across all captures (runtime-added phys.shieldBreaker*
+  trio + player.shieldBreakerID, presence-modeled in ml_player.h after a
+  rule-7 marshal hard-fail); re-survey whenever a spec adopts a new
+  golden.
+- **characters/falcon moves (M2 task 10 committed form):** `node
+  port/sim/calib/run-capture.js --spec moves-falcon --golden <id>` — the
+  task-8 recipe over goldens **g03/g04/g06** (the falcon carriers —
+  MEASURED: g07's CPU falcon fires ZERO live falcon-origin moves, so
+  carrier membership is measured live coverage, never char presence):
+  217 falcon-origin fns on table 4 (214 phase fns + falcon's NON-phase
+  dispatch surfaces onPlayerHit ×2 / onWallCollide ×1 — hitDetection.js:
+  493's specialOnHit and physics.js:122's specialWallCollide arms; the
+  onWallCollide args canon is `[slot, wallFace, wallNum]`) + the 2
+  article inits wrapped as a MEASUREMENT instrument only: falcon has NO
+  article call sites (6 dead `articles` imports) — pinned zero, replay
+  FIFOs any record as an unconsumed-seam tripwire. C:
+  `port/sim/characters/falcon/moves/*.c` (67 files) + falcon
+  moves_index/moves.h; special phases route through NEW
+  `mv_register_special_phases` (shared moves.h: driver-registered
+  (state,phase)→MvFn lookup — MlMoveDef keeps its 5-field shape, no
+  initializer churn; unregistered = the upstream missing-property
+  TypeError via mv_out_of_domain). The 20 THROWN* + GRAB/CATCHATTACK C
+  files are the fox translations renamed (falcon-vs-fox diffs data-only;
+  offsets from the mvData falcon dump, rule 15). Gotcha classes:
+  SIDESPECIALGROUND writes `this.canEdgeCancel` at RUNTIME — a scalar
+  move-table write invisible to the array-only mvData dump: modeled as C
+  module state (write-only until task 17 wires physics' flag read);
+  UPSPECIALCATCH/UPSPECIALTHROW draw the seeded stream INLINE in move
+  code (2 draws per firefoxtail ×3 — chain state even though the values
+  are render-only); dead-arm quirks from upstream typos
+  (SIDESPECIALGROUNDHIT reads phys.timer, DOWNSPECIALGROUNDENDAIR reads
+  player.timer — both undefined, comparisons always false) are carried
+  as commented dead arms, never "fixed". Task check:
+  `bash port/sim/calib/check-moves-falcon-replay.sh` →
+  `MOVES falcon MATCH`.
+- **characters/marth moves (M2 task 11 committed form):** `node
+  port/sim/calib/run-capture.js --spec moves-marth --golden <id>` — the
+  task-8 recipe over goldens **g01/g05/g06** (the marth carriers,
+  probe-measured live coverage 1082/1417/1054; g04 fields no marth): 244
+  marth-origin fns on table 0 (242 phase fns — 58×3 + 17 land — plus the
+  NON-phase `onClank(p,input)` pair on DOWNSPECIAL{GROUND,AIR},
+  hitDetection.js:71-72's specialClank arm, routed through the task-10
+  `mv_register_special_phases` hook whose mv_dispatch arm now also
+  accepts "onClank") + the 2 article inits as the zero-pin tripwire
+  (marth has ZERO `articles` imports — measured). C:
+  `port/sim/characters/marth/moves/*.c` (75 files) + marth
+  moves_index/moves.h + `dancing_blade_{combo,air_mobility}.c`;
+  `mv_register_char_module(0, marth_move_def)` makes checkForIASA's
+  char-0 MARTHMOVES arm real (measured dead-by-construction upstream —
+  marth aerials INLINE their aerial-IASA logic instead). NEW oracle-fed
+  seam: `player.shieldBreakerID = sounds.shieldbreakercharge.play()`
+  consumes a GLOBAL howler-counter id (unrecoverable chain state) — the
+  capture records it in the post "sbid" list, the replay injects it via
+  `mv_howl_play_id` and re-emits the consumed list; `.stop(id)` is the
+  "shieldbreakercharge.stop" token. Gotcha classes: NEUTRALSPECIAL*'s
+  timer-46 `hitboxes.id[i].dmg` write MUTATES the GLOBAL charHitboxes
+  plane (player.js:132 aliases chars data — the falcon canEdgeCancel
+  class, VALUE-plane sub-shape; benign while charge < 30, the measured
+  live domain; the sweep's >=120 arm restores the 8 dmg fields, rule 12);
+  a "delta-2" per-file diff can be two SEMANTIC lines, not imports —
+  THROWNFALCOBACK's 2-line delta vs fox was the offset DATA plus an ADDED
+  `face *= -1` (caught by the probe replay: always read the diff BODY,
+  never trust the line count); THROWN guard/clamp ORDER varies per file
+  (clamp-first vs guard-first — verbatim per file). Task check:
+  `bash port/sim/calib/check-moves-marth-replay.sh` →
+  `MOVES marth MATCH`.
+- **characters/puff moves (M2 task 12 committed form; the LAST per-char
+  cluster — tasks 7-12 now cover all five chars + shared):** `node
+  port/sim/calib/run-capture.js --spec moves-puff --golden <id>` — the
+  task-8 recipe over goldens **g02/g04/g08** (the puff carriers,
+  probe-measured live coverage 843/1215/1037; g08's CPU puff attacks,
+  unlike g07's falcon — and fires the FIRST LIVE mdispatch seam of any
+  per-char cluster: its THROWBACK dispatches fox's THROWNPUFFBACK).
+  221 puff-origin fns on table 1 (217 phase fns + onPlayerHit ×3 on
+  NEUTRALSPECIAL{GROUND,AIR,GROUNDTURN} + onWallCollide on
+  NEUTRALSPECIALAIR — the task-10 hook) + the 2 article inits pinned
+  ZERO (puff has no `articles` references, marth-strength). Puff
+  OVERRIDES shared FURAFURA/JUMPAERIALB/JUMPAERIALF on ITS table only
+  (rule 15's fn-identity origin map, asserted both directions); puff's
+  FURAFURA is trivial (WAIT.init — NO furaloop: the task-11 sbid seam
+  measured unnecessary). NEW (fix_plan §M2 rule 17): every move
+  record's pre carries **"chd"** — the EXECUTED charHitboxes
+  {moveKey:{idN:{dmg,size}}} VALUE plane — because puff WRITES the
+  M1-owned plane through STALE id aliases (rollout's post-release dmg
+  even uncharged; sing's id[0].size cycles): measured LIVE drift on
+  g04 (jab1 dmg 3→7, frame 1038). C `pf_assign_hitbox_id` feeds
+  dmg/size from chd, never assumed-pristine CTAB1 (dmg/size = the only
+  createHitbox fields with upstream write sites, grep-measured). C:
+  `port/sim/characters/puff/moves/*.c` (71 files) + puff moves_index/
+  moves.h + `puff_{multi_jump_drift,next_jump}.c` (helper modules;
+  puffNextJump's COMPUTED "AERIALTURN/JUMPAERIAL"+(1+jumpsUsed) keys —
+  rung 6 unreachable, trapped); rule-8 read/write helpers for the
+  runtime-added rollOut* plane (rollOutTurnTimer widened this task —
+  rule 16). Gotcha classes: NSG/NSA mains do NOT advance timer at the
+  top (mid-body charge-scaled advance — sweep presets must hit EXACT
+  arm timers) and their interrupts ALWAYS return false (the WAIT/
+  FALLSPECIAL arms fire inits and still return false); THROWBACK's
+  window carries a floor-over-COMPARISON typo (`Math.floor(t+0.01<37)`
+  — floor of a boolean, truthiness preserved verbatim); upstream typo
+  fields hitboxes.FRAMES++ / lowercase phys.autocancel carried
+  verbatim; per-file THROWN* snap/flip/negX/clamp-order variation
+  (read every body — the task-11 lesson held). Task check:
+  `bash port/sim/calib/check-moves-puff-replay.sh` →
+  `MOVES puff MATCH`.
+- **articles (M2 task 13 committed form):** `node
+  port/sim/calib/run-capture.js --spec article --golden <id>` — wraps
+  the article module (src/physics/article.js): the 4 gameTick pipeline
+  calls mutation-captured over the three article queues (aArticles ==
+  CHECKSUM.md §2's checksummed `articles` key) with LEAN-WHEN-EMPTY
+  envelopes, articles.{LASER,ILLUSION}.init as first-class "ainit"
+  mutation records (the task-8/9 article-seam crossings), resetAArticles
+  (endGame-only) + the 6 internal-only collision helpers pinned ZERO,
+  per-char entries as mdispatch seam loggers (measured zero). Carriers
+  g01/g02/g08 — probe-MEASURED over all six fox/falco goldens (g03/g05
+  field zero live articles; g07's lasers never connect; zero live
+  ILLUSIONs anywhere — sweep-only, 72 rule-11/12 calls). C:
+  `port/sim/article.{c,h}` (MlArticle value model; REAL bodies for the
+  task-8/9 init seams — task 17 swaps mv_article_* for direct calls,
+  FORMAT.md "The article spec"; executeArticleHits runs task-7 shared
+  bodies via mv_dispatch + task-6 hit_detection getters + screenShake's
+  4 draws). NEW rig instrument (fix_plan §M2 rule 18): module state
+  fully enclosed by captured boundaries is CHAINED in C and
+  chain-verified against every in-match record's pre (a wrong queue
+  mutation flags at the NEXT record even when its own record replays
+  clean); lean-when-empty is the read-set projection gated on the
+  driving queue's emptiness (~20x capture-size cut, zero teeth loss).
+  Gotcha classes: fox lasers are ZERO-knockback (kg=bk=sk=0 — live fox
+  hits are percent-only; kb>0 arms live only on falco carriers), and
+  upstream quirks carried verbatim: ILLUSION `isFox || true`
+  always-true, duplicate-destroy `splice(queue[k]-k)` going NEGATIVE
+  (JS removes from the END), wall-death truthiness (sweep 0 falsy),
+  hit.hitPoint aliasing instance.pos (unobservable — measured by
+  reading). Task check: `bash port/sim/calib/check-article-replay.sh` →
+  `ARTICLE MATCH`.
+- **movingPlatforms stage-tick logic (M2 task 14 committed form):** `node
+  port/sim/calib/run-capture.js --spec platforms --golden <id>` — wraps
+  all six VS stage objects' movingPlatforms (one record per tick;
+  main.js:1058 — the FIRST call of the mode-3 tick) with per-stage
+  read/write-set envelopes: plat = the FULL platform plane in every
+  record (rule 18's chain carrier — statics included, so "nothing else
+  writes the plane" is measured per record, not assumed), ystory adds the
+  4-slot player slice {grounded,onSurface,pos} (rider loop UNGUARDED by
+  playerType upstream — inactive slots are page-start CSS-era
+  playerObjects), fountain adds platformStates + starting + owner rng.
+  fountain's platformStates is module-PRIVATE (a closure `let`) — exposed
+  by a SECOND run-capture.js served-bytes injection (the __wpCache
+  mechanism class): a quote-free window getter after the declaration,
+  unique-match hard-fail, disk untouched. C: `port/sim/stages/
+  {moving_platforms,ystory,fountain}.c` (MpSim slice struct; the rail/
+  platform constants are upstream CODE literals, NOT STAB1 data; state
+  string "moving"/"static" ↔ isStatic). Carriers g01/g02/g06 by STAGE
+  IDENTITY (only ystory/fountain have non-empty bodies — the other four
+  are EMPTY upstream; g01 = the static-stage class representative).
+  Gotcha classes: ystory's rail arms are sequential NON-exclusive ifs —
+  corner frames run TWO arms in one call and `move` keeps the LAST arm's
+  value (arm order makes a bottom-right double impossible); fountain's
+  selection draw is CONSUMED even when the base-return arm ignores it;
+  the sweep restores fountain via the starting arm itself (the reset IS
+  the restore — poke-free net restoration). Task check:
+  `bash port/sim/calib/check-platforms-replay.sh` → `PLATFORMS MATCH`.
+- **ECMAScript float formatter + CHECKSUM.md ser (M2 task 15 committed
+  form):** `bash port/sim/calib/check-format.sh` → `FORMAT MATCH`, exit 0
+  — proves `port/sim/ml_fmt.c` (`String(x)`: vendored Ryu core at
+  port/ryu/, ulfjack/ryu @ 4c0618b0 byte-verbatim, provenance
+  sha256-pinned + NOTICES; our ECMA-262 §6.1.6.1.20 steps 6-10 layer on
+  Ryu's digits+exponent) and `port/sim/ml_ser.c` (§3 ser primitives:
+  explicit `-0` token, T/F, undef/null/fn/cyc, JSON.stringify escaping;
+  §4 SHA-256 lowercase hex via oracle/qjs/sha256.c) byte-identical to
+  the JS oracle DIFFERENTIALLY: 5.47M-pattern pinned adversarial corpus
+  + every unique double in ALL build/*.jsonl captures (~249k; records
+  g01 player+article if absent) through C vs V8-String(x)/oracle-numStr,
+  plus ~40k composite cases (every g01 player/article record tree + 3636
+  full §2/§3.1 fixed-literal-order frame envelopes) C parse→ser→hash vs
+  the oracle's OWN pagelib.js ser/__serializeState/__sha256 run under
+  `window === global` (references extracted from pagelib source bytes —
+  zero transcription). Pins: `expected-format.json`. Task 17 consumes
+  ml_fmt/ml_ser for stream emission — ml_sb_num is the only legal number
+  emitter. Gotcha classes: JS-reference extraction (eval the oracle's
+  own bytes, never transcribe it — transcription bugs mirror on both
+  sides of a differential); zsh `time cmd | tee` pipestatus lies about
+  mid-pipe failures — verify gate exit codes by direct invocation.
+  `bash oracle/build-upstream.sh` — clones/checks out the pin, applies
+  `oracle/meleelight-harness.patch`, prunes dead devDeps, builds via
+  docker node:8 into `${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}`;
+  idempotent, `--force` rebuilds from the pristine pin.
+- **AI-input bridge for CPU goldens (M2 task 16 committed form):** `node
+  port/sim/calib/run-capture.js --spec ai --golden <g07|g08>` — wraps
+  runAI (mutation record: args [i], post {bank, bk, rng} — the post-runAI
+  aiInputBank[i][0] row, the AI-private player bookkeeping, the seeded
+  draws consumed in-window) + the spec-input chain pair (pollInputs,
+  physics args-projected [i, inputBuffers[i]]) over the CPU goldens, with
+  a per-call in-page WRITE-SET RECON (pre/post canon of 4 players minus
+  the {currentAction,currentSubaction,curentAction,lastMash} allowlist +
+  all 32 bank rows + playerType/cS/gameSettings/activeStage; any other AI
+  write → wsViol record, pinned ZERO + finalCheck throw).
+  `node port/sim/calib/build-ai-bridge.js <id> <capture> <out>` distills
+  the replayable AIBRIDGE1 artifact (format: port/sim/ai_bridge.h; one
+  line per runAI: frame, slot, draw bit-patterns, 22 B0/B1/U/N<hex16>
+  field tokens in canon key order). C bridge `port/sim/ai_bridge.{h,c}`:
+  ml_ai_bridge_apply burns the recorded draws bit-verified on the CHAINED
+  mulberry32, verifies the never-AI-written fields (dd,dl,dr,du,r,rA,
+  raw*,s) against the chain, installs the row; task 17 calls it at the
+  update(i) runAI site. Task check: `bash port/sim/calib/
+  check-ai-bridge.sh` → `AI BRIDGE OK`. Gotcha classes: (1) rule-16 CLASS
+  FIX — interpretInputs is now implemented ONCE over the tagged JS-value
+  input model (port/sim/input/ai_input.h, MlAiVal bool|number|undefined;
+  AI helper literals assign undefined via missing-key reads);
+  ml_interpret_inputs is a conversion wrapper (task-3 check re-verified).
+  (2) upstream pollInputs returns the bank ROW ALIAS for CPU slots and
+  runAI runs BETWEEN interpretInputs and physics — slot 0 must be
+  re-copied from the bank post-runAI (a skipped write-through = 8-frame
+  history-propagating divergences). (3) the harness pins CPU-slot mType
+  to "keyboard": the KEYBOARD arm (incl. the pause machine reading the
+  bank's s by truthiness) is live on CPU slots; the raw*/deaden AI arm
+  never runs in the captured domain. (4) recon canon of FULL players ×2
+  per call costs ~nothing (26s captures) — prefer airtight over sampled.
+- **Integrated headless sim (M2 task 17 committed form; the M2 EXIT GATE
+  is live):** `bash port/sim/check-sim.sh` → `SIM CONFORMS`, exit 0 — the
+  §Gates M2 command, now runnable: regenerates CTAB1/STAB1
+  (pipeline/build/sim-tables), dumps the SIMDATA1 executed move-data
+  plane ×2 byte-identical (`node port/sim/calib/dump-sim-data.js` —
+  boot-time asFlags/hdFlags/mvData-union/palettes0, each section
+  byte-equal to the frozen captures' frame-0 records), builds
+  `port/sim/calib/build/sim_host` from `port/sim/sim/` + every module
+  cluster (all TUs `cc -O2 -ffp-contract=off -Wall -Wextra -Werror`),
+  then per golden: trace → text (`port/sim/sim/trace-to-txt.js`, IEEE
+  bit-pattern tokens), replay, wrap (`port/sim/sim/wrap-run.js`), judge
+  with the UNCHANGED verify-stream.js. Manual single-golden run + the
+  divergence instrument: `sim_host --trace t.txt --simdata s.txt --seed
+  N --p1 N --p2 N --stage N --frames N [--cpu --difficulty N --ai-bridge
+  f] [--dump-frames a,b]` — `--dump-frames` prints frame envelopes to
+  stderr; byte-diff them against `oracle/harness/run.js
+  --capture-frames` output to localize a divergence (M2CAL procedure).
+  Gotcha classes: (1) later-cluster value-model widenings must be
+  back-propagated to earlier clusters' ZERO-LIVE arms (task 8's
+  offsetSingle vs task 6's throw arm — the iter-36 ledger's one sim
+  divergence; grep earlier consumers' shape conditionals whenever a
+  value model widens); (2) integration seams that must stay LIVE state,
+  not data: falcon SSG canEdgeCancel (mlp_flags runtime overlay), the
+  rule-17 charHitboxes plane (WEAK-default hooks in shared
+  moves_index.c; strong overrides in port/sim/sim/sim_data.c), the
+  aiInputBank row alias (buffer slot 0 re-copied post-runAI); (3) draw
+  COUNTS are recoverable from mulberry32's state delta (odd additive
+  constant ⇒ modular inverse) — no wrapper needed on the hot path;
+  (4) bash 3.2 `set -u` rejects empty-array `"${a[@]}"` (use
+  `${a[@]+"${a[@]}"}`) and `node -e console.log(<number>)` can emit ANSI
+  colour — String() it in scripts.
+- **M3 EXIT GATE (concretized by REPLAN, iter 37):**
+  `bash port/sim/device/verify_m3.sh` — implements PLAN §4/M3's EXIT
+  verbatim, ALL evidence pulled from the device and judged ON THE HOST
+  (fix_plan §M3 conventions; this adbd drops exit codes — every device
+  step is RC-echo checked): (1) DEVICE CONFORMANCE — every golden in
+  `oracle/goldens/manifest.json` replayed ON the FunKey-S (static armv7
+  build of the full headless sim, SDK gcc `-O2 -ffp-contract=off`;
+  AI-bridge artifacts for g07/g08), each stream judged by the UNCHANGED
+  `oracle/harness/verify-stream.js` against the frozen
+  `oracle/goldens/*.sha256.json` — exact per-frame hash equality, FULL
+  length, rngCalls/rngCallsOutsideStep/specVersion pins; (2) PERF — the
+  OPK build replays g01 full-match ON DEVICE with live SDL1.2 render AND
+  the audio callback running (44100/S16LSB/2ch/512 + the 8-voice SFX
+  mixer), per-frame wall-clock logged in-app to tmpfs and pulled:
+  **p99 < 16.67 ms**, audio underruns == 0; (3) OPK — packaged with the
+  SDK container's mksquashfs 4.4 ONLY, launched via the FRONTEND path,
+  boot marker + in-app screenshot pulled; (4) LIVE SESSION — an S1-input
+  session driven through the real SDL keysym path (uinput injector) whose
+  recorded input trace replays to byte-identical checksum streams
+  host×2 + device (three-way cmp). Prints `M3 GATE OK`, exit 0; any
+  mismatch, shortfall, or missing evidence → nonzero. HUMAN GATE: a pass
+  is followed by the sentinel
+  `LOOP STOP: m3-device — needed: Chase S1 ratification playtest`
+  (LOOP §F-advance.3/§H) — Chase ratifies/amends the S1 mapping before
+  M4. (Script assembled by fix_plan §M3 task 7; per-task `done-check:`s
+  never substitute for this gate.)
+- **armv7 correctness rung (M3 task 1 committed form):**
+  `bash port/sim/device/check-device-g01.sh` → `DEVICE CONFORMS g01`,
+  exit 0 — cross-builds the FULL headless sim (check-sim.sh's exact TU
+  list, kept in sync), csweep, fmt_diff and `port/sim/device/mathsweep.c`
+  static armv7 (SDK gcc, every TU `-O2 -ffp-contract=off -Wall -Wextra
+  -Werror -static`; stamp-cached, `MLFK_FORCE_ARM=1` rebuilds), pushes
+  over ADB (`port/sim/device/adbsh.sh` RC-echo dsh — this adbd drops exit
+  codes), runs ON DEVICE the 257k fdlibm sweep, the exact-math family
+  sweep, `fmt_diff --self-test`, 5.47M-corpus gen+format (corpus
+  GENERATED on device), and the full g01 replay — ALL judged on the host
+  (`cmp` vs host references; unchanged verify-stream.js vs the frozen
+  stream; device writes only /tmp/mlfk + /mnt/mlfk-scratch, trap-removed).
+  FOUND (class, measured iter 38): **the SDK's static musl libc.a math
+  was built with unsafe-FP optimizations** — every algebraic-identity
+  path is folded: floor/ceil/round are IDENTITY for non-integers (±2^52
+  toint trick), fmod(0,0)==1.0 (`(x*y)/(x*y)`) and -0 results lose their
+  sign (`0*x`), strtod mis-rounds SUBNORMALS by 1 ulp and drops -0
+  (`sign*y`). This silently corrupted fd__rem_pio2's Payne-Hanek path
+  (sin/cos/tan of huge args) and every sim Math.floor. CLASS FIX:
+  `port/fdlibm/fdlibm.c` carries exact floor/ceil/fmod as STRONG symbol
+  overrides (Sun s_floor/s_ceil/e_fmod restated over the 64-bit pattern;
+  every fdlibm.c-linking TU inherits them, incl. qjs-oracle);
+  `fmt_diff --gen` is strtod-free where the breakage lives
+  (machine-generated bit-pattern anchor tables — corpus byte-identical,
+  the frozen expected-format.json pin proves it every run). STANDING
+  INSTRUMENT: mathsweep_arm (fdlibm.c linked, like the sim) vs
+  mathsweep_host (deliberately NOT linked with fdlibm.c = the host-libm
+  anchor), 432,319 lines byte-compared per run. Gotcha classes: trust NO
+  device-libc math/parse symbol — differential-sweep against a host
+  anchor before use (sqrt/fabs measured healthy — VFP instructions);
+  side-effectful calls as unsequenced snprintf args (sm64()) are a
+  corpus-determinism hazard across compilers — sequence explicitly.
+  Device g01 wall clock ~21 s / 3600 frames (~5.8 ms/frame sim-only avg).
+- **All-8 device conformance + sim-only p99 (M3 task 2 committed form):**
+  `bash port/sim/device/check-device-conform.sh` → `DEVICE CONFORMS 8/8`
+  + `SIM P99 OK`, exit 0 — replays EVERY golden in
+  `oracle/goldens/manifest.json` on the FunKey-S (g07/g08 via their
+  AIBRIDGE1 artifacts, built by the task-16 recipe when absent, fed as
+  `--cpu --difficulty --ai-bridge`), pulls every stream and judges ALL
+  host-side with the UNCHANGED verify-stream.js vs the frozen
+  `*.sha256.json`. Sim main gained `--timing <file>` (host + device):
+  per-frame CLOCK_MONOTONIC ns around tick+hash only, RAM-buffered,
+  written post-run — zero I/O in the frame loop; judged host-side by
+  `port/sim/device/percentiles.js` (nearest-rank p50/p99, strict
+  grammar), asserted p99_ns < 16670000 per golden. MEASURED (2026-07-16,
+  docs/research/device-perf.md): p50 4.27-5.81 ms, p99 7.95-10.68 ms —
+  worst p99 leaves ~6 ms for render+present+audio. Rig plumbing now
+  lives in `port/sim/device/riglib.sh` (extracted VERBATIM post-arc-GO;
+  check-device-g01.sh sources it): nonce-dsh, pullv, made(), shared
+  stamp-cached arm build (RIG_SCRIPTS = every rig script's bytes are
+  stamp input — one stamp, no ping-pong), rehash-adjacent-to-push +
+  push provenance, shared no-reclaim device lock, no-commit guard.
+  CORPUS pins/sweeps stay check-device-g01.sh-owned. Gotcha classes:
+  a perturbed FROZEN-copy tooth trips the frozen file's name/integrity
+  seal BEFORE the frame comparator — perturb the RUN JSON side to prove
+  per-frame judgment (both proven, `.loop/m3-task2-tooth-judge.log`);
+  check scripts must never write tracked files (the measured table is
+  script output; the writer appends it to device-perf.md).
+- **M4 EXIT GATE (concretized by REPLAN, iter 63):**
+  `bash port/sim/device/verify_m4.sh` — implements PLAN §4/M4's EXIT
+  verbatim, ALL evidence pulled from the device and judged ON THE HOST
+  under the verify_m3.sh discipline inherited whole:
+  `port/sim/device/m4-freeze-manifest.txt` reviewed-pin check + its
+  in-script MANIFEST_SHA256 anchor verified FIRST; AUTHORITATIVE-mode
+  hard-refusal while any evidence producer is arc-pending/arc-in-flight;
+  any dev/fake override forces `M4 GATE (DEV — NON-AUTHORITATIVE)` +
+  exit 3 (sentinel structurally locked out); relayed sub-content
+  `  | `-prefixed so `M4 GATE OK` is the only possible unprefixed
+  anchored occurrence. Legs: [1] FULL-GAME TRACE CONFORMANCE ON DEVICE
+  AT 60 FPS WITH AUDIO — every match golden in
+  `oracle/goldens/manifest.json` (g07/g08 driven by the LIVE C ai.c, no
+  AIBRIDGE1) plus every M4 golden in `port/goldens-m4/manifest.json`
+  (target-test + CPU-difficulty traces) replayed ON the FunKey-S with
+  live render + audio callback + music streaming, each stream judged by
+  the UNCHANGED `oracle/harness/verify-stream.js` against its frozen
+  `*.sha256.json` (target traces additionally by the frozen
+  target-plane verifier) — exact per-frame equality, FULL length,
+  rngCalls/specVersion pins, and per run: p99 frame < 16.67 ms,
+  underruns == 0, music buffer-starves == 0, skips == 0; [2] MENU
+  FLOWS — every committed `port/foh/flows/` script driven on device
+  through the real input path: frozen structural transition trace +
+  screenshot judges green + the launched match's stream prefix == its
+  frozen golden; [3] OPK — packaged with the SDK container's mksquashfs
+  4.4 ONLY, launched via the FRONTEND into the FOH, boot marker +
+  in-app screenshot pulled. Prints `M4 GATE OK`, exit 0; any mismatch,
+  shortfall, or missing evidence → nonzero. HUMAN GATE: a mechanical
+  pass is followed by the sentinel
+  `LOOP STOP: m4-complete — awaiting Chase acceptance playthrough`
+  (LOOP §F-advance.3/§H — driver duty, the gate never prints it);
+  Chase's acceptance playthrough closes the build phase. (Script
+  assembled by fix_plan §M4 task 14; per-task `done-check:`s never
+  substitute for this gate.)
+- **Upstream clone + build (proven twice — determinism spike + prototype):**
+  ```
+  git clone https://github.com/schmooblidon/meleelight "$MELEELIGHT_CLONE"
+  cd "$MELEELIGHT_CLONE" && git checkout 27af171
+  # apply the project patch (harness or mapping), drop dead devDeps
+  # (deepstream.io, electron*) + the postinstall script, then:
+  docker run --rm --platform linux/amd64 -v "$PWD":/app -w /app node:8 \
+    bash -c "npm install --ignore-scripts && npm run animations && npm run build"
+  ```
+  (Full recipe + patch: `spikes/determinism/README.md`,
+  `prototypes/control-mapping/README.md`.)
+- **Oracle harness (production, M0 task 2 — maintained copy; spike stays
+  frozen):** `cd oracle/harness && npm install` (committed package.json pins
+  playwright 1.61.1; launches installed Chrome via `channel:"chrome"`, no
+  browser download), then
+  `node run.js --dist "${MELEELIGHT_CLONE:-$HOME/.cache/meleelight-funkey-s/upstream}" --trace ../goldens/g01-fox-marth-battlefield.trace.json --frames 3600 --seed 1337 --out out/a.json`
+  ×2 + `node compare.js out/a.json out/b.json` → `IDENTICAL checksum
+  streams`. Match params: `--p1/--p2` char (0 marth · 1 puff · 2 fox ·
+  3 falco · 4 falcon), `--stage` (0 battlefield · 1 ystory · 2 pstadium ·
+  3 dreamland · 4 fdest · 5 fountain), `--cpu [--difficulty 1-9]` (P2 AI;
+  trace P2 column ignored). Defaults p1=2 p2=0 stage=0 = golden #1.
+  `gen-trace.js /tmp/t.json 3800 1337` regenerates g01's trace
+  byte-identically (sha256 60c332c5…20b9).
+- **Oracle harness (spike-era original, frozen):** `spikes/determinism/harness/` —
+  `node run.js --dist "$MELEELIGHT_CLONE" --frames 3600 --seed 1337 [--cpu] --out out/a.json`
+  twice, then `node compare.js out/a.json out/b.json` → `IDENTICAL`.
+  Needs `npm i playwright` next to the harness (uses installed Chrome).
+- **arm32 cross-compile (FunKey SDK 2.3.0 via docker `jondbell/funkey-s-sdk`):**
+  ```
+  docker run --rm -v "$PWD":/work -w /work jondbell/funkey-s-sdk bash -lc \
+    'export PATH=/opt/FunKey-sdk-2.3.0/bin:$PATH; arm-funkey-linux-musleabihf-gcc \
+     -O2 -ffp-contract=off <srcs> -o build-arm/<out> \
+     $(/opt/FunKey-sdk-2.3.0/arm-funkey-linux-musleabihf/sysroot/usr/bin/sdl-config --cflags --libs) -lm'
+  ```
+  gcc 10.2, musl hard-float, targets Cortex-A7+NEON by default. `sdl-config`
+  is NOT on PATH (full path above). Run docker builds SERIALLY. Image is
+  amd64 — fine under emulation. `-ffp-contract=off` on every sim TU is a
+  hard rule; `-O3` only on the hot raster TU.
+- **fdlibm crosscheck (M0 task 3):** `bash oracle/fdlibm-crosscheck/run.sh`
+  → `CROSSCHECK OK`, exit 0 — (1) every constant in
+  `port/fdlibm/{fdlibm.c,fdlibm.js}` matches its commented bit pattern,
+  (2) ~257k-input deterministic sweep C↔JS bit-exact (`cmp`), (3) ≤16-ulp
+  sanity vs native Math (guard only, never the gate), (4) golden #1's
+  full Math call stream three-way byte-identical (browser/C/JS). Vendored
+  surface sin/cos/tan/atan/atan2/pow at `port/fdlibm/` (V8 12.4.254
+  `src/base/ieee754.cc` lineage; fdlibm_sin/fdlibm_cos bodies; NOTICES
+  entry + Sun/V8 headers carried). The harness shims `Math.*` with fdlibm
+  BY DEFAULT (`--native-libm` disables, drift experiments only;
+  `--capture-math` records the call stream into output JSON's
+  `mathCapture`). Shimmed g01 stream first diverges from the pre-shim
+  stream at frame 1671 — browser-libm drift is real; run-to-run identity
+  holds (streams freeze in task 5).
+- **Checksum spec (M0 task 4, FROZEN):** `oracle/CHECKSUM.md` spec v1 —
+  the normative field-list/serialization/SHA-256/frame-boundary/RNG
+  contract the C port implements in M2. Any normative change = version
+  bump + re-freeze ALL `oracle/goldens/*.sha256.json` in the same change
+  (spec §8). Envelope keys are fixed-literal order (NOT sorted — only
+  nested objects sort); the seeded stream burns exactly one off-step draw
+  at `startGame` (`rngCallsOutsideStep == 1` is the expected value).
+- **Golden record + freeze / stream verify (M0 task 5):**
+  `bash oracle/record.sh <golden-id> [--refreeze]` — params come ONLY from
+  `oracle/goldens/manifest.json` (single param source; g01 seeded, task 7
+  extends it): two fresh browser runs (fdlibm shim on by default) →
+  `compare.js` identity → `oracle/harness/freeze-stream.js` writes
+  `oracle/goldens/<name>.sha256.json` (deterministic — NO timestamps or
+  environment data; re-recording an already-frozen golden must print
+  `unchanged (byte-identical re-freeze)`, any diff = drift; a DIFFERING
+  overwrite needs `--refreeze` and is only legit with a spec version bump,
+  CHECKSUM.md §8) → `verify-stream.js` self-check. Verify any run:
+  `cd oracle/harness && node verify-stream.js <run.json> ../goldens/<name>.sha256.json`
+  → `STREAM MATCH …`, exit 0 — exact string equality per frame, FULL
+  length, plus rngCalls + rngCallsOutsideStep equality, specVersion pin
+  (parsed live from oracle/CHECKSUM.md — a spec bump without re-freeze
+  fails mechanically), trace-sha256/param pins, and the frozen file's
+  `streamSha256` integrity seal. g01 frozen: spec v1, 3600 frames,
+  rngCalls=134, rngCallsOutsideStep=1, frame-1 hash = the CHECKSUM.md §5
+  anchor (9f4c6df7…).
+- **QuickJS oracle runtime + golden replay (M0 task 6, committed form):**
+  `bash oracle/qjs/build.sh && bash oracle/qjs/replay.sh <golden-id>` →
+  `QJS MATCH <id>`, exit 0. build.sh pins bellard/quickjs @
+  `42d08be5f28abfdf881110bba3713f6a256d8d97` (VERSION 2026-06-04 —
+  byte-matches the feasibility-spike tree; all 18 consumed sources
+  sha256-verified), builds `build-host/qjs-oracle` (embedder repoints the
+  Math table at `port/fdlibm/` C at startup; C SHA-256, NIST-self-tested;
+  `-ffp-contract=off` on every TU) + a static armv7 cross-build
+  COMPILE-ONLY (`QJS_SKIP_ARM=1` skips it for fast host iteration; device
+  rung is M3). replay.sh boots the built bundle under qjs via
+  `oracle/qjs/shim.js` (host-object shims only, each documented) with the
+  browser harness's `init.js`/`pagelib.js` VERBATIM, feeds the golden's
+  manifest params/trace through `__harness`, and judges with the
+  unchanged `verify-stream.js`. Boot guards fail hard: bitwise
+  fdlibm-repoint assertion (negative-testable: `QJS_ORACLE_NO_REPOINT=1`)
+  and a boot-RNG draw pin (== 465; mulberry32 state is never re-seeded at
+  setupMatch, so boot draw count misalignment silently shifts the
+  in-match stream). Gotcha class (cost a divergence at frame 403):
+  browser FEATURE DETECTION makes missing globals silent path-flips, not
+  crashes — absent `Storage`, getCookie returns `""` (not null) and
+  getGameplayCookies Number("")-zeroes every gameSettings entry
+  (phantomThreshold 0.01→0). Shim for parity of paths, not just survival.
+- **Golden set (M0 task 7, committed form):** 8 goldens in
+  `oracle/goldens/manifest.json` — g01 fox/marth/battlefield seed 1337 ·
+  g02 falco/puff/ystory 7302 · g03 falcon/fox/pstadium 7303 ·
+  g04 puff/falcon/dreamland 7344 · g05 marth/falco/fdest 7305 ·
+  g06 falcon/marth/fountain 7306 · g07 falco/CPU-falcon(d5)/battlefield
+  7307 · g08 fox/CPU-puff(d5)/fdest 7308. All 3600 verified frames;
+  manifest `seed` doubles as the gen-trace.js seed
+  (`node oracle/harness/gen-trace.js <trace> 3800 <seed>` reproduces every
+  trace byte-identically). Trace GAMEPLAY QUALITY CONTRACT (checked at
+  record time; documented in the manifest comment): ≥1 KO (DEAD* state),
+  ≥1 DAMAGE*/CAPTUREDAMAGE state (real hits, not just SDs), both players
+  ≥1 stock at the final frame (match still live — a 0-stock endpoint means
+  post-match frames polluted the stream; seed 7314 rejected for exactly
+  that). Full gate `bash oracle/verify_goldens.sh` (16 browser runs + 8
+  qjs replays) ≈ 4 min. CPU rngCalls vary wildly by matchup (81 g07 vs
+  1496 g08) — both deterministic.
+- **QuickJS oracle-runtime build (spike-era original, frozen):**
+  `spikes/device-feasibility/README.md` step 2 (bellard/quickjs
+  @2026-06-04, single gcc invocation via `qjsmin.c`, static, 890 KB).
+- **Device access (ADB):** marker file `adb` at SD root → adbd on boot,
+  root shell. Park frontend: `touch /mnt/disable_frontend; pkill gmenu2x`
+  (restore: `rm /mnt/disable_frontend`). Launch via login shell **`sh -lc`**
+  (else SDL_Init dies: "Unable to open mouse"); detached runs need
+  `setsid … </dev/null` + trailing `sleep 2`. Buttons arrive as letter
+  keysyms: `u/d/l/r` d-pad, `a/b/x/y` face, `s` START, `k`/`n` L/R, `q`
+  MENU. Known-good device id: `12c00003237f5528`.
+- **OPK packaging:** `mksquashfs $STAGE out.opk -all-root -noappend
+  -no-exports -no-xattrs -comp gzip` — **use the SDK container's
+  mksquashfs 4.4 ONLY** (newer versions produce an OPK the kernel silently
+  fails to mount). `.desktop` file needs a trailing empty line; `Exec=` a
+  launcher script, not the binary. OPK mounts read-only: write to `/tmp`
+  (RAM, wiped at power-off) or `/mnt` (SD).
+
+- **vfx seam widening, sim + capture side (M4 task 1 committed form):**
+  `bash port/sim/calib/check-vfx-seam.sh` → `VFX SEAM MATCH`, exit 0 —
+  composes the 10 vfx-affected cluster checks (moves-shared/fox/falco/
+  falcon/marth/puff, article, asshort, physics, hitdet — the
+  grep-MEASURED emitter set; the pre-registered guess lacked hitdet's
+  18 sites) + `check-sim.sh` (stream untouched: vfx is not on the
+  CHECKSUM.md surface). ml_events vfx events carry the FULL drawVfx
+  config: `MlVfx` + the `ml_drawVfx*` shape-emitter family (central
+  ml_drawVfx_cfg keeps circleDust's 4 seeded draws) + `ml_vfx_sink`
+  (enqueue-time renderer chokepoint, ml_snd_sink twin — the queue
+  resets per tick stage, consume at enqueue). Captures record
+  ctx.canon(cfg) at CALL time (snapshot semantics — live-reference pos
+  is real); C replays compare via calib cb_vfx. Measured config domain
+  (FORMAT.md "vfx posts"): keys ⊆ {name,pos,face,f,color1,color2}; f =
+  num | Vec2D | {frame,pNum,swingType}. Gotcha classes: (1) widening
+  an OBSERVABLE widens read sets transitively — shieldDepletion needed
+  +pos/face (AsShieldDepState + 7-key pre), puff's stage projection
+  needed +wallL/wallR (NSA onWallCollide wallBounce) — trust the
+  strict marshals to find these; (2) config expressions consuming
+  seeded draws (FURAFURA jitter, falcon UPSPECIALCATCH/THROW) must
+  hoist draws into sequenced locals (C args are unsequenced — the
+  sm64() class); (3) teeth restores by reverse-edit + 0-divergence
+  re-replay, never `git checkout --` (index-restore reverts unstaged
+  work).
+
+- **Live CPU integration + d1/d9 coverage goldens (M4 task 5 committed
+  form):** `bash port/sim/check-ai-live.sh` → `AI LIVE CONFORMS`, exit 0
+  — the sim's runAI site runs the REAL C ai.c LIVE (seeded-chain draws
+  via logged ml_random, bank + bookkeeping writes; the pollInputs
+  slot-0 alias re-copy stays the caller's job) through the
+  `ml_sim_runai_live` POINTER SEAM: NULL in sim_tick.c, constructor-
+  installed by `port/sim/sim/sim_ai_live.c` (linked only alongside
+  ai.c) — so the FROZEN `check-sim.sh` build (whose TU list never gains
+  ai.c) is symbol- and behavior-identical, and `--cpu` without
+  `--ai-bridge` still errors there (in-check M2-contract witness).
+  check-sim.sh is BYTE-UNTOUCHED and its sha256 is PINNED inside
+  check-ai-live.sh. AIBRIDGE1 = the archival `--ai-bridge` arm
+  (check-ai-bridge.sh stays green; composed in). The check composes:
+  check-sim.sh (bridge-fed, 8/8) + live g07/g08 vs the frozen oracle
+  streams + live m01/m02 vs `port/goldens-m4/*.sha256.json` + the
+  ai-bridge and aiport rigs — every stream judged by the UNCHANGED
+  verify-stream.js. NEW golden machinery (HARD RULE 3: oracle/
+  read-only): `port/goldens-m4/{manifest.json,record-m4.sh,
+  freeze-stream-m4.js,check-quality.js}` — record = oracle/harness
+  run.js/compare.js/gen-trace.js BY PATH, browser ×2-identity, the M0
+  gameplay-quality contract checked MECHANICALLY, M0-format freeze
+  (streamlib required by path). Goldens: m01
+  falcon/CPU-marth(d1)/ystory seed 8114 (first live CPU on a
+  moving-platform stage) · m02 falcon/CPU-fox(d9)/dreamland seed 8109.
+  `sim_host_live --ai-cover` dumps the ml_ai_cov arm table (stderr,
+  diagnostic). GameState bank is now `[4][8]` (ai.js:357 reads
+  `[i][1]`). Gotcha classes: (1) frozen-build link seams — new symbols
+  behind a constructor-installed pointer OUTSIDE GameState (memset-
+  safe), never referenced from frozen-list TUs; (2) trace quality is
+  STRUCTURAL, not seed luck — laser damage carries percent but NO
+  DAMAGE state, wide blastzones suppress SD KOs, and a d1 CPU deals no
+  kill knockback (marthAI's whole action block is `pdiff>=2`-gated:
+  d1 proves its OFF side); diagnose before re-rolling seeds.
+- **Persistent play install (A13 committed form):** `bash
+  port/gfx/opk/install-play-opk.sh` → `PLAY OPK INSTALLED (...)`, exit 0 —
+  builds the PLAY OPK (shared rig arm stamp; SDK-container mksquashfs 4.4;
+  unsquashfs cmp of all 5 members) and installs it as
+  `/mnt/Applications/meleelight.opk`, sha-verified host==device, retiring the
+  pre-A13 name `meleelight-foh.opk` verified-gone. NOT a gate: it provisions
+  the device; `check-device-opk.sh`'s `OPK_INVENTORY_PIN` is what notices if
+  it goes missing or changes name. Restart the frontend to see the new entry
+  (gmenu2x caches the grid it scanned at startup). **THREE ROLES, THREE
+  .desktop FILES, THREE DISTINCT `Name=` VALUES — never let two converge:**
+  play `meleelight-play.funkey-s.desktop` "MeleeLight" · M3 evidence
+  `meleelight.funkey-s.desktop` "MeleeLight EV" (`NAV_LINK=2`) · FOH evidence
+  `meleelight-foh.funkey-s.desktop` "MeleeLight FOH" (`NAV_LINK=2`). The grid
+  is ordered alphabetically by `Name`, both checks navigate to a MEASURED link
+  index, and on the FOH arm the play install runs the SAME launcher and writes
+  the SAME boot marker with the SAME `foh_device` sha — so equal titles there
+  are a FALSE-PASS hole, not merely an ambiguity. Editing any `Name=` means
+  re-measuring both `NAV_LINK`s in the same change (the installer's grammar
+  check says so on failure). Gotcha classes: (1) a script that sources
+  `riglib.sh` must define `DTMP`/`DSD`/`FDC` itself — the lock, the recovery
+  claim and `rig_srchash` read them, and `set -u` dies mid-run otherwise;
+  (2) a new device script should NOT join `RIG_SCRIPTS` unless its bytes can
+  change a COMPILED byte — joining it forces every device check to rebuild.
+
+- **Custom target stages PLAY (A45 T2 committed form; D42/D43):**
+  `bash port/sim/target/check-custom-stage.sh` → `CUSTOM STAGE PLAYS`,
+  exit 0 — the DIFFERENTIAL that makes a `.mlstage` playable rather than
+  merely parseable: for EVERY golden in `port/goldens-m4/manifest-target.json`
+  it re-expresses the AUTHORED stage as a share code (T1's `mlk_encode`),
+  publishes it as `<dir>/custom0.mlstage`, loads it back through the custom
+  path, replays the SAME trace, requires the two runs BYTE-IDENTICAL, then
+  judges BOTH with the UNCHANGED `verify-stream.js` + `verify-target-stream.js`
+  against the frozen goldens (so it cannot pass by both sides being wrong the
+  same way) and asserts the custom run really destroyed targets. Sound only
+  because the round trip is EXACT: MEASURED, all 10 authored target stages =
+  210 numbers, ZERO lossy at `toFixed(2)`. The blocker was `tp_setup_target` /
+  `tp_stage_from_ttab1` / `gfx_target_init` all keying on a TTAB1 integer id;
+  the fix is ROOT-CAUSE, not an arm — `tp_setup_target_core` is the ONE
+  translation of `startTargetGame` and BOTH entries route through it
+  (`target_play.c`; the custom entry is `tp_setup_target_custom`,
+  `port/sim/target/custom_stage.c`), and `gfx_target_init_custom`
+  materialises a runtime `ml_tstage_t` row so all ten `gfx_target.c` draw
+  functions stay byte-unchanged. `--custom <dir> <slot>` on `sim_host_target`
+  sits behind the `tp_custom_setup` POINTER SEAM (the `ml_sim_runai_live`
+  precedent) so `check-target-sim.sh` and `port/foh/check-foh-flows.sh` — the
+  other two builders of `target_main.c` — need no line changed; an in-check
+  witness builds without `custom_stage.c` and proves `--custom` is refused.
+  ON-DISK CONTRACT: three LF lines `MLSTAGE1` / share code / `SUM <64 hex>`
+  (sha256 over preceding bytes — `foh_persist.c:154`'s idiom reused, not a
+  second one invented). VALIDATE ON READ, ALWAYS: bounded read, strict
+  anchored grammar, SUM verified BEFORE parsing, then `mlk_parse` +
+  `mlk_stage_playable`; every refusal names its rule; a corrupt file cannot
+  reach the sim. T2 has NO WRITER by design — files arrive by SD card; when
+  T3/T4 needs one it must generalise `foh_persist_save`'s existing atomic
+  publish (`foh_persist.c:506-551`), never grow a second write path.
+  Gotcha classes: (1) the damage plane HAS NEVER EXECUTED (zero authored
+  stages carry `damageType`) and a share code CAN carry one — `mlk_stage_playable`
+  REFUSES it at load naming A45 T6 as owing the golden, but props with a
+  **null** damageType are inert (physics tests truthiness) and are exactly
+  what upstream BUG 1 emits for every sixth surface, so only a real type
+  string refuses; (2) the play-leg tooth first shifted GROUND SURFACE 0 and
+  did NOT bite — on t01 that surface is a ledge at y=88 the fox never
+  touches (5th razor-thin-nudge no-op this session): a tooth must perturb
+  the domain that OCCURS, not the first row of it; (3) `getConnected` is NOT
+  needed — `connected` is not one of the code grammar's 14 fields, so a
+  decoded stage never had one to recompute (`hasConnected = false`, the
+  fdest/ystory arms); it belongs to A45 T7. R2 (target cap 10 vs the codec's
+  20) ships as a LOUD REFUSAL, the safe half; raising it is an owner ruling
+  and would break the `_Static_assert` tying the cap to upstream's own
+  10-element `targetDestroyed` literal.
+
+## Build/gotcha notes (the loop appends here)
+
+- Log to tmpfs during play, copy to SD on exit (SD streaming = multi-second
+  stalls); drive telemetry from the host over ADB (on-device background
+  scripts starve at 100% game CPU). Read MemAvailable, not MemFree.
+- Screenshot from INSIDE the app (dump own framebuffer) — the kernel fb is
+  240×720 (3 flip pages), raw fb reads hit the wrong page. Fn+Up = OS
+  screenshot chord → `/mnt/FunKey/snapshots/`.
+- SDL_SetVideoMode fallback chain HWSURFACE|DOUBLEBUF → SWSURFACE|DOUBLEBUF
+  → SWSURFACE → 0; verify `BitsPerPixel == 16` after init or bail.
+- Upstream expected console noise: 404 for `/favicon.ico`; webpack
+  localforage warning. Sim frames before ~frame 91 (match `starting`
+  window) ignore inputs.
+- Process standards (owner ruling 2026-07-16): `docs/PROCESS.md` binds
+  driver + writer briefs (tiered Codex review arcs, pre-registration,
+  identity pins, ground-truth ritual); current truth lives in
+  `docs/STATE.md` (driver-updated every turn).
+- C legibility standard (owner ruling 2026-08-26): `docs/c-legibility.md`
+  (vendored 7etsuo/write-legible-c + scope preamble) governs ORIGINAL-plane
+  C (`port/foh/`, `port/gfx/`, `port/sim/target/`, `port/sim/device/`
+  tools, M4 mixer) FORWARD-ONLY — new/touched code, no retrofit sweeps.
+  Translation TUs are EXEMPT (HARD RULE 5 wins). Reviewer prompts for
+  original-plane diffs carry the §14+§16 lens per PROCESS.md §3.2.
+
+<!-- ───────────────────────────────────────────────────────────────────
+     Below this line is MACHINE-GENERATED by `headroom learn` and is
+     local tooling notes, not project rules. It used to be the whole of a
+     gitignored AGENTS.md; when the rules moved into this file it was kept
+     rather than dropped, inside its own markers so the generator can
+     rewrite its block without touching anything above.
+     ─────────────────────────────────────────────────────────────────── -->
+<!-- headroom:learn:start -->
+## Headroom Learned Patterns
+*Auto-generated by `headroom learn` on 2026-07-26 — do not edit manually*
+
+### Large Files — read once, navigate by line range
+*~156,406 tokens/session saved*
+- Known large files: `port/sim/device/check-device-fullgame.sh` (~2900 lines), `port/foh/foh_dev.c` (~2350), `port/sim/device/riglib.sh` (~1900), `docs/AGENT-LOG.md` (~19k lines). Do NOT re-Read them in dozens of overlapping chunks. First build an index once (`rtk proxy grep -nE '^[a-z_]+\(\)|^# --- \[|^echo "== \[' <file>` for shell; `rtk proxy grep -n 'int main\|^static\|strcmp(a,' <file>` for C), then jump straight to sections with `rtk proxy sed -n 'A,Bp'`.
+- The Read tool in 2–7 KB windows is the same trap — measured 103 chunked Reads (~156k tokens) in one session batch, mostly re-walking `check-device-fullgame.sh`, `riglib.sh`, and `.loop/review-*` files. Read each needed file ONCE with a wide range (or 2–3 non-overlapping wide ranges) per session; re-read only after you edit it. If you find yourself issuing a 4th Read on the same file, stop and dump the remaining region in one call.
+- For `docs/AGENT-LOG.md`, find recent iteration entries with `rtk proxy grep -n '^## ' docs/AGENT-LOG.md | tail -12` — plain grep variants of this fail via the hook.
+- `.loop/review-*.log` files reach ~1 MB and Read is blocked by hcat-gate; use `hcat <file>` or `rtk proxy tail/sed` with line ranges, and extract codex findings once with `awk '/^## Findings/{f=1} f'` instead of repeated tails.
+
+### Reviewing check-device-fullgame.sh
+*~30,000 tokens/session saved*
+- When triaging review findings against `port/sim/device/check-device-fullgame.sh`, pull the relevant sections ONCE up front: `rtk proxy grep -nE '^# --- \[|^[a-z_]+\(\)' port/sim/device/check-device-fullgame.sh` for the section map, then ONE wide `rtk proxy sed -n 'A,Bp'` per section under discussion. Sessions that instead alternated Read-chunk → Grep-variant → Read-chunk over the same regions (settle/sd_diag/lease/teeth blocks) burned 100k+ tokens without new information.
+
+### Shell / Command Environment
+*~15,000 tokens/session saved*
+- Plain `grep`/`cat`/`sed`/Read output is intercepted by a compression hook and frequently comes back empty or mangled. This includes the Grep TOOL: a ~15–16 byte result means the hook ate the matches, not that there were none — do NOT reissue 2–3 pattern variants of the same search (measured repeatedly: `lease_renew|LEASE`, `PINNED_GOLDEN_SET|g01`, `dsh\(\)` variants). On the first tiny result, switch straight to `rtk proxy grep -nE 'pat' <file>` or `/usr/bin/grep`.
+- `rg` is NOT installed in the Bash eval shell (`command not found: rg`, hit repeatedly in heredoc/multi-line commands) — use `grep -rn` or `rtk proxy grep` instead; never script against rg here.
+- Never quote the whole command after `rtk proxy` (`rtk proxy 'grep -n ...'` fails); pass argv directly: `rtk proxy grep -nE 'pat' file`.
+- `python` is not on PATH — always use `python3`.
+- `git` invocations emit `confstr() failed ... DARWIN_USER_TEMP_DIR` and spill into a background session; prefix `TMPDIR=/tmp git ...` (or export TMPDIR once per session); if a git session does spawn, drain it with ONE `write_stdin` using a large `max_output_tokens`.
+- Bash commands of the form `sleep 240; <cmds>` are blocked; to wait on a condition use the Monitor tool or a bounded `for i in $(seq 1 N); do sleep 15; grep -q SENTINEL log && break; done` loop under the 10-minute timeout.
+
+### Computer-use app state
+*~7,400,000 tokens/session saved*
+- Never re-call `get_app_state` on the same app between every action — measured 80x on Chrome (~3.5M tokens), 45x on Firefox (~1.9M), 28x on cmux (~2M) in single sessions. Cache the element indexes from the last snapshot and refresh ONLY after an action that changes the page (navigation, submit, modal open). Batch click/set_value against the cached indexes.
+- If a `set_value`/`click`/`type_text` appears not to take effect, do not retry the identical call 3–5x (each retry re-embeds a full screenshot/state); take one fresh snapshot, verify the element index changed, then act once.
+
+### File Paths
+*~25,000 tokens/session saved*
+- The skip-attribution rig is `port/sim/device/check-skip-attrib.sh` + `port/sim/device/skip-attrib/` — NOT under `port/gfx/` or `port/foh/`. `check-device-fullgame.sh` lives in `port/sim/device/`, not `port/foh/`.
+- Host syntax-check line for foh/gfx TUs: `cc -fsyntax-only -ffp-contract=off -Wall -Wextra -Werror -Ipipeline/build/sim-tables -Iport/ryu -Iport/sim -Ioracle/qjs port/foh/foh_dev.c` — requires `pipeline/build/sim-tables/` to exist (regenerate via `node pipeline/run.js --only animations,tables` if `ml_stages.h` is missing).
+- Before passing hardcoded paths to `rg`/`nl` (e.g. `pyproject.toml`, `src/db`, sibling-repo dirs), confirm they exist with `rg --files | rg '<name>'` — passing missing paths makes rg exit 2 and the whole command's output is lost, forcing a re-run.
+
+### Device / ADB
+*~2,000 tokens/session saved*
+- Don't alias adb in a shell variable (`A="adb -s ID shell"; $A ...` fails in zsh as command-not-found). Either write `adb -s 12c00003237f5528 shell "sh -lc '...'"` inline or `source port/sim/device/adbsh.sh` and use `dsh` (RC-echo checked; this adbd drops exit codes).
+
+<!-- headroom:learn:end -->

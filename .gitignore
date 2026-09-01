@@ -5,6 +5,7 @@ build*/
 spikes/device-audio/audiotest
 # local agent-tooling artifacts (never project state; LOOP.md §A.2 needs a clean tree)
 .tokensave/
-AGENTS.md
+# AGENTS.md is TRACKED (it holds the hard rules; CLAUDE.md imports it).
+# `headroom learn` still writes its own marked block at the bottom.
 CLAUDE.local.md
 scratch-*.js
