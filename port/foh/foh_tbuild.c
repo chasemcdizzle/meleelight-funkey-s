@@ -1904,8 +1904,245 @@ static void tb_view(const FohState *s, FohTbView *out) {
 // would have lied about the player's work. This makes the statement true
 // instead of removing it.
 #define TB_DOC_NAME "tbdoc.mlstage"
+#define TB_VIEW_NAME "tbview.dat"
 
-static bool tb_suspend(const char **why) {
+// --- THE WORK IN PROGRESS, NOT JUST THE WORK COMMITTED (D62, 2026-08-31) ----
+//
+// D57 made the DOCUMENT survive the lid, and check-hibernate.sh leg [5b]
+// proves it byte-for-byte. What it did not keep is everything the builder
+// holds in FohState: where the crosshair was, which tool was in hand, the
+// half-dragged platform, and the polygon with four vertices down and the
+// fifth tracking the cursor. MEASURED, reported by the owner: "resume for
+// target test builder doesn't bring back what you were in the middle of
+// drawing ... or the cursor position."
+//
+// An uncommitted polygon is the MOST valuable thing on that screen — it is
+// the only thing that is not also in the document — so keeping the document
+// and dropping it is the wrong half to keep.
+//
+// WHY A SIDECAR AND NOT PERSIST ROWS. The view is ~30 scalars plus 33 polygon
+// points: about ninety rows on a format whose every row is hand-declared,
+// domain-checked and pinned by a positional device whitelist. None of it
+// means anything to any other screen, and the builder already owns a file of
+// its own with an atomic publish and a SUM (D57). So it goes beside the
+// document, under the same rules: validate on read, SUM before parse, refuse
+// by name, CONSUME at resume.
+//
+// The value list is a table for the same reason the persist plane's is: a
+// field added to the builder's view state and forgotten here is a field the
+// player loses, and the table is one line per field with a domain beside it.
+//
+//   I = int, with an inclusive [lo,hi] the reader enforces
+//   D = double, which must be FINITE (the canvas has no meaning for NaN)
+//   B = bool, written 0/1
+#define TB_VIEW_FIELDS(X)                                                      \
+  X(I, tbTool, 0, FOH_TB_TOOL_IDS - 1)                                         \
+  X(I, tbGrid, 0, 4) /* gridSizes (:80); 4 == free */                          \
+  X(I, tbSlot, -1, FOH_TB_SLOTS - 1)                                           \
+  X(D, tbUnX, 0, 0) X(D, tbUnY, 0, 0) X(D, tbX, 0, 0) X(D, tbY, 0, 0)          \
+  X(B, tbPaused, 0, 1) X(B, tbHoldA, 0, 1)                                     \
+  X(I, tbPauseRow, 0, 64) X(I, tbPane, 0, 64) X(I, tbPaneRow, 0, 64)           \
+  X(I, tbHoverKind, 0, 64) X(I, tbHoverIdx, -1, 4096)                          \
+  X(I, tbGrabKind, 0, 64) X(I, tbGrabIdx, -1, 4096)                            \
+  X(I, tbLedgeKind, 0, 64) X(I, tbLedgeIdx, -1, 4096)                          \
+  X(I, tbLedgeSide, -1, 64)                                                    \
+  X(I, tbWallType, 0, 64) X(I, tbDamageType, 0, 64)                            \
+  X(I, tbDrawMode, 0, 1) X(I, tbScaleScroll, -4096, 4096)                      \
+  X(D, tbDragX0, 0, 0) X(D, tbDragY0, 0, 0)                                    \
+  X(D, tbDragX1, 0, 0) X(D, tbDragY1, 0, 0)                                    \
+  X(B, tbDrawingPoly, 0, 1)                                                    \
+  X(I, tbPolyN, 0, FOH_TB_MAX_POLY_PTS)                                        \
+  X(I, tbPolyLinesN, 0, FOH_TB_MAX_POLY_PTS)
+
+#define TB_VIEW_HDR "MLTBVIEW1\n"
+#define TB_VIEW_MAX 8192
+
+static void tb_view_hex(double v, char out[17]) {
+  uint64_t b;
+  memcpy(&b, &v, 8);
+  static const char *H = "0123456789abcdef";
+  for (int i = 0; i < 16; i++) out[i] = H[(b >> (60 - 4 * i)) & 0xFu];
+  out[16] = 0;
+}
+
+// Publish the builder's view state beside its document. A failure here is
+// REPORTED and is NOT fatal to the resume: the document is the thing that
+// must survive, and losing the crosshair is not worth downgrading a resume
+// the player would otherwise get.
+static bool tb_view_write(const FohState *s, const char **why) {
+  static char file[TB_VIEW_MAX];
+  size_t n = 0;
+  const size_t hdr = sizeof(TB_VIEW_HDR) - 1;
+  memcpy(file, TB_VIEW_HDR, hdr);
+  n = hdr;
+#define TB_VW_NUM(name)                                                        \
+  {                                                                            \
+    const int w =                                                              \
+        snprintf(file + n, sizeof file - n, "%s %d\n", #name, (int)(s->name)); \
+    if (w <= 0 || (size_t)w >= sizeof file - n) {                              \
+      if (why) *why = "VIEW TOO LARGE";                                        \
+      return false;                                                            \
+    }                                                                          \
+    n += (size_t)w;                                                            \
+  }
+#define TB_VW_I(name, lo, hi) TB_VW_NUM(name)
+#define TB_VW_B(name, lo, hi) TB_VW_NUM(name)
+#define TB_VW_D(name, lo, hi)                                                  \
+  {                                                                            \
+    char hx[17];                                                               \
+    tb_view_hex((double)(s->name), hx);                                        \
+    const int w =                                                              \
+        snprintf(file + n, sizeof file - n, "%s %s\n", #name, hx);             \
+    if (w <= 0 || (size_t)w >= sizeof file - n) {                              \
+      if (why) *why = "VIEW TOO LARGE";                                        \
+      return false;                                                            \
+    }                                                                          \
+    n += (size_t)w;                                                            \
+  }
+#define TB_VW_ROW(k, name, lo, hi) TB_VW_##k(name, lo, hi)
+  TB_VIEW_FIELDS(TB_VW_ROW)
+#undef TB_VW_ROW
+  // The polygon points, every slot of the array and not just the live ones:
+  // a reader that trusted tbPolyN would leave stale coordinates in the tail,
+  // and the tail is exactly what a later B press walks back into.
+  for (int i = 0; i < FOH_TB_MAX_POLY_PTS; i++) {
+    char hx[17], hy[17];
+    tb_view_hex(s->tbPolyX[i], hx);
+    tb_view_hex(s->tbPolyY[i], hy);
+    const int w = snprintf(file + n, sizeof file - n, "p %d %s %s\n", i, hx, hy);
+    if (w <= 0 || (size_t)w >= sizeof file - n) {
+      if (why) *why = "VIEW TOO LARGE";
+      return false;
+    }
+    n += (size_t)w;
+  }
+  if (n + 69 > sizeof file) {
+    if (why) *why = "VIEW TOO LARGE";
+    return false;
+  }
+  char hex[65];
+  ml_sha256_hex(file, n, hex);
+  memcpy(file + n, "SUM ", 4);
+  memcpy(file + n + 4, hex, 64);
+  file[n + 68] = '\n';
+  const char *pubWhy = 0;
+  if (!foh_persist_publish(TB_VIEW_NAME, file, n + 69, &pubWhy)) {
+    if (why) *why = pubWhy ? pubWhy : "SAVE FAILED";
+    return false;
+  }
+  if (why) *why = 0;
+  return true;
+}
+
+static bool tb_view_hex_read(const char *p, double *out) {
+  uint64_t b = 0;
+  for (int i = 0; i < 16; i++) {
+    const char c = p[i];
+    int d;
+    if (c >= '0' && c <= '9') d = c - '0';
+    else if (c >= 'a' && c <= 'f') d = 10 + (c - 'a');
+    else return false;
+    b = (b << 4) | (uint64_t)d;
+  }
+  memcpy(out, &b, 8);
+  return isfinite(*out);
+}
+
+// Read the view back. EVERY refusal names its rule and leaves the FohState
+// untouched, so a corrupt view file costs the crosshair and never the
+// document — the two are separate files precisely so one cannot poison the
+// other.
+static bool tb_view_read(FohState *s, const char **why) {
+#define VR_FAIL(m)                                                             \
+  do {                                                                         \
+    if (why) *why = (m);                                                       \
+    if (f) fclose(f);                                                          \
+    return false;                                                              \
+  } while (0)
+  FILE *f = 0;
+  char path[512];
+  if (!named_path(TB_VIEW_NAME, path, sizeof path)) VR_FAIL("PATH TOO LONG");
+  f = fopen(path, "rb");
+  if (!f) VR_FAIL("EMPTY");
+  static char buf[TB_VIEW_MAX + 1];
+  const size_t n = fread(buf, 1, sizeof buf, f);
+  if (ferror(f)) VR_FAIL("UNREADABLE");
+  if (n > TB_VIEW_MAX) VR_FAIL("FILE TOO LARGE");
+  fclose(f);
+  f = 0;
+  const size_t hdr = sizeof(TB_VIEW_HDR) - 1;
+  if (n < hdr || memcmp(buf, TB_VIEW_HDR, hdr) != 0) VR_FAIL("NOT A VIEW FILE");
+  const size_t sumLen = 4 + 64 + 1;
+  if (n < hdr + sumLen) VR_FAIL("TRUNCATED");
+  const size_t sumAt = n - sumLen;
+  if (memcmp(buf + sumAt, "SUM ", 4) != 0) VR_FAIL("NO SUM LINE");
+  if (buf[n - 1] != '\n') VR_FAIL("BAD SUM LINE");
+  // INTEGRITY BEFORE MEANING — the .mlstage rule, inherited whole.
+  char hex[65];
+  ml_sha256_hex(buf, sumAt, hex);
+  if (memcmp(buf + sumAt + 4, hex, 64) != 0) VR_FAIL("VIEW SUM MISMATCH");
+  buf[sumAt] = 0;
+  // Parse into a SCRATCH copy, so a refusal half way down cannot leave the
+  // live screen holding some of a bad file.
+  FohState tmp = *s;
+  const char *p = buf + hdr;
+#define TB_VR_KEY(name)                                                        \
+  const size_t kl_##name = strlen(#name);                                      \
+  if (strncmp(p, #name, kl_##name) != 0 || p[kl_##name] != ' ')                \
+    VR_FAIL("VIEW ORDER");                                                     \
+  p += kl_##name + 1;
+#define TB_VR_INT(name, lo, hi, assign)                                        \
+  {                                                                            \
+    TB_VR_KEY(name)                                                            \
+    char *end = 0;                                                             \
+    const long v = strtol(p, &end, 10);                                        \
+    if (end == p || *end != '\n') VR_FAIL("VIEW GRAMMAR");                     \
+    if (v < (long)(lo) || v > (long)(hi)) VR_FAIL("VIEW DOMAIN");              \
+    assign;                                                                    \
+    p = end + 1;                                                               \
+  }
+#define TB_VR_I(name, lo, hi) TB_VR_INT(name, lo, hi, tmp.name = (int)v)
+#define TB_VR_B(name, lo, hi) TB_VR_INT(name, lo, hi, tmp.name = (v != 0))
+#define TB_VR_D(name, lo, hi)                                                  \
+  {                                                                            \
+    TB_VR_KEY(name)                                                            \
+    double d;                                                                  \
+    if (!tb_view_hex_read(p, &d)) VR_FAIL("VIEW BAD DOUBLE");                  \
+    if (p[16] != '\n') VR_FAIL("VIEW GRAMMAR");                                \
+    tmp.name = d;                                                              \
+    p += 17;                                                                   \
+  }
+#define TB_VR_ROW(k, name, lo, hi) TB_VR_##k(name, lo, hi)
+  TB_VIEW_FIELDS(TB_VR_ROW)
+#undef TB_VR_ROW
+  for (int i = 0; i < FOH_TB_MAX_POLY_PTS; i++) {
+    int idx = -1;
+    if (p[0] != 'p' || p[1] != ' ') VR_FAIL("VIEW ORDER");
+    char *end = 0;
+    idx = (int)strtol(p + 2, &end, 10);
+    if (end == p + 2 || *end != ' ' || idx != i) VR_FAIL("VIEW ORDER");
+    double x, y;
+    if (!tb_view_hex_read(end + 1, &x)) VR_FAIL("VIEW BAD DOUBLE");
+    if (end[17] != ' ') VR_FAIL("VIEW GRAMMAR");
+    if (!tb_view_hex_read(end + 18, &y)) VR_FAIL("VIEW BAD DOUBLE");
+    if (end[34] != '\n') VR_FAIL("VIEW GRAMMAR");
+    tmp.tbPolyX[i] = x;
+    tmp.tbPolyY[i] = y;
+    p = end + 35;
+  }
+  if (p != buf + sumAt) VR_FAIL("VIEW TRAILING BYTES");
+  // Cross-field: a live polygon must have at least the cursor point, and the
+  // line count lags the vertex count. Upstream's own invariants (:386, :296).
+  if (tmp.tbDrawingPoly && (tmp.tbPolyN < 1 || tmp.tbPolyLinesN > tmp.tbPolyN)) {
+    VR_FAIL("VIEW POLYGON INCONSISTENT");
+  }
+  *s = tmp;
+  if (why) *why = 0;
+  return true;
+#undef VR_FAIL
+}
+
+static bool tb_suspend(const FohState *s, const char **why) {
   if (why) *why = 0;
   if (!g_docReady) {
     // Nothing has ever been edited this process. There is no work to keep,
@@ -1914,10 +2151,21 @@ static bool tb_suspend(const char **why) {
     if (why) *why = "NO DOCUMENT";
     return false;
   }
-  return named_write(TB_DOC_NAME, &g_doc, why);
+  if (!named_write(TB_DOC_NAME, &g_doc, why)) return false;
+  // D62: the view rides along, and its failure is NOT the document's. A
+  // resume with the document and a default crosshair is worth having; one
+  // that was refused because the crosshair could not be written is not.
+  {
+    const char *vWhy = 0;
+    if (!tb_view_write(s, &vWhy)) {
+      fprintf(stderr, "foh_tbuild: view state NOT kept (%s)\n",
+              vWhy ? vWhy : "?");
+    }
+  }
+  return true;
 }
 
-static bool tb_resume(void) {
+static bool tb_resume(FohState *s) {
   MlkStage *tmp = (MlkStage *)malloc(sizeof *tmp);
   if (tmp == 0) return false;
   const char *why = 0;
@@ -1931,6 +2179,25 @@ static bool tb_resume(void) {
     map_all_null();
   }
   free(tmp);
+  // D62: the view, only if the DOCUMENT came back. Restoring a crosshair and
+  // a half-drawn polygon onto the D51 template would put the player's
+  // in-progress shape on a stage that is not the one they were drawing it on.
+  if (ok) {
+    const char *vWhy = 0;
+    if (tb_view_read(s, &vWhy)) {
+      map_all_null(); // the restored polygon count moved; the map cannot survive
+    } else {
+      fprintf(stderr, "foh_tbuild: view state not restored (%s)\n",
+              vWhy ? vWhy : "?");
+    }
+  }
+  // CONSUMED either way, BOTH files: the view means "where you were when the
+  // lid closed" exactly as the document does, and leaving an unreadable one
+  // would retry the same failure every boot.
+  {
+    char vpath[512];
+    if (named_path(TB_VIEW_NAME, vpath, sizeof vpath)) remove(vpath);
+  }
   // CONSUMED either way. The file means "the work you had when the lid
   // closed"; leaving it would resurrect it into a later ordinary visit, and
   // leaving an UNREADABLE one would retry the same failure every boot.

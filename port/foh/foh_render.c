@@ -1678,9 +1678,9 @@ static void render_css(const FohState *s, Raster *rz) {
   // a hand-kept second copy of foh.c's drop test; both now call the SAME table
   // and the SAME predicate, which is what D4 has always asked for.
   {
-    FohHandRect cells[5];
+    FohHandRect cells[FOH_CSS_CHARS];
     foh_css_cells(cells);
-    const int hotCell = foh_hand_hit(cells, 5, hx, hy);
+    const int hotCell = foh_hand_hit(cells, FOH_CSS_CHARS, hx, hy);
     for (int k = 0; k < 5; k++) css_cell(rz, k, k == hotCell);
   }
   // Tokens, carried-on-top: the carried one rides the hand, so it must draw
@@ -2546,7 +2546,14 @@ static void render_tss(const FohState *s, Raster *rz) {
     // records are far smaller; widening changes no rendered byte.
     char line[24] = "--:--:--";
     if (s->tssCursor <= 9) {
-      const double rec = s->targetRecords[s->p1Char][s->tssCursor];
+      // D59 — THE PAGE IS PART OF THE INDEX. This used to read
+      // targetRecords[p1Char][tssCursor] whatever page it was on, so on the
+      // CUSTOM page slot 3 displayed AUTHORED stage 3's personal best as
+      // though the player had set it there. The launch has always carried
+      // MLK_PLAYING_BASE + slot for a custom slot (foh.c:1420-1425); the
+      // record display simply never learned the same arithmetic.
+      const int tstage = s->tssPage ? (10 + s->tssCursor) : s->tssCursor;
+      const double rec = foh_state_record(s, s->p1Char, tstage);
       if (rec != -1.0) {
         const long cs = (long)(rec * 100.0 + 0.5);
         snprintf(line, sizeof line, "0%ld:%02ld.%02ld", cs / 6000,

@@ -74,7 +74,8 @@ void foh_persist_defaults(FohPersist *p) {
   p->masterVolume[1] = 0.3;   // audiomenu.js:13 (music)
   for (int c = 0; c < FOH_PERSIST_CHARS; c++) {
     for (int s = 0; s < FOH_PERSIST_TSTAGES; s++) {
-      p->targetRecords[c][s] = -1.0; // targetplay.js:40
+      p->targetRecords[c][s] = -1.0;       // targetplay.js:40
+      p->targetRecordsCustom[c][s] = -1.0; // the same literal's columns 10-19
     }
   }
   // v5 (fix_plan A31): the IDENTITY binding on every port. Not left to the
@@ -499,7 +500,16 @@ typedef struct {
   X(audioRow, .key = "audiorow", .kind = FP_FLAG, .vals = 1,                   \
     .dmax = FOH_AUDIO_ROWS, .since = 7)                                        \
   X(ctlRow, .key = "ctlrow", .kind = FP_U2, .vals = 1,                         \
-    .dmax = FOH_CTL_ROWS, .since = 7)
+    .dmax = FOH_CTL_ROWS, .since = 7)                                          \
+  /* D59: the custom half of the record plane. APPENDED LAST and `since = 7`  \
+     on purpose — this is the format's own extensibility path, not a new      \
+     version. Reading a file written before it, the walk defaults this field  \
+     (fp_walk's trailing fp_absent) and every existing `rec` row is parsed    \
+     unchanged, so the player keeps the records they had. See the argument in \
+     foh_persist.h beside targetRecordsCustom. */                             \
+  X(targetRecordsCustom, .key = "crec", .kind = FP_HEX64, .dims = 2,           \
+    .d0 = FOH_PERSIST_CHARS, .d1 = FOH_PERSIST_TSTAGES, .ix0 = 10, .ix1 = 10,  \
+    .vals = 1, .dom = FP_DOM_REC, .since = 7)
 
 #define FP_ROW(nm, ...)                                                        \
   {.off = offsetof(FohPersist, nm),                                            \
@@ -1379,6 +1389,8 @@ void foh_persist_apply(const FohPersist *p, FohState *s) {
   s->masterVolume[1] = p->masterVolume[1];
   for (int k = 0; k < 4; k++) s->tapJumpOff[k] = p->tapJumpOff[k];
   memcpy(s->targetRecords, p->targetRecords, sizeof s->targetRecords);
+  memcpy(s->targetRecordsCustom, p->targetRecordsCustom,
+         sizeof s->targetRecordsCustom);
   // A49/D45: the SELECTION plane, and the TOKEN plane RE-HOMED FROM IT.
   //
   // Writing both here is the whole of observable (b) at boot, and it is
@@ -1504,23 +1516,54 @@ void foh_persist_collect(FohPersist *p, const FohState *s) {
   // back from the display copy.
 }
 
+// THE ONE PLACE THAT KNOWS THE PLANE IS SPLIT (D59). Upstream indexes ONE
+// [5][20] array by `targetStagePlaying`; the wire format cannot (see
+// foh_persist.h beside targetRecordsCustom), so the split lives here and
+// nowhere else. Returns 0 for a tstage outside 0..19, which every caller
+// treats as "no record" rather than guessing at a row.
+static double *fp_record_cell(FohPersist *p, int ch, int tstage) {
+  if (p == 0 || ch < 0 || ch >= FOH_PERSIST_CHARS || tstage < 0) return 0;
+  if (tstage < FOH_PERSIST_TSTAGES) return &p->targetRecords[ch][tstage];
+  if (tstage < 2 * FOH_PERSIST_TSTAGES) {
+    return &p->targetRecordsCustom[ch][tstage - FOH_PERSIST_TSTAGES];
+  }
+  return 0;
+}
+
+double foh_persist_record_get(const FohPersist *p, int ch, int tstage) {
+  const double *c = fp_record_cell((FohPersist *)p, ch, tstage);
+  return c ? *c : -1.0;
+}
+
 bool foh_persist_record_update(FohPersist *p, int ch, int tstage,
                                double matchTimer) {
-  if (ch < 0 || ch >= FOH_PERSIST_CHARS || tstage < 0 ||
-      tstage >= FOH_PERSIST_TSTAGES ||
-      !(isfinite(matchTimer) && matchTimer >= 0.0 &&
-        matchTimer < FP_TIME_CAP)) {
+  // The DOMAIN IS 0..19, because D52 made the launch domain 0..19 and a
+  // record's index is the launched stage's. It was 0..9 here until
+  // 2026-08-31, so finishing a custom target stage — a journey the player
+  // reaches through a menu the port itself draws — died on this guard.
+  // MEASURED, reported by the owner: "I just finished breaking all the
+  // targets on a custom target stage and it crashed immediately."
+  double *cell = fp_record_cell(p, ch, tstage);
+  if (cell == 0 || !(isfinite(matchTimer) && matchTimer >= 0.0 &&
+                     matchTimer < FP_TIME_CAP)) {
     gfx_fatal("foh_persist: record update out of domain");
   }
-  const double rec = p->targetRecords[ch][tstage];
+  const double rec = *cell;
   // main.js:1442: matchTimer < rec || rec == -1
   const bool improved = (matchTimer < rec) || (rec == -1.0);
   if (improved) {
-    p->targetRecords[ch][tstage] = matchTimer;
+    *cell = matchTimer;
     // review-100 M1: refresh the bound render copy at the SAME write so
     // a same-process return-to-target-select renders the new record
     // (the chokepoint owns the sync; no driver-side plumbing).
-    if (g_bound) g_bound->targetRecords[ch][tstage] = matchTimer;
+    if (g_bound) {
+      if (tstage < FOH_PERSIST_TSTAGES) {
+        g_bound->targetRecords[ch][tstage] = matchTimer;
+      } else {
+        g_bound->targetRecordsCustom[ch][tstage - FOH_PERSIST_TSTAGES] =
+            matchTimer;
+      }
+    }
   }
   fprintf(stderr, "foh_persist: record char=%d tstage=%d improved=%d\n", ch,
           tstage, improved ? 1 : 0);

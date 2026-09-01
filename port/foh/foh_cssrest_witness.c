@@ -240,8 +240,22 @@ int main(void) {
   // --- P2 picks falcon, through the real gesture ----------------------------
   want(WALK(&s, up, y_on_p2_token),
        "hand walks back up to port 2's token row");
-  want(WALK(&s, left, on_p2_token),
-       "hand walks left onto port 2's resting token");
+  // D61: A PORT THAT BECOMES A CPU PICKS ITS OWN CHARACTER, so port 2's
+  // token is now resting on a cell this witness does not get to choose, and
+  // the direction to reach it is whichever side of the hand it landed on.
+  // The predicate was always dynamic (foh_css_token_pos); only the hard-coded
+  // `left` assumed the home cell. Deriving the direction keeps this witness
+  // about the TOKEN REST rule and independent of which character was drawn —
+  // which is what it should have been either way.
+  {
+    double tx, ty;
+    foh_css_token_pos(&s, 1, &tx, &ty);
+    (void)ty;
+    const bool tokenIsLeft = tx < s.cssHandX;
+    want(tokenIsLeft ? WALK(&s, left, on_p2_token)
+                     : WALK(&s, right, on_p2_token),
+         "hand walks onto port 2's resting token");
+  }
   PRESS(&s, a); // A on a CPU port's token grabs it (css.js:297-313)
   want(s.cssCarry == 1, "A on port 2's token grabs it");
   want(WALK(&s, right, p2_on_falcon),

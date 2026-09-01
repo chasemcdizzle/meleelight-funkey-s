@@ -304,6 +304,30 @@ typedef struct {
   //   before save: p.modOnR = ctl_mod_on_r_get();
   int modOnR;
   double targetRecords[FOH_PERSIST_CHARS][FOH_PERSIST_TSTAGES]; // -1
+  // THE CUSTOM HALF OF THE SAME RECORD PLANE (A45/D52 + D59, 2026-08-31).
+  //
+  // Upstream's `targetRecords` is FIVE ROWS OF TWENTY (targetplay.js:40) and
+  // its cookie loader walks j < 20 (:156-158): a custom slot's best time is
+  // persisted exactly like an authored stage's, because `targetStagePlaying`
+  // is ONE index over both families (main.js:1442-1445). D52 widened this
+  // port's launch domain to that same 0-19 and THIS PLANE DID NOT FOLLOW,
+  // which cost two bugs the owner found by playing: finishing a custom stage
+  // called foh_persist_record_update with tstage >= 10 and died on its own
+  // domain guard, and target-select's PERSONAL BEST read the AUTHORED row
+  // for a custom slot.
+  //
+  // WHY A SECOND ARRAY AND NOT A [5][20] ONE. The wire format indexes a row
+  // with a SINGLE digit (fp_parse_field's `'0' + ixmax[d]`) and requires
+  // every row of a field to be present, in order, by position. Widening
+  // `rec` in place would therefore need two-digit indices AND would make
+  // every existing file — which carries fifty `rec` rows — fail its own
+  // grammar, resetting the player's settings and records to defaults. The
+  // format's OWN extensibility rule is a new key: absent in an old file and
+  // defaulted, unknown to an older build and skipped (see the version note
+  // above). So the on-disk plane splits and `foh_record_get`/the update
+  // chokepoint put it back together; upstream's single index is preserved
+  // where it is observable, which is in the API rather than on the wire.
+  double targetRecordsCustom[FOH_PERSIST_CHARS][FOH_PERSIST_TSTAGES]; // -1
   // --- v4 (MENU-SPEC §3/§4; the options screens completed) ----------------
   // gameSettings is ELEVEN keys (settings.js:44-56) and upstream's B-exit
   // writes EVERY one of them (gameplaymenu.js:29-31), including the three
@@ -805,5 +829,9 @@ void foh_persist_collect(FohPersist *p, const FohState *s);
 // out-of-domain char/tstage/time — unreachable from the FOH plane).
 bool foh_persist_record_update(FohPersist *p, int ch, int tstage,
                                double matchTimer);
+
+// D59 — read a record by upstream's own 0-19 index (the FohState twin is
+// foh_state_record). -1.0 for "no record", including out of domain.
+double foh_persist_record_get(const FohPersist *p, int ch, int tstage);
 
 #endif // FOH_FOH_PERSIST_H

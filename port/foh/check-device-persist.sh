@@ -112,10 +112,15 @@ WORSE_BITS=4030000000000000
 # cursors 58 (menusel 10 + ssscur 9 + optrow 9 + optcol 9 + audiorow 11 +
 # ctlrow 10 — `ctlrow NN` + LF, TWO digits because the controls screen's
 # eleventh row, RESET, does not fit in one) + SUM 69
-# = 1927). A dropped/added byte — including an embedded NUL that command
+# + D59's crec 1300 (fifty rows of `crec C S ` + 16 hex + LF = 26 each — the
+# custom half of the record plane, appended rather than widening `rec` in
+# place because the wire indexes a row with ONE digit and requires every row
+# of a field to be present, so widening would have made every existing file
+# fail its own grammar and reset the player's settings)
+# = 3227). A dropped/added byte — including an embedded NUL that command
 # substitution silently swallows through the per-line sed reads — breaks
 # this reconciliation.
-PERSIST_BYTES=1927
+PERSIST_BYTES=3227
 
 DEADMAN_S="${MLFK_DEADMAN_S:-900}"
 READY_TRIES=60
@@ -655,7 +660,7 @@ verify_persist_file() { # <file> <ctx>
   nbytes="$(wc -c < "$f" | tr -d ' ')"
   [ "$nbytes" = "$PERSIST_BYTES" ] || grammar_die "$ctx: file is $nbytes bytes != $PERSIST_BYTES (MLFKPERSIST7 fixed size; byte-count reconciliation failed — dropped/added/NUL byte)"
   nl="$(grep -c "" "$f")" || grammar_die "$ctx: cannot count lines"
-  [ "$nl" = 87 ] || grammar_die "$ctx: $nl lines != 87 (MLFKPERSIST7 is exactly 87 LF lines)"
+  [ "$nl" = 137 ] || grammar_die "$ctx: $nl lines != 137 (MLFKPERSIST7 is exactly 137 LF lines)"
   L="$(sed -n 1p "$f")"; [ "$L" = "MLFKPERSIST7" ] || grammar_die "$ctx: line 1 is not the exact header ('$L')"
   L="$(sed -n 2p "$f")"; [[ "$L" =~ ^turbo\ [01]$ ]] || grammar_die "$ctx: line 2 turbo grammar ('$L')"
   L="$(sed -n 3p "$f")"; [[ "$L" =~ ^lcancel\ [0-2]$ ]] || grammar_die "$ctx: line 3 lcancel grammar ('$L')"
@@ -893,6 +898,32 @@ verify_persist_file() { # <file> <ctx>
     || grammar_die "$ctx: line 86 is not the ctlrow row in [00-10] ('$L') — a
   one-digit value here means the row was demoted to a flag and RESET, the
   eleventh row, can no longer be written"
+  # lines 87-136: D59's `crec`, the CUSTOM half of the record plane. Same
+  # grammar, same domain and same by-position progression as the fifty `rec`
+  # rows above — a custom slot's personal best is a record like any other, and
+  # upstream stores it in the same [5][20] array (targetplay.js:40). It is a
+  # SEPARATE KEY here only because the wire indexes a row with one digit; see
+  # foh_persist.h. Walked with the same loop so a transposed or missing row is
+  # caught by position rather than by count.
+  ln=87
+  for c in 0 1 2 3 4; do
+    for s in 0 1 2 3 4 5 6 7 8 9; do
+      L="$(sed -n "${ln}p" "$f")"
+      [[ "$L" =~ ^crec\ ([0-4])\ ([0-9])\ ([0-9a-f]{16})$ ]] \
+        || grammar_die "$ctx: line $ln is not a crec row ('$L')"
+      [ "${BASH_REMATCH[1]}" = "$c" ] && [ "${BASH_REMATCH[2]}" = "$s" ] \
+        || grammar_die "$ctx: line $ln crec (char,slot)=(${BASH_REMATCH[1]},${BASH_REMATCH[2]}) != canonical ($c,$s) — order/progression violated"
+      bits="${BASH_REMATCH[3]}"
+      if [ "$bits" = bff0000000000000 ]; then
+        : # the -1.0 no-record sentinel
+      elif hex_lt "$bits" 40b7700000000000; then
+        : # finite non-negative in [0,6000)
+      else
+        grammar_die "$ctx: line $ln crec bits $bits out of domain (not -1.0 and not finite [0,6000))"
+      fi
+      ln=$((ln + 1))
+    done
+  done
   # THE CROSS-ROW RULE, restated (ticket #27). Line 69 is `resume <NN>`; when
   # it names menu-controls the cursor above may only be 0 or 1, because that
   # is all that screen draws — and foh_render.c gfx_fatals on a cursor outside
@@ -908,9 +939,10 @@ verify_persist_file() { # <file> <ctx>
   draws (it has two), and line 69 arms exactly that screen — this file boots
   the app into foh_render.c's menu-cursor gfx_fatal"
   fi
-  ln=87
-  L="$(sed -n 87p "$f")"
-  [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 87 is not the SUM line ('$L')"
+  # 137, not 87: D59 appended fifty `crec` rows before the SUM, walked above.
+  ln=137
+  L="$(sed -n 137p "$f")"
+  [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 137 is not the SUM line ('$L')"
   sum="${BASH_REMATCH[1]}"
   # review-102 M-b: validate the COMPLETE recomputed shasum line grammar
   # (`<64hex>  -` on stdin), never a `cut -d' ' -f1` first-field scrape —

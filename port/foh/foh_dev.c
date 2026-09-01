@@ -850,6 +850,41 @@ static void app_snd_stop_sink(const char *token, int hasId, double id) {
   platform_audio_unlock();
 }
 
+// --- THE OPTIONS>AUDIO SLIDERS, ACTUALLY ON THE BUS (D60, 2026-08-31) --------
+//
+// snd_bus_set() has existed, been documented and been exercised by
+// foh_snd_witness.c since the mixer landed — and had ZERO callers in the
+// product. foh.c's audio arm wrote FohState.masterVolume, foh_persist saved
+// and restored it, foh_render drew the bars moving, and nothing ever reached
+// the mixer. MEASURED, reported by the owner: "I don't think changing the
+// music slider in the audio menu does anything. check the sounds slider too."
+// Both were dead, for the same reason and in the same way.
+//
+// The wire is a RATIO, not a level: the packed SNDPACK1 gains already carry
+// the 0.5/0.3 shipping defaults (snd_mixer.h's AUDIO BUS note), so pushing a
+// raw level would apply the default twice and a "half" slider would be a
+// quarter. snd_bus_set does that division; this function's whole job is to
+// call it under the audio lock, from the two places a level can change.
+//
+// PUSH-ON-CHANGE, not every frame: the callback reads these fields, so each
+// push takes the audio lock, and the levels move only when the player is
+// standing on the audio screen pressing left or right. The remembered pair
+// starts at a value no level can take, so the FIRST call always pushes.
+static double g_busSfx = -1.0, g_busMusic = -1.0;
+static void app_volume_push(const FohState *f) {
+  if (!g_have_audio) return;
+  if (f->masterVolume[0] == g_busSfx && f->masterVolume[1] == g_busMusic) {
+    return;
+  }
+  g_busSfx = f->masterVolume[0];
+  g_busMusic = f->masterVolume[1];
+  platform_audio_lock();
+  snd_bus_set(&g_mix, g_busSfx, g_busMusic);
+  platform_audio_unlock();
+  fprintf(stderr, "foh_dev: volume sfx=%.1f music=%.1f\n", g_busSfx,
+          g_busMusic);
+}
+
 // menu-plane SFX chokepoint (FohState.snd tokens; foh.c citations).
 // snd_event_menu, NOT snd_event (A40, snd_mixer.h header note): the sim
 // plane mints play ids off ml_events.c's counter, which only
@@ -1518,7 +1553,7 @@ static void tdev_hibernate_check(FohScreen sc, const FohState *f) {
   if (sc == FOH_TBUILD) {
     const char *tbWhy = 0;
     if (!foh_tbuild_ops || !foh_tbuild_ops->suspend ||
-        !foh_tbuild_ops->suspend(&tbWhy)) {
+        !foh_tbuild_ops->suspend(f, &tbWhy)) {
       fprintf(stderr, "foh_dev: builder document NOT kept (%s) — resuming to "
                       "the menu top instead\n",
               tbWhy ? tbWhy : "no builder in this build");
@@ -2271,6 +2306,13 @@ int main(int argc, char **argv) {
   // the load chokepoint, so no site can load without it.
   tdev_persist_load();
   foh_persist_apply(&g_persist, &foh);
+  // D60 — THE PERSISTED LEVELS REACH THE BUS ON EVERY PATH, INCLUDING THE
+  // ONES WITH NO FOH TICK. The per-tick push below the FOH loop covers the
+  // player moving a slider, but a --direct-match run and a lid RESUME both
+  // launch without ticking the FOH once (`foh: 0 ticks ... launched=1` in
+  // the device log), so a resumed match would have played at the shipping
+  // default however the player had set it.
+  app_volume_push(&foh);
   // A26/D53. Unconditional: SIGUSR1's default disposition is TERMINATE, so
   // installing the handler can only make this binary harder to kill by
   // accident, and no evidence rig has a sender — their runs are unchanged.
@@ -2479,7 +2521,7 @@ int main(int argc, char **argv) {
     // was lost between the write and this read.
     if (foh.screen == FOH_TBUILD && foh_tbuild_ops) {
       foh_tbuild_ops->enter(&foh, -1);
-      const bool got = foh_tbuild_ops->resume && foh_tbuild_ops->resume();
+      const bool got = foh_tbuild_ops->resume && foh_tbuild_ops->resume(&foh);
       fprintf(stderr, "foh_dev: builder document %s\n",
               got ? "restored" : "NOT FOUND (empty editor)");
     }
@@ -2721,6 +2763,10 @@ foh_phase:;
         rowIdx++;
       }
     }
+    // D60: the sliders reach the bus here, before the tick that may move
+    // them again. First call pushes the PERSISTED levels (the boot case);
+    // later calls are the player's edits on the audio screen.
+    app_volume_push(&foh);
     foh_tick(&foh, &cur);
     // review-100 M1 witness: fire the crafted finishGame chain MID-FLOW
     // at the requested frame (the standalone --tooth-persist-finish

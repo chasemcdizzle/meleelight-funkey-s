@@ -529,6 +529,8 @@ grep -qxF 'foh_dev: hibernate from=target-builder resume=target-builder' \
   flow did not park there, or suspend() failed and it downgraded"; }
 made "$TBDIR/tbdoc.mlstage"
 cp "$TBDIR/tbdoc.mlstage" "$BUILD/tbdoc.before"
+made "$TBDIR/tbview.dat"
+cp "$TBDIR/tbview.dat" "$BUILD/tbview.before"
 # THE EDIT MUST BE REAL, or the round trip proves nothing: a document that is
 # still D51's template would round-trip just as byte-identically.
 TPL=$BUILD/tbdoc.template
@@ -573,6 +575,11 @@ grep -qxF 'foh_dev: builder document restored' "$BUILD/tbres.err" \
   && { kill -9 "$TBPID2" 2>/dev/null || true
        fail "[5b] tbdoc.mlstage survived the resume — it must be CONSUMED, or
   a later ordinary visit resurrects work the player already got back"; }
+[ -e "$TBDIR/tbview.dat" ] \
+  && { kill -9 "$TBPID2" 2>/dev/null || true
+       fail "[5b] tbview.dat survived the resume — it is CONSUMED for the same
+  reason the document is, and an unreadable one left behind would retry the
+  same failure on every boot"; }
 kill -USR1 "$TBPID2"
 n=0
 while kill -0 "$TBPID2" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
@@ -583,6 +590,37 @@ cmp "$BUILD/tbdoc.before" "$TBDIR/tbdoc.mlstage" \
   || fail "[5b] the document did NOT survive the round trip: the file published
   by the second hibernate differs from the first. A resume that lands on the
   builder with someone else's stage is worse than not resuming at all."
+
+# --- [5b-view] THE WORK IN PROGRESS, NOT JUST THE WORK COMMITTED (D62) -------
+#
+# D57 kept the DOCUMENT and the leg above proves it. It did not keep anything
+# in FohState: the crosshair, the tool in hand, the half-dragged platform, the
+# polygon with four vertices down. MEASURED, reported by the owner: "resume
+# for target test builder doesn't bring back what you were in the middle of
+# drawing ... or the cursor position." An uncommitted polygon is the ONLY
+# thing on that screen which is not also in the document, so it is the half
+# most worth keeping and it was the half being dropped.
+#
+# The view rides in its own file beside the document, and this asserts the
+# round trip the same way: BYTE-IDENTITY of the published file across
+# park -> hibernate -> resume -> hibernate.
+made "$TBDIR/tbview.dat"
+cmp "$BUILD/tbview.before" "$TBDIR/tbview.dat" \
+  || fail "[5b] the builder's VIEW state did not survive the round trip. The
+  document came back and the crosshair, the tool and any in-progress polygon
+  did not — which is what the owner reported and what D62 exists to fix."
+# ...and it must be REAL: a view file that is all zeroes would round-trip just
+# as byte-identically as one holding the player's crosshair. The parked flow
+# walks the tool cycle and moves the crosshair, so at least one field must
+# differ from a freshly-initialised builder's.
+made "$BUILD/tb-tpl/tbview.dat"
+cmp -s "$BUILD/tb-tpl/tbview.dat" "$BUILD/tbview.before" \
+  && fail "[5b] the parked VIEW state is byte-identical to the untouched
+  builder's — the flow moved neither the crosshair nor the tool, so the
+  round-trip assertion above would hold for a resume that restored nothing
+  (dead leg)"
+[ -e "$TBDIR/tbview.dat.consumed" ] || true
+echo "   the parked view state differs from a fresh builder's and round-trips"
 echo "   builder resumed with the SAME document, byte for byte; file consumed"
 
 # --- [5c] the CHARACTER SELECT resumes SET UP THE WAY IT WAS LEFT -----------
@@ -1363,6 +1401,13 @@ node -e '
     if (i < 0) throw new Error("no " + k + "row to remove");
     b.splice(i, 1);
   }
+  // D59: `crec` is post-v6 too, and there are FIFTY of them — one splice
+  // would leave forty-nine behind and the file would be CORRUPT rather than
+  // migratable, so this tooth would then fail for a reason that has nothing
+  // to do with the migration it is named after.
+  const before = b.length;
+  b = b.filter((l) => !l.startsWith("crec "));
+  if (b.length === before) throw new Error("no crec rows to remove");
   const s2 = b.findIndex((l) => l.startsWith("SUM "));
   const body = b.slice(0, s2).join("\n") + "\n";
   b[s2] = "SUM " + crypto.createHash("sha256").update(body).digest("hex");
@@ -1586,8 +1631,8 @@ for anchor in 'hex_lt() ( LC_ALL=C; [[ "$1" < "$2" ]]; ) # fixed 16-hex: byte or
   the anchor '$anchor' (want 1) — the extracted whitelist moved"
 done
 {
-  grep -xF 'PERSIST_BYTES=1927' "$DEVP" \
-    || grammar_die "[7] check-device-persist.sh does not pin PERSIST_BYTES=1927"
+  grep -xF 'PERSIST_BYTES=3227' "$DEVP" \
+    || grammar_die "[7] check-device-persist.sh does not pin PERSIST_BYTES=3227"
   awk '
     /^hex_lt\(\) \( LC_ALL=C; \[\[ "\$1" < "\$2" \]\]; \)/ { inr = 1 }
     inr { print }

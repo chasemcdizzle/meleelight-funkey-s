@@ -101,14 +101,16 @@ nser="$(grep -c 'fp_addf(buf, cap' "$SRC")" || true
    the writer is no longer walking the table"
 # every FP_FIELDS row, counted, so a dropped row is loud
 nrows="$(grep -cE '^  X\([A-Za-z]' "$SRC")" || true
-[ "$nrows" = 33 ] \
-  || grammar_die "[0] FP_FIELDS has $nrows rows (want 33: turbo, lcancel,
+[ "$nrows" = 34 ] \
+  || grammar_die "[0] FP_FIELDS has $nrows rows (want 34: turbo, lcancel,
    tapjump, ctlstyle, modonr, rec, flash, walljump, blastzone, dustless,
    phantom, soundslevel, musiclevel, bind, sel, resume, then ticket #25's
    CSS machine plane — ptype, cpudiff, vsmode, hand, slider, carry, cpucarry,
    handtype — then ticket #26's target-select trio, tsscur, tsspage and
    tsshand — then ticket #27's six remaining screen cursors, menusel, ssscur,
-   optrow, optcol, audiorow and ctlrow).
+   optrow, optcol, audiorow and ctlrow — and last, D59's crec, the custom
+   half of the record plane, appended rather than widening rec in place
+   because the wire indexes a row with one digit and demands every row).
    A row was added or removed — if that was deliberate, this number moves WITH
    the format and the fixture builder in leg [1] moves with it too"
 echo "    [0] OK: table, static assertion, layout guard and 33 rows all present"
@@ -138,7 +140,19 @@ function record(mode) {
       rec.push(seeded ? (c === 2 && s === 7 ? -1 : c * 10 + s + 0.5) : -1);
     }
   }
+  // D59's custom half. DELIBERATELY DIFFERENT VALUES from `rec` (+1000), so
+  // a build that wrote one plane into the other, or read the authored row for
+  // a custom slot — the display bug this deviation also fixes — produces
+  // different bytes here rather than passing.
+  const crec = [];
+  for (let c = 0; c < 5; c++) {
+    for (let s = 0; s < 10; s++) {
+      crec.push(seeded ? (c === 1 && s === 4 ? -1 : 1000 + c * 10 + s + 0.25)
+                       : -1);
+    }
+  }
   return {
+    crec,
     turbo: seeded ? 1 : 0,
     lcancel: seeded ? 2 : 0,
     tapjump: seeded ? [1, 0, 1, 1] : [0, 0, 0, 0],
@@ -254,6 +268,11 @@ function lines(r) {
   L.push("optcol " + r.optcol);
   L.push("audiorow " + r.audiorow);
   L.push("ctlrow " + String(r.ctlrow).padStart(2, "0")); // TWO digits
+  for (let c = 0; c < 5; c++) {
+    for (let s = 0; s < 10; s++) {
+      L.push("crec " + c + " " + s + " " + bits(r.crec[c * 10 + s]));
+    }
+  }
   return L;
 }
 // The record dump foh_persist_witness.c prints, derived from the SAME
@@ -307,6 +326,11 @@ function dump(r) {
   D.push("optcol " + r.optcol);
   D.push("audiorow " + r.audiorow);
   D.push("ctlrow " + r.ctlrow);
+  for (let c = 0; c < 5; c++) {
+    for (let s = 0; s < 10; s++) {
+      D.push("crec " + c + " " + s + " " + bits(r.crec[c * 10 + s]));
+    }
+  }
   return D.join("\n") + "\n";
 }
 function seal(L) {
@@ -326,7 +350,7 @@ node "$BUILD/fixture.js" dump seed "$BUILD/seed.dump"
 node "$BUILD/fixture.js" file defaults "$BUILD/defaults.dat"
 node "$BUILD/fixture.js" dump defaults "$BUILD/defaults.dump"
 made "$BUILD/seed.dat" "$BUILD/seed.dump" "$BUILD/defaults.dat" "$BUILD/defaults.dump"
-[ "$(grep -c "" "$BUILD/seed.dat")" = 87 ] \
+[ "$(grep -c "" "$BUILD/seed.dat")" = 137 ] \
   || grammar_die "[1] the independently built fixture is not 87 LF lines —
    fixture construction is broken, so every leg below would be vacuous"
 cmp -s "$BUILD/seed.dat" "$BUILD/defaults.dat" \
@@ -358,6 +382,22 @@ for (const op of ops) {
     const keep = L.filter((l) => !l.startsWith(arg + " "));
     if (keep.length === L.length) throw new Error("dropall: no rows " + arg);
     L = keep;
+  } else if (kind === "setall") {
+    // Replace EVERY row of an indexed key with that key's rows from another
+    // fixture, in place. `set` cannot: it edits one line, and D59's `crec` is
+    // fifty. Used to state a migrated file's default record plane from the
+    // DEFAULTS fixture rather than by typing the sentinel out fifty times.
+    const c = arg.indexOf(":");
+    const k = arg.slice(0, c), from = arg.slice(c + 1);
+    const rows = fs.readFileSync(from, "utf8").split("\n")
+      .filter((l) => l.startsWith(k + " "));
+    if (rows.length === 0) throw new Error("setall: no " + k + " in " + from);
+    const i = at(k);
+    if (i < 0) throw new Error("setall: no row " + k);
+    const keep = L.filter((l) => !l.startsWith(k + " "));
+    if (keep.length === L.length) throw new Error("setall: no rows " + k);
+    L = keep;
+    L.splice(i, 0, ...rows);
   } else if (kind === "set") {
     const c = arg.indexOf(":");
     const k = arg.slice(0, c), v = arg.slice(c + 1);
@@ -417,7 +457,7 @@ V7_ROWS=(drop=resume drop=ptype drop=cpudiff drop=vsmode drop=hand
          drop=slider drop=carry drop=cpucarry drop=handtype
          drop=tsscur drop=tsspage drop=tsshand
          drop=menusel drop=ssscur drop=optrow drop=optcol drop=audiorow
-         drop=ctlrow)
+         drop=ctlrow dropall=crec)
 variant v6 hdr=6 "${V7_ROWS[@]}"
 variant v5 hdr=5 "${V7_ROWS[@]}" drop=sel
 variant v4 hdr=4 "${V7_ROWS[@]}" drop=sel dropall=bind
@@ -603,8 +643,8 @@ hist_ok() { # <name> <from-version>
   # would still print `migrated` and `loaded`.
   cmp "$D/mlfk-persist.dat" "$BUILD/expect-$1.dat" \
     || fail "[7] $1: the migrated+saved file is not the independently built
-   expectation — a setting, a binding or one of the 50 target records was
-   lost carrying it forward"
+   expectation — a setting, a binding or one of the 100 target records (50
+   authored + D59's 50 custom) was lost carrying it forward"
   teeth=$((teeth + 1))
 }
 # The expectations: the seeded record with exactly the fields that version
@@ -631,7 +671,8 @@ for k in ptype cpudiff vsmode hand slider carry cpucarry handtype \
   V7_DEFAULT_OPS+=("set=$k:$dline")
 done
 node "$BUILD/variant.js" "$BUILD/seed.dat" "$BUILD/expect-v6.dat" \
-  'set=resume:resume 00' "${V7_DEFAULT_OPS[@]}"
+  'set=resume:resume 00' "${V7_DEFAULT_OPS[@]}" \
+  "setall=crec:$BUILD/defaults.dat"
 node "$BUILD/variant.js" "$BUILD/expect-v6.dat" "$BUILD/expect-v5.dat" \
   'set=sel:sel 0 0 0 0'
 node "$BUILD/variant.js" "$BUILD/expect-v5.dat" "$BUILD/expect-v4.dat" \

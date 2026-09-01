@@ -56,6 +56,12 @@ static void seed(FohPersist *p) {
     for (int s = 0; s < FOH_PERSIST_TSTAGES; s++) {
       p->targetRecords[c][s] =
           (c == 2 && s == 7) ? -1.0 : (double)(c * 10 + s) + 0.5;
+      // D59's custom half, DELIBERATELY DISJOINT from the authored values
+      // (+1000, .25, a different -1 hole) so a build that wrote one plane
+      // into the other — or read the authored row for a custom slot, which
+      // is the display half of the same bug — fails on the bytes.
+      p->targetRecordsCustom[c][s] =
+          (c == 1 && s == 4) ? -1.0 : 1000.0 + (double)(c * 10 + s) + 0.25;
     }
   }
   p->flashOnLCancel = 1;
@@ -210,6 +216,11 @@ static void dump(const FohPersist *p) {
   printf("optcol %d\n", p->optCol);
   printf("audiorow %d\n", p->audioRow);
   printf("ctlrow %d\n", p->ctlRow);
+  for (int c = 0; c < FOH_PERSIST_CHARS; c++) {
+    for (int s = 0; s < FOH_PERSIST_TSTAGES; s++) {
+      printf("crec %d %d %016llx\n", c, s, BITS(p->targetRecordsCustom[c][s]));
+    }
+  }
 #undef BITS
 }
 

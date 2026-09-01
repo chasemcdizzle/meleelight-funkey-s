@@ -776,8 +776,12 @@ static int css_level_at(int k, double x) {
 // the cell, y strictly inside FOH_CSS_CELL_Y + FOH_CSS_CELL_H), and every cell
 // shares the same y, so folding them into one point-in-rect sweep is an
 // identity — proven bit for bit by check-hand.sh's differential, not asserted.
-void foh_css_cells(FohHandRect out[5]) {
-  for (int c = 0; c < 5; c++) {
+void foh_css_cells(FohHandRect out[FOH_CSS_CHARS]) {
+  // Adding a character means moving FOH_CSS_CHARS, and every walker of the
+  // roster — this table and its two hit tests — moves with it because they all
+  // read the constant. The signature is part of that: a caller's
+  // `FohHandRect cells[5]` no longer matches, so the build says so.
+  for (int c = 0; c < FOH_CSS_CHARS; c++) {
     out[c].x = foh_css_cell_x(c);
     out[c].y = FOH_CSS_CELL_Y;
     out[c].w = FOH_CSS_CELL_W;
@@ -977,9 +981,9 @@ static void step_css(FohState *s, const PlatformInput *in,
       s->cssHandType = 2; // css.js:217
       const int k = s->cssCarry;
       {
-        FohHandRect cells[5];
+        FohHandRect cells[FOH_CSS_CHARS];
         foh_css_cells(cells);
-        const int c = foh_hand_hit(cells, 5, s->cssHandX, s->cssHandY);
+        const int c = foh_hand_hit(cells, FOH_CSS_CHARS, s->cssHandX, s->cssHandY);
         if (c >= 0) {
           int *ch = css_char_of(s, k);
           if (*ch != c) {

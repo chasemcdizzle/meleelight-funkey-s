@@ -224,7 +224,7 @@ static const char *const kCharName[5] = {"marth", "puff", "fox", "falco",
 static int token_cell(const FohState *s, int k) {
   double tx, ty;
   foh_css_token_pos(s, k, &tx, &ty);
-  FohHandRect cells[5];
+  FohHandRect cells[FOH_CSS_CHARS];
   foh_css_cells(cells);
   for (int c = 0; c < 5; c++) {
     if (tx > (double)cells[c].x && tx < (double)(cells[c].x + cells[c].w) &&
@@ -237,7 +237,7 @@ static int token_cell(const FohState *s, int k) {
 
 // Walk the hand to the centre of cell c.
 static bool walk_to_cell(FohState *s, int c) {
-  FohHandRect cells[5];
+  FohHandRect cells[FOH_CSS_CHARS];
   foh_css_cells(cells);
   return walk_to(s, (double)cells[c].x + (double)cells[c].w / 2.0,
                  (double)cells[c].y + (double)cells[c].h / 2.0);
@@ -322,6 +322,16 @@ int main(void) {
 
   // --- [2] take port 2's token and give it a character ----------------------
   const int wantChar = 3; // falco — NOT cell 0, and not port 2's index
+  // D61: THE BASELINE IS TAKEN, NOT ASSUMED. Leg [1] walks all four ports
+  // through CPU, and a port that becomes a CPU now picks its own character,
+  // so "everything else is still marth" stopped being true — for a reason
+  // that has nothing to do with what this witness is about. What it IS about
+  // survives verbatim and is stated against this baseline below: moving PORT
+  // 2's selection must move NO OTHER PORT's. Reading the baseline here rather
+  // than writing `{0, 0, x, 0}` also means this leg keeps its edge whatever a
+  // future roster or a future pick does.
+  int baseSel[FOH_CSS_PORTS];
+  for (int k = 0; k < FOH_CSS_PORTS; k++) baseSel[k] = s.selChar[k];
   {
     double tx, ty;
     foh_css_token_pos(&s, 2, &tx, &ty);
@@ -336,7 +346,7 @@ int main(void) {
     }
     ok("the one hand picked up PORT 2's token (D40(a))");
 
-    FohHandRect cells[5];
+    FohHandRect cells[FOH_CSS_CHARS];
     foh_css_cells(cells);
     const double cx = (double)cells[wantChar].x + (double)cells[wantChar].w / 2.0;
     const double cy = (double)cells[wantChar].y + (double)cells[wantChar].h / 2.0;
@@ -359,7 +369,9 @@ int main(void) {
   // The D21/D35 family: what a port launches with is its SELECTION, and no
   // other port's selection may move because this one did.
   {
-    const int want[FOH_CSS_PORTS] = {0, 0, wantChar, 0};
+    int want[FOH_CSS_PORTS];
+    for (int k = 0; k < FOH_CSS_PORTS; k++) want[k] = baseSel[k];
+    want[2] = wantChar; // the ONLY port this leg's gesture touched
     for (int k = 0; k < FOH_CSS_PORTS; k++) {
       if (s.selChar[k] != want[k]) {
         bad("port %d's selection is %s, want %s — a port index and a roster "
@@ -367,15 +379,16 @@ int main(void) {
             kCharName[s.selChar[k]], kCharName[want[k]]);
       }
     }
-    ok("the selection plane reads marth/marth/%s/marth — only PORT 2 moved",
-       kCharName[wantChar]);
+    ok("the selection plane moved PORT 2 to %s and no other port (baseline "
+       "%s/%s/-/%s carried through the D61 CPU picks)", kCharName[wantChar],
+       kCharName[baseSel[0]], kCharName[baseSel[1]], kCharName[baseSel[3]]);
   }
 
   // --- [4] the token plane agrees with the selection ------------------------
   {
     double tx, ty;
     foh_css_token_pos(&s, 2, &tx, &ty);
-    FohHandRect cells[5];
+    FohHandRect cells[FOH_CSS_CHARS];
     foh_css_cells(cells);
     const FohHandRect *c = &cells[wantChar];
     if (!(tx > (double)c->x && tx < (double)(c->x + c->w) &&
@@ -422,7 +435,12 @@ int main(void) {
 
     SimPortCfg ports[4];
     foh_launch_ports(&s, ports);
-    const int wantCharCfg[FOH_CSS_PORTS] = {0, 0, wantChar, 0};
+    // D61: the same baseline as leg [3]'s, for the same reason. What this
+    // asserts is that the LAUNCH CONFIG reads each port's own selection —
+    // the port-index bug — so it is stated against whatever the selection
+    // plane actually holds, never against a roster value typed twice.
+    int wantCharCfg[FOH_CSS_PORTS];
+    for (int k = 0; k < FOH_CSS_PORTS; k++) wantCharCfg[k] = s.selChar[k];
     for (int k = 0; k < FOH_CSS_PORTS; k++) {
       if (ports[k].type != wantType[k]) {
         bad("cfg.players[%d].type is %d, want %d", k, ports[k].type,
@@ -810,6 +828,22 @@ int main(void) {
       // the leg would then refuse for a reason that has nothing to do with
       // the migration it is named after. LAST FIRST, so this list is in
       // REVERSE file order and ticket #27's six lead it.
+      // D59's `crec` is post-v5 too, and unlike every row below it there are
+      // FIFTY of them — one splice would leave forty-nine behind and the file
+      // would be corrupt rather than migratable. It is LAST in the file
+      // (appended after ctlrow), so it goes first, and the loop runs until
+      // none remain rather than a counted fifty: the count is the format's
+      // business, not this witness's.
+      for (;;) {
+        char *row = strstr(buf, "\ncrec ");
+        if (!row) break;
+        sum = strstr(buf, "\nSUM ");
+        if (!sum || row > sum) {
+          bad("a `crec` row sits after the SUM line");
+          return 1;
+        }
+        memmove(row, strchr(row + 1, '\n'), strlen(strchr(row + 1, '\n')) + 1);
+      }
       static const char *const kPostV5[] = {
           "\nctlrow ",   "\naudiorow ", "\noptcol ",   "\noptrow ",
           "\nssscur ",   "\nmenusel ",  "\ntsshand ",  "\ntsspage ",

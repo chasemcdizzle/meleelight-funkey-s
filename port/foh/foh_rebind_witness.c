@@ -619,6 +619,7 @@ static void a31_v4_migrates(void) {
   static char out[8192];
   size_t m = 0;
   int stripped = 0, strippedSel = 0, strippedResume = 0, strippedCss = 0;
+  int strippedCrec = 0;
   for (size_t i = 0; i < n;) {
     size_t e = i;
     while (e < n && buf[e] != '\n') e++;
@@ -633,6 +634,12 @@ static void a31_v4_migrates(void) {
     }
     if (isCss) {
       strippedCss++; /* ticket #25's CSS rows (v7) — v4 never had them */
+    } else if (len > 5 && memcmp(buf + i, "crec ", 5) == 0) {
+      // D59's custom record plane (v7). A v4 file never had it, and there are
+      // FIFTY rows: leaving them in makes the fixture a v4 header over v7
+      // content, which the loader rightly refuses — the exact stale-fixture
+      // failure this constructor's comment above warns about.
+      strippedCrec++;
     } else if (len > 5 && memcmp(buf + i, "bind ", 5) == 0) {
       stripped++;
     } else if (len > 4 && memcmp(buf + i, "sel ", 4) == 0) {
@@ -663,6 +670,10 @@ static void a31_v4_migrates(void) {
        "eight CSS ones, ticket #26's three target-select ones and ticket "
        "#27's six screen cursors (same rule again, and now it is APPENDED "
        "ROWS rather than version bumps that go stale here)");
+  want(strippedCrec == FOH_PERSIST_CHARS * FOH_PERSIST_TSTAGES,
+       "the synthetic v4 fixture dropped all fifty of D59's crec rows (the "
+       "custom half of the record plane; a partial strip leaves a v4 header "
+       "over v7 content, which is a stale fixture and not a migration bug)");
   {
     char hex[65];
     ml_sha256_hex(out, m, hex);

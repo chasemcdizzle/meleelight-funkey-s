@@ -487,12 +487,20 @@ static inline double foh_css_slider_home(int k) {
 // moved to port/foh/foh_hand.h with the cursor itself (A25c), which foh.h
 // includes above, so FOH_CURSOR_SPEED / _VX / _VY still resolve here.
 
+// THE ROSTER SIZE, in one place. The number was a literal `5` at every site
+// that walked the roster — the cell table and its two hit tests. Hygiene
+// today; a prerequisite for anything that CHOOSES a character rather than
+// hit-testing one the hand is already over, because such a chooser walking a
+// stale count either never picks the newest character or names one that does
+// not exist. Adding a character means changing this and the roster art.
+#define FOH_CSS_CHARS 5
+
 // The five roster cells as a hit table, for foh_hand_hit. ONE definition, two
 // callers — foh.c's drop/hover arm and foh_render.c's `hot` flag — which is
 // what D4 asks for and what the CSS previously had in two hand-kept copies
 // (foh.c's `css_cell_at` plus its enclosing y guard, and foh_render.c's
 // `overCells &&` line). The extents are exactly those two tests' extents.
-void foh_css_cells(FohHandRect out[5]);
+void foh_css_cells(FohHandRect out[FOH_CSS_CHARS]);
 
 // --- TSS layout + hit geometry (A25c; same D4 contract as the CSS above) -----
 // The eleven target-select slots. Ten are upstream's own 2-col x 5-row
@@ -1211,6 +1219,10 @@ typedef struct {
   // drivers overwrite from the foh_persist chokepoint at boot
   // (foh_persist_apply). The machine only READS it (render_tss).
   double targetRecords[5][10];
+  // D59 — the custom half (tstage 10-19). Same split, same reason, as the
+  // persist struct's; foh_state_record() is the accessor that hides it, and
+  // it is the ONLY thing render_tss may use to read a personal best.
+  double targetRecordsCustom[5][10];
   // launch record (frozen once screen == FOH_MATCH / FOH_TMATCH):
   // targetMode false -> VS launch (stageSel); true -> target launch
   // (tssStage; char == p1Char)
@@ -1255,6 +1267,24 @@ typedef struct {
   const char *snd[FOH_EV_CAP];
   int nsnd;
 } FohState;
+
+// D59 — READ A PERSONAL BEST BY UPSTREAM'S OWN INDEX.
+//
+// `tstage` is the launch index, 0-9 authored and 10-19 custom (D52), which is
+// exactly what upstream's targetRecords[char][targetStagePlaying] takes. The
+// two-array split below the surface is a wire-format constraint and nothing
+// else, so no caller should ever see it: read through here.
+//
+// Out of domain is -1.0 — "no record" — and never a neighbouring row. That is
+// the display half of the bug the owner found: target-select used to index
+// targetRecords by the SLOT (0-9) whatever page it was on, so every custom
+// slot showed the AUTHORED stage's time as though it were the player's.
+static inline double foh_state_record(const FohState *s, int ch, int tstage) {
+  if (s == 0 || ch < 0 || ch >= 5 || tstage < 0) return -1.0;
+  if (tstage < 10) return s->targetRecords[ch][tstage];
+  if (tstage < 20) return s->targetRecordsCustom[ch][tstage - 10];
+  return -1.0;
+}
 
 void foh_init(FohState *s);
 void foh_tick(FohState *s, const PlatformInput *in);
