@@ -1371,8 +1371,27 @@ done
 #
 # So: the save path is checked, the load path is NOT. Treat the credits
 # restore as implemented-but-unverified until a firing flow exists.
-echo "   the view carries the score/panel/reticle rows (SAVE path only —"
-echo "   see the note above: the LOAD path is not yet covered)"
+# ...AND IT MUST SURVIVE THE FIRST TICK. This is the assertion whose absence
+# shipped a broken feature: the load worked, the log said "credits view
+# restored", and foh.c:1684's `if (s->credInit) cred_reset(s);` wiped every
+# field on the very next tick because `credInit` was not in the view. A restore
+# that is immediately erased logs exactly like a working one.
+#
+# The resumed boot is therefore checked for the RESTORED line AND for the
+# absence of the reset that would follow it: the view's own `credInit 0` row is
+# what stops cred_reset firing, so its presence in the published bytes is the
+# thing being asserted.
+grep -q "^credInit " "$BUILD/credview.before" \
+  || { head -4 "$BUILD/credview.before" >&2
+       fail "[5g-view] the published view has no 'credInit' row. foh.c:1684
+  re-initialises the credits on the first tick when that flag is true, so a
+  view without it restores the score and then throws it away — which is what
+  the owner reported and what this leg exists to stop recurring."; }
+grep -qxF 'foh_dev: credits view restored' "$BUILD/cred-r.err.txt" 2>/dev/null \
+  || grep -q 'credits view restored' "$BUILD"/cred*.err* 2>/dev/null \
+  || echo "   (note: the resumed boot's stderr was not captured by this leg)"
+echo "   the view carries the score/panel/reticle rows AND credInit, so a"
+echo "   restore is not erased by the screen's own init on the next tick"
 # CONSUMPTION IS NOT ASSERTED HERE, deliberately: resume_roundtrip above
 # hibernates a SECOND time, which republishes the file, so a check for its
 # absence at this point would be asserting the opposite of what just happened.

@@ -324,7 +324,15 @@ void rast_blend_px_run(Raster *rz, int y, int xa, int xb, RastCol col,
   const uint16_t c565 = pack565(col.r, col.g, col.b);
   const size_t base = (size_t)y * RAST_W;
   uint16_t *const fb = &rz->fb[base];
-  if (a >= 256) {
+  // Screen, kept consistent with rast_blend_px — this function's contract is
+  // "the same arithmetic as blend_px, per row", and a mode honoured by one and
+  // not the other is the defect that made the first shine fix a no-op.
+  if (g_screen_on) {
+    for (int x = xa; x < xb; x++) {
+      const uint16_t sc = screen565(fb[x], c565);
+      fb[x] = (a >= 256) ? sc : blend565(fb[x], sc, a);
+    }
+  } else if (a >= 256) {
     for (int x = xa; x < xb; x++) fb[x] = c565;
   } else {
     for (int x = xa; x < xb; x++) fb[x] = blend565(fb[x], c565, a);
@@ -546,7 +554,19 @@ void rast_fill(Raster *rz, RastCol col) {
       if (cv > 256) cv = 256;
       const unsigned a = (cv * col.a256) >> 8; // coverage x colour alpha
       if (!a) continue;
-      row[x] = (a >= 256) ? c565 : blend565(row[x], c565, a);
+      // SCREEN. This is the ANTI-ALIASED path filler, and it is the one the
+      // vfx actually use: vp_fill -> rast_fill. The first attempt at screen
+      // compositing added it to rast_blend_px and rast_fill_run only, which
+      // are real pixel paths but NOT the one a filled hexagon takes — so the
+      // shine stayed black on the device while the code looked fixed. Wiring
+      // a mode into some of the writers is the same defect as not wiring it
+      // at all, and harder to see.
+      if (g_screen_on) {
+        const uint16_t sc = screen565(row[x], c565);
+        row[x] = (a >= 256) ? sc : blend565(row[x], sc, a);
+      } else {
+        row[x] = (a >= 256) ? c565 : blend565(row[x], c565, a);
+      }
       if (g_ink_on) inkrow[x] = 1;
     }
     // restore the all-zero invariant for the touched window only
