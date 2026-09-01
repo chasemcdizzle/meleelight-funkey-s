@@ -248,12 +248,12 @@ typedef struct {
   // reason if it cannot be written — and the CALLER must then NOT arm a
   // TBUILD resume, because an armed resume with no document is exactly the
   // lie the old redirect existed to prevent.
-  bool (*suspend)(const char **why);
+  bool (*suspend)(const FohState *s, const char **why);
   // resume(): load `tbdoc.mlstage` back into the live document and CONSUME
   // it (the file is removed). True iff a document was restored. Consuming
   // is deliberate: the file means "the work you had when the lid closed",
   // so a later ordinary visit must not resurrect it.
-  bool (*resume)(void);
+  bool (*resume)(FohState *s);
 } FohTbuildOps;
 
 // NULL unless foh_tbuild.c is linked. Read it, never assume it.

@@ -5,6 +5,25 @@ build*/
 spikes/device-audio/audiotest
 # local agent-tooling artifacts (never project state; LOOP.md §A.2 needs a clean tree)
 .tokensave/
-AGENTS.md
+# AGENTS.md is TRACKED (it holds the hard rules; CLAUDE.md imports it).
+# `headroom learn` still writes its own marked block at the bottom.
 CLAUDE.local.md
 scratch-*.js
+
+# --- belt and braces for a PUBLIC repo -------------------------------------
+# Built packages and device binaries. `build*/` already covers where they are
+# produced today; these patterns mean a stray copy anywhere else still cannot
+# be committed by accident. Distributing them is forbidden (AGENTS.md, and the
+# upstream licence's Nintendo rider) — this is the mechanical half of that.
+*.opk
+*.squashfs
+
+# Converted game audio. The pipeline writes these from an upstream build; they
+# are Nintendo-derived and must never enter the repository. They live under
+# build*/ today, so this is a second lock on the same door.
+*.pcm
+audio/sfx/
+audio/music/
+
+# Agent worktrees and their scratch (hundreds of MB, machine-local).
+.claude/

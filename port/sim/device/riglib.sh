@@ -1882,6 +1882,28 @@ rig_arm_build() {
         "$TABLES/ml_tables.c" "$TABLES/ml_stages.c" \
         oracle/qjs/sha256.c port/fdlibm/fdlibm.c \
         $($SDLCFG --libs) -lm
+      # TICKETS #28/#29/#30 — THE RESUME SEAMS, AND WHY THEY ARE LISTED HERE.
+      #
+      # MEASURED ON THE OWNER DEVICE, 2026-08-28: a match was played, the lid
+      # was closed, and the console came back to the CHARACTER SELECT. No
+      # mlfk-match.hdr and no mlfk-match.sim were ever written, and the app log
+      # read `foh_dev: resumed screen=css`. The code was correct and every host
+      # check was green. THE FEATURE WAS NOT IN THE BINARY.
+      #
+      # foh_match_snap.c / foh_target_snap.c install themselves through POINTER
+      # SEAMS, which is what let #29 and #30 land without touching any other
+      # build. The cost of that design is the failure mode above: leave the TU
+      # out and there is no link error, no warning, no crash — the ops pointer
+      # is NULL, the hibernate arm quietly records `resume=css`, and the player
+      # loses their match. An absent seam is INDISTINGUISHABLE from a seam that
+      # decided not to fire.
+      #
+      # This recipe builds the binary the OWNER PLAYS (install-play-opk.sh ->
+      # the OPK). check-device-foh.sh build_foh_headless is a DIFFERENT list
+      # that had all three; so every host check passed while the product could
+      # not resume anything. The guard against a third divergence is
+      # the FOH TU-set comparison in check-device-foh.sh, which fails if either list
+      # gains a port/foh TU the other lacks.
       # A45 T3/T4 — the target builder engine and the custom-stage plane.
       # foh_tbuild.c is the FOH-side editor (behind the foh_tbuild_ops pointer
       # seam so no OTHER build had to change); custom_stage.c + stage_code.c
@@ -1906,6 +1928,8 @@ rig_arm_build() {
         port/foh/foh_pause.c \
         port/foh/foh_tbuild.c \
         port/sim/stage_code.c port/sim/target/custom_stage.c \
+        port/foh/foh_match_snap.c port/foh/foh_target_snap.c \
+        port/sim/sim/sim_snapshot.c \
         port/gfx/ctl_style.c \
         port/gfx/img1.c \
         port/sim/target/target_play.c \

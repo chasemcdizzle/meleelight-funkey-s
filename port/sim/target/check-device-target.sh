@@ -147,6 +147,24 @@ NUM12='(0|[1-9][0-9]{0,11})'
 NUM19='(0|[1-9][0-9]{0,18})'
 
 fail() { echo "DEVICE TARGET FAIL: $1" >&2; exit 1; }
+
+# A PERTURBATION THAT PERTURBS NOTHING IS WORSE THAN NO TOOTH: it reads green
+# forever and then accuses the code the day the data moves. MEASURED in this
+# feature — check-match-resume.sh's `s/^SUM \(.\)/SUM 0/` flipped the SUM's
+# first hex digit unless it was already `0`, and one build in sixteen it is.
+# Every in-place edit below goes through here, and a no-op fails LOUDLY,
+# naming the fixture instead of the feature.
+perturb() { # <file> <sed-arg>... — apply, and prove the bytes moved
+  local f="$1"; shift
+  local before after
+  before="$(shasum -a 256 < "$f")"
+  sed -i.bak "$@" "$f"
+  rm -f "$f.bak"
+  after="$(shasum -a 256 < "$f")"
+  [ "$before" != "$after" ] || fail "FIXTURE NO-OP: the perturbation
+  $* did not change $f. The tooth it feeds cannot fail, so a green run here
+  proves nothing. Fix the fixture; do NOT relax the assertion downstream."
+}
 grammar_die() { echo "DEVICE TARGET FAIL: $1" >&2; exit 2; }
 
 # --- producer byte pins -------------------------------------------------------
@@ -1690,7 +1708,7 @@ echo "    T2 OK: device T-line nibble dies in verify-target-stream (rc 2)"
 # diagnostic (iter 101, review-99 L3): a bare nonzero — crash, usage
 # error, unrelated earlier death — no longer passes as a live tooth.
 cp "$BUILD/f06-target-t01.dev-out.txt" "$BUILD/tooth3.out"
-sed -i.bak -E 's/^TFIN [0-9]+ /TFIN 9 /' "$BUILD/tooth3.out"; rm -f "$BUILD/tooth3.out.bak"
+perturb "$BUILD/tooth3.out" -E 's/^TFIN [0-8] /TFIN 9 /'
 cmp -s "$BUILD/tooth3.out" "$BUILD/f06-target-t01.dev-out.txt" && \
   fail "T3: TFIN perturb was a no-op (dead tooth)"
 t3_tfin="$(node -e '

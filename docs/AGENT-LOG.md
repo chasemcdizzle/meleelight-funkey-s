@@ -22609,3 +22609,332 @@ executed, so the builder lets you paint fire and then REFUSES TO SAVE, naming
 the rule. The witness asserts that refusal. Un-gating it needs one recorded
 browser golden (spec §5, confirmed reachable without touching `oracle/`).
 
+
+## driver — 2026-08-28 — #23 resume, found on the device instead of guessed at. ZOOM-OUT: a fixture that perturbs nothing is worse than no tooth
+
+The lid-close resume failed on the owner's hardware three times. Each failed
+diagnosis was made by reading source and reasoning; each was wrong or
+incomplete; each cost a device round trip and a message asking for another
+test. This entry records the fourth attempt, which was made by MEASURING the
+device, and it found two more defects — one of which no amount of reading the
+port would have revealed, because it lives in the platform's own scripts.
+
+### What was actually wrong
+
+`instant_play load` (`/root/.profile` runs it BEFORE `frontend init`) does two
+things in order: it mounts the OPK named by `/mnt/last_opk`, then it `source`s
+`/mnt/instant_play`. Everything under `/opk` — the launcher, the binary, the
+data — exists only while that mount is live.
+
+**Defect 6 — the `&` on its own line.** v3 wrote the relaunch record itself
+rather than calling `instant_play save` (that verb ends in `exec powerdown
+now`; it IS the shutdown). It emitted the path with a trailing `\n`, so the
+`&` landed alone on line 2. That is a shell SYNTAX ERROR. MEASURED, on both
+hosts: sourcing such a file does NOT abandon it — the shell runs line 1, then
+errors — so the malformed record started the game in the FOREGROUND and never
+reached `pid record`. A resumed session that cannot hibernate again, with the
+frontend wedged behind it forever. `instant_play save` avoids this by building
+its args with a trailing SPACE and no newline; the port had not copied that
+detail because nobody had read the file it was imitating.
+
+**Defect 7 — the mount belongs to somebody else.** MEASURED on the device,
+both arms: with `/mnt/last_opk` present the resume works end to end; with it
+absent, the boot prints `/opk/mlfk-foh.sh: not found` and walks on to the
+frontend, having done nothing a player can see. That file is opkrun's
+bookkeeping, and MEASURED again, `instant_play load` itself deletes it after
+every resume. Depending on another process's bookkeeping to survive a power
+cut is the fragile half of the feature. The record now MOUNTS ITS OWN OPK and
+re-writes `last_opk` so the platform's own trailing `umount; rm` still tidies
+up. If the boot already mounted it, the mount fails and is discarded; the
+record is correct either way.
+
+### The evidence, and how it was obtained
+
+The whole journey runs over ADB without the owner touching anything:
+`opkrun` (exactly as the frontend launches), `kill -USR1 $(pid print)`
+(exactly what `powerdown schedule` does at the lid), `instant_play load`
+(exactly what the next boot does). NINE generations were run.
+
+| | outcome |
+|---|---|
+| launch, arm | record written, `sh -n` clean, `last_opk` present |
+| lid | trap fired, `HIBERNATING=1`, record KEPT, app exit 0, /opk unmounted |
+| boot with `last_opk` DELETED | record self-mounted, app up, launcher re-recorded, session re-armed |
+| 5 back-to-back generations | 5/5 rc=0, state saved each time, record re-armed each time |
+
+ONE ANOMALY, HONESTLY UNRESOLVED: the second manual generation reported
+`rc=138` (128+SIGUSR1) and did NOT update the persist file — a lost save. It
+did not reproduce in the eight generations that followed, including one that
+deliberately matched its ~210 s session length. It is recorded here rather
+than explained away; if it returns, `/mnt/mlfk-resume.log` now carries the
+timestamps to bound it.
+
+### Breadcrumbs, because three diagnoses were guesses for want of one line
+
+`$LOG` lives in `/tmp`, which is tmpfs, so a lid close erases exactly the
+evidence a lid-close bug needs. `/mnt/mlfk-resume.log` now records
+`armed` / `no-opkfile` / `trap` / `quit` / `hibernate` with timestamps, and
+says `armed` only where something was actually armed.
+
+### ZOOM-OUT: the fixture class
+
+The cold post-merge sweep turned `check-match-resume.sh` red at the `sum`
+tooth: a corrupted SUM was accepted. The code was correct. The FIXTURE was
+`sed 's/^SUM \(.\)/SUM 0/'` — flip the first hex digit to `0` — and #30's TU
+change had produced a header whose SUM already began `0e4fb0…`. One header in
+sixteen. The fixture edited nothing, the loader correctly believed a valid
+card, and the check accused the feature.
+
+Its siblings were the same shape: `BUILD .` -> `BUILD 0` carries the identical
+one-in-sixteen dud; `STAGE 00`, `TSTAGE 00` and the 4-digit `FRAME` all assume
+a value today's flow happens to produce; `TFIN 9`, `RNG 9007…` are no-ops if
+the value is already the replacement.
+
+A perturbation that silently perturbs nothing is worse than no tooth at all:
+it reads green forever, and then one build in sixteen it accuses the code. The
+class fix is one helper, `perturb <file> <sed-arg>…`, which hashes before and
+after and fails LOUDLY naming the FIXTURE — added to all five checks that do
+in-place edits, and all 13 sites routed through it. The SUM/BUILD flips are
+now unconditional AND length-preserving (`-e 's/^SUM 0/SUM 1/' -e t -e 's/^SUM
+./SUM 0/'`), so they can never silently shorten a header into the "wrong
+length" refusal instead of the SUM refusal they exist to prove. Guard proven
+to bite by pointing a fixture at a pattern that cannot match: `FIXTURE NO-OP`,
+exit 1, file restored byte-identical.
+
+### And the check that should have existed from the start
+
+`check-hibernate.sh` gained leg **[3b]**: the relaunch record is not compared
+to a shape someone typed twice — it is EXTRACTED from the launcher's own bytes
+(only paths retargeted), then `sh -n`'d, then SOURCED in a fresh `/bin/sh`
+(the platform does not run `.profile` under `set -e`) against stand-ins for
+`mlfk-foh.sh` and the `pid` verb. It asserts the record mounts its own OPK,
+re-writes `last_opk`, launches the launcher and records its pid. Its tooth is
+defect 6 exactly, and it asserts the consequence that is REAL rather than the
+one that is obvious: the malformed record still runs its first line, and never
+reaches `pid record`.
+
+The lesson stated plainly: this feature has now produced four defects, and the
+three found by reading the port were the small ones. The one that actually
+kept the game from coming back was in a script the port merely calls, and it
+took ten minutes of ADB to find. Read the platform, not just the port.
+
+## driver — 2026-08-28 (later) — the match resume was never in the shipped app. ZOOM-OUT: two builders, one product, and a pointer seam that fails silently
+
+The owner played a match, closed the lid, opened it, and landed on the
+CHARACTER SELECT. Every host check was green. The code was right.
+
+### What the device said
+
+```
+foh_persist: loaded
+foh_dev: resumed screen=css
+```
+and `/mnt/mlfk-data/` held **no `mlfk-match.hdr` and no `mlfk-match.sim`**. The
+writer had never run.
+
+### Cause, MEASURED
+
+Three TUs — `port/foh/foh_match_snap.c`, `port/foh/foh_target_snap.c` and
+`port/sim/sim/sim_snapshot.c` — were listed in `check-device-foh.sh`'s
+`build_foh_headless` and **in no other builder**. `riglib.sh`'s `foh_device`
+recipe is the one `install-play-opk.sh` packages into the OPK, and it had none
+of them. So every check compiled the feature and the game the owner plays did
+not contain it.
+
+The #30 lane REPORTED this, in its finding 4, and called it an owner call
+outside its lane. It was right to flag it and I did not act on it. That is on
+the driver.
+
+### Why nothing caught it
+
+`foh_match_snap.c` and `foh_target_snap.c` install themselves through POINTER
+SEAMS — the same device that let #29 and #30 land without touching any other
+build. The price is a failure mode with no symptom: leave the TU out and there
+is no link error, no warning and no crash. The ops pointer is NULL, the
+hibernate arm quietly records `resume=css`, and the player loses their match.
+
+**An absent seam is indistinguishable from a seam that decided not to fire.**
+That is precisely the shape HARD RULE 2 forbids, arriving through the build
+system rather than through the source.
+
+### The class fix
+
+`check-device-foh.sh` now compares the two recipes MECHANICALLY on the plane
+where they must agree — every `port/foh` TU plus the snapshot writer — reading
+both scripts' bytes, never a compiled artifact. It fails naming the TUs that
+are in one list and not the other, and it refuses to pass if either extraction
+yields zero (an anchor that moved must not silently disable the guard).
+MEASURED green after the fix: **10 FOH TUs, identical in both recipes**.
+
+### A second thing the arm compiler found, because this TU had never met it
+
+`MS_FRAME_MAX`/`TS_FRAME_MAX` were `999999999999L` with a comment claiming it
+"still fits a 32-bit long". It does not. armv7 gcc 10.2 rejected
+`frame > MS_FRAME_MAX` under `-Werror=type-limits` as provably vacuous, since a
+32-bit long tops out at 10 digits. Both bounds are real, so neither was
+dropped: where `long` is the wider type the 12-digit format ceiling stays a
+live refusal, and where it is the narrower one the comparison is compiled out
+rather than written and ignored. A comment that had never been compiled for the
+target was simply false for three tickets.
+
+### Evidence
+
+- `DEVICE FOH OK` on hardware, with the parity guard live
+  (flows=5 shots=15 fbwit=21 p99=13.923 ms skips=0 underruns=0 starves=0,
+  16 teeth).
+- The shipped arm binary now carries `MLMATCH1`, `MLTMATCH1`, `MLSIM1` and both
+  header-refusal strings; the OPK is installed and sha-verified host == device.
+
+### And a rig lesson worth more than it looks
+
+Two runs during this session showed an app dying OF SIGUSR1 (`rc=138`, no
+save). The handler is installed unconditionally and early, so that reads like a
+product bug. It is not: with the FRONTEND STILL RUNNING the app blocks inside
+`platform_init` fighting for the framebuffer and never reaches the install. The
+stderr tell is the ABSENCE of `platform_sdl1: SetVideoMode ok`. Park the
+frontend before signalling anything, and read the log for what is missing
+rather than only for what is there.
+
+## driver — 2026-08-28 (later still) — the restore was right and the CLOCK was wrong. ZOOM-OUT: every resume check ran unpaced, so nobody had run the feature on the path the owner plays
+
+The owner closed the lid mid-match, opened it, and the game came back into the
+match — and sat frozen on a READY screen with the music playing and the timer
+stopped.
+
+### What the device said
+
+```
+foh_dev: match resume armed stage=3 frame=4549
+foh_dev: resumed screen=match
+foh_dev: match restored frame=4549
+foh_dev mustrack: from=menu to=dreamland on=1
+```
+
+Every line of the resume was correct. So the freeze was measured instead of
+guessed at: `/proc/<pid>/wchan` read `hrtimer_nanosleep` and utime advanced 5
+jiffies in 3 s — **1.7 % CPU, asleep in the pace sleep**, not spinning and not
+deadlocked. A later sample read 89 % with `wchan` 0: it had UNFROZEN by itself.
+The freeze lasted about 76 seconds, which is 4549 frames at 60 fps — the exact
+length of the match that had already been played.
+
+### Cause
+
+`f` is an ABSOLUTE frame index (that is what makes a spliced checksum stream
+meaningful) and the pace deadline is `tStart + (f + 1) * budgetNs`. A resumed
+run enters the loop with `f` already at K and an epoch of `now_ns()`, so the
+FIRST deadline lands K frames in the future and the loop sleeps through all of
+it. The state restore was right; the clock was not.
+
+The fix is the same correction `tStart += pausedNs` already makes for the pause
+overlay, in the other direction: back-date the epoch by the frames already
+behind us, clamped, because now_ns() is monotonic-since-boot and a long match
+resumed seconds after a cold boot could otherwise underflow an unsigned epoch
+into the far future — the very freeze being removed. Applied to BOTH resumed
+loops, #29's match and #30's target run, which have the identical shape and had
+the identical defect.
+
+### ZOOM-OUT: why nine legs and three device checks were blind to it
+
+**Every leg of check-match-resume.sh runs `--pace 0`**, and correctly so: a
+checksum stream must not depend on a clock. The consequence is that the whole
+resume feature was proven correct and NOBODY HAD EVER RUN A RESUMED MATCH ON
+THE PACED PATH — which is the only path the owner plays. The unpaced-by-default
+rule that makes the conformance evidence sound is exactly what hid a defect
+that lives only in the pacing.
+
+New leg **[6]**: arm a card, then resume it with `--pace 1 --budget-ns 8000000`
+bounded to a 40-frame tail, and assert the WALL CLOCK. The bound is DERIVED
+from the defect's own cost (AT frames of budget) rather than typed, and sits at
+half of it — no correct run can reach it (it owes 40 frames = 0.32 s) and no
+defective one can beat it. The fixture refuses to run at all if AT is too small
+to separate the two, so it can never pass by being unable to tell.
+
+Tooth, proven by deleting the fix and re-running: **15 s vs 0 s**, and the
+failure prints the defect's shape rather than a bare number. foh_dev.c restored
+byte-identical (sha compared).
+
+### The pattern across today
+
+Three defects, three different places, one shape between them: the thing that
+was verified and the thing that ships were not the same thing.
+
+1. The TU was in the check's build and not the product's.
+2. The bound was compiled on a 64-bit host and never on the 32-bit target.
+3. The loop was exercised unpaced and never on the clock the player runs.
+
+Every one of them passed every check that existed. A check is evidence about
+what it ran, and what it ran is a choice worth re-reading whenever a feature
+reaches hardware and misbehaves anyway.
+
+## driver — 2026-08-28 (fourth pass) — the same freeze, a second time, because the first fix was measured only where it could not fail
+
+The pacing fix shipped and the owner reported the identical symptom. They also
+added the detail that solved it: they were seeing the SPAWN PLATFORMS. That is
+a frame-0 image, so the screen was holding a freshly set-up match while the
+loop slept — the diagnosis was right and the fix was not.
+
+### What the first fix did, and why it did nothing on the device
+
+It back-dated `tStart` by K frames and CLAMPED the subtraction at zero:
+
+```c
+const uint64_t behind = (uint64_t)matchResumeFrom * budgetNs;
+tStart = (tStart > behind) ? tStart - behind : 0;
+```
+
+`now_ns()` is CLOCK_MONOTONIC — seconds since BOOT. A resume happens ~40 s into
+a boot, and the owner's match was 6562 frames = 109 s. **The match was older
+than the clock it was being measured against**, so the clamp fired, `tStart`
+became 0, and the absolute deadline came straight back. MEASURED: device uptime
+168 s when read, resume at frame 6562 = 109.4 s of play.
+
+A host whose uptime is measured in days can never reproduce that, which is why
+the new leg [6] went green while the device did not move. The check was sound
+and the environment it ran in could not contain the defect.
+
+### The actual fix
+
+The epoch is not adjusted at all. The deadline counts frames SINCE THE RESUME —
+`tStart + (f - paceBase + 1) * budgetNs` — which is what pacing has always
+meant, and it has no opinion about where the clock zero is. Both loops.
+
+### Measured ON HARDWARE this time, under the owner condition
+
+Rebooted the device so uptime was small, armed a snapshot at frame 1800 (30 s of
+match) into a directory on /mnt so it survived a second reboot, rebooted again,
+and resumed PACED at the real 16.666667 ms budget with **uptime 33 s against a
+30 s match** — the clock-origin case exactly.
+
+```
+match restored frame=1800
+WALL=1s
+foh_dev match: 1840 frames, 0 render skips, 0 failed presents, wall 666 ms, pace=1
+```
+
+The defect costs >= 30 s before the first frame. This run cost 1.
+
+### Leg [6] gained the half a host clock cannot exercise
+
+A wall-clock assertion on a host can never see the clock-origin variant, so the
+SHAPE is pinned too: both deadlines must read `(f - paceBase + 1)`, and any
+surviving `(f + 1)` deadline fails the leg by name. That is the only statement
+available about a defect whose reproduction needs a machine that booted a
+minute ago.
+
+### Rig finding, recorded so the next person does not lose an hour to it
+
+A run that ends through the hibernate `_exit(0)` leaves the console VT owned, so
+the NEXT SDL app on the device blocks forever in SDL_Init at
+`__vt_event_wait`. Harmless in real use — the device powers off immediately
+after a hibernate — but it means ONE hibernate per boot when driving the device
+by hand. The tell is an app with no `platform_sdl1: SetVideoMode ok` line at
+all. Reboot between arm and resume.
+
+### ZOOM-OUT, and it is the same one as this morning, sharpened
+
+A check is evidence about the environment it ran in. Today that boundary moved
+three times — the check's build vs the product's, the host word size vs the
+target's, the unpaced clock vs the player's — and a fourth time WITHIN a fix,
+where a host's uptime vs a device's decided whether the fix worked at all. When
+a defect reaches hardware and a green check disagrees, the question is not
+whether the check is correct. It is what the check could not have seen.

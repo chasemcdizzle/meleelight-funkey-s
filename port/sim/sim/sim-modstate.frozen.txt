@@ -1,0 +1,92 @@
+# port/sim/sim/sim-modstate.frozen.txt — ticket #28.
+#
+# EVERY mutable file-scope `static` in the sim's translation units, with what
+# a snapshot does about it. SCOPE (widened by ticket #29): the M2 gate's TU
+# list PLUS sim_snapshot.c PLUS the LIVE-AI TUs (port/sim/ai.c and
+# port/sim/sim/sim_ai_live.c). The live-AI pair is not on the gate's list and
+# so was invisible to #28 — but the FOH binary that plays a real match links
+# both, and a resumed CPU match that lost their state resumes into a different
+# opponent. ai.c contributes no row: its only mutable file-scope object is the
+# non-static diagnostic counter array ml_ai_cov (ai.h:82).
+#
+# SCOPE widened AGAIN by ticket #30, one step further out and for the same
+# reason: PLUS the TARGET TUs (port/sim/target/target_play.c and
+# port/sim/target/custom_stage.c), which the FOH binary links and the gate's
+# list does not carry. Neither contributes a row — MEASURED: neither has a
+# mutable file-scope static at all.
+#
+# AND A HOLE THIS FILE CANNOT COVER, stated rather than left to be discovered.
+# The target plane itself is `MlTargets TP` (port/sim/target/target_play.h) —
+# a file-scope NON-STATIC global, so the derivation below, which greps
+# `^static`, is structurally incapable of seeing a field added to it. That
+# guard lives where the struct does: target_play.c carries a _Static_assert
+# over sizeof(MlTargets) against its PERSISTED and DERIVED row lists plus its
+# named alignment holes, so an unclassified member does not compile. The
+# snapshot row that carries the persisted half is `mod:targets`.
+#
+# This is the module-state twin of the
+# _Static_assert in sim_snapshot.c: that assertion makes adding a member to
+# GameState a build failure, and this file makes adding a module static a
+# CHECK failure (port/sim/check-sim-snapshot.sh leg [2] re-derives the list
+# from the sources with the exact command below and diffs it against this).
+#
+# Why both are needed: GameState is where the match lives, but it is not all
+# of it. The port is structure-parallel, so where upstream keeps state in
+# module scope — a physics.js module `let`, a move object's own property,
+# howler's page-global counter — so does the port. Those bytes are sim state
+# in every sense that matters to a resume, and nothing about their type
+# announces it.
+#
+# CLASSES
+#   persisted     carried in the snapshot payload; the sim_snapshot.c module
+#                 row that carries it is named.
+#   reconstructed rebuilt from its source by boot code BEFORE ss_load runs;
+#                 the rebuilder is named. Copying it would at best be
+#                 redundant and at worst (a pointer) a trap.
+#   transient     holds nothing across a frame boundary — it is rebuilt or
+#                 reset inside the frame that uses it. The reset site is
+#                 named. A snapshot is taken at a frame boundary
+#                 (oracle/CHECKSUM.md §5), which is what makes this class
+#                 safe rather than merely convenient.
+#
+# TO REGENERATE THE LEFT-HAND COLUMNS (the check runs exactly this):
+#   bash port/sim/check-sim-snapshot.sh   # leg [2] prints the derived list
+#
+# A NEW ROW IS A DECISION, not a formality. "transient" is the class that can
+# be wrong quietly, so it is the one that has to name its reset site.
+#
+# format: <path> <symbol> <class> — <reason>
+
+port/sim/calib/canon.c arena transient — canon serialisation scratch; reset by canon_arena_reset() at the top of every canon build (sim_ser.c), so it carries nothing between frames.
+port/sim/calib/canon.c arena_used transient — the arena's bump pointer; same reset.
+port/sim/characters/falcon/moves/SIDESPECIALGROUND.c g_ssg_canEdgeCancel persisted — mod:falconSsgEdgeCancel. `this.canEdgeCancel`, a scalar write onto the move object itself, read back by physics' edge-cancel arm (CLAUDE.md M2 task 10).
+port/sim/characters/shared/moves_index.c g_char_module reconstructed — sim_data_register(). A table of FUNCTION POINTERS: valid only inside the process that registered them.
+port/sim/characters/shared/moves_index.c g_special_phases reconstructed — sim_data_register(). Function pointers, as above.
+port/sim/ml_events.c g_snd_play_count persisted — mod:playcount. ml_howl_play_id derives play ids from this count and those ids are stored in players; restarting it would re-issue an id a live voice holds.
+port/sim/sim/sim_ai_live.c g_ai persisted — mod:aiLive, IN PART. runai_live repopulates every other field (the three POINTER fields, playerType/cS/multiJump/multiJumpUndef/turbo) from the live GameState and CTAB1 before ml_runAI reads them; what nothing repopulates is hasCurentAction/curentAction (ai.js:1254's typo field, modeled as slice state), and that is what the row carries.
+port/sim/sim/sim_ai_live.c g_ai_bound reconstructed — runai_live's own bind arm. It gates the POINTER fields of g_ai, whose values are addresses in this process; ai_live_snap_load clears it so a restore rebinds.
+port/sim/sim/sim_ai_live.c g_stage transient — ai_stage_refresh(), called at the top of every runai_live before ml_runAI reads aS. The whole MlAiStage view is rebuilt from STAB1 plus the live stage plane, so nothing crosses a frame boundary.
+port/sim/sim/sim_data.c g_arr reconstructed — sim_data_load(). SIMDATA1's executed move-data arrays; immutable after load.
+port/sim/sim/sim_data.c g_arr_count reconstructed — sim_data_load().
+port/sim/sim/sim_data.c g_arr_loaded reconstructed — sim_data_load().
+port/sim/sim/sim_data.c g_as reconstructed — sim_data_load(). The frame-0 asFlags table; immutable after load.
+port/sim/sim/sim_data.c g_as_count reconstructed — sim_data_load().
+port/sim/sim/sim_data.c g_as_loaded reconstructed — sim_data_load().
+port/sim/sim/sim_data.c g_chd persisted — mod:chd. The rule-17 LIVE charHitboxes plane, which move code writes through stale id aliases (measured: puff jab1 dmg 3->7 on g04). Not recoverable from pristine CTAB1 once a match has started.
+port/sim/sim/sim_data.c g_chd_ready persisted — mod:chd (same blob).
+port/sim/sim/sim_data.c g_hd reconstructed — sim_data_load(). The hdFlags table; immutable after load.
+port/sim/sim/sim_data.c g_hd_count reconstructed — sim_data_load().
+port/sim/sim/sim_data.c g_hd_loaded reconstructed — sim_data_load().
+port/sim/sim/sim_data.c g_loaded reconstructed — sim_data_load().
+port/sim/sim/sim_data.c g_mv reconstructed — sim_data_load(). The executed move-data plane; immutable after load. Its LIVE dmg/size overlay is g_chd, which is persisted.
+port/sim/sim/sim_data.c g_mv_loaded reconstructed — sim_data_load().
+port/sim/sim/sim_data.c g_pal_loaded reconstructed — sim_data_load().
+port/sim/sim/sim_data.c g_palette0 reconstructed — sim_data_load(). Boot palette names; immutable after load.
+port/sim/sim/sim_data.c g_prov persisted — mod:chd (same blob). Says which plane entry each player's hitbox id slot aliases; a resumed match without it writes the wrong entry.
+port/sim/sim/sim_main.c g_trace reconstructed — load_trace() from --trace. Driver state, and a pointer.
+port/sim/sim/sim_main.c g_trace_len reconstructed — load_trace().
+port/sim/sim/sim_ser.c g_acanon transient — the article-queue canon buffer; rebuilt from live state by every sim_frame_hash call.
+port/sim/sim/sim_ser.c g_bufs_ready transient — one-shot allocation flag for those buffers; their CONTENTS are rebuilt per call, so nothing crosses a frame boundary.
+port/sim/sim/sim_ser.c g_env transient — the §3.1 envelope bytes of the last hash; rebuilt by every sim_frame_hash call.
+port/sim/sim/sim_ser.c g_pcanon transient — the per-slot player canon buffers; rebuilt by every sim_frame_hash call.
+port/sim/sim/sim_tick.c g_howl_counter persisted — mod:howl. Mints marth's shieldBreakerID; the id is stored in the player and read back by `.stop(id)`.

@@ -1,89 +1,167 @@
-# ▶ RESUME HERE (rewritten 2026-08-26 — read this first, then §rulings)
+# ▶ RESUME HERE (rewritten 2026-08-28 — read this first, then §rulings)
 
-**Branch `agent/auto`, tree clean.**
-**M4 IS OWNER-DEFERRED** (2026-08-23: *"skip m4 for now and just do all my
-features"*). Feature work runs from **`docs/FEATURES-SPEC.md`**; vocabulary is
-pinned in **`/CONTEXT.md`** — read that second.
+**Branch `spec/20-crashes-and-resume`, PR #31 (draft) against `agent/auto`.**
+Spec **#20**; ten tickets **#21-#30**. **ALL TEN DONE.**
 
-## What is true on HARDWARE right now (2026-08-26, all re-run this day)
+**THE RESUME IS DEVICE-VERIFIED END TO END as of 2026-08-28**, after four
+defects that every green check had missed. Read `§what-a-check-cannot-see`
+before adding a check to this feature.
 
-`DEVICE FOH OK` · `PERSIST OK` · `FULLGAME CONFORMS 12/12` (p99 15.786 ms) ·
-`LIVE ARMS OK` · `S1 INPUT OK` · `DEVICE TARGET CONFORMS` ·
-`DEVICE CONFORMS g01` · `SIM P99 OK` · `DEVICE RENDER OK` · `DEVICE MUSIC OK` ·
-`OPK LAUNCH OK` · `SKIP ATTRIB OK`.
+**#23's relaunch is device-verified**, over nine generations
+driven entirely from the host: `opkrun` (as the frontend launches),
+`kill -USR1 $(pid print)` (as the lid does), `instant_play load` (as the next
+boot does). Eight of nine clean, one unresolved anomaly recorded in
+AGENT-LOG rather than explained away. See §resume-defects below.
 
-**ONE RED, KNOWN AND OWNER-DEFERRED:** `check-device-audio.sh` full-frame p99
-**17.274 ms** vs the 16.67 ms bar. This is the iter-118 M3 audio class
-(17.444 ms then) reproduced, not a regression. **The bar was not moved and
-must not be.** The PRODUCT path is green — fullgame runs the real
-`foh_device` with render + sfx + music live at 15.786 ms.
+## What a player gets that they did not have this morning
 
-## The zoom-out that explains most of this session
+- The **target builder no longer crashes.** Eight reported crashes, one cause:
+  the font has NO lowercase and a missing glyph was a hard kill. Device-verified
+  by running the witness on the FunKey itself (154 assertions, rc 0).
+- **Power on goes straight into the game** — no launcher, no manual start (#23).
+- **Closing the lid keeps what you were doing**: character select with the CPU
+  opponent, its difficulty and endless KO fest (#25); target select's page and
+  cursor (#26); every menu row, stage select and credits (#27); and **a match in
+  progress** (#28/#29).
 
-**Nine of thirteen device checks refused stale evidence, and NOT ONE was a
-regression.** Every stale thing was the second half of a paired change whose
-first half had shipped. A pin only refuses when someone runs the check, and
-these need hardware — so they are last to run and first to rot. Full table +
-the three-part class fix: `docs/AGENT-LOG.md`, driver 2026-08-26.
-**Standing consequence:** stop pinning DERIVED facts (an audio period lives in
-`platform.h`; a callback count is `rate*seconds/PERIOD`), make inventories
-self-check against their source, and make evidence hermetic.
+## Ticket state
 
-## A45 target builder — T1..T8 COMPLETE
+| # | what | verified |
+|---|---|---|
+| 21 | crashes + the check draws | host + **device** |
+| 22 | persist is a field table | host cold |
+| 23 | lid auto-relaunch | **device** |
+| 24 | face-domain lint | host cold |
+| 25 | CSS resumes | host + **device** |
+| 26 | target select + resume hook | host cold |
+| 27 | every screen resumes | host cold |
+| 28 | sim snapshot, all 8 goldens | host cold |
+| 29 | match resumes across a lid close | host cold + `DEVICE FOH OK` |
+| 30 | target runs resume | host cold (`TARGET RESUME OK`) |
 
-- **T5-T8 landed**: all ten upstream tools, at upstream's own indices.
-  `TBUILD CHECK OK` — 139 assertions, 8 teeth. New deviations **D54** (type
-  cycle -> X+shoulder), **D55** (SCALE keeps the d-pad; upstream already
-  freezes the crosshair), **D56** (B pops a polygon vertex while drawing),
-  **D57** (the builder resumes into itself with its document).
-- **`getConnected` was a LIVE DEFECT**, found while specifying T5 — custom
-  stages have had no `connected` plane since T2 and no check could see it.
-  Fixed at upstream's own site with a 1500-code differential against
-  upstream's executed `getConnected`.
-- **T6 IS DONE — the damage plane EXECUTES.** `dealWithDamagingStageCollision`
-  had five translated call sites and had never run; the routing from physics'
-  queue into the hitQueue had never been written, because nothing could reach
-  it. Golden **t03** (fox, custom stage, fire ground) discharged the refusal:
-  MEASURED sim frame 263 WALK percent 0 -> frame 264 DAMAGEFLYN percent 10,
-  and the C sim reproduces both frozen browser streams exactly. The traps are
-  NARROWED, not removed (a damage row on a stage with no damaging surface is
-  still fatal), and `check-custom-stage.sh` leg [5] fails by name if no golden
-  covers the plane.
+## THINGS OWED, all stated on their tickets
 
-## OWED / OPEN
-- **A33 rung 3** (host-mode fork) — owner: after the ready-now list. Unlocks
-  BOTH the GC adapter and **A47 two-device link play**.
-- **Freeze manifest: 31 stale pins.** §A-par.5 batched pass, driver-only,
-  **when M4 resumes — NOT now** (owner instruction, 2026-08-26). Deliberately
-  untouched all session; the repo-wide producer-pin audit excludes it.
-- **A26 resume: the builder half is DONE (D57), the match half is not.**
-  Closing the lid in the target builder now comes back to it WITH the stage
-  you were drawing — the document travels as a `tbdoc.mlstage` through A45
-  T2's contract, and the resume is downgraded to the menu top if that write
-  fails, so it can never claim work it does not have. Proved by byte-identity
-  across park->hibernate->resume->hibernate (`check-hibernate.sh` [5b]).
-  **The remaining redirects** are MATCH -> CSS, TMATCH -> target-select,
-  SSS -> CSS, CREDITS -> options. The match one is the real ticket, and TIME
-  IS NOT WHAT BLOCKS IT: measured on the device, a write+fsync to `/mnt`
-  costs 22 ms at 2 KB and **33 ms at 160 KB**, inside a ~100 ms grace that
-  already carries the settings save — and `sizeof(GameState)` is 158.9 KB.
-  What blocks it is that GameState holds function pointers (move tables,
-  hooks) so it needs a canonical form rather than a raw write, and
-  CHECKSUM.md deliberately excludes some timing-dependent fields, so
-  "checksum-equal" and "byte-equal" are a decision to make, not a given.
+0. **`check-device-persist.sh` is RED at `dp02`, and it is the SAME question
+   as M1 was — one level deeper. MEASURED on hardware 2026-08-28**, not
+   inferred: the device's session B walks `menu-top -> css` where the host twin
+   walks `menu-top -> menu-options`, because the twin's seed is HOMED by the
+   lane's `seed_p02_cursors` and the device loads its own un-homed session-A
+   file. Homing the device copy too would fix the trace and then break the leg
+   below it: `cmp pull3 pull2` asserts a session round-trips the file
+   BYTE-IDENTICALLY, which was true only while no cursor was persistent. #26
+   and #27 made that premise false. **This is a design decision about what the
+   device leg asserts, not a fixture patch, and it is deliberately left for the
+   owner** — the same ruling as M1, which the lane resolved for the host side
+   only. Nothing else in the check is red; it reached leg [8] of 10, the boot
+   identity judged, and the pre-existing card was restored by the trap.
 
-## STANDING HAZARDS (all paid for)
-- **A comment is not evidence.** `z` was documented as grab for months;
-  `custom_stage.c` said "no connected field in the code grammar" and was right
-  about the grammar and wrong about the behaviour.
-- **A name is not evidence about its plane.**
-- **A green check is not evidence a change is safe — measure the CONSUMERS.**
-- **Teeth go vacuous silently.** Also: a witness loop that waits on state a
-  tooth can freeze must be BOUNDED, or the check hangs instead of failing.
-- **A tool that cannot run reports everything as broken.**
-- **Deviation numbers are DRIVER-allocated** (D54/D55/D56 taken 2026-08-26).
-- **Never leave a device marker that outlives the test** — D44's boot-unpark
-  line makes the class impossible; verified again this session.
+1. **`check-device-persist.sh` leg M1 is RED and deliberately not worked
+   around.** It compares a same-process session against a PERSISTED TWIN and
+   requires the shots identical — a frozen refutation shape whose text says
+   STOP. #26 persists `tssCursor` and #27 persists the menu rows, so a resumed
+   session now legitimately arrives with screen-local state a freshly-navigated
+   one lacks. **The leg's premise is what this spec changed on purpose.** Either
+   something restores state it should re-derive, or the leg should compare
+   resumed-against-resumed. **Owner/driver call, not a fixture patch.**
+2. ~~#30 owes the hibernate/boot seam for a target run.~~ **DONE 2026-08-28**
+   (`check-target-resume.sh` -> `TARGET RESUME OK`). A custom stage is
+   RE-LOADED from the card, never carried; the header's `SRC` line pins which
+   stage it must be, and the boot disarms the pair and lands on target select
+   when the card no longer holds it.
+
+## Process lessons this run paid for
+
+- **"Affected checks" is not a list you curate.** I ran a chosen subset after
+  #22 and again after #25 and under-scoped it both times; `check-foh-flows.sh`
+  sat red for two tickets. Every merge since used the FULL sweep (23 checks).
+- **A lane's green is evidence about its worktree, not about HEAD.** #27 and #29
+  merged textually clean and left `check-persist-table.sh` leg [8b] asserting
+  the pre-#29 rule. Only the cold re-run saw it.
+- **Tell lanes to commit as they go.** Two lanes died to session limits. The
+  first left 8 modified files, nothing committed — unmergeable. The second, told
+  to commit each self-contained step, left a real merged commit.
+- **The device catches what no host check can.** It found a stale migration
+  expectation, two whitelist gaps, and a flow whose `DOWN x3` walk assumed a
+  cursor that #27 made persistent.
+
+## Defects found that nobody was looking for
+
+- `ss_save` never **fsynced** — `rename()` gives atomicity, not durability, and
+  this device powers off ~100 ms after the lid, so a snapshot could sit in page
+  cache and simply not exist. Found by #29 in #28's work.
+- `ctl_style_name`'s fallback returned `"?"`, drawn through a face with no `?`
+  glyph. Unreachable today; nothing had ever looked at that arm.
+- **#23 worked exactly once**: the resume record pointed at the binary, so the
+  resumed session bypassed the launcher that arms the next resume.
+
+## §what-a-check-cannot-see — the four defects of 2026-08-28, and their one shape
+
+Every one of these passed every check that existed, and reached the owner's
+hands anyway. The shape is the same each time: **the thing verified and the
+thing that ships were not the same thing**, and the difference lived in the
+ENVIRONMENT the check ran in rather than in the check's logic.
+
+| # | verified in | shipped in | symptom |
+|---|---|---|---|
+| 1 | `check-device-foh.sh`'s TU list | riglib's OPK recipe, missing 3 TUs | the whole match/target resume was ABSENT; lid -> character select |
+| 2 | a 64-bit host | a 32-bit target | `frame > 999999999999L` provably vacuous; the arm build refused |
+| 3 | `--pace 0` (correct: a checksum stream must not depend on a clock) | the player's paced clock | resumed match froze for as long as it had been played |
+| 4 | a host with days of uptime | a device 40 s past boot | the pacing FIX's `tStart` clamp fired; the freeze came straight back |
+
+Guards added, in the same order: a mechanical FOH TU-set comparison between the
+two build recipes (`check-device-foh.sh`); the bound compiled on both word
+sizes; `check-match-resume.sh` leg [6], a PACED resume judged on wall clock with
+its bound derived from the defect's cost; and, because no host clock can
+reproduce #4, a SHAPE pin in that same leg requiring both deadlines to read
+`(f - paceBase + 1)`.
+
+**When hardware misbehaves and a green check disagrees, do not ask whether the
+check is correct. Ask what it could not have seen.**
+
+## §resume-defects — #23 took SEVEN fixes, and the last two were not in our code
+
+Read this before touching the lid path. The three defects found by READING the
+port were the small ones; the two that actually kept the game from coming back
+live in the platform's own scripts, and ten minutes of ADB found both.
+
+1. `instant_play save` ends in `exec powerdown now` — it IS the shutdown, not a
+   record-this verb. Calling it at launch powered the console off, and because
+   the record pointed here, every boot did it again. A loop.
+2. Moving that call into the USR1 trap lost the feature to a 20 s liveness
+   guard and to having ~40 ms left after forwarding the signal.
+3. A lid close DOES reach the launcher's clean-exit path (the app takes the
+   signal, saves and `_exit(0)`s), so the `rm` meant for "the player quit" was
+   deleting the record it had just armed. Hence `HIBERNATING`.
+4. `pid record "$APP"` re-aimed the lid's SIGUSR1 AT THE APP, so the launcher's
+   trap never fired. `powerdown schedule` signals `pid print`, and the frontend
+   records the LAUNCHER — that is the only reason a USR1 trap works here.
+5. **A `\n` before the `&`** put the ampersand alone on line 2 — a shell syntax
+   error. MEASURED: `source` on such a file does NOT abandon it; the shell runs
+   line 1 and then errors. The game came back in the FOREGROUND, never reached
+   `pid record`, and wedged the frontend behind it.
+6. **The mount belongs to opkrun.** `/opk` exists only while `instant_play
+   load` has mounted it, and it mounts only if `/mnt/last_opk` is readable —
+   a file opkrun owns and `instant_play load` deletes after every resume.
+   MEASURED both arms. The record now mounts its own OPK.
+
+**`/mnt/mlfk-resume.log`** carries `armed` / `no-opkfile` / `trap` / `quit` /
+`hibernate` with timestamps. `$LOG` is tmpfs; a lid close erases exactly the
+evidence a lid-close bug needs, and three of the diagnoses above were guesses
+for want of that one line.
+
+## §fixture-noop — a perturbation that perturbs nothing is worse than no tooth
+
+The cold post-merge sweep turned `check-match-resume.sh` red at its `sum`
+tooth. The code was right. The fixture was `sed 's/^SUM \(.\)/SUM 0/'` — flip
+the first hex digit to `0` — and #30's TU change happened to produce a header
+whose SUM already began `0e4fb0…`. One header in sixteen. It edited nothing,
+the loader correctly believed a valid card, and the check accused the feature.
+
+All five host checks that edit a file in place now route their 13 sites through
+one `perturb <file> <sed-arg>…` helper that hashes before and after and fails
+LOUDLY naming the FIXTURE. The SUM/BUILD flips are unconditional AND
+length-preserving, so they can never shorten a header into the "wrong length"
+refusal instead of the SUM refusal they exist to prove.
 
 ---
 
@@ -93,6 +171,30 @@ _Read CLAUDE.md first, then this page. History → docs/AGENT-LOG.md;
 queue → fix_plan.md; standards → docs/PROCESS.md._
 
 ## §rulings (standing owner directives, day-tagged)
+
+- **2026-08-27 — PERSIST THE PORT TYPES AND CPU LEVELS (Chase, in session).**
+  Offered three options — (A) persist them, (B) persist presence and difficulty
+  but leave the port disarmed on boot, (C) persist only the mode and difficulty
+  — with the recommendation of B. Verbatim: *"for the options I want A. persist
+  them anyway."*
+  **This REVERSES a written judgement** at `foh_persist.h:258-272`, which
+  refuses to persist `FohState.portType` and the CPU levels because upstream's
+  fresh state is `playerType = [-1,-1,-1,-1]` (faithfulness) and because A49
+  made CPU reachable on ports 2/3 where a 3-or-4-port CPU match is playable but
+  **NOT checksum-verified**. `foh.h:846` carries the parallel note for
+  `versusMode`. The comment anticipated the ruling — *"if the owner wants types
+  too it is one more appended row"* — so this is a cost the design priced, not
+  one it missed.
+  **MECHANICAL CONSEQUENCE, stated not papered over:** the device can now boot
+  into a character select that is already armed, possibly READY TO FIGHT before
+  the player touches it, off a configuration from another session — and if that
+  configuration was a 3-or-4-port CPU match, it wakes into a state no golden
+  covers. Do not file that later as a defect; it is this ruling's price.
+  **PAIRED CHANGE, BINDING:** the two comments above must be rewritten in the
+  same change that persists the fields. A comment left asserting the opposite of
+  what the code does is exactly the `getConnected` class — true about its own
+  reasoning, false about the behaviour, believed for three days.
+  Ticket #25; recorded on the issue as well.
 
 - **2026-08-03 — RE-PRIORITIZATION; B11 DEFERRED (Chase, in session).** Verbatim:
   *"let's skip B11 I am totally done with all this for now. defer it until after

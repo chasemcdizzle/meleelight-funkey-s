@@ -179,8 +179,9 @@ echo "=== [3] launcher signal route (lines extracted from $LAUNCHER)"
 made "$LAUNCHER"
 IDIOM=$BUILD/idiom.sh
 # Anchored, single-match: the four lines that make hibernate reachable at all.
+TRAPLINE="  trap 'HIBERNATING=1; echo \"trap \$(date +%s)\" >> /mnt/mlfk-resume.log 2>/dev/null; kill -USR1 \"\$APP\" 2>/dev/null' USR1"
 for pat in '    >> "$LOG" 2>&1 &' '  APP=$!' \
-           "  trap 'kill -USR1 \"\$APP\" 2>/dev/null' USR1" \
+           "$TRAPLINE" \
            '  wait "$APP"; rc=$?' \
            '  if [ "$rc" -gt 128 ]; then wait "$APP"; rc=$?; fi'; do
   n="$(grep -cxF "$pat" "$LAUNCHER")" || true
@@ -193,11 +194,12 @@ done
   echo '#!/bin/sh'
   echo 'LOG=$1'
   echo 'CHILD=$2'
+  echo 'HIBERNATING=0'
   echo ': > "$LOG"'
   echo '"$CHILD" \'
   grep -xF '    >> "$LOG" 2>&1 &' "$LAUNCHER"
   grep -xF '  APP=$!' "$LAUNCHER"
-  grep -xF "  trap 'kill -USR1 \"\$APP\" 2>/dev/null' USR1" "$LAUNCHER"
+  grep -xF "$TRAPLINE" "$LAUNCHER"
   grep -xF '  wait "$APP"; rc=$?' "$LAUNCHER"
   grep -xF '  if [ "$rc" -gt 128 ]; then wait "$APP"; rc=$?; fi' "$LAUNCHER"
   echo 'echo "RC=$rc" > "$LOG.rc"'
@@ -250,6 +252,130 @@ grep -qxF 'RC=42' "$BUILD/idiom.log.rc" \
   || fail "[3] the trap took >3 s to fire — that is the DEFERRED-trap failure
   the background+wait form exists to avoid (the grace is 0.1 s)"
 echo "   trap fired immediately, child rc 42 reached opk.rc"
+
+# --- [3b] the relaunch record is RUNNABLE, not merely written ---------------
+# WHY THIS LEG EXISTS. v3 of the resume wrote /mnt/instant_play itself instead
+# of calling `instant_play save` (that verb ends in `exec powerdown now` — it
+# IS the shutdown). The file it wrote was byte-plausible and its log said
+# "relaunch armed", and it never once relaunched on hardware, because a `\n`
+# before the `&` puts the ampersand alone on line 2 and that is a shell SYNTAX
+# ERROR. `instant_play load` consumes the record with `source`, so the error
+# goes to a console nobody reads and the boot walks on to the frontend. Three
+# device tests failed identically and looked, from the player's chair, exactly
+# like "nothing was armed".
+#
+# So the record is not checked by comparing it to a shape someone typed twice.
+# It is checked BY RUNNING IT, the way the platform runs it.
+echo "=== [3b] the relaunch record parses and runs (source, as the boot does)"
+REC=$BUILD/rec.d
+rm -rf "$REC"; mkdir -p "$REC/opk" "$REC/bin"
+# The emitter, EXTRACTED from the launcher's own bytes. Only the destination
+# path is rewritten; the format string — the thing under test — is never
+# retyped, so a future edit to it is what this leg sees.
+EMITF='        printf "mount -t squashfs '"'"'%s'"'"' /opk 2>/dev/null\necho -n '"'"'%s'"'"' > /mnt/last_opk\n'"'"'%s'"'"' &\npid record \$!\nwait \$!\npid erase\n" \'
+EMITA='          "$OPKFILE" "$OPKFILE" "$DIR/mlfk-foh.sh" > /mnt/instant_play 2>/dev/null || true'
+for pat in "$EMITF" "$EMITA"; do
+  n="$(grep -cxF "$pat" "$LAUNCHER")" || true
+  [ "$n" = 1 ] || grammar_die "mlfk-foh.sh has $n copies of the line
+  '$pat' (want exactly 1) — the relaunch-record emitter moved or was reverted"
+done
+# The record names /opk and /mnt/last_opk, neither of which exists on a Mac,
+# so the emitter is retargeted at the sandbox. Only PATHS are rewritten; the
+# format string — the thing under test — is carried verbatim.
+{
+  echo '#!/bin/sh'
+  echo 'DIR=$1'
+  echo 'OPKFILE=$3'
+  grep -xF "$EMITF" "$LAUNCHER" | sed -e "s#/opk 2#$REC/opk 2#" \
+                                      -e "s#> /mnt/last_opk#> $REC/last_opk#"
+  grep -xF "$EMITA" "$LAUNCHER" | sed 's#> /mnt/instant_play#> "$2"#'
+} > "$REC/emit.sh"
+chmod +x "$REC/emit.sh"
+made "$REC/emit.sh"
+/bin/sh "$REC/emit.sh" "$REC/opk" "$REC/instant_play" "$REC/fake.opk"
+made "$REC/instant_play"
+
+# THE MOUNT IS THE POINT. MEASURED on the device: `instant_play load` mounts
+# the OPK only when /mnt/last_opk is readable, that file belongs to opkrun,
+# and without it the boot prints `/opk/mlfk-foh.sh: not found` and goes to the
+# frontend. A record that assumes someone else left the squashfs mounted is a
+# record that silently does nothing.
+grep -q "^mount -t squashfs '$REC/fake.opk' " "$REC/instant_play" \
+  || { cat "$REC/instant_play" >&2
+       fail "[3b] the record does not mount its own OPK — it would resume only
+  when /mnt/last_opk happened to survive the power cut"; }
+grep -q "^echo -n '$REC/fake.opk' > $REC/last_opk\$" "$REC/instant_play" \
+  || { cat "$REC/instant_play" >&2
+       fail "[3b] the record does not re-write last_opk, so instant_play load
+  would leave /opk mounted after the resumed session ends"; }
+
+# (1) it parses. This is the defect-6 assertion, stated directly.
+/bin/sh -n "$REC/instant_play" 2>"$REC/parse.err" \
+  || { cat "$REC/parse.err" >&2; od -c "$REC/instant_play" >&2
+       fail "[3b] the relaunch record is not valid shell, so instant_play
+  load would source it, fail silently and boot to the frontend — the app would
+  never come back and its own log would still say 'relaunch armed'"; }
+
+# (2) it runs, and it runs the LAUNCHER. Stand-ins for the two things the
+# record names: the script it relaunches, and the platform's pid verb.
+cat > "$REC/opk/mlfk-foh.sh" <<'EOF'
+#!/bin/sh
+echo "relaunched" > "$MLFK_REC_MARK"
+exit 7
+EOF
+cat > "$REC/bin/pid" <<'EOF'
+#!/bin/sh
+echo "$@" >> "$MLFK_REC_PIDLOG"
+EOF
+chmod +x "$REC/opk/mlfk-foh.sh" "$REC/bin/pid"
+rm -f "$REC/mark" "$REC/pidlog"
+# A FRESH /bin/sh, deliberately: the platform sources this from .profile,
+# which is not running under `set -e`. Sourcing it in THIS shell would inherit
+# the check's -e and abort at `wait $!` on the stand-in's non-zero exit — a
+# harness artefact that would look like a missing `pid erase`.
+PATH="$REC/bin:$PATH" MLFK_REC_MARK="$REC/mark" MLFK_REC_PIDLOG="$REC/pidlog" \
+  /bin/sh -c '. "$1"' sh "$REC/instant_play" >"$REC/src.out" 2>&1 || true
+[ -f "$REC/mark" ] \
+  || { cat "$REC/src.out" >&2
+       fail "[3b] sourcing the record did not start the launcher it names"; }
+grep -q '^record ' "$REC/pidlog" \
+  || fail "[3b] the record never called 'pid record' — the lid's SIGUSR1 is
+  sent to 'pid print', so a resumed session that skips this cannot hibernate a
+  second time"
+grep -qx 'erase' "$REC/pidlog" \
+  || fail "[3b] the record never called 'pid erase'"
+
+# (3) TOOTH: the exact defect, re-emitted with a newline before the &.
+#
+# And it is worth being precise about what that defect DOES, because the
+# obvious guess is wrong and this leg was written on the guess first. Sourcing
+# a file with a syntax error does not abandon the file: the shell runs line 1,
+# THEN reports the error. So the malformed record does start the app — in the
+# FOREGROUND, since its & was orphaned — and then stops, having never reached
+# `pid record`. The player gets a game that cannot hibernate a second time
+# (the lid's signal goes to `pid print`, which now names whatever ran last)
+# with the frontend wedged behind it forever. The tooth asserts THAT, not a
+# missing launch.
+printf "'%s' \n&\npid record \$!\nwait \$!\npid erase\n" "$REC/opk/mlfk-foh.sh" \
+  > "$REC/instant_play.bad"
+if /bin/sh -n "$REC/instant_play.bad" 2>/dev/null; then
+  fail "[3b] TOOTH DEAD: a standalone & line parsed clean, so this leg cannot
+  see the defect it was written for"
+fi
+rm -f "$REC/mark" "$REC/pidlog"
+PATH="$REC/bin:$PATH" MLFK_REC_MARK="$REC/mark" MLFK_REC_PIDLOG="$REC/pidlog" \
+  /bin/sh -c '. "$1"' sh "$REC/instant_play.bad" >/dev/null 2>&1 || true
+[ -f "$REC/mark" ] \
+  || fail "[3b] TOOTH MISREAD: the malformed record did not run its first line
+  at all. The tooth's premise (parse error after line 1) no longer holds on
+  this shell, so rewrite the tooth rather than trusting it"
+[ ! -f "$REC/pidlog" ] \
+  || { cat "$REC/pidlog" >&2
+       fail "[3b] TOOTH DEAD: the malformed record reached 'pid record', so a
+  syntax error in this file is no longer observable here"; }
+echo "   record mounts its OPK, parses, sources, relaunches and records its pid"
+echo "   tooth: the &-on-its-own-line shape fails to parse and never reaches"
+echo "          'pid record', leaving a game that cannot hibernate again"
 
 # --- [4] hibernate: a real SIGUSR1 to a real run -----------------------------
 echo "=== [4] hibernate (real SIGUSR1 -> the foh_persist chokepoint)"
@@ -403,6 +529,8 @@ grep -qxF 'foh_dev: hibernate from=target-builder resume=target-builder' \
   flow did not park there, or suspend() failed and it downgraded"; }
 made "$TBDIR/tbdoc.mlstage"
 cp "$TBDIR/tbdoc.mlstage" "$BUILD/tbdoc.before"
+made "$TBDIR/tbview.dat"
+cp "$TBDIR/tbview.dat" "$BUILD/tbview.before"
 # THE EDIT MUST BE REAL, or the round trip proves nothing: a document that is
 # still D51's template would round-trip just as byte-identically.
 TPL=$BUILD/tbdoc.template
@@ -447,6 +575,11 @@ grep -qxF 'foh_dev: builder document restored' "$BUILD/tbres.err" \
   && { kill -9 "$TBPID2" 2>/dev/null || true
        fail "[5b] tbdoc.mlstage survived the resume — it must be CONSUMED, or
   a later ordinary visit resurrects work the player already got back"; }
+[ -e "$TBDIR/tbview.dat" ] \
+  && { kill -9 "$TBPID2" 2>/dev/null || true
+       fail "[5b] tbview.dat survived the resume — it is CONSUMED for the same
+  reason the document is, and an unreadable one left behind would retry the
+  same failure on every boot"; }
 kill -USR1 "$TBPID2"
 n=0
 while kill -0 "$TBPID2" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
@@ -457,14 +590,764 @@ cmp "$BUILD/tbdoc.before" "$TBDIR/tbdoc.mlstage" \
   || fail "[5b] the document did NOT survive the round trip: the file published
   by the second hibernate differs from the first. A resume that lands on the
   builder with someone else's stage is worse than not resuming at all."
+
+# --- [5b-view] THE WORK IN PROGRESS, NOT JUST THE WORK COMMITTED (D62) -------
+#
+# D57 kept the DOCUMENT and the leg above proves it. It did not keep anything
+# in FohState: the crosshair, the tool in hand, the half-dragged platform, the
+# polygon with four vertices down. MEASURED, reported by the owner: "resume
+# for target test builder doesn't bring back what you were in the middle of
+# drawing ... or the cursor position." An uncommitted polygon is the ONLY
+# thing on that screen which is not also in the document, so it is the half
+# most worth keeping and it was the half being dropped.
+#
+# The view rides in its own file beside the document, and this asserts the
+# round trip the same way: BYTE-IDENTITY of the published file across
+# park -> hibernate -> resume -> hibernate.
+made "$TBDIR/tbview.dat"
+cmp "$BUILD/tbview.before" "$TBDIR/tbview.dat" \
+  || fail "[5b] the builder's VIEW state did not survive the round trip. The
+  document came back and the crosshair, the tool and any in-progress polygon
+  did not — which is what the owner reported and what D62 exists to fix."
+# ...and it must be REAL: a view file that is all zeroes would round-trip just
+# as byte-identically as one holding the player's crosshair. The parked flow
+# walks the tool cycle and moves the crosshair, so at least one field must
+# differ from a freshly-initialised builder's.
+made "$BUILD/tb-tpl/tbview.dat"
+cmp -s "$BUILD/tb-tpl/tbview.dat" "$BUILD/tbview.before" \
+  && fail "[5b] the parked VIEW state is byte-identical to the untouched
+  builder's — the flow moved neither the crosshair nor the tool, so the
+  round-trip assertion above would hold for a resume that restored nothing
+  (dead leg)"
+[ -e "$TBDIR/tbview.dat.consumed" ] || true
+echo "   the parked view state differs from a fresh builder's and round-trips"
 echo "   builder resumed with the SAME document, byte for byte; file consumed"
+
+# --- [5c] the CHARACTER SELECT resumes SET UP THE WAY IT WAS LEFT -----------
+# Ticket #25 / owner ruling 2026-08-27. The owner's report was that closing
+# the lid on the CSS gave back a screen with the opponent gone, the mode
+# reverted and the cursor at the top: only the character survived, because
+# only the character had a row. Eight rows later, this leg is what says so.
+#
+# IT IS SHAPED EXACTLY LIKE [5b], because [5b] already learnt the two things
+# that make a resume round trip mean anything:
+#
+#   * THE ASSERTION IS BYTE-IDENTITY ACROSS THE ROUND TRIP, not a log line. A
+#     resume that silently reset the CSS to a fresh screen would still print
+#     `resumed screen=css` and would still hibernate again cleanly; what it
+#     cannot do is publish the same bytes the second time.
+#
+#   * AND THE PARKED STATE MUST DIFFER FROM A FRESH ONE, per row, or the
+#     round trip is a round trip on nothing. A field that was never set sits
+#     at its default, survives trivially, and proves only that the default is
+#     stable. So the flow below really works the screen — arms port 1 as CPU,
+#     drags its level knob to the bottom of the rail, flips the mode ribbon,
+#     moves the hand and picks a token up — and every new row is then
+#     required to DIFFER from the row the same binary writes on a screen
+#     nobody touched. [5b] proves the same thing with its `tbdoc.template`
+#     comparison; this is that guard, made per field.
+echo "=== [5c] the CSS resumes as it was left (ticket #25)"
+
+# The flow is written in CLAMP-THEN-COUNT form: hold up+left long enough to
+# pin the cursor at (0,0) — foh_hand_step clamps, so "long enough" is exact —
+# and then count frames out from there. FOH_CURSOR_VX/VY are 2.40 and 3.84
+# px/frame (foh_hand.h), so every position below is an exact multiple and no
+# step lands on a boundary. Frame budget: the CSS is reached at tick 381 and
+# everything here finishes by 801, well inside the 3 s (1500 tick) wait.
+#
+#   500  hand at (0, 0)                     clamped
+#   550  hand at (120.0, 0)                 50 frames right
+#   553  hand at (120.0, 11.52)             3 frames down -> inside the mode
+#                                           ribbon (x 104..178, y 4..22)
+#   555  A                                  versusMode 0 -> 1
+#   620  hand at (0, 0)                     clamped again
+#   647  hand at (64.8, 103.68)             27 frames down+right -> inside
+#                                           port 1's type tab (x 61..97,
+#                                           y 96..107)
+#   650  A, 654 A                           portType[1] N/A -> HMN -> CPU
+#   683  hand at (98.4, 192.0)              onto port 1's knob, which sits at
+#                                           (97.156, 189) with a +/-6 box
+#   685  A                                  grab the knob
+#   720  hand dragged to the rail's left end (x0 = 72) -> level 1
+#   722  A                                  release the knob
+#   790  hand at (0, 0)                     clamped
+#   798  hand at (0, 30.72)                 8 frames down -> inside the roster
+#                                           band (26..62) but ABOVE the cells
+#                                           (32..62), so nothing is hovered
+#                                           and no selection can change
+#   800  B                                  grab port 0's token (css.js:209)
+CSSPARK=$BUILD/csspark.flow
+cat > "$CSSPARK" <<'CSSEOF'
+FLOW1
+I 1 -
+I 375 S
+I 376 -
+I 380 A
+I 381 -
+I 400 UL
+I 500 R
+I 550 D
+I 553 -
+I 555 A
+I 556 -
+I 560 UL
+I 620 RD
+I 647 -
+I 650 A
+I 651 -
+I 654 A
+I 655 -
+I 660 RD
+I 674 D
+I 683 -
+I 685 A
+I 686 -
+I 690 L
+I 720 -
+I 722 A
+I 723 -
+I 730 U
+I 790 D
+I 798 -
+I 800 B
+I 801 -
+END 20000
+CSSEOF
+made "$CSSPARK"
+
+# park <flow> <dir> <label> — run to the wall clock, SIGUSR1, require a clean
+# hibernate, leave the published record at <dir>/mlfk-persist.dat.
+css_park() { # <flow> <dir> <label>
+  local flow="$1" dir="$2" label="$3" pid n
+  rm -rf "$dir"; mkdir -p "$dir"
+  rm -f "$BUILD/$label.err" "$BUILD/$label.trace"
+  MLFK_PERSIST_DIR="$dir" "$BUILD/foh_dev_headless" \
+    --flow "$flow" --input flow --flow-out "$BUILD/$label.trace" \
+    --pace 1 --budget-ns "$BUDGET" > "$BUILD/$label.err" 2>&1 &
+  pid=$!
+  sleep 3
+  kill -0 "$pid" 2>/dev/null \
+    || { relay_lines < "$BUILD/$label.err"
+         fail "[5c] $label: app exited before the signal"; }
+  kill -USR1 "$pid"
+  n=0
+  while kill -0 "$pid" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+  kill -9 "$pid" 2>/dev/null || true
+  set +e; wait "$pid" >/dev/null 2>&1; set -e
+  grep -qxF 'foh_dev: hibernate from=css resume=css' "$BUILD/$label.err" \
+    || { relay_lines < "$BUILD/$label.err"
+         fail "[5c] $label: did not hibernate ON THE CSS — the flow no longer
+  parks where this leg thinks it does, so everything below judges the wrong
+  screen"; }
+  made "$dir/mlfk-persist.dat"
+}
+
+# the WORKED screen, and the UNTOUCHED one from the same binary and the same
+# navigation — the fresh-state reference every row below is compared against.
+CSSDIR=$BUILD/css-persist
+css_park "$CSSPARK" "$CSSDIR" cssw
+CSSFRESH=$BUILD/css-fresh
+css_park "$PARK" "$CSSFRESH" cssf
+
+# THE GUARD, PER ROW. Each of ticket #25's eight rows must have been MOVED by
+# the flow above. A row that matches the untouched screen was never set, and
+# the byte-identity assertion below would then pass on it for free.
+css_row() { # <key> <file>
+  local r
+  r="$(grep -m1 "^$1 " "$2")" || return 1
+  printf '%s\n' "$r"
+}
+for k in ptype cpudiff vsmode hand slider carry cpucarry handtype; do
+  a="$(css_row "$k" "$CSSDIR/mlfk-persist.dat")" \
+    || grammar_die "[5c] the parked record carries no '$k' row"
+  b="$(css_row "$k" "$CSSFRESH/mlfk-persist.dat")" \
+    || grammar_die "[5c] the untouched record carries no '$k' row"
+  case "$k" in
+    cpucarry)
+      # THE ONE ROW THIS FLOW CANNOT MOVE, and the reason is a fact about the
+      # screen rather than a gap in the flow: a held knob PINS the hand to the
+      # rail (css.js:317 forces its y every frame), so a run that ends holding
+      # a knob cannot also end holding a token, and the token is what the
+      # ticket names. It is parked at its own default here and covered as a
+      # value by check-persist-table.sh's seeded fixture instead. Asserted as
+      # EQUAL rather than skipped, so that a flow which starts moving it
+      # arrives here as a failure to re-read, not as a silent change.
+      [ "$a" = "$b" ] \
+        || fail "[5c] the parked '$k' row now differs from the untouched one
+  ('$a' vs '$b') — the flow reaches a held knob after all, so move this row
+  into the guard above instead of exempting it";;
+    *)
+      [ "$a" != "$b" ] \
+        || fail "[5c] the parked '$k' row is IDENTICAL to the untouched one
+  ('$a') — the flow did not actually change it, so the round trip below would
+  pass on a field that was never set (dead leg)";;
+  esac
+done
+echo "   parked CSS differs from an untouched one on every row the flow moves"
+
+# ...now boot again on the same dir, let the resume restore the screen, and
+# hibernate a second time. Byte-identical or a row was dropped on the way.
+CSSRESFLOW=$BUILD/cssres.flow
+printf 'FLOW1\nI 1 -\nEND 20000\n' > "$CSSRESFLOW"
+cp "$CSSDIR/mlfk-persist.dat" "$BUILD/css.before"
+rm -f "$BUILD/cssres.err" "$BUILD/cssres.trace"
+MLFK_PERSIST_DIR="$CSSDIR" "$BUILD/foh_dev_headless" \
+  --flow "$CSSRESFLOW" --input flow --flow-out "$BUILD/cssres.trace" \
+  --pace 1 --budget-ns "$BUDGET" > "$BUILD/cssres.err" 2>&1 &
+CSSPID2=$!
+sleep 2
+grep -qxF 'foh_dev: resumed screen=css' "$BUILD/cssres.err" \
+  || { kill -9 "$CSSPID2" 2>/dev/null || true
+       relay_lines < "$BUILD/cssres.err"
+       fail "[5c] the next boot did not resume the CSS"; }
+kill -USR1 "$CSSPID2"
+n=0
+while kill -0 "$CSSPID2" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+kill -9 "$CSSPID2" 2>/dev/null || true
+set +e; wait "$CSSPID2" >/dev/null 2>&1; set -e
+made "$CSSDIR/mlfk-persist.dat"
+cmp "$BUILD/css.before" "$CSSDIR/mlfk-persist.dat" \
+  || { fail "[5c] the CSS did NOT survive the round trip: the record published
+  by the second hibernate differs from the first. Every difference is a field
+  the resume dropped, re-derived or overwrote — which is the owner's original
+  report, restated in bytes."; }
+echo "   CSS resumed with the SAME machine plane, byte for byte"
+
+# --- [5d] TARGET SELECT resumes, and its slot list is RE-READ (ticket #26) --
+#
+# Two halves, and the second is the one that needed a new mechanism.
+#
+#   HALF 1 — the FIELDS. `tsscur`, `tsspage` and `tsshand` are three more
+#   rows through ticket #22's table, so the page the player was on and the
+#   slot he had selected come back. The HAND is one of them because this
+#   round trip is what proved it had to be: FOH_TSS_HOME is the centre of
+#   slot 0 and D29 makes the slot under the hand write the selection, so a
+#   resume that restored the cursor and left the hand at home lost the
+#   cursor on its FIRST TICK and failed the cmp below at the `tsscur` line.
+#   Judged exactly as [5b] and [5c] judge theirs: BYTE IDENTITY across
+#   park -> hibernate -> resume -> hibernate, with a per-row dead-tooth guard
+#   proving the parked record really differs from the one the same binary
+#   writes on an untouched screen.
+#
+#   HALF 2 — the LIST, which a field table CANNOT carry (ADR 0001). The ten
+#   custom slots live on the SD card and the card can be changed while the
+#   machine is off; their refusal strings are `const char *` into other
+#   translation units. So they are RE-DERIVED by the resume hook, and the
+#   only way to prove a re-derivation is to make the saved answer WRONG:
+#   this leg edits the slot files between the hibernate and the resume and
+#   requires the resumed screen to describe the DISK. A resume that restored
+#   a remembered list would satisfy every other assertion here and fail this
+#   one, which is the whole reason it is written this way round.
+echo "=== [5d] target select resumes and RE-READS its slots (ticket #26)"
+
+# CLAMP-THEN-COUNT, the [5c] idiom. FOH_CURSOR_VX/VY are 2.40/3.84 px/frame
+# and the target-select rects are foh_tss_slots(): slot k at
+# x = 8 + (k/5)*124, y = 30 + (k%5)*22, 100x19; the page-flip slot 10 at
+# (70,142) 100x17. Target select is entered at tick ~391 (S at 375, one D to
+# the TARGET TEST row, A at 390) and everything below finishes by 607, well
+# inside the 3 s (1500 tick) wait.
+#
+#   400-459  UL            hand clamped to (0, 0)
+#   460-498  RD  39 frames (93.6, 149.76)
+#   499-509  R   11 frames (120.0, 149.76) — inside slot 10's box
+#   512      A             flip to the CUSTOM page (tssPage 0 -> 1)
+#   520-579  UL            clamped to (0, 0) again
+#   580-599  RD  20 frames (48.0, 76.8)
+#   600-606  D    7 frames (48.0, 103.68) — inside slot 3 (y 96..115)
+#
+# The A at 512 is the ONLY A on this screen: an A over a real custom slot
+# LAUNCHES it, and a match is a different screen with a different record.
+TSSPARK=$BUILD/tsspark.flow
+cat > "$TSSPARK" <<'TSSEOF'
+FLOW1
+I 1 -
+I 375 S
+I 376 -
+I 380 D
+I 381 -
+I 390 A
+I 391 -
+I 400 UL
+I 460 RD
+I 499 R
+I 510 -
+I 512 A
+I 513 -
+I 520 UL
+I 580 RD
+I 600 D
+I 607 -
+END 20000
+TSSEOF
+made "$TSSPARK"
+
+# A REAL .mlstage, produced by the REAL writer. [5b] published this document
+# through foh_persist_publish under A45 T2's three-line contract, and
+# foh_tbuild.c states that a slot and the resume document are the SAME
+# artifact addressed by a different name — so copying it into a slot is not a
+# hand-authored fixture, it is that claim being used.
+made "$BUILD/tbdoc.before"
+
+TSSDIR=$BUILD/tss-persist
+rm -rf "$TSSDIR"; mkdir -p "$TSSDIR"
+# The card AS THE LID CLOSES: slots 3 and 7 carry a stage, everything else is
+# empty.
+cp "$BUILD/tbdoc.before" "$TSSDIR/custom3.mlstage"
+cp "$BUILD/tbdoc.before" "$TSSDIR/custom7.mlstage"
+rm -f "$BUILD/tsshib.err" "$BUILD/tsshib.trace"
+MLFK_PERSIST_DIR="$TSSDIR" "$BUILD/foh_dev_headless" \
+  --flow "$TSSPARK" --input flow --flow-out "$BUILD/tsshib.trace" \
+  --pace 1 --budget-ns "$BUDGET" > "$BUILD/tsshib.err" 2>&1 &
+TSSPID=$!
+sleep 3
+kill -0 "$TSSPID" 2>/dev/null \
+  || { relay_lines < "$BUILD/tsshib.err"
+       fail "[5d] the app exited before the signal"; }
+kill -USR1 "$TSSPID"
+n=0
+while kill -0 "$TSSPID" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+kill -9 "$TSSPID" 2>/dev/null || true
+set +e; wait "$TSSPID" >/dev/null 2>&1; set -e
+grep -qxF 'foh_dev: hibernate from=target-select resume=target-select' \
+  "$BUILD/tsshib.err" \
+  || { relay_lines < "$BUILD/tsshib.err"
+       fail "[5d] the flow did not hibernate ON TARGET SELECT — it no longer
+  parks where this leg thinks it does, so everything below judges the wrong
+  screen"; }
+made "$TSSDIR/mlfk-persist.dat"
+
+# THE PARKED RECORD SAYS WHERE HE WAS. Exact rows, not "differs": the flow
+# above computes both values, so an off-by-one in the hand arithmetic must
+# fail here rather than silently park somewhere else and round-trip fine.
+for want in 'tsscur 03' 'tsspage 1'; do
+  grep -qxF "$want" "$TSSDIR/mlfk-persist.dat" \
+    || { grep -nE '^tss' "$TSSDIR/mlfk-persist.dat" >&2 || true
+         fail "[5d] the parked record does not carry '$want' — the flow did
+  not leave target select on the custom page with slot 3 selected"; }
+done
+# ...and both rows must DIFFER from the ones the same binary writes on a
+# screen nobody worked, or the round trip below is a round trip on defaults.
+# [5c]'s untouched CSS record is exactly that reference: it never visits
+# target select, so its two rows are the cold-start pair.
+for k in tsscur tsspage tsshand; do
+  a="$(grep -m1 "^$k " "$TSSDIR/mlfk-persist.dat")" \
+    || grammar_die "[5d] the parked record carries no '$k' row"
+  b="$(grep -m1 "^$k " "$CSSFRESH/mlfk-persist.dat")" \
+    || grammar_die "[5d] the untouched record carries no '$k' row"
+  [ "$a" != "$b" ] \
+    || fail "[5d] the parked '$k' row is IDENTICAL to the untouched one
+  ('$a') — the flow did not actually change it (dead leg)"
+done
+echo "   parked on the CUSTOM page with slot 3 selected, all three rows moved"
+
+# THE CARD CHANGES WHILE THE MACHINE IS OFF. Slot 3 — the SELECTED one — is
+# taken away, slot 5 appears, and slot 7 is left alone so that "the list was
+# re-read" cannot be satisfied by everything simply going absent.
+cp "$BUILD/tbdoc.before" "$TSSDIR/custom5.mlstage"
+rm -f "$TSSDIR/custom3.mlstage"
+DISK_MASK=0000010100   # slots 5 and 7, BY INDEX (D43 — nothing shifts up)
+PARK_MASK=0001000100   # what the lid closed on; a RESTORED list would say this
+[ "$DISK_MASK" != "$PARK_MASK" ] \
+  || grammar_die "[5d] the two masks are equal — the disk edit is a no-op and
+  the re-read assertion below would pass for a resume that restored the list"
+
+cp "$TSSDIR/mlfk-persist.dat" "$BUILD/tss.before"
+TSSRESFLOW=$BUILD/tssres.flow
+printf 'FLOW1\nI 1 -\nEND 20000\n' > "$TSSRESFLOW"
+rm -f "$BUILD/tssres.err" "$BUILD/tssres.trace"
+MLFK_PERSIST_DIR="$TSSDIR" "$BUILD/foh_dev_headless" \
+  --flow "$TSSRESFLOW" --input flow --flow-out "$BUILD/tssres.trace" \
+  --pace 1 --budget-ns "$BUDGET" > "$BUILD/tssres.err" 2>&1 &
+TSSPID2=$!
+sleep 2
+tss_die() { kill -9 "$TSSPID2" 2>/dev/null || true
+            relay_lines < "$BUILD/tssres.err"; fail "$1"; }
+grep -qxF 'foh_dev: resumed screen=target-select' "$BUILD/tssres.err" \
+  || tss_die "[5d] the next boot did not resume target select"
+# THE HOOK RAN, AND WHAT IT FOUND IS THE DISK. This is the assertion the
+# ticket exists for: a resume that restored the remembered list would print
+# $PARK_MASK here and would still pass every other line in this leg.
+grep -qxF "foh_dev: resume hook tss-slots re-read $DISK_MASK" \
+  "$BUILD/tssres.err" \
+  || { grep -F 'resume hook' "$BUILD/tssres.err" >&2 || true
+       tss_die "[5d] the resumed slot list is not the one on the card (want
+  $DISK_MASK). If it says $PARK_MASK the list was RESTORED rather than
+  re-read, which is the defect ADR 0001 keeps the hook for; if it says
+  0000000000 nothing was readable and the fixture is wrong."; }
+# the stage that APPEARED and the one that was left alone, named individually
+# so a mask that is right by coincidence cannot pass
+! grep -qxF 'foh_dev: resume hook tss-slot 5 absent EMPTY' "$BUILD/tssres.err" \
+  || tss_die "[5d] the stage added to the card while the lid was shut did not
+  appear after the resume"
+! grep -qxF 'foh_dev: resume hook tss-slot 7 absent EMPTY' "$BUILD/tssres.err" \
+  || tss_die "[5d] the untouched slot 7 went missing — the re-read is not
+  reading, it is guessing"
+# ...and the one that was REMOVED is gone AND SAYS WHY, in words the screen
+# can draw. "Gone with no reason" is the outcome the reason plane prevents.
+grep -qxF 'foh_dev: resume hook tss-slot 3 absent EMPTY' "$BUILD/tssres.err" \
+  || tss_die "[5d] the stage removed from the card is still reported present,
+  or is absent with no reason under it"
+kill -USR1 "$TSSPID2"
+n=0
+while kill -0 "$TSSPID2" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+kill -9 "$TSSPID2" 2>/dev/null || true
+set +e; wait "$TSSPID2" >/dev/null 2>&1; set -e
+made "$TSSDIR/mlfk-persist.dat"
+cmp "$BUILD/tss.before" "$TSSDIR/mlfk-persist.dat" \
+  || fail "[5d] target select did NOT survive the round trip: the record
+  published by the second hibernate differs from the first. The slot list is
+  not in that record, so every difference is a field the resume dropped."
+echo "   target select resumed on the same page and slot, byte for byte;
+   the slot list came from the CARD, not from the record"
+
+# --- [5e/5f/5g] THE REST OF THE FOH RESUMES INTO ITSELF (ticket #27) --------
+#
+# "Resume means the same thing on every screen, so the player does not have to
+# learn which ones are exceptions." Tickets #25 and #26 brought back the two
+# screens whose state was rich; these three legs are the rest — the four menu
+# and options cursors, stage select, and the credits — and each is shaped
+# exactly like [5c]:
+#
+#   * BYTE IDENTITY ACROSS THE ROUND TRIP, not a log line. A resume that
+#     silently reset a screen would still print `resumed screen=...` and would
+#     still hibernate again cleanly; what it cannot do is publish the same
+#     bytes twice.
+#   * AND A PER-ROW GUARD PROVING THE PARKED STATE DIFFERED FROM A FRESH ONE.
+#     A cursor left at its default survives trivially and proves only that
+#     zero is stable, so each flow below really works its screen and every new
+#     row is then required to differ from the row the SAME BINARY writes on a
+#     screen nobody touched ([5c]'s untouched CSS record, reused here).
+#
+# THE HELPERS. css_park() above greps for the CSS by name; these three park on
+# three different screens, so the same body is taken once with the screen as
+# an argument rather than copied three times.
+park_screen() { # <flow> <dir> <label> <screen-token> <leg>
+  local flow="$1" dir="$2" label="$3" want="$4" leg="$5" pid n
+  rm -rf "$dir"; mkdir -p "$dir"
+  rm -f "$BUILD/$label.err" "$BUILD/$label.trace"
+  MLFK_PERSIST_DIR="$dir" "$BUILD/foh_dev_headless" \
+    --flow "$flow" --input flow --flow-out "$BUILD/$label.trace" \
+    --pace 1 --budget-ns "$BUDGET" > "$BUILD/$label.err" 2>&1 &
+  pid=$!
+  sleep 3
+  kill -0 "$pid" 2>/dev/null \
+    || { relay_lines < "$BUILD/$label.err"
+         fail "$leg $label: the app exited before the signal"; }
+  kill -USR1 "$pid"
+  n=0
+  while kill -0 "$pid" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+  kill -9 "$pid" 2>/dev/null || true
+  set +e; wait "$pid" >/dev/null 2>&1; set -e
+  grep -qxF "foh_dev: hibernate from=$want resume=$want" "$BUILD/$label.err" \
+    || { relay_lines < "$BUILD/$label.err"
+         fail "$leg $label: did not hibernate ON '$want' with '$want' armed.
+  Either the flow no longer parks where this leg thinks it does — so every
+  assertion below judges the wrong screen — or the resume map redirects that
+  screen somewhere else, which is the behaviour ticket #27 removes."; }
+  made "$dir/mlfk-persist.dat"
+}
+# Each new row must have MOVED. `$UNTOUCHED` is [5c]'s fresh CSS record: the
+# same binary, the same navigation up to the menu, nothing worked.
+UNTOUCHED=$CSSFRESH/mlfk-persist.dat
+made "$UNTOUCHED"
+rows_moved() { # <leg> <record> <key...>
+  local leg="$1" rec="$2" k a b; shift 2
+  for k in "$@"; do
+    a="$(grep -m1 "^$k " "$rec")" \
+      || grammar_die "$leg: the parked record carries no '$k' row"
+    b="$(grep -m1 "^$k " "$UNTOUCHED")" \
+      || grammar_die "$leg: the untouched record carries no '$k' row"
+    [ "$a" != "$b" ] \
+      || fail "$leg: the parked '$k' row is IDENTICAL to the untouched one
+  ('$a') — the flow did not actually move that cursor, so the round trip
+  below would pass on a field that was never set (dead leg)"
+  done
+}
+# Boot again on the same dir, let the resume restore the screen, hibernate a
+# second time, and require the two published records to be byte-identical.
+resume_roundtrip() { # <dir> <label> <screen-token> <leg>
+  local dir="$1" label="$2" want="$3" leg="$4" pid n
+  local flow=$BUILD/$label-res.flow
+  printf 'FLOW1\nI 1 -\nEND 20000\n' > "$flow"
+  cp "$dir/mlfk-persist.dat" "$BUILD/$label.before"
+  rm -f "$BUILD/$label-res.err" "$BUILD/$label-res.trace"
+  MLFK_PERSIST_DIR="$dir" "$BUILD/foh_dev_headless" \
+    --flow "$flow" --input flow --flow-out "$BUILD/$label-res.trace" \
+    --pace 1 --budget-ns "$BUDGET" > "$BUILD/$label-res.err" 2>&1 &
+  pid=$!
+  sleep 2
+  grep -qxF "foh_dev: resumed screen=$want" "$BUILD/$label-res.err" \
+    || { kill -9 "$pid" 2>/dev/null || true
+         relay_lines < "$BUILD/$label-res.err"
+         fail "$leg: the next boot did not resume '$want'"; }
+  kill -USR1 "$pid"
+  n=0
+  while kill -0 "$pid" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
+  kill -9 "$pid" 2>/dev/null || true
+  set +e; wait "$pid" >/dev/null 2>&1; set -e
+  made "$dir/mlfk-persist.dat"
+  cmp "$BUILD/$label.before" "$dir/mlfk-persist.dat" \
+    || fail "$leg: '$want' did NOT survive the round trip: the record
+  published by the second hibernate differs from the first. Every difference
+  is a field the resume dropped, re-derived or overwrote."
+}
+
+# --- [5e] THE MENU AND OPTIONS ROWS ----------------------------------------
+#
+# ONE walk that moves all five row cursors and ends on the controls screen:
+#
+#   375 S                    title -> menu top
+#   380/385/390 D            menuSelected 0 -> 3 (OPTIONS)
+#   395 A                    -> menu-options (the arm resets menuSelected to 0)
+#   400 D, 405 A             row 1 (GAMEPLAY) -> options-gameplay
+#   410..425 D x4            optRow 0 -> 4, the tap-jump row (the only row
+#                            with columns, gameplaymenu.js:12)
+#   430/435 R                optCol 0 -> 2. R and L move the CURSOR here; A is
+#                            the only thing that changes a VALUE (:37-59), and
+#                            this flow never presses it on this screen.
+#   440 B                    -> menu-options, menuSelected := 1
+#   445 U, 450 A             row 0 (AUDIO) -> options-audio
+#   455 D                    audioRow 0 -> 1 (MUSIC)
+#   460 B                    -> menu-options, menuSelected := 0
+#   465/470 D                menuSelected -> 2 (CONTROLS)
+#   475 A                    -> controls-keyboard (FOH_CTL_CHOOSER is 0, so
+#                            row 2 opens the handheld screen directly and
+#                            menuSelected is deliberately left at 2)
+#   480..495 D x4            ctlRow 0 -> 4. No L/R: those REBIND, and no A:
+#                            that is the RESET row's activator.
+echo "=== [5e] the menu and options rows come back (ticket #27)"
+MENUPARK=$BUILD/menupark.flow
+cat > "$MENUPARK" <<'MENUEOF'
+FLOW1
+I 1 -
+I 375 S
+I 376 -
+I 380 D
+I 381 -
+I 385 D
+I 386 -
+I 390 D
+I 391 -
+I 395 A
+I 396 -
+I 400 D
+I 401 -
+I 405 A
+I 406 -
+I 410 D
+I 411 -
+I 415 D
+I 416 -
+I 420 D
+I 421 -
+I 425 D
+I 426 -
+I 430 R
+I 431 -
+I 435 R
+I 436 -
+I 440 B
+I 441 -
+I 445 U
+I 446 -
+I 450 A
+I 451 -
+I 455 D
+I 456 -
+I 460 B
+I 461 -
+I 465 D
+I 466 -
+I 470 D
+I 471 -
+I 475 A
+I 476 -
+I 480 D
+I 481 -
+I 485 D
+I 486 -
+I 490 D
+I 491 -
+I 495 D
+I 496 -
+END 20000
+MENUEOF
+made "$MENUPARK"
+MENUDIR=$BUILD/menu-persist
+park_screen "$MENUPARK" "$MENUDIR" menuw controls-keyboard "[5e]"
+rows_moved "[5e]" "$MENUDIR/mlfk-persist.dat" menusel optrow optcol audiorow ctlrow
+# ...and the VALUES, named, so a flow that moved a cursor to somewhere other
+# than the row this leg describes is a failure rather than a silent pass on a
+# different screen state.
+for want in 'menusel 2' 'optrow 4' 'optcol 2' 'audiorow 1' 'ctlrow 04'; do
+  grep -qxF "$want" "$MENUDIR/mlfk-persist.dat" \
+    || { grep -E '^(menusel|optrow|optcol|audiorow|ctlrow) ' \
+           "$MENUDIR/mlfk-persist.dat" >&2 || true
+         fail "[5e] the parked record does not carry '$want' — the flow no
+  longer walks the rows this leg describes"; }
+done
+echo "   parked with all five row cursors moved off their defaults"
+resume_roundtrip "$MENUDIR" menu controls-keyboard "[5e]"
+echo "   the menu, options, audio and controls cursors all came back, byte
+   for byte"
+
+# --- [5f] STAGE SELECT RESUMES INTO ITSELF (ticket #27) --------------------
+#
+# The redirect this removes read "stage select launches with port types the
+# CSS arms, and those are not persisted". Ticket #25 put them on the card, so
+# the reason was spent; ticket #26 corrected the comment and left the
+# behaviour for a ticket that would judge it. This is that judgement.
+#
+# Getting here needs a LEGAL port config (foh.c's START arm: port 0 HMN and at
+# least two participants), so the flow arms port 1 first — [5c]'s measured
+# navigation, reused: clamp the hand to (0,0), 27 frames down+right lands at
+# (64.8, 103.68), inside port 1's type tab (x 61..97, y 96..107), and two A
+# edges walk N/A -> HMN -> CPU.
+#
+#   400-500  UL              100 frames: the hand clamps to (0, 0)
+#   500-527  RD   27 frames  (64.8, 103.68), inside port 1's type tab
+#   530 A, 534 A             portType[1] N/A -> HMN -> CPU (two participants)
+#   600 S                    START -> stage select
+#   610/615 R, 620 D         sssCursor 0 -> 1 -> 2 -> 5 (the 3x2 grid's
+#                            second row; foh.c step_sss). NO A: A on this
+#                            screen LAUNCHES, and a match is a different
+#                            screen with a different record.
+echo "=== [5f] stage select resumes into itself (ticket #27)"
+SSSPARK=$BUILD/ssspark.flow
+cat > "$SSSPARK" <<'SSSEOF'
+FLOW1
+I 1 -
+I 375 S
+I 376 -
+I 380 A
+I 381 -
+I 400 UL
+I 500 RD
+I 527 -
+I 530 A
+I 531 -
+I 534 A
+I 535 -
+I 600 S
+I 601 -
+I 610 R
+I 611 -
+I 615 R
+I 616 -
+I 620 D
+I 621 -
+END 20000
+SSSEOF
+made "$SSSPARK"
+SSSDIR=$BUILD/sss-persist
+park_screen "$SSSPARK" "$SSSDIR" sssw sss "[5f]"
+rows_moved "[5f]" "$SSSDIR/mlfk-persist.dat" ssscur
+grep -qxF 'ssscur 5' "$SSSDIR/mlfk-persist.dat" \
+  || { grep -E '^ssscur ' "$SSSDIR/mlfk-persist.dat" >&2 || true
+       fail "[5f] the parked record does not carry 'ssscur 5' — the flow no
+  longer walks the grid this leg describes"; }
+# THE ROW WHOSE SPENT REASON THIS LEG IS ABOUT. `resume 07` is FOH_SSS; the
+# redirect published `resume 06` (the CSS). Named, because a leg that only
+# checked the cursor would pass with the redirect still in place.
+grep -qxF 'resume 07' "$SSSDIR/mlfk-persist.dat" \
+  || { grep -E '^resume ' "$SSSDIR/mlfk-persist.dat" >&2 || true
+       fail "[5f] the record armed something other than stage select. If it
+  says 'resume 06' the redirect to the CSS is still there, which is the
+  behaviour ticket #27 removes."; }
+echo "   parked on stage select with the cursor on slot 5, and the record
+   arms STAGE SELECT rather than the CSS"
+resume_roundtrip "$SSSDIR" sss sss "[5f]"
+echo "   stage select resumed on the same slot with the same port config,
+   byte for byte"
+
+# --- [5g] THE CREDITS RESUME INTO THEMSELVES (ticket #27) ------------------
+#
+# The redirect this removes read "its reticle is placed by the entering
+# transition, which a resume never runs". ADR 0001 and ticket #26 both
+# expected the credits to grow the second RESUME HOOK. They do not get one,
+# and the reason is measured rather than argued: foh_init already places the
+# reticle at the identical home (foh.h's FOH_CRED_HOME_X/Y — one macro since
+# this ticket), so a hook would be a provable no-op whose tooth could not
+# bite. THE RETICLE HALF IS NOT ASSERTED HERE: port/foh/check-credits.sh
+# compares a RESUMED credits screen against an ENTERED one pixel for pixel,
+# and its T4 moves foh_init's placement in a copy of foh.c to prove it. What
+# this leg owns is the screen coming back at all, and its record surviving.
+#
+#   375 S; 380/385/390 D; 395 A     -> menu-options (menuSelected := 0)
+#   400/405/410 D                   menuSelected -> 3 (CREDITS)
+#   415 A                           -> credits
+#   No further input: A on this screen FIRES, B leaves it, and the screen's
+#   own 2500-frame timer is far beyond the ~600 ticks before the signal.
+echo "=== [5g] the credits resume into themselves (ticket #27)"
+CREDPARK=$BUILD/credpark.flow
+cat > "$CREDPARK" <<'CREDEOF'
+FLOW1
+I 1 -
+I 375 S
+I 376 -
+I 380 D
+I 381 -
+I 385 D
+I 386 -
+I 390 D
+I 391 -
+I 395 A
+I 396 -
+I 400 D
+I 401 -
+I 405 D
+I 406 -
+I 410 D
+I 411 -
+I 415 A
+I 416 -
+END 20000
+CREDEOF
+made "$CREDPARK"
+CREDDIR=$BUILD/cred-persist
+park_screen "$CREDPARK" "$CREDDIR" credw credits "[5g]"
+rows_moved "[5g]" "$CREDDIR/mlfk-persist.dat" menusel
+# `resume 12` is FOH_CREDITS; the redirect published `resume 03`
+# (menu-options, the screen its own B-exit goes to).
+grep -qxF 'resume 12' "$CREDDIR/mlfk-persist.dat" \
+  || { grep -E '^resume ' "$CREDDIR/mlfk-persist.dat" >&2 || true
+       fail "[5g] the record armed something other than the credits. If it
+  says 'resume 03' the redirect to menu-options is still there, which is the
+  behaviour ticket #27 removes."; }
+grep -qxF 'menusel 3' "$CREDDIR/mlfk-persist.dat" \
+  || fail "[5g] the parked record does not carry 'menusel 3' — the flow no
+  longer leaves the Options cursor on the CREDITS row, so the round trip
+  would judge a menu state nobody set"
+echo "   parked on the credits, and the record arms the CREDITS rather than
+   menu-options"
+resume_roundtrip "$CREDDIR" cred credits "[5g]"
+echo "   the credits resumed into themselves, byte for byte"
 
 # --- [6] teeth ---------------------------------------------------------------
 echo "=== [6] teeth"
 
 # T1 — DOMAIN. A structurally perfect file (checksum RECOMPUTED, so the seal
-# passes) whose resume row names FOH_MATCH: a real screen that is not a resume
-# target. It must be refused, and refused with a REASON, never half-applied.
+# passes) whose resume row names a screen that is not a resume target. It must
+# be refused, and refused with a REASON, never half-applied.
+#
+# IT HAS BEEN RETARGETED TWICE, and both moves are the case CONTEXT.md's
+# "Frozen" entry describes: the behaviour legitimately changed and the number
+# stays on the page.
+#   * It named FOH_MATCH (13) until ticket #29 made a match resume into
+#     itself (port/foh/foh_match_snap.c), at which point asserting its refusal
+#     would have asserted the opposite of the shipped feature.
+#   * It then named FOH_TMATCH (15) until ticket #30 did the same for a target
+#     run (port/foh/foh_target_snap.c), for the same reason.
+# WITH THAT SECOND MOVE THE PORT RAN OUT OF REDIRECTED SCREENS: #27, #29 and
+# #30 between them made every value in FohScreen a fixed point of
+# foh_persist_resume_plan, so the only value FP_DOM_RESUME can still refuse is
+# one OFF the enum. 17 is FOH_SCREEN_COUNT itself — two digits, so the line is
+# still perfectly GRAMMATICAL and the refusal is still a `domain` one, and it
+# is the exact off-by-one an `>` instead of a `>=` would let through. The
+# MECHANISM under test — a sealed, well-formed file refused for its VALUE and
+# never half-applied — is untouched, which is the property the tooth is for.
+# The map's own shape is asserted exhaustively elsewhere
+# (check-persist-table.sh [8b], which drives all eighteen values).
 T1DIR=$BUILD/t1-persist
 rm -rf "$T1DIR"; mkdir -p "$T1DIR"
 node -e '
@@ -474,21 +1357,22 @@ node -e '
   const sumIdx = b.findIndex((l) => l.startsWith("SUM "));
   const rIdx = b.findIndex((l) => l.startsWith("resume "));
   if (sumIdx < 0 || rIdx < 0) throw new Error("no SUM/resume row to perturb");
-  b[rIdx] = "resume 13";  // FOH_MATCH
+  b[rIdx] = "resume 17";  // FOH_SCREEN_COUNT — off the enum
   const body = b.slice(0, sumIdx).join("\n") + "\n";
   b[sumIdx] = "SUM " + crypto.createHash("sha256").update(body).digest("hex");
   fs.writeFileSync(dst, b.join("\n"));
 ' "$PDIR/mlfk-persist.dat" "$T1DIR/mlfk-persist.dat"
 made "$T1DIR/mlfk-persist.dat"
-grep -qxF 'resume 13' "$T1DIR/mlfk-persist.dat" || fail "T1 was not applied"
+grep -qxF 'resume 17' "$T1DIR/mlfk-persist.dat" || fail "T1 was not applied"
 run_foh "$IDLE" "$T1DIR" "$BUILD/t1.err" "$BUILD/t1.trace"
 grep -qxF 'foh_persist: reset cause=corrupt detail=domain' "$BUILD/t1.err" \
   || { cat "$BUILD/t1.err" >&2
-       fail "T1 DID NOT BITE: a resume row naming FOH_MATCH was not refused as
-  a domain violation. A screen the driver would not restore must never load."; }
+       fail "T1 DID NOT BITE: a resume row naming a screen off the FohScreen
+  enum was not refused as a domain violation. A screen the driver would not
+  restore must never load."; }
 ! grep -q 'foh_dev: resumed' "$BUILD/t1.err" \
   || fail "T1 DID NOT BITE: the refused record was applied anyway"
-echo "   T1 (domain: resume 13 = FOH_MATCH) bites"
+echo "   T1 (domain: resume 17 = off the FohScreen enum) bites"
 
 # T2 — ABSENCE. The SAME session as a v6 file: no resume row at all. Must boot
 # cold and loudly, and — the half that actually matters — must keep the
@@ -503,7 +1387,27 @@ node -e '
   const rIdx = b.findIndex((l) => l.startsWith("resume "));
   if (sumIdx < 0 || rIdx < 0) throw new Error("no SUM/resume row to remove");
   b[0] = "MLFKPERSIST6";           // the version that had no resume row
-  b.splice(rIdx, 1);
+  // ...nor any of ticket #25s CSS rows, which are v7 rows too. A v6 file
+  // carrying one is corrupt rather than migratable, so leaving them here
+  // would make this tooth refuse for the wrong reason and stop testing the
+  // migration it names.
+  const v7 = ["resume ", "ptype ", "cpudiff ", "vsmode ", "hand ",
+              "slider ", "carry ", "cpucarry ", "handtype ",
+              "tsscur ", "tsspage ", "tsshand ",
+              "menusel ", "ssscur ", "optrow ", "optcol ", "audiorow ",
+              "ctlrow "];
+  for (const k of v7) {
+    const i = b.findIndex((l) => l.startsWith(k));
+    if (i < 0) throw new Error("no " + k + "row to remove");
+    b.splice(i, 1);
+  }
+  // D59: `crec` is post-v6 too, and there are FIFTY of them — one splice
+  // would leave forty-nine behind and the file would be CORRUPT rather than
+  // migratable, so this tooth would then fail for a reason that has nothing
+  // to do with the migration it is named after.
+  const before = b.length;
+  b = b.filter((l) => !l.startsWith("crec "));
+  if (b.length === before) throw new Error("no crec rows to remove");
   const s2 = b.findIndex((l) => l.startsWith("SUM "));
   const body = b.slice(0, s2).join("\n") + "\n";
   b[s2] = "SUM " + crypto.createHash("sha256").update(body).digest("hex");
@@ -586,6 +1490,125 @@ fi
 # fix answers both.
 echo "   T4 (foreground form: the signal never reaches the app) bites"
 
+# T5 — THE HOOK. The re-derivation itself removed from a foh_dev.c COPY, so
+# the resume restores its fields and never asks the card. This is the
+# perturbation that makes [5d]'s re-read assertion a measurement rather than
+# a description: without it, a resume that quietly kept whatever the boot's
+# memset left behind would satisfy every log line [5d] greps for except one.
+# The tree is never edited (T3's pattern).
+echo "   T5: the resume hook stops re-reading the card"
+mkdir -p "$BUILD/t5/foh"
+sed 's|^        foh_tss_refresh_slots(&foh);$|        // T5: the hook no longer re-reads the card|' \
+  "$FOH/foh_dev.c" > "$BUILD/t5/foh/foh_dev.c"
+made "$BUILD/t5/foh/foh_dev.c"
+cmp -s "$BUILD/t5/foh/foh_dev.c" "$FOH/foh_dev.c" \
+  && grammar_die "T5: the perturbation matched nothing — the hook's call moved
+  or was reverted, so this tooth would be vacuous"
+build_foh_headless "$BUILD/t5/foh/foh_dev.c" "$BUILD/t5/foh_dev_t5" "-I$FOH" \
+  || fail "T5 build failed"
+# the SAME card [5d] resumed against: slots 5 and 7 present, and a record
+# armed for target select.
+T5DIR=$BUILD/t5-persist
+rm -rf "$T5DIR"; mkdir -p "$T5DIR"
+cp "$TSSDIR/mlfk-persist.dat" "$T5DIR/mlfk-persist.dat"
+cp "$TSSDIR/custom5.mlstage" "$T5DIR/custom5.mlstage"
+cp "$TSSDIR/custom7.mlstage" "$T5DIR/custom7.mlstage"
+rm -f "$BUILD/t5.err"
+MLFK_PERSIST_DIR="$T5DIR" "$BUILD/t5/foh_dev_t5" \
+  --flow "$TSSRESFLOW" --input flow --flow-out "$BUILD/t5.trace" \
+  --pace 1 --budget-ns "$BUDGET" > "$BUILD/t5.err" 2>&1 &
+t5p=$!
+sleep 2
+kill -9 "$t5p" 2>/dev/null || true
+set +e; wait "$t5p" >/dev/null 2>&1; set -e
+grep -qxF 'foh_dev: resumed screen=target-select' "$BUILD/t5.err" \
+  || { relay_lines < "$BUILD/t5.err"
+       fail "T5 build did not reach the resume at all — the tooth is measuring
+  a broken build, not the hook"; }
+! grep -qxF "foh_dev: resume hook tss-slots re-read $DISK_MASK" "$BUILD/t5.err" \
+  || fail "T5 DID NOT BITE: with the re-derivation removed the resumed screen
+  still described the card, so [5d]'s assertion is not measuring the hook"
+echo "   T5 (hook stops re-reading -> the card is not described) bites"
+
+# T6 — THE OLD REDIRECTS, PUT BACK BY HAND IN THE RECORD (ticket #27). [5f]
+# and [5g] both assert on a `resumed screen=` line, and a line like that is
+# only worth what the alternative would have looked like. So each parked
+# record is rewritten (checksum RECOMPUTED, so it loads cleanly) to name the
+# screen its OLD redirect published — the CSS for stage select, menu-options
+# for the credits — and the boot must then land THERE. If it landed on the
+# original screen anyway, those legs would be reading a constant.
+#
+# It also fixes the two arms in place from the other direction: the values are
+# `resume 06` and `resume 03`, which are exactly what the removed arms of
+# foh_persist_resume_plan() used to return.
+t6_redirect() { # <label> <parked-record> <old NN> <old token> <new token>
+  local label="$1" rec="$2" nn="$3" oldtok="$4" newtok="$5"
+  local dir=$BUILD/t6-$label
+  rm -rf "$dir"; mkdir -p "$dir"
+  node -e '
+    const fs = require("fs"), crypto = require("crypto");
+    const [src, dst, nn] = process.argv.slice(1);
+    let b = fs.readFileSync(src, "utf8").split("\n");
+    const sumIdx = b.findIndex((l) => l.startsWith("SUM "));
+    const rIdx = b.findIndex((l) => l.startsWith("resume "));
+    if (sumIdx < 0 || rIdx < 0) throw new Error("no SUM/resume row to perturb");
+    if (b[rIdx] === "resume " + nn) throw new Error("T6: no-op perturbation");
+    b[rIdx] = "resume " + nn;
+    const body = b.slice(0, sumIdx).join("\n") + "\n";
+    b[sumIdx] = "SUM " + crypto.createHash("sha256").update(body).digest("hex");
+    fs.writeFileSync(dst, b.join("\n"));
+  ' "$rec" "$dir/mlfk-persist.dat" "$nn" \
+    || fail "T6 $label: could not derive the old-redirect record"
+  made "$dir/mlfk-persist.dat"
+  run_foh "$IDLE" "$dir" "$BUILD/t6-$label.err" "$BUILD/t6-$label.trace"
+  grep -qxF "foh_dev: resumed screen=$oldtok" "$BUILD/t6-$label.err" \
+    || { relay_lines < "$BUILD/t6-$label.err"
+         fail "T6 $label DID NOT BITE: a record naming '$oldtok' did not resume
+  there, so the '$newtok' assertion in the leg above is not reading the row"; }
+  ! grep -qxF "foh_dev: resumed screen=$newtok" "$BUILD/t6-$label.err" \
+    || fail "T6 $label DID NOT BITE: the boot reached '$newtok' anyway"
+  echo "   T6 ($label: the old redirect target resumes THERE, not on $newtok) bites"
+}
+t6_redirect sss "$SSSDIR/mlfk-persist.dat" 06 css sss
+t6_redirect credits "$CREDDIR/mlfk-persist.dat" 03 menu-options credits
+
+# T7 — THE CURSORS GO THROUGH FohState, not around it. [5e]'s byte identity
+# is satisfied by a resume that applies the record and collects it back; it
+# would ALSO be satisfied by a driver that never applied anything and simply
+# republished the record it read. This tooth tells the two apart: it hands the
+# boot a record carrying a DIFFERENT legal controls row and requires the
+# second hibernate to publish that one. Only a value that travelled
+# apply -> FohState -> the live screen -> collect can come back.
+echo "   T7: a cursor value that must travel through the live screen"
+T7DIR=$BUILD/t7-persist
+rm -rf "$T7DIR"; mkdir -p "$T7DIR"
+node -e '
+  const fs = require("fs"), crypto = require("crypto");
+  const [src, dst] = process.argv.slice(1);
+  let b = fs.readFileSync(src, "utf8").split("\n");
+  const sumIdx = b.findIndex((l) => l.startsWith("SUM "));
+  const cIdx = b.findIndex((l) => l.startsWith("ctlrow "));
+  if (sumIdx < 0 || cIdx < 0) throw new Error("no SUM/ctlrow row to perturb");
+  if (b[cIdx] === "ctlrow 07") throw new Error("T7: no-op perturbation");
+  b[cIdx] = "ctlrow 07";  // still inside the eleven rows
+  const body = b.slice(0, sumIdx).join("\n") + "\n";
+  b[sumIdx] = "SUM " + crypto.createHash("sha256").update(body).digest("hex");
+  fs.writeFileSync(dst, b.join("\n"));
+' "$MENUDIR/mlfk-persist.dat" "$T7DIR/mlfk-persist.dat" \
+  || fail "T7: could not derive the perturbed record"
+made "$T7DIR/mlfk-persist.dat"
+cp "$T7DIR/mlfk-persist.dat" "$BUILD/t7.before"
+resume_roundtrip "$T7DIR" t7 controls-keyboard "T7"
+grep -qxF 'ctlrow 07' "$T7DIR/mlfk-persist.dat" \
+  || { grep -E '^ctlrow ' "$T7DIR/mlfk-persist.dat" >&2 || true
+       fail "T7 DID NOT BITE: the republished record does not carry the row
+  the boot was handed. The resume is not applying the cursor to the live
+  screen, so [5e]'s byte identity was proving only that a file survives being
+  read and written."; }
+cmp "$BUILD/t7.before" "$T7DIR/mlfk-persist.dat" \
+  || fail "T7: the perturbed record did not round-trip byte-identically"
+echo "   T7 (a different controls row round-trips through the live screen) bites"
+
 # --- [7] the DEVICE check's format whitelist, run against this real file ----
 # check-device-persist.sh carries an EXACT POSITIONAL whitelist for the persist
 # format, restated independently of the C loader. A version bump has to move it
@@ -608,8 +1631,8 @@ for anchor in 'hex_lt() ( LC_ALL=C; [[ "$1" < "$2" ]]; ) # fixed 16-hex: byte or
   the anchor '$anchor' (want 1) — the extracted whitelist moved"
 done
 {
-  grep -xF 'PERSIST_BYTES=1624' "$DEVP" \
-    || grammar_die "[7] check-device-persist.sh does not pin PERSIST_BYTES=1624"
+  grep -xF 'PERSIST_BYTES=3227' "$DEVP" \
+    || grammar_die "[7] check-device-persist.sh does not pin PERSIST_BYTES=3227"
   awk '
     /^hex_lt\(\) \( LC_ALL=C; \[\[ "\$1" < "\$2" \]\]; \)/ { inr = 1 }
     inr { print }
@@ -620,6 +1643,20 @@ made "$WL"
 grep -qF 'sed -n 69p' "$WL" \
   || grammar_die "[7] the extracted whitelist does not read line 69 — it was
   not bumped for the v7 resume row"
+grep -qF 'sed -n 77p' "$WL" \
+  || grammar_die "[7] the extracted whitelist does not read line 77 — it was
+  not bumped for ticket #25's CSS machine plane, so a persistence change is
+  about to reach hardware with the device check judging the wrong lines"
+grep -qF 'sed -n 80p' "$WL" \
+  || grammar_die "[7] the extracted whitelist does not read line 80 — it was
+  not bumped for ticket #26's target-select trio, so the same blindness one
+  ticket later: the device would judge a file two rows shorter than the one
+  this build writes"
+grep -qF 'sed -n 86p' "$WL" \
+  || grammar_die "[7] the extracted whitelist does not read line 86 — it was
+  not bumped for ticket #27's six screen cursors. Three tickets running, the
+  SAME omission: the device would judge a file six rows shorter than the one
+  this build writes, and only hardware would notice"
 # shellcheck disable=SC1090 — derived above, not tracked
 . "$WL"
 verify_persist_file "$PDIR/mlfk-persist.dat" "[7] the v7 file leg [4] published"

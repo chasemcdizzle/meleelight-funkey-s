@@ -178,3 +178,14 @@ double ml_random(void) {
   ml_events.rng[ml_events.rng_count++] = v;
   return v;
 }
+
+// --- ticket #28: the play count is module state a snapshot has to carry ----
+//
+// ml_howl_play_id derives a Howl play id from this count (ml_events.h), and
+// those ids are stored IN players and read back by `.stop(id)`. A resumed
+// match that restarted the count would hand out an id a live voice already
+// holds. Declared in port/sim/sim/sim_modstate.h, which is dependency-free
+// precisely so this TU can stay buildable by the rigs that never see the
+// generated-table include path.
+unsigned long long ml_events_play_count_get(void) { return g_snd_play_count; }
+void ml_events_play_count_set(unsigned long long v) { g_snd_play_count = v; }

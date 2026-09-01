@@ -1,67 +1,110 @@
 # meleelight-funkey-s
 
-Faithful port of [meleelight](https://github.com/schmooblidon/meleelight)
-(browser JS Melee remake, upstream pin `27af171`) to the FunKey-S handheld.
-Private, personal-use hobby project — no distribution.
+A **frame-exact C port** of [meleelight](https://github.com/schmooblidon/meleelight)
+— Will Blackett's browser remake of Super Smash Bros. Melee — to the
+[FunKey-S](https://www.funkey-project.com/), a 1.54-inch clamshell handheld.
 
-**Status: spec locked, build loop ready** (wayfinder map completed
-2026-07-14 — issue #1 and closed tickets #2–#13 hold the full decision
-trail). The repo is self-sufficient: an agent landing here with no other
-context starts at [`PLAN.md`](./PLAN.md) and [`CLAUDE.md`](./CLAUDE.md).
+The simulation is not approximated. Every frame, the port serialises its game
+state and SHA-256s it, and that hash must equal the browser original's exactly.
+Across 8 recorded matches × 3600 frames, 5 characters, 6 stages, on the device
+itself. The interface is a rewrite, because a 240×240 screen and a d-pad are
+not a 1200×750 canvas and a keyboard.
 
-## Index
+**Personal hobby project. No binaries, no ROMs, no game assets are distributed
+here — see [Assets and provenance](#assets-and-provenance).**
 
-| Surface | File |
-|---|---|
-| **The spec** — locked strategy (S1 C rewrite), verification spine, M0–M4 milestone ladder, input/renderer/audio sections, risks | [`PLAN.md`](./PLAN.md) |
-| **Hard rules** (always loaded) + gate table + verified commands | [`CLAUDE.md`](./CLAUDE.md) |
-| **Loop protocol** (one bounded iteration; sentinels) | [`docs/LOOP.md`](./docs/LOOP.md) |
-| Independent verifier / planner contracts | [`docs/loop/CHECKER.md`](./docs/loop/CHECKER.md) · [`docs/loop/REPLAN.md`](./docs/loop/REPLAN.md) |
-| Task queue (phase-scoped, REPLAN-owned) | [`fix_plan.md`](./fix_plan.md) |
-| Iteration ledger + LOOP STOP sentinels | [`docs/AGENT-LOG.md`](./docs/AGENT-LOG.md) |
-| Licensing (upstream MIT carried verbatim + provenance) | [`LICENSE-meleelight`](./LICENSE-meleelight) · [`NOTICES`](./NOTICES) · [`docs/LICENSING.md`](./docs/LICENSING.md) |
+## What "frame-exact" means
 
-Evidence appendix (research + measured spikes, all merged onto main):
+The browser original is the oracle. A recorded input trace is replayed through
+both, and the two must agree on a per-frame checksum of the game state — exact
+string equality, never a tolerance.
 
 | | |
 |---|---|
-| Codebase anatomy (#2) | [`docs/research/meleelight-anatomy.md`](./docs/research/meleelight-anatomy.md) |
-| License/provenance (#3) | [`docs/research/meleelight-license.md`](./docs/research/meleelight-license.md) |
-| Porting-strategy survey (#4) | [`docs/research/porting-strategies.md`](./docs/research/porting-strategies.md) |
-| FunKey envelope + ssb64 reusables (#5) | [`docs/research/funkey-envelope.md`](./docs/research/funkey-envelope.md) |
-| B0XX digital→analog mapping (#6) | [`docs/research/b0xx-mapping.md`](./docs/research/b0xx-mapping.md) |
-| Determinism/oracle spike (#7) | [`docs/research/determinism-spike.md`](./docs/research/determinism-spike.md) + [`spikes/determinism/`](./spikes/determinism/) |
-| On-device feasibility spike (#8) | [`docs/research/device-feasibility-spike.md`](./docs/research/device-feasibility-spike.md) + [`spikes/device-feasibility/`](./spikes/device-feasibility/) |
-| Control-mapping prototype (#9) | [`prototypes/control-mapping/`](./prototypes/control-mapping/) |
-| Device audio spike (#12) | [`docs/research/audio-spike.md`](./docs/research/audio-spike.md) + [`spikes/device-audio/`](./spikes/device-audio/) |
+| Goldens | 8 matches, 3600 frames each |
+| Coverage | 5 characters, 6 VS stages, human + CPU |
+| Agreement | per-frame SHA-256, full length, plus RNG draw counts |
+| Verified on | desktop **and** the FunKey-S hardware |
 
-## Locked goals / restrictions
+Getting there meant doubles-only arithmetic, a vendored
+[fdlibm](https://www.netlib.org/fdlibm/) for every transcendental, and
+`-ffp-contract=off` on every translation unit — because the browser's `Math.sin`
+and the ARM compiler's are not the same function, and one ulp of drift
+compounds into a different match by frame 1671.
 
-1. **Faithful port** — meleelight's gameplay verbatim; deviations are bugs.
-   The browser original is the oracle (deterministic input-replay +
-   per-frame state checksums — proven real in #7, not aspirational).
-2. **Input** — B0XX-style digital→analog mapping layer (scheme S1
-   "One-Mod + C-layer", PLAN §6). Core techniques guaranteed; engine
-   untouched. Chase ratifies the scheme hands-on at the M3 gate.
-3. **Performance** — hard 60 fps simulation AND render at 240×240
-   (renderer measured at 2.54 ms worst-case on real hardware, #8).
-4. **Private, personal use** — publication out of scope (`docs/LICENSING.md`).
-5. **Solo parity is the playable bar** — meleelight has a CPU opponent
-   (`ai.js`), so solo = menus, VS-vs-CPU, target test; the AI ports in M4.
+The device's own libc was a problem too: the SDK ships a musl built with
+unsafe-FP optimisations, where `floor()` is the identity for non-integers and
+`fmod(0,0)` is `1.0`. The port overrides those with exact implementations and
+sweeps 432,319 values against a host reference on every run.
 
-## Running the loop
+## What is deliberately different
 
-```sh
-git switch -c agent/auto          # the loop refuses any other branch
-bash scripts/loop.sh              # interactive approvals by default
-# unattended (owner opt-in, git-guardrails hook installed):
-# PERM_MODE=bypassPermissions MAX_ITERS=300 bash scripts/loop.sh
+The physics are the original's. The **interface is not**, and cannot be — this
+screen is 4% of the area the original draws into. Every departure is recorded
+with its reasoning in [`docs/MENU-SPEC.md`](docs/MENU-SPEC.md); there are 54 of
+them. A few examples:
+
+- the character select, stage select and menus are re-laid-out for 240×240
+- the target-stage builder is rebound for a console with no `z` key, where the
+  d-pad **is** the cursor
+- closing the lid saves your match, your target run, or your half-drawn stage,
+  and reopening it puts you back — the original has no lid
+- custom target stages arrive as files on the SD card, not pasted share codes
+
+## Verification
+
+Thirty-six host checks in the standard sweep, eleven more that run on the
+hardware over ADB, and others for narrower questions. They are not unit tests; each one
+is an argument that a specific claim still holds, and most carry deliberate
+perturbations ("teeth") that must make them fail — a check that cannot fail is
+a check that proves nothing.
+
+```
+bash port/sim/check-sim.sh              # the simulation conforms, all 8 goldens
+bash port/sim/device/verify_m3.sh       # device conformance + 60 fps + audio
+bash port/foh/check-foh-flows.sh        # menu flows, frozen transition traces
 ```
 
-One fresh-context iteration per `claude -p` invocation, protocol in
-`docs/LOOP.md`. Halts on `LOOP STOP:` sentinels (device needed, M2-CAL
-no-go, Chase ratification/acceptance gates) or `.loop/STOP`. First
-iteration is a REPLAN that concretizes M0's seeded tasks.
+## Building
 
-Sibling project / prior art: `~/code_projects/ssb64-funkey-s` (toolchain,
-platform-layer pattern, loop discipline — adapted here, see NOTICES).
+**[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) is the from-scratch guide** — it
+assumes you have never seen this project and do not own the handheld, and
+covers what to install, how to build the oracle, how to get a shell on the
+device, and the traps that cost real time. The short version:
+
+```
+bash oracle/build-upstream.sh           # clone + build the original at its pin
+cd oracle/harness && npm install && cd ../..
+node pipeline/run.js --out pipeline/build/dev
+bash port/sim/check-sim.sh              # SIM CONFORMS = your build is honest
+bash port/gfx/opk/install-play-opk.sh   # device only: build + install the OPK
+```
+
+Most of it works without a FunKey-S; the hardware is needed for the device
+checks and for playing it.
+
+[`AGENTS.md`](AGENTS.md) is the working contract and the fastest way in
+(`CLAUDE.md` imports it); [`PLAN.md`](PLAN.md) is the original strategy
+document.
+
+## Credit
+
+**[meleelight](https://github.com/schmooblidon/meleelight) is Will Blackett's**
+(`schmooblidon`), MIT licensed, and this port would not exist without it. The
+physics, the frame data and the feel are entirely that project's work; what is
+here is a translation of it to a different machine, and a great deal of
+machinery to prove the translation is honest.
+
+Upstream's licence is carried verbatim as
+[`LICENSE-meleelight`](LICENSE-meleelight). Third-party code is listed in
+[`NOTICES`](NOTICES) — fdlibm (Sun), Ryu (Ulf Adams), QuickJS (Fabrice Bellard).
+
+## Assets and provenance
+
+**No game assets are distributed here.** Audio is converted from an upstream
+build at runtime into gitignored files that never enter this repository, and
+no sprite or sound is committed. The only images in the tree are an
+application icon and screenshots of the author's own device.
+
+Characters and concepts are © Nintendo / HAL Laboratory, as upstream's licence
+states. This is a personal project for use with software you build yourself.

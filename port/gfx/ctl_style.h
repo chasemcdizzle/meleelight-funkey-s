@@ -139,7 +139,9 @@ CtlStyle ctl_style_get(void);
 bool ctl_style_set(int style);
 
 // Stable display name for the Controls screen ("Natural" / "Classic" /
-// "Box"). Returns "?" for an out-of-domain value (never NULL).
+// "Box"). Returns "-" for an out-of-domain value (never NULL) — "-", not
+// "?", because the Controls screen draws this through face 1, which has no
+// '?' glyph (ticket #24; the reason lives at the return site).
 const char *ctl_style_name(int style);
 
 // --- Mod shoulder (orthogonal to style; BOX-only effect) ---------------

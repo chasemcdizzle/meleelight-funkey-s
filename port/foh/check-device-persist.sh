@@ -104,11 +104,23 @@ WORSE_BITS=4030000000000000
 # phantom 25 + soundslevel 29 + musiclevel 28; MENU-SPEC §3/§4) + the v5
 # bind block 92 (4 rows x23; fix_plan A31) + the v6 sel row 12
 # (`sel c c c c` + LF; fix_plan A49, DEVIATION D45) + the v7 resume row 10
-# (`resume NN` + LF; fix_plan A26, DEVIATION D53) + SUM 69
-# = 1624). A dropped/added byte — including an embedded NUL that command
+# (`resume NN` + LF; fix_plan A26, DEVIATION D53) + ticket #25's CSS machine
+# plane 183 (ptype 14 + cpudiff 16 + vsmode 9 + hand 39 + slider 75 +
+# carry 8 + cpucarry 11 + handtype 11) + ticket #26's target-select trio 62
+# (tsscur 10 — `tsscur NN` + LF, TWO digits because the eleventh slot does not
+# fit in one — plus tsspage 10 + tsshand 42) + ticket #27's six screen
+# cursors 58 (menusel 10 + ssscur 9 + optrow 9 + optcol 9 + audiorow 11 +
+# ctlrow 10 — `ctlrow NN` + LF, TWO digits because the controls screen's
+# eleventh row, RESET, does not fit in one) + SUM 69
+# + D59's crec 1300 (fifty rows of `crec C S ` + 16 hex + LF = 26 each — the
+# custom half of the record plane, appended rather than widening `rec` in
+# place because the wire indexes a row with ONE digit and requires every row
+# of a field to be present, so widening would have made every existing file
+# fail its own grammar and reset the player's settings)
+# = 3227). A dropped/added byte — including an embedded NUL that command
 # substitution silently swallows through the per-line sed reads — breaks
 # this reconciliation.
-PERSIST_BYTES=1624
+PERSIST_BYTES=3227
 
 DEADMAN_S="${MLFK_DEADMAN_S:-900}"
 READY_TRIES=60
@@ -611,16 +623,27 @@ run_host() {
 # EXACT POSITIONAL MLFKPERSIST7 whitelist verification, INDEPENDENT of
 # the C loader (review-100 M2 + the whitelist-grammar rule, PROCESS §3).
 # The format is a FIXED shape — so this asserts it BY POSITION:
-# final byte LF, exactly 68 lines, each line matched at its exact index
+# final byte LF, exactly 137 lines, each line matched at its exact index
 # by an anchored full-line pattern, the 50 rec rows carrying the
 # canonical c-major (c 0..4, s 0..9) progression at their exact
 # position (uniqueness by position, not a global count), each rec bit
 # pattern in the C loader's domain (== the -1.0 sentinel or finite in
 # [0,6000)), the four v5 bind rows carrying the port-major progression and
 # each being a PERMUTATION of 0..7, and a shasum recompute of the SUM seal
-# over lines 1..69 (the whole body; the SUM line itself is line 70).
+# over lines 1..86 (the whole body; the SUM line itself is line 87).
 # Binary outcome: exact match -> pass; resembles-but-doesn't -> fail
 # closed (grammar_die). NO global counts, NO permissive scan.
+#
+# A POSITIONAL WHITELIST AND AN EXTENSIBLE FORMAT (ticket #22/#25). The
+# loader SKIPS rows it does not know, because that is what retired the
+# version bump — but this whitelist deliberately does not, and the two are
+# not in conflict. The loader's job is to survive a file from a build it has
+# never met; this function's job is to say exactly what THIS build writes, on
+# hardware, independently of the C that wrote it. So appending a row is still
+# one row in the table AND an edit here, and that is on purpose: the edit that
+# gets skipped is the one that ships a format change to a device blind. That
+# is not hypothetical — A49 moved the SUM line and left the body recompute two
+# lines short, and this file rejected every genuine save until it was found.
 hex_lt() ( LC_ALL=C; [[ "$1" < "$2" ]]; ) # fixed 16-hex: byte order == numeric order
 verify_persist_file() { # <file> <ctx>
   local f="$1" ctx="$2" nl L sum want ln c s bits
@@ -637,7 +660,7 @@ verify_persist_file() { # <file> <ctx>
   nbytes="$(wc -c < "$f" | tr -d ' ')"
   [ "$nbytes" = "$PERSIST_BYTES" ] || grammar_die "$ctx: file is $nbytes bytes != $PERSIST_BYTES (MLFKPERSIST7 fixed size; byte-count reconciliation failed — dropped/added/NUL byte)"
   nl="$(grep -c "" "$f")" || grammar_die "$ctx: cannot count lines"
-  [ "$nl" = 70 ] || grammar_die "$ctx: $nl lines != 70 (MLFKPERSIST7 is exactly 70 LF lines)"
+  [ "$nl" = 137 ] || grammar_die "$ctx: $nl lines != 137 (MLFKPERSIST7 is exactly 137 LF lines)"
   L="$(sed -n 1p "$f")"; [ "$L" = "MLFKPERSIST7" ] || grammar_die "$ctx: line 1 is not the exact header ('$L')"
   L="$(sed -n 2p "$f")"; [[ "$L" =~ ^turbo\ [01]$ ]] || grammar_die "$ctx: line 2 turbo grammar ('$L')"
   L="$(sed -n 3p "$f")"; [[ "$L" =~ ^lcancel\ [0-2]$ ]] || grammar_die "$ctx: line 3 lcancel grammar ('$L')"
@@ -736,16 +759,190 @@ verify_persist_file() { # <file> <ctx>
   # domain above is. 00 = FOH_STARTUP = nothing armed; the rest are the
   # resumable screens (title 01, menu-top 02, menu-options 03, menu-controls
   # 05, css 06, opt-gameplay 08, opt-audio 09, ctrl-pad 10, ctrl-key 11,
-  # tss 14). NOT here, and that is the point: 04 menu-battle, 07 sss,
-  # 12 credits, 13 match, 15 tmatch — screens a resume must never restore.
+  # MATCH 13, tss 14). NOT here, and that is the point: 04 menu-battle,
+  # 07 sss, 12 credits, 15 tmatch — screens a resume must never restore.
+  #
+  # 13 JOINED THE DOMAIN IN TICKET #29, and it is the reason this list has to
+  # be maintained rather than admired: a card written by a lid close DURING A
+  # MATCH now carries `resume 13`, and this whitelist would have rejected the
+  # real, correct file. foh_persist_resume_plan maps FOH_MATCH to itself and
+  # port/foh/foh_match_snap.c is the state it comes back to; the refusal that
+  # used to live in this number moved to the WRITE side (a failed snapshot
+  # downgrades the row to 06) and to the read side (six named refusals), where
+  # port/foh/check-match-resume.sh proves it.
+  #
+  # STILL MISSING, named rather than quietly fixed under another ticket:
+  # 16 = FOH_TBUILD, which foh_persist_resume_plan has mapped to ITSELF since
+  # A45 T4 (the builder resumes into itself with its document). A card parked
+  # in the builder therefore carries `resume 16` and this whitelist would
+  # reject it. That is a pre-existing gap, not one #29 opened, and changing a
+  # device whitelist for a screen this ticket does not touch is an owner call.
   L="$(sed -n 69p "$f")"
-  [[ "$L" =~ ^resume\ (00|01|02|03|05|06|08|09|10|11|14)$ ]] \
+  [[ "$L" =~ ^resume\ (00|01|02|03|05|06|08|09|10|11|13|14)$ ]] \
     || grammar_die "$ctx: line 69 is not a v7 resume row in the resumable
   domain ('$L') — a screen the driver would refuse to restore must never
   reach the file either"
-  ln=70
+  # ticket #25 (owner ruling 2026-08-27): the CSS machine plane, lines 70-77.
+  # Positional and domain-checked like everything above, and restated from the
+  # FORMAT (foh_persist.h) rather than from the table: three of these columns
+  # are WIRE-BIASED — `ptype` is playerType + 1 and `cpudiff` is the level - 1
+  # — and a bias applied on only one side of foh_persist.c would round-trip
+  # its own file perfectly. The column bounds below are what catch it here.
   L="$(sed -n 70p "$f")"
-  [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 70 is not the SUM line ('$L')"
+  [[ "$L" =~ ^ptype\ [0-2]\ [0-2]\ [0-2]\ [0-2]$ ]] \
+    || grammar_die "$ctx: line 70 is not the ptype row, [0-2] x4 ('$L') — the
+  column is playerType + 1, so a 3 here means an unbiased write"
+  L="$(sed -n 71p "$f")"
+  [[ "$L" =~ ^cpudiff\ [0-3]\ [0-3]\ [0-3]\ [0-3]$ ]] \
+    || grammar_die "$ctx: line 71 is not the cpudiff row, [0-3] x4 ('$L') — the
+  column is the level - 1, so a 4 here means an unbiased write"
+  L="$(sed -n 72p "$f")"
+  [[ "$L" =~ ^vsmode\ [01]$ ]] || grammar_die "$ctx: line 72 vsmode grammar ('$L')"
+  # the hand and the knobs are CLAMPED to the canvas every frame, so both
+  # coordinates are finite, non-negative and <= 240.0 (406e000000000000).
+  # INCLUSIVE at the cap for the same reason phantom is: foh_hand_step clamps
+  # TO the width, so exactly 240.0 is a position the player can park at and
+  # rejecting it would reject a legitimate save.
+  local hb
+  L="$(sed -n 73p "$f")"
+  [[ "$L" =~ ^hand\ ([0-9a-f]{16})\ ([0-9a-f]{16})$ ]] \
+    || grammar_die "$ctx: line 73 is not 'hand <hex16> <hex16>' ('$L')"
+  for hb in "${BASH_REMATCH[@]:1:2}"; do
+    [ "$hb" = 406e000000000000 ] || hex_lt "$hb" 406e000000000000 \
+      || grammar_die "$ctx: line 73 hand bits $hb are off the canvas (want
+  finite non-negative <= 240.0) — a cursor there hit-tests nothing at all"
+  done
+  L="$(sed -n 74p "$f")"
+  [[ "$L" =~ ^slider\ ([0-9a-f]{16})\ ([0-9a-f]{16})\ ([0-9a-f]{16})\ ([0-9a-f]{16})$ ]] \
+    || grammar_die "$ctx: line 74 is not 'slider <hex16> x4' ('$L')"
+  for hb in "${BASH_REMATCH[@]:1:4}"; do
+    [ "$hb" = 406e000000000000 ] || hex_lt "$hb" 406e000000000000 \
+      || grammar_die "$ctx: line 74 slider bits $hb are off the canvas (want
+  finite non-negative <= 240.0)"
+  done
+  # carry / cpucarry: the column is the grabbed PORT + 1, so 0 is "holding
+  # nothing" and 1..4 name ports 0..3. Five values, never more — CONTEXT.md's
+  # "a port is a player slot, never an index into the roster", which is five
+  # wide for a different reason and is the confusion this bound refuses.
+  L="$(sed -n 75p "$f")"
+  [[ "$L" =~ ^carry\ [0-4]$ ]] || grammar_die "$ctx: line 75 carry grammar ('$L')"
+  L="$(sed -n 76p "$f")"
+  [[ "$L" =~ ^cpucarry\ [0-4]$ ]] || grammar_die "$ctx: line 76 cpucarry grammar ('$L')"
+  L="$(sed -n 77p "$f")"
+  [[ "$L" =~ ^handtype\ [0-2]$ ]] \
+    || grammar_die "$ctx: line 77 handtype grammar ('$L') — handPoint, handOpen
+  or handGrab, and nothing else"
+  # ticket #26: the target-select view plane, lines 78-79. `tsscur` is TWO
+  # digits and its domain is ELEVEN values — the ten target stages plus the
+  # page-flip slot — restated here, independently of the C loader, exactly as
+  # every domain above is. 00..10 and nothing else: 11 is grammatical and is
+  # not a slot this screen has, and a resume that rings a slot which is not
+  # there is the failure this bound refuses.
+  L="$(sed -n 78p "$f")"
+  [[ "$L" =~ ^tsscur\ (0[0-9]|10)$ ]] \
+    || grammar_die "$ctx: line 78 is not the tsscur row in [00-10] ('$L') — a
+  one-digit value here means the row was demoted to a flag and the eleventh
+  slot can no longer be written"
+  L="$(sed -n 79p "$f")"
+  [[ "$L" =~ ^tsspage\ [01]$ ]] \
+    || grammar_die "$ctx: line 79 tsspage grammar ('$L') — 0 authored or
+  1 custom, and nothing else"
+  # the hand that CARRIES that selection (D29). Same canvas bound as the CSS
+  # hand on line 73, inclusive at 240.0 for the same reason: foh_hand_step
+  # clamps TO the width, so exactly 240.0 is a position the player can park at.
+  L="$(sed -n 80p "$f")"
+  [[ "$L" =~ ^tsshand\ ([0-9a-f]{16})\ ([0-9a-f]{16})$ ]] \
+    || grammar_die "$ctx: line 80 is not 'tsshand <hex16> <hex16>' ('$L')"
+  for hb in "${BASH_REMATCH[@]:1:2}"; do
+    [ "$hb" = 406e000000000000 ] || hex_lt "$hb" 406e000000000000 \
+      || grammar_die "$ctx: line 80 tsshand bits $hb are off the canvas (want
+  finite non-negative <= 240.0) — a cursor there hit-tests nothing, and on
+  this screen that freezes the selection wherever it last was"
+  done
+  # ticket #27: the remaining screen cursors, lines 81-86. Every domain is
+  # restated here from the SCREEN, independently of the C loader, exactly as
+  # every domain above is — and each is one past its screen's last row, which
+  # is the only failure a persisted cursor really has.
+  #
+  # `menusel` is the only row in this file whose legality also depends on
+  # ANOTHER row: the menu it will be drawn on is named by `resume` on line 69,
+  # and menu-controls (screen 05) draws two rows, not four. That pairing is
+  # the C loader's FP_DOM_MENUROW and it is restated below the per-row checks,
+  # because a whitelist that only judged columns would accept a file the
+  # loader refuses and report the disagreement as the loader's fault.
+  L="$(sed -n 81p "$f")"
+  [[ "$L" =~ ^menusel\ [0-3]$ ]] \
+    || grammar_die "$ctx: line 81 menusel grammar ('$L') — the menu cursor,
+  0..3 (menu.js:31's widest menuCount)"
+  local menusel_v="${L#menusel }"
+  L="$(sed -n 82p "$f")"
+  [[ "$L" =~ ^ssscur\ [0-6]$ ]] \
+    || grammar_die "$ctx: line 82 ssscur grammar ('$L') — 0..5 are the oracle
+  stage ids and 6 is the refusing RANDOM slot; 7 is not a slot this screen has"
+  L="$(sed -n 83p "$f")"
+  [[ "$L" =~ ^optrow\ [0-4]$ ]] \
+    || grammar_die "$ctx: line 83 optrow grammar ('$L') — five rows
+  (gameplaymenu.js:11's menuVOptions is a MAX INDEX)"
+  L="$(sed -n 84p "$f")"
+  [[ "$L" =~ ^optcol\ [0-3]$ ]] \
+    || grammar_die "$ctx: line 84 optcol grammar ('$L') — four columns, and
+  only the tap-jump row has more than one (gameplaymenu.js:12)"
+  L="$(sed -n 85p "$f")"
+  [[ "$L" =~ ^audiorow\ [01]$ ]] \
+    || grammar_die "$ctx: line 85 audiorow grammar ('$L') — sounds or music"
+  # TWO digits, like `tsscur`: the controls screen has ELEVEN rows (nine
+  # actions, the style row, RESET), and RESET is the one a single decimal
+  # column could not name.
+  L="$(sed -n 86p "$f")"
+  [[ "$L" =~ ^ctlrow\ (0[0-9]|10)$ ]] \
+    || grammar_die "$ctx: line 86 is not the ctlrow row in [00-10] ('$L') — a
+  one-digit value here means the row was demoted to a flag and RESET, the
+  eleventh row, can no longer be written"
+  # lines 87-136: D59's `crec`, the CUSTOM half of the record plane. Same
+  # grammar, same domain and same by-position progression as the fifty `rec`
+  # rows above — a custom slot's personal best is a record like any other, and
+  # upstream stores it in the same [5][20] array (targetplay.js:40). It is a
+  # SEPARATE KEY here only because the wire indexes a row with one digit; see
+  # foh_persist.h. Walked with the same loop so a transposed or missing row is
+  # caught by position rather than by count.
+  ln=87
+  for c in 0 1 2 3 4; do
+    for s in 0 1 2 3 4 5 6 7 8 9; do
+      L="$(sed -n "${ln}p" "$f")"
+      [[ "$L" =~ ^crec\ ([0-4])\ ([0-9])\ ([0-9a-f]{16})$ ]] \
+        || grammar_die "$ctx: line $ln is not a crec row ('$L')"
+      [ "${BASH_REMATCH[1]}" = "$c" ] && [ "${BASH_REMATCH[2]}" = "$s" ] \
+        || grammar_die "$ctx: line $ln crec (char,slot)=(${BASH_REMATCH[1]},${BASH_REMATCH[2]}) != canonical ($c,$s) — order/progression violated"
+      bits="${BASH_REMATCH[3]}"
+      if [ "$bits" = bff0000000000000 ]; then
+        : # the -1.0 no-record sentinel
+      elif hex_lt "$bits" 40b7700000000000; then
+        : # finite non-negative in [0,6000)
+      else
+        grammar_die "$ctx: line $ln crec bits $bits out of domain (not -1.0 and not finite [0,6000))"
+      fi
+      ln=$((ln + 1))
+    done
+  done
+  # THE CROSS-ROW RULE, restated (ticket #27). Line 69 is `resume <NN>`; when
+  # it names menu-controls the cursor above may only be 0 or 1, because that
+  # is all that screen draws — and foh_render.c gfx_fatals on a cursor outside
+  # the mode it is drawing, so this pairing is a BOOT CRASH, not a cosmetic
+  # disagreement. A device file that carried it would take the app down before
+  # anything could report why.
+  L="$(sed -n 69p "$f")"
+  [[ "$L" =~ ^resume\ ([0-9]{2})$ ]] \
+    || grammar_die "$ctx: line 69 is not the resume row ('$L') — the cross-row
+  check below cannot be made"
+  if [ "${BASH_REMATCH[1]}" = 05 ] && [ "$menusel_v" -gt 1 ]; then
+    grammar_die "$ctx: line 81 menusel $menusel_v is not a row menu-controls
+  draws (it has two), and line 69 arms exactly that screen — this file boots
+  the app into foh_render.c's menu-cursor gfx_fatal"
+  fi
+  # 137, not 87: D59 appended fifty `crec` rows before the SUM, walked above.
+  ln=137
+  L="$(sed -n 137p "$f")"
+  [[ "$L" =~ ^SUM\ ([0-9a-f]{64})$ ]] || grammar_die "$ctx: line 137 is not the SUM line ('$L')"
   sum="${BASH_REMATCH[1]}"
   # review-102 M-b: validate the COMPLETE recomputed shasum line grammar
   # (`<64hex>  -` on stdin), never a `cut -d' ' -f1` first-field scrape —
@@ -836,9 +1033,117 @@ mk_pdir() { # <dst-dir> <src-file|-> : fresh persist dir, optional seed file
   mkdir -p "$1"
   if [ "$2" != - ]; then cp "$2" "$1/mlfk-persist.dat"; fi
 }
+
+# HOME THE SCREEN-LOCAL CURSORS IN EVERY p02 SEED, and the reason is a real
+# interaction tickets #26/#27 introduced rather than a fixture nicety.
+#
+# The p02 flow reaches the options screen by pressing DOWN three times from
+# menu-top's row 0 — an assumption that held for as long as foh_init was the
+# only thing that set `menuSelected`. #27 persists it, so the cursor now
+# arrives from the FILE, and the seed carries 1: three DOWNs then land on row
+# 4, which wraps to 0, and the session walked into the character select
+# instead. MEASURED, not reasoned: the trace read `T 395 menu-top css a` and
+# the B-exit resave this leg judges never happened.
+#
+# THE CLASS, not the instance (HARD RULE 8). `menusel` was the first row to do
+# this and it is not the only one that could: #26 put `tsscur`/`tsspage`/
+# `tsshand` on the card and #27 added `ssscur`/`optrow`/`optcol`/`audiorow`/
+# `ctlrow`, and every one of them is state a RESUMED session carries and a
+# freshly-navigated one does not. So this is a TABLE of cursor rows rather
+# than one sed, and adding a row to it is one line.
+#
+# WIDTH-PRESERVING, and derived from the file rather than from a constant: the
+# home value of every row in the table is zero, and the row's own digits say
+# how many. Nothing here re-types a value that lives in foh.h.
+#
+# NOT IN THE TABLE, deliberately: `optrow`/`optcol` (which the p01 session
+# leaves at 4/1 and which the opt-persisted SHOT renders — homing them would
+# change what this leg pictures, and both p02 fixtures carry the same values
+# because they share one file lineage) and `tsshand` (whose home is a pair of
+# doubles that only foh.h owns; re-typing it here would be exactly the
+# duplication this project keeps paying for). Those rows are covered instead
+# by assert_p02_comparable below, which is the general statement and needs no
+# constant at all.
+#
+# The flow is left alone deliberately. A relative walk cannot home a wrapping
+# cursor without knowing the row count, and teaching every committed flow the
+# count would spread #27's change across the whole corpus. Seeding the cursors
+# states the precondition where the fixture is built, which is also the honest
+# place: this leg is about the OPTIONS values and the resave, not about where
+# the cursor happened to be.
+P02_HOME_ROWS="menusel tsscur tsspage ssscur audiorow ctlrow"
+seed_p02_cursors() { # <persist-file> : home the cursor rows, re-seal the SUM
+  local f="$1" body row
+  body="$(dirname "$f")/.homing"
+  awk -v rows="$P02_HOME_ROWS" '
+    BEGIN { n = split(rows, r, " "); for (i = 1; i <= n; i++) want[r[i]] = 1 }
+    /^SUM / { next }
+    {
+      if ($1 in want) {
+        line = $1
+        for (i = 2; i <= NF; i++) {
+          z = $i; gsub(/[0-9]/, "0", z); line = line " " z
+        }
+        print line
+        next
+      }
+      print
+    }
+  ' "$f" > "$body"
+  # Every row in the table must have BEEN there. A row that was renamed or
+  # dropped would otherwise leave this fixture silently un-homed, which is
+  # exactly the failure this function exists to prevent.
+  for row in $P02_HOME_ROWS; do
+    grep -qE "^$row( 0+)+\$" "$body" \
+      || fail "seed_p02_cursors: no '$row' row (all-zero) in $f after homing —
+   a #26/#27 persisted cursor row moved or vanished, and this fixture would
+   silently stop homing it"
+  done
+  { cat "$body"; printf 'SUM %s\n' "$(shasum -a 256 "$body" | cut -d' ' -f1)"; } > "$f"
+  rm -f "$body"
+}
+
+# ...AND THE GENERAL STATEMENT THE TABLE CANNOT MAKE. Two p02 sessions are
+# only comparable shot-for-shot if they START from the same screen-local
+# state; the table above homes the rows we know about, and this asserts the
+# outcome for EVERY row, including ones nobody has thought of yet.
+#
+# The two fixtures differ by design in exactly one thing — the RECORD the
+# session is supposed to be about (M1 boots with the records fresh and earns
+# one mid-flow; the twin boots with it already on disk) — so `rec` rows and
+# the SUM seal are the only permitted difference and everything else must be
+# byte-identical.
+assert_p02_comparable() { # <fileA> <fileB> <ctx>
+  local a="$1" b="$2" ctx="$3" sa sb
+  # both scratch files under $HP, never beside a persist file: a stray file
+  # in a persist dir is a file the next boot's directory scan can see.
+  sa="$HP/.cmpA"; sb="$HP/.cmpB"
+  grep -vE '^(rec |SUM )' "$a" > "$sa"
+  grep -vE '^(rec |SUM )' "$b" > "$sb"
+  if ! cmp -s "$sa" "$sb"; then
+    diff "$sa" "$sb" >&2 || true
+    rm -f "$sa" "$sb"
+    fail "$ctx: the two p02 fixtures do not start from the same screen-local
+   state (rows above). A byte-identity comparison between their shots would
+   then be judging WHERE THE SESSION WENT and not what it rendered. State the
+   precondition in the fixture — add the row to P02_HOME_ROWS — never relax
+   the comparison."
+  fi
+  rm -f "$sa" "$sb"
+}
+
 mk_pdir "$HP/twin-persist" "$FILE_REC"
+seed_p02_cursors "$HP/twin-persist/mlfk-persist.dat"
+# KEPT AS A SEPARATE COPY because the session about to run RESAVES the file at
+# its options B-exit, writing the cursor rows back from the SESSION and not
+# from the seed (that resave is what the idempotence assertion below is for).
+# The M1 fixture's comparability is a statement about the two SEEDS, so it has
+# to be made against the seed and never against the post-run file.
+TWIN_SEED=$HP/twin-seed-want.dat
+cp "$HP/twin-persist/mlfk-persist.dat" "$TWIN_SEED"
 run_host p02-persist-verify "$HP/p02twin" "$PWD/$HP/twin-persist"
 mk_pdir "$HP/twin-persist2" "$FILE_REC"
+seed_p02_cursors "$HP/twin-persist2/mlfk-persist.dat"
 run_host p02-persist-verify "$HP/p02twin2" "$PWD/$HP/twin-persist2"
 for s in opt-persisted tss-record; do
   made "$HP/p02twin/shots/$s.ppm" "$HP/p02twin2/shots/$s.ppm"
@@ -1062,9 +1367,37 @@ echo "   L-b OK: twin shot decodes to '$dec_twin' == derived; control '$dec_ctrl
 # SAME-PROCESS frame-440 tss-record shot renders the NEW record and is
 # BYTE-IDENTICAL to the persisted-twin shot (which BOOTS with the record
 # already on disk). Under the shipped bug that shot shows the stale
-# "--:--:--" (proven in this iteration's smoke: an unfixed build's shot
-# DIFFERS) — the tooth discriminates by construction.
+# "--:--:--" — the tooth discriminates by construction.
+#
+# THE PRECONDITION THIS LEG NEEDS, ADDED 2026-08-28 (ticket #30's lane).
+# This leg went RED, and not because the product bug came back: it seeded its
+# fixture WITHOUT the cursor homing the twin has had since the p02 flow was
+# written. #26 and #27 made the menu cursor persistent, so an un-homed session
+# takes three DOWNs from row 1 and lands on the CHARACTER SELECT — MEASURED:
+# its trace read `T 395 menu-top css a` and it never reached target select at
+# all, so the shot it was compared against was of a different screen. The two
+# sessions were incomparable for a reason that has nothing to do with the bug
+# this leg guards.
+#
+# THE FIX IS THE PRECONDITION, NOT THE COMPARISON. The byte-identity cmp below
+# is untouched and must stay untouched; what changed is that the fixture now
+# says what it assumes. `seed_p02_cursors` is the same function the twin uses,
+# and `assert_p02_comparable` makes the assumption MECHANICAL for every row
+# rather than for the ones anyone remembered.
+#
+# AND THE TOOTH STILL BITES, proven by construction rather than argued: with
+# the fixture seeded, a build whose foh_persist.c is the tree's own MINUS the
+# one line `if (g_bound) g_bound->targetRecords[ch][tstage] = matchTimer;` —
+# i.e. the stale-PB bug re-introduced — produces a tss-record shot that
+# DIFFERS from the twin's while its trace stays byte-identical, so the shot is
+# the only signal and it is the personal-best line that moves. (Measured on
+# the host, ticket #30's lane: the fixed build's shot is identical; the
+# perturbed build's first differing byte is inside the PB line rather than at
+# the top of the image, which is where the un-homed session used to differ.)
 mk_pdir "$HP/m1-persist" "$FILE_P01"
+seed_p02_cursors "$HP/m1-persist/mlfk-persist.dat"
+assert_p02_comparable "$HP/m1-persist/mlfk-persist.dat" "$TWIN_SEED" \
+  "M1 fixture"
 run_host p02-persist-verify "$HP/p02m1" "$PWD/$HP/m1-persist" \
   --tooth-finish-at 100 "$REC_CHAR" "$REC_TSTAGE" "$REC_BITS"
 made "$HP/p02m1/shots/tss-record.ppm"
@@ -1114,7 +1447,14 @@ echo "    T-H1 OK: nibble-flipped rec dies on the SUM seal (loud reset)"
 # moves to v8, a version this build cannot know. (It has moved with every bump; leaving it behind
 # turns this tooth into a no-op that asserts the CURRENT format resets.)
 mk_pdir "$HP/th2" -
-{ printf 'MLFKPERSIST8\n'; tail -n +2 "$FILE_REC" | head -n 68; } > "$HP/th2/body"
+# `sed -e 1d -e $d` = drop the header and the SUM, i.e. "the body", in ONE
+# process. The old form was `tail -n +2 | head -n 68`, which had two defects
+# that only showed once D59 lengthened the file: `head` closes the pipe as soon
+# as it has its 68 lines, so `tail` takes SIGPIPE and `set -o pipefail` turns
+# the whole check into exit 141 — intermittently, which is why it read as a
+# flake — and 68 was a magic number sized for a file that has since grown
+# twice. This form has no count to go stale and no pipe to close early.
+{ printf 'MLFKPERSIST8\n'; sed -e '1d' -e '$d' "$FILE_REC"; } > "$HP/th2/body"
 { cat "$HP/th2/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th2/body" | cut -d' ' -f1)"; } \
   > "$HP/th2/mlfk-persist.dat"
 rm -f "$HP/th2/body"
@@ -1123,8 +1463,8 @@ teeth=$((teeth + 1))
 echo "    T-H2 OK: unsupported version (checksum-valid) resets loudly"
 # T-H3 domain: NaN record bits with a recomputed SUM
 mk_pdir "$HP/th3" -
-sed "s/^rec $REC_CHAR $REC_TSTAGE $REC_BITS\$/rec $REC_CHAR $REC_TSTAGE 7ff8000000000000/" \
-  "$FILE_REC" | head -n 69 > "$HP/th3/body"
+sed -e "s/^rec $REC_CHAR $REC_TSTAGE $REC_BITS\$/rec $REC_CHAR $REC_TSTAGE 7ff8000000000000/" \
+  -e '$d' "$FILE_REC" > "$HP/th3/body"  # T-H2's note: no count, no early close
 { cat "$HP/th3/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th3/body" | cut -d' ' -f1)"; } \
   > "$HP/th3/mlfk-persist.dat"
 rm -f "$HP/th3/body"
@@ -1246,6 +1586,70 @@ v6_defaults() {
 v7_defaults() {
   printf 'resume 00\n'
 }
+# The CSS block appended by ticket #25 under the 2026-08-27 owner ruling
+# (persist the port types and CPU levels). Written here as LITERAL defaults
+# rather than read back from the code, so this expectation stays INDEPENDENT
+# of the writer it is judging — which is the whole point of building it by
+# hand. The values are foh_persist_defaults()'s, which the same ticket made
+# reproduce foh_init exactly:
+#   ptype     wire-biased portType[] — port 0 HMN (0 -> 1), 1..3 absent (-1 -> 0)
+#   cpudiff   the fresh CPU level, biased
+#   vsmode    0 = stock
+#   hand      the CSS free cursor's cold-start position, IEEE-754 bit patterns
+#   slider    the four CPU knob x positions, likewise
+#   carry     -1 -> 0, holding no token
+#   cpucarry  -1 -> 0, holding no knob
+#   handtype  0
+# If any of these drift, the DEVICE check fails here rather than the file
+# quietly gaining a row nobody judged.
+v8_defaults() {
+  printf 'ptype 1 0 0 0\n'
+  printf 'cpudiff 2 2 2 2\n'
+  printf 'vsmode 0\n'
+  printf 'hand 403c000000000000 406c000000000000\n'
+  printf 'slider 4042940c565c87b6 40584a062b2e43db 4063a503159721ee 406b2503159721ee\n'
+  printf 'carry 0\n'
+  printf 'cpucarry 0\n'
+  printf 'handtype 0\n'
+}
+# The target-select pair appended by ticket #26, written as LITERAL defaults
+# for the same reason as the block above. Both are what an ENTRY to target
+# select produces — slot 0 on the AUTHORED grid, upstream's own
+# targetPointerPos reset (menu.js:77-84) — so a v1..v7 file that predates
+# them migrates onto the screen it would have opened anyway.
+#   tsscur   TWO digits, so a fresh file says `00`, not `0`
+#   tsspage  0 = the ten authored stages
+#   tsshand  slot 0's centre — x 58.0, y 39.5 — which is where `tsscur 00`
+#            has to put it: the hand writes the cursor every frame, so a
+#            migrated file whose two disagreed would correct itself on tick
+#            one and make one of these rows a lie
+v9_defaults() {
+  printf 'tsscur 00\n'
+  printf 'tsspage 0\n'
+  printf 'tsshand 404d000000000000 4043c00000000000\n'
+}
+# The six screen cursors appended by ticket #27, written as LITERAL defaults
+# for the same reason as the two blocks above. Every one is ZERO — the
+# top/leftmost row of its screen, which is where an untouched machine opens
+# it — so a v1..v7 file that predates these rows migrates onto exactly the
+# screens it would have opened before they existed. That is what makes the
+# migration invisible to the player, which is what makes it safe to do
+# without asking.
+#   menusel   the menu cursor: 0 is the first row of whichever menu the
+#             `resume` row names, so it is in range on ALL FOUR of them (the
+#             cross-row rule above cannot bite a migrated file)
+#   ssscur    0 = battlefield, the first stage of the 3x2 grid
+#   optrow/optcol  the first row and column of options > gameplay
+#   audiorow  0 = SOUNDS
+#   ctlrow    TWO digits, so a fresh file says `00`, not `0` — the d-pad row
+v10_defaults() {
+  printf 'menusel 0\n'
+  printf 'ssscur 0\n'
+  printf 'optrow 0\n'
+  printf 'optcol 0\n'
+  printf 'audiorow 0\n'
+  printf 'ctlrow 00\n'
+}
 mk_pdir "$HP/th9" -
 { printf 'MLFKPERSIST1\n'; sed -n '2,4p' "$FILE_P01"; th9_rows "$WORSE_BITS"; } \
   > "$HP/th9/body"
@@ -1272,10 +1676,26 @@ rm -f "$HP/th9/body"
 # One shared expectation conflated them, and because this check had not
 # been RUN on hardware since d60505e, it went stale rather than loud.
 # Splitting it is what makes each arm assert its own rule.
+# D59's custom record plane, as a MIGRATION fills it: every slot at the -1
+# sentinel, because no version before 7 could carry a custom-stage best time.
+# Emitted LAST, which is where `crec` sits in the field table and therefore in
+# the file. Written as a loop rather than fifty printfs so the shape is stated
+# once — the fixture builders that hand-listed rows are exactly what went stale
+# when this key was added.
+crec_defaults() {
+  local c s
+  for c in 0 1 2 3 4; do
+    for s in 0 1 2 3 4 5 6 7 8 9; do
+      printf 'crec %s %s bff0000000000000\n' "$c" "$s"
+    done
+  done
+}
 mk_expect() { # <out> <modonr>
   { printf 'MLFKPERSIST7\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 1\n';
     printf 'modonr %s\n' "$2"; th9_rows "$REC_BITS"; v4_defaults; v5_defaults;
-    v6_defaults; v7_defaults; } > "$HP/expect.body"
+    v6_defaults; v7_defaults; v8_defaults; v9_defaults; v10_defaults;
+    crec_defaults;
+  } > "$HP/expect.body"
   { cat "$HP/expect.body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/expect.body" | cut -d' ' -f1)"; } \
     > "$1"
   rm -f "$HP/expect.body"

@@ -96,3 +96,20 @@ the size without reading the comment, the guard is gone and nothing says so.
 That is the same hostage relationship this project already documents for its
 deliberate perturbations, and it is accepted on the same terms: the guard
 asserts an outcome, and a check must prove the guard still bites.
+
+**Correction, 2026-08-27 (ticket #27).** The Decision above names two hook
+cases: target select's slot scan and *"credits must place its reticle"*.
+Only the first survived measurement. `foh_init` already places the credits
+reticle at the identical home the entering transition writes, so a resume —
+which arrives on a freshly initialised state — finds it placed, and a hook
+that placed it again would be a **provable no-op whose tooth could not
+bite**. A no-op hook is worse than no hook: it asserts a dependency that is
+not there, and it dilutes the one mechanism this ADR kept. The credits
+screen therefore resumes into itself with `FOH_RESUME_HOOK_NONE`, and the
+two placements were collapsed into one macro (`FOH_CRED_HOME_X/Y`) so the
+argument holds by construction rather than by two literals agreeing;
+`port/foh/check-credits.sh` compares a resumed credits screen against an
+entered one pixel for pixel and its T4 moves `foh_init`'s placement to prove
+the comparison bites. The general rule the correction leaves behind: **a
+hook earns its place only if removing it changes something a check can
+see.** Target select's still does.

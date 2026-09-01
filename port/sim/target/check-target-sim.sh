@@ -37,6 +37,24 @@ set -euo pipefail
 cd "$(dirname "$0")/../../.."
 
 fail() { echo "TARGET SIM FAIL: $*" >&2; exit 1; }
+
+# A PERTURBATION THAT PERTURBS NOTHING IS WORSE THAN NO TOOTH: it reads green
+# forever and then accuses the code the day the data moves. MEASURED in this
+# feature — check-match-resume.sh's `s/^SUM \(.\)/SUM 0/` flipped the SUM's
+# first hex digit unless it was already `0`, and one build in sixteen it is.
+# Every in-place edit below goes through here, and a no-op fails LOUDLY,
+# naming the fixture instead of the feature.
+perturb() { # <file> <sed-arg>... — apply, and prove the bytes moved
+  local f="$1"; shift
+  local before after
+  before="$(shasum -a 256 < "$f")"
+  sed -i.bak "$@" "$f"
+  rm -f "$f.bak"
+  after="$(shasum -a 256 < "$f")"
+  [ "$before" != "$after" ] || fail "FIXTURE NO-OP: the perturbation
+  $* did not change $f. The tooth it feeds cannot fail, so a green run here
+  proves nothing. Fix the fixture; do NOT relax the assertion downstream."
+}
 grammar_die() { echo "TARGET SIM FAIL: $*" >&2; exit 2; }
 relay_lines() { sed 's/^/  | /'; }
 made() {
@@ -313,7 +331,7 @@ echo "    T2 target-plane nibble -> verify-target-stream diverges"
 # T3 — TFIN count perturb: alter the reported targetsDestroyed in a COPY ->
 # verify-target's finals pin must fail.
 cp "$BUILD/$TID.sim.out" "$BUILD/tooth3.sim.out"
-sed -i.bak -E 's/^TFIN [0-9]+ /TFIN 9 /' "$BUILD/tooth3.sim.out"; rm -f "$BUILD/tooth3.sim.out.bak"
+perturb "$BUILD/tooth3.sim.out" -E 's/^TFIN [0-8] /TFIN 9 /'
 node "$M4G/wrap-target.js" "$TID" "$BUILD/tooth3.sim.out" \
   "$BUILD/tooth3.player.json" "$BUILD/tooth3.target.json" >/dev/null
 if node "$M4G/verify-target-stream.js" "$BUILD/tooth3.target.json" \
@@ -348,7 +366,7 @@ echo "    T5 hq-row drop -> target_hq_probe fails"
 # T6 — wrap-target GRAMMAR: a resembling-but-malformed F line in a COPY ->
 # wrap-target must reject (no partial parse).
 cp "$BUILD/$TID.sim.out" "$BUILD/tooth6.sim.out"
-sed -i.bak '5s/^F /F x/' "$BUILD/tooth6.sim.out"; rm -f "$BUILD/tooth6.sim.out.bak"
+perturb "$BUILD/tooth6.sim.out" '5s/^F /F x/'
 if node "$M4G/wrap-target.js" "$TID" "$BUILD/tooth6.sim.out" \
     "$BUILD/tooth6.player.json" "$BUILD/tooth6.target.json" >/dev/null 2>&1; then
   fail "T6 malformed F line did NOT fail wrap-target"
@@ -687,8 +705,7 @@ echo "    T21 finalTargetsDestroyed +1 -> run-finals binding death"
 # the producer cannot emit ('RNG 9007199254740993 1', Number() rounds
 # it) in a sim.out COPY -> wrap-target must die, never wrap.
 cp "$BUILD/$TID.sim.out" "$BUILD/tooth22.sim.out"
-sed -i.bak -E 's/^RNG [0-9]+ /RNG 9007199254740993 /' "$BUILD/tooth22.sim.out"
-rm -f "$BUILD/tooth22.sim.out.bak"
+perturb "$BUILD/tooth22.sim.out" -E 's/^RNG [0-9]+ /RNG 9007199254740993 /'
 if T22_OUT="$(node "$M4G/wrap-target.js" "$TID" "$BUILD/tooth22.sim.out" \
     "$BUILD/tooth22.player.json" "$BUILD/tooth22.target.json" 2>&1)"; then
   fail "T22 unsafe-integer RNG token did NOT fail wrap-target"

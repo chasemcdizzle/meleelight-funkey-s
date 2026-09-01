@@ -130,6 +130,24 @@ GFX=port/gfx
 M4G=port/goldens-m4
 
 fail() { echo "FOH FLOWS FAIL: $1" >&2; exit 1; }
+
+# A PERTURBATION THAT PERTURBS NOTHING IS WORSE THAN NO TOOTH: it reads green
+# forever and then accuses the code the day the data moves. MEASURED in this
+# feature — check-match-resume.sh's `s/^SUM \(.\)/SUM 0/` flipped the SUM's
+# first hex digit unless it was already `0`, and one build in sixteen it is.
+# Every in-place edit below goes through here, and a no-op fails LOUDLY,
+# naming the fixture instead of the feature.
+perturb() { # <file> <sed-arg>... — apply, and prove the bytes moved
+  local f="$1"; shift
+  local before after
+  before="$(shasum -a 256 < "$f")"
+  sed -i.bak "$@" "$f"
+  rm -f "$f.bak"
+  after="$(shasum -a 256 < "$f")"
+  [ "$before" != "$after" ] || fail "FIXTURE NO-OP: the perturbation
+  $* did not change $f. The tooth it feeds cannot fail, so a green run here
+  proves nothing. Fix the fixture; do NOT relax the assertion downstream."
+}
 grammar_die() { echo "FOH FLOWS FAIL: $1" >&2; exit 2; }
 
 made() {
@@ -625,7 +643,24 @@ pt_up="$(sed -n 's/^[[:space:]]*phantomThreshold[[:space:]]*:[[:space:]]*\([0-9.
 # Two PINNED file sets, because "assigns the field" and "hand-types a number"
 # are different questions and only the second is a HARD RULE 5 matter:
 PT_LIT_SITES="port/foh/foh.c port/foh/foh_persist.c port/sim/sim/sim_boot.c port/sim/target/target_play.c"
-PT_ASSIGN_SITES="port/foh/foh.c port/foh/foh_app.c port/foh/foh_persist.c port/sim/calib/replay_hitdet.c port/sim/calib/replay_physics.c port/sim/hit_detection.c port/sim/sim/sim_boot.c port/sim/target/target_play.c"
+PT_ASSIGN_SITES="port/foh/foh.c port/foh/foh_app.c port/foh/foh_persist.c port/foh/foh_persist_witness.c port/sim/calib/replay_hitdet.c port/sim/calib/replay_physics.c port/sim/hit_detection.c port/sim/sim/sim_boot.c port/sim/target/target_play.c"
+# A THIRD category, because a WITNESS hand-types this field for the opposite
+# reason a product TU does: its whole job is to move every persisted field OFF
+# its default so that a table row which silently dropped one would still
+# round-trip (foh_persist_witness.c's `seed`). Judging it by PT_LIT_SITES'
+# rule would demand it equal upstream's authored value, which is exactly what
+# it must NOT be.
+#
+# FOUND HERE, ticket #26, and it had been red since ticket #22: that ticket
+# added `p->phantomThreshold = 0.02;` to the witness and did not run this
+# check, so the whole-tree sweep above had been failing on the lane ever
+# since. Recorded rather than quietly folded in.
+#
+# The category cannot be used to park a product file: a seed site's NAME must
+# end in `_witness.c` (asserted below, so the pin cannot be widened by adding
+# a TU that ships), and its value must DIFFER from upstream's — a seed that
+# drifted onto the default would be a dead seed and is reported as one.
+PT_SEED_SITES="port/foh/foh_persist_witness.c"
 # Whole-tree sweep with NO constraint on the right-hand side: every file that
 # assigns phantomThreshold at all must be pinned. A new site cannot hide behind
 # an unusual spelling of the number, because the spelling is not consulted.
@@ -649,6 +684,22 @@ for f in $PT_ASSIGN_SITES; do
     # hand-typed literal. Anything else (an identifier, a field read, a call)
     # is a propagation and is not a HARD RULE 5 site.
     printf '%s' "$pt_rhs" | grep -qE '^[[:space:]]*[-+(]*[[:space:]]*[0-9.][0-9.eE+-]*[[:space:]]*[)]*[[:space:]]*$' || continue
+    case " $PT_SEED_SITES " in
+      *" $f "*)
+        case "$f" in
+          *_witness.c) ;;
+          *) fail "phantomThreshold instrument — $f is pinned as a SEED site
+   but is not a witness TU; the seed category exists for files that exist to
+   move a field off its default, and a shipping TU must be judged by the
+   HARD RULE 5 rule instead" ;;
+        esac
+        awk -v a="$(printf '%s' "$pt_rhs" | tr -d '() ')" -v b="$pt_up" \
+          'BEGIN { exit !(a ~ /[0-9]/ && (a + 0) != (b + 0)) }' \
+          || fail "phantomThreshold instrument — $f:$pt_ln seeds '$pt_rhs',
+   which is upstream's own authored $pt_up: a seed equal to the default is a
+   DEAD SEED, and a table row that dropped this field would still round-trip"
+        continue ;;
+    esac
     pt_found=$((pt_found + 1))
     case " $PT_LIT_SITES " in
       *" $f "*) ;;
@@ -671,7 +722,7 @@ done
 # is ever wanted, it must be added together with the check that judges it.
 pt_mac="$( { grep -rnE '^[[:space:]]*#[[:space:]]*define[[:space:]]+[A-Za-z_]*([Pp][Hh][Aa][Nn][Tt][Oo][Mm])[A-Za-z_]*' port/ --include='*.c' --include='*.h' 2>/dev/null || true; } | { grep -v '/build/' || true; } | wc -l | tr -d ' ')"
 [ "$pt_mac" = 0 ] || fail "phantomThreshold instrument — a phantom* macro is now defined ($pt_mac site(s)); a named constant reads as a propagation to the classifier above, so extend this instrument to judge the macro's value in the SAME change"
-echo "    [1p] OK: every file assigning phantomThreshold is pinned (${pt_want% }); all 4 hand-typed literals == upstream settings.js's authored $pt_up numerically; no fifth hand-typed site, no phantom* macro"
+echo "    [1p] OK: every file assigning phantomThreshold is pinned (${pt_want% }); all 4 hand-typed literals == upstream settings.js's authored $pt_up numerically; the witness seed is deliberately != $pt_up; no fifth hand-typed site, no phantom* macro"
 
 # --- [2] build ----------------------------------------------------------------
 echo "=== [2] build foh_app"
@@ -2184,7 +2235,7 @@ echo "    [5b] OK: gfx_target_banner_text renders COMPLETE! + FAILURE (both non-
 # against the perturbed copy. (-Iport/gfx lets the build-dir copy resolve
 # its "gfx.h"/"../foh/foh.h" quoted includes.)
 cp "$GFX/gfx_target.c" "$B/gt-banner-tooth.c"
-sed -i.bak 's/"COMPLETE!"/"COMPLETE?"/' "$B/gt-banner-tooth.c"; rm -f "$B/gt-banner-tooth.c.bak"
+perturb "$B/gt-banner-tooth.c" 's/"COMPLETE!"/"COMPLETE?"/'
 grep -q '"COMPLETE?"' "$B/gt-banner-tooth.c" || fail "banner tooth — the missing-glyph perturb did not take"
 cc -O2 "${CFLAGS_COMMON[@]}" -Iport/gfx -c "$B/gt-banner-tooth.c" -o "$B/gt-banner-tooth.o"
 cc -O2 -Wl,-dead_strip -o "$B/foh_banner_witness_tooth" \

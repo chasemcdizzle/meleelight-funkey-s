@@ -342,8 +342,20 @@ int main(int argc, char **argv) {
     if (!tbuf) sim_fatal("oom (timing buffer)");
   }
 
+  // SNAPSHOT SEAM (sim.h; ticket #28). NULL unless sim_snapshot.c is linked,
+  // so check-sim.sh's frozen build starts at frame 0 exactly as it always
+  // did. When a snapshot IS restored, the hook returns the number of frames
+  // the restored state has already simulated and the loop resumes at the
+  // next one — the trace index, the RNG counters and the AI-bridge cursor
+  // all ride in the restored state, so nothing else here changes.
+  // (--timing with a restore would leave the skipped entries unwritten;
+  // the two are never combined, and the restore path is judged on its
+  // checksum stream, not on wall clock.)
+  long f0 = 0;
+  if (ml_sim_snap_boot) f0 = ml_sim_snap_boot(&G);
+
   char hex[65];
-  for (long f = 0; f < frames; f++) {
+  for (long f = f0; f < frames; f++) {
     // pagelib.js:93-96 — held-last past trace end
     const long idx = f < g_trace_len - 1 ? f : g_trace_len - 1;
     const TraceRow *row = &g_trace[idx];
@@ -355,6 +367,9 @@ int main(int argc, char **argv) {
     sim_frame_hash(&G, hex);
     if (tbuf) tbuf[f] = now_ns() - t0; // sim-only: the print below is excluded
     printf("F %ld %s\n", f + 1, hex);
+    // The frame boundary oracle/CHECKSUM.md §5 defines: tick, then hash,
+    // then this. NULL in the frozen M2-gate build.
+    if (ml_sim_snap_frame) ml_sim_snap_frame(&G, f + 1);
     if (dumpFrames) {
       // diagnostic envelope dump (stderr — stdout is wrap-run's contract)
       char tok[24];

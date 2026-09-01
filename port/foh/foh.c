@@ -29,13 +29,11 @@
 // unavailable notice instead. foh_tbuild.h explains why it is a pointer.
 const FohTbuildOps *foh_tbuild_ops = 0;
 
-static const int kMenuCount[FOH_SCREEN_COUNT] = {
-    // menuCount = [4, 4, 4, 2] (menu.js:31), indexed here by screen
-    [FOH_MENU_TOP] = 4,
-    [FOH_MENU_OPTIONS] = 4,
-    [FOH_MENU_BATTLE] = 4,
-    [FOH_MENU_CONTROLS] = 2,
-};
+// menuCount = [4, 4, 4, 2] (menu.js:31) MOVED to foh.h as foh_menu_count()
+// (ticket #27). It was a table here, a second copy in foh_render.c's range
+// guard, and ticket #27 needed a third reader in foh_persist.c, which cannot
+// link this TU — so it is one inline function all three ask. Nothing about
+// the values changed.
 
 // --- A7: the credits (upstream menus/credits.js; MENU-SPEC §8) -------------
 //
@@ -266,28 +264,28 @@ void foh_init(FohState *s) {
   // channel, not decoration.
   // A44: ports 2/3 join ports 1's N/A rather than being pinned there — the
   // difference is that the type box can now walk them to HMN (D40).
-  for (int k = 0; k < FOH_CSS_PORTS; k++) s->portType[k] = -1;
-  s->portType[0] = 0;
-  // cpuDifficulty = [3,3,3,3] (main.js:109). A49 made this four wide because
-  // every port can now be CPU; upstream's own literal was always four long.
-  for (int k = 0; k < FOH_CSS_PORTS; k++) s->cpuDifficulty[k] = 3;
+  //
+  // EVERY COLD VALUE ON THIS SCREEN NOW COMES FROM foh.h's CSS COLD-START
+  // PLANE (ticket #25) rather than from a literal here. foh_persist_defaults()
+  // is the second reader: the CSS machine plane is persisted now, so a fresh
+  // install's record must reproduce THIS state exactly, and two copies of
+  // these formulas in two TUs is the drift CONTEXT.md names as this project's
+  // costliest defect class. The provenance citations moved with them.
+  for (int k = 0; k < FOH_CSS_PORTS; k++) s->portType[k] = foh_css_type_home(k);
+  // A49 made this four wide because every port can now be CPU; upstream's own
+  // literal was always four long.
+  for (int k = 0; k < FOH_CSS_PORTS; k++) {
+    s->cpuDifficulty[k] = FOH_CSS_DIFF_HOME;
+  }
   s->cssCarry = -1;    // whichTokenGrabbed (css.js:68)
   s->cssCpuCarry = -1; // whichCpuGrabbed (css.js:75)
-  // cpuSlider[k] init, css.js:72: x = 152+15+166+225k-50 = 283+225k on a rail
-  // running [167+225k, 333+225k], i.e. 116/166 = 0.6988 of the way along —
-  // NOT the level-3 stop at 2/3, though it reads back as level 3
-  // (round(0.6988*3)+1 == 3). Carried as the same fraction of our rail.
   // FOH_CSS_PORTS, not 2: `cpuSlider` is a four-element literal upstream
   // (css.js:72) and A49 gave ports 2/3 a CPU type to draw a knob for.
   for (int k = 0; k < FOH_CSS_PORTS; k++) {
-    s->cssSliderX[k] = (double)(foh_css_panel_x(k) + FOH_CSS_RAIL_X0) +
-                       (116.0 / 166.0) * (double)FOH_CSS_RAIL_LEN;
+    s->cssSliderX[k] = foh_css_slider_home(k);
   }
-  // handPos[0] = (140,700) on upstream's 1200x750 canvas (css.js:64) — the
-  // same fraction of this screen. Module scope upstream: set ONCE here and
-  // never re-initialised on CSS entry (MENU-SPEC §2.2 property 4).
-  s->cssHandX = 140.0 * RAST_W / 1200.0;
-  s->cssHandY = 700.0 * RAST_H / 750.0;
+  s->cssHandX = FOH_CSS_HAND_HOME_X;
+  s->cssHandY = FOH_CSS_HAND_HOME_Y;
   // The TSS hand (D29) is re-homed on every entry to that screen, so this is
   // only the cold value — but memset's (0,0) would leave a boot-time state
   // whose hand hovers nothing while tssCursor reads 0, and nothing in the FOH
@@ -317,11 +315,24 @@ void foh_init(FohState *s) {
   // entry, because upstream's absolute map re-centres it whenever the stick
   // is neutral and losing that would be a behaviour change D12 never asked
   // for.
-  s->credX = RAST_W / 2.0;
-  s->credY = RAST_H / 2.0;
+  //
+  // TICKET #27 MADE THIS LINE LOAD-BEARING BEYOND THE COLD BOOT. Credits now
+  // resumes into itself, and a resume never runs the entering transition —
+  // so THIS is what places the reticle on a resumed credits screen. It is
+  // the same macro the entry writes (foh.h's FOH_CRED_HOME_X/Y), which is
+  // what makes "the resume arrives where an entry would" true by
+  // construction instead of by two copies of a literal agreeing.
+  s->credX = FOH_CRED_HOME_X;
+  s->credY = FOH_CRED_HOME_Y;
   // targetRecords fresh state is -1, NOT 0 (targetplay.js:40) — 0 would
   // read as a valid 0-second record (task 13).
+  // BOTH halves (D59). foh_state_record reads 0.0 as a valid ZERO-SECOND
+  // record, so leaving the custom plane memset-zero here would make a fresh
+  // FohState claim a perfect time on every custom slot. The product masks it
+  // via foh_persist_apply, which is exactly why it went unnoticed — this is
+  // the PUBLIC initialiser and it has to be right on its own.
   for (int c = 0; c < 5; c++) {
+    for (int t = 0; t < 10; t++) s->targetRecordsCustom[c][t] = -1.0;
     for (int t = 0; t < 10; t++) s->targetRecords[c][t] = -1.0;
   }
   // LOOK plane (A1 restyle Phase 0; foh.h). menuColours / menuCurColour
@@ -409,7 +420,7 @@ static int clampi(int v, int lo, int hi) {
 static void step_menu(FohState *s, const PlatformInput *in,
                       const PlatformInput *pv) {
   const FohScreen sc = s->screen;
-  const int count = kMenuCount[sc];
+  const int count = foh_menu_count(sc);
   const bool aE = in->a && !pv->a;
   const bool bE = in->b && !pv->b;
   const bool uE = in->up && !pv->up;
@@ -447,6 +458,25 @@ static void step_menu(FohState *s, const PlatformInput *in,
           // opens hovering tstage 0 exactly as `tssCursor = 0` opened it.
           s->tssHandX = FOH_TSS_HOME_X;
           s->tssHandY = FOH_TSS_HOME_Y;
+          // ...and RE-READ THE CARD (ticket #26). `tssPage` is persisted
+          // now, so this entry can land on the CUSTOM grid, and the cache
+          // behind that grid describes ten files on an SD card the player
+          // may have edited on a PC since the last visit. Before this line
+          // the only refresh was the page-flip arm in step_tss — which is
+          // exactly the arrival a restored page SKIPS, so every custom slot
+          // would have drawn dead with no reason under it.
+          //
+          // Same re-derivation the RESUME HOOK performs
+          // (FOH_RESUME_HOOK_TSS_SLOTS, foh_persist.h): entry and resume are
+          // the two ways to arrive here without flipping, and they call the
+          // same function rather than growing a second answer.
+          //
+          // It is I/O in a file whose header promises none, and that promise
+          // was already qualified — the page-flip arm has opened these ten
+          // files since A45 T3. The seam is foh_tbuild_ops (NULL when the
+          // builder TU is unlinked, where this becomes a memset), and it
+          // fires on entry and flip only, never per frame.
+          foh_tss_refresh_slots(s);
           snd_push(s, "menuForward"); // menu.js:70
           ev_trans(s, sc, FOH_TSS, "a"); // changeGamemode(7), menu.js:84
         } else if (s->menuSelected == 2) {
@@ -556,8 +586,10 @@ static void step_menu(FohState *s, const PlatformInput *in,
           // Upstream's absolute map parks it dead centre whenever the stick
           // is neutral (credits.js:169-173), and that is the observable
           // being preserved. The tssHandX re-home above is the precedent.
-          s->credX = RAST_W / 2.0;
-          s->credY = RAST_H / 2.0;
+          // Ticket #27: the SAME macro foh_init writes, so a resumed credits
+          // screen (which skips this transition) is placed identically.
+          s->credX = FOH_CRED_HOME_X;
+          s->credY = FOH_CRED_HOME_Y;
           ev_trans(s, sc, FOH_CREDITS, "a"); // changeGamemode(13), :147
         }
         break;
@@ -750,8 +782,17 @@ static int css_level_at(int k, double x) {
 // the cell, y strictly inside FOH_CSS_CELL_Y + FOH_CSS_CELL_H), and every cell
 // shares the same y, so folding them into one point-in-rect sweep is an
 // identity — proven bit for bit by check-hand.sh's differential, not asserted.
-void foh_css_cells(FohHandRect out[5]) {
-  for (int c = 0; c < 5; c++) {
+void foh_css_cells(FohHandRect out[FOH_CSS_CHARS]) {
+  // Adding a character means moving FOH_CSS_CHARS, and every walker of the
+  // roster — this table and its two hit tests — moves with it because they
+  // all read the constant.
+  //
+  // The parameter's `[FOH_CSS_CHARS]` is DOCUMENTATION, not enforcement: C
+  // adjusts an array parameter to a pointer, so a caller passing `cells[5]`
+  // still compiles. Said plainly because the comment here used to claim the
+  // build would catch it, which is the kind of false comment that costs a
+  // later reader an hour.
+  for (int c = 0; c < FOH_CSS_CHARS; c++) {
     out[c].x = foh_css_cell_x(c);
     out[c].y = FOH_CSS_CELL_Y;
     out[c].w = FOH_CSS_CELL_W;
@@ -951,9 +992,9 @@ static void step_css(FohState *s, const PlatformInput *in,
       s->cssHandType = 2; // css.js:217
       const int k = s->cssCarry;
       {
-        FohHandRect cells[5];
+        FohHandRect cells[FOH_CSS_CHARS];
         foh_css_cells(cells);
-        const int c = foh_hand_hit(cells, 5, s->cssHandX, s->cssHandY);
+        const int c = foh_hand_hit(cells, FOH_CSS_CHARS, s->cssHandX, s->cssHandY);
         if (c >= 0) {
           int *ch = css_char_of(s, k);
           if (*ch != c) {
@@ -1204,6 +1245,20 @@ static void step_css(FohState *s, const PlatformInput *in,
     // REPLAY a CPU golden, not what makes the AI run. The real ground was
     // VERIFICATION COVERAGE, which is a scope call the owner owns and has now
     // made. Refusing here again would be re-deciding it.
+    //
+    // TICKET #25 (owner ruling 2026-08-27) WIDENED THAT CONSEQUENCE, and it
+    // is restated here rather than left for the reader to infer, because
+    // this guard is where a reader arrives asking "how does the machine end
+    // up in that configuration?" — and the answer changed:
+    //
+    //   *** THE PORT TYPES AND CPU LEVELS ARE NOW PERSISTED TO SD. So the
+    //   *** unverified configuration above is no longer only something a
+    //   *** player assembles during a session. It can be the state the
+    //   *** device BOOTS INTO: close the lid on a 3-or-4-port CPU match's
+    //   *** character select and the next power-on comes back to it, armed,
+    //   *** possibly reading READY TO FIGHT before anything is touched.
+    //   *** The ruling was made knowing that; foh_persist.h's CSS machine
+    //   *** plane carries the full statement and the reasons it overrode.
     {
       int participants = 0;
       for (int j = 0; j < FOH_CSS_PORTS; j++) {
@@ -1302,7 +1357,7 @@ static void step_sss(FohState *s, const PlatformInput *in,
 void foh_tss_refresh_slots(FohState *s) {
   for (int i = 0; i < FOH_TB_SLOT_CACHE; i++) {
     s->tssSlotPresent[i] = false;
-    s->tssSlotReason[i] = "unavailable in this build";
+    s->tssSlotReason[i] = "UNAVAILABLE IN THIS BUILD";
   }
   if (foh_tbuild_ops) {
     foh_tbuild_ops->slots(s->tssSlotPresent, s->tssSlotReason);
@@ -1416,8 +1471,13 @@ static void step_tss(FohState *s, const PlatformInput *in,
 
 // menuVOptions / menuHOptions (gameplaymenu.js:11-12). BOTH are MAX
 // INDICES, not counts: five rows, and only the last one has columns.
-#define FOH_OPT_ROWMAX 4
-static const int kOptColMax[FOH_OPT_ROWMAX + 1] = {0, 0, 0, 0, 3};
+// The COUNTS are foh.h's FOH_OPT_ROWS / FOH_OPT_COLS since ticket #27 (the
+// persist table needs them as column bounds and cannot link this TU), so
+// they are derived here rather than restated — one fact, two spellings of
+// it, and the -1 says which spelling this one is.
+#define FOH_OPT_ROWMAX (FOH_OPT_ROWS - 1)
+static const int kOptColMax[FOH_OPT_ROWMAX + 1] = {0, 0, 0, 0,
+                                                   FOH_OPT_COLS - 1};
 
 static void step_opt_gameplay(FohState *s, const PlatformInput *in,
                               const PlatformInput *pv) {

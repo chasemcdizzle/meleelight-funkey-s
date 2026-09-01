@@ -60,7 +60,16 @@ const char *ctl_style_name(int style) {
   case CTL_STYLE_NATURAL: return "Natural";
   case CTL_STYLE_NORMAL: return "Classic";
   case CTL_STYLE_BOX: return "Box";
-  default: return "?";
+  // "-", NOT "?" — the same correction foh_render.c:2788 already made for the
+  // target builder's NULL arm, and found here by port/foh/face-lint.js
+  // (ticket #24) walking this switch's out-of-domain arm. foh_render.c:2121
+  // draws this string through FACE 1, and face 1 carries no '?' at all
+  // (foh_font.c's note says why that hole must stay), so what this arm used
+  // to return was a check-build gfx_fatal and a placeholder box for the
+  // player. The arm is unreachable today — ctl_style_set refuses an
+  // out-of-domain value, so ctl_style_get can only hand back a validated one
+  // — and this keeps it harmless if it ever becomes reachable.
+  default: return "-";
   }
 }
 

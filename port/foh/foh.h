@@ -450,16 +450,57 @@ static inline int foh_css_panel_x(int k) {
   return FOH_CSS_PANEL_X0 + FOH_CSS_PANEL_PITCH * k;
 }
 
+// --- THE CSS COLD-START PLANE (ticket #25) ----------------------------------
+// The values foh_init gives this screen on a machine that has never run.
+//
+// THEY ARE HERE, AND NOT INLINE IN foh_init, BECAUSE THEY NOW HAVE A SECOND
+// READER. Ticket #25 persists the CSS machine plane, so
+// foh_persist_defaults() must produce EXACTLY what foh_init produces — a
+// fresh install has to boot the screen it has always booted. Two copies of
+// `140.0 * RAST_W / 1200.0` in two TUs is CONTEXT.md's costliest defect
+// class ("one thing having two representations that drifted apart") with a
+// silent failure mode: the drift would show up as a cursor that starts
+// somewhere else after the first save, months later, in a bug report.
+// So there is ONE definition and both callers ask it — the same shape
+// FOH_TSS_HOME_X/Y already has for the target-select hand.
+//
+// handPos[0] = (140,700) on upstream's 1200x750 canvas (css.js:64), taken
+// as the same FRACTION of this screen. Module scope upstream: set once at
+// boot and never re-initialised on CSS entry (MENU-SPEC §2.2 property 4).
+#define FOH_CSS_HAND_HOME_X (140.0 * RAST_W / 1200.0)
+#define FOH_CSS_HAND_HOME_Y (700.0 * RAST_H / 750.0)
+// cpuDifficulty = [3,3,3,3] (main.js:109).
+#define FOH_CSS_DIFF_HOME 3
+// playerType = [-1,-1,-1,-1] (main.js:107) with addPlayer arming port 0
+// (main.js:495) — upstream's own fresh state, port by port.
+static inline int foh_css_type_home(int k) { return k == 0 ? 0 : -1; }
+// cpuSlider[k] (css.js:72): x = 152+15+166+225k-50 = 283+225k on a rail
+// running [167+225k, 333+225k], i.e. 116/166 of the way along — NOT the
+// level-3 stop at 2/3, though it reads back as level 3
+// (round(0.6988*3)+1 == 3). Carried as the same fraction of our rail.
+static inline double foh_css_slider_home(int k) {
+  return (double)(foh_css_panel_x(k) + FOH_CSS_RAIL_X0) +
+         (116.0 / 166.0) * (double)FOH_CSS_RAIL_LEN;
+}
+
 // DEVIATION D3 — cursor speed, the one calibration knob in this whole spec —
 // moved to port/foh/foh_hand.h with the cursor itself (A25c), which foh.h
 // includes above, so FOH_CURSOR_SPEED / _VX / _VY still resolve here.
+
+// THE ROSTER SIZE, in one place. The number was a literal `5` at every site
+// that walked the roster — the cell table and its two hit tests. Hygiene
+// today; a prerequisite for anything that CHOOSES a character rather than
+// hit-testing one the hand is already over, because such a chooser walking a
+// stale count either never picks the newest character or names one that does
+// not exist. Adding a character means changing this and the roster art.
+#define FOH_CSS_CHARS 5
 
 // The five roster cells as a hit table, for foh_hand_hit. ONE definition, two
 // callers — foh.c's drop/hover arm and foh_render.c's `hot` flag — which is
 // what D4 asks for and what the CSS previously had in two hand-kept copies
 // (foh.c's `css_cell_at` plus its enclosing y guard, and foh_render.c's
 // `overCells &&` line). The extents are exactly those two tests' extents.
-void foh_css_cells(FohHandRect out[5]);
+void foh_css_cells(FohHandRect out[FOH_CSS_CHARS]);
 
 // --- TSS layout + hit geometry (A25c; same D4 contract as the CSS above) -----
 // The eleven target-select slots. Ten are upstream's own 2-col x 5-row
@@ -629,6 +670,56 @@ typedef struct {
 #define FOH_CTL_ROW_RESET 10
 #define FOH_CTL_ROWS 11
 
+// --- THE CURSOR DOMAINS (ticket #27) ----------------------------------------
+//
+// Every one of these numbers already existed; what did not exist was ONE
+// place to read it from. Ticket #27 persists the four remaining screen
+// cursors, so foh_persist.c's field table needs each cursor's domain as its
+// column bound — and foh_persist.c may not link foh.c (foh_persist.h's
+// isolation note: check-persist-table.sh builds the persist pair with its
+// witness and NOTHING ELSE OF THE FOH). A header constant costs nothing and
+// keeps the number a single fact; a second copy inside foh_persist.c would
+// be CONTEXT.md's costliest defect class with the quietest failure mode — a
+// persisted cursor whose file column is one short of the screen's last row.
+//
+// gameplaymenu.js:11-12: `menuVOptions = 4` is a MAX INDEX, so FIVE rows,
+// and `menuHOptions = [0,0,0,0,3]` gives the tap-jump row four columns.
+#define FOH_OPT_ROWS 5
+#define FOH_OPT_COLS 4
+// audiomenu.js:96-99 wraps between exactly two rows (sounds, music).
+#define FOH_AUDIO_ROWS 2
+// stageselect: 0..5 are the oracle stage ids, 6 is the RANDOM slot this port
+// refuses (the seeded-stream exclusion argued at FohState.sssCursor).
+#define FOH_SSS_SLOTS 7
+
+// THE MENU CURSOR'S DOMAIN, PER MENU SCREEN — upstream's `menuCount`
+// (menu.js:31 `[4, 4, 4, 2]`), indexed by screen rather than by menuMode.
+//
+// It is a function, and it is in this header, because the number had grown
+// THREE representations and ticket #27 was about to add a fourth: foh.c's
+// `kMenuCount[]` drove the cursor wrap, foh_render.c carried it a second
+// time as `mm == 3 ? 2 : 4` for its range guard, and the persist table now
+// needs it to judge a RESTORED cursor. Those three may not disagree:
+// foh_render.c gfx_fatals on a cursor outside the mode it is drawing (its
+// own note: "foh.c keeps the cursor in range; make that loud, not lucky"),
+// so a count that drifted low on any one side is a boot crash.
+//
+// 0 means "not a menu screen". That is a stated answer, not a silence: the
+// persist table's cross-row rule reads it as "this row does not constrain
+// that one", and the render guard never asks about a non-menu screen.
+static inline int foh_menu_count(FohScreen sc) {
+  switch (sc) {
+    case FOH_MENU_TOP: return 4;
+    case FOH_MENU_OPTIONS: return 4;
+    case FOH_MENU_BATTLE: return 4;
+    case FOH_MENU_CONTROLS: return 2;
+    default: return 0;
+  }
+}
+// The widest of the four — the `menusel` row's own one-digit column bound.
+// The NARROWER menus are exactly what the cross-row rule exists for.
+#define FOH_MENU_ROWS_MAX 4
+
 // --- CREDITS (upstream menus/credits.js, 422 lines; MENU-SPEC §8; A7) ------
 //
 // WHAT THE SCREEN IS. Not a roll — a Star Fox shooting gallery. Fourteen
@@ -665,6 +756,23 @@ typedef struct {
 // ever be live. 16 is that bound doubled; foh.c traps on overflow rather than
 // dropping a laser silently.
 #define FOH_CRED_SHOTS 16
+
+// THE RETICLE'S HOME — cPlayerXPos/cPlayerYPos = the canvas centre
+// (credits.js:23-24), in raster pixels because D12 makes the reticle a
+// relative cursor (MENU-SPEC §8.3).
+//
+// IT IS A MACRO FOR THE REASON FOH_CSS_HAND_HOME_X IS ONE, and ticket #27 is
+// what made the reason bite. Credits now RESUMES INTO ITSELF, and it does so
+// with no persisted reticle and no resume hook — because a resume arrives on
+// a freshly initialised FohState and foh_init writes the reticle home there,
+// which is the very value the ENTERING transition (foh.c's menu-options arm)
+// writes. That is the whole argument for the redirect's removal, and until
+// this line it was two independent copies of `RAST_W / 2.0` in one file
+// agreeing by luck: move the entry's placement and the resumed screen would
+// silently keep the other one. ONE definition, both callers ask it, so the
+// argument holds by construction rather than by inspection.
+#define FOH_CRED_HOME_X (RAST_W / 2.0)
+#define FOH_CRED_HOME_Y (RAST_H / 2.0)
 
 // One ScrollingText's authored content (credits.js:41-45,115-132).
 typedef struct {
@@ -773,12 +881,19 @@ typedef struct {
   // drift. WRITE THROUGH `selChar[k]` in new code — a per-port `if (k == 0)
   // ... else ...` chain is how D21 and D35 were both written.
   //
-  // A49/DEVIATION D45: this plane, and ONLY this plane, is PERSISTED to SD
-  // (`MLFKPERSIST6`, foh_persist.h). Upstream cookies no character at all, so
-  // persisting is the deviation; the owner asked for it in as many words
-  // (*"i want to MAKE it persistent ... I want it to be last character"*).
+  // A49/DEVIATION D45: this plane is PERSISTED to SD (foh_persist.h).
+  // Upstream cookies no character at all, so persisting is the deviation;
+  // the owner asked for it in as many words (*"i want to MAKE it persistent
+  // ... I want it to be last character"*).
   // The TOKEN plane below is NOT persisted and must never be: it is re-homed
   // FROM this one at load, which is D21/D35's rule applied to boot.
+  //
+  // "AND ONLY THIS PLANE" USED TO STAND HERE AND NO LONGER DOES. Ticket #25
+  // persists the rest of the CSS machine plane too — port types, CPU levels,
+  // the mode, the hand, what the hand is holding — so the sentence that told
+  // a reader "the character is the only CSS state on the card" would now be
+  // false. The token plane's exclusion is unchanged and is the sentence
+  // above; it is a rule about VIEWS, not a rule about how much is saved.
   union {
     int selChar[FOH_CSS_PORTS]; // 0 marth 1 puff 2 fox 3 falco 4 falcon
     struct {
@@ -814,6 +929,13 @@ typedef struct {
   // CONFORMS`), so a CPU on port 2 or 3 plays. What AIBRIDGE1's single slot
   // actually limits is VERIFICATION, not capability — see the ACCEPTED
   // CONSEQUENCE written at the launch guard in foh.c.
+  //
+  // PERSISTED TO SD as of ticket #25 (OWNER RULING 2026-08-27, option A —
+  // the argument, the reversal and the consequence are written out at
+  // foh_persist.h's `portType` field). Write through `portType[k]`, never
+  // through the union aliases: foh_persist.c's field table addresses this
+  // plane BY OFFSET under ONE of the two names, and a table that named both
+  // would serialise the same sixteen bytes twice.
   union {
     int portType[FOH_CSS_PORTS];
     struct {
@@ -830,7 +952,10 @@ typedef struct {
   // and every frozen LAUNCH line already mean by port 1's level, and two
   // fields kept in sync by hand is CONTEXT.md's costliest defect class.
   // Overlaid storage cannot drift. WRITE THROUGH `cpuDifficulty[k]` in new
-  // code.
+  // code — and now for a second reason: ticket #25 PERSISTS this plane
+  // (`cpudiff` in foh_persist.c's field table), and that table addresses it
+  // by offset under ONE name. A row per union alias would write the same
+  // four ints four times.
   union {
     int cpuDifficulty[FOH_CSS_PORTS];
     struct {
@@ -842,9 +967,23 @@ typedef struct {
   // mode ribbon's `setVersusMode(1 - versusMode)` (css.js:393; A27). It is
   // PAGE state upstream, not match state: startGame never resets it, so it
   // lives here beside the other page-scoped CSS fields, is initialised once
-  // by foh_init's memset (upstream's own `= 0`), survives a match and the
-  // MEX_CSS re-entry, and is NOT persisted to SD — upstream keeps no cookie
-  // for it, so a power cycle is the page reload that clears it.
+  // by foh_init's memset (upstream's own `= 0`), and survives a match and
+  // the MEX_CSS re-entry.
+  //
+  // IT IS PERSISTED TO SD. OWNER RULING 2026-08-27 (ticket #25, option A),
+  // and this comment is a REVERSAL: it used to end "and is NOT persisted to
+  // SD — upstream keeps no cookie for it, so a power cycle is the page
+  // reload that clears it." The owner reported that as a defect in as many
+  // words — an endless KO fest reverts to VS Melee across a lid close — and
+  // ruled that the mode comes back. Upstream's absent cookie is therefore
+  // evidence about UPSTREAM, not a rule about this port: this device has no
+  // page reload, it has a lid, and the two are not the same event. The row
+  // is `vsmode` in foh_persist.c's field table.
+  //
+  // A power cycle no longer clears it, so a machine can boot into ENDLESS
+  // with nothing on screen saying the player chose it in another session.
+  // That is the ruled consequence and it is stated, not softened; the mode
+  // ribbon draws the current mode, which is the whole of the feedback.
   int versusMode;
   // sss
   int sssCursor; // 0..5 == oracle stage ids; 6 = the refusing RANDOM slot
@@ -1080,6 +1219,10 @@ typedef struct {
   // drivers overwrite from the foh_persist chokepoint at boot
   // (foh_persist_apply). The machine only READS it (render_tss).
   double targetRecords[5][10];
+  // D59 — the custom half (tstage 10-19). Same split, same reason, as the
+  // persist struct's; foh_state_record() is the accessor that hides it, and
+  // it is the ONLY thing render_tss may use to read a personal best.
+  double targetRecordsCustom[5][10];
   // launch record (frozen once screen == FOH_MATCH / FOH_TMATCH):
   // targetMode false -> VS launch (stageSel); true -> target launch
   // (tssStage; char == p1Char)
@@ -1124,6 +1267,24 @@ typedef struct {
   const char *snd[FOH_EV_CAP];
   int nsnd;
 } FohState;
+
+// D59 — READ A PERSONAL BEST BY UPSTREAM'S OWN INDEX.
+//
+// `tstage` is the launch index, 0-9 authored and 10-19 custom (D52), which is
+// exactly what upstream's targetRecords[char][targetStagePlaying] takes. The
+// two-array split below the surface is a wire-format constraint and nothing
+// else, so no caller should ever see it: read through here.
+//
+// Out of domain is -1.0 — "no record" — and never a neighbouring row. That is
+// the display half of the bug the owner found: target-select used to index
+// targetRecords by the SLOT (0-9) whatever page it was on, so every custom
+// slot showed the AUTHORED stage's time as though it were the player's.
+static inline double foh_state_record(const FohState *s, int ch, int tstage) {
+  if (s == 0 || ch < 0 || ch >= 5 || tstage < 0) return -1.0;
+  if (tstage < 10) return s->targetRecords[ch][tstage];
+  if (tstage < 20) return s->targetRecordsCustom[ch][tstage - 10];
+  return -1.0;
+}
 
 void foh_init(FohState *s);
 void foh_tick(FohState *s, const PlatformInput *in);
@@ -1208,5 +1369,25 @@ int foh_text_width(const char *s, int scale);
 void foh_text2(Raster *rz, int x, int y, int scale, int italic,
                const char *s, RastCol col);
 int foh_text2_width(const char *s, int scale);
+
+// --- THE FACE DOMAIN (CONTEXT.md; spec #20 / ticket #21) --------------------
+// The set of characters a face can actually draw. It lives in foh_font.c's
+// glyph tables and NOWHERE ELSE — these four are the only way to ask about
+// it, so no caller has to restate a list that then drifts out of step.
+// `face` is 1 (the 5x7 body face) or 2 (the 6x9 display face).
+bool foh_face_has(char c, int face);
+// The first character of `s` the face cannot draw, or 0 when the whole
+// string is drawable. NULL-safe (a null string is drawable: nothing to draw).
+char foh_face_undrawable(const char *s, int face);
+// Writes the face's whole drawable set into `out` as a NUL-terminated string
+// and returns its length; -1 if `cap` cannot hold it. For checks that want to
+// ENUMERATE the domain rather than assert a hand-copied list.
+int foh_face_domain(int face, char *out, int cap);
+// Product builds ONLY (foh_app.c, foh_dev.c): draw a visible placeholder box
+// for a character outside the domain instead of dying. Every check build
+// leaves this alone and keeps the loud gfx_fatal — see foh_font.c's header
+// for why the default is that way round.
+void foh_font_enable_placeholder(void);
+int foh_font_placeholder_enabled(void);
 
 #endif // FOH_FOH_H

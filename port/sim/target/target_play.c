@@ -21,13 +21,15 @@
 //   consumes ZERO seeded draws (drawVfx.js: only circleDust draws).
 #include "target_play.h"
 
+#include <stddef.h>
 #include <string.h>
 
 #include "../../fdlibm/fdlibm.h"
 #include "../ml_events.h"
 #include "../ml_js.h"
 #include "../ml_ser.h"
-#include "ml_targets.h" // TTAB1 (generated; -I pipeline build dir)
+#include "../sim/sim_modstate.h" // #30: the target plane's snapshot seam
+#include "ml_targets.h"          // TTAB1 (generated; -I pipeline build dir)
 
 MlTargets TP; // zero-init: page-boot values (targetplay.js:34-38 lets)
 
@@ -40,6 +42,157 @@ _Static_assert(ML_MAX_TARGETS == 10,
 _Static_assert(sizeof TP.targetDestroyed / sizeof TP.targetDestroyed[0] ==
                    ML_MAX_TARGETS,
                "targetDestroyed[] must hold exactly ML_MAX_TARGETS slots");
+
+// --- TICKET #30: the target plane across a lid close ------------------------
+//
+// WHAT THIS IS. A target run has to survive the machine powering off mid-run
+// and CONTINUE. Ticket #28 gave the sim that ability and ticket #29 wired a VS
+// match to a real lid; neither of them touched THIS struct, and that is the
+// whole reason #30 is a ticket of its own — MlTargets is separate state with
+// its own frozen stream and its own verifier (target_play.h's
+// tp_target_frame_hash / port/goldens-m4/verify-target-stream.js), so a
+// restore that got the sim right and this wrong would pass every assertion
+// #29 wrote.
+//
+// EVERY FIELD IS CLASSIFIED, and the two lists below ARE the classification —
+// not a comment about one. A member that is in neither list does not compile
+// (the assertion under them), which is the guard sim_modstate.h's ledger
+// cannot provide here: `TP` is a file-scope NON-static global, invisible to a
+// derivation that greps `^static`.
+//
+// PERSISTED — the RUN. Nothing rebuilds these; they are what the player did,
+// and losing one is losing the run.
+#define TS_PERSISTED(X)                                                        \
+  /* which targets are broken (targetplay.js:37; destroyTarget :259 sets a
+     slot true). THE field this ticket exists for. */                          \
+  X(targetDestroyed)                                                           \
+  /* how many (:37, :260). Upstream's finishGame compares it to
+     activeStage.target.length by STRICT equality, so it is not derivable
+     from the array above — the double-destroy quirk (target_play.h) can
+     overshoot it. */                                                          \
+  X(targetsDestroyed)                                                          \
+  /* the pending finish EDGE (main.js's let; set on the frame the last target
+     falls, consumed by the NEXT tick's finishGame). A lid close between the
+     two must not swallow it. */                                               \
+  X(endTargetGame)                                                             \
+  /* the run is over (main.js:68; set by finishGame :1422, reset ONLY by
+     endGame :1373). It is carried because it is genuine mutable run state;
+     the FOH additionally REFUSES to arm a resume while it is true, because a
+     finished run has nothing to continue and its record has already been
+     written (port/foh/foh_target_snap.c). */                                  \
+  X(gameEnd)
+
+// DERIVED — the STAGE, and the entry arguments that name it. Every one of
+// these is rebuilt by tp_setup_target_core from the geometry, which runs
+// BEFORE the snapshot is read back (ss_load's precondition). They are
+// therefore REBUILT, NEVER RESTORED: restoring them would at best be
+// redundant, and at worst would let a snapshot's idea of the stage disagree
+// with the one the renderer is drawing off the SD card. What pins them is the
+// pair's header — the BUILD line for an authored stage (whose TTAB1 row is
+// compiled in) and the SRC line for a custom one (port/foh/foh_target_snap.h).
+#define TS_DERIVED(X)                                                          \
+  /* startTargetGame(p, test)'s own argument; the play path passes false and
+     the BUILDER arm is scope-excluded (target_play.h). */                     \
+  X(targetTesting)                                                             \
+  /* the slot playing, always 0 — target mode has one port. */                 \
+  X(targetPlayer)                                                              \
+  /* which stage: the header's TSTAGE line is what the resume sets up FROM,
+     and foh_target_snap.c checks the rebuilt value against it. */             \
+  X(targetStagePlaying)                                                        \
+  /* the target coordinates and their count: the stage's own geometry,
+     TTAB1-decoded or .mlstage-parsed. */                                      \
+  X(target)                                                                    \
+  X(targetCount)                                                               \
+  /* A45 T6: derived in tp_setup_target_core from the MlStageX the sim is
+     about to read, so it cannot disagree with what physics sees. Deriving it
+     again is the only way to keep that true. */                               \
+  X(stageHasDamage)
+
+#define TS_ROW_BYTES(nm) +sizeof(((MlTargets *)0)->nm)
+enum {
+  TS_PERSISTED_BYTES = 0 TS_PERSISTED(TS_ROW_BYTES),
+  TS_DERIVED_BYTES = 0 TS_DERIVED(TS_ROW_BYTES)
+};
+
+// The alignment holes, each written as an EXPRESSION rather than a measured
+// number (sim_snapshot.c's SS_GAP posture, inherited whole) so that the armv7
+// target — where nothing here moves, but the habit is what keeps the guard
+// honest — needs no second copy. Each is asserted against the hole the
+// compiler actually left, so a reordering is told which one moved.
+#define TS_GAP(cur, next)                                                      \
+  (offsetof(MlTargets, next) -                                                 \
+   (offsetof(MlTargets, cur) + sizeof(((MlTargets *)0)->cur)))
+#define TS_TAIL_GAP                                                            \
+  (sizeof(MlTargets) - (offsetof(MlTargets, stageHasDamage) +                  \
+                        sizeof(((MlTargets *)0)->stageHasDamage)))
+
+#define TS_PAD_TESTING (_Alignof(double) - sizeof(((MlTargets *)0)->targetTesting))
+#define TS_PAD_DESTROYED                                                       \
+  (_Alignof(double) -                                                          \
+   (sizeof(((MlTargets *)0)->targetDestroyed) % _Alignof(double)))
+#define TS_PAD_GAMEEND                                                         \
+  (_Alignof(double) - (sizeof(((MlTargets *)0)->endTargetGame) +               \
+                       sizeof(((MlTargets *)0)->gameEnd)))
+#define TS_PAD_TAIL                                                            \
+  (_Alignof(double) - (sizeof(((MlTargets *)0)->targetCount) +                 \
+                       sizeof(((MlTargets *)0)->stageHasDamage)))
+
+_Static_assert(TS_GAP(targetTesting, targetPlayer) == TS_PAD_TESTING,
+               "MlTargets' targetTesting/targetPlayer alignment hole moved");
+_Static_assert(TS_GAP(targetDestroyed, targetsDestroyed) == TS_PAD_DESTROYED,
+               "MlTargets' targetDestroyed/targetsDestroyed hole moved");
+_Static_assert(TS_GAP(gameEnd, target) == TS_PAD_GAMEEND,
+               "MlTargets' gameEnd/target alignment hole moved");
+_Static_assert(TS_TAIL_GAP == TS_PAD_TAIL,
+               "MlTargets' trailing alignment hole moved");
+
+// THE GUARD THE TWO LISTS ARE FOR. Add a member to MlTargets and this stops
+// holding, so the author must say — in the list, on the line, with the reason
+// — whether a resume CARRIES it or REBUILDS it. sim_snapshot.c makes the same
+// statement about GameState; this is the one struct that assertion cannot
+// reach, because MlTargets is not in GameState and TP is not a static.
+_Static_assert(sizeof(MlTargets) == TS_PERSISTED_BYTES + TS_DERIVED_BYTES +
+                                        TS_PAD_TESTING + TS_PAD_DESTROYED +
+                                        TS_PAD_GAMEEND + TS_PAD_TAIL,
+               "MlTargets changed size. The TARGET-PLANE SNAPSHOT LISTS: add "
+               "the new member to TS_PERSISTED (a resume must carry it) or to "
+               "TS_DERIVED (tp_setup_target_core rebuilds it from the stage), "
+               "with the reason on the line. Ticket #30.");
+
+// The wire is the persisted members' raw bytes in list order. That is THIS
+// BUILD'S representation and no other's, exactly as the MLSIM1 payload is,
+// and it is what ss_build_identity's payload total pins.
+static size_t ts_snap_bytes(void) { return (size_t)TS_PERSISTED_BYTES; }
+
+#define TS_PUT(nm)                                                             \
+  memcpy((char *)dst + at, &TP.nm, sizeof TP.nm);                              \
+  at += sizeof TP.nm;
+static void ts_snap_save(void *dst) {
+  size_t at = 0;
+  TS_PERSISTED(TS_PUT)
+  (void)at;
+}
+#undef TS_PUT
+
+#define TS_GET(nm)                                                             \
+  memcpy(&TP.nm, (const char *)src + at, sizeof TP.nm);                        \
+  at += sizeof TP.nm;
+static void ts_snap_load(const void *src) {
+  size_t at = 0;
+  TS_PERSISTED(TS_GET)
+  (void)at;
+}
+#undef TS_GET
+
+// Installed the way every optional sim seam in this tree is installed
+// (ml_sim_runai_live, tp_custom_setup, sim_snapshot.c's own hooks): a
+// constructor, so a build that does not link this TU leaves the pointers NULL
+// and the snapshot row zero bytes wide.
+__attribute__((constructor)) static void ts_snap_install(void) {
+  ml_targets_snap_bytes = ts_snap_bytes;
+  ml_targets_snap_save = ts_snap_save;
+  ml_targets_snap_load = ts_snap_load;
+}
 
 // --- slot deref (P()/slot() are hit_detection.c statics; same semantics) -----
 

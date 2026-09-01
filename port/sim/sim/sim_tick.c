@@ -37,6 +37,7 @@
 #include <string.h>
 
 #include "sim.h"
+#include "sim_modstate.h" // ticket #29: the live-AI snapshot seam
 #include "../characters/shared/moves.h"
 #include "../characters/fox/moves.h"
 #include "../characters/falco/moves.h"
@@ -63,6 +64,37 @@ void (*ml_sim_ai_cov_dump)(void) = 0;
 // out-of-domain trap on the NULL arm, so every trace-, flow- and golden-fed
 // run behaves exactly as before.
 void (*ml_sim_finish_hook)(void) = 0;
+
+// snapshot pointer seam (sim.h; ticket #28): NULL unless sim_snapshot.c is
+// linked — its constructor installs the real hooks. The frozen M2-gate build
+// never links it, so both stay NULL and sim_main.c's frame loop is the loop
+// it always was.
+long (*ml_sim_snap_boot)(GameState *g) = 0;
+void (*ml_sim_snap_frame)(GameState *g, long frame) = 0;
+
+// live-AI SNAPSHOT seam (sim_modstate.h; ticket #29): NULL unless
+// sim_ai_live.c is linked, and defined HERE for the same reason the two
+// pointers above are — sim_snapshot.c is built by rigs that never link ai.c,
+// so it cannot name a symbol that TU owns, while sim_tick.c is on every list.
+// NULL is not "skip the row": it is a row of ZERO bytes, which changes the
+// payload total and therefore the build identity, so a snapshot written by a
+// build WITH the live AI is refused by name by a build without it.
+size_t (*ml_ai_live_snap_bytes)(void) = 0;
+void (*ml_ai_live_snap_save)(void *dst) = 0;
+void (*ml_ai_live_snap_load)(const void *src) = 0;
+
+// TARGET-PLANE SNAPSHOT seam (sim_modstate.h; ticket #30): NULL unless
+// port/sim/target/target_play.c is linked, and defined HERE for exactly the
+// reason the live-AI trio above is — sim_snapshot.c is built by rigs that
+// never link the target plane (check-sim-snapshot.sh derives its TU list from
+// the M2 gate, which has no target TU), so it cannot name a target_play.c
+// symbol, while sim_tick.c is on every list there is. NULL is a row of ZERO
+// bytes, so a VS-only build and a build that can play target stages have
+// different payload totals and therefore different build identities: neither
+// can load the other's snapshot by accident.
+size_t (*ml_targets_snap_bytes)(void) = 0;
+void (*ml_targets_snap_save)(void *dst) = 0;
+void (*ml_targets_snap_load)(const void *src) = 0;
 
 void mv_out_of_domain(const char *what) { sim_fatal(what); }
 void ml_phys_out_of_domain(const char *what) { sim_fatal(what); }
@@ -189,6 +221,13 @@ double mv_howl_play_id(const char *name) {
   (void)name;
   return ++g_howl_counter;
 }
+
+// ticket #28: this counter is MODULE state that a snapshot has to carry —
+// the ids it mints are stored in players (marth's shieldBreakerID) and read
+// back by `.stop(id)`, so a resumed match that restarted it would re-issue
+// an id a live voice already holds. Declared in sim_modstate.h.
+double sim_tick_howl_counter_get(void) { return g_howl_counter; }
+void sim_tick_howl_counter_set(double v) { g_howl_counter = v; }
 
 // --- the moving-platforms bridge (task 14 -> the live plane) --------------------
 
