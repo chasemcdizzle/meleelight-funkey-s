@@ -725,6 +725,7 @@ refuse otherbuild r_build_sealed   "target snapshot is from a different build"
 refuse nosim   r_nosim         "no such snapshot file" fresh
 refuse framed  r_frame_sealed  "target header and snapshot disagree about the frame" fresh
 
+
 # THE REFUSAL ONLY THIS SCREEN HAS. A custom target stage is played from a file
 # on the SD card, and the card can be edited on a PC while the machine is off.
 # Both cases land the player on TARGET SELECT rather than inside a run: a

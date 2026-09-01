@@ -405,23 +405,61 @@ static bool ts_restore(GameState *g, const FohTmatchHdr *want,
   if (!ts_path(simPath, sizeof simPath, FOH_TMATCH_SNAP_FILE)) {
     TS_REFUSE("persist path too long");
   }
+  // A REFUSAL MUST LEAVE THE FRESH RUN INTACT. Raised in code review, and
+  // NOT DEMONSTRATED REACHABLE: an attempt to make it bite — refusing after
+  // ss_load vs before it, same card, comparing the played streams — produced
+  // BYTE-IDENTICAL runs with this rollback deleted, so something downstream
+  // re-establishes the state and the player is not currently reaching a
+  // clobbered run. That attempt was removed rather than committed, because a
+  // check that passes with the fix deleted proves nothing.
+  //
+  // The rollback is kept anyway, as a cheap invariant rather than as a fix
+  // for a live bug: what it costs is one struct copy on a path that runs at
+  // most once per boot, and what it buys is that the function's contract —
+  // "false means nothing was changed" — is true by construction instead of by
+  // a downstream accident nobody wrote down. If that accident is ever
+  // refactored away, this is what stops it becoming a defect.
+  //
+  // The original reasoning follows, and it is still why the shape is wrong
+  // without this: `ss_load` overwrites the WHOLE GameState and the target
+  // module's own rows, and the pair-agreement checks below run AFTER it — so a
+  // header that disagreed with its snapshot returned false with `g` and `TP`
+  // already carrying the loaded state. The caller (foh_dev.c) then does what
+  // its comment says it does: plays "the legal, freshly started run sitting in
+  // G and TP". It was neither legal nor fresh; it was half of somebody else's
+  // run, and the player would have been dropped into it.
+  //
+  // There is no peek in the snapshot API to validate ahead of the load, so the
+  // load is made UNDOABLE instead: both planes are copied first and put back
+  // on any refusal below. GameState is ~160 KB, which is why the scratch is
+  // static — this is a boot-time path that runs at most once, never a loop.
+  static GameState ssBefore;
+  MlTargets tpBefore;
+  ssBefore = *g;
+  tpBefore = TP;
+#define TS_REFUSE_LOADED(m)                                                    \
+  do {                                                                         \
+    *g = ssBefore;                                                             \
+    TP = tpBefore;                                                             \
+    ts_disarm();                                                               \
+    TS_REFUSE(m);                                                              \
+  } while (0)
   const char *ssWhy = 0;
   if (!ss_load(g, simPath, &ssWhy)) {
     // The half-torn pair (header present, snapshot gone or corrupt) lands here
-    // and is refused BY THE SNAPSHOT'S OWN RULE NAME.
-    ts_disarm();
-    TS_REFUSE(ssWhy ? ssWhy : "snapshot load failed");
+    // and is refused BY THE SNAPSHOT'S OWN RULE NAME. ss_load is not
+    // documented to leave `g` untouched when it fails part way, so this rolls
+    // back too rather than assuming.
+    TS_REFUSE_LOADED(ssWhy ? ssWhy : "snapshot load failed");
   }
   // ...and the pair has to agree. A header that survived from an earlier
   // hibernate beside a newer snapshot would set the run up wrong and then load
   // a state that does not belong to it.
   if (g->frame != want->frame) {
-    ts_disarm();
-    TS_REFUSE("target header and snapshot disagree about the frame");
+    TS_REFUSE_LOADED("target header and snapshot disagree about the frame");
   }
   if ((int)g->sim.characterSelections[0] != want->charId) {
-    ts_disarm();
-    TS_REFUSE("target header and snapshot disagree about the character");
+    TS_REFUSE_LOADED("target header and snapshot disagree about the character");
   }
   // CONSUMED. A resumed run must not be resumable a second time: the player is
   // playing it now, and a crash an hour later must not hand back the state he
