@@ -67,17 +67,25 @@ bash port/foh/check-foh-flows.sh        # menu flows, frozen transition traces
 
 ## Building
 
-Requires Docker (for the FunKey SDK and the pinned Node 8 toolchain), Node, and
-a checkout of upstream meleelight.
+**[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) is the from-scratch guide** — it
+assumes you have never seen this project and do not own the handheld, and
+covers what to install, how to build the oracle, how to get a shell on the
+device, and the traps that cost real time. The short version:
 
 ```
-bash oracle/build-upstream.sh           # clone + build the oracle at its pin
+bash oracle/build-upstream.sh           # clone + build the original at its pin
+cd oracle/harness && npm install && cd ../..
 node pipeline/run.js --out pipeline/build/dev
-bash port/gfx/opk/install-play-opk.sh   # build + install the OPK over ADB
+bash port/sim/check-sim.sh              # SIM CONFORMS = your build is honest
+bash port/gfx/opk/install-play-opk.sh   # device only: build + install the OPK
 ```
 
-[`CLAUDE.md`](CLAUDE.md) is the working contract and the fastest way in;
-[`PLAN.md`](PLAN.md) is the original strategy document.
+Most of it works without a FunKey-S; the hardware is needed for the device
+checks and for playing it.
+
+[`AGENTS.md`](AGENTS.md) is the working contract and the fastest way in
+(`CLAUDE.md` imports it); [`PLAN.md`](PLAN.md) is the original strategy
+document.
 
 ## Credit
 

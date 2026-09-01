@@ -1447,7 +1447,14 @@ echo "    T-H1 OK: nibble-flipped rec dies on the SUM seal (loud reset)"
 # moves to v8, a version this build cannot know. (It has moved with every bump; leaving it behind
 # turns this tooth into a no-op that asserts the CURRENT format resets.)
 mk_pdir "$HP/th2" -
-{ printf 'MLFKPERSIST8\n'; tail -n +2 "$FILE_REC" | head -n 68; } > "$HP/th2/body"
+# `sed -e 1d -e $d` = drop the header and the SUM, i.e. "the body", in ONE
+# process. The old form was `tail -n +2 | head -n 68`, which had two defects
+# that only showed once D59 lengthened the file: `head` closes the pipe as soon
+# as it has its 68 lines, so `tail` takes SIGPIPE and `set -o pipefail` turns
+# the whole check into exit 141 — intermittently, which is why it read as a
+# flake — and 68 was a magic number sized for a file that has since grown
+# twice. This form has no count to go stale and no pipe to close early.
+{ printf 'MLFKPERSIST8\n'; sed -e '1d' -e '$d' "$FILE_REC"; } > "$HP/th2/body"
 { cat "$HP/th2/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th2/body" | cut -d' ' -f1)"; } \
   > "$HP/th2/mlfk-persist.dat"
 rm -f "$HP/th2/body"
@@ -1456,8 +1463,8 @@ teeth=$((teeth + 1))
 echo "    T-H2 OK: unsupported version (checksum-valid) resets loudly"
 # T-H3 domain: NaN record bits with a recomputed SUM
 mk_pdir "$HP/th3" -
-sed "s/^rec $REC_CHAR $REC_TSTAGE $REC_BITS\$/rec $REC_CHAR $REC_TSTAGE 7ff8000000000000/" \
-  "$FILE_REC" | head -n 69 > "$HP/th3/body"
+sed -e "s/^rec $REC_CHAR $REC_TSTAGE $REC_BITS\$/rec $REC_CHAR $REC_TSTAGE 7ff8000000000000/" \
+  -e '$d' "$FILE_REC" > "$HP/th3/body"  # T-H2's note: no count, no early close
 { cat "$HP/th3/body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/th3/body" | cut -d' ' -f1)"; } \
   > "$HP/th3/mlfk-persist.dat"
 rm -f "$HP/th3/body"
@@ -1669,10 +1676,25 @@ rm -f "$HP/th9/body"
 # One shared expectation conflated them, and because this check had not
 # been RUN on hardware since d60505e, it went stale rather than loud.
 # Splitting it is what makes each arm assert its own rule.
+# D59's custom record plane, as a MIGRATION fills it: every slot at the -1
+# sentinel, because no version before 7 could carry a custom-stage best time.
+# Emitted LAST, which is where `crec` sits in the field table and therefore in
+# the file. Written as a loop rather than fifty printfs so the shape is stated
+# once — the fixture builders that hand-listed rows are exactly what went stale
+# when this key was added.
+crec_defaults() {
+  local c s
+  for c in 0 1 2 3 4; do
+    for s in 0 1 2 3 4 5 6 7 8 9; do
+      printf 'crec %s %s bff0000000000000\n' "$c" "$s"
+    done
+  done
+}
 mk_expect() { # <out> <modonr>
   { printf 'MLFKPERSIST7\n'; sed -n '2,4p' "$FILE_P01"; printf 'ctlstyle 1\n';
     printf 'modonr %s\n' "$2"; th9_rows "$REC_BITS"; v4_defaults; v5_defaults;
     v6_defaults; v7_defaults; v8_defaults; v9_defaults; v10_defaults;
+    crec_defaults;
   } > "$HP/expect.body"
   { cat "$HP/expect.body"; printf 'SUM %s\n' "$(shasum -a 256 "$HP/expect.body" | cut -d' ' -f1)"; } \
     > "$1"
