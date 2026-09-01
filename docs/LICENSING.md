@@ -10,15 +10,20 @@ Attributions: [`NOTICES`](../NOTICES) at the repo root.
 - **meleelight code → MIT** ((c) 2016 Will Blackett). The upstream
   `LICENSE` is standard MIT plus a two-line Nintendo-IP rider; GitHub's
   `NOASSERTION` is a detection artifact of that rider, nothing more.
-  A private derivative port is unambiguously fine. We carry the upstream
-  license **verbatim** as [`LICENSE-meleelight`](../LICENSE-meleelight)
-  (rider included) even though the notice obligation only technically
-  triggers on distribution — hygiene and provenance.
+  A derivative port is unambiguously fine, private or public. We carry the
+  upstream license **verbatim** as [`LICENSE-meleelight`](../LICENSE-meleelight)
+  (rider included). That used to be hygiene ahead of an obligation that had
+  not triggered; since the source repository became public (owner ruling,
+  2026-08-31) it IS the obligation — MIT requires the notice to travel with
+  substantial portions, and a derivative work published as source is exactly
+  that. Carrying it from the start is why publishing needed no scramble.
 - **meleelight's bundled assets → Nintendo/HAL IP, not MIT, cannot be.**
   Ripped/recreated Melee audio (204 wav SFX, 8 ogg tracks), CSS portraits,
-  and the character designs the vector animations recreate. Private
-  personal use on one handheld: no practical exposure. Distribution:
-  never (see rules below).
+  and the character designs the vector animations recreate. **None of it is
+  in this repository and none of it is published.** The converted audio is
+  gitignored build output, produced on the machine that runs it and never
+  committed; publishing the SOURCE changes nothing about the assets, which
+  are still personal use on one handheld. Distribution: never (rules below).
 - **This repo's own work** (spec, harnesses, spikes, the future C port) is
   a derivative of meleelight where it translates/patches/serializes it —
   MIT obligations carried via `LICENSE-meleelight` + `NOTICES`.
@@ -29,9 +34,12 @@ Attributions: [`NOTICES`](../NOTICES) at the repo root.
 2. `NOTICES` gains an entry BEFORE any third-party code is copied in-tree.
 3. **No distribution of anything from this repo** — that is a project goal
    (locked goal #4), and it is also what keeps the Nintendo-derived asset
-   question moot. No public forks, no published OPKs, no uploaded videos of
-   asset rips. The GitHub remote (`chasemcdizzle/meleelight-funkey-s`) is
-   the private working copy.
+   question moot. **The SOURCE is public** (`chasemcdizzle/meleelight-funkey-s`,
+   owner ruling 2026-08-31) — code, docs and checks, which are this project's
+   own work plus an MIT derivative, both publishable. What stays unpublished
+   is unchanged and is the part that matters: no OPKs, no binaries, no
+   converted audio, no ripped or recreated assets, no uploaded video of them,
+   and no fork of upstream.
 4. Never push to, or open PRs against, `schmooblidon/meleelight` or any
    other upstream remote. Upstream clones live OUTSIDE the tree (scratch /
    `vendor/`, both untracked).

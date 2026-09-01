@@ -26,8 +26,13 @@ Loop: [`docs/LOOP.md`](./docs/LOOP.md) · Checker:
    iteration, clean tree between; **never** force-push, `reset --hard`, or
    delete branches; `main` receives only human/spec commits. **NEVER add,
    push to, or open PRs against `schmooblidon/meleelight` or any upstream
-   remote** — upstream clones live outside the tree. **No distribution of
-   anything** (binaries, OPKs, assets, forks): private project.
+   remote** — upstream clones live outside the tree.
+   **THIS REPOSITORY IS PUBLIC** (owner ruling, 2026-08-31); its SOURCE and
+   docs are published deliberately. Nothing else is: **never distribute
+   binaries, OPKs, or game assets**, and never fork or open a PR/issue against
+   upstream. The converted audio is Nintendo-derived, gitignored build output
+   and must never be committed — the licence rider in `LICENSE-meleelight` and
+   `docs/LICENSING.md` are why, and `.gitignore` is the mechanical half.
 5. **Faithfulness:** the browser original is ground truth; a behavioral
    deviation is a bug even when it "feels better". Engine values (physics
    constants, frame data, thresholds) come from the executed-data pipeline,
