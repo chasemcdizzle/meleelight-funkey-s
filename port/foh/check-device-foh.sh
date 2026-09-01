@@ -692,6 +692,7 @@ build_foh_headless() { # <foh_dev_src> <out> [extra cc args...]
     "$FOH/foh_render.c" "$FOH/foh_persist.c" "$FOH/foh_pause.c" \
     "$FOH/foh_tbuild.c" port/sim/stage_code.c port/sim/target/custom_stage.c \
     "$FOH/foh_match_snap.c" "$FOH/foh_target_snap.c" \
+    "$FOH/foh_viewfile.c" "$FOH/foh_credits_view.c" \
     "$GFX/ctl_style.c" "$GFX/img1.c" \
     "$GFX/platform_headless.c" \
     "$GFX/anim1.c" "$GFX/gfx_render.c" "$GFX/gfx_target.c" \

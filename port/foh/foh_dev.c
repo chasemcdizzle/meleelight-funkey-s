@@ -160,6 +160,7 @@
 #include "../gfx/gfx.h"
 #include "../gfx/gfx_target.h" // M4 task 12: the target-mode compositor
 #include "../gfx/gfx_vfx.h"
+#include "foh_credits_view.h"
 #include "../gfx/platform.h"
 #include "../gfx/platform_keymap.h"
 #include "../gfx/s1_input.h"
@@ -1550,6 +1551,11 @@ static void tdev_hibernate_check(FohScreen sc, const FohState *f) {
   // save, so it fits — but "fits" is why it is ordered first rather than
   // last: if the window is ever missed, the thing lost is the document,
   // and the resume that would have pointed at it is not armed.
+  // D63: the CREDITS are a game, not just a screen — `credNameShot` and
+  // `credScore` are the player's progress. Published beside the settings save
+  // for the same reason the builder's document is, and like it this is
+  // non-fatal: the resume still happens if the view cannot be written.
+  if (sc == FOH_CREDITS) foh_credits_view_save(f);
   if (sc == FOH_TBUILD) {
     const char *tbWhy = 0;
     if (!foh_tbuild_ops || !foh_tbuild_ops->suspend ||
@@ -2519,6 +2525,13 @@ int main(int argc, char **argv) {
     // says so and leaves the template: the screen is still honest, it just
     // has nothing of the player's in it, which can only happen if the file
     // was lost between the write and this read.
+    if (foh.screen == FOH_CREDITS) {
+      // Over the top of a freshly-initialised credits screen (foh_init ran
+      // well above), so a refusal leaves a legal fresh screen rather than a
+      // half-restored one.
+      fprintf(stderr, "foh_dev: credits view %s\n",
+              foh_credits_view_load(&foh) ? "restored" : "NOT FOUND (fresh)");
+    }
     if (foh.screen == FOH_TBUILD && foh_tbuild_ops) {
       foh_tbuild_ops->enter(&foh, -1);
       const bool got = foh_tbuild_ops->resume && foh_tbuild_ops->resume(&foh);

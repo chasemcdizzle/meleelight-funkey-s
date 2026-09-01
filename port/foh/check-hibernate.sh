@@ -1323,6 +1323,63 @@ echo "   parked on the credits, and the record arms the CREDITS rather than
 resume_roundtrip "$CREDDIR" cred credits "[5g]"
 echo "   the credits resumed into themselves, byte for byte"
 
+# --- [5g-view] THE CREDITS ARE A GAME, SO THE SCORE COMES BACK (D63) --------
+#
+# #27 made the credits resume; everything the screen HELD was rebuilt fresh on
+# arrival. The owner named the part that makes this more than cosmetic:
+#
+#   "we also want to know which and how many names have been shot by the user
+#    (that's the whole premise) and that is restored too, it's kind of a game"
+#
+# `credNameShot` and `credScore` are the player's progress. Losing them on a
+# lid close is the same class of loss as losing a match, and it is what this
+# leg exists to make impossible. The scroll position, the info-panel text and
+# the reticle ride along.
+#
+# Asserted as a BYTE-IDENTICAL round trip of the published view across
+# park -> hibernate -> resume -> hibernate, the same shape leg [5b] uses for
+# the builder's document, plus a dead-leg guard: the parked view must DIFFER
+# from a freshly-initialised credits screen's, or a resume that restored
+# nothing would pass this too.
+made "$CREDDIR/credview.dat"
+cp "$CREDDIR/credview.dat" "$BUILD/credview.before"
+# THE VIEW MUST CARRY THE GAME, not just exist. These are the rows the owner
+# asked for by name, and a writer that quietly stopped emitting them would
+# round-trip byte-identically and prove nothing.
+for k in credScore credHitTimer credHitIdx credX credY "nshot 0" "nshot 13"; do
+  grep -q "^$k " "$BUILD/credview.before" \
+    || { head -14 "$BUILD/credview.before" >&2
+         fail "[5g-view] the published credits view has no '$k' row — the
+  score, the info panel, the reticle and the fourteen shot flags ARE what this
+  file is for"; }
+done
+# WHAT THIS LEG DOES **NOT** PROVE, said plainly because the gap is real and
+# a reader would otherwise assume otherwise.
+#
+# It proves the view is PUBLISHED and carries the rows the feature is for. It
+# does NOT prove the resume READS them back. The byte-identity shape leg [5b]
+# uses for the builder cannot work here: the builder's document is STATIC, so
+# two hibernates around a resume publish identical bytes, whereas the credits
+# starfield drifts and the timers count every tick, so the two views
+# legitimately differ whether or not the restore happened.
+#
+# The assertion that WOULD bite is on the non-drifting half — `credScore` and
+# `nshot` — but the parking flow never fires, so both are zero either way, and
+# MEASURED: deleting the foh_credits_view_load call leaves this leg green.
+# Authoring a flow that actually plays the credits (moves the reticle onto a
+# scrolling name and hits it) is what closes this, and it is not done.
+#
+# So: the save path is checked, the load path is NOT. Treat the credits
+# restore as implemented-but-unverified until a firing flow exists.
+echo "   the view carries the score/panel/reticle rows (SAVE path only —"
+echo "   see the note above: the LOAD path is not yet covered)"
+# CONSUMPTION IS NOT ASSERTED HERE, deliberately: resume_roundtrip above
+# hibernates a SECOND time, which republishes the file, so a check for its
+# absence at this point would be asserting the opposite of what just happened.
+# The consume call is shared with the builder (foh_view_consume) and leg [5b]
+# asserts it on the path where it can be observed.
+
+
 # --- [6] teeth ---------------------------------------------------------------
 echo "=== [6] teeth"
 
