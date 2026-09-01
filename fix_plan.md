@@ -8319,3 +8319,81 @@ DISCHARGED by owner observation.** The warp field, the scrolling names, the
 reticle and the laser all read correctly at 240x240, which the lane could only
 guess at. **The remaining A7 device legs (the judge-sha re-pins) are unaffected
 and still owed.**
+
+## OPEN ACTION ITEMS — owner-filed 2026-09-01
+
+### A50 — sndpack.bin (and the music) should be BUILT FROM THE PLAYER'S OWN ISO
+
+**Owner ruling, 2026-09-01.** Today `mlfk-data.tar.gz` ships converted game
+audio, because the app cannot run without it and regenerating it needs Docker,
+an upstream build and ffmpeg. That works and it is the reason the release is
+usable — but it is also the only part of the release that redistributes
+material nobody involved has the right to license. `docs/LICENSING.md` records
+the decision honestly rather than pretending otherwise, which is not the same
+as it being a good end state.
+
+**The end state that removes the problem instead of documenting it:** the
+sound pack and the music are produced AT BUILD TIME from a Melee ISO the
+player already owns, the way every reputable decompilation-adjacent project
+handles this. Nothing copyrighted ships; the tool extracts from the user's own
+copy.
+
+Work, roughly:
+- identify what upstream's `dist/sfx/*.wav` + `dist/music/*.ogg` actually
+  correspond to on the disc (MEASURE this — the assumption that they are
+  straight rips is exactly the kind of thing that turns out to be half true;
+  some may be recreations, and those are Will Blackett's own work and can
+  ship)
+- a pipeline stage that takes an ISO path, extracts and converts, and emits
+  the same SNDPACK1/PCM artifacts the current `audio` stage does, so nothing
+  downstream changes
+- the release then ships NO audio, and the install step gains "point it at
+  your ISO"
+- `docs/LICENSING.md` and the README's "Assets and provenance" both simplify
+  back to "no game assets are distributed", which becomes true again
+
+**Do not start this by deleting the current release.** The audio path works;
+this replaces it once the replacement is proven, and not before.
+
+### A51 — the undefined-ECB spawn bug: PROVE, THEN DECIDE
+
+**Owner ruling, 2026-09-01: prove it, then file the fix.**
+
+Owner report: in a 1v1v1v1, Captain Falcon ran around on an INVISIBLE PLATFORM
+near where his spawn platform had been.
+
+MEASURED so far:
+- `main.js:168` — `startingPoint` is an array of ARRAYS
+- `main.js:1298-99` — reads `.x`/`.y` off those arrays, so every player's
+  `phys.ECB1` and `phys.ECBp` begin as `Vec2D(undefined, undefined)`
+- `physics.js:257` READS `ECB1` (`ECB1[2].y - ECB1[0].y`) and `:847` writes
+  it, so on frame 1 the read can precede the write and yield NaN
+- ports 1/2 start at y=50 (in the air), ports 3/4 at y=5 (grounded) — and
+  :257 is on the grounded path, which is why a 3rd/4th port is the one that
+  would take it
+- `phys` is on the checksummed surface in full (CHECKSUM.md:62), ECBs
+  included, and the port models the undefined-ness faithfully
+
+NOT MEASURED, and this is the gap: **that any of the above causes the platform
+the owner saw.** The chain is plausible and was presented as a finding before
+it had been checked, which it should not have been.
+
+THE PROOF: reproduce a 4-port match in the BROWSER ORACLE with a character on
+port 3/4 and watch the first frames. If the browser does it too, the port is
+faithful and this is upstream's bug. If the browser does NOT, the port has a
+real defect and the ECB theory is dead — a different answer entirely, and the
+reason this has to be proven before anything is written.
+
+IF IT CONFIRMS UPSTREAM, the options, ranked:
+1. **Carry it.** Upstream is ground truth (HARD RULE 5); this is the project's
+   stated purpose.
+2. **Report it upstream.** It is a one-line bug in Will Blackett's own code.
+   NEEDS OWNER GO — HARD RULE 4 forbids touching that repository.
+3. **Fix as a registered deviation, paying the full price knowingly.** The fix
+   itself is one line (build the Vec2D from `startingPoint[i][0]`/`[1]`, the
+   indices `playerObject` already uses). The PRICE is the verification spine:
+   ECBs are checksummed, so frame 1's hash moves for every match, all 8
+   goldens plus the fourport/target/m4 goldens re-freeze, and the re-record
+   has to come from a PATCHED browser — at which point the oracle is our fork
+   and "verified against the original" quietly becomes "verified against our
+   modified copy". That is the cost, and it is why 1 and 2 are ranked above it.
