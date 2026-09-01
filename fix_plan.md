@@ -8399,13 +8399,36 @@ was stated as a finding before it was checked, and is now refuted. Nothing
 should be re-recorded and no deviation is warranted; the three ranked options
 below are moot for THIS cause.
 
-**THE OWNER'S BUG IS STILL UNEXPLAINED.** What is left, unproven and not to be
-repeated as fact: a four-player match zooms the camera out further than any
-2-port golden, and a platform that fails to DRAW at that zoom while remaining
-solid would look exactly like an invisible platform. That is a RENDER
-hypothesis, not a physics one, and it wants the same treatment — reproduce
-before writing anything. The next step is a repro: which stage, which port
-number, and was it at match start or after a death.
+**THE OWNER'S BUG IS STILL UNEXPLAINED, and TWO MORE HYPOTHESES ARE DEAD.**
+
+Owner detail added 2026-09-01: it happened **after Captain Falcon DIED**, once,
+on a port other than the first. So it is the RESPAWN platform, not the starting
+one — which killed the startingPoint line of enquiry outright and replaced it
+with two better guesses. Both were checked and both are wrong:
+
+  * "the port fails to DRAW the respawn platform." NO — render.js:268-279 draws
+    a filled+stroked trapezoid for REBIRTH/REBIRTHWAIT, and the port carries it
+    faithfully at gfx_render.c:559-575 (same quad, same palette indices, same
+    persisted lineWidth). Verified by reading both.
+  * "he was hit out of REBIRTHWAIT and kept `grounded`." NO — hurtBoxStateUpdate
+    sets `hurtBoxState = 1` for REBIRTH/REBIRTHWAIT, and every hit path requires
+    `hurtBoxState == 0` (hitDetection.js:809, :1107). A waiting player is
+    INTANGIBLE and cannot be hit out of that state.
+
+WHAT IS ACTUALLY ESTABLISHED: the player was grounded at the respawn height
+while NOT in REBIRTH/REBIRTHWAIT — that is the only way the platform is solid
+and unlit at the same time, because both states draw it. The remaining question
+is which exit from REBIRTHWAIT can leave `grounded` true, or leave `onSurface`
+naming something that is not under the player. Every interrupt arm in
+REBIRTHWAIT.js sets `grounded = false` explicitly (6 of them, and the port has
+6 — counted), so the answer is NOT in that file's obvious paths.
+
+**STOP GUESSING AND GET A REPRO.** Three wrong theories in one session is the
+signal. What would settle it in minutes: the owner reproduces it once with the
+app writing its usual log, and `player[i].actionState`, `phys.grounded`,
+`phys.onSurface` and `phys.pos` for the affected port are read at that moment.
+Until then this is an OPEN REPORT with no cause, and nothing should be changed
+on the strength of a story about it.
 
 IF IT CONFIRMS UPSTREAM, the options, ranked:
 1. **Carry it.** Upstream is ground truth (HARD RULE 5); this is the project's
