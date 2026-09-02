@@ -50,6 +50,13 @@
      shipped. A view that restores everything except the flag saying "you are
      already initialised" restores nothing. */                                 \
   B(credInit)                                                                  \
+  /* HOW FAR INTO THE CREDITS YOU ARE — the owner asked for this by name and
+     the first pass did not carry it. It is cScrollingPos (+2/frame) and it is
+     also the EXIT: foh.c:1822 ends the credits at 5000. Without it a resumed
+     screen restarts its scroll from zero, so the sequence you were most of the
+     way through plays again from the top. Found by the field-coverage guard in
+     check-hibernate.sh, not by re-reading this list. */                       \
+  I(credScrollPos, 0, 100000)                                                  \
   I(credScore, 0, FOH_CRED_NAMES)                                              \
   I(credCool, 0, 4096)                                                         \
   B(credShootBuf)                                                              \

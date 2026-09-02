@@ -1953,7 +1953,24 @@ static void tb_view(const FohState *s, FohTbView *out) {
   X(D, tbDragX1, 0, 0) X(D, tbDragY1, 0, 0)                                    \
   X(B, tbDrawingPoly, 0, 1) X(B, tbDenied, 0, 1)                               \
   X(I, tbPolyN, 0, FOH_TB_MAX_POLY_PTS)                                        \
-  X(I, tbPolyLinesN, 0, FOH_TB_MAX_POLY_PTS)
+  X(I, tbPolyLinesN, 0, FOH_TB_MAX_POLY_PTS)                                   \
+  /* THE CONNECT TOOL'S IN-PROGRESS LINK. Missed on the first pass, and it is
+     the same KIND of thing as the polygon: work the player has started and
+     which exists NOWHERE ELSE — not in the document, not derivable. Losing it
+     is the exact complaint D62 was filed to answer, so leaving it out made the
+     fix half a fix. Found by enumerating FohState's tb* fields against this
+     table rather than by re-reading the list I had already convinced myself
+     was complete. */                                                          \
+  X(B, tbConnectInd, 0, 1) X(D, tbConnectX, 0, 0) X(D, tbConnectY, 0, 0)       \
+  /* The two on-screen timers. Cosmetic — a banner and a refusal message
+     counting down — but free here, and a message that vanishes mid-sentence
+     across a lid close reads as a glitch. `tbMsg` itself is a POINTER to a
+     static string (foh.h says "static strings only") and is deliberately NOT
+     carried: foh_persist.h's rule is that a pointer is never persisted,
+     because it restores an address that is only valid while the binary is
+     unchanged. The timer without the text means the message simply does not
+     draw, which is the honest degradation. */                                 \
+  X(I, tbToolTimer, 0, 4096) X(I, tbMsgTimer, 0, 4096)
 
 #define TB_VIEW_HDR "MLTBVIEW1\n"
 #define TB_VIEW_MAX 8192
