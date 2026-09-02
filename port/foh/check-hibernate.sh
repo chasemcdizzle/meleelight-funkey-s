@@ -472,6 +472,47 @@ echo "   resumed on the CSS; the cold boot's startup walk is absent"
 # the resume restore it, hibernate a second time, and require the two
 # published documents to be BYTE-IDENTICAL. A resume that silently reset to
 # the template passes every log check and fails this one.
+# --- [5b-fields] EVERY SCREEN FIELD IS IN ITS VIEW, OR NAMED AS EXCLUDED ----
+#
+# THE CLASS THIS CATCHES, twice paid for. A view sidecar restores the fields
+# somebody remembered to list, and a field left off is invisible: it compiles,
+# the round trip passes on every field that IS listed, and the player loses
+# the one that is not.
+#
+#   * the credits lost `credInit`, so the restore landed and foh.c:1684 wiped
+#     it on the next tick — the log said "restored" and the screen was empty
+#   * the builder lost `tbConnectInd/X/Y`, the CONNECT tool's in-progress
+#     link, which is work that exists nowhere else
+#
+# Both were found by ENUMERATING the struct against the table, which is what
+# this leg now does mechanically. A new tb*/cred* field must be listed in the
+# view or named here as deliberately excluded; anything else fails.
+echo "=== [5b-fields] every builder/credits field is carried or named excluded"
+# Pointers can never be persisted (foh_persist.h: a restored address is valid
+# only while the binary is unchanged), and these two are the measured cases.
+TBEXCL="tbMsg tbPolyX tbPolyY"     # tbMsg: const char* to a static string.
+CREXCL="credStar credShot credNameShot credNameRender credNameX credNameY credNameXVal credNameXMax credNameXDir credRng"  # credRng ships under the short key `rng`, written outside the macro table
+for pair in "tb:$FOH/foh_tbuild.c:TB_VIEW_FIELDS:$TBEXCL" \
+            "cred:$FOH/foh_credits_view.c:CV_SCALARS:$CREXCL"; do
+  pfx="${pair%%:*}"; rest="${pair#*:}"
+  src="${rest%%:*}"; rest="${rest#*:}"
+  macro="${rest%%:*}"; excl="${rest#*:}"
+  grep -oE "\b${pfx}[A-Z][A-Za-z0-9]*" "$FOH/foh.h" | sort -u > "$BUILD/$pfx.all"
+  sed -n "/#define $macro/,/^\$/p" "$src" \
+    | grep -oE "\b${pfx}[A-Z][A-Za-z0-9]*" | sort -u > "$BUILD/$pfx.have"
+  # the arrays each file writes in its own explicit loop, not via the macro
+  for e in $excl; do echo "$e"; done | sort -u >> "$BUILD/$pfx.have"
+  sort -u -o "$BUILD/$pfx.have" "$BUILD/$pfx.have"
+  missing="$(comm -23 "$BUILD/$pfx.all" "$BUILD/$pfx.have" | tr '\n' ' ')"
+  [ -z "$missing" ] \
+    || fail "[5b-fields] these $pfx fields are in FohState and in neither the
+  view table nor the exclusion list: $missing
+  A field that is neither carried nor named is one the player silently loses
+  across a lid close. Add it to the view, or to the exclusion list WITH a
+  reason (a pointer, or state the screen re-derives)."
+  echo "   $pfx: $(wc -l < "$BUILD/$pfx.all" | tr -d ' ') fields, all carried or named"
+done
+
 echo "=== [5b] the builder resumes into itself, with the document"
 TBPARK=$BUILD/tbpark.flow
 cat > "$TBPARK" <<'TBEOF'

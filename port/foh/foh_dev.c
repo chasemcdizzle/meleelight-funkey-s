@@ -160,6 +160,7 @@
 #include "../gfx/gfx.h"
 #include "../gfx/gfx_target.h" // M4 task 12: the target-mode compositor
 #include "../gfx/gfx_vfx.h"
+#include "foh_crashlog.h"
 #include "foh_credits_view.h"
 #include "../gfx/platform.h"
 #include "../gfx/platform_keymap.h"
@@ -2310,6 +2311,11 @@ int main(int argc, char **argv) {
   // duty and review-mexit-r1 caught it missing, which meant a save holding
   // Box silently played as Natural. It now lives inside tdev_persist_load,
   // the load chokepoint, so no site can load without it.
+  // CRASH LOGGING, installed before anything interesting can fault. Writes one
+  // line to the SD card naming the signal and the faulting address, because a
+  // segfault otherwise leaves only `RC=139` and a log that stops mid-sentence
+  // — and /tmp is tmpfs, so the power cycle that follows a crash erases it.
+  foh_crashlog_install(foh_persist_dir(), 0);
   tdev_persist_load();
   foh_persist_apply(&g_persist, &foh);
   // D60 — THE PERSISTED LEVELS REACH THE BUS ON EVERY PATH, INCLUDING THE
@@ -4506,9 +4512,16 @@ foh_phase:;
     foh.bHold = 0;
     foh.nev = 0;
     foh.nsnd = 0;
+    // QUIT TO MENU GOES TO THE MENU. It used to land on FOH_TITLE — the
+    // "press start" screen — which is what the owner reported: "quit to menu
+    // takes me to the melee light press start not the actual menu". The row
+    // says MENU, foh_pause.h calls the result QUIT_MENU, and the player has
+    // to press start again to get to the thing they asked for. The pause
+    // overlay is this port's own feature (A11/A12), so there is no upstream
+    // behaviour being preserved here — it was simply the wrong destination.
     foh.screen = (g_mexit == MEX_CSS)   ? FOH_CSS  // changeGamemode(2)
                  : (g_mexit == MEX_TSS) ? FOH_TSS  // changeGamemode(7)
-                                        : FOH_TITLE;
+                                        : FOH_MENU_TOP;
     // MUSIC (main.js:1377-1388, review-mexit-r1 High): endGame ALWAYS
     // stops what is playing, and then — for gameMode 3 (VS) ONLY — starts
     // the menu loop. gameMode 5 (targets) deliberately does not, so target
@@ -4531,7 +4544,12 @@ foh_phase:;
     //     Programming the menu track silent restores the boot precondition
     //     the flag-flip arm is written against.
     if (g_have_music) {
-      const int menuAudible = (g_mexit == MEX_CSS) ? 1 : 0;
+      // ...and it arrives with the menu loop PLAYING. The title is silent by
+      // design (its own join unmutes at title->menu-top), but the menu top is
+      // not a place this game is ever silent — landing there muted was the
+      // second half of the wrong-destination bug.
+      const int menuAudible =
+          (g_mexit == MEX_CSS || g_mexit == MEX_TITLE) ? 1 : 0;
       mus_reader_stop(); // MUST be stopped across a program (:1030)
       mus_track_program(0, menuAudible); // kMusTok[0] = menu
       mus_reader_start();
